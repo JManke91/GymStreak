@@ -320,7 +320,7 @@ struct RoutineSetRowView: View {
                         Text(formatRestTime(editingRestTime))
                             .foregroundStyle(.secondary)
                     }
-                    Slider(value: $editingRestTime, in: 0...300, step: 5)
+                    Slider(value: $editingRestTime, in: 0...300, step: 10)
                         .onChange(of: editingRestTime) { _, newValue in
                             onUpdate(editingReps, editingWeight, newValue)
                         }

@@ -38,7 +38,7 @@ struct EditSetView: View {
                         Spacer()
                         Text("\(Int(restTime))s")
                     }
-                    Slider(value: $restTime, in: 0...300, step: 5)
+                    Slider(value: $restTime, in: 0...300, step: 10)
                 }
             }
             .navigationTitle("Edit Set")

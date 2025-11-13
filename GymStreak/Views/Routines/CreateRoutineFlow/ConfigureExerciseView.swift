@@ -167,7 +167,7 @@ struct ConfigureExerciseView: View {
                     Spacer()
                     Text("\(Int(globalRestTime))s")
                 }
-                Slider(value: $globalRestTime, in: 0...300, step: 5)
+                Slider(value: $globalRestTime, in: 0...300, step: 10)
             }
         }
         .navigationTitle(exercise.name)
