@@ -17,7 +17,7 @@ struct RoutinesView: View {
         NavigationView {
             List {
                 ForEach(viewModel.routines) { routine in
-                    NavigationLink(destination: RoutineDetailView(routine: routine, viewModel: viewModel)) {
+                    NavigationLink(destination: RoutineDetailView(routine: routine, viewModel: viewModel, exercisesViewModel: exercisesViewModel)) {
                         RoutineRowView(routine: routine)
                     }
                 }

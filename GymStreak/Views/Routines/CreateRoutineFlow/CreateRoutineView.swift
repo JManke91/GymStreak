@@ -52,15 +52,31 @@ struct CreateRoutineView: View {
                 } else {
                     // Exercise list
                     ForEach(pendingExercises) { pending in
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(pending.exercise.name)
-                                .font(.headline)
+                        NavigationLink(destination: ConfigureExerciseView(
+                            exercise: pending.exercise,
+                            existingSets: pending.sets,
+                            onComplete: { exercise, sets in
+                                updateExercise(pendingExercise: pending, withSets: sets)
+                            }
+                        )) {
+                            HStack(spacing: 12) {
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text(pending.exercise.name)
+                                        .font(.headline)
 
-                            Text(pending.setSummary)
-                                .font(.caption)
-                                .foregroundColor(.secondary)
+                                    Text(pending.setSummary)
+                                        .font(.caption)
+                                        .foregroundColor(.secondary)
+                                }
+
+                                Spacer()
+
+                                Image(systemName: "chevron.right")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                            }
+                            .padding(.vertical, 4)
                         }
-                        .padding(.vertical, 4)
                         .swipeActions(edge: .trailing, allowsFullSwipe: true) {
                             Button(role: .destructive) {
                                 deleteExercise(pending)
@@ -78,6 +94,7 @@ struct CreateRoutineView: View {
                 NavigationLink(destination: ExerciseSelectionView(
                     routinesViewModel: routinesViewModel,
                     exercisesViewModel: exercisesViewModel,
+                    alreadyAddedExercises: pendingExercises.map { $0.exercise },
                     onExerciseConfigured: { exercise, sets in
                         addExercise(exercise: exercise, sets: sets)
                     }
@@ -140,6 +157,12 @@ struct CreateRoutineView: View {
         let order = pendingExercises.count
         let pending = PendingRoutineExercise(exercise: exercise, sets: sets, order: order)
         pendingExercises.append(pending)
+    }
+
+    private func updateExercise(pendingExercise: PendingRoutineExercise, withSets sets: [ExerciseSet]) {
+        if let index = pendingExercises.firstIndex(where: { $0.id == pendingExercise.id }) {
+            pendingExercises[index].sets = sets
+        }
     }
 
     private func deleteExercise(_ pending: PendingRoutineExercise) {

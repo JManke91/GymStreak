@@ -5,6 +5,10 @@ struct RoutineExerciseDetailView: View {
     @ObservedObject var viewModel: RoutinesViewModel
     @State private var showingEditExercise = false
     @State private var showingDeleteAlert = false
+    @State private var editingSetId: UUID?
+    @State private var editingReps: Int = 10
+    @State private var editingWeight: Double = 0.0
+    @State private var editingRestTime: TimeInterval = 60.0
     
     var body: some View {
         List {
@@ -47,11 +51,85 @@ struct RoutineExerciseDetailView: View {
             }
             
             Section("Sets") {
-                ForEach(routineExercise.sets) { set in
-                    SetRowView(set: set)
+                ForEach(Array(routineExercise.sets.enumerated()), id: \.element.id) { index, set in
+                    VStack(alignment: .leading, spacing: 0) {
+                        // Collapsible set header
+                        Button(action: {
+                            withAnimation(.easeInOut(duration: 0.3)) {
+                                if editingSetId == set.id {
+                                    // Collapse
+                                    editingSetId = nil
+                                } else {
+                                    // Expand and load values
+                                    editingSetId = set.id
+                                    editingReps = set.reps
+                                    editingWeight = set.weight
+                                    editingRestTime = set.restTime
+                                }
+                            }
+                        }) {
+                            HStack {
+                                Text("Set \(index + 1)")
+                                    .font(.headline)
+                                    .foregroundColor(.primary)
+                                Spacer()
+                                Text("\(set.reps) reps • \(set.weight, specifier: "%.1f") kg")
+                                    .foregroundColor(.secondary)
+                                Image(systemName: "chevron.right")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                                    .rotationEffect(.degrees(editingSetId == set.id ? 90 : 0))
+                                    .animation(.easeInOut(duration: 0.2), value: editingSetId == set.id)
+                            }
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(PlainButtonStyle())
+
+                        // Inline edit form (expanded)
+                        if editingSetId == set.id {
+                            VStack(spacing: 12) {
+                                HStack {
+                                    Text("Reps:")
+                                    Spacer()
+                                    Stepper("\(editingReps)", value: $editingReps, in: 1...100)
+                                        .onChange(of: editingReps) { _, newValue in
+                                            updateSet(set, reps: newValue)
+                                        }
+                                }
+
+                                HStack {
+                                    Text("Weight (kg):")
+                                    Spacer()
+                                    TextField("0.0", value: $editingWeight, format: .number)
+                                        .keyboardType(.decimalPad)
+                                        .multilineTextAlignment(.trailing)
+                                        .frame(width: 80)
+                                        .onChange(of: editingWeight) { _, newValue in
+                                            updateSet(set, weight: newValue)
+                                        }
+                                }
+
+                                HStack {
+                                    Text("Rest Time:")
+                                    Spacer()
+                                    Text("\(Int(editingRestTime))s")
+                                        .foregroundColor(.secondary)
+                                }
+                                Slider(value: $editingRestTime, in: 0...300, step: 5)
+                                    .onChange(of: editingRestTime) { _, newValue in
+                                        updateSet(set, restTime: newValue)
+                                    }
+                            }
+                            .padding(.top, 8)
+                            .transition(.asymmetric(
+                                insertion: .opacity.combined(with: .scale(scale: 0.95, anchor: .top)),
+                                removal: .opacity.combined(with: .scale(scale: 0.95, anchor: .top))
+                            ))
+                        }
+                    }
                 }
                 .onDelete(perform: deleteSets)
-                
+
                 Button("Add Set") {
                     viewModel.addSet(to: routineExercise)
                 }
@@ -62,13 +140,8 @@ struct RoutineExerciseDetailView: View {
         .navigationBarTitleDisplayMode(.large)
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
-                Menu {
-                    Button("Edit Exercise", action: {})
-                    Button("Delete Exercise", role: .destructive) {
-                        showingDeleteAlert = true
-                    }
-                } label: {
-                    Image(systemName: "ellipsis.circle")
+                Button("Delete", role: .destructive) {
+                    showingDeleteAlert = true
                 }
             }
         }
@@ -89,18 +162,32 @@ struct RoutineExerciseDetailView: View {
             viewModel.removeSet(routineExercise.sets[index], from: routineExercise)
         }
     }
+
+    private func updateSet(_ set: ExerciseSet, reps: Int? = nil, weight: Double? = nil, restTime: TimeInterval? = nil) {
+        if let reps = reps {
+            set.reps = reps
+        }
+        if let weight = weight {
+            set.weight = weight
+        }
+        if let restTime = restTime {
+            set.restTime = restTime
+        }
+        viewModel.updateSet(set)
+    }
 }
 
 struct SetRowView: View {
     let set: ExerciseSet
-    
+    var showChevron: Bool = false
+
     var body: some View {
         HStack {
             VStack(alignment: .leading, spacing: 4) {
                 Text("Set \(set.id.uuidString.prefix(8))")
                     .font(.caption)
                     .foregroundColor(.secondary)
-                
+
                 HStack {
                     Text("\(set.reps) reps")
                     Text("•")
@@ -111,12 +198,18 @@ struct SetRowView: View {
                 .font(.caption)
                 .foregroundColor(.secondary)
             }
-            
+
             Spacer()
-            
+
             if set.isCompleted {
                 Image(systemName: "checkmark.circle.fill")
                     .foregroundColor(.green)
+            }
+
+            if showChevron {
+                Image(systemName: "chevron.right")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
             }
         }
         .padding(.vertical, 4)

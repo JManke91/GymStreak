@@ -19,10 +19,25 @@ struct ExerciseSelectionView: View {
 
     let routinesViewModel: RoutinesViewModel
     let exercisesViewModel: ExercisesViewModel
+    let alreadyAddedExercises: [Exercise]
     let onExerciseConfigured: (Exercise, [ExerciseSet]) -> Void
 
     var body: some View {
         List {
+            // Info section showing count of added exercises
+            if !alreadyAddedExercises.isEmpty {
+                Section {
+                    HStack {
+                        Image(systemName: "info.circle")
+                            .foregroundColor(.blue)
+                        Text("\(alreadyAddedExercises.count) exercise\(alreadyAddedExercises.count == 1 ? "" : "s") already added")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                    .listRowBackground(Color.blue.opacity(0.1))
+                }
+            }
+
             // Existing exercises
             Section {
                 ForEach(filteredExercises) { exercise in
@@ -32,13 +47,24 @@ struct ExerciseSelectionView: View {
                             onExerciseConfigured(exercise, sets)
                         }
                     )) {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(exercise.name)
-                                .font(.headline)
+                        HStack(spacing: 12) {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(exercise.name)
+                                    .font(.headline)
 
-                            Text(exercise.muscleGroup)
-                                .font(.caption)
-                                .foregroundColor(.secondary)
+                                Text(exercise.muscleGroup)
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                            }
+
+                            Spacer()
+
+                            // Show checkmark if exercise is already added
+                            if isExerciseAlreadyAdded(exercise) {
+                                Image(systemName: "checkmark.circle.fill")
+                                    .foregroundColor(.green)
+                                    .font(.system(size: 20))
+                            }
                         }
                         .padding(.vertical, 4)
                     }
@@ -97,5 +123,11 @@ struct ExerciseSelectionView: View {
                 exercise.muscleGroup.localizedCaseInsensitiveContains(searchText)
             }
         }
+    }
+
+    // MARK: - Helper Methods
+
+    private func isExerciseAlreadyAdded(_ exercise: Exercise) -> Bool {
+        alreadyAddedExercises.contains(where: { $0.id == exercise.id })
     }
 }

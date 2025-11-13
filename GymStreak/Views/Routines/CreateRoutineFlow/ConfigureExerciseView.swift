@@ -11,6 +11,7 @@ struct ConfigureExerciseView: View {
     @Environment(\.dismiss) private var dismiss
 
     let exercise: Exercise
+    let existingSets: [ExerciseSet]?
     let onComplete: (Exercise, [ExerciseSet]) -> Void
 
     @State private var sets: [ExerciseSet] = []
@@ -18,6 +19,12 @@ struct ConfigureExerciseView: View {
     @State private var editingSetIndex: Int?
     @State private var editingReps = 10
     @State private var editingWeight = 0.0
+
+    init(exercise: Exercise, existingSets: [ExerciseSet]? = nil, onComplete: @escaping (Exercise, [ExerciseSet]) -> Void) {
+        self.exercise = exercise
+        self.existingSets = existingSets
+        self.onComplete = onComplete
+    }
 
     var body: some View {
         Form {
@@ -167,18 +174,46 @@ struct ConfigureExerciseView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
-                Button("Add to Routine") {
-                    addToRoutine()
+                if !isEditMode {
+                    Button("Add to Routine") {
+                        addToRoutine()
+                    }
+                    .disabled(sets.isEmpty)
                 }
-                .disabled(sets.isEmpty)
+            }
+        }
+        .navigationBarBackButtonHidden(false)
+        .onDisappear {
+            // Auto-save when navigating back in edit mode
+            if isEditMode && !sets.isEmpty {
+                // Apply global rest time to all sets
+                for i in 0..<sets.count {
+                    sets[i].restTime = globalRestTime
+                }
+                // Call completion handler
+                onComplete(exercise, sets)
             }
         }
         .onAppear {
-            // Auto-create first set with defaults
-            if sets.isEmpty {
+            // Load existing sets if in edit mode, otherwise create default set
+            if let existingSets = existingSets, !existingSets.isEmpty {
+                // Edit mode: copy existing sets (create new instances to avoid modifying originals)
+                sets = existingSets.map { ExerciseSet(reps: $0.reps, weight: $0.weight, restTime: $0.restTime) }
+                // Set global rest time from first set
+                if let firstSet = sets.first {
+                    globalRestTime = firstSet.restTime
+                }
+            } else if sets.isEmpty {
+                // New mode: auto-create first set with defaults
                 addNewSet()
             }
         }
+    }
+
+    // MARK: - Computed Properties
+
+    private var isEditMode: Bool {
+        existingSets != nil && !(existingSets?.isEmpty ?? true)
     }
 
     // MARK: - Helper Methods

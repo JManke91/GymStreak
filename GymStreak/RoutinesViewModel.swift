@@ -74,7 +74,14 @@ class RoutinesViewModel: ObservableObject {
             }
         }
     }
-    
+
+    func updateSet(_ set: ExerciseSet) {
+        // SwiftData will automatically track changes to the set
+        if let routine = set.routineExercise?.routine {
+            updateRoutine(routine)
+        }
+    }
+
     private func save() {
         do {
             try modelContext.save()
