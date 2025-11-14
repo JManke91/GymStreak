@@ -8,7 +8,7 @@ struct ActiveWorkoutView: View {
     @State private var showingFinishConfirmation = false
     @State private var showingSaveOptions = false
     @State private var showingRestTimerSheet = false
-    @State private var editingSet: WorkoutSet?
+    @State private var expandedSetId: UUID?
 
     var body: some View {
         ZStack {
@@ -21,7 +21,7 @@ struct ActiveWorkoutView: View {
                                 workoutExercise: workoutExercise,
                                 viewModel: viewModel,
                                 isCurrentExercise: isCurrentExercise(workoutExercise),
-                                editingSet: $editingSet
+                                expandedSetId: $expandedSetId
                             )
                         }
                     }
@@ -89,9 +89,6 @@ struct ActiveWorkoutView: View {
             .presentationDetents([.height(320), .medium])
             .presentationDragIndicator(.visible)
             .interactiveDismissDisabled(false)
-        }
-        .sheet(item: $editingSet) { set in
-            EditSetSheet(set: set, viewModel: viewModel)
         }
         .onChange(of: viewModel.isRestTimerActive) { _, isActive in
             if isActive {
@@ -177,7 +174,7 @@ struct ExerciseCard: View {
     let workoutExercise: WorkoutExercise
     @ObservedObject var viewModel: WorkoutViewModel
     let isCurrentExercise: Bool
-    @Binding var editingSet: WorkoutSet?
+    @Binding var expandedSetId: UUID?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -214,8 +211,15 @@ struct ExerciseCard: View {
                     workoutExercise: workoutExercise,
                     viewModel: viewModel,
                     isNextSet: isNextSet(set),
-                    onEdit: {
-                        editingSet = set
+                    isExpanded: expandedSetId == set.id,
+                    onToggleExpand: {
+                        withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                            if expandedSetId == set.id {
+                                expandedSetId = nil
+                            } else {
+                                expandedSetId = set.id
+                            }
+                        }
                     }
                 )
             }
@@ -248,135 +252,189 @@ struct WorkoutSetRow: View {
     let workoutExercise: WorkoutExercise
     @ObservedObject var viewModel: WorkoutViewModel
     let isNextSet: Bool
-    let onEdit: () -> Void
+    let isExpanded: Bool
+    let onToggleExpand: () -> Void
+
+    @State private var editingReps: Int
+    @State private var editingWeight: Double
+    @State private var initialReps: Int
+    @State private var initialWeight: Double
+    @State private var bannerDismissed = false
+
+    init(set: WorkoutSet, workoutExercise: WorkoutExercise, viewModel: WorkoutViewModel, isNextSet: Bool, isExpanded: Bool, onToggleExpand: @escaping () -> Void) {
+        self.set = set
+        self.workoutExercise = workoutExercise
+        self.viewModel = viewModel
+        self.isNextSet = isNextSet
+        self.isExpanded = isExpanded
+        self.onToggleExpand = onToggleExpand
+        self._editingReps = State(initialValue: set.actualReps)
+        self._editingWeight = State(initialValue: set.actualWeight)
+        self._initialReps = State(initialValue: set.actualReps)
+        self._initialWeight = State(initialValue: set.actualWeight)
+    }
+
+    // Computed property to check if values have changed
+    private var hasChanges: Bool {
+        editingReps != initialReps || editingWeight != initialWeight
+    }
+
+    // Check if exercise has multiple incomplete sets
+    private var hasMultipleIncompleteSets: Bool {
+        workoutExercise.sets.filter { !$0.isCompleted }.count > 1
+    }
+
+    // Apply current values to all incomplete sets in this exercise
+    private func applyToAllIncompleteSets() {
+        for workoutSet in workoutExercise.sets where !workoutSet.isCompleted {
+            viewModel.updateSet(workoutSet, reps: editingReps, weight: editingWeight)
+        }
+    }
 
     var body: some View {
-        HStack(spacing: 12) {
-            // Completion Button
-            Button {
+        VStack(alignment: .leading, spacing: 0) {
+            // Set Header
+            Button(action: {
                 if !set.isCompleted {
-                    viewModel.completeSet(workoutExercise: workoutExercise, set: set)
-                    UINotificationFeedbackGenerator().notificationOccurred(.success)
+                    if !isExpanded {
+                        // Reset banner when opening
+                        bannerDismissed = false
+                        initialReps = set.actualReps
+                        initialWeight = set.actualWeight
+                    }
+                    onToggleExpand()
                 }
-            } label: {
-                ZStack {
-                    Circle()
-                        .strokeBorder(set.isCompleted ? Color.green : (isNextSet ? Color.blue : Color.secondary), lineWidth: 2)
-                        .frame(width: 28, height: 28)
+            }) {
+                HStack(spacing: 12) {
+                    // Completion Button
+                    Button {
+                        if !set.isCompleted {
+                            viewModel.completeSet(workoutExercise: workoutExercise, set: set)
+                            UINotificationFeedbackGenerator().notificationOccurred(.success)
+                        }
+                    } label: {
+                        ZStack {
+                            Circle()
+                                .strokeBorder(set.isCompleted ? Color.green : (isNextSet ? Color.blue : Color.secondary), lineWidth: 2)
+                                .frame(width: 28, height: 28)
 
-                    if set.isCompleted {
-                        Image(systemName: "checkmark")
-                            .font(.caption.weight(.bold))
-                            .foregroundStyle(.green)
+                            if set.isCompleted {
+                                Image(systemName: "checkmark")
+                                    .font(.caption.weight(.bold))
+                                    .foregroundStyle(.green)
+                            }
+                        }
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(set.isCompleted)
+
+                    // Set Info
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Set \(set.order + 1)")
+                            .font(.subheadline.weight(.medium))
+                            .foregroundStyle(.primary)
+
+                        HStack(spacing: 8) {
+                            Text("\(set.actualReps) reps")
+                            Text("×")
+                                .foregroundStyle(.secondary)
+                            Text(String(format: "%.1f kg", set.actualWeight))
+                        }
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    }
+
+                    Spacer()
+
+                    // Expand/Collapse indicator or completion time
+                    if !set.isCompleted {
+                        Image(systemName: "chevron.right")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.tertiary)
+                            .rotationEffect(.degrees(isExpanded ? 90 : 0))
+                    } else if let completedAt = set.completedAt {
+                        Text(completedAt, style: .time)
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
                     }
                 }
+                .contentShape(Rectangle())
             }
-            .disabled(set.isCompleted)
+            .buttonStyle(.plain)
+            .padding(.vertical, 8)
+            .padding(.horizontal, 12)
 
-            // Set Info
-            VStack(alignment: .leading, spacing: 2) {
-                Text("Set \(set.order + 1)")
-                    .font(.subheadline.weight(.medium))
+            // Expanded inline editor
+            if isExpanded && !set.isCompleted {
+                VStack(spacing: 12) {
+                    // Apply to All Banner (only if multiple incomplete sets AND changes were made AND not dismissed)
+                    if hasMultipleIncompleteSets && hasChanges && !bannerDismissed {
+                        ApplyToAllBanner(
+                            setCount: workoutExercise.sets.filter { !$0.isCompleted }.count,
+                            onApply: {
+                                withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                                    applyToAllIncompleteSets()
+                                    bannerDismissed = true
+                                }
+                            },
+                            onDismiss: {
+                                withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                                    bannerDismissed = true
+                                }
+                            }
+                        )
+                        .transition(.asymmetric(
+                            insertion: .move(edge: .top).combined(with: .opacity),
+                            removal: .move(edge: .top).combined(with: .opacity)
+                        ))
+                    }
 
-                HStack(spacing: 8) {
-                    Text("\(set.actualReps) reps")
-                    Text("×")
-                        .foregroundStyle(.secondary)
-                    Text(String(format: "%.1f kg", set.actualWeight))
+                    VStack(spacing: 16) {
+                        HorizontalStepper(
+                            title: "Reps",
+                            value: $editingReps,
+                            range: 1...100,
+                            step: 1
+                        ) { newValue in
+                            viewModel.updateSet(set, reps: newValue, weight: editingWeight)
+                        }
+
+                        WeightInput(
+                            title: "Weight (kg)",
+                            weight: $editingWeight,
+                            increment: 0.25
+                        ) { newValue in
+                            viewModel.updateSet(set, reps: editingReps, weight: newValue)
+                        }
+
+                        // Show planned values for reference
+                        HStack {
+                            Text("Planned:")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                            Text("\(set.plannedReps) reps × \(String(format: "%.1f kg", set.plannedWeight))")
+                                .font(.caption.weight(.medium))
+                                .foregroundStyle(.secondary)
+                            Spacer()
+                        }
+                    }
                 }
-                .font(.caption)
-                .foregroundStyle(.secondary)
-            }
-
-            Spacer()
-
-            // Edit button (only for incomplete sets)
-            if !set.isCompleted {
-                Button {
-                    onEdit()
-                } label: {
-                    Image(systemName: "pencil.circle.fill")
-                        .symbolRenderingMode(.hierarchical)
-                        .font(.title3)
-                        .foregroundStyle(.blue)
-                }
-            } else if let completedAt = set.completedAt {
-                Text(completedAt, style: .time)
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
+                .padding(.horizontal, 12)
+                .padding(.bottom, 12)
+                .transition(.asymmetric(
+                    insertion: .opacity.combined(with: .scale(scale: 0.95, anchor: .top)),
+                    removal: .opacity.combined(with: .scale(scale: 0.95, anchor: .top))
+                ))
             }
         }
-        .padding(.vertical, 8)
-        .padding(.horizontal, 12)
-        .background(isNextSet ? Color.blue.opacity(0.1) : Color.clear)
+        .background(isNextSet && !isExpanded ? Color.blue.opacity(0.1) : Color.clear)
         .clipShape(RoundedRectangle(cornerRadius: 8))
         .opacity(set.isCompleted ? 0.7 : 1.0)
-    }
-}
-
-// MARK: - Edit Set Sheet
-
-struct EditSetSheet: View {
-    let set: WorkoutSet
-    @ObservedObject var viewModel: WorkoutViewModel
-    @Environment(\.dismiss) private var dismiss
-
-    @State private var reps: Int
-    @State private var weight: Double
-
-    init(set: WorkoutSet, viewModel: WorkoutViewModel) {
-        self.set = set
-        self.viewModel = viewModel
-        self._reps = State(initialValue: set.actualReps)
-        self._weight = State(initialValue: set.actualWeight)
-    }
-
-    var body: some View {
-        NavigationView {
-            Form {
-                Section {
-                    Stepper("Reps: \(reps)", value: $reps, in: 1...100)
-                        .font(.headline)
-
-                    HStack {
-                        Text("Weight:")
-                            .font(.headline)
-
-                        Spacer()
-
-                        TextField("Weight", value: $weight, format: .number.precision(.fractionLength(1)))
-                            .keyboardType(.decimalPad)
-                            .multilineTextAlignment(.trailing)
-                            .frame(width: 100)
-
-                        Text("kg")
-                            .foregroundStyle(.secondary)
-                    }
-                }
-
-                Section {
-                    LabeledContent("Planned") {
-                        Text("\(set.plannedReps) reps × \(String(format: "%.1f kg", set.plannedWeight))")
-                            .foregroundStyle(.secondary)
-                    }
-                }
-            }
-            .navigationTitle("Edit Set \(set.order + 1)")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") {
-                        dismiss()
-                    }
-                }
-
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Save") {
-                        viewModel.updateSet(set, reps: reps, weight: weight)
-                        dismiss()
-                    }
-                }
-            }
+        .onChange(of: set.actualReps) { _, newValue in
+            editingReps = newValue
+        }
+        .onChange(of: set.actualWeight) { _, newValue in
+            editingWeight = newValue
         }
     }
 }
