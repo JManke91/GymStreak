@@ -38,7 +38,13 @@ struct EditSetView: View {
                         Spacer()
                         Text("\(Int(restTime))s")
                     }
-                    Slider(value: $restTime, in: 0...300, step: 10)
+                    Slider(value: $restTime, in: 0...300, step: 30)
+                        .onChange(of: restTime) { _, newValue in
+                            let rounded = round(newValue / 30) * 30
+                            if rounded != restTime {
+                                restTime = rounded
+                            }
+                        }
                 }
             }
             .navigationTitle("Edit Set")

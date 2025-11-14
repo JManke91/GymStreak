@@ -23,30 +23,60 @@ struct AddExerciseToRoutineView: View {
         }
     }
 
+    private func isExerciseAlreadyInRoutine(_ exercise: Exercise) -> Bool {
+        routine.routineExercises.contains(where: { $0.exercise?.id == exercise.id })
+    }
+
     var body: some View {
         NavigationStack(path: $navigationPath) {
             List {
+                // Info section showing count of exercises already in routine
+                if !routine.routineExercises.isEmpty {
+                    Section {
+                        HStack {
+                            Image(systemName: "info.circle")
+                                .foregroundColor(.blue)
+                            Text("\(routine.routineExercises.count) exercise\(routine.routineExercises.count == 1 ? "" : "s") already in routine")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+                        .listRowBackground(Color.blue.opacity(0.1))
+                    }
+                }
+
                 Section("Choose Exercise") {
                     ForEach(filteredExercises) { exercise in
                         NavigationLink(value: exercise) {
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text(exercise.name)
-                                    .font(.headline)
-                                    .foregroundColor(.primary)
-                                HStack {
-                                    Text(exercise.muscleGroup)
-                                        .font(.caption)
-                                        .foregroundColor(.secondary)
-                                    if !exercise.exerciseDescription.isEmpty {
-                                        Text("•")
-                                            .foregroundColor(.secondary)
-                                        Text(exercise.exerciseDescription)
+                            HStack(spacing: 12) {
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text(exercise.name)
+                                        .font(.headline)
+                                        .foregroundColor(.primary)
+                                    HStack {
+                                        Text(exercise.muscleGroup)
                                             .font(.caption)
                                             .foregroundColor(.secondary)
-                                            .lineLimit(1)
+                                        if !exercise.exerciseDescription.isEmpty {
+                                            Text("•")
+                                                .foregroundColor(.secondary)
+                                            Text(exercise.exerciseDescription)
+                                                .font(.caption)
+                                                .foregroundColor(.secondary)
+                                                .lineLimit(1)
+                                        }
                                     }
                                 }
+
+                                Spacer()
+
+                                // Show checkmark if exercise is already in routine
+                                if isExerciseAlreadyInRoutine(exercise) {
+                                    Image(systemName: "checkmark.circle.fill")
+                                        .foregroundColor(.green)
+                                        .font(.system(size: 20))
+                                }
                             }
+                            .padding(.vertical, 4)
                         }
                     }
                 }
@@ -247,7 +277,13 @@ struct ConfigureExerciseSetsView: View {
                     Spacer()
                     Text("\(Int(globalRestTime))s")
                 }
-                Slider(value: $globalRestTime, in: 0...300, step: 10)
+                Slider(value: $globalRestTime, in: 0...300, step: 30)
+                    .onChange(of: globalRestTime) { _, newValue in
+                        let rounded = round(newValue / 30) * 30
+                        if rounded != globalRestTime {
+                            globalRestTime = rounded
+                        }
+                    }
             }
         }
         .navigationTitle("Add to Routine")

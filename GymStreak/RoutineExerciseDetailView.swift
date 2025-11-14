@@ -115,9 +115,13 @@ struct RoutineExerciseDetailView: View {
                                     Text("\(Int(editingRestTime))s")
                                         .foregroundColor(.secondary)
                                 }
-                                Slider(value: $editingRestTime, in: 0...300, step: 10)
+                                Slider(value: $editingRestTime, in: 0...300, step: 30)
                                     .onChange(of: editingRestTime) { _, newValue in
-                                        updateSet(set, restTime: newValue)
+                                        let rounded = round(newValue / 30) * 30
+                                        if rounded != editingRestTime {
+                                            editingRestTime = rounded
+                                        }
+                                        updateSet(set, restTime: rounded)
                                     }
                             }
                             .padding(.top, 8)

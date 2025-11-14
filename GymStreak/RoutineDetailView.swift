@@ -320,9 +320,13 @@ struct RoutineSetRowView: View {
                         Text(formatRestTime(editingRestTime))
                             .foregroundStyle(.secondary)
                     }
-                    Slider(value: $editingRestTime, in: 0...300, step: 10)
+                    Slider(value: $editingRestTime, in: 0...300, step: 30)
                         .onChange(of: editingRestTime) { _, newValue in
-                            onUpdate(editingReps, editingWeight, newValue)
+                            let rounded = round(newValue / 30) * 30
+                            if rounded != editingRestTime {
+                                editingRestTime = rounded
+                            }
+                            onUpdate(editingReps, editingWeight, rounded)
                         }
                 }
                 .padding(.leading, 40)

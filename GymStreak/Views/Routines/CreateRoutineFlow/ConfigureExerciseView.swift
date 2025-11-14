@@ -167,7 +167,13 @@ struct ConfigureExerciseView: View {
                     Spacer()
                     Text("\(Int(globalRestTime))s")
                 }
-                Slider(value: $globalRestTime, in: 0...300, step: 10)
+                Slider(value: $globalRestTime, in: 0...300, step: 30)
+                    .onChange(of: globalRestTime) { _, newValue in
+                        let rounded = round(newValue / 30) * 30
+                        if rounded != globalRestTime {
+                            globalRestTime = rounded
+                        }
+                    }
             }
         }
         .navigationTitle(exercise.name)
