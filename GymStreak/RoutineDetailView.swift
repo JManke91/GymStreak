@@ -256,18 +256,8 @@ struct ExerciseHeaderView: View {
     }
 
     private func muscleGroupIcon(for group: String?) -> String {
-        switch group {
-        case "Arms": return "figure.arms.open"
-        case "Legs": return "figure.walk"
-        case "Chest": return "figure.strengthtraining.traditional"
-        case "Back": return "figure.cooldown"
-        case "Shoulders": return "figure.flexibility"
-        case "Core": return "figure.core.training"
-        case "Glutes": return "figure.run"
-        case "Calves": return "figure.stairs"
-        case "Full Body": return "figure.mixed.cardio"
-        default: return "dumbbell.fill"
-        }
+        guard let group = group else { return "dumbbell.fill" }
+        return MuscleGroups.icon(for: group)
     }
 }
 

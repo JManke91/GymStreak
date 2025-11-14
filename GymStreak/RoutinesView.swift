@@ -17,13 +17,28 @@ struct RoutinesView: View {
     
     var body: some View {
         NavigationView {
-            List {
-                ForEach(viewModel.routines) { routine in
-                    NavigationLink(destination: RoutineDetailView(routine: routine, viewModel: viewModel, exercisesViewModel: exercisesViewModel, workoutViewModel: workoutViewModel)) {
-                        RoutineRowView(routine: routine)
+            Group {
+                if viewModel.routines.isEmpty {
+                    ContentUnavailableView {
+                        Label("No Routines Yet", systemImage: "list.bullet.clipboard")
+                    } description: {
+                        Text("Create your first routine to get started")
+                    } actions: {
+                        Button("Add Routine") {
+                            viewModel.showingAddRoutine = true
+                        }
+                        .buttonStyle(.borderedProminent)
+                    }
+                } else {
+                    List {
+                        ForEach(viewModel.routines) { routine in
+                            NavigationLink(destination: RoutineDetailView(routine: routine, viewModel: viewModel, exercisesViewModel: exercisesViewModel, workoutViewModel: workoutViewModel)) {
+                                RoutineRowView(routine: routine)
+                            }
+                        }
+                        .onDelete(perform: deleteRoutines)
                     }
                 }
-                .onDelete(perform: deleteRoutines)
             }
             .navigationTitle("Routines")
             .toolbar {

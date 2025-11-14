@@ -47,7 +47,13 @@ Routine (1) ←→ (Many) RoutineExercise (Many) ←→ (1) Exercise
 3. **Streamlined UX**: "Add Set" button creates sets instantly with default values
 
 ### Muscle Group Categories
-Arms, Legs, Chest, Back, Shoulders, Core, Glutes, Calves, Full Body, General
+Defined in `MuscleGroups.swift`:
+- **General**: General, Full Body
+- **Arms**: Biceps, Triceps, Forearms
+- **Chest & Back**: Chest, Upper Back, Lats, Lower Back
+- **Shoulders**: Front Delts, Side Delts, Rear Delts
+- **Core**: Abs, Obliques
+- **Lower Body**: Quadriceps, Hamstrings, Glutes, Calves, Hip Flexors
 
 ## Development Notes
 

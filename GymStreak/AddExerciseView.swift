@@ -8,8 +8,6 @@ struct AddExerciseView: View {
     @State private var muscleGroup = "General"
     @State private var exerciseDescription = ""
 
-    private let muscleGroups = ["General", "Arms", "Legs", "Chest", "Back", "Shoulders", "Core", "Glutes", "Calves", "Full Body"]
-
     // Optional callback when exercise is created (for use in CreateRoutineFlow)
     var onExerciseCreated: ((Exercise) -> Void)?
     
@@ -20,7 +18,7 @@ struct AddExerciseView: View {
                     TextField("Exercise Name", text: $exerciseName)
                     
                     Picker("Muscle Group", selection: $muscleGroup) {
-                        ForEach(muscleGroups, id: \.self) { muscleGroup in
+                        ForEach(MuscleGroups.all, id: \.self) { muscleGroup in
                             Text(muscleGroup).tag(muscleGroup)
                         }
                     }

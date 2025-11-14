@@ -249,17 +249,6 @@ struct WorkoutExerciseDetailCard: View {
     }
 
     private var muscleGroupIcon: String {
-        switch workoutExercise.muscleGroup {
-        case "Arms": return "figure.arms.open"
-        case "Legs": return "figure.walk"
-        case "Chest": return "heart.fill"
-        case "Back": return "figure.cooldown"
-        case "Shoulders": return "figure.arms.open"
-        case "Core": return "figure.core.training"
-        case "Glutes": return "figure.strengthtraining.traditional"
-        case "Calves": return "figure.walk"
-        case "Full Body": return "figure.mixed.cardio"
-        default: return "dumbbell.fill"
-        }
+        MuscleGroups.icon(for: workoutExercise.muscleGroup)
     }
 }

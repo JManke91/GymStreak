@@ -372,15 +372,13 @@ struct CreateExerciseInlineView: View {
     @State private var muscleGroup = "General"
     @State private var exerciseDescription = ""
 
-    private let muscleGroups = ["General", "Arms", "Legs", "Chest", "Back", "Shoulders", "Core", "Glutes", "Calves", "Full Body"]
-
     var body: some View {
         Form {
             Section("Exercise Details") {
                 TextField("Exercise Name", text: $exerciseName)
 
                 Picker("Muscle Group", selection: $muscleGroup) {
-                    ForEach(muscleGroups, id: \.self) { muscleGroup in
+                    ForEach(MuscleGroups.all, id: \.self) { muscleGroup in
                         Text(muscleGroup).tag(muscleGroup)
                     }
                 }

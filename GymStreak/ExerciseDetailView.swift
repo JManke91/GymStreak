@@ -10,8 +10,6 @@ struct ExerciseDetailView: View {
     @State private var muscleGroup: String = ""
     @State private var exerciseDescription: String = ""
 
-    private let muscleGroups = ["General", "Arms", "Legs", "Chest", "Back", "Shoulders", "Core", "Glutes", "Calves", "Full Body"]
-
     var body: some View {
         List {
             Section("Exercise Details") {
@@ -32,7 +30,7 @@ struct ExerciseDetailView: View {
                     Spacer()
                     if isEditing {
                         Picker("Muscle Group", selection: $muscleGroup) {
-                            ForEach(muscleGroups, id: \.self) { muscleGroup in
+                            ForEach(MuscleGroups.all, id: \.self) { muscleGroup in
                                 Text(muscleGroup).tag(muscleGroup)
                             }
                         }

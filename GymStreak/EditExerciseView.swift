@@ -10,8 +10,6 @@ struct EditExerciseView: View {
     @State private var exerciseDescription: String
     @State private var showingDeleteAlert = false
     
-    private let muscleGroups = ["General", "Arms", "Legs", "Chest", "Back", "Shoulders", "Core", "Glutes", "Calves", "Full Body"]
-    
     init(exercise: Exercise, viewModel: ExercisesViewModel) {
         self.exercise = exercise
         self.viewModel = viewModel
@@ -27,7 +25,7 @@ struct EditExerciseView: View {
                     TextField("Exercise Name", text: $exerciseName)
                     
                     Picker("Muscle Group", selection: $muscleGroup) {
-                        ForEach(muscleGroups, id: \.self) { muscleGroup in
+                        ForEach(MuscleGroups.all, id: \.self) { muscleGroup in
                             Text(muscleGroup).tag(muscleGroup)
                         }
                     }

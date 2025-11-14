@@ -11,13 +11,28 @@ struct ExercisesView: View {
     
     var body: some View {
         NavigationView {
-            List {
-                ForEach(viewModel.exercises) { exercise in
-                    NavigationLink(destination: ExerciseDetailView(exercise: exercise, viewModel: viewModel)) {
-                        ExerciseRowView(exercise: exercise)
+            Group {
+                if viewModel.exercises.isEmpty {
+                    ContentUnavailableView {
+                        Label("No Exercises Yet", systemImage: "dumbbell")
+                    } description: {
+                        Text("Add your first exercise to build your library")
+                    } actions: {
+                        Button("Add Exercise") {
+                            viewModel.showingAddExercise = true
+                        }
+                        .buttonStyle(.borderedProminent)
+                    }
+                } else {
+                    List {
+                        ForEach(viewModel.exercises) { exercise in
+                            NavigationLink(destination: ExerciseDetailView(exercise: exercise, viewModel: viewModel)) {
+                                ExerciseRowView(exercise: exercise)
+                            }
+                        }
+                        .onDelete(perform: deleteExercises)
                     }
                 }
-                .onDelete(perform: deleteExercises)
             }
             .navigationTitle("Exercises")
             .toolbar {
