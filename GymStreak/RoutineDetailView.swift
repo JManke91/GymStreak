@@ -13,7 +13,7 @@ struct RoutineDetailView: View {
     @State private var expandedSetId: UUID?
     @State private var editingReps: Int = 10
     @State private var editingWeight: Double = 0.0
-    @State private var editingRestTime: TimeInterval = 60.0
+    @State private var exerciseRestTimes: [UUID: TimeInterval] = [:]
 
     var body: some View {
         List {
@@ -50,6 +50,11 @@ struct RoutineDetailView: View {
                                         if isExpanded {
                                             expandedExerciseId = routineExercise.id
                                             expandedSetId = nil
+                                            // Initialize rest time for this exercise if not set
+                                            if exerciseRestTimes[routineExercise.id] == nil,
+                                               let firstSet = routineExercise.sets.first {
+                                                exerciseRestTimes[routineExercise.id] = firstSet.restTime
+                                            }
                                         } else {
                                             expandedExerciseId = nil
                                             expandedSetId = nil
@@ -67,7 +72,6 @@ struct RoutineDetailView: View {
                                         isExpanded: expandedSetId == set.id,
                                         editingReps: $editingReps,
                                         editingWeight: $editingWeight,
-                                        editingRestTime: $editingRestTime,
                                         onTap: {
                                             withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
                                                 if expandedSetId == set.id {
@@ -76,12 +80,11 @@ struct RoutineDetailView: View {
                                                     expandedSetId = set.id
                                                     editingReps = set.reps
                                                     editingWeight = set.weight
-                                                    editingRestTime = set.restTime
                                                 }
                                             }
                                         },
-                                        onUpdate: { reps, weight, restTime in
-                                            updateSet(set, reps: reps, weight: weight, restTime: restTime)
+                                        onUpdate: { reps, weight in
+                                            updateSet(set, reps: reps, weight: weight)
                                         }
                                     )
                                 }
@@ -95,6 +98,37 @@ struct RoutineDetailView: View {
                                 }
                                 .buttonStyle(.bordered)
                                 .tint(.blue)
+
+                                // Global Rest Timer for this exercise
+                                Divider()
+                                    .padding(.vertical, 4)
+
+                                VStack(spacing: 8) {
+                                    HStack {
+                                        Text("Rest Time Between Sets")
+                                            .font(.subheadline.weight(.medium))
+                                        Spacer()
+                                        Text(TimeFormatting.formatRestTime(exerciseRestTimes[routineExercise.id] ?? 60))
+                                            .font(.subheadline)
+                                            .foregroundStyle(.secondary)
+                                    }
+                                    Slider(
+                                        value: Binding(
+                                            get: { exerciseRestTimes[routineExercise.id] ?? 60 },
+                                            set: { newValue in
+                                                let rounded = round(newValue / 30) * 30
+                                                exerciseRestTimes[routineExercise.id] = rounded
+                                                updateAllSetsRestTime(for: routineExercise, restTime: rounded)
+                                            }
+                                        ),
+                                        in: 0...300,
+                                        step: 30
+                                    )
+                                }
+                                .padding(.vertical, 8)
+                                .padding(.horizontal, 12)
+                                .background(Color(.tertiarySystemGroupedBackground))
+                                .clipShape(RoundedRectangle(cornerRadius: 8))
                             }
                             .padding(.vertical, 8)
 
@@ -187,17 +221,21 @@ struct RoutineDetailView: View {
         }
     }
 
-    private func updateSet(_ set: ExerciseSet, reps: Int? = nil, weight: Double? = nil, restTime: TimeInterval? = nil) {
+    private func updateSet(_ set: ExerciseSet, reps: Int? = nil, weight: Double? = nil) {
         if let reps = reps {
             set.reps = reps
         }
         if let weight = weight {
             set.weight = weight
         }
-        if let restTime = restTime {
-            set.restTime = restTime
-        }
         viewModel.updateSet(set)
+    }
+
+    private func updateAllSetsRestTime(for routineExercise: RoutineExercise, restTime: TimeInterval) {
+        for set in routineExercise.sets {
+            set.restTime = restTime
+            viewModel.updateSet(set)
+        }
     }
 }
 
@@ -267,9 +305,8 @@ struct RoutineSetRowView: View {
     let isExpanded: Bool
     @Binding var editingReps: Int
     @Binding var editingWeight: Double
-    @Binding var editingRestTime: TimeInterval
     let onTap: () -> Void
-    let onUpdate: (Int, Double, TimeInterval) -> Void
+    let onUpdate: (Int, Double) -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -290,7 +327,7 @@ struct RoutineSetRowView: View {
                             .font(.subheadline.weight(.medium))
                             .foregroundStyle(.primary)
 
-                        Text("Rest: \(formatRestTime(set.restTime))")
+                        Text("Rest: \(TimeFormatting.formatRestTime(set.restTime))")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
@@ -314,7 +351,7 @@ struct RoutineSetRowView: View {
                         Spacer()
                         Stepper("\(editingReps)", value: $editingReps, in: 1...100)
                             .onChange(of: editingReps) { _, newValue in
-                                onUpdate(newValue, editingWeight, editingRestTime)
+                                onUpdate(newValue, editingWeight)
                             }
                     }
 
@@ -326,24 +363,9 @@ struct RoutineSetRowView: View {
                             .multilineTextAlignment(.trailing)
                             .frame(width: 80)
                             .onChange(of: editingWeight) { _, newValue in
-                                onUpdate(editingReps, newValue, editingRestTime)
+                                onUpdate(editingReps, newValue)
                             }
                     }
-
-                    HStack {
-                        Text("Rest Time:")
-                        Spacer()
-                        Text(formatRestTime(editingRestTime))
-                            .foregroundStyle(.secondary)
-                    }
-                    Slider(value: $editingRestTime, in: 0...300, step: 30)
-                        .onChange(of: editingRestTime) { _, newValue in
-                            let rounded = round(newValue / 30) * 30
-                            if rounded != editingRestTime {
-                                editingRestTime = rounded
-                            }
-                            onUpdate(editingReps, editingWeight, rounded)
-                        }
                 }
                 .padding(.leading, 40)
                 .padding(.top, 8)
@@ -354,16 +376,6 @@ struct RoutineSetRowView: View {
             }
         }
         .padding(.vertical, 4)
-    }
-
-    private func formatRestTime(_ seconds: TimeInterval) -> String {
-        let minutes = Int(seconds) / 60
-        let secs = Int(seconds) % 60
-        if minutes > 0 {
-            return "\(minutes)m \(secs)s"
-        } else {
-            return "\(secs)s"
-        }
     }
 }
 

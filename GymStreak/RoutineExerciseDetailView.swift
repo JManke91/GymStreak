@@ -8,7 +8,7 @@ struct RoutineExerciseDetailView: View {
     @State private var editingSetId: UUID?
     @State private var editingReps: Int = 10
     @State private var editingWeight: Double = 0.0
-    @State private var editingRestTime: TimeInterval = 60.0
+    @State private var globalRestTime: TimeInterval = 60.0
     
     var body: some View {
         List {
@@ -64,7 +64,6 @@ struct RoutineExerciseDetailView: View {
                                     editingSetId = set.id
                                     editingReps = set.reps
                                     editingWeight = set.weight
-                                    editingRestTime = set.restTime
                                 }
                             }
                         }) {
@@ -108,21 +107,6 @@ struct RoutineExerciseDetailView: View {
                                             updateSet(set, weight: newValue)
                                         }
                                 }
-
-                                HStack {
-                                    Text("Rest Time:")
-                                    Spacer()
-                                    Text("\(Int(editingRestTime))s")
-                                        .foregroundColor(.secondary)
-                                }
-                                Slider(value: $editingRestTime, in: 0...300, step: 30)
-                                    .onChange(of: editingRestTime) { _, newValue in
-                                        let rounded = round(newValue / 30) * 30
-                                        if rounded != editingRestTime {
-                                            editingRestTime = rounded
-                                        }
-                                        updateSet(set, restTime: rounded)
-                                    }
                             }
                             .padding(.top, 8)
                             .transition(.asymmetric(
@@ -135,9 +119,25 @@ struct RoutineExerciseDetailView: View {
                 .onDelete(perform: deleteSets)
 
                 Button("Add Set") {
-                    viewModel.addSet(to: routineExercise)
+                    addNewSet()
                 }
                 .foregroundColor(.blue)
+            }
+
+            Section("Rest Timer") {
+                HStack {
+                    Text("Rest Time Between Sets")
+                    Spacer()
+                    Text(TimeFormatting.formatRestTime(globalRestTime))
+                }
+                Slider(value: $globalRestTime, in: 0...300, step: 30)
+                    .onChange(of: globalRestTime) { _, newValue in
+                        let rounded = round(newValue / 30) * 30
+                        if rounded != globalRestTime {
+                            globalRestTime = rounded
+                        }
+                        updateAllSetsRestTime(rounded)
+                    }
             }
         }
         .navigationTitle(routineExercise.exercise?.name ?? "Exercise")
@@ -159,25 +159,53 @@ struct RoutineExerciseDetailView: View {
         } message: {
             Text("Are you sure you want to delete this exercise from the routine? This action cannot be undone.")
         }
+        .onAppear {
+            // Initialize global rest time from first set, or use default
+            if let firstSet = routineExercise.sets.first {
+                globalRestTime = firstSet.restTime
+            }
+        }
     }
-    
+
     private func deleteSets(offsets: IndexSet) {
         for index in offsets {
             viewModel.removeSet(routineExercise.sets[index], from: routineExercise)
         }
     }
 
-    private func updateSet(_ set: ExerciseSet, reps: Int? = nil, weight: Double? = nil, restTime: TimeInterval? = nil) {
+    private func addNewSet() {
+        viewModel.addSet(to: routineExercise)
+
+        // Get the newly added set (last one)
+        if let newSet = routineExercise.sets.last {
+            // Update its rest time to match global setting
+            newSet.restTime = globalRestTime
+            viewModel.updateSet(newSet)
+
+            // Auto-expand the new set
+            withAnimation(.easeInOut(duration: 0.3)) {
+                editingSetId = newSet.id
+                editingReps = newSet.reps
+                editingWeight = newSet.weight
+            }
+        }
+    }
+
+    private func updateSet(_ set: ExerciseSet, reps: Int? = nil, weight: Double? = nil) {
         if let reps = reps {
             set.reps = reps
         }
         if let weight = weight {
             set.weight = weight
         }
-        if let restTime = restTime {
-            set.restTime = restTime
-        }
         viewModel.updateSet(set)
+    }
+
+    private func updateAllSetsRestTime(_ restTime: TimeInterval) {
+        for set in routineExercise.sets {
+            set.restTime = restTime
+            viewModel.updateSet(set)
+        }
     }
 }
 
@@ -197,7 +225,7 @@ struct SetRowView: View {
                     Text("•")
                     Text("\(set.weight, specifier: "%.1f") kg")
                     Text("•")
-                    Text("\(Int(set.restTime))s rest")
+                    Text("\(TimeFormatting.formatRestTime(set.restTime)) rest")
                 }
                 .font(.caption)
                 .foregroundColor(.secondary)

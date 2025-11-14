@@ -275,7 +275,7 @@ struct ConfigureExerciseSetsView: View {
                 HStack {
                     Text("Rest Time Between Sets")
                     Spacer()
-                    Text("\(Int(globalRestTime))s")
+                    Text(TimeFormatting.formatRestTime(globalRestTime))
                 }
                 Slider(value: $globalRestTime, in: 0...300, step: 30)
                     .onChange(of: globalRestTime) { _, newValue in
