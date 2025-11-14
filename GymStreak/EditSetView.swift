@@ -23,28 +23,36 @@ struct EditSetView: View {
         NavigationView {
             Form {
                 Section("Set Details") {
-                    Stepper("Reps: \(reps)", value: $reps, in: 1...100)
-                    
-                    HStack {
-                        Text("Weight (kg)")
-                        Spacer()
-                        TextField("0.0", value: $weight, format: .number)
-                            .keyboardType(.decimalPad)
-                            .multilineTextAlignment(.trailing)
-                    }
-                    
-                    HStack {
-                        Text("Rest Time")
-                        Spacer()
-                        Text("\(Int(restTime))s")
-                    }
-                    Slider(value: $restTime, in: 0...300, step: 30)
-                        .onChange(of: restTime) { _, newValue in
-                            let rounded = round(newValue / 30) * 30
-                            if rounded != restTime {
-                                restTime = rounded
-                            }
+                    HorizontalStepper(
+                        title: "Reps",
+                        value: $reps,
+                        range: 1...100,
+                        step: 1
+                    )
+
+                    WeightInput(
+                        title: "Weight (kg)",
+                        weight: $weight,
+                        increment: 0.25
+                    )
+
+                    VStack(spacing: 8) {
+                        HStack {
+                            Text("Rest Time")
+                                .font(.subheadline)
+                            Spacer()
+                            Text(TimeFormatting.formatRestTime(restTime))
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
                         }
+                        Slider(value: $restTime, in: 0...300, step: 30)
+                            .onChange(of: restTime) { _, newValue in
+                                let rounded = round(newValue / 30) * 30
+                                if rounded != restTime {
+                                    restTime = rounded
+                                }
+                            }
+                    }
                 }
             }
             .navigationTitle("Edit Set")
@@ -55,7 +63,7 @@ struct EditSetView: View {
                         dismiss()
                     }
                 }
-                
+
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button("Save") {
                         saveSet()

@@ -153,6 +153,14 @@ struct ConfigureExerciseSetsView: View {
     @State private var editingSetIndex: Int?
     @State private var editingReps = 10
     @State private var editingWeight = 0.0
+    @State private var initialReps = 10
+    @State private var initialWeight = 0.0
+    @State private var bannerDismissed = false
+
+    // Computed property to check if values have changed
+    private var hasChanges: Bool {
+        editingReps != initialReps || editingWeight != initialWeight
+    }
 
     var body: some View {
         List {
@@ -193,6 +201,10 @@ struct ConfigureExerciseSetsView: View {
                                     editingSetIndex = index
                                     editingReps = set.reps
                                     editingWeight = set.weight
+                                    initialReps = set.reps
+                                    initialWeight = set.weight
+                                    // Reset banner dismissed state when opening a new set
+                                    bannerDismissed = false
                                 }
                             }
                         }) {
@@ -215,28 +227,51 @@ struct ConfigureExerciseSetsView: View {
 
                         if editingSetIndex == index {
                             VStack(spacing: 12) {
-                                HStack {
-                                    Text("Reps:")
-                                    Spacer()
-                                    Stepper("\(editingReps)", value: $editingReps, in: 1...100)
-                                        .onChange(of: editingReps) { _, _ in
-                                            updateSet(at: index)
+                                // Apply to All Banner (only if multiple sets AND changes were made AND not dismissed)
+                                if sets.count > 1 && hasChanges && !bannerDismissed {
+                                    ApplyToAllBanner(
+                                        setCount: sets.count,
+                                        onApply: {
+                                            withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                                                // Apply to all sets
+                                                for i in sets.indices {
+                                                    sets[i].reps = editingReps
+                                                    sets[i].weight = editingWeight
+                                                }
+                                                bannerDismissed = true
+                                            }
+                                        },
+                                        onDismiss: {
+                                            withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                                                bannerDismissed = true
+                                            }
                                         }
+                                    )
+                                    .transition(.asymmetric(
+                                        insertion: .move(edge: .top).combined(with: .opacity),
+                                        removal: .move(edge: .top).combined(with: .opacity)
+                                    ))
                                 }
 
-                                HStack {
-                                    Text("Weight (kg):")
-                                    Spacer()
-                                    TextField("0.0", value: $editingWeight, format: .number)
-                                        .keyboardType(.decimalPad)
-                                        .multilineTextAlignment(.trailing)
-                                        .frame(width: 80)
-                                        .onChange(of: editingWeight) { _, _ in
-                                            updateSet(at: index)
-                                        }
+                                HorizontalStepper(
+                                    title: "Reps",
+                                    value: $editingReps,
+                                    range: 1...100,
+                                    step: 1
+                                ) { _ in
+                                    handleSetUpdate(at: index)
+                                }
+
+                                WeightInput(
+                                    title: "Weight (kg)",
+                                    weight: $editingWeight,
+                                    increment: 0.25
+                                ) { _ in
+                                    handleSetUpdate(at: index)
                                 }
                             }
-                            .padding(.top, 8)
+                            .padding(.top, 12)
+                            .padding(.bottom, 8)
                             .transition(.asymmetric(
                                 insertion: .opacity.combined(with: .scale(scale: 0.95, anchor: .top)),
                                 removal: .opacity.combined(with: .scale(scale: 0.95, anchor: .top))
@@ -306,6 +341,8 @@ struct ConfigureExerciseSetsView: View {
             editingSetIndex = sets.count - 1
             editingReps = newSet.reps
             editingWeight = newSet.weight
+            initialReps = newSet.reps
+            initialWeight = newSet.weight
         }
     }
 
@@ -330,7 +367,14 @@ struct ConfigureExerciseSetsView: View {
             editingSetIndex = sets.count - 1
             editingReps = newSet.reps
             editingWeight = newSet.weight
+            initialReps = newSet.reps
+            initialWeight = newSet.weight
         }
+    }
+
+    private func handleSetUpdate(at index: Int) {
+        // Apply only to current set (Apply to All is handled by the banner callback)
+        updateSet(at: index)
     }
 
     private func updateSet(at index: Int) {

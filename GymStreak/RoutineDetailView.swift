@@ -13,7 +13,11 @@ struct RoutineDetailView: View {
     @State private var expandedSetId: UUID?
     @State private var editingReps: Int = 10
     @State private var editingWeight: Double = 0.0
+    @State private var initialReps: Int = 10
+    @State private var initialWeight: Double = 0.0
     @State private var exerciseRestTimes: [UUID: TimeInterval] = [:]
+    @State private var bannerDismissedForExercise: [UUID: Bool] = [:]
+    @State private var currentRoutineExercise: RoutineExercise?
 
     var body: some View {
         List {
@@ -72,19 +76,53 @@ struct RoutineDetailView: View {
                                         isExpanded: expandedSetId == set.id,
                                         editingReps: $editingReps,
                                         editingWeight: $editingWeight,
+                                        initialReps: initialReps,
+                                        initialWeight: initialWeight,
+                                        showApplyToAllBanner: routineExercise.sets.count > 1,
+                                        bannerDismissed: bannerDismissedForExercise[routineExercise.id] ?? false,
+                                        totalSets: routineExercise.sets.count,
                                         onTap: {
                                             withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
                                                 if expandedSetId == set.id {
                                                     expandedSetId = nil
+                                                    currentRoutineExercise = nil
                                                 } else {
                                                     expandedSetId = set.id
                                                     editingReps = set.reps
                                                     editingWeight = set.weight
+                                                    initialReps = set.reps
+                                                    initialWeight = set.weight
+                                                    currentRoutineExercise = routineExercise
+                                                    // Reset banner dismissed state when opening a new set
+                                                    bannerDismissedForExercise[routineExercise.id] = false
                                                 }
                                             }
                                         },
                                         onUpdate: { reps, weight in
-                                            updateSet(set, reps: reps, weight: weight)
+                                            handleSetUpdate(
+                                                set: set,
+                                                reps: reps,
+                                                weight: weight,
+                                                routineExercise: routineExercise,
+                                                applyToAll: false
+                                            )
+                                        },
+                                        onApplyToAll: {
+                                            withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                                                handleSetUpdate(
+                                                    set: set,
+                                                    reps: editingReps,
+                                                    weight: editingWeight,
+                                                    routineExercise: routineExercise,
+                                                    applyToAll: true
+                                                )
+                                                bannerDismissedForExercise[routineExercise.id] = true
+                                            }
+                                        },
+                                        onDismissBanner: {
+                                            withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                                                bannerDismissedForExercise[routineExercise.id] = true
+                                            }
                                         }
                                     )
                                 }
@@ -237,6 +275,30 @@ struct RoutineDetailView: View {
             viewModel.updateSet(set)
         }
     }
+
+    private func handleSetUpdate(
+        set: ExerciseSet,
+        reps: Int?,
+        weight: Double?,
+        routineExercise: RoutineExercise,
+        applyToAll: Bool
+    ) {
+        if applyToAll {
+            // Apply to all sets in this exercise
+            for exerciseSet in routineExercise.sets {
+                if let reps = reps {
+                    exerciseSet.reps = reps
+                }
+                if let weight = weight {
+                    exerciseSet.weight = weight
+                }
+                viewModel.updateSet(exerciseSet)
+            }
+        } else {
+            // Apply only to current set
+            updateSet(set, reps: reps, weight: weight)
+        }
+    }
 }
 
 // MARK: - Supporting Views
@@ -305,8 +367,20 @@ struct RoutineSetRowView: View {
     let isExpanded: Bool
     @Binding var editingReps: Int
     @Binding var editingWeight: Double
+    let initialReps: Int
+    let initialWeight: Double
+    let showApplyToAllBanner: Bool
+    let bannerDismissed: Bool
+    let totalSets: Int
     let onTap: () -> Void
     let onUpdate: (Int, Double) -> Void
+    let onApplyToAll: () -> Void
+    let onDismissBanner: () -> Void
+
+    // Computed property to check if values have changed
+    private var hasChanges: Bool {
+        editingReps != initialReps || editingWeight != initialWeight
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -346,29 +420,44 @@ struct RoutineSetRowView: View {
             // Expanded edit form
             if isExpanded {
                 VStack(spacing: 12) {
-                    HStack {
-                        Text("Reps:")
-                        Spacer()
-                        Stepper("\(editingReps)", value: $editingReps, in: 1...100)
-                            .onChange(of: editingReps) { _, newValue in
-                                onUpdate(newValue, editingWeight)
-                            }
+                    // Apply to All Banner (only if exercise has multiple sets AND changes were made AND not dismissed)
+                    if showApplyToAllBanner && hasChanges && !bannerDismissed {
+                        ApplyToAllBanner(
+                            setCount: totalSets,
+                            onApply: onApplyToAll,
+                            onDismiss: onDismissBanner
+                        )
+                        .padding(.leading, 40)
+                        .padding(.trailing, 16)
+                        .transition(.asymmetric(
+                            insertion: .move(edge: .top).combined(with: .opacity),
+                            removal: .move(edge: .top).combined(with: .opacity)
+                        ))
                     }
 
-                    HStack {
-                        Text("Weight (kg):")
-                        Spacer()
-                        TextField("0.0", value: $editingWeight, format: .number)
-                            .keyboardType(.decimalPad)
-                            .multilineTextAlignment(.trailing)
-                            .frame(width: 80)
-                            .onChange(of: editingWeight) { _, newValue in
-                                onUpdate(editingReps, newValue)
-                            }
+                    VStack(spacing: 16) {
+                        HorizontalStepper(
+                            title: "Reps",
+                            value: $editingReps,
+                            range: 1...100,
+                            step: 1
+                        ) { newValue in
+                            onUpdate(newValue, editingWeight)
+                        }
+
+                        WeightInput(
+                            title: "Weight (kg)",
+                            weight: $editingWeight,
+                            increment: 0.25
+                        ) { newValue in
+                            onUpdate(editingReps, newValue)
+                        }
                     }
+                    .padding(.leading, 40)
+                    .padding(.trailing, 16)
                 }
-                .padding(.leading, 40)
-                .padding(.top, 8)
+                .padding(.top, 12)
+                .padding(.bottom, 8)
                 .transition(.asymmetric(
                     insertion: .opacity.combined(with: .scale(scale: 0.95, anchor: .top)),
                     removal: .opacity.combined(with: .scale(scale: 0.95, anchor: .top))
