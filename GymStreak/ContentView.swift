@@ -6,29 +6,42 @@
 //
 
 import SwiftUI
+import SwiftData
 
 struct ContentView: View {
+    @Environment(\.modelContext) private var modelContext
+    @StateObject private var workoutViewModel: WorkoutViewModel
+
+    init() {
+        // Initialize with a temporary context, will be updated in onAppear
+        let tempContext = ModelContext(try! ModelContainer(for: Routine.self, Exercise.self, RoutineExercise.self, ExerciseSet.self, WorkoutSession.self, WorkoutExercise.self, WorkoutSet.self))
+        self._workoutViewModel = StateObject(wrappedValue: WorkoutViewModel(modelContext: tempContext))
+    }
+
     var body: some View {
         TabView {
             RoutinesView()
                 .tabItem {
                     Label("Routines", systemImage: "list.bullet")
                 }
-            
+
             ExercisesView()
                 .tabItem {
                     Label("Exercises", systemImage: "dumbbell.fill")
                 }
-            
-            WorkoutView()
+
+            WorkoutHistoryView(viewModel: workoutViewModel)
                 .tabItem {
-                    Label("Workout", systemImage: "play.circle")
+                    Label("History", systemImage: "clock.fill")
                 }
+        }
+        .onAppear {
+            workoutViewModel.updateModelContext(modelContext)
         }
     }
 }
 
 #Preview {
     ContentView()
-        .modelContainer(for: [Routine.self, Exercise.self, RoutineExercise.self, ExerciseSet.self], inMemory: true)
+        .modelContainer(for: [Routine.self, Exercise.self, RoutineExercise.self, ExerciseSet.self, WorkoutSession.self, WorkoutExercise.self, WorkoutSet.self], inMemory: true)
 }

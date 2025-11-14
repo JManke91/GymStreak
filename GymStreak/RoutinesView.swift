@@ -5,19 +5,21 @@ struct RoutinesView: View {
     @Environment(\.modelContext) private var modelContext
     @StateObject private var viewModel: RoutinesViewModel
     @StateObject private var exercisesViewModel: ExercisesViewModel
+    @StateObject private var workoutViewModel: WorkoutViewModel
 
     init() {
         // Initialize with a temporary context, will be updated in onAppear
-        let tempContext = ModelContext(try! ModelContainer(for: Routine.self, Exercise.self, RoutineExercise.self, ExerciseSet.self))
+        let tempContext = ModelContext(try! ModelContainer(for: Routine.self, Exercise.self, RoutineExercise.self, ExerciseSet.self, WorkoutSession.self, WorkoutExercise.self, WorkoutSet.self))
         self._viewModel = StateObject(wrappedValue: RoutinesViewModel(modelContext: tempContext))
         self._exercisesViewModel = StateObject(wrappedValue: ExercisesViewModel(modelContext: tempContext))
+        self._workoutViewModel = StateObject(wrappedValue: WorkoutViewModel(modelContext: tempContext))
     }
     
     var body: some View {
         NavigationView {
             List {
                 ForEach(viewModel.routines) { routine in
-                    NavigationLink(destination: RoutineDetailView(routine: routine, viewModel: viewModel, exercisesViewModel: exercisesViewModel)) {
+                    NavigationLink(destination: RoutineDetailView(routine: routine, viewModel: viewModel, exercisesViewModel: exercisesViewModel, workoutViewModel: workoutViewModel)) {
                         RoutineRowView(routine: routine)
                     }
                 }
@@ -44,6 +46,7 @@ struct RoutinesView: View {
             // Update viewModels with the actual modelContext from environment
             viewModel.updateModelContext(modelContext)
             exercisesViewModel.updateModelContext(modelContext)
+            workoutViewModel.updateModelContext(modelContext)
             viewModel.fetchRoutines()
         }
     }

@@ -4,9 +4,11 @@ struct RoutineDetailView: View {
     let routine: Routine
     @ObservedObject var viewModel: RoutinesViewModel
     @ObservedObject var exercisesViewModel: ExercisesViewModel
+    @ObservedObject var workoutViewModel: WorkoutViewModel
     @State private var showingAddExercise = false
     @State private var showingDeleteAlert = false
     @State private var showingEditRoutine = false
+    @State private var showingActiveWorkout = false
     @State private var expandedExerciseId: UUID?
     @State private var expandedSetId: UUID?
     @State private var editingReps: Int = 10
@@ -124,6 +126,27 @@ struct RoutineDetailView: View {
         .listStyle(.insetGrouped)
         .navigationTitle(routine.name)
         .navigationBarTitleDisplayMode(.large)
+        .safeAreaInset(edge: .bottom) {
+            if !routine.routineExercises.isEmpty {
+                VStack(spacing: 0) {
+                    Divider()
+                    Button {
+                        workoutViewModel.startWorkout(routine: routine)
+                        showingActiveWorkout = true
+                    } label: {
+                        Label("Start Workout", systemImage: "play.circle.fill")
+                            .font(.headline)
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 50)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.large)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 12)
+                    .background(.regularMaterial)
+                }
+            }
+        }
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
                 Menu {
@@ -151,6 +174,9 @@ struct RoutineDetailView: View {
             Button("Cancel", role: .cancel) {}
         } message: {
             Text("Are you sure you want to delete '\(routine.name)'? This action cannot be undone.")
+        }
+        .fullScreenCover(isPresented: $showingActiveWorkout) {
+            ActiveWorkoutView(viewModel: workoutViewModel)
         }
     }
 
