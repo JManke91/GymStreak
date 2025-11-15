@@ -9,6 +9,7 @@ struct ActiveWorkoutView: View {
     @State private var showingSaveOptions = false
     @State private var showingRestTimerSheet = false
     @State private var expandedSetId: UUID?
+    @State private var lastActiveExerciseId: UUID?
 
     var body: some View {
         ZStack {
@@ -21,7 +22,8 @@ struct ActiveWorkoutView: View {
                                 workoutExercise: workoutExercise,
                                 viewModel: viewModel,
                                 isCurrentExercise: isCurrentExercise(workoutExercise),
-                                expandedSetId: $expandedSetId
+                                expandedSetId: $expandedSetId,
+                                lastActiveExerciseId: $lastActiveExerciseId
                             )
                         }
                     }
@@ -105,6 +107,12 @@ struct ActiveWorkoutView: View {
     }
 
     private func isCurrentExercise(_ exercise: WorkoutExercise) -> Bool {
+        // If user has interacted with a specific exercise, highlight that one
+        if let lastActiveId = lastActiveExerciseId {
+            return exercise.id == lastActiveId
+        }
+
+        // Otherwise, highlight the exercise with the next incomplete set
         guard let nextSet = viewModel.findNextIncompleteSet() else {
             return false
         }
@@ -175,6 +183,7 @@ struct ExerciseCard: View {
     @ObservedObject var viewModel: WorkoutViewModel
     let isCurrentExercise: Bool
     @Binding var expandedSetId: UUID?
+    @Binding var lastActiveExerciseId: UUID?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -219,7 +228,13 @@ struct ExerciseCard: View {
                             } else {
                                 expandedSetId = set.id
                             }
+                            // Mark this exercise as active when user interacts with it
+                            lastActiveExerciseId = workoutExercise.id
                         }
+                    },
+                    onSetInteraction: {
+                        // Mark this exercise as active when user completes/uncompletes a set
+                        lastActiveExerciseId = workoutExercise.id
                     }
                 )
             }
@@ -238,10 +253,21 @@ struct ExerciseCard: View {
     }
 
     private func isNextSet(_ set: WorkoutSet) -> Bool {
-        guard let nextSet = viewModel.findNextIncompleteSet() else {
+        // Only highlight next set if this is the current exercise
+        guard isCurrentExercise else {
             return false
         }
-        return nextSet.set.id == set.id
+
+        // Find the first incomplete set in THIS exercise
+        let incompleteSetsInExercise = workoutExercise.sets
+            .sorted(by: { $0.order < $1.order })
+            .filter { !$0.isCompleted }
+
+        guard let firstIncompleteSet = incompleteSetsInExercise.first else {
+            return false
+        }
+
+        return firstIncompleteSet.id == set.id
     }
 }
 
@@ -254,6 +280,7 @@ struct WorkoutSetRow: View {
     let isNextSet: Bool
     let isExpanded: Bool
     let onToggleExpand: () -> Void
+    let onSetInteraction: () -> Void
 
     @State private var editingReps: Int
     @State private var editingWeight: Double
@@ -262,13 +289,14 @@ struct WorkoutSetRow: View {
     @State private var repsBannerDismissed = false
     @State private var weightBannerDismissed = false
 
-    init(set: WorkoutSet, workoutExercise: WorkoutExercise, viewModel: WorkoutViewModel, isNextSet: Bool, isExpanded: Bool, onToggleExpand: @escaping () -> Void) {
+    init(set: WorkoutSet, workoutExercise: WorkoutExercise, viewModel: WorkoutViewModel, isNextSet: Bool, isExpanded: Bool, onToggleExpand: @escaping () -> Void, onSetInteraction: @escaping () -> Void) {
         self.set = set
         self.workoutExercise = workoutExercise
         self.viewModel = viewModel
         self.isNextSet = isNextSet
         self.isExpanded = isExpanded
         self.onToggleExpand = onToggleExpand
+        self.onSetInteraction = onSetInteraction
         self._editingReps = State(initialValue: set.actualReps)
         self._editingWeight = State(initialValue: set.actualWeight)
         self._initialReps = State(initialValue: set.actualReps)
@@ -339,6 +367,8 @@ struct WorkoutSetRow: View {
                             viewModel.completeSet(workoutExercise: workoutExercise, set: set)
                             UINotificationFeedbackGenerator().notificationOccurred(.success)
                         }
+                        // Notify that user interacted with this exercise
+                        onSetInteraction()
                     } label: {
                         ZStack {
                             Circle()
