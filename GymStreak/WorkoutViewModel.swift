@@ -227,8 +227,9 @@ class WorkoutViewModel: ObservableObject {
     func startWorkout(routine: Routine) {
         let session = WorkoutSession(routine: routine)
 
-        // Create workout exercises from routine
-        for (index, routineExercise) in routine.routineExercises.enumerated() {
+        // Create workout exercises from routine (sorted by order to maintain routine sequence)
+        let sortedRoutineExercises = routine.routineExercises.sorted(by: { $0.order < $1.order })
+        for (index, routineExercise) in sortedRoutineExercises.enumerated() {
             let workoutExercise = WorkoutExercise(from: routineExercise, order: index)
             workoutExercise.workoutSession = session
             session.workoutExercises.append(workoutExercise)
