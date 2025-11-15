@@ -26,6 +26,45 @@ struct ActiveWorkoutView: View {
                                 lastActiveExerciseId: $lastActiveExerciseId
                             )
                         }
+
+                        // Add Exercise Button - Card-style with chevron (navigation pattern)
+                        Button {
+                            // TODO: Navigate to exercise picker
+                            UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                        } label: {
+                            HStack(spacing: 12) {
+                                Image(systemName: "dumbbell.fill")
+                                    .font(.title2)
+                                    .foregroundStyle(.white)
+                                    .frame(width: 44, height: 44)
+                                    .background(
+                                        Circle()
+                                            .fill(Color.green)
+                                    )
+
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text("Add Exercise")
+                                        .font(.headline)
+                                    Text("Browse exercise library")
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
+
+                                Spacer()
+
+                                Image(systemName: "chevron.right")
+                                    .font(.caption.weight(.semibold))
+                                    .foregroundStyle(.tertiary)
+                            }
+                            .padding(.vertical, 12)
+                            .padding(.horizontal, 16)
+                            .background(Color(.secondarySystemGroupedBackground))
+                            .clipShape(RoundedRectangle(cornerRadius: 12))
+                        }
+                        .buttonStyle(.plain)
+                        .padding(.top, 16)
+                        .accessibilityLabel("Add a new exercise to this workout")
+                        .accessibilityHint("Opens exercise picker to add another exercise")
                     }
                 }
                 .padding(.horizontal)
@@ -184,6 +223,12 @@ struct ExerciseCard: View {
     let isCurrentExercise: Bool
     @Binding var expandedSetId: UUID?
     @Binding var lastActiveExerciseId: UUID?
+    @State private var showingRestTimeConfig = false
+
+    // Computed property to get current rest time from the exercise's sets
+    private var exerciseRestTime: TimeInterval {
+        workoutExercise.sets.first?.restTime ?? 0.0
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -203,8 +248,6 @@ struct ExerciseCard: View {
                         .foregroundStyle(.secondary)
                 }
 
-                Spacer()
-
                 if workoutExercise.completedSetsCount == workoutExercise.sets.count {
                     Image(systemName: "checkmark.circle.fill")
                         .foregroundStyle(.green)
@@ -212,6 +255,21 @@ struct ExerciseCard: View {
                         .symbolEffect(.bounce, value: workoutExercise.completedSetsCount)
                 }
             }
+
+            // Rest Timer Configuration
+            RestTimerConfigView(
+                restTime: Binding(
+                    get: { exerciseRestTime },
+                    set: { newValue in
+                        viewModel.updateRestTimeForExercise(workoutExercise, restTime: newValue)
+                    }
+                ),
+                isExpanded: $showingRestTimeConfig,
+                showToggle: true,
+                onRestTimeChange: { newValue in
+                    viewModel.updateRestTimeForExercise(workoutExercise, restTime: newValue)
+                }
+            )
 
             // Sets List
             ForEach(workoutExercise.sets.sorted(by: { $0.order < $1.order }), id: \.id) { set in
@@ -237,7 +295,36 @@ struct ExerciseCard: View {
                         lastActiveExerciseId = workoutExercise.id
                     }
                 )
+                .transition(.asymmetric(
+                    insertion: .opacity.combined(with: .move(edge: .top)),
+                    removal: .opacity.combined(with: .move(edge: .leading))
+                ))
             }
+
+            // Add Set Button - Lightweight, in-context, repeatable action
+            Button {
+                withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                    viewModel.addSetToExercise(workoutExercise)
+                }
+                UIImpactFeedbackGenerator(style: .light).impactOccurred()
+            } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: "plus.circle.fill")
+                        .font(.subheadline)
+                        .fontWeight(.medium)
+                    Text("Add Set")
+                        .font(.subheadline)
+                        .fontWeight(.semibold)
+                }
+                .foregroundStyle(.blue)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 12)
+                .background(Color(.tertiarySystemFill))
+                .clipShape(RoundedRectangle(cornerRadius: 10))
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Add a new set to \(workoutExercise.exerciseName)")
+            .accessibilityHint("Creates a new set with default values")
         }
         .padding()
         .background(isCurrentExercise ? Color.blue.opacity(0.1) : Color(.secondarySystemGroupedBackground))
@@ -431,21 +518,6 @@ struct WorkoutSetRow: View {
                     .padding(.horizontal, 12)
 
                 VStack(spacing: 12) {
-                    // Completed badge
-                    if set.isCompleted, let completedAt = set.completedAt {
-                        HStack {
-                            Image(systemName: "checkmark.circle.fill")
-                                .font(.caption)
-                                .foregroundStyle(.green)
-                            Text("Completed at \(completedAt, style: .time)")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                            Spacer()
-                        }
-                        .padding(.horizontal, 12)
-                        .padding(.top, 4)
-                    }
-
                     VStack(spacing: 16) {
                         // Reps input with contextual banner
                         VStack(spacing: 8) {
@@ -530,6 +602,24 @@ struct WorkoutSetRow: View {
                                 .foregroundStyle(.secondary)
                             Spacer()
                         }
+
+                        // Delete Set Button
+                        Button(role: .destructive) {
+                            withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                                viewModel.removeSetFromExercise(set, from: workoutExercise)
+                            }
+                        } label: {
+                            HStack(spacing: 6) {
+                                Image(systemName: "trash")
+                                    .font(.subheadline)
+                                Text("Delete Set")
+                                    .font(.subheadline.weight(.medium))
+                            }
+                            .foregroundStyle(.red)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 10)
+                        }
+                        .buttonStyle(.plain)
                     }
                 }
                 .padding(.horizontal, 12)

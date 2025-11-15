@@ -149,7 +149,7 @@ struct ConfigureExerciseSetsView: View {
     var onSave: () -> Void
 
     @State private var sets: [ExerciseSet] = []
-    @State private var globalRestTime: TimeInterval = 60.0
+    @State private var globalRestTime: TimeInterval = 0.0
     @State private var editingSetIndex: Int?
     @State private var editingReps = 10
     @State private var editingWeight = 0.0

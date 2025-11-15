@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct RoutineDetailView: View {
-    let routine: Routine
+    @Bindable var routine: Routine
     @ObservedObject var viewModel: RoutinesViewModel
     @ObservedObject var exercisesViewModel: ExercisesViewModel
     @ObservedObject var workoutViewModel: WorkoutViewModel
@@ -15,10 +15,15 @@ struct RoutineDetailView: View {
     @State private var editingWeight: Double = 0.0
     @State private var initialReps: Int = 10
     @State private var initialWeight: Double = 0.0
-    @State private var exerciseRestTimes: [UUID: TimeInterval] = [:]
     @State private var repsBannerDismissedForExercise: [UUID: Bool] = [:]
     @State private var weightBannerDismissedForExercise: [UUID: Bool] = [:]
     @State private var currentRoutineExercise: RoutineExercise?
+    @State private var restTimerExpandedForExercise: [UUID: Bool] = [:]
+
+    // Helper function to get rest time for an exercise
+    private func restTime(for exercise: RoutineExercise) -> TimeInterval {
+        exercise.sets.first?.restTime ?? 0.0
+    }
 
     var body: some View {
         List {
@@ -55,11 +60,6 @@ struct RoutineDetailView: View {
                                         if isExpanded {
                                             expandedExerciseId = routineExercise.id
                                             expandedSetId = nil
-                                            // Initialize rest time for this exercise if not set
-                                            if exerciseRestTimes[routineExercise.id] == nil,
-                                               let firstSet = routineExercise.sets.first {
-                                                exerciseRestTimes[routineExercise.id] = firstSet.restTime
-                                            }
                                         } else {
                                             expandedExerciseId = nil
                                             expandedSetId = nil
@@ -70,6 +70,21 @@ struct RoutineDetailView: View {
                         ) {
                             // Sets content
                             VStack(spacing: 12) {
+                                // Rest Timer Configuration (placed at top like in ActiveWorkoutView)
+                                RestTimerConfigView(
+                                    restTime: Binding(
+                                        get: { restTime(for: routineExercise) },
+                                        set: { newValue in
+                                            updateAllSetsRestTime(for: routineExercise, restTime: newValue)
+                                        }
+                                    ),
+                                    isExpanded: Binding(
+                                        get: { restTimerExpandedForExercise[routineExercise.id] ?? false },
+                                        set: { restTimerExpandedForExercise[routineExercise.id] = $0 }
+                                    ),
+                                    showToggle: true
+                                )
+
                                 ForEach(Array(routineExercise.sets.enumerated()), id: \.element.id) { index, set in
                                     RoutineSetRowView(
                                         set: set,
@@ -139,50 +154,43 @@ struct RoutineDetailView: View {
                                             withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
                                                 weightBannerDismissedForExercise[routineExercise.id] = true
                                             }
+                                        },
+                                        onDelete: {
+                                            withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                                                viewModel.removeSet(set, from: routineExercise)
+                                                // Clear expanded state if we deleted the expanded set
+                                                if expandedSetId == set.id {
+                                                    expandedSetId = nil
+                                                }
+                                            }
                                         }
                                     )
+                                    .transition(.asymmetric(
+                                        insertion: .opacity.combined(with: .move(edge: .top)),
+                                        removal: .opacity.combined(with: .move(edge: .leading))
+                                    ))
                                 }
 
                                 Button {
-                                    viewModel.addSet(to: routineExercise)
-                                } label: {
-                                    Label("Add Set", systemImage: "plus.circle.fill")
-                                        .font(.subheadline.weight(.medium))
-                                        .frame(maxWidth: .infinity)
-                                }
-                                .buttonStyle(.bordered)
-                                .tint(.blue)
-
-                                // Global Rest Timer for this exercise
-                                Divider()
-                                    .padding(.vertical, 4)
-
-                                VStack(spacing: 8) {
-                                    HStack {
-                                        Text("Rest Time Between Sets")
-                                            .font(.subheadline.weight(.medium))
-                                        Spacer()
-                                        Text(TimeFormatting.formatRestTime(exerciseRestTimes[routineExercise.id] ?? 60))
-                                            .font(.subheadline)
-                                            .foregroundStyle(.secondary)
+                                    withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                                        viewModel.addSet(to: routineExercise)
                                     }
-                                    Slider(
-                                        value: Binding(
-                                            get: { exerciseRestTimes[routineExercise.id] ?? 60 },
-                                            set: { newValue in
-                                                let rounded = round(newValue / 30) * 30
-                                                exerciseRestTimes[routineExercise.id] = rounded
-                                                updateAllSetsRestTime(for: routineExercise, restTime: rounded)
-                                            }
-                                        ),
-                                        in: 0...300,
-                                        step: 30
-                                    )
+                                } label: {
+                                    HStack(spacing: 6) {
+                                        Image(systemName: "plus.circle.fill")
+                                            .font(.subheadline)
+                                            .fontWeight(.medium)
+                                        Text("Add Set")
+                                            .font(.subheadline)
+                                            .fontWeight(.semibold)
+                                    }
+                                    .foregroundStyle(.blue)
+                                    .frame(maxWidth: .infinity)
+                                    .padding(.vertical, 12)
+                                    .background(Color(.tertiarySystemFill))
+                                    .clipShape(RoundedRectangle(cornerRadius: 10))
                                 }
-                                .padding(.vertical, 8)
-                                .padding(.horizontal, 12)
-                                .background(Color(.tertiarySystemGroupedBackground))
-                                .clipShape(RoundedRectangle(cornerRadius: 8))
+                                .buttonStyle(.plain)
                             }
                             .padding(.vertical, 8)
 
@@ -191,6 +199,8 @@ struct RoutineDetailView: View {
                         }
                         .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16))
                         .sensoryFeedback(.selection, trigger: expandedExerciseId)
+                        // Only allow deleting exercise when collapsed
+                        .deleteDisabled(expandedExerciseId == routineExercise.id)
                     }
                     .onDelete(perform: deleteRoutineExercises)
                 }
@@ -199,12 +209,25 @@ struct RoutineDetailView: View {
                     Button {
                         showingAddExercise = true
                     } label: {
-                        Label("Add Exercise", systemImage: "plus.circle.fill")
-                            .font(.subheadline.weight(.medium))
-                            .frame(maxWidth: .infinity)
+                        HStack(spacing: 12) {
+                            Image(systemName: "dumbbell.fill")
+                                .font(.title3)
+                                .foregroundStyle(.white)
+                                .frame(width: 36, height: 36)
+                                .background(Circle().fill(Color.green))
+
+                            Text("Add Exercise")
+                                .font(.body.weight(.semibold))
+
+                            Spacer()
+
+                            Image(systemName: "chevron.right")
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(.tertiary)
+                        }
+                        .frame(maxWidth: .infinity)
                     }
-                    .buttonStyle(.bordered)
-                    .tint(.blue)
+                    .buttonStyle(.plain)
                     .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
                 }
             } header: {
@@ -409,6 +432,7 @@ struct RoutineSetRowView: View {
     let onApplyWeightToAll: () -> Void
     let onDismissRepsBanner: () -> Void
     let onDismissWeightBanner: () -> Void
+    let onDelete: () -> Void
 
     // Computed property to check if reps have changed
     private var repsChanged: Bool {
@@ -445,15 +469,9 @@ struct RoutineSetRowView: View {
                         .background(.blue)
                         .clipShape(Circle())
 
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("\(set.reps) reps × \(set.weight, specifier: "%.2f") kg")
-                            .font(.subheadline.weight(.medium))
-                            .foregroundStyle(.primary)
-
-                        Text("Rest: \(TimeFormatting.formatRestTime(set.restTime))")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
+                    Text("\(set.reps) reps × \(set.weight, specifier: "%.2f") kg")
+                        .font(.subheadline.weight(.medium))
+                        .foregroundStyle(.primary)
 
                     Spacer()
 
@@ -528,6 +546,22 @@ struct RoutineSetRowView: View {
                             ))
                         }
                     }
+
+                    // Delete Set Button
+                    Button(role: .destructive) {
+                        onDelete()
+                    } label: {
+                        HStack(spacing: 6) {
+                            Image(systemName: "trash")
+                                .font(.subheadline)
+                            Text("Delete Set")
+                                .font(.subheadline.weight(.medium))
+                        }
+                        .foregroundStyle(.red)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 10)
+                    }
+                    .buttonStyle(.plain)
                 }
                 .padding(.horizontal, 12)
                 .padding(.top, 12)

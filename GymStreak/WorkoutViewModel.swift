@@ -141,6 +141,50 @@ class WorkoutViewModel: ObservableObject {
         save()
     }
 
+    func updateRestTimeForExercise(_ workoutExercise: WorkoutExercise, restTime: TimeInterval) {
+        objectWillChange.send()
+        for set in workoutExercise.sets {
+            set.restTime = restTime
+        }
+        save()
+    }
+
+    func addSetToExercise(_ workoutExercise: WorkoutExercise) {
+        guard currentSession != nil else { return }
+
+        objectWillChange.send()
+
+        // Get the last set to copy its values
+        let lastSet = workoutExercise.sets.sorted(by: { $0.order < $1.order }).last
+
+        // Create new workout set using the last set's values (or defaults if no sets exist)
+        let newSet = WorkoutSet(
+            plannedReps: lastSet?.plannedReps ?? 10,
+            actualReps: lastSet?.actualReps ?? 10,
+            plannedWeight: lastSet?.plannedWeight ?? 0.0,
+            actualWeight: lastSet?.actualWeight ?? 0.0,
+            restTime: lastSet?.restTime ?? 60.0,
+            order: (lastSet?.order ?? -1) + 1
+        )
+        newSet.workoutExercise = workoutExercise
+        workoutExercise.sets.append(newSet)
+
+        modelContext.insert(newSet)
+        save()
+    }
+
+    func removeSetFromExercise(_ set: WorkoutSet, from workoutExercise: WorkoutExercise) {
+        guard currentSession != nil else { return }
+
+        objectWillChange.send()
+
+        if let index = workoutExercise.sets.firstIndex(where: { $0.id == set.id }) {
+            workoutExercise.sets.remove(at: index)
+            modelContext.delete(set)
+            save()
+        }
+    }
+
     func skipSet(workoutExercise: WorkoutExercise, set: WorkoutSet) {
         // Move to next set without marking complete
         if let nextSet = findNextIncompleteSet(after: set, in: workoutExercise) {
@@ -263,12 +307,21 @@ class WorkoutViewModel: ObservableObject {
             if let routineExercise = routine.routineExercises.first(where: {
                 $0.exercise?.name == workoutExercise.exerciseName
             }) {
-                // Update sets that were completed
-                for (index, workoutSet) in workoutExercise.sets.enumerated() {
-                    if workoutSet.isCompleted && index < routineExercise.sets.count {
-                        let routineSet = routineExercise.sets[index]
-                        routineSet.reps = workoutSet.actualReps
-                        routineSet.weight = workoutSet.actualWeight
+                // Get the rest time from the first set (all sets should have same rest time)
+                let exerciseRestTime = workoutExercise.sets.first?.restTime ?? 60.0
+
+                // Update all routine sets with the exercise rest time and completed set data
+                for (index, routineSet) in routineExercise.sets.enumerated() {
+                    // Always update rest time for all sets
+                    routineSet.restTime = exerciseRestTime
+
+                    // Update reps and weight only for completed sets
+                    if index < workoutExercise.sets.count {
+                        let workoutSet = workoutExercise.sets[index]
+                        if workoutSet.isCompleted {
+                            routineSet.reps = workoutSet.actualReps
+                            routineSet.weight = workoutSet.actualWeight
+                        }
                     }
                 }
             }

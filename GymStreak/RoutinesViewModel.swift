@@ -57,7 +57,9 @@ class RoutinesViewModel: ObservableObject {
     }
     
     func addSet(to routineExercise: RoutineExercise) {
-        let set = ExerciseSet(reps: 10, weight: 0.0, restTime: 60)
+        // Get rest time from existing sets, or default to 0 (disabled)
+        let restTime = routineExercise.sets.first?.restTime ?? 0
+        let set = ExerciseSet(reps: 10, weight: 0.0, restTime: restTime)
         set.routineExercise = routineExercise
         routineExercise.sets.append(set)
         if let routine = routineExercise.routine {

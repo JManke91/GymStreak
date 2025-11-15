@@ -1,14 +1,19 @@
 import SwiftUI
 
 struct RoutineExerciseDetailView: View {
-    let routineExercise: RoutineExercise
+    @Bindable var routineExercise: RoutineExercise
     @ObservedObject var viewModel: RoutinesViewModel
     @State private var showingEditExercise = false
     @State private var showingDeleteAlert = false
     @State private var editingSetId: UUID?
     @State private var editingReps: Int = 10
     @State private var editingWeight: Double = 0.0
-    @State private var globalRestTime: TimeInterval = 60.0
+    @State private var restTimerExpanded = false
+
+    // Computed property to get current rest time from sets
+    private var globalRestTime: TimeInterval {
+        routineExercise.sets.first?.restTime ?? 0.0
+    }
     
     var body: some View {
         List {
@@ -124,20 +129,19 @@ struct RoutineExerciseDetailView: View {
                 .foregroundColor(.blue)
             }
 
-            Section("Rest Timer") {
-                HStack {
-                    Text("Rest Time Between Sets")
-                    Spacer()
-                    Text(TimeFormatting.formatRestTime(globalRestTime))
-                }
-                Slider(value: $globalRestTime, in: 0...300, step: 30)
-                    .onChange(of: globalRestTime) { _, newValue in
-                        let rounded = round(newValue / 30) * 30
-                        if rounded != globalRestTime {
-                            globalRestTime = rounded
+            Section {
+                RestTimerConfigView(
+                    restTime: Binding(
+                        get: { globalRestTime },
+                        set: { newValue in
+                            updateAllSetsRestTime(newValue)
                         }
-                        updateAllSetsRestTime(rounded)
-                    }
+                    ),
+                    isExpanded: $restTimerExpanded,
+                    showToggle: true
+                )
+            } header: {
+                Text("Rest Timer")
             }
         }
         .navigationTitle(routineExercise.exercise?.name ?? "Exercise")
@@ -158,12 +162,6 @@ struct RoutineExerciseDetailView: View {
             Button("Cancel", role: .cancel) {}
         } message: {
             Text("Are you sure you want to delete this exercise from the routine? This action cannot be undone.")
-        }
-        .onAppear {
-            // Initialize global rest time from first set, or use default
-            if let firstSet = routineExercise.sets.first {
-                globalRestTime = firstSet.restTime
-            }
         }
     }
 

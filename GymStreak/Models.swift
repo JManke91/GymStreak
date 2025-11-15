@@ -177,4 +177,16 @@ final class WorkoutSet {
         self.completedAt = nil
         self.order = order
     }
+
+    init(plannedReps: Int, actualReps: Int, plannedWeight: Double, actualWeight: Double, restTime: TimeInterval, order: Int) {
+        self.id = UUID()
+        self.plannedReps = plannedReps
+        self.actualReps = actualReps
+        self.plannedWeight = plannedWeight
+        self.actualWeight = actualWeight
+        self.restTime = restTime
+        self.isCompleted = false
+        self.completedAt = nil
+        self.order = order
+    }
 }
