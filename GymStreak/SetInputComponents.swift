@@ -89,6 +89,7 @@ struct WeightInput: View {
     let increment: Double
     let onUpdate: (Double) -> Void
     @FocusState private var isFocused: Bool
+    @State private var lastReportedValue: Double?
 
     init(
         title: String = "Weight (kg)",
@@ -116,6 +117,9 @@ struct WeightInput: View {
                 let newWeight = max(0, weight - increment)
                 weight = newWeight
                 UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                // Directly call onUpdate for button clicks
+                lastReportedValue = newWeight
+                onUpdate(newWeight)
             } label: {
                 Image(systemName: "minus.circle.fill")
                     .font(.title)
@@ -138,13 +142,19 @@ struct WeightInput: View {
                 .background(Color(.tertiarySystemGroupedBackground))
                 .clipShape(RoundedRectangle(cornerRadius: 8))
                 .focused($isFocused)
-                .onChange(of: weight) { _, newValue in
+                .onChange(of: weight) { oldValue, newValue in
                     // Round to nearest increment (e.g., 0.25kg)
                     let rounded = round(newValue / increment) * increment
-                    if rounded != newValue {
-                        weight = rounded
+
+                    // Only update if this is a new value we haven't reported yet
+                    // This prevents feedback loops from external updates
+                    if rounded != lastReportedValue {
+                        if rounded != newValue {
+                            weight = rounded
+                        }
+                        lastReportedValue = rounded
+                        onUpdate(rounded)
                     }
-                    onUpdate(rounded)
                 }
 
             // Plus button
@@ -152,6 +162,9 @@ struct WeightInput: View {
                 let newWeight = weight + increment
                 weight = newWeight
                 UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                // Directly call onUpdate for button clicks
+                lastReportedValue = newWeight
+                onUpdate(newWeight)
             } label: {
                 Image(systemName: "plus.circle.fill")
                     .font(.title)

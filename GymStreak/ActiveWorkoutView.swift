@@ -259,7 +259,8 @@ struct WorkoutSetRow: View {
     @State private var editingWeight: Double
     @State private var initialReps: Int
     @State private var initialWeight: Double
-    @State private var bannerDismissed = false
+    @State private var repsBannerDismissed = false
+    @State private var weightBannerDismissed = false
 
     init(set: WorkoutSet, workoutExercise: WorkoutExercise, viewModel: WorkoutViewModel, isNextSet: Bool, isExpanded: Bool, onToggleExpand: @escaping () -> Void) {
         self.set = set
@@ -274,9 +275,14 @@ struct WorkoutSetRow: View {
         self._initialWeight = State(initialValue: set.actualWeight)
     }
 
-    // Computed property to check if values have changed
-    private var hasChanges: Bool {
-        editingReps != initialReps || editingWeight != initialWeight
+    // Computed property to check if reps have changed
+    private var repsChanged: Bool {
+        editingReps != initialReps
+    }
+
+    // Computed property to check if weight has changed
+    private var weightChanged: Bool {
+        editingWeight != initialWeight
     }
 
     // Check if exercise has multiple incomplete sets
@@ -284,10 +290,17 @@ struct WorkoutSetRow: View {
         workoutExercise.sets.filter { !$0.isCompleted }.count > 1
     }
 
-    // Apply current values to all incomplete sets in this exercise
-    private func applyToAllIncompleteSets() {
+    // Apply current reps to all incomplete sets in this exercise
+    private func applyRepsToAllIncompleteSets() {
         for workoutSet in workoutExercise.sets where !workoutSet.isCompleted {
-            viewModel.updateSet(workoutSet, reps: editingReps, weight: editingWeight)
+            viewModel.updateSet(workoutSet, reps: editingReps, weight: workoutSet.actualWeight)
+        }
+    }
+
+    // Apply current weight to all incomplete sets in this exercise
+    private func applyWeightToAllIncompleteSets() {
+        for workoutSet in workoutExercise.sets where !workoutSet.isCompleted {
+            viewModel.updateSet(workoutSet, reps: workoutSet.actualReps, weight: editingWeight)
         }
     }
 
@@ -296,8 +309,9 @@ struct WorkoutSetRow: View {
             // Set Header
             Button(action: {
                 if !isExpanded {
-                    // Reset banner when opening
-                    bannerDismissed = false
+                    // Reset banners when opening
+                    repsBannerDismissed = false
+                    weightBannerDismissed = false
                     initialReps = set.actualReps
                     initialWeight = set.actualWeight
                 }
@@ -338,7 +352,7 @@ struct WorkoutSetRow: View {
                             Text("\(set.actualReps) reps")
                             Text("×")
                                 .foregroundStyle(.secondary)
-                            Text(String(format: "%.1f kg", set.actualWeight))
+                            Text(String(format: "%.2f kg", set.actualWeight))
                         }
                         .font(.caption)
                         .foregroundStyle(.secondary)
@@ -383,45 +397,78 @@ struct WorkoutSetRow: View {
                         .padding(.top, 4)
                     }
 
-                    // Apply to All Banner (show if multiple incomplete sets exist, changes were made, and not dismissed)
-                    // Works for both completed and incomplete sets - applies changes to remaining incomplete sets
-                    if hasMultipleIncompleteSets && hasChanges && !bannerDismissed {
-                        ApplyToAllBanner(
-                            setCount: workoutExercise.sets.filter { !$0.isCompleted }.count,
-                            onApply: {
-                                withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
-                                    applyToAllIncompleteSets()
-                                    bannerDismissed = true
-                                }
-                            },
-                            onDismiss: {
-                                withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
-                                    bannerDismissed = true
-                                }
-                            }
-                        )
-                        .transition(.asymmetric(
-                            insertion: .move(edge: .top).combined(with: .opacity),
-                            removal: .move(edge: .top).combined(with: .opacity)
-                        ))
-                    }
-
                     VStack(spacing: 16) {
-                        HorizontalStepper(
-                            title: "Reps",
-                            value: $editingReps,
-                            range: 1...100,
-                            step: 1
-                        ) { newValue in
-                            viewModel.updateSet(set, reps: newValue, weight: editingWeight)
+                        // Reps input with contextual banner
+                        VStack(spacing: 8) {
+                            HorizontalStepper(
+                                title: "Reps",
+                                value: $editingReps,
+                                range: 1...100,
+                                step: 1
+                            ) { newValue in
+                                viewModel.updateSet(set, reps: newValue, weight: editingWeight)
+                            }
+
+                            // Reps Apply to All Banner
+                            if hasMultipleIncompleteSets && repsChanged && !repsBannerDismissed {
+                                ApplyToAllBanner(
+                                    type: .reps,
+                                    setCount: workoutExercise.sets.filter { !$0.isCompleted }.count,
+                                    onApply: {
+                                        withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                                            applyRepsToAllIncompleteSets()
+                                            repsBannerDismissed = true
+                                            // Update initial reps so banner doesn't reappear
+                                            initialReps = editingReps
+                                        }
+                                    },
+                                    onDismiss: {
+                                        withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                                            repsBannerDismissed = true
+                                        }
+                                    }
+                                )
+                                .transition(.asymmetric(
+                                    insertion: .move(edge: .top).combined(with: .opacity),
+                                    removal: .move(edge: .top).combined(with: .opacity)
+                                ))
+                            }
                         }
 
-                        WeightInput(
-                            title: "Weight (kg)",
-                            weight: $editingWeight,
-                            increment: 0.25
-                        ) { newValue in
-                            viewModel.updateSet(set, reps: editingReps, weight: newValue)
+                        // Weight input with contextual banner
+                        VStack(spacing: 8) {
+                            WeightInput(
+                                title: "Weight (kg)",
+                                weight: $editingWeight,
+                                increment: 0.25
+                            ) { newValue in
+                                viewModel.updateSet(set, reps: editingReps, weight: newValue)
+                            }
+
+                            // Weight Apply to All Banner
+                            if hasMultipleIncompleteSets && weightChanged && !weightBannerDismissed {
+                                ApplyToAllBanner(
+                                    type: .weight,
+                                    setCount: workoutExercise.sets.filter { !$0.isCompleted }.count,
+                                    onApply: {
+                                        withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                                            applyWeightToAllIncompleteSets()
+                                            weightBannerDismissed = true
+                                            // Update initial weight so banner doesn't reappear
+                                            initialWeight = editingWeight
+                                        }
+                                    },
+                                    onDismiss: {
+                                        withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                                            weightBannerDismissed = true
+                                        }
+                                    }
+                                )
+                                .transition(.asymmetric(
+                                    insertion: .move(edge: .top).combined(with: .opacity),
+                                    removal: .move(edge: .top).combined(with: .opacity)
+                                ))
+                            }
                         }
 
                         // Show planned values for reference
@@ -429,7 +476,7 @@ struct WorkoutSetRow: View {
                             Text("Planned:")
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
-                            Text("\(set.plannedReps) reps × \(String(format: "%.1f kg", set.plannedWeight))")
+                            Text("\(set.plannedReps) reps × \(String(format: "%.2f kg", set.plannedWeight))")
                                 .font(.caption.weight(.medium))
                                 .foregroundStyle(.secondary)
                             Spacer()

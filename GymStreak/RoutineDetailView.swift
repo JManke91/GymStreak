@@ -16,7 +16,8 @@ struct RoutineDetailView: View {
     @State private var initialReps: Int = 10
     @State private var initialWeight: Double = 0.0
     @State private var exerciseRestTimes: [UUID: TimeInterval] = [:]
-    @State private var bannerDismissedForExercise: [UUID: Bool] = [:]
+    @State private var repsBannerDismissedForExercise: [UUID: Bool] = [:]
+    @State private var weightBannerDismissedForExercise: [UUID: Bool] = [:]
     @State private var currentRoutineExercise: RoutineExercise?
 
     var body: some View {
@@ -78,8 +79,9 @@ struct RoutineDetailView: View {
                                         editingWeight: $editingWeight,
                                         initialReps: initialReps,
                                         initialWeight: initialWeight,
-                                        showApplyToAllBanner: routineExercise.sets.count > 1,
-                                        bannerDismissed: bannerDismissedForExercise[routineExercise.id] ?? false,
+                                        hasMultipleSets: routineExercise.sets.count > 1,
+                                        repsBannerDismissed: repsBannerDismissedForExercise[routineExercise.id] ?? false,
+                                        weightBannerDismissed: weightBannerDismissedForExercise[routineExercise.id] ?? false,
                                         totalSets: routineExercise.sets.count,
                                         onTap: {
                                             withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
@@ -93,8 +95,9 @@ struct RoutineDetailView: View {
                                                     initialReps = set.reps
                                                     initialWeight = set.weight
                                                     currentRoutineExercise = routineExercise
-                                                    // Reset banner dismissed state when opening a new set
-                                                    bannerDismissedForExercise[routineExercise.id] = false
+                                                    // Reset banner dismissed states when opening a new set
+                                                    repsBannerDismissedForExercise[routineExercise.id] = false
+                                                    weightBannerDismissedForExercise[routineExercise.id] = false
                                                 }
                                             }
                                         },
@@ -107,21 +110,34 @@ struct RoutineDetailView: View {
                                                 applyToAll: false
                                             )
                                         },
-                                        onApplyToAll: {
+                                        onApplyRepsToAll: {
                                             withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
-                                                handleSetUpdate(
-                                                    set: set,
+                                                handleApplyRepsToAll(
                                                     reps: editingReps,
-                                                    weight: editingWeight,
-                                                    routineExercise: routineExercise,
-                                                    applyToAll: true
+                                                    routineExercise: routineExercise
                                                 )
-                                                bannerDismissedForExercise[routineExercise.id] = true
+                                                repsBannerDismissedForExercise[routineExercise.id] = true
+                                                initialReps = editingReps
                                             }
                                         },
-                                        onDismissBanner: {
+                                        onApplyWeightToAll: {
                                             withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
-                                                bannerDismissedForExercise[routineExercise.id] = true
+                                                handleApplyWeightToAll(
+                                                    weight: editingWeight,
+                                                    routineExercise: routineExercise
+                                                )
+                                                weightBannerDismissedForExercise[routineExercise.id] = true
+                                                initialWeight = editingWeight
+                                            }
+                                        },
+                                        onDismissRepsBanner: {
+                                            withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                                                repsBannerDismissedForExercise[routineExercise.id] = true
+                                            }
+                                        },
+                                        onDismissWeightBanner: {
+                                            withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                                                weightBannerDismissedForExercise[routineExercise.id] = true
                                             }
                                         }
                                     )
@@ -299,6 +315,20 @@ struct RoutineDetailView: View {
             updateSet(set, reps: reps, weight: weight)
         }
     }
+
+    private func handleApplyRepsToAll(reps: Int, routineExercise: RoutineExercise) {
+        for exerciseSet in routineExercise.sets {
+            exerciseSet.reps = reps
+            viewModel.updateSet(exerciseSet)
+        }
+    }
+
+    private func handleApplyWeightToAll(weight: Double, routineExercise: RoutineExercise) {
+        for exerciseSet in routineExercise.sets {
+            exerciseSet.weight = weight
+            viewModel.updateSet(exerciseSet)
+        }
+    }
 }
 
 // MARK: - Supporting Views
@@ -369,17 +399,25 @@ struct RoutineSetRowView: View {
     @Binding var editingWeight: Double
     let initialReps: Int
     let initialWeight: Double
-    let showApplyToAllBanner: Bool
-    let bannerDismissed: Bool
+    let hasMultipleSets: Bool
+    let repsBannerDismissed: Bool
+    let weightBannerDismissed: Bool
     let totalSets: Int
     let onTap: () -> Void
     let onUpdate: (Int, Double) -> Void
-    let onApplyToAll: () -> Void
-    let onDismissBanner: () -> Void
+    let onApplyRepsToAll: () -> Void
+    let onApplyWeightToAll: () -> Void
+    let onDismissRepsBanner: () -> Void
+    let onDismissWeightBanner: () -> Void
 
-    // Computed property to check if values have changed
-    private var hasChanges: Bool {
-        editingReps != initialReps || editingWeight != initialWeight
+    // Computed property to check if reps have changed
+    private var repsChanged: Bool {
+        editingReps != initialReps
+    }
+
+    // Computed property to check if weight has changed
+    private var weightChanged: Bool {
+        editingWeight != initialWeight
     }
 
     var body: some View {
@@ -397,7 +435,7 @@ struct RoutineSetRowView: View {
                         .clipShape(Circle())
 
                     VStack(alignment: .leading, spacing: 2) {
-                        Text("\(set.reps) reps × \(set.weight, specifier: "%.1f") kg")
+                        Text("\(set.reps) reps × \(set.weight, specifier: "%.2f") kg")
                             .font(.subheadline.weight(.medium))
                             .foregroundStyle(.primary)
 
@@ -420,37 +458,56 @@ struct RoutineSetRowView: View {
             // Expanded edit form
             if isExpanded {
                 VStack(spacing: 12) {
-                    // Apply to All Banner (only if exercise has multiple sets AND changes were made AND not dismissed)
-                    if showApplyToAllBanner && hasChanges && !bannerDismissed {
-                        ApplyToAllBanner(
-                            setCount: totalSets,
-                            onApply: onApplyToAll,
-                            onDismiss: onDismissBanner
-                        )
-                        .padding(.leading, 40)
-                        .padding(.trailing, 16)
-                        .transition(.asymmetric(
-                            insertion: .move(edge: .top).combined(with: .opacity),
-                            removal: .move(edge: .top).combined(with: .opacity)
-                        ))
-                    }
-
                     VStack(spacing: 16) {
-                        HorizontalStepper(
-                            title: "Reps",
-                            value: $editingReps,
-                            range: 1...100,
-                            step: 1
-                        ) { newValue in
-                            onUpdate(newValue, editingWeight)
+                        // Reps input with contextual banner
+                        VStack(spacing: 8) {
+                            HorizontalStepper(
+                                title: "Reps",
+                                value: $editingReps,
+                                range: 1...100,
+                                step: 1
+                            ) { newValue in
+                                onUpdate(newValue, editingWeight)
+                            }
+
+                            // Reps Apply to All Banner
+                            if hasMultipleSets && repsChanged && !repsBannerDismissed {
+                                ApplyToAllBanner(
+                                    type: .reps,
+                                    setCount: totalSets,
+                                    onApply: onApplyRepsToAll,
+                                    onDismiss: onDismissRepsBanner
+                                )
+                                .transition(.asymmetric(
+                                    insertion: .move(edge: .top).combined(with: .opacity),
+                                    removal: .move(edge: .top).combined(with: .opacity)
+                                ))
+                            }
                         }
 
-                        WeightInput(
-                            title: "Weight (kg)",
-                            weight: $editingWeight,
-                            increment: 0.25
-                        ) { newValue in
-                            onUpdate(editingReps, newValue)
+                        // Weight input with contextual banner
+                        VStack(spacing: 8) {
+                            WeightInput(
+                                title: "Weight (kg)",
+                                weight: $editingWeight,
+                                increment: 0.25
+                            ) { newValue in
+                                onUpdate(editingReps, newValue)
+                            }
+
+                            // Weight Apply to All Banner
+                            if hasMultipleSets && weightChanged && !weightBannerDismissed {
+                                ApplyToAllBanner(
+                                    type: .weight,
+                                    setCount: totalSets,
+                                    onApply: onApplyWeightToAll,
+                                    onDismiss: onDismissWeightBanner
+                                )
+                                .transition(.asymmetric(
+                                    insertion: .move(edge: .top).combined(with: .opacity),
+                                    removal: .move(edge: .top).combined(with: .opacity)
+                                ))
+                            }
                         }
                     }
                     .padding(.leading, 40)

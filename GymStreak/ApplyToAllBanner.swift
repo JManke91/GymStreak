@@ -7,20 +7,68 @@
 
 import SwiftUI
 
+enum ApplyToAllType {
+    case reps
+    case weight
+
+    var icon: String {
+        switch self {
+        case .reps: return "number.circle"
+        case .weight: return "scalemass"
+        }
+    }
+
+    var label: String {
+        switch self {
+        case .reps: return "reps"
+        case .weight: return "weight"
+        }
+    }
+}
+
 struct ApplyToAllBanner: View {
+    let type: ApplyToAllType?
     let setCount: Int
     let onApply: () -> Void
     let onDismiss: () -> Void
 
+    // Convenience initializer for backward compatibility (applies to both reps and weight)
+    init(setCount: Int, onApply: @escaping () -> Void, onDismiss: @escaping () -> Void) {
+        self.type = nil
+        self.setCount = setCount
+        self.onApply = onApply
+        self.onDismiss = onDismiss
+    }
+
+    // New initializer with specific type
+    init(type: ApplyToAllType, setCount: Int, onApply: @escaping () -> Void, onDismiss: @escaping () -> Void) {
+        self.type = type
+        self.setCount = setCount
+        self.onApply = onApply
+        self.onDismiss = onDismiss
+    }
+
+    private var icon: String {
+        type?.icon ?? "square.on.square"
+    }
+
+    private var labelText: String {
+        if let type = type {
+            return "Apply \(type.label) to all \(setCount)?"
+        } else {
+            return "Apply to all \(setCount)?"
+        }
+    }
+
     var body: some View {
         HStack(spacing: 8) {
-            Image(systemName: "square.on.square")
+            Image(systemName: icon)
                 .font(.caption)
                 .symbolRenderingMode(.hierarchical)
                 .foregroundStyle(.blue)
                 .frame(width: 20, height: 20)
 
-            Text("Apply to all \(setCount)?")
+            Text(labelText)
                 .font(.caption.weight(.medium))
                 .foregroundStyle(.primary)
                 .lineLimit(1)
@@ -70,8 +118,16 @@ struct ApplyToAllBanner: View {
 #Preview("Apply to All Banner") {
     VStack(spacing: 16) {
         ApplyToAllBanner(
+            type: .reps,
             setCount: 4,
-            onApply: { print("Applied to all sets") },
+            onApply: { print("Applied reps to all sets") },
+            onDismiss: { print("Dismissed") }
+        )
+
+        ApplyToAllBanner(
+            type: .weight,
+            setCount: 4,
+            onApply: { print("Applied weight to all sets") },
             onDismiss: { print("Dismissed") }
         )
     }
