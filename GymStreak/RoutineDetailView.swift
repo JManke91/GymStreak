@@ -19,6 +19,9 @@ struct RoutineDetailView: View {
     @State private var weightBannerDismissedForExercise: [UUID: Bool] = [:]
     @State private var currentRoutineExercise: RoutineExercise?
     @State private var restTimerExpandedForExercise: [UUID: Bool] = [:]
+    @State private var isEditMode: Bool = false
+    @AppStorage("hasSeenReorderHint") private var hasSeenReorderHint = false
+    @State private var showReorderHint = false
 
     // Helper function to get rest time for an exercise
     private func restTime(for exercise: RoutineExercise) -> TimeInterval {
@@ -27,15 +30,6 @@ struct RoutineDetailView: View {
 
     var body: some View {
         List {
-            Section {
-                InfoRow(label: "Name", value: routine.name)
-                InfoRow(label: "Exercises", value: "\(routine.routineExercises.count)")
-                InfoRow(label: "Created", value: routine.createdAt.formatted(date: .abbreviated, time: .omitted))
-            } header: {
-                Text("Routine Info")
-            }
-            .listRowSeparator(.hidden)
-
             Section {
                 if routine.routineExercises.isEmpty {
                     ContentUnavailableView {
@@ -52,22 +46,45 @@ struct RoutineDetailView: View {
                     .listRowBackground(Color.clear)
                 } else {
                     ForEach(routine.routineExercises.sorted(by: { $0.order < $1.order })) { routineExercise in
-                        DisclosureGroup(
-                            isExpanded: Binding(
-                                get: { expandedExerciseId == routineExercise.id },
-                                set: { isExpanded in
-                                    withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
-                                        if isExpanded {
-                                            expandedExerciseId = routineExercise.id
-                                            expandedSetId = nil
-                                        } else {
-                                            expandedExerciseId = nil
-                                            expandedSetId = nil
+                        Group {
+                            if isEditMode {
+                                // Edit mode: Simple row with delete button
+                                HStack(spacing: 12) {
+                                    // Delete button
+                                    Button {
+                                        withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                                            viewModel.removeRoutineExercise(routineExercise, from: routine)
                                         }
+                                    } label: {
+                                        Image(systemName: "minus.circle.fill")
+                                            .font(.title2)
+                                            .foregroundStyle(.white, .red)
+                                            .symbolRenderingMode(.palette)
                                     }
+                                    .buttonStyle(.plain)
+
+                                    // Exercise header
+                                    ExerciseHeaderView(routineExercise: routineExercise, isEditMode: isEditMode)
                                 }
-                            )
-                        ) {
+                                .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16))
+                            } else {
+                                // Normal mode: Full disclosure group
+                                DisclosureGroup(
+                                    isExpanded: Binding(
+                                        get: { expandedExerciseId == routineExercise.id },
+                                        set: { isExpanded in
+                                            withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                                                if isExpanded {
+                                                    expandedExerciseId = routineExercise.id
+                                                    expandedSetId = nil
+                                                } else {
+                                                    expandedExerciseId = nil
+                                                    expandedSetId = nil
+                                                }
+                                            }
+                                        }
+                                    )
+                                ) {
                             // Sets content
                             VStack(spacing: 12) {
                                 // Rest Timer Configuration (placed at top like in ActiveWorkoutView)
@@ -194,15 +211,21 @@ struct RoutineDetailView: View {
                             }
                             .padding(.vertical, 8)
 
-                        } label: {
-                            ExerciseHeaderView(routineExercise: routineExercise)
+                                } label: {
+                                    ExerciseHeaderView(routineExercise: routineExercise, isEditMode: false)
+                                }
+                                .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16))
+                                .sensoryFeedback(.selection, trigger: expandedExerciseId)
+                                // Only allow deleting exercise when collapsed
+                                .deleteDisabled(expandedExerciseId == routineExercise.id)
+                            }
                         }
-                        .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16))
-                        .sensoryFeedback(.selection, trigger: expandedExerciseId)
-                        // Only allow deleting exercise when collapsed
-                        .deleteDisabled(expandedExerciseId == routineExercise.id)
+                        // Edit mode visual effects
+                        .modifier(WiggleModifier(isWiggling: isEditMode))
+                        .scaleEffect(isEditMode ? 0.98 : 1.0)
+                        .animation(.spring(response: 0.3, dampingFraction: 0.7), value: isEditMode)
                     }
-                    .onDelete(perform: deleteRoutineExercises)
+                    .onMove(perform: isEditMode ? moveRoutineExercises : nil)
                 }
 
                 if !routine.routineExercises.isEmpty {
@@ -231,14 +254,60 @@ struct RoutineDetailView: View {
                     .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
                 }
             } header: {
-                Text("Exercises")
+                HStack {
+                    Text("Exercises")
+                    Spacer()
+                    if !routine.routineExercises.isEmpty {
+                        Button(isEditMode ? "Done" : "Edit") {
+                            withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                                isEditMode.toggle()
+                                if isEditMode {
+                                    // Collapse any expanded exercises when entering edit mode
+                                    expandedExerciseId = nil
+                                    expandedSetId = nil
+
+                                    // Announce to VoiceOver users
+                                    UIAccessibility.post(
+                                        notification: .announcement,
+                                        argument: "Edit mode. Drag exercises to reorder them."
+                                    )
+
+                                    // Show hint for first-time users
+                                    if !hasSeenReorderHint && routine.routineExercises.count > 1 {
+                                        // Delay to let wiggle animation start first
+                                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                                            withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                                                showReorderHint = true
+                                            }
+                                        }
+                                    }
+                                } else {
+                                    // Announce edit mode exit
+                                    UIAccessibility.post(
+                                        notification: .announcement,
+                                        argument: "Editing complete."
+                                    )
+                                }
+                            }
+                        }
+                        .font(.body.weight(.semibold))
+                        .foregroundStyle(isEditMode ? .orange : .blue)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 6)
+                        .background(
+                            RoundedRectangle(cornerRadius: 8)
+                                .fill(isEditMode ? Color.orange.opacity(0.1) : Color.blue.opacity(0.1))
+                        )
+                    }
+                }
+                .textCase(nil)
             }
         }
         .listStyle(.insetGrouped)
         .navigationTitle(routine.name)
         .navigationBarTitleDisplayMode(.large)
         .safeAreaInset(edge: .bottom) {
-            if !routine.routineExercises.isEmpty {
+            if !routine.routineExercises.isEmpty && !isEditMode {
                 VStack(spacing: 0) {
                     Divider()
                     Button {
@@ -272,6 +341,51 @@ struct RoutineDetailView: View {
                 }
             }
         }
+        .overlay(alignment: .top) {
+            if showReorderHint {
+                VStack(spacing: 8) {
+                    HStack(spacing: 10) {
+                        Image(systemName: "hand.draw")
+                            .font(.title3)
+                            .foregroundStyle(.white)
+
+                        Text("Drag exercises to reorder")
+                            .font(.subheadline.weight(.medium))
+                            .foregroundStyle(.white)
+
+                        Spacer()
+
+                        Button {
+                            withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                                showReorderHint = false
+                                hasSeenReorderHint = true
+                            }
+                        } label: {
+                            Image(systemName: "xmark.circle.fill")
+                                .font(.title3)
+                                .foregroundStyle(.white.opacity(0.8))
+                        }
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 12)
+                    .background(.blue)
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                    .shadow(color: .black.opacity(0.15), radius: 8, y: 4)
+                }
+                .padding(.horizontal, 16)
+                .padding(.top, 8)
+                .transition(.move(edge: .top).combined(with: .opacity))
+                .onAppear {
+                    // Auto-dismiss after 4 seconds
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 4) {
+                        withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                            showReorderHint = false
+                            hasSeenReorderHint = true
+                        }
+                    }
+                }
+            }
+        }
         .sheet(isPresented: $showingAddExercise) {
             AddExerciseToRoutineView(routine: routine, viewModel: viewModel, exercisesViewModel: exercisesViewModel)
         }
@@ -296,6 +410,25 @@ struct RoutineDetailView: View {
             let routineExercise = routine.routineExercises.sorted(by: { $0.order < $1.order })[index]
             viewModel.removeRoutineExercise(routineExercise, from: routine)
         }
+    }
+
+    private func moveRoutineExercises(from source: IndexSet, to destination: Int) {
+        // Provide haptic feedback
+        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+
+        // Get sorted exercises
+        var sortedExercises = routine.routineExercises.sorted(by: { $0.order < $1.order })
+
+        // Move items
+        sortedExercises.move(fromOffsets: source, toOffset: destination)
+
+        // Update order property for all exercises
+        for (index, exercise) in sortedExercises.enumerated() {
+            exercise.order = index
+        }
+
+        // Save changes
+        viewModel.updateRoutine(routine)
     }
 
     private func updateSet(_ set: ExerciseSet, reps: Int? = nil, weight: Double? = nil) {
@@ -356,24 +489,9 @@ struct RoutineDetailView: View {
 
 // MARK: - Supporting Views
 
-struct InfoRow: View {
-    let label: String
-    let value: String
-
-    var body: some View {
-        HStack {
-            Text(label)
-                .font(.subheadline)
-            Spacer()
-            Text(value)
-                .font(.subheadline.weight(.medium))
-                .foregroundStyle(.secondary)
-        }
-    }
-}
-
 struct ExerciseHeaderView: View {
     let routineExercise: RoutineExercise
+    var isEditMode: Bool = false
 
     var body: some View {
         HStack(spacing: 12) {
@@ -382,9 +500,9 @@ struct ExerciseHeaderView: View {
                 Image(systemName: muscleGroupIcon(for: exercise.muscleGroup))
                     .font(.title3)
                     .symbolRenderingMode(.hierarchical)
-                    .foregroundStyle(.blue)
+                    .foregroundStyle(isEditMode ? Color.secondary : Color.blue)
                     .frame(width: 40, height: 40)
-                    .background(.blue.opacity(0.1))
+                    .background(isEditMode ? Color.secondary.opacity(0.1) : Color.blue.opacity(0.1))
                     .clipShape(RoundedRectangle(cornerRadius: 10))
             }
 
@@ -404,6 +522,14 @@ struct ExerciseHeaderView: View {
             }
 
             Spacer()
+
+            // Drag indicator in edit mode
+            if isEditMode {
+                Image(systemName: "line.3.horizontal")
+                    .font(.body.weight(.medium))
+                    .foregroundStyle(.tertiary)
+                    .symbolEffect(.pulse.byLayer, options: .repeating)
+            }
         }
         .contentShape(Rectangle())
     }
@@ -637,4 +763,40 @@ struct EditRoutineNameView: View {
 
 #Preview {
     Text("RoutineDetailView Preview")
+}
+
+// MARK: - Wiggle Animation Modifier
+
+struct WiggleModifier: ViewModifier {
+    let isWiggling: Bool
+    @State private var wiggleCount: Int = 0
+
+    func body(content: Content) -> some View {
+        content
+            .rotationEffect(.degrees(wiggleCount > 0 ? (wiggleCount % 2 == 0 ? 2.0 : -2.0) : 0))
+            .onChange(of: isWiggling) { _, newValue in
+                if newValue {
+                    // Perform a single wiggle animation (3 shakes)
+                    wiggleCount = 0
+                    performWiggle()
+                }
+            }
+    }
+
+    private func performWiggle() {
+        // Wiggle 6 times (3 left-right cycles) then stop
+        for i in 1...6 {
+            DispatchQueue.main.asyncAfter(deadline: .now() + Double(i) * 0.1) {
+                withAnimation(.easeInOut(duration: 0.1)) {
+                    wiggleCount = i
+                }
+            }
+        }
+        // Return to center
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.7) {
+            withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                wiggleCount = 0
+            }
+        }
+    }
 }

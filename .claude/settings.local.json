@@ -4,7 +4,8 @@
       "Bash(xcodebuild:*)",
       "Bash(wait)",
       "Bash(find:*)",
-      "Bash(plutil:*)"
+      "Bash(plutil:*)",
+      "Bash(git checkout:*)"
     ],
     "defaultMode": "acceptEdits"
   }
