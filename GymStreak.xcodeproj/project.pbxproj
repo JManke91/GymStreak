@@ -6,14 +6,65 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		A6FBC4ED2EC91C1C0095483C /* WidgetKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A6FBC4EC2EC91C1C0095483C /* WidgetKit.framework */; };
+		A6FBC4EF2EC91C1C0095483C /* SwiftUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A6FBC4EE2EC91C1C0095483C /* SwiftUI.framework */; };
+		A6FBC4FE2EC91C1E0095483C /* GymStreakWidgetsExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = A6FBC4EA2EC91C1C0095483C /* GymStreakWidgetsExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		A6FBC4FC2EC91C1E0095483C /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = A6A340632E4E6F360017A4F7 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = A6FBC4E92EC91C1C0095483C;
+			remoteInfo = GymStreakWidgetsExtension;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		A6FBC5032EC91C1E0095483C /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				A6FBC4FE2EC91C1E0095483C /* GymStreakWidgetsExtension.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
 /* Begin PBXFileReference section */
 		A6A3406B2E4E6F360017A4F7 /* GymStreak.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = GymStreak.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		A6FBC4EA2EC91C1C0095483C /* GymStreakWidgetsExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = GymStreakWidgetsExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		A6FBC4EC2EC91C1C0095483C /* WidgetKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = WidgetKit.framework; path = System/Library/Frameworks/WidgetKit.framework; sourceTree = SDKROOT; };
+		A6FBC4EE2EC91C1C0095483C /* SwiftUI.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SwiftUI.framework; path = System/Library/Frameworks/SwiftUI.framework; sourceTree = SDKROOT; };
 /* End PBXFileReference section */
+
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		A6FBC4FF2EC91C1E0095483C /* Exceptions for "GymStreakWidgets" folder in "GymStreakWidgetsExtension" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = A6FBC4E92EC91C1C0095483C /* GymStreakWidgetsExtension */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		A6A3406D2E4E6F360017A4F7 /* GymStreak */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			path = GymStreak;
+			sourceTree = "<group>";
+		};
+		A6FBC4F02EC91C1C0095483C /* GymStreakWidgets */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				A6FBC4FF2EC91C1E0095483C /* Exceptions for "GymStreakWidgets" folder in "GymStreakWidgetsExtension" target */,
+			);
+			path = GymStreakWidgets;
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
@@ -26,6 +77,15 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		A6FBC4E72EC91C1C0095483C /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A6FBC4EF2EC91C1C0095483C /* SwiftUI.framework in Frameworks */,
+				A6FBC4ED2EC91C1C0095483C /* WidgetKit.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -33,6 +93,8 @@
 			isa = PBXGroup;
 			children = (
 				A6A3406D2E4E6F360017A4F7 /* GymStreak */,
+				A6FBC4F02EC91C1C0095483C /* GymStreakWidgets */,
+				A6FBC4EB2EC91C1C0095483C /* Frameworks */,
 				A6A3406C2E4E6F360017A4F7 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -41,8 +103,18 @@
 			isa = PBXGroup;
 			children = (
 				A6A3406B2E4E6F360017A4F7 /* GymStreak.app */,
+				A6FBC4EA2EC91C1C0095483C /* GymStreakWidgetsExtension.appex */,
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		A6FBC4EB2EC91C1C0095483C /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				A6FBC4EC2EC91C1C0095483C /* WidgetKit.framework */,
+				A6FBC4EE2EC91C1C0095483C /* SwiftUI.framework */,
+			);
+			name = Frameworks;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -55,10 +127,12 @@
 				A6A340672E4E6F360017A4F7 /* Sources */,
 				A6A340682E4E6F360017A4F7 /* Frameworks */,
 				A6A340692E4E6F360017A4F7 /* Resources */,
+				A6FBC5032EC91C1E0095483C /* Embed Foundation Extensions */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				A6FBC4FD2EC91C1E0095483C /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				A6A3406D2E4E6F360017A4F7 /* GymStreak */,
@@ -70,6 +144,28 @@
 			productReference = A6A3406B2E4E6F360017A4F7 /* GymStreak.app */;
 			productType = "com.apple.product-type.application";
 		};
+		A6FBC4E92EC91C1C0095483C /* GymStreakWidgetsExtension */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = A6FBC5002EC91C1E0095483C /* Build configuration list for PBXNativeTarget "GymStreakWidgetsExtension" */;
+			buildPhases = (
+				A6FBC4E62EC91C1C0095483C /* Sources */,
+				A6FBC4E72EC91C1C0095483C /* Frameworks */,
+				A6FBC4E82EC91C1C0095483C /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				A6FBC4F02EC91C1C0095483C /* GymStreakWidgets */,
+			);
+			name = GymStreakWidgetsExtension;
+			packageProductDependencies = (
+			);
+			productName = GymStreakWidgetsExtension;
+			productReference = A6FBC4EA2EC91C1C0095483C /* GymStreakWidgetsExtension.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -77,11 +173,14 @@
 			isa = PBXProject;
 			attributes = {
 				BuildIndependentTargetsInParallel = 1;
-				LastSwiftUpdateCheck = 1640;
+				LastSwiftUpdateCheck = 2600;
 				LastUpgradeCheck = 1640;
 				TargetAttributes = {
 					A6A3406A2E4E6F360017A4F7 = {
 						CreatedOnToolsVersion = 16.4;
+					};
+					A6FBC4E92EC91C1C0095483C = {
+						CreatedOnToolsVersion = 26.0.1;
 					};
 				};
 			};
@@ -100,12 +199,20 @@
 			projectRoot = "";
 			targets = (
 				A6A3406A2E4E6F360017A4F7 /* GymStreak */,
+				A6FBC4E92EC91C1C0095483C /* GymStreakWidgetsExtension */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
 		A6A340692E4E6F360017A4F7 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A6FBC4E82EC91C1C0095483C /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -122,7 +229,22 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		A6FBC4E62EC91C1C0095483C /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		A6FBC4FD2EC91C1E0095483C /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = A6FBC4E92EC91C1C0095483C /* GymStreakWidgetsExtension */;
+			targetProxy = A6FBC4FC2EC91C1E0095483C /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
 		A6A340752E4E6F370017A4F7 /* Debug */ = {
@@ -253,6 +375,7 @@
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_NSSupportsLiveActivities = YES;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphonesimulator*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents[sdk=iphoneos*]" = YES;
@@ -292,6 +415,7 @@
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_NSSupportsLiveActivities = YES;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphonesimulator*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents[sdk=iphoneos*]" = YES;
@@ -319,6 +443,71 @@
 			};
 			name = Release;
 		};
+		A6FBC5012EC91C1E0095483C /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				ASSETCATALOG_COMPILER_WIDGET_BACKGROUND_COLOR_NAME = WidgetBackground;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 45VTMQ88RW;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = GymStreakWidgets/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = GymStreakWidgets;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.shotat24fps.GymStreak.GymStreakWidgets;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		A6FBC5022EC91C1E0095483C /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				ASSETCATALOG_COMPILER_WIDGET_BACKGROUND_COLOR_NAME = WidgetBackground;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 45VTMQ88RW;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = GymStreakWidgets/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = GymStreakWidgets;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.shotat24fps.GymStreak.GymStreakWidgets;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -336,6 +525,15 @@
 			buildConfigurations = (
 				A6A340782E4E6F370017A4F7 /* Debug */,
 				A6A340792E4E6F370017A4F7 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		A6FBC5002EC91C1E0095483C /* Build configuration list for PBXNativeTarget "GymStreakWidgetsExtension" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				A6FBC5012EC91C1E0095483C /* Debug */,
+				A6FBC5022EC91C1E0095483C /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

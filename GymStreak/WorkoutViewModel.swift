@@ -3,6 +3,7 @@ import SwiftData
 import SwiftUI
 import Combine
 import UserNotifications
+import ActivityKit
 
 @MainActor
 class WorkoutViewModel: ObservableObject {
@@ -23,10 +24,14 @@ class WorkoutViewModel: ObservableObject {
     private var restTimerStartTime: Date?
     private var restDuration: TimeInterval?
 
+    // Live Activity for rest timer
+    private var currentRestActivity: Activity<RestTimerAttributes>?
+
     init(modelContext: ModelContext) {
         self.modelContext = modelContext
         fetchWorkoutHistory()
         requestNotificationPermission()
+        cleanupStaleActivities()
     }
 
     func updateModelContext(_ newContext: ModelContext) {
@@ -73,6 +78,94 @@ class WorkoutViewModel: ObservableObject {
         UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: ["restTimer"])
     }
 
+    // MARK: - Live Activity Management
+
+    private func cleanupStaleActivities() {
+        Task {
+            for activity in Activity<RestTimerAttributes>.activities {
+                // Check if timer has expired
+                if activity.contentState.timerRange.upperBound < Date() {
+                    await activity.end(dismissalPolicy: .immediate)
+                }
+            }
+        }
+    }
+
+    private func startRestTimerLiveActivity(duration: TimeInterval) {
+        // Check if Live Activities are enabled
+        let authInfo = ActivityAuthorizationInfo()
+        print("Live Activity Authorization Status: \(authInfo.areActivitiesEnabled)")
+        print("Live Activity Frequent Updates Enabled: \(authInfo.frequentPushesEnabled)")
+
+        guard authInfo.areActivitiesEnabled else {
+            print("⚠️ Live Activities not enabled by user")
+            return
+        }
+
+        let endDate = Date().addingTimeInterval(duration)
+        let timerRange = Date.now...endDate
+
+        // Get current exercise name if available
+        let exerciseName: String? = {
+            guard let session = currentSession else { return nil }
+            let exercises = session.workoutExercises.sorted(by: { $0.order < $1.order })
+            guard currentExerciseIndex < exercises.count else { return nil }
+            return exercises[currentExerciseIndex].exerciseName
+        }()
+
+        let initialContentState = RestTimerAttributes.ContentState(
+            timerRange: timerRange,
+            exerciseName: exerciseName,
+            completionMessage: nil
+        )
+
+        let attributes = RestTimerAttributes(
+            workoutName: currentSession?.routine?.name ?? "Workout"
+        )
+
+        do {
+            let activity = try Activity<RestTimerAttributes>.request(
+                attributes: attributes,
+                contentState: initialContentState,
+                pushType: nil
+            )
+            currentRestActivity = activity
+            print("✅ Started Live Activity: \(activity.id)")
+        } catch {
+            // Check for specific error messages in the error description
+            let errorDescription = error.localizedDescription
+            if errorDescription.contains("unsupportedTarget") {
+                print("❌ Live Activity Error: unsupportedTarget - NSSupportsLiveActivities must be set to YES in Info.plist")
+            } else if errorDescription.contains("activitiesDisabled") {
+                print("❌ Live Activity Error: User has disabled Live Activities")
+            } else if errorDescription.contains("activityLimitExceeded") {
+                print("❌ Live Activity Error: Too many active Live Activities")
+            } else {
+                print("❌ Live Activity Error: \(errorDescription)")
+            }
+        }
+    }
+
+    private func endRestTimerLiveActivity() {
+        guard let activity = currentRestActivity else { return }
+
+        Task {
+            // Show "Rest Complete" for 3 seconds then dismiss
+            let finalState = RestTimerAttributes.ContentState(
+                timerRange: Date.now...Date.now,
+                exerciseName: nil,
+                completionMessage: "Rest Complete! 💪"
+            )
+
+            await activity.end(
+                using: finalState,
+                dismissalPolicy: .after(Date.now.addingTimeInterval(3))
+            )
+        }
+
+        currentRestActivity = nil
+    }
+
     // MARK: - Background Timer Persistence
 
     func saveTimerState() {
@@ -108,6 +201,11 @@ class WorkoutViewModel: ObservableObject {
                 isRestTimerActive = true
                 restTimerStartTime = restStart
                 restDuration = duration
+
+                // Restart Live Activity if not already active
+                if currentRestActivity == nil {
+                    startRestTimerLiveActivity(duration: remaining)
+                }
 
                 // Restart the UI update timer
                 startRestTimerUI()
@@ -341,6 +439,9 @@ class WorkoutViewModel: ObservableObject {
         // Schedule notification for when rest timer completes
         scheduleRestTimerNotification(duration: duration)
 
+        // Start Live Activity for Lock Screen display
+        startRestTimerLiveActivity(duration: duration)
+
         // Start UI update timer
         startRestTimerUI()
     }
@@ -379,6 +480,9 @@ class WorkoutViewModel: ObservableObject {
 
         // Cancel any pending notification
         cancelRestTimerNotification()
+
+        // End Live Activity
+        endRestTimerLiveActivity()
 
         // Clear saved state
         UserDefaults.standard.removeObject(forKey: "restTimerStartTime")

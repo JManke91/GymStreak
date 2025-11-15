@@ -2,7 +2,9 @@
   "permissions": {
     "allow": [
       "Bash(xcodebuild:*)",
-      "Bash(wait)"
+      "Bash(wait)",
+      "Bash(find:*)",
+      "Bash(plutil:*)"
     ],
     "defaultMode": "acceptEdits"
   }
