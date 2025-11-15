@@ -3,6 +3,7 @@ import SwiftUI
 struct ActiveWorkoutView: View {
     @ObservedObject var viewModel: WorkoutViewModel
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.scenePhase) private var scenePhase
 
     @State private var showingCancelAlert = false
     @State private var showingFinishConfirmation = false
@@ -137,11 +138,20 @@ struct ActiveWorkoutView: View {
                 showingRestTimerSheet = true
             }
         }
-        .onReceive(NotificationCenter.default.publisher(for: UIApplication.willResignActiveNotification)) { _ in
-            viewModel.pauseWorkout()
-        }
-        .onReceive(NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)) { _ in
-            viewModel.resumeWorkout()
+        .onChange(of: scenePhase) { oldPhase, newPhase in
+            switch newPhase {
+            case .background:
+                // Save timer state when app goes to background
+                viewModel.saveTimerState()
+            case .active:
+                // Restore timer state when app becomes active
+                viewModel.restoreTimerState()
+            case .inactive:
+                // App is transitioning, no action needed
+                break
+            @unknown default:
+                break
+            }
         }
     }
 

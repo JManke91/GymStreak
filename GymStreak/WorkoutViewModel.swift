@@ -2,6 +2,7 @@ import Foundation
 import SwiftData
 import SwiftUI
 import Combine
+import UserNotifications
 
 @MainActor
 class WorkoutViewModel: ObservableObject {
@@ -17,14 +18,110 @@ class WorkoutViewModel: ObservableObject {
     private var timer: Timer?
     private var restTimer: Timer?
 
+    // Date-based timer tracking for background persistence
+    private var workoutStartTime: Date?
+    private var restTimerStartTime: Date?
+    private var restDuration: TimeInterval?
+
     init(modelContext: ModelContext) {
         self.modelContext = modelContext
         fetchWorkoutHistory()
+        requestNotificationPermission()
     }
 
     func updateModelContext(_ newContext: ModelContext) {
         self.modelContext = newContext
         fetchWorkoutHistory()
+    }
+
+    // MARK: - Notification Permission
+
+    func requestNotificationPermission() {
+        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge]) { granted, error in
+            if let error = error {
+                print("Notification permission error: \(error)")
+            }
+            if granted {
+                print("Notification permission granted")
+            } else {
+                print("Notification permission denied")
+            }
+        }
+    }
+
+    private func scheduleRestTimerNotification(duration: TimeInterval) {
+        let content = UNMutableNotificationContent()
+        content.title = "Rest Complete"
+        content.body = "Time to start your next set!"
+        content.sound = .default
+
+        let trigger = UNTimeIntervalNotificationTrigger(timeInterval: duration, repeats: false)
+        let request = UNNotificationRequest(
+            identifier: "restTimer",
+            content: content,
+            trigger: trigger
+        )
+
+        UNUserNotificationCenter.current().add(request) { error in
+            if let error = error {
+                print("Error scheduling rest timer notification: \(error)")
+            }
+        }
+    }
+
+    private func cancelRestTimerNotification() {
+        UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: ["restTimer"])
+    }
+
+    // MARK: - Background Timer Persistence
+
+    func saveTimerState() {
+        // Save workout timer state
+        if let startTime = workoutStartTime {
+            UserDefaults.standard.set(startTime, forKey: "workoutStartTime")
+        }
+
+        // Save rest timer state
+        if let restStart = restTimerStartTime, let duration = restDuration {
+            UserDefaults.standard.set(restStart, forKey: "restTimerStartTime")
+            UserDefaults.standard.set(duration, forKey: "restDuration")
+        }
+    }
+
+    func restoreTimerState() {
+        // Restore workout timer
+        if let startTime = UserDefaults.standard.object(forKey: "workoutStartTime") as? Date {
+            let elapsed = Date().timeIntervalSince(startTime)
+            elapsedTime = elapsed
+            workoutStartTime = startTime
+        }
+
+        // Restore rest timer
+        if let restStart = UserDefaults.standard.object(forKey: "restTimerStartTime") as? Date,
+           let duration = UserDefaults.standard.object(forKey: "restDuration") as? TimeInterval {
+            let elapsed = Date().timeIntervalSince(restStart)
+            let remaining = max(0, duration - elapsed)
+
+            if remaining > 0 {
+                // Timer still running
+                restTimeRemaining = remaining
+                isRestTimerActive = true
+                restTimerStartTime = restStart
+                restDuration = duration
+
+                // Restart the UI update timer
+                startRestTimerUI()
+            } else {
+                // Timer has completed while in background
+                stopRestTimer()
+            }
+        }
+    }
+
+    private func clearTimerState() {
+        UserDefaults.standard.removeObject(forKey: "workoutStartTime")
+        UserDefaults.standard.removeObject(forKey: "restTimerStartTime")
+        UserDefaults.standard.removeObject(forKey: "restDuration")
     }
 
     // MARK: - Workout Session Management
@@ -201,9 +298,16 @@ class WorkoutViewModel: ObservableObject {
 
     private func startTimer() {
         timer?.invalidate()
+
+        // Save workout start time for background persistence
+        workoutStartTime = Date()
+        saveTimerState()
+
         timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
             Task { @MainActor [weak self] in
-                self?.elapsedTime += 1
+                guard let self = self, let startTime = self.workoutStartTime else { return }
+                // Calculate elapsed time from start date for accuracy
+                self.elapsedTime = Date().timeIntervalSince(startTime)
             }
         }
     }
@@ -211,6 +315,8 @@ class WorkoutViewModel: ObservableObject {
     private func stopTimer() {
         timer?.invalidate()
         timer = nil
+        workoutStartTime = nil
+        clearTimerState()
     }
 
     func pauseWorkout() {
@@ -226,6 +332,21 @@ class WorkoutViewModel: ObservableObject {
 
         restTimeRemaining = duration
         isRestTimerActive = true
+
+        // Save rest timer start time and duration for background persistence
+        restTimerStartTime = Date()
+        restDuration = duration
+        saveTimerState()
+
+        // Schedule notification for when rest timer completes
+        scheduleRestTimerNotification(duration: duration)
+
+        // Start UI update timer
+        startRestTimerUI()
+    }
+
+    private func startRestTimerUI() {
+        restTimer?.invalidate()
 
         restTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
             Task { @MainActor [weak self] in
@@ -251,6 +372,17 @@ class WorkoutViewModel: ObservableObject {
         restTimer = nil
         isRestTimerActive = false
         restTimeRemaining = 0
+
+        // Clear rest timer state
+        restTimerStartTime = nil
+        restDuration = nil
+
+        // Cancel any pending notification
+        cancelRestTimerNotification()
+
+        // Clear saved state
+        UserDefaults.standard.removeObject(forKey: "restTimerStartTime")
+        UserDefaults.standard.removeObject(forKey: "restDuration")
     }
 
     // MARK: - Navigation Helpers
