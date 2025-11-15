@@ -98,6 +98,7 @@ class WorkoutViewModel: ObservableObject {
     func completeSet(workoutExercise: WorkoutExercise, set: WorkoutSet) {
         guard currentSession != nil else { return }
 
+        objectWillChange.send()
         set.isCompleted = true
         set.completedAt = Date()
         save()
@@ -124,7 +125,17 @@ class WorkoutViewModel: ObservableObject {
         }
     }
 
+    func uncompleteSet(_ set: WorkoutSet) {
+        guard currentSession != nil else { return }
+
+        objectWillChange.send()
+        set.isCompleted = false
+        set.completedAt = nil
+        save()
+    }
+
     func updateSet(_ set: WorkoutSet, reps: Int, weight: Double) {
+        objectWillChange.send()
         set.actualReps = reps
         set.actualWeight = weight
         save()

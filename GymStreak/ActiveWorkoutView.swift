@@ -295,20 +295,21 @@ struct WorkoutSetRow: View {
         VStack(alignment: .leading, spacing: 0) {
             // Set Header
             Button(action: {
-                if !set.isCompleted {
-                    if !isExpanded {
-                        // Reset banner when opening
-                        bannerDismissed = false
-                        initialReps = set.actualReps
-                        initialWeight = set.actualWeight
-                    }
-                    onToggleExpand()
+                if !isExpanded {
+                    // Reset banner when opening
+                    bannerDismissed = false
+                    initialReps = set.actualReps
+                    initialWeight = set.actualWeight
                 }
+                onToggleExpand()
             }) {
                 HStack(spacing: 12) {
-                    // Completion Button
+                    // Completion Button (toggleable)
                     Button {
-                        if !set.isCompleted {
+                        if set.isCompleted {
+                            viewModel.uncompleteSet(set)
+                            UINotificationFeedbackGenerator().notificationOccurred(.warning)
+                        } else {
                             viewModel.completeSet(workoutExercise: workoutExercise, set: set)
                             UINotificationFeedbackGenerator().notificationOccurred(.success)
                         }
@@ -326,7 +327,6 @@ struct WorkoutSetRow: View {
                         }
                     }
                     .buttonStyle(.plain)
-                    .disabled(set.isCompleted)
 
                     // Set Info
                     VStack(alignment: .leading, spacing: 2) {
@@ -346,17 +346,18 @@ struct WorkoutSetRow: View {
 
                     Spacer()
 
-                    // Expand/Collapse indicator or completion time
-                    if !set.isCompleted {
-                        Image(systemName: "chevron.right")
-                            .font(.caption.weight(.semibold))
-                            .foregroundStyle(.tertiary)
-                            .rotationEffect(.degrees(isExpanded ? 90 : 0))
-                    } else if let completedAt = set.completedAt {
+                    // Completion time badge (if completed and not expanded)
+                    if set.isCompleted && !isExpanded, let completedAt = set.completedAt {
                         Text(completedAt, style: .time)
                             .font(.caption2)
                             .foregroundStyle(.secondary)
                     }
+
+                    // Expand/Collapse indicator
+                    Image(systemName: "chevron.right")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.tertiary)
+                        .rotationEffect(.degrees(isExpanded ? 90 : 0))
                 }
                 .contentShape(Rectangle())
             }
@@ -365,9 +366,25 @@ struct WorkoutSetRow: View {
             .padding(.horizontal, 12)
 
             // Expanded inline editor
-            if isExpanded && !set.isCompleted {
+            if isExpanded {
                 VStack(spacing: 12) {
-                    // Apply to All Banner (only if multiple incomplete sets AND changes were made AND not dismissed)
+                    // Completed badge
+                    if set.isCompleted, let completedAt = set.completedAt {
+                        HStack {
+                            Image(systemName: "checkmark.circle.fill")
+                                .font(.caption)
+                                .foregroundStyle(.green)
+                            Text("Completed at \(completedAt, style: .time)")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                            Spacer()
+                        }
+                        .padding(.horizontal, 12)
+                        .padding(.top, 4)
+                    }
+
+                    // Apply to All Banner (show if multiple incomplete sets exist, changes were made, and not dismissed)
+                    // Works for both completed and incomplete sets - applies changes to remaining incomplete sets
                     if hasMultipleIncompleteSets && hasChanges && !bannerDismissed {
                         ApplyToAllBanner(
                             setCount: workoutExercise.sets.filter { !$0.isCompleted }.count,
