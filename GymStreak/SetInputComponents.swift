@@ -41,7 +41,9 @@ struct HorizontalStepper: View {
             // Minus button
             Button {
                 guard value > range.lowerBound else { return }
-                value -= step
+                withAnimation(.snappy(duration: 0.3)) {
+                    value -= step
+                }
                 UIImpactFeedbackGenerator(style: .light).impactOccurred()
             } label: {
                 Image(systemName: "minus.circle.fill")
@@ -63,7 +65,9 @@ struct HorizontalStepper: View {
             // Plus button
             Button {
                 guard value < range.upperBound else { return }
-                value += step
+                withAnimation(.snappy(duration: 0.3)) {
+                    value += step
+                }
                 UIImpactFeedbackGenerator(style: .light).impactOccurred()
             } label: {
                 Image(systemName: "plus.circle.fill")
@@ -115,7 +119,9 @@ struct WeightInput: View {
             // Minus button
             Button {
                 let newWeight = max(0, weight - increment)
-                weight = newWeight
+                withAnimation(.snappy(duration: 0.3)) {
+                    weight = newWeight
+                }
                 UIImpactFeedbackGenerator(style: .light).impactOccurred()
                 // Directly call onUpdate for button clicks
                 lastReportedValue = newWeight
@@ -160,7 +166,9 @@ struct WeightInput: View {
             // Plus button
             Button {
                 let newWeight = weight + increment
-                weight = newWeight
+                withAnimation(.snappy(duration: 0.3)) {
+                    weight = newWeight
+                }
                 UIImpactFeedbackGenerator(style: .light).impactOccurred()
                 // Directly call onUpdate for button clicks
                 lastReportedValue = newWeight
