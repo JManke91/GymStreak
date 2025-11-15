@@ -84,7 +84,7 @@ struct RoutineDetailView: View {
                                         weightBannerDismissed: weightBannerDismissedForExercise[routineExercise.id] ?? false,
                                         totalSets: routineExercise.sets.count,
                                         onTap: {
-                                            withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                                            withAnimation(.snappy(duration: 0.35)) {
                                                 if expandedSetId == set.id {
                                                     expandedSetId = nil
                                                     currentRoutineExercise = nil
@@ -420,10 +420,21 @@ struct RoutineSetRowView: View {
         editingWeight != initialWeight
     }
 
+    private var backgroundColor: Color {
+        if isExpanded {
+            return Color(.tertiarySystemGroupedBackground)
+        } else {
+            return Color.clear
+        }
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             // Set header
-            Button(action: onTap) {
+            Button(action: {
+                UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                onTap()
+            }) {
                 HStack(spacing: 12) {
                     // Set number badge
                     Text("\(index + 1)")
@@ -446,82 +457,95 @@ struct RoutineSetRowView: View {
 
                     Spacer()
 
-                    Image(systemName: "chevron.right")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(.tertiary)
-                        .rotationEffect(.degrees(isExpanded ? 90 : 0))
+                    Image(systemName: "chevron.down")
+                        .font(isExpanded ? .subheadline.weight(.bold) : .caption.weight(.semibold))
+                        .foregroundStyle(isExpanded ? .blue : .secondary)
+                        .rotationEffect(.degrees(isExpanded ? 180 : 0))
                 }
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
+            .padding(.vertical, 8)
+            .padding(.horizontal, 12)
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel("Set \(index + 1): \(set.reps) reps, \(String(format: "%.2f", set.weight)) kilograms")
+            .accessibilityHint(isExpanded ? "Tap to collapse" : "Tap to expand and edit")
+            .accessibilityAddTraits(.isButton)
 
             // Expanded edit form
             if isExpanded {
-                VStack(spacing: 12) {
-                    VStack(spacing: 16) {
-                        // Reps input with contextual banner
-                        VStack(spacing: 8) {
-                            HorizontalStepper(
-                                title: "Reps",
-                                value: $editingReps,
-                                range: 1...100,
-                                step: 1
-                            ) { newValue in
-                                onUpdate(newValue, editingWeight)
-                            }
+                Divider()
+                    .padding(.horizontal, 12)
 
-                            // Reps Apply to All Banner
-                            if hasMultipleSets && repsChanged && !repsBannerDismissed {
-                                ApplyToAllBanner(
-                                    type: .reps,
-                                    setCount: totalSets,
-                                    onApply: onApplyRepsToAll,
-                                    onDismiss: onDismissRepsBanner
-                                )
-                                .transition(.asymmetric(
-                                    insertion: .move(edge: .top).combined(with: .opacity),
-                                    removal: .move(edge: .top).combined(with: .opacity)
-                                ))
-                            }
+                VStack(spacing: 16) {
+                    // Reps input with contextual banner
+                    VStack(spacing: 8) {
+                        HorizontalStepper(
+                            title: "Reps",
+                            value: $editingReps,
+                            range: 1...100,
+                            step: 1
+                        ) { newValue in
+                            onUpdate(newValue, editingWeight)
                         }
 
-                        // Weight input with contextual banner
-                        VStack(spacing: 8) {
-                            WeightInput(
-                                title: "Weight (kg)",
-                                weight: $editingWeight,
-                                increment: 0.25
-                            ) { newValue in
-                                onUpdate(editingReps, newValue)
-                            }
-
-                            // Weight Apply to All Banner
-                            if hasMultipleSets && weightChanged && !weightBannerDismissed {
-                                ApplyToAllBanner(
-                                    type: .weight,
-                                    setCount: totalSets,
-                                    onApply: onApplyWeightToAll,
-                                    onDismiss: onDismissWeightBanner
-                                )
-                                .transition(.asymmetric(
-                                    insertion: .move(edge: .top).combined(with: .opacity),
-                                    removal: .move(edge: .top).combined(with: .opacity)
-                                ))
-                            }
+                        // Reps Apply to All Banner
+                        if hasMultipleSets && repsChanged && !repsBannerDismissed {
+                            ApplyToAllBanner(
+                                type: .reps,
+                                setCount: totalSets,
+                                onApply: onApplyRepsToAll,
+                                onDismiss: onDismissRepsBanner
+                            )
+                            .transition(.asymmetric(
+                                insertion: .move(edge: .top).combined(with: .opacity),
+                                removal: .move(edge: .top).combined(with: .opacity)
+                            ))
                         }
                     }
-                    .padding(.leading, 40)
-                    .padding(.trailing, 16)
+
+                    // Weight input with contextual banner
+                    VStack(spacing: 8) {
+                        WeightInput(
+                            title: "Weight (kg)",
+                            weight: $editingWeight,
+                            increment: 0.25
+                        ) { newValue in
+                            onUpdate(editingReps, newValue)
+                        }
+
+                        // Weight Apply to All Banner
+                        if hasMultipleSets && weightChanged && !weightBannerDismissed {
+                            ApplyToAllBanner(
+                                type: .weight,
+                                setCount: totalSets,
+                                onApply: onApplyWeightToAll,
+                                onDismiss: onDismissWeightBanner
+                            )
+                            .transition(.asymmetric(
+                                insertion: .move(edge: .top).combined(with: .opacity),
+                                removal: .move(edge: .top).combined(with: .opacity)
+                            ))
+                        }
+                    }
                 }
+                .padding(.horizontal, 12)
                 .padding(.top, 12)
-                .padding(.bottom, 8)
+                .padding(.bottom, 12)
                 .transition(.asymmetric(
                     insertion: .opacity.combined(with: .scale(scale: 0.95, anchor: .top)),
                     removal: .opacity.combined(with: .scale(scale: 0.95, anchor: .top))
                 ))
             }
         }
-        .padding(.vertical, 4)
+        .background(
+            RoundedRectangle(cornerRadius: 8)
+                .fill(backgroundColor)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 8)
+                .strokeBorder(isExpanded ? Color.blue.opacity(0.3) : Color.clear, lineWidth: 1)
+        )
     }
 }
 

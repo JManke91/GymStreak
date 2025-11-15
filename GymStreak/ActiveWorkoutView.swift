@@ -213,7 +213,7 @@ struct ExerciseCard: View {
                     isNextSet: isNextSet(set),
                     isExpanded: expandedSetId == set.id,
                     onToggleExpand: {
-                        withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                        withAnimation(.snappy(duration: 0.35)) {
                             if expandedSetId == set.id {
                                 expandedSetId = nil
                             } else {
@@ -304,6 +304,16 @@ struct WorkoutSetRow: View {
         }
     }
 
+    private var backgroundColor: Color {
+        if isExpanded {
+            return Color(.tertiarySystemGroupedBackground)
+        } else if isNextSet {
+            return Color.blue.opacity(0.1)
+        } else {
+            return Color.clear
+        }
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             // Set Header
@@ -315,6 +325,8 @@ struct WorkoutSetRow: View {
                     initialReps = set.actualReps
                     initialWeight = set.actualWeight
                 }
+                // Haptic feedback for expand/collapse
+                UIImpactFeedbackGenerator(style: .light).impactOccurred()
                 onToggleExpand()
             }) {
                 HStack(spacing: 12) {
@@ -368,19 +380,26 @@ struct WorkoutSetRow: View {
                     }
 
                     // Expand/Collapse indicator
-                    Image(systemName: "chevron.right")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(.tertiary)
-                        .rotationEffect(.degrees(isExpanded ? 90 : 0))
+                    Image(systemName: "chevron.down")
+                        .font(isExpanded ? .subheadline.weight(.bold) : .caption.weight(.semibold))
+                        .foregroundStyle(isExpanded ? .blue : .secondary)
+                        .rotationEffect(.degrees(isExpanded ? 180 : 0))
                 }
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             .padding(.vertical, 8)
             .padding(.horizontal, 12)
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel("Set \(set.order + 1): \(set.actualReps) reps, \(String(format: "%.2f", set.actualWeight)) kilograms")
+            .accessibilityHint(isExpanded ? "Tap to collapse" : "Tap to expand and edit")
+            .accessibilityAddTraits(.isButton)
 
             // Expanded inline editor
             if isExpanded {
+                Divider()
+                    .padding(.horizontal, 12)
+
                 VStack(spacing: 12) {
                     // Completed badge
                     if set.isCompleted, let completedAt = set.completedAt {
@@ -491,8 +510,14 @@ struct WorkoutSetRow: View {
                 ))
             }
         }
-        .background(isNextSet && !isExpanded ? Color.blue.opacity(0.1) : Color.clear)
-        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .background(
+            RoundedRectangle(cornerRadius: 8)
+                .fill(backgroundColor)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 8)
+                .strokeBorder(isExpanded ? Color.blue.opacity(0.3) : Color.clear, lineWidth: 1)
+        )
         .opacity(set.isCompleted ? 0.7 : 1.0)
         .onChange(of: set.actualReps) { _, newValue in
             editingReps = newValue
