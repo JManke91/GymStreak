@@ -13,6 +13,7 @@ class WorkoutViewModel: ObservableObject {
     @Published var currentSetIndex: Int = 0
     @Published var isRestTimerActive = false
     @Published var restTimeRemaining: TimeInterval = 0
+    @Published var restDuration: TimeInterval = 0
     @Published var workoutHistory: [WorkoutSession] = []
 
     private var modelContext: ModelContext
@@ -22,7 +23,6 @@ class WorkoutViewModel: ObservableObject {
     // Date-based timer tracking for background persistence
     private var workoutStartTime: Date?
     private var restTimerStartTime: Date?
-    private var restDuration: TimeInterval?
 
     // Live Activity for rest timer
     private var currentRestActivity: Activity<RestTimerAttributes>?
@@ -175,9 +175,9 @@ class WorkoutViewModel: ObservableObject {
         }
 
         // Save rest timer state
-        if let restStart = restTimerStartTime, let duration = restDuration {
+        if let restStart = restTimerStartTime, restDuration > 0 {
             UserDefaults.standard.set(restStart, forKey: "restTimerStartTime")
-            UserDefaults.standard.set(duration, forKey: "restDuration")
+            UserDefaults.standard.set(restDuration, forKey: "restDuration")
         }
     }
 
@@ -477,7 +477,7 @@ class WorkoutViewModel: ObservableObject {
 
         // Clear rest timer state
         restTimerStartTime = nil
-        restDuration = nil
+        restDuration = 0
 
         // Cancel any pending notification
         cancelRestTimerNotification()

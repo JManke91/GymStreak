@@ -73,12 +73,7 @@ struct RestTimerView: View {
     }
 
     private var progress: CGFloat {
-        guard viewModel.currentSession != nil,
-              let nextSet = viewModel.findNextIncompleteSet() else {
-            return 0
-        }
-
-        let totalDuration = nextSet.set.restTime
+        let totalDuration = viewModel.restDuration
         guard totalDuration > 0 else { return 0 }
 
         return CGFloat(viewModel.restTimeRemaining / totalDuration)
