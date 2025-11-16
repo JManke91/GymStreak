@@ -30,38 +30,35 @@ struct AddExerciseToRoutineView: View {
     var body: some View {
         NavigationStack(path: $navigationPath) {
             List {
-                // Info section showing count of exercises already in routine
-                if !routine.routineExercises.isEmpty {
+                // Section 1: Already in Routine
+                let alreadyAddedExercises = filteredExercises.filter { isExerciseAlreadyInRoutine($0) }
+                if !alreadyAddedExercises.isEmpty {
                     Section {
-                        HStack {
-                            Image(systemName: "info.circle")
-                                .foregroundColor(.blue)
-                            Text("\(routine.routineExercises.count) exercise\(routine.routineExercises.count == 1 ? "" : "s") already in routine")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                        }
-                        .listRowBackground(Color.blue.opacity(0.1))
-                    }
-                }
-
-                Section("Choose Exercise") {
-                    ForEach(filteredExercises) { exercise in
-                        NavigationLink(value: exercise) {
+                        ForEach(alreadyAddedExercises) { exercise in
                             HStack(spacing: 12) {
+                                // Muscle group icon (subdued)
+                                Image(systemName: MuscleGroups.icon(for: exercise.muscleGroup))
+                                    .font(.title3)
+                                    .symbolRenderingMode(.hierarchical)
+                                    .foregroundStyle(.secondary)
+                                    .frame(width: 40, height: 40)
+                                    .background(Color.secondary.opacity(0.1))
+                                    .clipShape(RoundedRectangle(cornerRadius: 10))
+
                                 VStack(alignment: .leading, spacing: 4) {
                                     Text(exercise.name)
                                         .font(.headline)
-                                        .foregroundColor(.primary)
+                                        .foregroundStyle(.secondary)
                                     HStack {
                                         Text(exercise.muscleGroup)
                                             .font(.caption)
-                                            .foregroundColor(.secondary)
+                                            .foregroundStyle(.tertiary)
                                         if !exercise.exerciseDescription.isEmpty {
                                             Text("•")
-                                                .foregroundColor(.secondary)
+                                                .foregroundStyle(.tertiary)
                                             Text(exercise.exerciseDescription)
                                                 .font(.caption)
-                                                .foregroundColor(.secondary)
+                                                .foregroundStyle(.tertiary)
                                                 .lineLimit(1)
                                         }
                                     }
@@ -69,14 +66,65 @@ struct AddExerciseToRoutineView: View {
 
                                 Spacer()
 
-                                // Show checkmark if exercise is already in routine
-                                if isExerciseAlreadyInRoutine(exercise) {
-                                    Image(systemName: "checkmark.circle.fill")
-                                        .foregroundColor(.green)
-                                        .font(.system(size: 20))
-                                }
+                                Image(systemName: "checkmark.circle.fill")
+                                    .foregroundStyle(.secondary)
+                                    .font(.title3)
                             }
                             .padding(.vertical, 4)
+                            .listRowBackground(Color(.secondarySystemGroupedBackground))
+                            .accessibilityLabel("\(exercise.name), \(exercise.muscleGroup), already in routine")
+                            .accessibilityHint("This exercise is already in your routine")
+                        }
+                    } header: {
+                        Label("Already in Routine", systemImage: "checkmark.circle.fill")
+                    }
+                }
+
+                // Section 2: Available Exercises
+                let availableExercises = filteredExercises.filter { !isExerciseAlreadyInRoutine($0) }
+                if !availableExercises.isEmpty {
+                    Section("Available Exercises") {
+                        ForEach(availableExercises) { exercise in
+                            NavigationLink(value: exercise) {
+                                HStack(spacing: 12) {
+                                    // Muscle group icon (active)
+                                    Image(systemName: MuscleGroups.icon(for: exercise.muscleGroup))
+                                        .font(.title3)
+                                        .symbolRenderingMode(.hierarchical)
+                                        .foregroundStyle(.blue)
+                                        .frame(width: 40, height: 40)
+                                        .background(Color.blue.opacity(0.1))
+                                        .clipShape(RoundedRectangle(cornerRadius: 10))
+
+                                    VStack(alignment: .leading, spacing: 4) {
+                                        Text(exercise.name)
+                                            .font(.headline)
+                                            .foregroundStyle(.primary)
+                                        HStack {
+                                            Text(exercise.muscleGroup)
+                                                .font(.caption)
+                                                .foregroundStyle(.secondary)
+                                            if !exercise.exerciseDescription.isEmpty {
+                                                Text("•")
+                                                    .foregroundStyle(.secondary)
+                                                Text(exercise.exerciseDescription)
+                                                    .font(.caption)
+                                                    .foregroundStyle(.secondary)
+                                                    .lineLimit(1)
+                                            }
+                                        }
+                                    }
+
+                                    Spacer()
+
+                                    Image(systemName: "chevron.right")
+                                        .font(.caption.weight(.semibold))
+                                        .foregroundStyle(.tertiary)
+                                }
+                                .padding(.vertical, 4)
+                            }
+                            .accessibilityLabel("Add \(exercise.name), \(exercise.muscleGroup) to routine")
+                            .accessibilityHint("Opens configuration screen to add sets")
                         }
                     }
                 }
@@ -92,6 +140,7 @@ struct AddExerciseToRoutineView: View {
                     }
                 }
             }
+            .listStyle(.insetGrouped)
             .navigationTitle("Choose Exercise")
             .navigationBarTitleDisplayMode(.inline)
             .searchable(text: $searchText, prompt: "Search exercises or muscle groups")

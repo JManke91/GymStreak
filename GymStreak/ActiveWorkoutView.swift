@@ -2,6 +2,7 @@ import SwiftUI
 
 struct ActiveWorkoutView: View {
     @ObservedObject var viewModel: WorkoutViewModel
+    @ObservedObject var exercisesViewModel: ExercisesViewModel
     @Environment(\.dismiss) private var dismiss
     @Environment(\.scenePhase) private var scenePhase
 
@@ -9,6 +10,7 @@ struct ActiveWorkoutView: View {
     @State private var showingFinishConfirmation = false
     @State private var showingSaveOptions = false
     @State private var showingRestTimerSheet = false
+    @State private var showingAddExercise = false
     @State private var expandedSetId: UUID?
     @State private var lastActiveExerciseId: UUID?
 
@@ -30,7 +32,7 @@ struct ActiveWorkoutView: View {
 
                         // Add Exercise Button - Card-style with chevron (navigation pattern)
                         Button {
-                            // TODO: Navigate to exercise picker
+                            showingAddExercise = true
                             UIImpactFeedbackGenerator(style: .medium).impactOccurred()
                         } label: {
                             HStack(spacing: 12) {
@@ -132,6 +134,9 @@ struct ActiveWorkoutView: View {
             .presentationDetents([.height(320), .medium])
             .presentationDragIndicator(.visible)
             .interactiveDismissDisabled(false)
+        }
+        .sheet(isPresented: $showingAddExercise) {
+            AddExerciseToWorkoutView(workoutViewModel: viewModel, exercisesViewModel: exercisesViewModel)
         }
         .onChange(of: viewModel.isRestTimerActive) { _, isActive in
             if isActive {

@@ -369,6 +369,40 @@ class WorkoutViewModel: ObservableObject {
         save()
     }
 
+    func addExerciseToWorkout(exercise: Exercise) {
+        guard let session = currentSession else { return }
+
+        objectWillChange.send()
+
+        // Determine the order for the new exercise
+        let nextOrder = session.workoutExercises.map(\.order).max().map { $0 + 1 } ?? 0
+
+        // Create a workout exercise from the library exercise
+        let workoutExercise = WorkoutExercise(
+            exerciseName: exercise.name,
+            muscleGroup: exercise.muscleGroup,
+            order: nextOrder
+        )
+        workoutExercise.workoutSession = session
+
+        // Add default set
+        let defaultSet = WorkoutSet(
+            plannedReps: 10,
+            actualReps: 10,
+            plannedWeight: 0.0,
+            actualWeight: 0.0,
+            restTime: 60.0,
+            order: 0
+        )
+        defaultSet.workoutExercise = workoutExercise
+        workoutExercise.sets.append(defaultSet)
+
+        session.workoutExercises.append(workoutExercise)
+        modelContext.insert(workoutExercise)
+        modelContext.insert(defaultSet)
+        save()
+    }
+
     func removeSetFromExercise(_ set: WorkoutSet, from workoutExercise: WorkoutExercise) {
         guard currentSession != nil else { return }
 

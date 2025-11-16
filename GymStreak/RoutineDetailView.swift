@@ -249,6 +249,7 @@ struct RoutineDetailView: View {
                                 .foregroundStyle(.tertiary)
                         }
                         .frame(maxWidth: .infinity)
+                        .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
                     .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
@@ -401,7 +402,7 @@ struct RoutineDetailView: View {
             Text("Are you sure you want to delete '\(routine.name)'? This action cannot be undone.")
         }
         .fullScreenCover(isPresented: $showingActiveWorkout) {
-            ActiveWorkoutView(viewModel: workoutViewModel)
+            ActiveWorkoutView(viewModel: workoutViewModel, exercisesViewModel: exercisesViewModel)
         }
     }
 

@@ -148,6 +148,14 @@ final class WorkoutExercise {
         }
     }
 
+    init(exerciseName: String, muscleGroup: String, order: Int) {
+        self.id = UUID()
+        self.exerciseName = exerciseName
+        self.muscleGroup = muscleGroup
+        self.order = order
+        self.sets = []
+    }
+
     var completedSetsCount: Int {
         sets.filter(\.isCompleted).count
     }
