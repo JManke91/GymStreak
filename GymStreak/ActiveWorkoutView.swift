@@ -30,6 +30,12 @@ struct ActiveWorkoutView: View {
                                 lastActiveExerciseId: $lastActiveExerciseId,
                                 onDelete: {
                                     exerciseToDelete = workoutExercise
+                                },
+                                onSetCompleted: {
+                                    // Collapse the expanded set when it's marked as complete
+                                    withAnimation(.snappy(duration: 0.35)) {
+                                        expandedSetId = nil
+                                    }
                                 }
                             )
                         }
@@ -261,6 +267,7 @@ struct ExerciseCard: View {
     @Binding var lastActiveExerciseId: UUID?
     var onDelete: (() -> Void)?
     @State private var showingRestTimeConfig = false
+    var onSetCompleted: (() -> Void)?
 
     // Computed property to get current rest time from the exercise's sets
     private var exerciseRestTime: TimeInterval {
@@ -344,6 +351,10 @@ struct ExerciseCard: View {
                     onSetInteraction: {
                         // Mark this exercise as active when user completes/uncompletes a set
                         lastActiveExerciseId = workoutExercise.id
+                    },
+                    onSetCompleted: {
+                        // Collapse the set when it's marked as complete
+                        onSetCompleted?()
                     }
                 )
                 .transition(.asymmetric(
@@ -419,6 +430,7 @@ struct WorkoutSetRow: View {
     let isExpanded: Bool
     let onToggleExpand: () -> Void
     let onSetInteraction: () -> Void
+    let onSetCompleted: () -> Void
 
     @State private var editingReps: Int
     @State private var editingWeight: Double
@@ -427,7 +439,7 @@ struct WorkoutSetRow: View {
     @State private var repsBannerDismissed = false
     @State private var weightBannerDismissed = false
 
-    init(set: WorkoutSet, workoutExercise: WorkoutExercise, viewModel: WorkoutViewModel, isNextSet: Bool, isExpanded: Bool, onToggleExpand: @escaping () -> Void, onSetInteraction: @escaping () -> Void) {
+    init(set: WorkoutSet, workoutExercise: WorkoutExercise, viewModel: WorkoutViewModel, isNextSet: Bool, isExpanded: Bool, onToggleExpand: @escaping () -> Void, onSetInteraction: @escaping () -> Void, onSetCompleted: @escaping () -> Void) {
         self.set = set
         self.workoutExercise = workoutExercise
         self.viewModel = viewModel
@@ -435,6 +447,7 @@ struct WorkoutSetRow: View {
         self.isExpanded = isExpanded
         self.onToggleExpand = onToggleExpand
         self.onSetInteraction = onSetInteraction
+        self.onSetCompleted = onSetCompleted
         self._editingReps = State(initialValue: set.actualReps)
         self._editingWeight = State(initialValue: set.actualWeight)
         self._initialReps = State(initialValue: set.actualReps)
@@ -504,6 +517,10 @@ struct WorkoutSetRow: View {
                         } else {
                             viewModel.completeSet(workoutExercise: workoutExercise, set: set)
                             UINotificationFeedbackGenerator().notificationOccurred(.success)
+                            // Collapse the set when marked as complete
+                            if isExpanded {
+                                onSetCompleted()
+                            }
                         }
                         // Notify that user interacted with this exercise
                         onSetInteraction()
