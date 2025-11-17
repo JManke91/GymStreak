@@ -415,6 +415,25 @@ class WorkoutViewModel: ObservableObject {
         }
     }
 
+    func removeExerciseFromWorkout(_ workoutExercise: WorkoutExercise) {
+        guard let session = currentSession else { return }
+
+        objectWillChange.send()
+
+        // Remove all sets associated with this exercise
+        for set in workoutExercise.sets {
+            modelContext.delete(set)
+        }
+
+        // Remove the exercise from the session
+        if let index = session.workoutExercises.firstIndex(where: { $0.id == workoutExercise.id }) {
+            session.workoutExercises.remove(at: index)
+        }
+
+        modelContext.delete(workoutExercise)
+        save()
+    }
+
     func skipSet(workoutExercise: WorkoutExercise, set: WorkoutSet) {
         // Move to next set without marking complete
         if let nextSet = findNextIncompleteSet(after: set, in: workoutExercise) {

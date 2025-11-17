@@ -11,6 +11,7 @@ struct ActiveWorkoutView: View {
     @State private var showingSaveOptions = false
     @State private var showingRestTimerSheet = false
     @State private var showingAddExercise = false
+    @State private var exerciseToDelete: WorkoutExercise?
     @State private var expandedSetId: UUID?
     @State private var lastActiveExerciseId: UUID?
 
@@ -26,7 +27,10 @@ struct ActiveWorkoutView: View {
                                 viewModel: viewModel,
                                 isCurrentExercise: isCurrentExercise(workoutExercise),
                                 expandedSetId: $expandedSetId,
-                                lastActiveExerciseId: $lastActiveExerciseId
+                                lastActiveExerciseId: $lastActiveExerciseId,
+                                onDelete: {
+                                    exerciseToDelete = workoutExercise
+                                }
                             )
                         }
 
@@ -110,6 +114,22 @@ struct ActiveWorkoutView: View {
             Button("Keep Working Out", role: .cancel) {}
         } message: {
             Text("Your progress will not be saved.")
+        }
+        .sheet(item: $exerciseToDelete) { exercise in
+            DeleteExerciseConfirmationView(
+                exercise: exercise,
+                onConfirm: {
+                    withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                        viewModel.removeExerciseFromWorkout(exercise)
+                    }
+                    exerciseToDelete = nil
+                },
+                onCancel: {
+                    exerciseToDelete = nil
+                }
+            )
+            .presentationDetents([.height(280)])
+            .presentationDragIndicator(.visible)
         }
         .confirmationDialog("Finish Workout", isPresented: $showingFinishConfirmation) {
             Button("Save Workout") {
@@ -239,6 +259,7 @@ struct ExerciseCard: View {
     let isCurrentExercise: Bool
     @Binding var expandedSetId: UUID?
     @Binding var lastActiveExerciseId: UUID?
+    var onDelete: (() -> Void)?
     @State private var showingRestTimeConfig = false
 
     // Computed property to get current rest time from the exercise's sets
@@ -264,11 +285,25 @@ struct ExerciseCard: View {
                         .foregroundStyle(.secondary)
                 }
 
+                Spacer()
+
                 if workoutExercise.completedSetsCount == workoutExercise.sets.count {
                     Image(systemName: "checkmark.circle.fill")
                         .foregroundStyle(.green)
                         .font(.title2)
                         .symbolEffect(.bounce, value: workoutExercise.completedSetsCount)
+                }
+
+                // Delete button
+                if let onDelete = onDelete {
+                    Button {
+                        onDelete()
+                    } label: {
+                        Image(systemName: "trash")
+                            .foregroundStyle(.secondary)
+                            .font(.body)
+                    }
+                    .buttonStyle(.plain)
                 }
             }
 
@@ -775,5 +810,76 @@ struct CompactRestTimer: View {
         guard totalDuration > 0 else { return 0 }
 
         return CGFloat(viewModel.restTimeRemaining / totalDuration)
+    }
+}
+
+// MARK: - Delete Exercise Confirmation View
+
+struct DeleteExerciseConfirmationView: View {
+    let exercise: WorkoutExercise
+    let onConfirm: () -> Void
+    let onCancel: () -> Void
+
+    var body: some View {
+        VStack(spacing: 24) {
+            // Drag indicator area
+            Spacer()
+                .frame(height: 8)
+
+            // Icon
+            Image(systemName: "trash.circle.fill")
+                .font(.system(size: 56))
+                .foregroundStyle(.red)
+                .symbolRenderingMode(.hierarchical)
+
+            // Content
+            VStack(spacing: 8) {
+                Text("Remove Exercise?")
+                    .font(.title3.bold())
+
+                let completedCount = exercise.completedSetsCount
+                if completedCount > 0 {
+                    Text("This will remove \(completedCount) completed set\(completedCount == 1 ? "" : "s") and all other data for \(exercise.exerciseName).")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                } else {
+                    Text("This will remove all sets for \(exercise.exerciseName) from your workout.")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                }
+            }
+            .padding(.horizontal)
+
+            // Buttons
+            VStack(spacing: 12) {
+                Button(role: .destructive) {
+                    onConfirm()
+                } label: {
+                    Text("Remove")
+                        .font(.headline)
+                        .frame(maxWidth: .infinity)
+                        .padding()
+                        .background(Color.red)
+                        .foregroundStyle(.white)
+                        .clipShape(RoundedRectangle(cornerRadius: 12))
+                }
+
+                Button {
+                    onCancel()
+                } label: {
+                    Text("Cancel")
+                        .font(.headline)
+                        .frame(maxWidth: .infinity)
+                        .padding()
+                        .background(Color(.secondarySystemGroupedBackground))
+                        .foregroundStyle(.primary)
+                        .clipShape(RoundedRectangle(cornerRadius: 12))
+                }
+            }
+            .padding(.horizontal)
+        }
+        .padding(.bottom, 20)
     }
 }
