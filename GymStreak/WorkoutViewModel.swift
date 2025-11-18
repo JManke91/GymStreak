@@ -4,6 +4,25 @@ import SwiftUI
 import Combine
 import UserNotifications
 import ActivityKit
+import HealthKit
+
+// MARK: - HealthKit Sync Status
+
+enum HealthKitSyncStatus: Equatable {
+    case idle
+    case syncing
+    case success
+    case failed(String)
+
+    var isComplete: Bool {
+        switch self {
+        case .success, .failed:
+            return true
+        default:
+            return false
+        }
+    }
+}
 
 @MainActor
 class WorkoutViewModel: ObservableObject {
@@ -17,6 +36,11 @@ class WorkoutViewModel: ObservableObject {
     @Published var workoutHistory: [WorkoutSession] = []
     @Published var showingWorkoutCompletePrompt = false
 
+    // HealthKit integration
+    @Published var healthKitSyncEnabled = true
+    @Published var healthKitSyncStatus: HealthKitSyncStatus = .idle
+    @Published var showHealthKitAuthPrompt = false
+
     private var modelContext: ModelContext
     private var timer: Timer?
     private var restTimer: Timer?
@@ -28,11 +52,35 @@ class WorkoutViewModel: ObservableObject {
     // Live Activity for rest timer
     private var currentRestActivity: Activity<RestTimerAttributes>?
 
+    // HealthKit workout manager
+    let healthKitManager = HealthKitWorkoutManager()
+
     init(modelContext: ModelContext) {
         self.modelContext = modelContext
         fetchWorkoutHistory()
         requestNotificationPermission()
         cleanupStaleActivities()
+        loadHealthKitPreferences()
+        healthKitManager.checkAuthorizationStatus()
+    }
+
+    // MARK: - HealthKit Preferences
+
+    private func loadHealthKitPreferences() {
+        healthKitSyncEnabled = UserDefaults.standard.object(forKey: "healthKitSyncEnabled") as? Bool ?? true
+    }
+
+    func setHealthKitSyncEnabled(_ enabled: Bool) {
+        healthKitSyncEnabled = enabled
+        UserDefaults.standard.set(enabled, forKey: "healthKitSyncEnabled")
+    }
+
+    func requestHealthKitAuthorization() async {
+        do {
+            try await healthKitManager.requestAuthorization()
+        } catch {
+            print("HealthKit authorization failed: \(error)")
+        }
     }
 
     func updateModelContext(_ newContext: ModelContext) {
@@ -240,16 +288,52 @@ class WorkoutViewModel: ObservableObject {
         elapsedTime = 0
         currentExerciseIndex = 0
         currentSetIndex = 0
+        healthKitSyncStatus = .idle
 
         modelContext.insert(session)
         save()
 
         startTimer()
+
+        // Start HealthKit workout session
+        startHealthKitSession()
+    }
+
+    private func startHealthKitSession() {
+        guard healthKitSyncEnabled && healthKitManager.isHealthKitAvailable else {
+            return
+        }
+
+        Task {
+            // Check if we need authorization
+            if !healthKitManager.isAuthorized {
+                do {
+                    try await healthKitManager.requestAuthorization()
+                } catch {
+                    print("HealthKit authorization failed: \(error)")
+                    return
+                }
+            }
+
+            // Start the workout session
+            if healthKitManager.isAuthorized {
+                do {
+                    try await healthKitManager.startWorkoutSession()
+                    print("HealthKit workout session started successfully")
+                } catch {
+                    print("Failed to start HealthKit session: \(error)")
+                    // Continue with workout even if HealthKit fails
+                }
+            }
+        }
     }
 
     func cancelWorkout() {
         stopTimer()
         stopRestTimer()
+
+        // Cancel HealthKit session without saving
+        healthKitManager.cancelWorkoutSession()
 
         if let session = currentSession {
             modelContext.delete(session)
@@ -260,6 +344,7 @@ class WorkoutViewModel: ObservableObject {
         elapsedTime = 0
         currentExerciseIndex = 0
         currentSetIndex = 0
+        healthKitSyncStatus = .idle
     }
 
     func pauseForCompletion() {
@@ -286,8 +371,65 @@ class WorkoutViewModel: ObservableObject {
         save()
         fetchWorkoutHistory()
 
+        // Save to HealthKit
+        saveWorkoutToHealthKit(session: session)
+
         currentSession = nil
         elapsedTime = 0
+    }
+
+    private func saveWorkoutToHealthKit(session: WorkoutSession) {
+        guard healthKitSyncEnabled && healthKitManager.isHealthKitAvailable else {
+            healthKitSyncStatus = .idle
+            return
+        }
+
+        healthKitSyncStatus = .syncing
+
+        Task {
+            do {
+                // Calculate estimated calories burned
+                let estimatedCalories = healthKitManager.estimateCaloriesBurned(
+                    durationInSeconds: session.duration
+                )
+
+                // Create metadata for the workout
+                var metadata: [String: Any] = [
+                    HKMetadataKeyWorkoutBrandName: "GymStreak"
+                ]
+
+                if let routineName = session.routine?.name {
+                    metadata["RoutineName"] = routineName
+                }
+
+                if !session.notes.isEmpty {
+                    metadata["Notes"] = session.notes
+                }
+
+                // Try to end the active session first
+                if healthKitManager.isWorkoutActive {
+                    _ = try await healthKitManager.endWorkoutSession(
+                        totalEnergyBurned: estimatedCalories,
+                        metadata: metadata
+                    )
+                } else {
+                    // Fall back to direct save if no active session
+                    _ = try await healthKitManager.saveWorkoutDirectly(
+                        startDate: session.startTime,
+                        endDate: session.endTime ?? Date(),
+                        totalEnergyBurned: estimatedCalories,
+                        metadata: metadata
+                    )
+                }
+
+                healthKitSyncStatus = .success
+                print("Workout synced to HealthKit successfully")
+
+            } catch {
+                healthKitSyncStatus = .failed(error.localizedDescription)
+                print("Failed to sync workout to HealthKit: \(error)")
+            }
+        }
     }
 
     // MARK: - Set Management

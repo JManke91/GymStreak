@@ -6,6 +6,7 @@ struct SaveWorkoutView: View {
 
     @State private var updateTemplate = false
     @State private var notes = ""
+    @State private var syncToHealthKit = true
 
     let onSave: () -> Void
 
@@ -36,8 +37,35 @@ struct SaveWorkoutView: View {
                                 .foregroundStyle(percentage == 100 ? .green : .primary)
                         }
                     }
+
+                    // Estimated calories
+                    let estimatedCalories = viewModel.healthKitManager.estimateCaloriesBurned(
+                        durationInSeconds: viewModel.currentSession?.duration ?? 0
+                    )
+                    LabeledContent("Est. Calories") {
+                        Text(String(format: "%.0f kcal", estimatedCalories))
+                            .font(.headline)
+                    }
                 } header: {
                     Text("Workout Summary")
+                }
+
+                // HealthKit Sync Section
+                if viewModel.healthKitManager.isHealthKitAvailable {
+                    Section {
+                        Toggle(isOn: $syncToHealthKit) {
+                            HStack {
+                                Image(systemName: "heart.fill")
+                                    .foregroundStyle(.red)
+                                Text("Save to Apple Health")
+                            }
+                        }
+                        .onChange(of: syncToHealthKit) { _, newValue in
+                            viewModel.setHealthKitSyncEnabled(newValue)
+                        }
+                    } footer: {
+                        Text("Your workout will appear in the Fitness app and contribute to your activity rings")
+                    }
                 }
 
                 // Template Update Section
@@ -71,6 +99,9 @@ struct SaveWorkoutView: View {
                         onSave()
                     }
                 }
+            }
+            .onAppear {
+                syncToHealthKit = viewModel.healthKitSyncEnabled
             }
         }
     }
