@@ -121,6 +121,18 @@ struct ActiveWorkoutView: View {
         } message: {
             Text("Your progress will not be saved.")
         }
+        .alert("Workout Complete!", isPresented: $viewModel.showingWorkoutCompletePrompt) {
+            Button("Finish Workout") {
+                showingSaveOptions = true
+            }
+            Button("Continue", role: .cancel) {
+                viewModel.resumeAfterCompletionPrompt()
+            }
+        } message: {
+            if let session = viewModel.currentSession {
+                Text("You completed all \(session.totalSetsCount) sets. Would you like to finish your workout?")
+            }
+        }
         .sheet(item: $exerciseToDelete) { exercise in
             DeleteExerciseConfirmationView(
                 exercise: exercise,
@@ -137,12 +149,13 @@ struct ActiveWorkoutView: View {
             .presentationDetents([.height(280)])
             .presentationDragIndicator(.visible)
         }
-        .confirmationDialog("Finish Workout", isPresented: $showingFinishConfirmation) {
+        .alert("Finish Workout?", isPresented: $showingFinishConfirmation) {
+            Button("Continue Workout") {}
             Button("Save Workout") {
                 viewModel.pauseForCompletion()
                 showingSaveOptions = true
             }
-            Button("Cancel", role: .cancel) {}
+            .keyboardShortcut(.defaultAction)
         } message: {
             if let session = viewModel.currentSession {
                 Text("You completed \(session.completedSetsCount) of \(session.totalSetsCount) sets.")

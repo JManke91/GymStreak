@@ -15,6 +15,7 @@ class WorkoutViewModel: ObservableObject {
     @Published var restTimeRemaining: TimeInterval = 0
     @Published var restDuration: TimeInterval = 0
     @Published var workoutHistory: [WorkoutSession] = []
+    @Published var showingWorkoutCompletePrompt = false
 
     private var modelContext: ModelContext
     private var timer: Timer?
@@ -318,6 +319,10 @@ class WorkoutViewModel: ObservableObject {
         } else {
             // Workout complete - no more work to do
             moveToNextExercise()
+
+            // Prompt user to finish workout
+            pauseForCompletion()
+            showingWorkoutCompletePrompt = true
         }
     }
 
@@ -549,6 +554,20 @@ class WorkoutViewModel: ObservableObject {
         // Clear saved state
         UserDefaults.standard.removeObject(forKey: "restTimerStartTime")
         UserDefaults.standard.removeObject(forKey: "restDuration")
+    }
+
+    // MARK: - Workout Completion Check
+
+    var isWorkoutComplete: Bool {
+        guard let session = currentSession else { return false }
+        return session.completedSetsCount == session.totalSetsCount && session.totalSetsCount > 0
+    }
+
+    func resumeAfterCompletionPrompt() {
+        // Restart timer if workout is still active
+        if currentSession != nil {
+            startTimer()
+        }
     }
 
     // MARK: - Navigation Helpers
