@@ -9,6 +9,7 @@ struct AddExerciseToWorkoutView: View {
 
     @State private var exercises: [Exercise] = []
     @State private var searchText = ""
+    @State private var navigationPath = NavigationPath()
 
     var filteredExercises: [Exercise] {
         if searchText.isEmpty {
@@ -27,8 +28,34 @@ struct AddExerciseToWorkoutView: View {
     }
 
     var body: some View {
-        NavigationStack {
+        NavigationStack(path: $navigationPath) {
             List {
+                // Section: Create New Exercise
+                Section {
+                    NavigationLink(value: "createNewExercise") {
+                        HStack(spacing: 12) {
+                            Image(systemName: "plus.circle.fill")
+                                .font(.title3)
+                                .foregroundStyle(.blue)
+                                .frame(width: 40, height: 40)
+                                .background(Color.blue.opacity(0.1))
+                                .clipShape(RoundedRectangle(cornerRadius: 10))
+
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text("Create New Exercise")
+                                    .font(.headline)
+                                    .foregroundStyle(.primary)
+                                Text("Add a custom exercise to your library")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                        .padding(.vertical, 4)
+                    }
+                    .accessibilityLabel("Create new exercise")
+                    .accessibilityHint("Opens form to create a custom exercise")
+                }
+
                 // Section 1: Already in Workout
                 let alreadyAddedExercises = filteredExercises.filter { isExerciseAlreadyInWorkout($0) }
                 if !alreadyAddedExercises.isEmpty {
@@ -145,6 +172,17 @@ struct AddExerciseToWorkoutView: View {
             }
             .onAppear {
                 fetchExercises()
+            }
+            .navigationDestination(for: String.self) { destination in
+                if destination == "createNewExercise" {
+                    CreateExerciseInlineView(
+                        exercisesViewModel: exercisesViewModel,
+                        onExerciseCreated: { newExercise in
+                            // Add the newly created exercise to the workout
+                            addExercise(newExercise)
+                        }
+                    )
+                }
             }
         }
     }
