@@ -455,13 +455,17 @@ class WorkoutViewModel: ObservableObject {
         workoutStartTime = Date()
         saveTimerState()
 
-        timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
+        let newTimer = Timer(timeInterval: 1, repeats: true) { [weak self] _ in
             Task { @MainActor [weak self] in
                 guard let self = self, let startTime = self.workoutStartTime else { return }
                 // Calculate elapsed time from start date for accuracy
                 self.elapsedTime = Date().timeIntervalSince(startTime)
             }
         }
+
+        // Add timer to RunLoop with .common mode to ensure it fires during scrolling
+        RunLoop.current.add(newTimer, forMode: .common)
+        timer = newTimer
     }
 
     private func stopTimer() {
@@ -503,7 +507,7 @@ class WorkoutViewModel: ObservableObject {
     private func startRestTimerUI() {
         restTimer?.invalidate()
 
-        restTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
+        let newRestTimer = Timer(timeInterval: 1, repeats: true) { [weak self] _ in
             Task { @MainActor [weak self] in
                 guard let self = self else { return }
 
@@ -520,6 +524,10 @@ class WorkoutViewModel: ObservableObject {
                 }
             }
         }
+
+        // Add timer to RunLoop with .common mode to ensure it fires during scrolling
+        RunLoop.current.add(newRestTimer, forMode: .common)
+        restTimer = newRestTimer
     }
 
     func stopRestTimer() {
