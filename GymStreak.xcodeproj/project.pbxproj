@@ -10,6 +10,7 @@
 		A6FBC4ED2EC91C1C0095483C /* WidgetKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A6FBC4EC2EC91C1C0095483C /* WidgetKit.framework */; };
 		A6FBC4EF2EC91C1C0095483C /* SwiftUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A6FBC4EE2EC91C1C0095483C /* SwiftUI.framework */; };
 		A6FBC4FE2EC91C1E0095483C /* GymStreakWidgetsExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = A6FBC4EA2EC91C1C0095483C /* GymStreakWidgetsExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		A6FBC5D62ECCED100095483C /* GymStreakWatch Watch App.app in Embed Watch Content */ = {isa = PBXBuildFile; fileRef = A6FBC5CC2ECCED0F0095483C /* GymStreakWatch Watch App.app */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -19,6 +20,13 @@
 			proxyType = 1;
 			remoteGlobalIDString = A6FBC4E92EC91C1C0095483C;
 			remoteInfo = GymStreakWidgetsExtension;
+		};
+		A6FBC5D42ECCED100095483C /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = A6A340632E4E6F360017A4F7 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = A6FBC5CB2ECCED0F0095483C;
+			remoteInfo = "GymStreakWatch Watch App";
 		};
 /* End PBXContainerItemProxy section */
 
@@ -34,6 +42,17 @@
 			name = "Embed Foundation Extensions";
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		A6FBC5D72ECCED100095483C /* Embed Watch Content */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "$(CONTENTS_FOLDER_PATH)/Watch";
+			dstSubfolderSpec = 16;
+			files = (
+				A6FBC5D62ECCED100095483C /* GymStreakWatch Watch App.app in Embed Watch Content */,
+			);
+			name = "Embed Watch Content";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
@@ -41,6 +60,7 @@
 		A6FBC4EA2EC91C1C0095483C /* GymStreakWidgetsExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = GymStreakWidgetsExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		A6FBC4EC2EC91C1C0095483C /* WidgetKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = WidgetKit.framework; path = System/Library/Frameworks/WidgetKit.framework; sourceTree = SDKROOT; };
 		A6FBC4EE2EC91C1C0095483C /* SwiftUI.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SwiftUI.framework; path = System/Library/Frameworks/SwiftUI.framework; sourceTree = SDKROOT; };
+		A6FBC5CC2ECCED0F0095483C /* GymStreakWatch Watch App.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "GymStreakWatch Watch App.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -67,6 +87,11 @@
 			path = GymStreakWidgets;
 			sourceTree = "<group>";
 		};
+		A6FBC5CD2ECCED0F0095483C /* GymStreakWatch Watch App */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = "GymStreakWatch Watch App";
+			sourceTree = "<group>";
+		};
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -86,6 +111,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		A6FBC5C92ECCED0F0095483C /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -94,6 +126,7 @@
 			children = (
 				A6A3406D2E4E6F360017A4F7 /* GymStreak */,
 				A6FBC4F02EC91C1C0095483C /* GymStreakWidgets */,
+				A6FBC5CD2ECCED0F0095483C /* GymStreakWatch Watch App */,
 				A6FBC4EB2EC91C1C0095483C /* Frameworks */,
 				A6A3406C2E4E6F360017A4F7 /* Products */,
 			);
@@ -104,6 +137,7 @@
 			children = (
 				A6A3406B2E4E6F360017A4F7 /* GymStreak.app */,
 				A6FBC4EA2EC91C1C0095483C /* GymStreakWidgetsExtension.appex */,
+				A6FBC5CC2ECCED0F0095483C /* GymStreakWatch Watch App.app */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -128,11 +162,13 @@
 				A6A340682E4E6F360017A4F7 /* Frameworks */,
 				A6A340692E4E6F360017A4F7 /* Resources */,
 				A6FBC5032EC91C1E0095483C /* Embed Foundation Extensions */,
+				A6FBC5D72ECCED100095483C /* Embed Watch Content */,
 			);
 			buildRules = (
 			);
 			dependencies = (
 				A6FBC4FD2EC91C1E0095483C /* PBXTargetDependency */,
+				A6FBC5D52ECCED100095483C /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				A6A3406D2E4E6F360017A4F7 /* GymStreak */,
@@ -166,6 +202,28 @@
 			productReference = A6FBC4EA2EC91C1C0095483C /* GymStreakWidgetsExtension.appex */;
 			productType = "com.apple.product-type.app-extension";
 		};
+		A6FBC5CB2ECCED0F0095483C /* GymStreakWatch Watch App */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = A6FBC5DA2ECCED100095483C /* Build configuration list for PBXNativeTarget "GymStreakWatch Watch App" */;
+			buildPhases = (
+				A6FBC5C82ECCED0F0095483C /* Sources */,
+				A6FBC5C92ECCED0F0095483C /* Frameworks */,
+				A6FBC5CA2ECCED0F0095483C /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				A6FBC5CD2ECCED0F0095483C /* GymStreakWatch Watch App */,
+			);
+			name = "GymStreakWatch Watch App";
+			packageProductDependencies = (
+			);
+			productName = "GymStreakWatch Watch App";
+			productReference = A6FBC5CC2ECCED0F0095483C /* GymStreakWatch Watch App.app */;
+			productType = "com.apple.product-type.application";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -180,6 +238,9 @@
 						CreatedOnToolsVersion = 16.4;
 					};
 					A6FBC4E92EC91C1C0095483C = {
+						CreatedOnToolsVersion = 26.0.1;
+					};
+					A6FBC5CB2ECCED0F0095483C = {
 						CreatedOnToolsVersion = 26.0.1;
 					};
 				};
@@ -200,6 +261,7 @@
 			targets = (
 				A6A3406A2E4E6F360017A4F7 /* GymStreak */,
 				A6FBC4E92EC91C1C0095483C /* GymStreakWidgetsExtension */,
+				A6FBC5CB2ECCED0F0095483C /* GymStreakWatch Watch App */,
 			);
 		};
 /* End PBXProject section */
@@ -213,6 +275,13 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		A6FBC4E82EC91C1C0095483C /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A6FBC5CA2ECCED0F0095483C /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -236,6 +305,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		A6FBC5C82ECCED0F0095483C /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
@@ -243,6 +319,11 @@
 			isa = PBXTargetDependency;
 			target = A6FBC4E92EC91C1C0095483C /* GymStreakWidgetsExtension */;
 			targetProxy = A6FBC4FC2EC91C1E0095483C /* PBXContainerItemProxy */;
+		};
+		A6FBC5D52ECCED100095483C /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = A6FBC5CB2ECCED0F0095483C /* GymStreakWatch Watch App */;
+			targetProxy = A6FBC5D42ECCED100095483C /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -512,6 +593,73 @@
 			};
 			name = Release;
 		};
+		A6FBC5D82ECCED100095483C /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 45VTMQ88RW;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = GymStreakWatch;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown";
+				INFOPLIST_KEY_WKCompanionAppBundleIdentifier = com.shotat24fps.GymStreak;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.shotat24fps.GymStreak.watchkitapp;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = watchos;
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 4;
+				WATCHOS_DEPLOYMENT_TARGET = 26.0;
+			};
+			name = Debug;
+		};
+		A6FBC5D92ECCED100095483C /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 45VTMQ88RW;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = GymStreakWatch;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown";
+				INFOPLIST_KEY_WKCompanionAppBundleIdentifier = com.shotat24fps.GymStreak;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.shotat24fps.GymStreak.watchkitapp;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = watchos;
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 4;
+				VALIDATE_PRODUCT = YES;
+				WATCHOS_DEPLOYMENT_TARGET = 26.0;
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -538,6 +686,15 @@
 			buildConfigurations = (
 				A6FBC5012EC91C1E0095483C /* Debug */,
 				A6FBC5022EC91C1E0095483C /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		A6FBC5DA2ECCED100095483C /* Build configuration list for PBXNativeTarget "GymStreakWatch Watch App" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				A6FBC5D82ECCED100095483C /* Debug */,
+				A6FBC5D92ECCED100095483C /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
