@@ -14,6 +14,29 @@ class RoutinesViewModel: ObservableObject {
     init(modelContext: ModelContext) {
         self.modelContext = modelContext
         fetchRoutines()
+        observeWatchWorkoutCompletions()
+        processPendingWatchWorkouts()
+    }
+
+    private func observeWatchWorkoutCompletions() {
+        NotificationCenter.default.addObserver(
+            forName: .watchWorkoutCompleted,
+            object: nil,
+            queue: .main
+        ) { [weak self] notification in
+            guard let workout = notification.userInfo?["workout"] as? CompletedWatchWorkout else {
+                return
+            }
+            self?.handleCompletedWatchWorkout(workout)
+        }
+    }
+
+    private func processPendingWatchWorkouts() {
+        // Check for any workouts that arrived before we started observing
+        if let pendingWorkout = watchConnectivity.processPendingWorkout() {
+            print("Processing pending watch workout: \(pendingWorkout.routineName)")
+            handleCompletedWatchWorkout(pendingWorkout)
+        }
     }
 
     func updateModelContext(_ newContext: ModelContext) {
@@ -97,6 +120,68 @@ class RoutinesViewModel: ObservableObject {
             try modelContext.save()
         } catch {
             print("Error saving context: \(error)")
+        }
+    }
+
+    // MARK: - Watch Workout Handling
+
+    private func handleCompletedWatchWorkout(_ workout: CompletedWatchWorkout) {
+        print("Received completed watch workout: \(workout.routineName)")
+
+        guard workout.shouldUpdateTemplate else {
+            print("Not updating template - user chose not to update")
+            return
+        }
+
+        // Find the routine by ID
+        let descriptor = FetchDescriptor<Routine>(
+            predicate: #Predicate { routine in
+                routine.id == workout.routineId
+            }
+        )
+
+        do {
+            guard let routine = try modelContext.fetch(descriptor).first else {
+                print("Could not find routine with ID: \(workout.routineId)")
+                return
+            }
+
+            print("Updating template for routine: \(routine.name)")
+            var updatedAny = false
+
+            // Update each routine exercise's sets with the actual values
+            for completedExercise in workout.exercises {
+                guard let routineExercise = routine.routineExercises.first(where: { $0.id == completedExercise.id }) else {
+                    print("Could not find routine exercise with ID: \(completedExercise.id)")
+                    continue
+                }
+
+                for completedSet in completedExercise.sets {
+                    guard let set = routineExercise.sets.first(where: { $0.id == completedSet.id }) else {
+                        print("Could not find set with ID: \(completedSet.id)")
+                        continue
+                    }
+
+                    // Only update if the set was modified
+                    if completedSet.actualReps != completedSet.plannedReps ||
+                       completedSet.actualWeight != completedSet.plannedWeight {
+                        set.reps = completedSet.actualReps
+                        set.weight = completedSet.actualWeight
+                        updatedAny = true
+                        print("Updated set: \(completedSet.actualWeight)lbs × \(completedSet.actualReps) reps")
+                    }
+                }
+            }
+
+            if updatedAny {
+                updateRoutine(routine)
+                print("Template updated successfully - \(workout.modifiedSetsCount) sets modified")
+            } else {
+                print("No sets were actually modified")
+            }
+
+        } catch {
+            print("Error updating routine template: \(error)")
         }
     }
 }

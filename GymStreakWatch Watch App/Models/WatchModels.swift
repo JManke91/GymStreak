@@ -60,6 +60,10 @@ struct ActiveWorkoutSet: Identifiable {
     var isCompleted: Bool
     var completedAt: Date?
     let order: Int
+
+    var wasModified: Bool {
+        actualReps != plannedReps || actualWeight != plannedWeight
+    }
 }
 
 // MARK: - Completed Workout for syncing back to iOS
@@ -71,9 +75,26 @@ struct CompletedWatchWorkout: Codable {
     let startTime: Date
     let endTime: Date
     let exercises: [CompletedWatchExercise]
+    let shouldUpdateTemplate: Bool
 
     var duration: TimeInterval {
         endTime.timeIntervalSince(startTime)
+    }
+
+    var hasModifiedSets: Bool {
+        exercises.contains { exercise in
+            exercise.sets.contains { set in
+                set.actualReps != set.plannedReps || set.actualWeight != set.plannedWeight
+            }
+        }
+    }
+
+    var modifiedSetsCount: Int {
+        exercises.reduce(0) { total, exercise in
+            total + exercise.sets.filter { set in
+                set.actualReps != set.plannedReps || set.actualWeight != set.plannedWeight
+            }.count
+        }
     }
 }
 

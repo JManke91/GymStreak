@@ -44,10 +44,26 @@ struct ActiveWorkoutView: View {
             isPresented: $showEndConfirmation,
             titleVisibility: .visible
         ) {
-            Button("Save Workout") {
-                Task {
-                    await viewModel.endWorkout()
-                    dismiss()
+            if viewModel.hasModifiedSets {
+                Button("Save & Update Template") {
+                    Task {
+                        await viewModel.endWorkout(updateTemplate: true)
+                        dismiss()
+                    }
+                }
+
+                Button("Save (Don't Update)") {
+                    Task {
+                        await viewModel.endWorkout(updateTemplate: false)
+                        dismiss()
+                    }
+                }
+            } else {
+                Button("Save Workout") {
+                    Task {
+                        await viewModel.endWorkout()
+                        dismiss()
+                    }
                 }
             }
 
@@ -57,6 +73,12 @@ struct ActiveWorkoutView: View {
             }
 
             Button("Continue", role: .cancel) { }
+        } message: {
+            if viewModel.hasModifiedSets {
+                Text("You modified \(viewModel.modifiedSetsCount) set\(viewModel.modifiedSetsCount == 1 ? "" : "s"). Update your routine template?")
+            } else {
+                Text("Save your workout progress?")
+            }
         }
     }
 
@@ -66,29 +88,28 @@ struct ActiveWorkoutView: View {
         TabView(selection: $selectedTab) {
             // Tab 0: Exercise flow with state-based navigation
             ZStack {
-                if isShowingExerciseDetail {
-                    ExerciseSetView(
-                        exercise: viewModel.currentExercise,
-                        setIndex: viewModel.currentSetIndex,
-                        progress: viewModel.progress,
-                        completedSets: viewModel.completedSetsCount,
-                        totalSets: viewModel.totalSetsCount,
-                        onComplete: {
-                            viewModel.completeCurrentSet()
-                            // Check if exercise is complete and there's a next exercise
-                            if let exercise = viewModel.currentExercise,
-                               exercise.isComplete,
-                               viewModel.canGoToNextExercise {
-                                // Auto-advance to next exercise
-                                viewModel.goToNextExercise()
-                            }
-                        },
-                        onBack: {
-                            withAnimation {
-                                exercisePath.removeLast()
+                if isShowingExerciseDetail, let exercise = viewModel.currentExercise {
+                    NavigationStack {
+                        SetListView(
+                            exercise: exercise,
+                            progress: viewModel.progress,
+                            completedSets: viewModel.completedSetsCount,
+                            totalSets: viewModel.totalSetsCount
+                        )
+                        .toolbar {
+                            ToolbarItem(placement: .cancellationAction) {
+                                Button {
+                                    WKInterfaceDevice.current().play(.click)
+                                    withAnimation {
+                                        exercisePath.removeLast()
+                                    }
+                                } label: {
+                                    Image(systemName: "chevron.left")
+                                        .font(.system(size: 18, weight: .semibold))
+                                }
                             }
                         }
-                    )
+                    }
                     .transition(.move(edge: .trailing))
                     .gesture(
                         DragGesture()

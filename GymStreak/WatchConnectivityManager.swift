@@ -10,6 +10,7 @@ final class WatchConnectivityManager: NSObject, ObservableObject {
     @Published var isWatchAppInstalled = false
 
     private var session: WCSession?
+    private var pendingWorkout: CompletedWatchWorkout?
 
     private override init() {
         super.init()
@@ -18,6 +19,13 @@ final class WatchConnectivityManager: NSObject, ObservableObject {
             session?.delegate = self
             session?.activate()
         }
+    }
+
+    // MARK: - Pending Workout Handling
+
+    func processPendingWorkout() -> CompletedWatchWorkout? {
+        defer { pendingWorkout = nil }
+        return pendingWorkout
     }
 
     // MARK: - Public Methods
@@ -114,13 +122,16 @@ extension WatchConnectivityManager: WCSessionDelegate {
 
     @MainActor
     private func handleCompletedWorkout(_ workout: CompletedWatchWorkout) {
+        // Store for later processing in case no one is observing yet
+        pendingWorkout = workout
+
         // Post notification for the app to handle
         NotificationCenter.default.post(
             name: .watchWorkoutCompleted,
             object: nil,
             userInfo: ["workout": workout]
         )
-        print("WatchConnectivity: Received completed workout from Watch")
+        print("WatchConnectivity: Received completed workout from Watch - \(workout.routineName)")
     }
 }
 

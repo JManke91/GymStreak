@@ -143,6 +143,18 @@ final class WatchWorkoutViewModel: ObservableObject {
         exercises.count
     }
 
+    var hasModifiedSets: Bool {
+        exercises.contains { exercise in
+            exercise.sets.contains(where: \.wasModified)
+        }
+    }
+
+    var modifiedSetsCount: Int {
+        exercises.reduce(0) { total, exercise in
+            total + exercise.sets.filter(\.wasModified).count
+        }
+    }
+
     // MARK: - Workout Lifecycle
 
     func startWorkout(with routine: WatchRoutine) async {
@@ -178,12 +190,12 @@ final class WatchWorkoutViewModel: ObservableObject {
         isPaused = false
     }
 
-    func endWorkout() async {
+    func endWorkout(updateTemplate: Bool = false) async {
         stopRestTimer()
 
         do {
             _ = try await healthKitManager.endWorkout()
-            await sendCompletedWorkoutToiPhone()
+            await sendCompletedWorkoutToiPhone(updateTemplate: updateTemplate)
             isWorkoutActive = false
             WKInterfaceDevice.current().play(.success)
         } catch {
@@ -199,6 +211,43 @@ final class WatchWorkoutViewModel: ObservableObject {
     }
 
     // MARK: - Set Management
+
+    func toggleSetCompletion(_ setId: UUID, in exerciseId: UUID) {
+        guard let exerciseIndex = exercises.firstIndex(where: { $0.id == exerciseId }),
+              let setIndex = exercises[exerciseIndex].sets.firstIndex(where: { $0.id == setId }) else {
+            return
+        }
+
+        // Toggle completion status
+        let wasCompleted = exercises[exerciseIndex].sets[setIndex].isCompleted
+        exercises[exerciseIndex].sets[setIndex].isCompleted.toggle()
+
+        if exercises[exerciseIndex].sets[setIndex].isCompleted {
+            // Just completed
+            exercises[exerciseIndex].sets[setIndex].completedAt = Date()
+            WKInterfaceDevice.current().play(.success)
+
+            // Start rest timer if applicable
+            let restTime = exercises[exerciseIndex].sets[setIndex].restTime
+            if restTime > 0 {
+                startRestTimer(duration: restTime)
+            }
+        } else {
+            // Just uncompleted
+            exercises[exerciseIndex].sets[setIndex].completedAt = nil
+            WKInterfaceDevice.current().play(.directionDown)
+        }
+    }
+
+    func updateSet(_ updatedSet: ActiveWorkoutSet, in exerciseId: UUID) {
+        guard let exerciseIndex = exercises.firstIndex(where: { $0.id == exerciseId }),
+              let setIndex = exercises[exerciseIndex].sets.firstIndex(where: { $0.id == updatedSet.id }) else {
+            return
+        }
+
+        exercises[exerciseIndex].sets[setIndex] = updatedSet
+        WKInterfaceDevice.current().play(.success)
+    }
 
     func completeCurrentSet() {
         guard var exercise = currentExercise,
@@ -373,7 +422,7 @@ final class WatchWorkoutViewModel: ObservableObject {
 
     // MARK: - Sync to iPhone
 
-    private func sendCompletedWorkoutToiPhone() async {
+    private func sendCompletedWorkoutToiPhone(updateTemplate: Bool) async {
         guard let routine = currentRoutine,
               let startTime = workoutStartTime else { return }
 
@@ -383,7 +432,8 @@ final class WatchWorkoutViewModel: ObservableObject {
             routineName: routine.name,
             startTime: startTime,
             endTime: Date(),
-            exercises: exercises.map { $0.toCompletedExercise() }
+            exercises: exercises.map { $0.toCompletedExercise() },
+            shouldUpdateTemplate: updateTemplate
         )
 
         connectivityManager.sendCompletedWorkout(completedWorkout)
