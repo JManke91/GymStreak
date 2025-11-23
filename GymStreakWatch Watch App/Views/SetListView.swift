@@ -9,6 +9,7 @@ struct SetListView: View {
     @EnvironmentObject var viewModel: WatchWorkoutViewModel
     @State private var editingSet: ActiveWorkoutSet?
     @State private var showingEditor = false
+    @State private var showingRestTimerEditor = false
 
     var body: some View {
         List {
@@ -19,9 +20,35 @@ struct SetListView: View {
                         ProgressRing(progress: progress)
                             .frame(width: 28, height: 28)
 
-                        Text("\(completedSets)/\(totalSets) sets")
-                            .font(.caption.monospacedDigit())
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("\(completedSets)/\(totalSets) sets")
+                                .font(.caption.monospacedDigit())
+                                .foregroundStyle(.secondary)
+
+                            // Rest timer indicator
+                            HStack(spacing: 4) {
+                                Image(systemName: "timer")
+                                    .font(.caption2)
+                                Text(formattedRestTime)
+                                    .font(.caption.monospacedDigit())
+                            }
                             .foregroundStyle(.secondary)
+                        }
+
+                        Spacer()
+
+                        // Edit button
+                        Button {
+                            showingRestTimerEditor = true
+                        } label: {
+                            Image(systemName: "pencil.circle.fill")
+                                .foregroundStyle(.blue)
+                                .font(.title3)
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("Rest timer: \(formattedRestTime)")
+                        .accessibilityHint("Double tap to edit rest duration for all sets")
+                        .accessibilityAddTraits(.isButton)
                     }
 
                     // Compact timer integration
@@ -104,12 +131,36 @@ struct SetListView: View {
                 .environmentObject(viewModel)
             }
         }
+        .sheet(isPresented: $showingRestTimerEditor) {
+            RestTimerEditorSheet(
+                currentRestTime: exercise.sets.first?.restTime ?? 0,
+                onSave: { newRestTime in
+                    viewModel.updateRestTime(for: exercise.id, newRestTime: newRestTime)
+                    showingRestTimerEditor = false
+                },
+                onCancel: {
+                    showingRestTimerEditor = false
+                }
+            )
+        }
     }
 
     // MARK: - Actions
 
     private func toggleSetCompletion(_ set: ActiveWorkoutSet) {
         viewModel.toggleSetCompletion(set.id, in: exercise.id)
+    }
+
+    private var formattedRestTime: String {
+        let restTime = exercise.sets.first?.restTime ?? 0
+        let minutes = Int(restTime) / 60
+        let seconds = Int(restTime) % 60
+
+        if minutes > 0 {
+            return "\(minutes):\(String(format: "%02d", seconds))"
+        } else {
+            return "\(seconds)s"
+        }
     }
 
     private func setAccessibilityLabel(for set: ActiveWorkoutSet, number: Int) -> String {

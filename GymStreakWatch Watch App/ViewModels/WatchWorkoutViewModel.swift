@@ -249,6 +249,20 @@ final class WatchWorkoutViewModel: ObservableObject {
         WKInterfaceDevice.current().play(.success)
     }
 
+    func updateRestTime(for exerciseId: UUID, newRestTime: TimeInterval) {
+        guard let exerciseIndex = exercises.firstIndex(where: { $0.id == exerciseId }) else {
+            return
+        }
+
+        // Update all sets in the exercise with the new rest time
+        for setIndex in exercises[exerciseIndex].sets.indices {
+            exercises[exerciseIndex].sets[setIndex].restTime = newRestTime
+        }
+
+        WKInterfaceDevice.current().play(.success)
+        print("Updated rest time for exercise \(exercises[exerciseIndex].name) to \(newRestTime)s")
+    }
+
     func completeCurrentSet() {
         guard var exercise = currentExercise,
               currentSetIndex < exercise.sets.count else { return }
