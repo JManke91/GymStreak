@@ -111,6 +111,7 @@ struct SetListView: View {
                 }
             }
         }
+        .listStyle(.plain)
         .navigationTitle(exercise.name)
         .navigationBarTitleDisplayMode(.inline)
         .animation(.easeInOut(duration: 0.25), value: viewModel.isResting)

@@ -16,25 +16,30 @@ struct ActiveWorkoutView: View {
     }
 
     var body: some View {
-        // Keep workoutTabs always in hierarchy to preserve navigation state
-        workoutTabs
-            .overlay {
-                // Overlay full-screen timer on top
-                if viewModel.isResting && !viewModel.isRestTimerMinimized {
-                    RestTimerView(
-                        timeRemaining: viewModel.restTimeRemaining,
-                        totalDuration: viewModel.restDuration,
-                        formattedTime: viewModel.formattedRestTime,
-                        state: viewModel.restTimerState,
-                        onSkip: viewModel.skipRest,
-                        onMinimize: viewModel.minimizeRestTimer
-                    )
-                    .transition(.opacity)
+        ZStack {
+            // Black background for entire workout view
+            Color.black.ignoresSafeArea()
+
+            // Keep workoutTabs always in hierarchy to preserve navigation state
+            workoutTabs
+                .overlay {
+                    // Overlay full-screen timer on top
+                    if viewModel.isResting && !viewModel.isRestTimerMinimized {
+                        RestTimerView(
+                            timeRemaining: viewModel.restTimeRemaining,
+                            totalDuration: viewModel.restDuration,
+                            formattedTime: viewModel.formattedRestTime,
+                            state: viewModel.restTimerState,
+                            onSkip: viewModel.skipRest,
+                            onMinimize: viewModel.minimizeRestTimer
+                        )
+                        .transition(.opacity)
+                    }
                 }
-            }
-            .animation(.easeInOut(duration: 0.25), value: viewModel.isResting)
-            .animation(.easeInOut(duration: 0.25), value: viewModel.isRestTimerMinimized)
-            .animation(.easeInOut(duration: 0.3), value: viewModel.restTimerState)
+                .animation(.easeInOut(duration: 0.25), value: viewModel.isResting)
+                .animation(.easeInOut(duration: 0.25), value: viewModel.isRestTimerMinimized)
+                .animation(.easeInOut(duration: 0.3), value: viewModel.restTimerState)
+        }
         .toolbar(.hidden, for: .navigationBar)
         .task {
             await viewModel.startWorkout(with: routine)
