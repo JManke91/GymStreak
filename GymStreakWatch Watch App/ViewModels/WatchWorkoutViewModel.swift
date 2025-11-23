@@ -380,8 +380,9 @@ final class WatchWorkoutViewModel: ObservableObject {
                     self.restTimerState = .completed
                     self.isRestTimerMinimized = false
 
-                    // Stop timer BEFORE playing haptic
-                    self.stopRestTimer()
+                    // Invalidate timer (but don't reset state like stopRestTimer does)
+                    self.restTimer?.invalidate()
+                    self.restTimer = nil
 
                     // Play haptic ONCE
                     WKInterfaceDevice.current().play(.success)
@@ -391,6 +392,8 @@ final class WatchWorkoutViewModel: ObservableObject {
                         try? await Task.sleep(for: .seconds(2))
                         self.isResting = false
                         self.restTimerState = .running
+                        self.restTimeRemaining = 0
+                        self.restDuration = 0
                     }
                 }
             }

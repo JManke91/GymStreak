@@ -9,32 +9,34 @@ struct RestTimerView: View {
     let onMinimize: () -> Void
 
     var body: some View {
-        VStack(spacing: 8) {
-            Text(state == .completed ? "Complete!" : "Rest")
-                .font(.caption2)
-                .foregroundStyle(state == .completed ? .green : .secondary)
+        let _ = print("🎨 Rendering RestTimerView - state: \(state)")
+        ZStack {
+            // Running timer state
+            VStack(spacing: 8) {
+                Text("Rest")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
 
-            // Large timer display
-            Text(state == .completed ? "Done!" : formattedTime)
-                .font(.system(.title, design: .rounded).monospacedDigit())
-                .foregroundStyle(state == .completed ? .green : .yellow)
-                .accessibilityLabel(state == .completed ? "Rest complete" : "Rest time remaining \(formattedTime)")
+                // Large timer display
+                Text(formattedTime)
+                    .font(.system(.title, design: .rounded).monospacedDigit())
+                    .foregroundStyle(.yellow)
+                    .accessibilityLabel("Rest time remaining \(formattedTime)")
 
-            // Progress ring - slightly smaller
-            ZStack {
-                Circle()
-                    .stroke(Color.gray.opacity(0.3), lineWidth: 5)
+                // Progress ring - slightly smaller
+                ZStack {
+                    Circle()
+                        .stroke(Color.gray.opacity(0.3), lineWidth: 5)
 
-                Circle()
-                    .trim(from: 0, to: state == .completed ? 1.0 : progress)
-                    .stroke(state == .completed ? Color.green : Color.yellow, style: StrokeStyle(lineWidth: 5, lineCap: .round))
-                    .rotationEffect(.degrees(-90))
-                    .animation(.linear(duration: state == .completed ? 0.3 : 1), value: progress)
-            }
-            .frame(width: 55, height: 55)
+                    Circle()
+                        .trim(from: 0, to: progress)
+                        .stroke(Color.yellow, style: StrokeStyle(lineWidth: 5, lineCap: .round))
+                        .rotationEffect(.degrees(-90))
+                        .animation(.linear(duration: 1), value: progress)
+                }
+                .frame(width: 55, height: 55)
 
-            // Horizontal button layout - only show in running state
-            if state == .running {
+                // Horizontal button layout - only show in running state
                 HStack(spacing: 8) {
                     Button {
                         onMinimize()
@@ -59,11 +61,33 @@ struct RestTimerView: View {
                 }
                 .buttonBorderShape(.capsule)
             }
+            .opacity(state == .running ? 1 : 0)
+
+            // Beautiful completion screen
+            VStack(spacing: 12) {
+                let _ = print("✅ Completion view in hierarchy - opacity: \(state == .completed ? 1.0 : 0.0)")
+                Image(systemName: "checkmark.circle.fill")
+                    .font(.system(size: 44))
+                    .foregroundStyle(.green)
+                    .symbolEffect(.bounce, value: state == .completed)
+
+                Text("Let's Go!")
+                    .font(.system(.title2, design: .rounded, weight: .bold))
+                    .foregroundStyle(.green)
+
+                Text("Rest Complete")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+            .opacity(state == .completed ? 1 : 0)
+            .scaleEffect(state == .completed ? 1.0 : 0.85)
+            .accessibilityLabel("Rest complete. Let's go!")
         }
         .padding(.horizontal, 8)
         .padding(.vertical, 12)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color(.black))
+        .animation(.spring(response: 0.4, dampingFraction: 0.65), value: state)
     }
 
     private var progress: Double {
@@ -139,12 +163,23 @@ struct CompactRestTimer: View {
     }
 }
 
-#Preview {
+#Preview("Running") {
     RestTimerView(
         timeRemaining: 45,
         totalDuration: 90,
         formattedTime: "0:45",
         state: .running,
+        onSkip: { },
+        onMinimize: { }
+    )
+}
+
+#Preview("Completed") {
+    RestTimerView(
+        timeRemaining: 0,
+        totalDuration: 90,
+        formattedTime: "0:00",
+        state: .completed,
         onSkip: { },
         onMinimize: { }
     )
