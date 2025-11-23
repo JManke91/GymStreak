@@ -7,26 +7,34 @@ class RoutinesViewModel: ObservableObject {
     @Published var routines: [Routine] = []
     @Published var showingAddRoutine = false
     @Published var selectedRoutine: Routine?
-    
+
     private var modelContext: ModelContext
-    
+    private let watchConnectivity = WatchConnectivityManager.shared
+
     init(modelContext: ModelContext) {
         self.modelContext = modelContext
         fetchRoutines()
     }
-    
+
     func updateModelContext(_ newContext: ModelContext) {
         self.modelContext = newContext
         fetchRoutines()
     }
-    
+
     func fetchRoutines() {
         let descriptor = FetchDescriptor<Routine>(sortBy: [SortDescriptor(\.updatedAt, order: .reverse)])
         do {
             routines = try modelContext.fetch(descriptor)
+            syncRoutinesToWatch()
         } catch {
             print("Error fetching routines: \(error)")
         }
+    }
+
+    // MARK: - Watch Connectivity
+
+    private func syncRoutinesToWatch() {
+        watchConnectivity.syncRoutines(routines)
     }
     
     func addRoutine(name: String) {
