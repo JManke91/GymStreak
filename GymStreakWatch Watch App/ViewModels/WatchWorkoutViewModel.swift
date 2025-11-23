@@ -360,7 +360,7 @@ final class WatchWorkoutViewModel: ObservableObject {
         restTimerState = .running
         WKInterfaceDevice.current().play(.start)
 
-        restTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
+        let timer = Timer(timeInterval: 1.0, repeats: true) { [weak self] _ in
             Task { @MainActor in
                 guard let self = self else { return }
 
@@ -395,6 +395,9 @@ final class WatchWorkoutViewModel: ObservableObject {
                 }
             }
         }
+        // Add timer to common run loop mode so it continues during scrolling
+        RunLoop.current.add(timer, forMode: .common)
+        restTimer = timer
     }
 
     func minimizeRestTimer() {
@@ -424,7 +427,7 @@ final class WatchWorkoutViewModel: ObservableObject {
     private func observeHealthKitMetrics() {
         // Observe HealthKit manager's published properties
         // In a real app, you'd use Combine or observation
-        Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
+        let timer = Timer(timeInterval: 1.0, repeats: true) { [weak self] _ in
             Task { @MainActor in
                 guard let self = self else { return }
                 self.heartRate = self.healthKitManager.heartRate
@@ -432,6 +435,8 @@ final class WatchWorkoutViewModel: ObservableObject {
                 self.elapsedTime = self.healthKitManager.elapsedTime
             }
         }
+        // Add timer to common run loop mode so it continues during scrolling
+        RunLoop.current.add(timer, forMode: .common)
     }
 
     // MARK: - Sync to iPhone
