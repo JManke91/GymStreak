@@ -27,7 +27,9 @@ class RoutinesViewModel: ObservableObject {
             guard let workout = notification.userInfo?["workout"] as? CompletedWatchWorkout else {
                 return
             }
-            self?.handleCompletedWatchWorkout(workout)
+            Task { @MainActor in
+                self?.handleCompletedWatchWorkout(workout)
+            }
         }
     }
 
@@ -128,6 +130,63 @@ class RoutinesViewModel: ObservableObject {
     private func handleCompletedWatchWorkout(_ workout: CompletedWatchWorkout) {
         print("Received completed watch workout: \(workout.routineName)")
 
+        // Step 1: Create WorkoutSession to appear in history
+        do {
+            // Find the routine by ID
+            let descriptor = FetchDescriptor<Routine>(
+                predicate: #Predicate { routine in
+                    routine.id == workout.routineId
+                }
+            )
+
+            let routine = try modelContext.fetch(descriptor).first
+
+            // Create workout session
+            let workoutSession = WorkoutSession(routine: routine ?? createPlaceholderRoutine(from: workout))
+            workoutSession.startTime = workout.startTime
+            workoutSession.endTime = workout.endTime
+            workoutSession.didUpdateTemplate = workout.shouldUpdateTemplate
+            workoutSession.routineName = workout.routineName
+
+            // Create workout exercises
+            for completedExercise in workout.exercises {
+                let workoutExercise = WorkoutExercise(
+                    exerciseName: completedExercise.name,
+                    muscleGroup: completedExercise.muscleGroup,
+                    order: completedExercise.order
+                )
+                workoutExercise.workoutSession = workoutSession
+
+                // Create workout sets
+                for completedSet in completedExercise.sets {
+                    let workoutSet = WorkoutSet(
+                        plannedReps: completedSet.plannedReps,
+                        actualReps: completedSet.actualReps,
+                        plannedWeight: completedSet.plannedWeight,
+                        actualWeight: completedSet.actualWeight,
+                        restTime: completedSet.restTime,
+                        order: completedSet.order
+                    )
+                    workoutSet.isCompleted = completedSet.isCompleted
+                    workoutSet.completedAt = completedSet.completedAt
+                    workoutSet.workoutExercise = workoutExercise
+                    workoutExercise.sets.append(workoutSet)
+                    modelContext.insert(workoutSet)
+                }
+
+                workoutSession.workoutExercises.append(workoutExercise)
+                modelContext.insert(workoutExercise)
+            }
+
+            modelContext.insert(workoutSession)
+            try modelContext.save()
+            print("Created workout session from watch workout: \(workout.routineName)")
+
+        } catch {
+            print("Error creating workout session from watch workout: \(error)")
+        }
+
+        // Step 2: Optionally update routine template
         guard workout.shouldUpdateTemplate else {
             print("Not updating template - user chose not to update")
             return
@@ -183,5 +242,12 @@ class RoutinesViewModel: ObservableObject {
         } catch {
             print("Error updating routine template: \(error)")
         }
+    }
+
+    // Helper method to create a placeholder routine if the original was deleted
+    private func createPlaceholderRoutine(from workout: CompletedWatchWorkout) -> Routine {
+        let routine = Routine(name: workout.routineName)
+        routine.id = workout.routineId
+        return routine
     }
 }
