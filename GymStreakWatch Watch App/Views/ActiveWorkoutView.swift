@@ -94,27 +94,17 @@ struct ActiveWorkoutView: View {
             // Tab 0: Exercise flow with state-based navigation
             ZStack {
                 if isShowingExerciseDetail, let exercise = viewModel.currentExercise {
-                    NavigationStack {
-                        SetListView(
-                            exercise: exercise,
-                            progress: viewModel.progress,
-                            completedSets: viewModel.completedSetsCount,
-                            totalSets: viewModel.totalSetsCount
-                        )
-                        .toolbar {
-                            ToolbarItem(placement: .cancellationAction) {
-                                Button {
-                                    WKInterfaceDevice.current().play(.click)
-                                    withAnimation {
-                                        exercisePath.removeLast()
-                                    }
-                                } label: {
-                                    Image(systemName: "chevron.left")
-                                        .font(.system(size: 18, weight: .semibold))
+                    FullScreenSetEditorView(
+                        exercise: exercise,
+                        initialSetIndex: viewModel.currentSetIndex,
+                        onBack: {
+                            withAnimation {
+                                if !exercisePath.isEmpty {
+                                    exercisePath.removeLast()
                                 }
                             }
                         }
-                    }
+                    )
                     .transition(.move(edge: .trailing))
                     .gesture(
                         DragGesture()
@@ -122,7 +112,9 @@ struct ActiveWorkoutView: View {
                                 if gesture.translation.width > 50 {
                                     WKInterfaceDevice.current().play(.click)
                                     withAnimation {
-                                        exercisePath.removeLast()
+                                        if !exercisePath.isEmpty {
+                                            exercisePath.removeLast()
+                                        }
                                     }
                                 }
                             }

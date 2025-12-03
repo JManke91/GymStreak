@@ -7,8 +7,7 @@ struct SetListView: View {
     let totalSets: Int
 
     @EnvironmentObject var viewModel: WatchWorkoutViewModel
-    @State private var editingSet: ActiveWorkoutSet?
-    @State private var showingEditor = false
+    @State private var editingSetId: UUID?
     @State private var showingRestTimerEditor = false
 
     var body: some View {
@@ -71,17 +70,31 @@ struct SetListView: View {
             // Sets section
             Section {
                 ForEach(Array(exercise.sets.enumerated()), id: \.element.id) { index, set in
+                    let isCurrent = index == viewModel.currentSetIndex &&
+                                   exercise.id == viewModel.currentExercise?.id
+                    let isEditing = editingSetId == set.id
+
                     SetRow(
-                        set: set,
+                        set: Binding(
+                            get: { exercise.sets[index] },
+                            set: { updatedSet in
+                                viewModel.updateSet(updatedSet, in: exercise.id)
+                            }
+                        ),
                         setNumber: index + 1,
-                        isCurrent: index == viewModel.currentSetIndex &&
-                                   exercise.id == viewModel.currentExercise?.id,
+                        isCurrent: isCurrent,
+                        isEditing: isEditing,
                         onToggle: {
                             toggleSetCompletion(set)
                         },
-                        onEdit: {
-                            editingSet = set
-                            showingEditor = true
+                        onEditToggle: {
+                            withAnimation(.easeInOut(duration: 0.25)) {
+                                if isEditing {
+                                    editingSetId = nil
+                                } else {
+                                    editingSetId = set.id
+                                }
+                            }
                         }
                     )
                     .swipeActions(edge: .leading) {
@@ -95,18 +108,9 @@ struct SetListView: View {
                         }
                         .tint(set.isCompleted ? .orange : .green)
                     }
-                    .swipeActions(edge: .trailing) {
-                        Button {
-                            editingSet = set
-                            showingEditor = true
-                        } label: {
-                            Label("Edit", systemImage: "pencil")
-                        }
-                        .tint(.blue)
-                    }
                     .accessibilityElement(children: .combine)
                     .accessibilityLabel(setAccessibilityLabel(for: set, number: index + 1))
-                    .accessibilityHint("Double tap to mark \(set.isCompleted ? "incomplete" : "complete"). Swipe up or down for actions")
+                    .accessibilityHint(isCurrent ? "Double tap to edit set values" : "Double tap to mark \(set.isCompleted ? "incomplete" : "complete")")
                     .accessibilityAddTraits(set.isCompleted ? [.isSelected] : [])
                 }
             }
@@ -116,22 +120,7 @@ struct SetListView: View {
         .navigationBarTitleDisplayMode(.inline)
         .animation(.easeInOut(duration: 0.25), value: viewModel.isResting)
         .animation(.easeInOut(duration: 0.25), value: viewModel.isRestTimerMinimized)
-        .sheet(isPresented: $showingEditor) {
-            if let set = editingSet {
-                SetEditorSheet(
-                    set: set,
-                    exerciseId: exercise.id,
-                    onSave: { updatedSet in
-                        viewModel.updateSet(updatedSet, in: exercise.id)
-                        showingEditor = false
-                    },
-                    onCancel: {
-                        showingEditor = false
-                    }
-                )
-                .environmentObject(viewModel)
-            }
-        }
+        .animation(.easeInOut(duration: 0.25), value: editingSetId)
         .sheet(isPresented: $showingRestTimerEditor) {
             RestTimerEditorSheet(
                 currentRestTime: exercise.sets.first?.restTime ?? 0,
@@ -182,62 +171,94 @@ struct SetListView: View {
 // MARK: - Set Row
 
 struct SetRow: View {
-    let set: ActiveWorkoutSet
+    @Binding var set: ActiveWorkoutSet
     let setNumber: Int
     let isCurrent: Bool
+    let isEditing: Bool
     let onToggle: () -> Void
-    let onEdit: () -> Void
+    let onEditToggle: () -> Void
 
     var body: some View {
-        Button(action: onToggle) {
-            HStack(spacing: 12) {
-                // Status icon
-                statusIcon
-                    .font(.title3)
-                    .frame(width: 24)
+        VStack(spacing: 0) {
+            // Compact header row (always visible)
+            Button(action: isCurrent ? onEditToggle : onToggle) {
+                HStack(spacing: 12) {
+                    // Status icon
+                    statusIcon
+                        .font(.title3)
+                        .frame(width: 24)
 
-                // Set info
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Set \(setNumber)")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-
-                    HStack(spacing: 4) {
-                        Text("\(Int(set.actualWeight))")
-                            .font(.body.monospacedDigit())
-                            .fontWeight(.semibold)
-
-                        Text("×")
+                    // Set info
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Set \(setNumber)")
                             .font(.caption)
                             .foregroundStyle(.secondary)
 
-                        Text("\(set.actualReps)")
-                            .font(.body.monospacedDigit())
-                            .fontWeight(.semibold)
+                        HStack(spacing: 4) {
+                            Text("\(Int(set.actualWeight))")
+                                .font(.body.monospacedDigit())
+                                .fontWeight(.semibold)
 
-                        Text("lbs")
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
+                            Text("×")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+
+                            Text("\(set.actualReps)")
+                                .font(.body.monospacedDigit())
+                                .fontWeight(.semibold)
+
+                            Text("lbs")
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                        }
+                        .strikethrough(set.isCompleted, color: .secondary)
+                        .foregroundStyle(set.isCompleted ? .secondary : .primary)
                     }
-                    .strikethrough(set.isCompleted, color: .secondary)
-                    .foregroundStyle(set.isCompleted ? .secondary : .primary)
+
+                    Spacer()
+
+                    // Modified indicator
+                    if set.wasModified {
+                        Image(systemName: "pencil.circle.fill")
+                            .foregroundStyle(.orange)
+                            .font(.caption)
+                    }
                 }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
 
-                Spacer()
-
-                // Modified indicator
-                if set.wasModified {
-                    Image(systemName: "pencil.circle.fill")
-                        .foregroundStyle(.orange)
-                        .font(.caption)
+            // Expanded editing controls (only for current set when editing)
+            if isCurrent && isEditing {
+                InlineSetEditorView(
+                    set: $set,
+                    onComplete: {
+                        onToggle()
+                        onEditToggle() // Close editor after completing
+                    }
+                )
+                .transition(.move(edge: .top).combined(with: .opacity))
+            }
+        }
+        .listRowBackground(
+            Group {
+                if isCurrent {
+                    Color.blue.opacity(0.15)
+                } else if set.isCompleted {
+                    Rectangle()
+                        .fill(Color.clear)
+                        .overlay(
+                            Rectangle()
+                                .fill(Color.green)
+                                .frame(width: 3),
+                            alignment: .leading
+                        )
+                } else {
+                    Color.clear
                 }
             }
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .listRowBackground(
-            isCurrent ? Color.blue.opacity(0.15) : Color.clear
         )
+        .listRowInsets(EdgeInsets(top: 8, leading: isEditing ? 8 : 16, bottom: 8, trailing: 16))
     }
 
     private var statusIcon: some View {
@@ -257,7 +278,7 @@ struct SetRow: View {
     }
 }
 
-#Preview {
+#Preview("Set List View") {
     NavigationStack {
         SetListView(
             exercise: ActiveWorkoutExercise(
@@ -321,4 +342,35 @@ struct SetRow: View {
             connectivityManager: WatchConnectivityManager.shared
         ))
     }
+}
+
+#Preview("Inline Editing") {
+    struct PreviewWrapper: View {
+        @State private var set = ActiveWorkoutSet(
+            id: UUID(),
+            plannedReps: 10,
+            actualReps: 10,
+            plannedWeight: 135,
+            actualWeight: 135,
+            restTime: 90,
+            isCompleted: false,
+            completedAt: nil,
+            order: 0
+        )
+
+        var body: some View {
+            List {
+                SetRow(
+                    set: $set,
+                    setNumber: 1,
+                    isCurrent: true,
+                    isEditing: true,
+                    onToggle: {},
+                    onEditToggle: {}
+                )
+            }
+        }
+    }
+
+    return PreviewWrapper()
 }
