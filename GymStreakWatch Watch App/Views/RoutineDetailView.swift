@@ -54,7 +54,7 @@ struct RoutineDetailView: View {
         Button(action: onStartWorkout) {
             Label("Start Workout", systemImage: "play.fill")
         }
-        .buttonStyle(.borderedProminent)
+//        .buttonStyle(.borderedProminent)
         .tint(.green)
         .controlSize(.large)
         .padding(.top, 8)

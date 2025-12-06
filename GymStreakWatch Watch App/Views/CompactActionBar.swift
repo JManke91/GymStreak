@@ -35,7 +35,7 @@ struct CompactActionBar: View {
                 } label: {
                     Image(systemName: "chevron.left")
                 }
-                .buttonStyle(.bordered)
+//                .buttonStyle(.bordered)
                 .controlSize(.mini)
                 .disabled(!hasPrevious)
                 .opacity(hasPrevious ? 1.0 : 0.3)
@@ -47,7 +47,7 @@ struct CompactActionBar: View {
                 } label: {
                     Image(systemName: isCompleted ? "checkmark.circle.fill" : "circle")
                 }
-                .buttonStyle(.borderedProminent)
+//                .buttonStyle(.borderedProminent)
                 .controlSize(.mini)
                 .tint(isCompleted ? .green : .blue)
                 .accessibilityLabel(isCompleted ? "Set completed" : "Complete set")
@@ -58,7 +58,7 @@ struct CompactActionBar: View {
                 } label: {
                     Image(systemName: "chevron.right")
                 }
-                .buttonStyle(.bordered)
+//                .buttonStyle(.bordered)
                 .controlSize(.mini)
                 .disabled(!hasNext)
                 .opacity(hasNext ? 1.0 : 0.3)
@@ -73,7 +73,7 @@ struct CompactActionBar: View {
                 Image(systemName: isCompleted ? "checkmark.circle.fill" : "circle")
                     .symbolRenderingMode(.hierarchical)
             }
-            .buttonStyle(.borderedProminent)
+//            .buttonStyle(.borderedProminent)
             .controlSize(.mini)
             .tint(isCompleted ? .green : .blue)
             .accessibilityLabel(isCompleted ? "Set completed" : "Complete set")

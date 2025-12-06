@@ -44,7 +44,7 @@ struct RestTimerView: View {
                         Image(systemName: "chevron.down")
                             .font(.system(size: 14, weight: .semibold))
                     }
-                    .buttonStyle(.bordered)
+//                    .buttonStyle(.bordered)
                     .tint(.blue)
                     .accessibilityLabel("Minimize")
                     .accessibilityHint("Double tap to minimize rest timer")
@@ -55,7 +55,7 @@ struct RestTimerView: View {
                         Text("Skip")
                             .font(.footnote.weight(.semibold))
                     }
-                    .buttonStyle(.bordered)
+//                    .buttonStyle(.bordered)
                     .tint(.orange)
                     .accessibilityHint("Double tap to skip rest")
                 }
