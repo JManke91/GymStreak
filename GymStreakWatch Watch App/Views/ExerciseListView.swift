@@ -213,35 +213,35 @@ struct StatusIcon: View {
     }
 }
 
-#Preview {
-    NavigationStack {
-        ExerciseListView(
-            exercises: [
-                ActiveWorkoutExercise(
-                    id: UUID(),
-                    name: "Bench Press",
-                    muscleGroup: "Chest",
-                    sets: [
-                        ActiveWorkoutSet(id: UUID(), plannedReps: 10, actualReps: 10, plannedWeight: 135, actualWeight: 135, restTime: 90, isCompleted: true, completedAt: Date(), order: 0),
-                        ActiveWorkoutSet(id: UUID(), plannedReps: 10, actualReps: 10, plannedWeight: 135, actualWeight: 135, restTime: 90, isCompleted: true, completedAt: Date(), order: 1),
-                        ActiveWorkoutSet(id: UUID(), plannedReps: 10, actualReps: 10, plannedWeight: 135, actualWeight: 135, restTime: 90, isCompleted: false, completedAt: nil, order: 2)
-                    ],
-                    order: 0
-                ),
-                ActiveWorkoutExercise(
-                    id: UUID(),
-                    name: "Shoulder Press",
-                    muscleGroup: "Shoulders",
-                    sets: [
-                        ActiveWorkoutSet(id: UUID(), plannedReps: 10, actualReps: 10, plannedWeight: 65, actualWeight: 65, restTime: 60, isCompleted: false, completedAt: nil, order: 0),
-                        ActiveWorkoutSet(id: UUID(), plannedReps: 10, actualReps: 10, plannedWeight: 65, actualWeight: 65, restTime: 60, isCompleted: false, completedAt: nil, order: 1)
-                    ],
-                    order: 1
-                )
-            ],
-            currentIndex: 0,
-            onSelectExercise: { _ in },
-            onEnd: { }
-        )
-    }
-}
+//#Preview {
+//    NavigationStack {
+//        ExerciseListView(
+//            exercises: [
+//                ActiveWorkoutExercise(
+//                    id: UUID(),
+//                    name: "Bench Press",
+//                    muscleGroup: "Chest",
+//                    sets: [
+//                        ActiveWorkoutSet(id: UUID(), plannedReps: 10, actualReps: 10, plannedWeight: 135, actualWeight: 135, restTime: 90, isCompleted: true, completedAt: Date(), order: 0),
+//                        ActiveWorkoutSet(id: UUID(), plannedReps: 10, actualReps: 10, plannedWeight: 135, actualWeight: 135, restTime: 90, isCompleted: true, completedAt: Date(), order: 1),
+//                        ActiveWorkoutSet(id: UUID(), plannedReps: 10, actualReps: 10, plannedWeight: 135, actualWeight: 135, restTime: 90, isCompleted: false, completedAt: nil, order: 2)
+//                    ],
+//                    order: 0
+//                ),
+//                ActiveWorkoutExercise(
+//                    id: UUID(),
+//                    name: "Shoulder Press",
+//                    muscleGroup: "Shoulders",
+//                    sets: [
+//                        ActiveWorkoutSet(id: UUID(), plannedReps: 10, actualReps: 10, plannedWeight: 65, actualWeight: 65, restTime: 60, isCompleted: false, completedAt: nil, order: 0),
+//                        ActiveWorkoutSet(id: UUID(), plannedReps: 10, actualReps: 10, plannedWeight: 65, actualWeight: 65, restTime: 60, isCompleted: false, completedAt: nil, order: 1)
+//                    ],
+//                    order: 1
+//                )
+//            ],
+//            currentIndex: 0,
+//            onSelectExercise: { _ in },
+//            onEnd: { }
+//        )
+//    }
+//}

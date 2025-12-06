@@ -180,65 +180,65 @@ struct FullScreenSetEditorView: View {
 
 // MARK: - Preview
 
-#Preview {
-    FullScreenSetEditorView(
-        exercise: ActiveWorkoutExercise(
-            id: UUID(),
-            name: "Bench Press",
-            muscleGroup: "Chest",
-            sets: [
-                ActiveWorkoutSet(
-                    id: UUID(),
-                    plannedReps: 10,
-                    actualReps: 10,
-                    plannedWeight: 135,
-                    actualWeight: 135,
-                    restTime: 90,
-                    isCompleted: true,
-                    completedAt: Date(),
-                    order: 0
-                ),
-                ActiveWorkoutSet(
-                    id: UUID(),
-                    plannedReps: 10,
-                    actualReps: 10,
-                    plannedWeight: 140,
-                    actualWeight: 140,
-                    restTime: 90,
-                    isCompleted: false,
-                    completedAt: nil,
-                    order: 1
-                ),
-                ActiveWorkoutSet(
-                    id: UUID(),
-                    plannedReps: 10,
-                    actualReps: 10,
-                    plannedWeight: 135,
-                    actualWeight: 135,
-                    restTime: 90,
-                    isCompleted: false,
-                    completedAt: nil,
-                    order: 2
-                ),
-                ActiveWorkoutSet(
-                    id: UUID(),
-                    plannedReps: 10,
-                    actualReps: 10,
-                    plannedWeight: 135,
-                    actualWeight: 135,
-                    restTime: 90,
-                    isCompleted: false,
-                    completedAt: nil,
-                    order: 3
-                )
-            ],
-            order: 0
-        ),
-        initialSetIndex: 1,
-        onBack: {}
-    )
-    .environmentObject(WatchWorkoutViewModel(
-        healthKitManager: WatchHealthKitManager(),
-        connectivityManager: WatchConnectivityManager.shared
-    ))
-}
+//#Preview {
+//    FullScreenSetEditorView(
+//        exercise: ActiveWorkoutExercise(
+//            id: UUID(),
+//            name: "Bench Press",
+//            muscleGroup: "Chest",
+//            sets: [
+//                ActiveWorkoutSet(
+//                    id: UUID(),
+//                    plannedReps: 10,
+//                    actualReps: 10,
+//                    plannedWeight: 135,
+//                    actualWeight: 135,
+//                    restTime: 90,
+//                    isCompleted: true,
+//                    completedAt: Date(),
+//                    order: 0
+//                ),
+//                ActiveWorkoutSet(
+//                    id: UUID(),
+//                    plannedReps: 10,
+//                    actualReps: 10,
+//                    plannedWeight: 140,
+//                    actualWeight: 140,
+//                    restTime: 90,
+//                    isCompleted: false,
+//                    completedAt: nil,
+//                    order: 1
+//                ),
+//                ActiveWorkoutSet(
+//                    id: UUID(),
+//                    plannedReps: 10,
+//                    actualReps: 10,
+//                    plannedWeight: 135,
+//                    actualWeight: 135,
+//                    restTime: 90,
+//                    isCompleted: false,
+//                    completedAt: nil,
+//                    order: 2
+//                ),
+//                ActiveWorkoutSet(
+//                    id: UUID(),
+//                    plannedReps: 10,
+//                    actualReps: 10,
+//                    plannedWeight: 135,
+//                    actualWeight: 135,
+//                    restTime: 90,
+//                    isCompleted: false,
+//                    completedAt: nil,
+//                    order: 3
+//                )
+//            ],
+//            order: 0
+//        ),
+//        initialSetIndex: 1,
+//        onBack: {}
+//    )
+//    .environmentObject(WatchWorkoutViewModel(
+//        healthKitManager: WatchHealthKitManager(),
+//        connectivityManager: WatchConnectivityManager.shared
+//    ))
+//}

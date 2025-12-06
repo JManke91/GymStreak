@@ -210,33 +210,80 @@ final class WatchWorkoutViewModel: ObservableObject {
         resetState()
     }
 
-    // MARK: - Set Management
+    @MainActor
+    private func applyToggleSetCompletion(_ result: (exerciseIndex: Int, setIndex: Int, newState: Bool)?) {
+        guard let r = result else { return }
 
-    func toggleSetCompletion(_ setId: UUID, in exerciseId: UUID) {
-        guard let exerciseIndex = exercises.firstIndex(where: { $0.id == exerciseId }),
-              let setIndex = exercises[exerciseIndex].sets.firstIndex(where: { $0.id == setId }) else {
-            return
-        }
+//        exercises[r.exerciseIndex].sets[r.setIndex].isCompleted = r.newState
 
-        // Toggle completion status
-        let wasCompleted = exercises[exerciseIndex].sets[setIndex].isCompleted
-        exercises[exerciseIndex].sets[setIndex].isCompleted.toggle()
-
-        if exercises[exerciseIndex].sets[setIndex].isCompleted {
-            // Just completed
-            exercises[exerciseIndex].sets[setIndex].completedAt = Date()
+        if r.newState {
+            exercises[r.exerciseIndex].sets[r.setIndex].completedAt = Date()
             WKInterfaceDevice.current().play(.success)
 
-            // Start rest timer if applicable
-            let restTime = exercises[exerciseIndex].sets[setIndex].restTime
+            let restTime = exercises[r.exerciseIndex].sets[r.setIndex].restTime
             if restTime > 0 {
                 startRestTimer(duration: restTime)
             }
         } else {
-            // Just uncompleted
-            exercises[exerciseIndex].sets[setIndex].completedAt = nil
+            exercises[r.exerciseIndex].sets[r.setIndex].completedAt = nil
             WKInterfaceDevice.current().play(.directionDown)
         }
+    }
+
+    private func performToggleSetCompletion(_ setId: UUID, exerciseId: UUID) async -> (exerciseIndex: Int, setIndex: Int, newState: Bool)? {
+        // Heavy work only, NO UI
+        guard let exerciseIndex = exercises.firstIndex(where: { $0.id == exerciseId }),
+              let setIndex = exercises[exerciseIndex].sets.firstIndex(where: { $0.id == setId }) else {
+            return nil
+        }
+
+        // Simulate heavy work
+//        try? await Task.sleep(nanoseconds: 50_000_000)
+
+        let newState = !exercises[exerciseIndex].sets[setIndex].isCompleted
+        return (exerciseIndex, setIndex, newState)
+    }
+
+    // MARK: - Set Management
+
+    func toggleSetCompletion(_ setId: UUID, in exerciseId: UUID) {
+//        isResting = true
+//        guard let exerciseIndex = exercises.firstIndex(where: { $0.id == exerciseId }),
+//              let setIndex = exercises[exerciseIndex].sets.firstIndex(where: { $0.id == setId }) else {
+//            return
+//        }
+////
+////        // Toggle completion status
+////        let wasCompleted = exercises[exerciseIndex].sets[setIndex].isCompleted
+//        exercises[exerciseIndex].sets[setIndex].isCompleted.toggle()
+//
+//        if exercises[exerciseIndex].sets[setIndex].isCompleted {
+//            // Just completed
+//            exercises[exerciseIndex].sets[setIndex].completedAt = Date()
+//            WKInterfaceDevice.current().play(.success)
+//
+            // Start rest timer if applicable
+//            let restTime = exercises[exerciseIndex].sets[setIndex].restTime
+//            if restTime > 0 {
+//                startRestTimer(duration: restTime)
+//            }
+//        } else {
+//            // Just uncompleted
+//            exercises[exerciseIndex].sets[setIndex].completedAt = nil
+//            WKInterfaceDevice.current().play(.directionDown)
+//        }
+
+        Task {
+               // --- Do background work here ---
+               // (e.g. database writes, computing next rest time, logs, analytics, etc.)
+
+               let result = await performToggleSetCompletion(setId, exerciseId: exerciseId)
+
+               // --- Switch back to main thread for UI updates ---
+               await MainActor.run {
+                   applyToggleSetCompletion(result)
+               }
+           }
     }
 
     func updateSet(_ updatedSet: ActiveWorkoutSet, in exerciseId: UUID) {
@@ -268,7 +315,7 @@ final class WatchWorkoutViewModel: ObservableObject {
               currentSetIndex < exercise.sets.count else { return }
 
         // Mark set as complete
-        exercise.sets[currentSetIndex].isCompleted = true
+//        exercise.sets[currentSetIndex].isCompleted = true
         exercise.sets[currentSetIndex].completedAt = Date()
         exercises[currentExerciseIndex] = exercise
 

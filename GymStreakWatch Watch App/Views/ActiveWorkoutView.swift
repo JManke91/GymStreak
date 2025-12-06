@@ -22,7 +22,7 @@ struct ActiveWorkoutView: View {
 
             // Keep workoutTabs always in hierarchy to preserve navigation state
             workoutTabs
-                .overlay {
+//                .overlay {
                     // Overlay full-screen timer on top
                     if viewModel.isResting && !viewModel.isRestTimerMinimized {
                         RestTimerView(
@@ -35,10 +35,14 @@ struct ActiveWorkoutView: View {
                         )
                         .transition(.opacity)
                     }
-                }
-                .animation(.easeInOut(duration: 0.25), value: viewModel.isResting)
-                .animation(.easeInOut(duration: 0.25), value: viewModel.isRestTimerMinimized)
-                .animation(.easeInOut(duration: 0.3), value: viewModel.restTimerState)
+
+//            if viewModel.isResting {
+//                Text("hello world")
+//            }
+//                }
+//                .animation(.easeInOut(duration: 0.25), value: viewModel.isResting)
+//                .animation(.easeInOut(duration: 0.25), value: viewModel.isRestTimerMinimized)
+//                .animation(.easeInOut(duration: 0.3), value: viewModel.restTimerState)
         }
         .toolbar(.hidden, for: .navigationBar)
         .task {

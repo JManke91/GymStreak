@@ -76,39 +76,39 @@ struct InlineSetEditorView: View {
 
 // MARK: - Preview
 
-#Preview {
-    struct PreviewWrapper: View {
-        @State private var set = ActiveWorkoutSet(
-            id: UUID(),
-            plannedReps: 10,
-            actualReps: 10,
-            plannedWeight: 135,
-            actualWeight: 135,
-            restTime: 90,
-            isCompleted: false,
-            completedAt: nil,
-            order: 0
-        )
-
-        var body: some View {
-            List {
-                Section {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("Set 1")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-
-                        InlineSetEditorView(
-                            set: $set,
-                            onComplete: {
-                                print("Set completed")
-                            }
-                        )
-                    }
-                }
-            }
-        }
-    }
-
-    return PreviewWrapper()
-}
+//#Preview {
+//    struct PreviewWrapper: View {
+//        @State private var set = ActiveWorkoutSet(
+//            id: UUID(),
+//            plannedReps: 10,
+//            actualReps: 10,
+//            plannedWeight: 135,
+//            actualWeight: 135,
+//            restTime: 90,
+//            isCompleted: false,
+//            completedAt: nil,
+//            order: 0
+//        )
+//
+//        var body: some View {
+//            List {
+//                Section {
+//                    VStack(alignment: .leading, spacing: 8) {
+//                        Text("Set 1")
+//                            .font(.caption)
+//                            .foregroundStyle(.secondary)
+//
+//                        InlineSetEditorView(
+//                            set: $set,
+//                            onComplete: {
+//                                print("Set completed")
+//                            }
+//                        )
+//                    }
+//                }
+//            }
+//        }
+//    }
+//
+//    return PreviewWrapper()
+//}

@@ -163,34 +163,34 @@ extension Array {
     }
 }
 
-#Preview {
-    NavigationStack {
-        ExerciseSetView(
-            exercise: ActiveWorkoutExercise(
-                id: UUID(),
-                name: "Bench Press",
-                muscleGroup: "Chest",
-                sets: [
-                    ActiveWorkoutSet(
-                        id: UUID(),
-                        plannedReps: 10,
-                        actualReps: 10,
-                        plannedWeight: 135,
-                        actualWeight: 135,
-                        restTime: 90,
-                        isCompleted: false,
-                        completedAt: nil,
-                        order: 0
-                    )
-                ],
-                order: 0
-            ),
-            setIndex: 0,
-            progress: 0.25,
-            completedSets: 2,
-            totalSets: 8,
-            onComplete: { },
-            onBack: { }
-        )
-    }
-}
+//#Preview {
+//    NavigationStack {
+//        ExerciseSetView(
+//            exercise: ActiveWorkoutExercise(
+//                id: UUID(),
+//                name: "Bench Press",
+//                muscleGroup: "Chest",
+//                sets: [
+//                    ActiveWorkoutSet(
+//                        id: UUID(),
+//                        plannedReps: 10,
+//                        actualReps: 10,
+//                        plannedWeight: 135,
+//                        actualWeight: 135,
+//                        restTime: 90,
+//                        isCompleted: false,
+//                        completedAt: nil,
+//                        order: 0
+//                    )
+//                ],
+//                order: 0
+//            ),
+//            setIndex: 0,
+//            progress: 0.25,
+//            completedSets: 2,
+//            totalSets: 8,
+//            onComplete: { },
+//            onBack: { }
+//        )
+//    }
+//}

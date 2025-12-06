@@ -57,7 +57,9 @@ struct ActiveWorkoutSet: Identifiable {
     var plannedWeight: Double
     var actualWeight: Double
     var restTime: TimeInterval
-    var isCompleted: Bool
+    var isCompleted: Bool {
+        return !(completedAt == nil)
+    }
     var completedAt: Date?
     let order: Int
 
@@ -134,7 +136,7 @@ extension WatchExercise {
                     plannedWeight: set.weight,
                     actualWeight: set.weight,
                     restTime: set.restTime,
-                    isCompleted: false,
+//                    isCompleted: false,
                     completedAt: nil,
                     order: index
                 )
