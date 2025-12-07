@@ -61,9 +61,9 @@ struct FullScreenSetEditorView: View {
                         CompactValueEditor(
                             label: "WEIGHT",
                             value: currentSet.actualWeight,
-                            unit: "lb",
+                            unit: "kg",
                             icon: "scalemass.fill",
-                            step: 5,
+                            step: 1,
                             range: 0...999,
                             isFocused: focusedField == .weight,
                             onTap: {
@@ -71,10 +71,10 @@ struct FullScreenSetEditorView: View {
                                 WKInterfaceDevice.current().play(.click)
                             },
                             onIncrement: {
-                                adjustWeight(by: 5)
+                                adjustWeight(by: 1)
                             },
                             onDecrement: {
-                                adjustWeight(by: -5)
+                                adjustWeight(by: -1)
                             },
                             currentSetIndex: currentSetIndex,
                             totalSets: totalSets
@@ -90,7 +90,7 @@ struct FullScreenSetEditorView: View {
                             unit: "reps",
                             icon: "repeat",
                             step: 1,
-                            range: 0...100,
+                            range: 0...20,
                             isFocused: focusedField == .reps,
                             onTap: {
                                 focusedField = .reps
@@ -109,7 +109,7 @@ struct FullScreenSetEditorView: View {
                     .padding(.horizontal, 8)
 
                     Spacer()
-                        .frame(height: 4)
+                        .frame(height: 10)
 
                     // Compact action bar (Complete + Prev/Next combined)
                     CompactActionBar(
@@ -120,14 +120,16 @@ struct FullScreenSetEditorView: View {
                         onPrevious: { goToPreviousSet() },
                         onNext: { goToNextSet() }
                     )
+//                    .frame(height: 30)
+//                    .background(Color.red)
 
-                    Spacer()
-                        .frame(height: 4)
+//                    Spacer()
+//                        .frame(height: 4)
                 }
-                .padding(.bottom, 8)
+//                .padding(.bottom, 8)
             }
-            .navigationTitle(exercise.name)
-            .navigationBarTitleDisplayMode(.inline)
+//            .navigationTitle(exercise.name)
+//            .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button {
@@ -137,7 +139,30 @@ struct FullScreenSetEditorView: View {
                         Image(systemName: "chevron.left")
                             .font(.system(size: 16, weight: .semibold))
                     }
-                    .accessibilityLabel("Back to exercises")
+//                    .accessibilityLabel("Back to exercises")
+                }
+                if viewModel.isResting && viewModel.isRestTimerMinimized {
+                ToolbarItem(placement: .topBarTrailing) {
+
+                    // TODO: 🚧 - change small rest timer (remove circle) and show progress throughout horizontal view to not interfere with time at top
+                    // TODO: 🚧 - show set number within circle
+                    // TODO: 🚧 - when set is complete, instead of showing checkmark, just give circle background, such that set numbers are still visible
+                    // TODO: 🚧 - small "complete" text below button?
+//                    CompactRestTimer
+
+                    NewShrinkingRestTimer(
+                                timeRemaining: viewModel.restTimeRemaining,
+                                totalDuration: viewModel.restDuration,
+//                                formattedTime: viewModel.formattedRestTime,
+                                onExpand: viewModel.expandRestTimer, onSkip: viewModel.skipRest
+                            )
+//                            .padding(.top, 30)
+                            .frame(maxWidth: 100, maxHeight: 20)
+//                            .listRowIns/*ets(EdgeInsets(top: 4, leading: 8, bottom: 4, trailing: 8))*/
+                        .transition(.move(edge: .top).combined(with: .opacity))
+                    }
+
+
                 }
             }
         }
@@ -177,68 +202,3 @@ struct FullScreenSetEditorView: View {
         WKInterfaceDevice.current().play(.click)
     }
 }
-
-// MARK: - Preview
-
-//#Preview {
-//    FullScreenSetEditorView(
-//        exercise: ActiveWorkoutExercise(
-//            id: UUID(),
-//            name: "Bench Press",
-//            muscleGroup: "Chest",
-//            sets: [
-//                ActiveWorkoutSet(
-//                    id: UUID(),
-//                    plannedReps: 10,
-//                    actualReps: 10,
-//                    plannedWeight: 135,
-//                    actualWeight: 135,
-//                    restTime: 90,
-//                    isCompleted: true,
-//                    completedAt: Date(),
-//                    order: 0
-//                ),
-//                ActiveWorkoutSet(
-//                    id: UUID(),
-//                    plannedReps: 10,
-//                    actualReps: 10,
-//                    plannedWeight: 140,
-//                    actualWeight: 140,
-//                    restTime: 90,
-//                    isCompleted: false,
-//                    completedAt: nil,
-//                    order: 1
-//                ),
-//                ActiveWorkoutSet(
-//                    id: UUID(),
-//                    plannedReps: 10,
-//                    actualReps: 10,
-//                    plannedWeight: 135,
-//                    actualWeight: 135,
-//                    restTime: 90,
-//                    isCompleted: false,
-//                    completedAt: nil,
-//                    order: 2
-//                ),
-//                ActiveWorkoutSet(
-//                    id: UUID(),
-//                    plannedReps: 10,
-//                    actualReps: 10,
-//                    plannedWeight: 135,
-//                    actualWeight: 135,
-//                    restTime: 90,
-//                    isCompleted: false,
-//                    completedAt: nil,
-//                    order: 3
-//                )
-//            ],
-//            order: 0
-//        ),
-//        initialSetIndex: 1,
-//        onBack: {}
-//    )
-//    .environmentObject(WatchWorkoutViewModel(
-//        healthKitManager: WatchHealthKitManager(),
-//        connectivityManager: WatchConnectivityManager.shared
-//    ))
-//}

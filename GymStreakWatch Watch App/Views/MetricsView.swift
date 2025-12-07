@@ -2,8 +2,8 @@ import SwiftUI
 
 struct MetricsView: View {
     let elapsedTime: String
-    let heartRate: Double
-    let calories: Double
+    let heartRate: Int?
+    let calories: Int?
 
     @EnvironmentObject var viewModel: WatchWorkoutViewModel
 
@@ -35,7 +35,7 @@ struct MetricsView: View {
                     VStack {
                         Image(systemName: "heart.fill")
                             .foregroundStyle(.red)
-                        Text("\(Int(heartRate))")
+                        Text("\(heartRate ?? 0)")
                             .font(.title3.monospacedDigit())
                             .fontWeight(.semibold)
                         Text("BPM")
@@ -43,13 +43,13 @@ struct MetricsView: View {
                             .foregroundStyle(.secondary)
                     }
                     .accessibilityElement(children: .combine)
-                    .accessibilityLabel("Heart rate \(Int(heartRate)) beats per minute")
+//                    .accessibilityLabel("Heart rate \(heartRate) beats per minute")
 
                     // Calories
                     VStack {
                         Image(systemName: "flame.fill")
                             .foregroundStyle(.orange)
-                        Text("\(Int(calories))")
+                        Text("\(Int(calories ?? 0))")
                             .font(.title3.monospacedDigit())
                             .fontWeight(.semibold)
                         Text("CAL")
@@ -57,7 +57,7 @@ struct MetricsView: View {
                             .foregroundStyle(.secondary)
                     }
                     .accessibilityElement(children: .combine)
-                    .accessibilityLabel("\(Int(calories)) calories burned")
+//                    .accessibilityLabel("\(Int(calories)) calories burned")
                 }
             }
             .scenePadding()

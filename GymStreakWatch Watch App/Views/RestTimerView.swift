@@ -106,7 +106,7 @@ struct CompactRestTimer: View {
     let onExpand: () -> Void
 
     var body: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: 5) {
             // Circular progress indicator - smaller
             ZStack {
                 Circle()
@@ -132,7 +132,7 @@ struct CompactRestTimer: View {
                 .font(.system(size: 10, weight: .semibold))
                 .foregroundStyle(.tertiary)
         }
-        .padding(.horizontal, 10)
+        .padding(.horizontal, 8)
         .padding(.vertical, 5)
         .background(
             RoundedRectangle(cornerRadius: 18, style: .continuous)
@@ -162,6 +162,250 @@ struct CompactRestTimer: View {
         return timeRemaining / totalDuration
     }
 }
+
+struct NewShrinkingRestTimer: View {
+    let timeRemaining: Double
+    let totalDuration: Double
+    let onExpand: () -> Void
+    let onSkip: () -> Void
+
+    @State private var pulse = false
+
+    var body: some View {
+        HStack(spacing: 6) {
+
+            ZStack {
+
+                // --- BACKGROUND CAPSULE ---
+                Capsule()
+                    .fill(.black.opacity(0.15))
+                    .overlay(
+                        Capsule()
+                            .stroke(.white.opacity(0.10), lineWidth: 0.8)
+                    )
+
+                // --- SMOOTH REMAINING BAR ---
+                ZStack(alignment: .leading) {
+
+                    // The shrinking bar, scaled smoothly
+                    Capsule()
+                        .fill(gradientFill)
+                        .scaleEffect(x: smoothProgress, y: 1, anchor: .leading)
+                        .animation(.easeInOut(duration: 0.35), value: smoothProgress)
+
+                    // Trailing fade: makes the shrink edge appear soft
+//                    Rectangle()
+//                        .fill(fadeGradient)
+//                        .frame(width: 14)
+//                        .offset(x: barWidth - 14)
+//                        .opacity(smoothProgress > 0 ? 1 : 0)
+//                        .allowsHitTesting(false)
+
+                    // Soft glow at the leading edge
+//                    Circle()
+//                        .fill(Color.yellow.opacity(0.5))
+//                        .frame(width: 14, height: 14)
+//                        .offset(x: barWidth - 7)    // center at trailing edge
+//                        .blur(radius: 4)
+//                        .opacity(smoothProgress > 0 ? 1 : 0)
+                }
+
+                // GPU-MASK to prevent any pixel bleeding
+                .mask(Capsule())
+
+                // --- TIME LABEL ---
+                Text(formattedTime)
+                    .font(.system(size: 13, weight: .medium, design: .rounded).monospacedDigit())
+                    .foregroundStyle(.primary)
+                    .shadow(radius: 0.5)
+            }
+            .frame(width: 62, height: 24)
+            .scaleEffect(pulse ? 1.06 : 1.00)
+            .animation(pulseAnimation, value: pulse)
+            .onChange(of: timeRemaining) { _ in
+                if timeRemaining <= 3 { pulse = true }
+            }
+
+            // Chevron icon
+            Image(systemName: "chevron.up")
+                .font(.system(size: 10, weight: .bold))
+                .foregroundStyle(.tertiary)
+        }
+
+        // --- CONTAINER CARD STYLE ---
+        .padding(.horizontal, 8)
+        .padding(.vertical, 5)
+        .background(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .fill(.ultraThinMaterial.opacity(0.95))
+                .shadow(color: .black.opacity(0.25), radius: 4, y: -1)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 18)
+                .stroke(Color.white.opacity(0.12), lineWidth: 1)
+        )
+        .contentShape(Rectangle())
+        .onTapGesture {
+            WKInterfaceDevice.current().play(.click)
+            onExpand()
+        }
+        .onLongPressGesture(minimumDuration: 0.5) {
+            WKInterfaceDevice.current().play(.success)
+            onSkip()
+        }
+    }
+
+    // MARK: - Computed Properties
+
+    private var smoothProgress: CGFloat {
+        guard totalDuration > 0 else { return 0 }
+        return CGFloat(timeRemaining / totalDuration)
+    }
+
+    private var barWidth: CGFloat {
+        62 * smoothProgress   // matches the frame width of the capsule
+    }
+
+    private var formattedTime: String {
+        let seconds = Int(timeRemaining)
+        return String(format: "%02d", seconds)
+    }
+
+    private var gradientFill: LinearGradient {
+        LinearGradient(
+            colors: [
+                Color.yellow.opacity(0.90),
+                Color.yellow.opacity(0.55)
+            ],
+            startPoint: .leading,
+            endPoint: .trailing
+        )
+    }
+
+    // A smooth trailing fade so the bar doesn’t end sharply
+    private var fadeGradient: LinearGradient {
+        LinearGradient(
+            colors: [
+                Color.yellow.opacity(0.40),
+                Color.yellow.opacity(0.05),
+                .clear
+            ],
+            startPoint: .leading,
+            endPoint: .trailing
+        )
+    }
+
+    // Pulse effect for the last 3 seconds
+    private var pulseAnimation: Animation {
+        .easeInOut(duration: 0.6).repeatForever(autoreverses: true)
+    }
+}
+
+struct ShrinkingRestTimer: View {
+    let timeRemaining: Double
+    let totalDuration: Double
+    let onExpand: () -> Void
+    let onSkip: () -> Void
+
+    @State private var pulse = false
+
+    var body: some View {
+        HStack(spacing: 6) {
+
+            ZStack {
+                GeometryReader { geo in
+                    ZStack(alignment: .leading) {
+
+                        // Background capsule track
+                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                            .fill(.black.opacity(0.15))
+
+                        // Remaining bar
+                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                            .fill(gradientFill)
+                            .frame(width: geo.size.width * progress)
+                            .animation(.easeInOut(duration: 0.3), value: progress)
+
+                        // Subtle glossy highlight (premium)
+                        RoundedRectangle(cornerRadius: 12)
+                            .fill(.white.opacity(0.10))
+                            .blur(radius: 1)
+                    }
+                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                }
+//                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 12)
+                        .stroke(Color.white.opacity(0.12), lineWidth: 0.8)
+                )
+                .frame(width: 62, height: 24)
+
+                // Time text stays centered and readable
+                Text(formattedTime)
+                    .font(.system(size: 13, weight: .medium, design: .rounded).monospacedDigit())
+                    .foregroundStyle(.primary)
+                    .shadow(radius: 0.5)
+            }
+            .scaleEffect(pulse ? 1.06 : 1.00)
+            .animation(pulseAnimation, value: pulse)
+            .onChange(of: timeRemaining) { _ in
+                if timeRemaining <= 3 { pulse = true }
+            }
+
+            Image(systemName: "chevron.up")
+                .font(.system(size: 10, weight: .bold))
+                .foregroundStyle(.tertiary)
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 5)
+        .background(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .fill(.ultraThinMaterial.opacity(0.95))
+                .shadow(color: .black.opacity(0.25), radius: 4, y: -1)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 18)
+                .stroke(Color.white.opacity(0.12), lineWidth: 1)
+        )
+        .contentShape(Rectangle())
+        .onTapGesture {
+            WKInterfaceDevice.current().play(.click)
+            onExpand()
+        }
+        .onLongPressGesture(minimumDuration: 0.5) {
+            WKInterfaceDevice.current().play(.success)
+            onSkip()
+        }
+    }
+
+    // MARK: - Helpers
+
+    private var progress: CGFloat {
+        guard totalDuration > 0 else { return 0 }
+        return CGFloat(timeRemaining / totalDuration)
+    }
+
+    private var formattedTime: String {
+        let seconds = Int(timeRemaining)
+        return String(format: "%02d", seconds)
+    }
+
+    private var gradientFill: LinearGradient {
+        LinearGradient(
+            colors: [
+                Color.yellow.opacity(0.8),
+                Color.yellow.opacity(0.55)
+            ],
+            startPoint: .leading,
+            endPoint: .trailing
+        )
+    }
+
+    private var pulseAnimation: Animation {
+        .easeInOut(duration: 0.6).repeatForever(autoreverses: true)
+    }
+}
+
 
 #Preview("Running") {
     RestTimerView(

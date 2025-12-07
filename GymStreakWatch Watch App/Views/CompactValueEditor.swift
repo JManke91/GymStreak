@@ -9,6 +9,8 @@ import SwiftUI
 import WatchKit
 
 struct CompactValueEditor: View {
+    @EnvironmentObject var viewModel: WatchWorkoutViewModel
+
     let label: String
     @Binding var value: Double
     let unit: String
@@ -29,13 +31,44 @@ struct CompactValueEditor: View {
 
     var body: some View {
         VStack(spacing: 3) {
-            // Set indicator - only show on NON-focused editor
-            if !isFocused, let currentSetIndex = currentSetIndex, let totalSets = totalSets {
-                Text("SET \(currentSetIndex + 1) OF \(totalSets)")
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(.secondary)
-                    .textCase(.uppercase)
-                    .padding(.bottom, 2)
+            // Compact stepper buttons (only show when focused)
+            if isFocused {
+                HStack(spacing: 8) {
+                    // Minus button
+                    Button {
+                        onDecrement()
+                    } label: {
+                        Image(systemName: "minus")
+                            .font(.system(size: 11, weight: .bold))
+                            .frame(width: 28, height: 24)
+                    }
+                    .buttonStyle(.bordered)
+                    .buttonBorderShape(.circle)
+                    .tint(.blue)
+                    .disabled(value <= range.lowerBound)
+                    .opacity(value <= range.lowerBound ? 0.4 : 1.0)
+
+                    // Plus button
+                    Button {
+                        onIncrement()
+                    } label: {
+                        Image(systemName: "plus")
+                            .font(.system(size: 11, weight: .bold))
+                            .frame(width: 28, height: 24)
+                    }
+                    .buttonStyle(.bordered)
+                    .buttonBorderShape(.circle)
+                    .tint(.blue)
+                    .disabled(value >= range.upperBound)
+                    .opacity(value >= range.upperBound ? 0.4 : 1.0)
+                }
+                .padding(.top, 2)
+                .transition(.opacity.combined(with: .scale(scale: 0.85)))
+            }
+            // Set indicator - only show on NON-focused editor'
+            // TODO: 🚧 - replace with workout metrics
+            if !isFocused, let heartRate = viewModel.heartRate, let calories = viewModel.activeCalories {
+                WorkoutMetricsView(heartRate: heartRate, calories: calories, size: .small)
             }
 
             // Icon + Label (compact header)
@@ -80,41 +113,6 @@ struct CompactValueEditor: View {
                         lineWidth: isFocused ? 1.5 : 1
                     )
             }
-
-            // Compact stepper buttons (only show when focused)
-            if isFocused {
-                HStack(spacing: 8) {
-                    // Minus button
-                    Button {
-                        onDecrement()
-                    } label: {
-                        Image(systemName: "minus")
-                            .font(.system(size: 11, weight: .bold))
-                            .frame(width: 28, height: 24)
-                    }
-                    .buttonStyle(.bordered)
-                    .buttonBorderShape(.circle)
-                    .tint(.blue)
-                    .disabled(value <= range.lowerBound)
-                    .opacity(value <= range.lowerBound ? 0.4 : 1.0)
-
-                    // Plus button
-                    Button {
-                        onIncrement()
-                    } label: {
-                        Image(systemName: "plus")
-                            .font(.system(size: 11, weight: .bold))
-                            .frame(width: 28, height: 24)
-                    }
-                    .buttonStyle(.bordered)
-                    .buttonBorderShape(.circle)
-                    .tint(.blue)
-                    .disabled(value >= range.upperBound)
-                    .opacity(value >= range.upperBound ? 0.4 : 1.0)
-                }
-                .padding(.top, 2)
-                .transition(.opacity.combined(with: .scale(scale: 0.85)))
-            }
         }
         .focusable(isFocused)
         .scrollIndicators(.hidden)
@@ -123,45 +121,45 @@ struct CompactValueEditor: View {
             from: range.lowerBound,
             through: range.upperBound,
             by: step,
-            sensitivity: step == 1 ? .low : .medium,
+            sensitivity: .medium,
             isContinuous: false,
             isHapticFeedbackEnabled: false
         )
-        .onChange(of: value) { oldValue, newValue in
-            // Provide haptic feedback only when crossing meaningful boundaries
-            if step == 1 {
-                // Integer steps (reps): only haptic when integer value actually changes
-                let currentIntValue = Int(round(newValue))
-                if currentIntValue != lastHapticIntValue {
-                    WKInterfaceDevice.current().play(.click)
-                    lastHapticIntValue = currentIntValue
-                }
-            } else {
-                // Multi-unit steps (weight): haptic every N units
-                let currentStepBoundary = Int(newValue / step)
-                if currentStepBoundary != lastHapticStepBoundary {
-                    WKInterfaceDevice.current().play(.click)
-                    lastHapticStepBoundary = currentStepBoundary
-                }
-            }
-        }
-        .onAppear {
-            if step == 1 {
-                lastHapticIntValue = Int(round(value))
-            } else {
-                lastHapticStepBoundary = Int(value / step)
-            }
-        }
+//        .onChange(of: value) { oldValue, newValue in
+//            // Provide haptic feedback only when crossing meaningful boundaries
+//            if step == 1 {
+//                // Integer steps (reps): only haptic when integer value actually changes
+//                let currentIntValue = Int(round(newValue))
+//                if currentIntValue != lastHapticIntValue {
+//                    WKInterfaceDevice.current().play(.click)
+//                    lastHapticIntValue = currentIntValue
+//                }
+//            } else {
+//                // Multi-unit steps (weight): haptic every N units
+//                let currentStepBoundary = Int(newValue / step)
+//                if currentStepBoundary != lastHapticStepBoundary {
+//                    WKInterfaceDevice.current().play(.click)
+//                    lastHapticStepBoundary = currentStepBoundary
+//                }
+//            }
+//        }
+//        .onAppear {
+//            if step == 1 {
+//                lastHapticIntValue = Int(round(value))
+//            } else {
+//                lastHapticStepBoundary = Int(value / step)
+//            }
+//        }
         .accessibilityElement(children: .combine)
         .accessibilityLabel("\(label). \(formatValue(value)) \(unit)")
         .accessibilityValue("\(formatValue(value))")
-        .accessibilityAdjustableAction { direction in
-            switch direction {
-            case .increment: onIncrement()
-            case .decrement: onDecrement()
-            @unknown default: break
-            }
-        }
+//        .accessibilityAdjustableAction { direction in
+//            switch direction {
+//            case .increment: onIncrement()
+//            case .decrement: onDecrement()
+//            @unknown default: break
+//            }
+//        }
     }
 
     private func formatValue(_ value: Double) -> String {
@@ -175,55 +173,55 @@ struct CompactValueEditor: View {
 
 // MARK: - Preview
 
-#Preview {
-    struct PreviewWrapper: View {
-        @State private var weight: Double = 135
-        @State private var reps: Double = 10
-        @State private var focusedField: Field = .weight
-
-        enum Field {
-            case weight, reps
-        }
-
-        var body: some View {
-            ZStack {
-                Color.black.ignoresSafeArea()
-
-                HStack(spacing: 12) {
-                    CompactValueEditor(
-                        label: "WEIGHT",
-                        value: $weight,
-                        unit: "lb",
-                        icon: "scalemass.fill",
-                        step: 5,
-                        range: 0...999,
-                        isFocused: focusedField == .weight,
-                        onTap: { focusedField = .weight },
-                        onIncrement: { weight = min(999, weight + 5) },
-                        onDecrement: { weight = max(0, weight - 5) },
-                        currentSetIndex: 1,
-                        totalSets: 3
-                    )
-
-                    CompactValueEditor(
-                        label: "REPS",
-                        value: $reps,
-                        unit: "reps",
-                        icon: "repeat",
-                        step: 1,
-                        range: 0...100,
-                        isFocused: focusedField == .reps,
-                        onTap: { focusedField = .reps },
-                        onIncrement: { reps = min(100, reps + 1) },
-                        onDecrement: { reps = max(0, reps - 1) },
-                        currentSetIndex: 1,
-                        totalSets: 3
-                    )
-                }
-                .padding()
-            }
-        }
-    }
-
-    return PreviewWrapper()
-}
+//#Preview {
+//    struct PreviewWrapper: View {
+//        @State private var weight: Double = 135
+//        @State private var reps: Double = 10
+//        @State private var focusedField: Field = .weight
+//
+//        enum Field {
+//            case weight, reps
+//        }
+//
+//        var body: some View {
+//            ZStack {
+//                Color.black.ignoresSafeArea()
+//
+//                HStack(spacing: 12) {
+//                    CompactValueEditor(
+//                        label: "WEIGHT",
+//                        value: $weight,
+//                        unit: "lb",
+//                        icon: "scalemass.fill",
+//                        step: 5,
+//                        range: 0...999,
+//                        isFocused: focusedField == .weight,
+//                        onTap: { focusedField = .weight },
+//                        onIncrement: { weight = min(999, weight + 5) },
+//                        onDecrement: { weight = max(0, weight - 5) },
+//                        currentSetIndex: 1,
+//                        totalSets: 3
+//                    )
+//
+//                    CompactValueEditor(
+//                        label: "REPS",
+//                        value: $reps,
+//                        unit: "reps",
+//                        icon: "repeat",
+//                        step: 1,
+//                        range: 0...100,
+//                        isFocused: focusedField == .reps,
+//                        onTap: { focusedField = .reps },
+//                        onIncrement: { reps = min(100, reps + 1) },
+//                        onDecrement: { reps = max(0, reps - 1) },
+//                        currentSetIndex: 1,
+//                        totalSets: 3
+//                    )
+//                }
+//                .padding()
+//            }
+//        }
+//    }
+//
+//    return PreviewWrapper()
+//}

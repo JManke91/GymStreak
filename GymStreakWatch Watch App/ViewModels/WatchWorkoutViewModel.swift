@@ -21,15 +21,19 @@ final class WatchWorkoutViewModel: ObservableObject {
     @Published var restDuration: TimeInterval = 0
     @Published var restTimerState: RestTimerState = .running
 
+
     enum RestTimerState {
         case running
         case completed
     }
 
     // HealthKit Metrics
-    @Published var heartRate: Double = 0
-    @Published var activeCalories: Double = 0
-    @Published var elapsedTime: TimeInterval = 0
+    @Published var heartRate: Int? = nil
+//    @Published var currentHeartRate: Int? = nil
+//    @Published var currentCalories: Int? = nil
+
+    @Published var activeCalories: Int? = nil
+    @Published var elapsedTime: TimeInterval? = nil
 
     // Error handling
     @Published var errorMessage: String?
@@ -40,14 +44,43 @@ final class WatchWorkoutViewModel: ObservableObject {
     private let connectivityManager: WatchConnectivityManager
     private var workoutStartTime: Date?
     private var restTimer: Timer?
+    private var cancellabes = Set<AnyCancellable>()
 
     // MARK: - Initialization
 
     init(healthKitManager: WatchHealthKitManager, connectivityManager: WatchConnectivityManager) {
         self.healthKitManager = healthKitManager
         self.connectivityManager = connectivityManager
-        observeHealthKitMetrics()
+//        observeHealthKitMetrics()
         requestNotificationPermission()
+
+        healthKitManager.$elapsedTime
+            .receive(on: DispatchQueue.main)
+            .print("wtf elapsed time")
+            .compactMap { $0 }
+            .sink { elapsedTime in
+                self.elapsedTime = elapsedTime
+            }
+            .store(in: &cancellabes)
+
+        healthKitManager.$heartRate
+            .receive(on: DispatchQueue.main)
+            .print("wtf heart rate")
+            .compactMap { $0 }
+            .sink { heartRate in
+                self.heartRate = Int(heartRate)
+            }
+            .store(in: &cancellabes)
+
+        healthKitManager.$activeCalories
+//            .subscribe(on: DispatchQueue.main)
+            .receive(on: DispatchQueue.main)
+            .print("wtf active calories")
+            .compactMap { $0 }
+            .sink { calories in
+            self.activeCalories = Int(calories)
+        }
+        .store(in: &cancellabes)
     }
 
     // MARK: - Notification Permission
@@ -116,9 +149,13 @@ final class WatchWorkoutViewModel: ObservableObject {
     }
 
     var formattedElapsedTime: String {
-        let minutes = Int(elapsedTime) / 60
-        let seconds = Int(elapsedTime) % 60
-        return String(format: "%02d:%02d", minutes, seconds)
+        if let elapsedTime {
+            let minutes = Int(elapsedTime) / 60
+            let seconds = Int(elapsedTime) % 60
+            return String(format: "%02d:%02d", minutes, seconds)
+        } else {
+            return ""
+        }
     }
 
     var formattedRestTime: String {
@@ -474,20 +511,20 @@ final class WatchWorkoutViewModel: ObservableObject {
 
     // MARK: - HealthKit Observation
 
-    private func observeHealthKitMetrics() {
-        // Observe HealthKit manager's published properties
-        // In a real app, you'd use Combine or observation
-        let timer = Timer(timeInterval: 1.0, repeats: true) { [weak self] _ in
-            Task { @MainActor in
-                guard let self = self else { return }
-                self.heartRate = self.healthKitManager.heartRate
-                self.activeCalories = self.healthKitManager.activeCalories
-                self.elapsedTime = self.healthKitManager.elapsedTime
-            }
-        }
-        // Add timer to common run loop mode so it continues during scrolling
-        RunLoop.current.add(timer, forMode: .common)
-    }
+//    private func observeHealthKitMetrics() {
+//        // Observe HealthKit manager's published properties
+//        // In a real app, you'd use Combine or observation
+//        let timer = Timer(timeInterval: 1.0, repeats: true) { [weak self] _ in
+//            Task { @MainActor in
+//                guard let self = self else { return }
+//                self.heartRate = self.healthKitManager.heartRate
+//                self.activeCalories = self.healthKitManager.activeCalories
+//                self.elapsedTime = self.healthKitManager.elapsedTime
+//            }
+//        }
+//        // Add timer to common run loop mode so it continues during scrolling
+//        RunLoop.current.add(timer, forMode: .common)
+//    }
 
     // MARK: - Sync to iPhone
 

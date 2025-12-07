@@ -6,11 +6,13 @@ import HealthKit
 final class WatchHealthKitManager: NSObject, ObservableObject {
     // MARK: - Published Properties
 
-    @Published var heartRate: Double = 0
-    @Published var activeCalories: Double = 0
+    @Published var heartRate: Double? = nil
+    @Published var activeCalories: Double? = nil
     @Published var elapsedTime: TimeInterval = 0
     @Published var isWorkoutActive = false
     @Published var authorizationStatus: HKAuthorizationStatus = .notDetermined
+//    @Published var currentHeartRate: Int? = nil
+//    @Published var currentCalories: Int? = nil
 
     // MARK: - Private Properties
 
@@ -18,6 +20,9 @@ final class WatchHealthKitManager: NSObject, ObservableObject {
     private var workoutSession: HKWorkoutSession?
     private var workoutBuilder: HKLiveWorkoutBuilder?
     private var workoutStartDate: Date?
+
+    private var heartRateQuery: HKAnchoredObjectQuery?
+    private var caloriesQuery: HKAnchoredObjectQuery?
 
     // MARK: - Initialization
 
@@ -65,6 +70,8 @@ final class WatchHealthKitManager: NSObject, ObservableObject {
         configuration.locationType = .indoor
 
         do {
+//            startHeartRateQuery()
+//            startCaloriesBurnedQuery()
             workoutSession = try HKWorkoutSession(healthStore: healthStore, configuration: configuration)
             workoutBuilder = workoutSession?.associatedWorkoutBuilder()
 
@@ -129,6 +136,7 @@ final class WatchHealthKitManager: NSObject, ObservableObject {
     func discardWorkout() {
         workoutSession?.end()
         workoutBuilder?.discardWorkout()
+//        endHealthKitQueries()
 
         isWorkoutActive = false
         stopElapsedTimeTimer()
@@ -141,6 +149,94 @@ final class WatchHealthKitManager: NSObject, ObservableObject {
     }
 
     // MARK: - Timer Management
+
+//    private func startCaloriesBurnedQuery(config: HKWorkoutConfiguration) {
+//        workoutBuilder?.dataSource = HKLiveWorkoutDataSource(healthStore: healthStore, workoutConfiguration: config)
+//        workoutBuilder?.statistics(for: .activeEnergyBurned)
+//
+//    }
+
+//    private func startCaloriesBurnedQuery() {
+//        guard let type = HKObjectType.quantityType(forIdentifier: .activeEnergyBurned) else { return }
+//
+//        caloriesQuery = HKAnchoredObjectQuery(
+//            type: type,
+//            predicate: nil,
+//            anchor: nil,
+//            limit: HKObjectQueryNoLimit
+//        ) { _, samples, _, _, _ in
+//            Task { @MainActor in
+//                self.handleCalories(samples)
+//            }
+//        }
+//
+//        caloriesQuery?.updateHandler = { _, samples, _, _, _ in
+//            Task { @MainActor in
+//                self.handleCalories(samples)
+//            }
+//        }
+//
+//        healthStore.execute(caloriesQuery!)
+//
+//    }
+
+//    private func handleCalories(_ samples: [HKSample]?) {
+//        guard let quantitySample = samples?.first as? HKQuantitySample else { return }
+//
+//        let value = quantitySample.quantity.doubleValue(for: .kilocalorie())
+//
+//        DispatchQueue.main.async {
+//            self.currentCalories = Int(value)
+//        }
+//    }
+
+//    private func startHeartRateQuery() {
+//        let type = HKObjectType.quantityType(forIdentifier: .heartRate)!
+//
+//        heartRateQuery = HKAnchoredObjectQuery(
+//            type: type,
+//            predicate: nil,
+//            anchor: nil,
+//            limit: HKObjectQueryNoLimit
+//        ) { _, samples, _, _, _ in
+////            self.handle(samples)
+//            Task { @MainActor in
+//                    self.handle(samples)
+//                }
+//        }
+//
+//        heartRateQuery?.updateHandler = { _, samples, _, _, _ in
+////            self.handle(samples)
+//            Task { @MainActor in
+//                    self.handle(samples)
+//                }
+//        }
+//
+//        healthStore.execute(heartRateQuery!)
+//    }
+
+//    private func endHealthKitQueries() {
+//        if let query = heartRateQuery {
+//            healthStore.stop(query)
+//            heartRateQuery = nil
+//        }
+//
+////        if let heartRateQuery = heartRateQuery {
+////            healthStore.stop(heartRateQuery)
+////            self.heartRateQuery = nil
+////        }
+//    }
+
+//    private func handle(_ samples: [HKSample]?) {
+//        guard let quantitySample = samples?.first as? HKQuantitySample else { return }
+//
+//        let heartRateUnit = HKUnit.count().unitDivided(by: .minute())
+//        let value = quantitySample.quantity.doubleValue(for: heartRateUnit)
+//
+//        DispatchQueue.main.async {
+//            self.currentHeartRate = Int(value)   // Bind this to your SwiftUI or WKInterfaceLabel
+//        }
+//    }
 
     private var elapsedTimeTimer: Timer?
 

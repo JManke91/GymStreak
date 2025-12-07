@@ -27,6 +27,13 @@ struct CompactActionBar: View {
 
     var body: some View {
         if totalSets > 1 {
+//            Button {
+//                //
+//            } label: {
+//                Text("press")
+//            }
+//            .buttonStyle(.plain)
+
             // Multi-set layout: Prev + Complete + Next
             HStack(spacing: 4) {
                 // Previous button
@@ -34,23 +41,69 @@ struct CompactActionBar: View {
                     onPrevious()
                 } label: {
                     Image(systemName: "chevron.left")
+                        
                 }
 //                .buttonStyle(.bordered)
                 .controlSize(.mini)
                 .disabled(!hasPrevious)
                 .opacity(hasPrevious ? 1.0 : 0.3)
-                .accessibilityLabel("Previous set")
+//                .buttonStyle(.plain)
+//                .accessibilityLabel("Previous set")
+
+                Spacer()
 
                 // Complete button
-                Button {
-                    handleComplete()
-                } label: {
-                    Image(systemName: isCompleted ? "checkmark.circle.fill" : "circle")
+//                HStack(spacing: 0) {
+//                    Text("\(currentSetIndex+1)/")
+//                        .font(.system(size: 14))
+                ZStack {
+                    Button {
+                        handleComplete()
+                    } label: {
+    //                    ZStack {
+                            Image(systemName: "circle")
+                                .font(.system(size: 30))
+    //                        if !isCompleted {
+    //                            HStack(spacing: 0) {
+
+
+    //                            }
+    //                        }
+    //                    }
+    //                    .frame(maxWidth: .infinity)
+    //                    .frame(height: 50)
+    //                    .background(Color.orange)
+                    }
+    //                .buttonStyle(.borderedProminent)
+                    .controlSize(.mini)
+                    .buttonStyle(.plain)
+
+                    if isCompleted {
+                        Circle()
+                            .fill(Color.green)
+                            .frame(width: 25, height: 25)
+                            .opacity(0.4)
+                    }
+
+                    HStack(spacing: 0) {
+                        Text("\(currentSetIndex+1)/")
+                            .font(.system(size: 14))
+                        Text("\(totalSets)")
+                            .font(.system(size: 8))
+                    }
                 }
-//                .buttonStyle(.borderedProminent)
-                .controlSize(.mini)
-                .tint(isCompleted ? .green : .blue)
-                .accessibilityLabel(isCompleted ? "Set completed" : "Complete set")
+
+
+//                    Text("\(totalSets)")
+//                        .font(.system(size: 8))
+//                }
+
+//                .tint(isCompleted ? .green : .blue)
+//                .accessibilityLabel(isCompleted ? "Set completed" : "Complete set")
+//                .frame(height: 50)
+//                .background(Color.blue)
+
+                Spacer()
 
                 // Next button
                 Button {
@@ -62,9 +115,12 @@ struct CompactActionBar: View {
                 .controlSize(.mini)
                 .disabled(!hasNext)
                 .opacity(hasNext ? 1.0 : 0.3)
-                .accessibilityLabel("Next set")
+//                .buttonStyle(.plain)
+//                .frame(width: 20, height: 20)
+//                .background(Color.red)
+//                .accessibilityLabel("Next set")
             }
-            .padding(.horizontal, 6)
+            .padding(.horizontal, 12)
         } else {
             // Single set layout: Full-width Complete button
             Button {
@@ -76,7 +132,7 @@ struct CompactActionBar: View {
 //            .buttonStyle(.borderedProminent)
             .controlSize(.mini)
             .tint(isCompleted ? .green : .blue)
-            .accessibilityLabel(isCompleted ? "Set completed" : "Complete set")
+//            .accessibilityLabel(isCompleted ? "Set completed" : "Complete set")
         }
     }
 
@@ -92,23 +148,23 @@ struct CompactActionBar: View {
 
 // MARK: - Preview
 
-#Preview("Multi-set layout") {
-    ZStack {
-        Color.black.ignoresSafeArea()
-
-        VStack {
-            Spacer()
-            CompactActionBar(
-                isCompleted: false,
-                currentSetIndex: 1,
-                totalSets: 4,
-                onComplete: {},
-                onPrevious: {},
-                onNext: {}
-            )
-        }
-    }
-}
+//#Preview("Multi-set layout") {
+//    ZStack {
+//        Color.black.ignoresSafeArea()
+//
+//        VStack {
+//            Spacer()
+//            CompactActionBar(
+//                isCompleted: false,
+//                currentSetIndex: 1,
+//                totalSets: 4,
+//                onComplete: {},
+//                onPrevious: {},
+//                onNext: {}
+//            )
+//        }
+//    }
+//}
 
 #Preview("Single set layout") {
     ZStack {

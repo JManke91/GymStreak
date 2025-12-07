@@ -68,6 +68,7 @@ struct ExerciseListView: View {
 // MARK: - Workout Progress Header
 
 struct WorkoutProgressHeader: View {
+    @EnvironmentObject var viewModel: WatchWorkoutViewModel
     let exercises: [ActiveWorkoutExercise]
 
     private var totalSets: Int {
@@ -84,30 +85,131 @@ struct WorkoutProgressHeader: View {
     }
 
     var body: some View {
-        VStack(spacing: 8) {
-            ZStack {
-                Circle()
-                    .stroke(Color.gray.opacity(0.3), lineWidth: 6)
-
-                Circle()
-                    .trim(from: 0, to: progress)
-                    .stroke(Color.green, style: StrokeStyle(lineWidth: 6, lineCap: .round))
-                    .rotationEffect(.degrees(-90))
-
-                VStack(spacing: 0) {
-                    Text("\(Int(progress * 100))%")
-                        .font(.title2.monospacedDigit())
-                        .fontWeight(.semibold)
+        HStack {
+            // Heart rate now updates because this view observes the environment object
+//            Text("heart: \(viewModel.currentHeartRate)")
+            VStack {
+                if let heartRate = viewModel.heartRate, let calories = viewModel.activeCalories {
+                    WorkoutMetricsView(heartRate: heartRate, calories: calories)
+//                        VStack(spacing: 5) {
+//                            Image(systemName: "heart.fill")
+//                                .resizable()
+//                                .foregroundColor(.red)
+//                                .frame(width: 15, height: 15)
+//                                .symbolEffect(.breathe)
+//
+//                            HStack(spacing: 3) {
+//                                Text("\(heartRate)")
+//                                    .font(.system(size: 18, weight: .bold))
+//                                Text("BPM")
+//                                    .font(.system(size: 12, weight: .light))
+//                            }
+//
+//                            Image(systemName: "flame")
+//                                .resizable()
+//                                .foregroundColor(.orange)
+//                                .frame(width: 15, height: 15)
+//                                .symbolEffect(.breathe)
+//                            HStack(spacing: 3) {
+//                                Text("\(calories)")
+//                                    .font(.system(size: 18, weight: .bold))
+//                                Text("kCal")
+//                                    .font(.system(size: 12, weight: .light))
+//                            }
+//                        }
+//                    }
                 }
+                // FIXME: does not work yet
+//                .transition(.asymmetric(insertion: .scale, removal: .opacity))
+//                .animation(.easeInOut(duration: 5.0))
             }
-            .frame(width: 60, height: 60)
 
-            Text("\(completedSets)/\(totalSets) sets")
-                .font(.caption)
-                .foregroundStyle(.secondary)
+            VStack(spacing: 8) {
+                ZStack {
+                    Circle()
+                        .stroke(Color.gray.opacity(0.3), lineWidth: 6)
+
+                    Circle()
+                        .trim(from: 0, to: progress)
+                        .stroke(Color.green, style: StrokeStyle(lineWidth: 6, lineCap: .round))
+                        .rotationEffect(.degrees(-90))
+
+                    VStack(spacing: 0) {
+                        Text("\(Int(progress * 100))%")
+                            .font(.title2.monospacedDigit())
+                            .fontWeight(.semibold)
+                    }
+                }
+                .frame(width: 60, height: 60)
+
+                Text("\(completedSets)/\(totalSets) sets")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 8)
         }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 8)
+
+    }
+}
+
+enum WorkoutMetricsSize {
+    case medium
+    case small
+}
+
+struct WorkoutMetricsView: View {
+    let heartRate: Int
+    let calories: Int
+    var size: WorkoutMetricsSize = .medium
+
+    var body: some View {
+        VStack(spacing: 5) {
+            if size == .medium {
+                Image(systemName: "heart.fill")
+                    .resizable()
+                    .foregroundColor(.red)
+                    .frame(width: size == .medium ? 15 : 10, height: size == .medium ? 15 : 10)
+                    .symbolEffect(.breathe)
+            }
+
+
+            HStack(spacing: 3) {
+                if size == .small {
+                    Image(systemName: "heart.fill")
+                        .resizable()
+                        .foregroundColor(.red)
+                        .frame(width: size == .medium ? 15 : 10, height: size == .medium ? 15 : 10)
+                        .symbolEffect(.breathe)
+                }
+                Text("\(heartRate)")
+                    .font(.system(size: size == .medium ? 18 : 16, weight: .bold))
+                Text("BPM")
+                    .font(.system(size: size == .medium ? 12 : 10, weight: .light))
+            }
+
+            if size == .medium {
+                Image(systemName: "flame")
+                    .resizable()
+                    .foregroundColor(.orange)
+                    .frame(width: size == .medium ? 15 : 10, height: size == .medium ? 15 : 10)
+                    .symbolEffect(.breathe)
+            }
+
+            HStack(spacing: 3) {
+                if size == .small {
+                    Image(systemName: "flame")
+                        .resizable()
+                        .foregroundColor(.orange)
+                        .frame(width: size == .medium ? 15 : 10, height: size == .medium ? 15 : 10)
+                        .symbolEffect(.breathe)
+                }
+                Text("\(calories)")
+                    .font(.system(size: size == .medium ? 18 : 16, weight: .bold))
+                Text("kCal")
+                    .font(.system(size: size == .medium ? 12 : 10, weight: .light))
+            }
+        }
     }
 }
 
@@ -212,36 +314,3 @@ struct StatusIcon: View {
         .accessibilityLabel(status.accessibilityLabel)
     }
 }
-
-//#Preview {
-//    NavigationStack {
-//        ExerciseListView(
-//            exercises: [
-//                ActiveWorkoutExercise(
-//                    id: UUID(),
-//                    name: "Bench Press",
-//                    muscleGroup: "Chest",
-//                    sets: [
-//                        ActiveWorkoutSet(id: UUID(), plannedReps: 10, actualReps: 10, plannedWeight: 135, actualWeight: 135, restTime: 90, isCompleted: true, completedAt: Date(), order: 0),
-//                        ActiveWorkoutSet(id: UUID(), plannedReps: 10, actualReps: 10, plannedWeight: 135, actualWeight: 135, restTime: 90, isCompleted: true, completedAt: Date(), order: 1),
-//                        ActiveWorkoutSet(id: UUID(), plannedReps: 10, actualReps: 10, plannedWeight: 135, actualWeight: 135, restTime: 90, isCompleted: false, completedAt: nil, order: 2)
-//                    ],
-//                    order: 0
-//                ),
-//                ActiveWorkoutExercise(
-//                    id: UUID(),
-//                    name: "Shoulder Press",
-//                    muscleGroup: "Shoulders",
-//                    sets: [
-//                        ActiveWorkoutSet(id: UUID(), plannedReps: 10, actualReps: 10, plannedWeight: 65, actualWeight: 65, restTime: 60, isCompleted: false, completedAt: nil, order: 0),
-//                        ActiveWorkoutSet(id: UUID(), plannedReps: 10, actualReps: 10, plannedWeight: 65, actualWeight: 65, restTime: 60, isCompleted: false, completedAt: nil, order: 1)
-//                    ],
-//                    order: 1
-//                )
-//            ],
-//            currentIndex: 0,
-//            onSelectExercise: { _ in },
-//            onEnd: { }
-//        )
-//    }
-//}
