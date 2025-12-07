@@ -16,6 +16,8 @@ struct CompactActionBar: View {
     let onComplete: () -> Void
     let onPrevious: () -> Void
     let onNext: () -> Void
+    // New: closure to advance to next exercise when there is no next set in current exercise
+    let onAdvance: () -> Void
 
     private var hasPrevious: Bool {
         currentSetIndex > 0
@@ -27,13 +29,6 @@ struct CompactActionBar: View {
 
     var body: some View {
         if totalSets > 1 {
-//            Button {
-//                //
-//            } label: {
-//                Text("press")
-//            }
-//            .buttonStyle(.plain)
-
             // Multi-set layout: Prev + Complete + Next
             HStack(spacing: 4) {
                 // Previous button
@@ -41,26 +36,31 @@ struct CompactActionBar: View {
                     onPrevious()
                 } label: {
                     Image(systemName: "chevron.left")
-                        
                 }
-//                .buttonStyle(.bordered)
                 .controlSize(.mini)
                 .disabled(!hasPrevious)
                 .opacity(hasPrevious ? 1.0 : 0.3)
-//                .buttonStyle(.plain)
-//                .accessibilityLabel("Previous set")
 
                 Spacer()
 
                 // Complete button
-//                HStack(spacing: 0) {
-//                    Text("\(currentSetIndex+1)/")
-//                        .font(.system(size: 14))
                 ZStack {
                     // Put visuals inside the Button label so the entire area responds to taps
                     Button {
-                        handleComplete()
-                        onNext()
+                        // IMPORTANT: decide navigation based on prior state (isCompleted).
+                        // If the set is already completed, treat this as an "uncomplete" -> do NOT navigate.
+                        if isCompleted {
+                            // Uncomplete case: only toggle state / haptic
+                            handleComplete()
+                        } else {
+                            // Complete case: toggle then advance appropriately
+                            handleComplete()
+                            if hasNext {
+                                onNext()
+                            } else {
+                                onAdvance()
+                            }
+                        }
                     } label: {
                         ZStack {
                             Image(systemName: "circle")
@@ -92,16 +92,6 @@ struct CompactActionBar: View {
                     .accessibilityLabel(isCompleted ? "Set completed. Tap to mark incomplete" : "Complete set")
                 }
 
-
-//                    Text("\(totalSets)")
-//                        .font(.system(size: 8))
-//                }
-
-//                .tint(isCompleted ? .green : .blue)
-//                .accessibilityLabel(isCompleted ? "Set completed" : "Complete set")
-//                .frame(height: 50)
-//                .background(Color.blue)
-
                 Spacer()
 
                 // Next button
@@ -110,28 +100,28 @@ struct CompactActionBar: View {
                 } label: {
                     Image(systemName: "chevron.right")
                 }
-//                .buttonStyle(.bordered)
                 .controlSize(.mini)
                 .disabled(!hasNext)
                 .opacity(hasNext ? 1.0 : 0.3)
-//                .buttonStyle(.plain)
-//                .frame(width: 20, height: 20)
-//                .background(Color.red)
-//                .accessibilityLabel("Next set")
             }
             .padding(.horizontal, 12)
         } else {
             // Single set layout: Full-width Complete button
             Button {
-                handleComplete()
+                // If already completed -> uncomplete only, don't advance.
+                if isCompleted {
+                    handleComplete()
+                } else {
+                    handleComplete()
+                    // Single-set exercise - after completing, attempt to advance to next exercise
+                    onAdvance()
+                }
             } label: {
                 Image(systemName: isCompleted ? "checkmark.circle.fill" : "circle")
                     .symbolRenderingMode(.hierarchical)
             }
-//            .buttonStyle(.borderedProminent)
             .controlSize(.mini)
             .tint(isCompleted ? .green : .blue)
-//            .accessibilityLabel(isCompleted ? "Set completed" : "Complete set")
         }
     }
 
@@ -165,20 +155,20 @@ struct CompactActionBar: View {
 //    }
 //}
 
-#Preview("Single set layout") {
-    ZStack {
-        Color.black.ignoresSafeArea()
-
-        VStack {
-            Spacer()
-            CompactActionBar(
-                isCompleted: false,
-                currentSetIndex: 0,
-                totalSets: 1,
-                onComplete: {},
-                onPrevious: {},
-                onNext: {}
-            )
-        }
-    }
-}
+//#Preview("Single set layout") {
+//    ZStack {
+//        Color.black.ignoresSafeArea()
+//
+//        VStack {
+//            Spacer()
+//            CompactActionBar(
+//                isCompleted: false,
+//                currentSetIndex: 0,
+//                totalSets: 1,
+//                onComplete: {},
+//                onPrevious: {},
+//                onNext: {}
+//            )
+//        }
+//    }
+//}

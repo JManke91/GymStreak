@@ -118,7 +118,9 @@ struct FullScreenSetEditorView: View {
                         totalSets: totalSets,
                         onComplete: { toggleSetCompletion() },
                         onPrevious: { goToPreviousSet() },
-                        onNext: { goToNextSet() }
+                        onNext: { goToNextSet() },
+                        // New: when there's no next set in this exercise, advance to next exercise
+                        onAdvance: { goToNextExercise() }
                     )
 //                    .frame(height: 30)
 //                    .background(Color.red)
@@ -199,6 +201,16 @@ struct FullScreenSetEditorView: View {
         guard currentSetIndex < totalSets - 1 else { return }
         currentSetIndex += 1
         viewModel.currentSetIndex = currentSetIndex // Keep ViewModel in sync
+        WKInterfaceDevice.current().play(.click)
+    }
+
+    // New: Advance to the next exercise when current exercise's sets are finished
+    private func goToNextExercise() {
+        guard viewModel.canGoToNextExercise else { return }
+        // Ask the ViewModel to move to the next exercise (it sets its currentSetIndex appropriately)
+        viewModel.goToNextExercise()
+        // Sync local state to ViewModel
+        currentSetIndex = viewModel.currentSetIndex
         WKInterfaceDevice.current().play(.click)
     }
 }
