@@ -209,7 +209,8 @@ final class WatchWorkoutViewModel: ObservableObject {
         }
 
         do {
-            try await healthKitManager.startWorkout()
+            // Provide the routine name so HealthKit workout metadata includes it
+            try await healthKitManager.startWorkout(routineName: routine.name)
             isWorkoutActive = true
             WKInterfaceDevice.current().play(.start)
         } catch {

@@ -24,6 +24,9 @@ final class WatchHealthKitManager: NSObject, ObservableObject {
     private var heartRateQuery: HKAnchoredObjectQuery?
     private var caloriesQuery: HKAnchoredObjectQuery?
 
+    // Optional routine name to attach as metadata when saving the workout
+    private var currentRoutineName: String?
+
     // MARK: - Initialization
 
     override init() {
@@ -64,7 +67,11 @@ final class WatchHealthKitManager: NSObject, ObservableObject {
 
     // MARK: - Workout Session Management
 
-    func startWorkout() async throws {
+    // Accept an optional routine name so we can save it as metadata later
+    func startWorkout(routineName: String? = nil) async throws {
+        // store the routine name for use when finishing the workout
+        self.currentRoutineName = routineName
+
         let configuration = HKWorkoutConfiguration()
         configuration.activityType = .traditionalStrengthTraining
         configuration.locationType = .indoor
@@ -116,6 +123,19 @@ final class WatchHealthKitManager: NSObject, ObservableObject {
 
         do {
             try await workoutBuilder.endCollection(at: Date())
+
+            // Add metadata. Use the routine name alone as the brand name so Health displays only the workout name.
+            var metadata: [String: Any] = [:]
+            if let name = currentRoutineName, !name.isEmpty {
+                metadata[HKMetadataKeyWorkoutBrandName] = name
+                metadata["RoutineName"] = name
+            } else {
+                metadata[HKMetadataKeyWorkoutBrandName] = "GymStreak"
+            }
+            if !metadata.isEmpty {
+                try? await workoutBuilder.addMetadata(metadata)
+            }
+
             let workout = try await workoutBuilder.finishWorkout()
 
             isWorkoutActive = false
@@ -124,6 +144,7 @@ final class WatchHealthKitManager: NSObject, ObservableObject {
 
             self.workoutSession = nil
             self.workoutBuilder = nil
+            self.currentRoutineName = nil
 
             print("HealthKit: Workout ended and saved")
             return workout
