@@ -57,6 +57,9 @@ struct FullScreenSetEditorView: View {
                     // CRITICAL CHANGE: Side-by-side layout
                     // Set indicator now appears on top of the NON-focused editor
                     HStack(spacing: 12) {
+
+//                        Image(systemName: "scalemass.fill")
+//                                            .font(.system(size: 9, weight: .semibold))
                         // Weight editor (left)
                         CompactValueEditor(
                             label: "WEIGHT",
@@ -109,10 +112,11 @@ struct FullScreenSetEditorView: View {
                     .padding(.horizontal, 8)
 
                     Spacer()
-                        .frame(height: 10)
+                        .frame(height: 5)
 
                     // Compact action bar (Complete + Prev/Next combined)
                     CompactActionBar(
+                        exerciseName: "dummy Name",
                         isCompleted: exercise.sets[currentSetIndex].isCompleted,
                         currentSetIndex: currentSetIndex,
                         totalSets: totalSets,

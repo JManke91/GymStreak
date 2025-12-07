@@ -72,15 +72,15 @@ struct CompactValueEditor: View {
             }
 
             // Icon + Label (compact header)
-            HStack(spacing: 3) {
-                Image(systemName: icon)
-                    .font(.system(size: 9, weight: .semibold))
-                Text(label)
-                    .font(.system(size: 9, weight: .semibold))
-                    .textCase(.uppercase)
-            }
-            .foregroundStyle(isFocused ? .blue : .secondary)
-            .tracking(0.4)
+//            HStack(spacing: 3) {
+//                Image(systemName: icon)
+//                    .font(.system(size: 9, weight: .semibold))
+//                Text(label)
+//                    .font(.system(size: 9, weight: .semibold))
+//                    .textCase(.uppercase)
+//            }
+//            .foregroundStyle(isFocused ? .blue : .secondary)
+//            .tracking(0.4)
 
             // Tappable value area
             Button {
@@ -94,9 +94,14 @@ struct CompactValueEditor: View {
                         .foregroundStyle(.primary)
 
                     // Unit label
-                    Text(unit)
-                        .font(.system(size: 8))
-                        .foregroundStyle(.secondary)
+                    HStack {
+                        Image(systemName: icon)
+                                            .font(.system(size: 9, weight: .semibold))
+
+                        Text(unit)
+                            .font(.system(size: 8))
+                            .foregroundStyle(.secondary)
+                    }
                 }
                 .frame(height: 50) // Fixed height for consistency
             }

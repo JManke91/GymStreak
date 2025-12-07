@@ -10,6 +10,7 @@ import SwiftUI
 import WatchKit
 
 struct CompactActionBar: View {
+    let exerciseName: String?
     let isCompleted: Bool
     let currentSetIndex: Int
     let totalSets: Int
@@ -62,30 +63,36 @@ struct CompactActionBar: View {
                             }
                         }
                     } label: {
-                        ZStack {
-                            Image(systemName: "circle")
-                                .font(.system(size: 40))
+                        VStack(spacing: 0) {
+                            ZStack {
+                                Image(systemName: "circle")
+                                    .font(.system(size: 40))
 
-                            // Subtle translucent background when completed to keep visual cue
-                            if isCompleted {
-                                Circle()
-                                    .fill(Color.green)
-                                    .frame(width: 30, height: 30)
-                                    .opacity(0.32)
-                            }
+                                // Subtle translucent background when completed to keep visual cue
+                                if isCompleted {
+                                    Circle()
+                                        .fill(Color.green)
+                                        .frame(width: 30, height: 30)
+                                        .opacity(0.32)
+                                }
 
-                            // Set index overlay text (kept small)
-                            HStack(spacing: 0) {
-                                Text("\(currentSetIndex + 1)/")
-                                    .font(.system(size: 14))
-                                Text("\(totalSets)")
-                                    .font(.system(size: 8))
+                                // Set index overlay text (kept small)
+                                HStack(spacing: 0) {
+                                    Text("\(currentSetIndex + 1)/")
+                                        .font(.system(size: 14))
+                                    Text("\(totalSets)")
+                                        .font(.system(size: 8))
+                                }
                             }
+                            // Explicitly increase hit area for watch: full tappable rectangle
+                            .padding(.vertical, 2)
+                            .contentShape(Rectangle())
+
+                            Text(exerciseName ?? "")
+                                .font(.system(size: 12, weight: .light))
                         }
-                        // Explicitly increase hit area for watch: full tappable rectangle
-                        .frame(minWidth: 68, minHeight: 44)
-                        .padding(.vertical, 2)
-                        .contentShape(Rectangle())
+//                        .frame(minWidth: 68, minHeight: 44)
+
                     }
                     .controlSize(.mini)
                     .buttonStyle(.plain)
