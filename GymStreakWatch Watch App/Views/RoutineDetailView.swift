@@ -21,19 +21,19 @@ struct RoutineDetailView: View {
         .navigationTitle(routine.name)
         // Floating start button pinned to bottom; small, without a rectangular background
         .safeAreaInset(edge: .bottom) {
-            HStack {
-                Spacer()
+//            HStack {
+//                Spacer()
 
-                startButton
+            startButton
                     // Make the floating button slightly smaller than before
-                    .controlSize(.regular)
+//                    .controlSize(.regular)
                     .frame(height: 36)
                     // remove extra background—keep it compact
                     .padding(.horizontal, 8)
 
-                Spacer()
-            }
-            .padding(.bottom, 6)
+//                Spacer()
+//            }
+//            .padding(.bottom, 6)
         }
     }
 
@@ -68,11 +68,70 @@ struct RoutineDetailView: View {
         Button(action: onStartWorkout) {
             Label("Start Workout", systemImage: "play.fill")
         }
-//        .buttonStyle(.borderedProminent)
-        .tint(.green)
-        .controlSize(.large)
-        .padding(.top, 8)
-        .accessibilityHint("Double tap to begin workout")
+        .tint(.white)
+        .controlSize(.small)
+        .background(
+            LinearGradient(
+                colors: [
+                    Color(red: 0.0, green: 0.6, blue: 1.0), // light blue
+                    Color(red: 0.0, green: 0.3, blue: 0.8)  // darker blue
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+        )
+        .clipShape(Capsule())
+        .overlay(
+            ShimmerView()
+                .clipShape(Capsule())
+        )
+        .padding(.top, 24)
+//        .accessibilityHint("Double tap to begin workout")
+    }
+
+//    private var nweStartButton: some View {
+//        Button(action: onStartWorkout) {
+//            HStack {
+//                Image(systemName: "play.fill")
+//                    .font(.title2.bold())
+//                Text("Start Workout")
+//                    .fontWeight(.semibold)
+//            }
+////            .foregroundColor(.white)
+//            .padding(.vertical, 10)
+//            .padding(.horizontal, 20)
+//            .background(
+//                LinearGradient(
+//                    colors: [Color.red, Color.orange],
+//                    startPoint: .topLeading,
+//                    endPoint: .bottomTrailing
+//                )
+//            )
+//            .clipShape(Capsule())
+////            .shadow(color: Color.orange.opacity(0.5), radius: 5, x: 0, y: 3)
+////            .overlay(
+////                Capsule()
+////                    .stroke(Color.white.opacity(0.2), lineWidth: 1)
+////            )
+//        }
+//    }
+}
+
+struct ShimmerView: View {
+    @State private var move = false
+
+    var body: some View {
+        LinearGradient(
+            gradient: Gradient(colors: [Color.white.opacity(0.0), Color.white.opacity(0.3), Color.white.opacity(0.0)]),
+            startPoint: .leading,
+            endPoint: .trailing
+        )
+        .rotationEffect(.degrees(30))
+        .offset(x: move ? 200 : -200) // move left to right
+        .animation(.linear(duration: 1.5).repeatForever(autoreverses: false), value: move)
+        .onAppear {
+            move = true
+        }
     }
 }
 

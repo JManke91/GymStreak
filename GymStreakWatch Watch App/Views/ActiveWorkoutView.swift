@@ -21,7 +21,13 @@ struct ActiveWorkoutView: View {
             Color.black.ignoresSafeArea()
 
             // Keep workoutTabs always in hierarchy to preserve navigation state
-            workoutTabs
+//            if viewModel.workoutState == .started {
+//                ProgressView("Loading...") // Shows spinner with optional text
+//                    .progressViewStyle(CircularProgressViewStyle())
+//            } else {
+                workoutTabs
+//            }
+
 //                .overlay {
                     // Overlay full-screen timer on top
                     if viewModel.isResting && !viewModel.isRestTimerMinimized {

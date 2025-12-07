@@ -5,6 +5,13 @@ import UserNotifications
 
 @MainActor
 final class WatchWorkoutViewModel: ObservableObject {
+
+    enum WorkoutState {
+        case running
+        case idle
+        case started
+        case stopped
+    }
     // MARK: - Published Properties
 
     @Published var isWorkoutActive = false
@@ -20,6 +27,8 @@ final class WatchWorkoutViewModel: ObservableObject {
     @Published var isRestTimerMinimized = false
     @Published var restDuration: TimeInterval = 0
     @Published var restTimerState: RestTimerState = .running
+
+    @Published var workoutState: WorkoutState = .idle
 
 
     enum RestTimerState {
@@ -78,6 +87,13 @@ final class WatchWorkoutViewModel: ObservableObject {
             self.activeCalories = Int(calories)
         }
         .store(in: &cancellabes)
+
+        healthKitManager.$activeCalories.compactMap { $0 }.combineLatest(healthKitManager.$heartRate.compactMap { $0 })
+            .sink { combined in
+                print("wtf received workout metrics: \(combined.0 ?? 0), \(combined.1 ?? 0)")
+                self.workoutState = .running
+            }
+            .store(in: &cancellabes)
     }
 
     // MARK: - Notification Permission
@@ -209,6 +225,7 @@ final class WatchWorkoutViewModel: ObservableObject {
             // Provide the routine name so HealthKit workout metadata includes it
             try await healthKitManager.startWorkout(routineName: routine.name)
             isWorkoutActive = true
+            workoutState = .started
             WKInterfaceDevice.current().play(.start)
         } catch {
             errorMessage = "Failed to start workout: \(error.localizedDescription)"
@@ -232,6 +249,7 @@ final class WatchWorkoutViewModel: ObservableObject {
             _ = try await healthKitManager.endWorkout()
             await sendCompletedWorkoutToiPhone(updateTemplate: updateTemplate)
             isWorkoutActive = false
+            workoutState = .stopped
             WKInterfaceDevice.current().play(.success)
         } catch {
             errorMessage = "Failed to save workout: \(error.localizedDescription)"
@@ -242,6 +260,7 @@ final class WatchWorkoutViewModel: ObservableObject {
         stopRestTimer()
         healthKitManager.discardWorkout()
         isWorkoutActive = false
+        workoutState = .stopped
         resetState()
     }
 

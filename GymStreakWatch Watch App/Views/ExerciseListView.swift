@@ -13,6 +13,7 @@ struct ExerciseListView: View {
             // Header with overall progress
             Section {
                 WorkoutProgressHeader(exercises: exercises)
+//                    .frame(height: 80)
             }
 
             // Compact timer integrated into layout
@@ -85,70 +86,94 @@ struct WorkoutProgressHeader: View {
     }
 
     var body: some View {
-        HStack {
-            // Heart rate now updates because this view observes the environment object
-//            Text("heart: \(viewModel.currentHeartRate)")
-            VStack {
-                if let heartRate = viewModel.heartRate, let calories = viewModel.activeCalories {
-                    WorkoutMetricsView(heartRate: heartRate, calories: calories)
-//                        VStack(spacing: 5) {
-//                            Image(systemName: "heart.fill")
-//                                .resizable()
-//                                .foregroundColor(.red)
-//                                .frame(width: 15, height: 15)
-//                                .symbolEffect(.breathe)
-//
-//                            HStack(spacing: 3) {
-//                                Text("\(heartRate)")
-//                                    .font(.system(size: 18, weight: .bold))
-//                                Text("BPM")
-//                                    .font(.system(size: 12, weight: .light))
-//                            }
-//
-//                            Image(systemName: "flame")
-//                                .resizable()
-//                                .foregroundColor(.orange)
-//                                .frame(width: 15, height: 15)
-//                                .symbolEffect(.breathe)
-//                            HStack(spacing: 3) {
-//                                Text("\(calories)")
-//                                    .font(.system(size: 18, weight: .bold))
-//                                Text("kCal")
-//                                    .font(.system(size: 12, weight: .light))
-//                            }
-//                        }
+        if viewModel.workoutState == .started { //
+//            Text("hello world")
+//            ProgressView("Loading...") // Shows spinner with optional text
+//                .progressViewStyle(CircularProgressViewStyle())
+//            ZStack {
+//                        Color.black.opacity(0.3)
+//                            .ignoresSafeArea()
+//                            .blur(radius: 2)
+//                            .frame(height: 60)
+
+            HStack(spacing: 14) {
+                ModernSpinner()
+                    .frame(width: 60, height: 60)
+                    .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 20))
+                    .shadow(radius: 10)
+
+                Text("Loading Metrics")
+            }
+
 //                    }
-                }
-                // FIXME: does not work yet
-//                .transition(.asymmetric(insertion: .scale, removal: .opacity))
-//                .animation(.easeInOut(duration: 5.0))
-            }
-
-            VStack(spacing: 8) {
-                ZStack {
-                    Circle()
-                        .stroke(Color.gray.opacity(0.3), lineWidth: 6)
-
-                    Circle()
-                        .trim(from: 0, to: progress)
-                        .stroke(Color.green, style: StrokeStyle(lineWidth: 6, lineCap: .round))
-                        .rotationEffect(.degrees(-90))
-
-                    VStack(spacing: 0) {
-                        Text("\(Int(progress * 100))%")
-                            .font(.title2.monospacedDigit())
-                            .fontWeight(.semibold)
+//                .frame(height: 60)
+        } else {
+            HStack {
+                // Heart rate now updates because this view observes the environment object
+    //            Text("heart: \(viewModel.currentHeartRate)")
+                VStack {
+                    if let heartRate = viewModel.heartRate, let calories = viewModel.activeCalories {
+                        WorkoutMetricsView(heartRate: heartRate, calories: calories)
+    //                        VStack(spacing: 5) {
+    //                            Image(systemName: "heart.fill")
+    //                                .resizable()
+    //                                .foregroundColor(.red)
+    //                                .frame(width: 15, height: 15)
+    //                                .symbolEffect(.breathe)
+    //
+    //                            HStack(spacing: 3) {
+    //                                Text("\(heartRate)")
+    //                                    .font(.system(size: 18, weight: .bold))
+    //                                Text("BPM")
+    //                                    .font(.system(size: 12, weight: .light))
+    //                            }
+    //
+    //                            Image(systemName: "flame")
+    //                                .resizable()
+    //                                .foregroundColor(.orange)
+    //                                .frame(width: 15, height: 15)
+    //                                .symbolEffect(.breathe)
+    //                            HStack(spacing: 3) {
+    //                                Text("\(calories)")
+    //                                    .font(.system(size: 18, weight: .bold))
+    //                                Text("kCal")
+    //                                    .font(.system(size: 12, weight: .light))
+    //                            }
+    //                        }
+    //                    }
                     }
+                    // FIXME: does not work yet
+    //                .transition(.asymmetric(insertion: .scale, removal: .opacity))
+    //                .animation(.easeInOut(duration: 5.0))
                 }
-                .frame(width: 60, height: 60)
 
-                Text("\(completedSets)/\(totalSets) sets")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                VStack(spacing: 8) {
+                    ZStack {
+                        Circle()
+                            .stroke(Color.gray.opacity(0.3), lineWidth: 6)
+
+                        Circle()
+                            .trim(from: 0, to: progress)
+                            .stroke(Color.green, style: StrokeStyle(lineWidth: 6, lineCap: .round))
+                            .rotationEffect(.degrees(-90))
+
+                        VStack(spacing: 0) {
+                            Text("\(Int(progress * 100))%")
+                                .font(.title2.monospacedDigit())
+                                .fontWeight(.semibold)
+                        }
+                    }
+                    .frame(width: 60, height: 60)
+
+                    Text("\(completedSets)/\(totalSets) sets")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 8)
             }
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 8)
         }
+
 
     }
 }
@@ -157,6 +182,36 @@ enum WorkoutMetricsSize {
     case medium
     case small
 }
+
+import SwiftUI
+
+struct ModernSpinner: View {
+    @State private var isAnimating = false
+
+    var body: some View {
+        ZStack {
+            Circle()
+                .trim(from: 0.0, to: 0.7) // part of a circle
+                .stroke(
+                    AngularGradient(
+                        gradient: Gradient(colors: [Color.blue.opacity(0.8), Color.cyan, Color.blue, Color.cyan]),
+                        center: .center
+                    ),
+                    style: StrokeStyle(lineWidth: 8, lineCap: .round)
+                )
+//                .frame(width: 40, height: 40)
+                .rotationEffect(.degrees(isAnimating ? 360 : 0))
+                .animation(
+                    Animation.linear(duration: 1.5).repeatForever(autoreverses: false),
+                    value: isAnimating
+                )
+        }
+        .onAppear {
+            isAnimating = true
+        }
+    }
+}
+
 
 struct WorkoutMetricsView: View {
     let heartRate: Int

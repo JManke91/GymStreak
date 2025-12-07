@@ -1,6 +1,7 @@
 import Foundation
 import Combine
 import HealthKit
+import AppIntents
 
 @MainActor
 final class WatchHealthKitManager: NSObject, ObservableObject {
