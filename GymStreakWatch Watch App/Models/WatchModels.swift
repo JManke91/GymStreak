@@ -124,13 +124,16 @@ struct CompletedWatchSet: Codable {
 
 extension WatchExercise {
     func toActiveWorkoutExercise() -> ActiveWorkoutExercise {
+        // Preserve the original IDs from the lightweight Watch models so that
+        // CompletedWatchWorkout sent back to the iPhone can be matched to the
+        // iOS Routine/RoutineExercise/ExerciseSet by id.
         ActiveWorkoutExercise(
-            id: UUID(),
+            id: id, // <-- preserve original WatchExercise id (was previously UUID())
             name: name,
             muscleGroup: muscleGroup,
             sets: sets.enumerated().map { index, set in
                 ActiveWorkoutSet(
-                    id: UUID(),
+                    id: set.id, // <-- preserve original WatchSet id (was previously UUID())
                     plannedReps: set.reps,
                     actualReps: set.reps,
                     plannedWeight: set.weight,
