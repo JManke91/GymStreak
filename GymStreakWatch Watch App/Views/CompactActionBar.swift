@@ -64,13 +64,13 @@ struct CompactActionBar: View {
                     } label: {
                         ZStack {
                             Image(systemName: "circle")
-                                .font(.system(size: 30))
+                                .font(.system(size: 40))
 
                             // Subtle translucent background when completed to keep visual cue
                             if isCompleted {
                                 Circle()
                                     .fill(Color.green)
-                                    .frame(width: 25, height: 25)
+                                    .frame(width: 30, height: 30)
                                     .opacity(0.32)
                             }
 
