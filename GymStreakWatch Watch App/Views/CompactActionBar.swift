@@ -62,7 +62,7 @@ struct CompactActionBar: View {
                         handleComplete()
                     } label: {
                         ZStack {
-                            Image(systemName: isCompleted ? "checkmark.circle.fill" : "circle")
+                            Image(systemName: "circle")
                                 .font(.system(size: 30))
 
                             // Subtle translucent background when completed to keep visual cue
