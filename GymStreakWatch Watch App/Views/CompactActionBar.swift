@@ -60,6 +60,7 @@ struct CompactActionBar: View {
                     // Put visuals inside the Button label so the entire area responds to taps
                     Button {
                         handleComplete()
+                        onNext()
                     } label: {
                         ZStack {
                             Image(systemName: "circle")
