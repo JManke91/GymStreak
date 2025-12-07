@@ -286,6 +286,7 @@ final class WatchHealthKitManager: NSObject, ObservableObject {
 // MARK: - HKWorkoutSessionDelegate
 
 extension WatchHealthKitManager: HKWorkoutSessionDelegate {
+
     nonisolated func workoutSession(_ workoutSession: HKWorkoutSession, didChangeTo toState: HKWorkoutSessionState, from fromState: HKWorkoutSessionState, date: Date) {
         Task { @MainActor in
             switch toState {

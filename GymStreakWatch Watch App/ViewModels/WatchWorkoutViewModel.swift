@@ -56,7 +56,6 @@ final class WatchWorkoutViewModel: ObservableObject {
 
         healthKitManager.$elapsedTime
             .receive(on: DispatchQueue.main)
-            .print("wtf elapsed time")
             .compactMap { $0 }
             .sink { elapsedTime in
                 self.elapsedTime = elapsedTime
@@ -65,7 +64,6 @@ final class WatchWorkoutViewModel: ObservableObject {
 
         healthKitManager.$heartRate
             .receive(on: DispatchQueue.main)
-            .print("wtf heart rate")
             .compactMap { $0 }
             .sink { heartRate in
                 self.heartRate = Int(heartRate)
@@ -75,7 +73,6 @@ final class WatchWorkoutViewModel: ObservableObject {
         healthKitManager.$activeCalories
 //            .subscribe(on: DispatchQueue.main)
             .receive(on: DispatchQueue.main)
-            .print("wtf active calories")
             .compactMap { $0 }
             .sink { calories in
             self.activeCalories = Int(calories)
