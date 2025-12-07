@@ -57,40 +57,38 @@ struct CompactActionBar: View {
 //                    Text("\(currentSetIndex+1)/")
 //                        .font(.system(size: 14))
                 ZStack {
+                    // Put visuals inside the Button label so the entire area responds to taps
                     Button {
                         handleComplete()
                     } label: {
-    //                    ZStack {
-                            Image(systemName: "circle")
+                        ZStack {
+                            Image(systemName: isCompleted ? "checkmark.circle.fill" : "circle")
                                 .font(.system(size: 30))
-    //                        if !isCompleted {
-    //                            HStack(spacing: 0) {
 
+                            // Subtle translucent background when completed to keep visual cue
+                            if isCompleted {
+                                Circle()
+                                    .fill(Color.green)
+                                    .frame(width: 25, height: 25)
+                                    .opacity(0.32)
+                            }
 
-    //                            }
-    //                        }
-    //                    }
-    //                    .frame(maxWidth: .infinity)
-    //                    .frame(height: 50)
-    //                    .background(Color.orange)
+                            // Set index overlay text (kept small)
+                            HStack(spacing: 0) {
+                                Text("\(currentSetIndex + 1)/")
+                                    .font(.system(size: 14))
+                                Text("\(totalSets)")
+                                    .font(.system(size: 8))
+                            }
+                        }
+                        // Explicitly increase hit area for watch: full tappable rectangle
+                        .frame(minWidth: 68, minHeight: 44)
+                        .padding(.vertical, 2)
+                        .contentShape(Rectangle())
                     }
-    //                .buttonStyle(.borderedProminent)
                     .controlSize(.mini)
                     .buttonStyle(.plain)
-
-                    if isCompleted {
-                        Circle()
-                            .fill(Color.green)
-                            .frame(width: 25, height: 25)
-                            .opacity(0.4)
-                    }
-
-                    HStack(spacing: 0) {
-                        Text("\(currentSetIndex+1)/")
-                            .font(.system(size: 14))
-                        Text("\(totalSets)")
-                            .font(.system(size: 8))
-                    }
+                    .accessibilityLabel(isCompleted ? "Set completed. Tap to mark incomplete" : "Complete set")
                 }
 
 

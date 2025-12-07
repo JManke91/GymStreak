@@ -5,6 +5,7 @@ struct RoutineDetailView: View {
     let onStartWorkout: () -> Void
 
     var body: some View {
+        // Main scrollable content; no large bottom spacer required because safeAreaInset reserves space
         ScrollView {
             VStack(spacing: 12) {
                 // Exercise summary
@@ -14,13 +15,26 @@ struct RoutineDetailView: View {
                 ForEach(routine.exercises) { exercise in
                     ExercisePreviewRow(exercise: exercise)
                 }
-
-                // Start button
-                startButton
             }
             .padding(.horizontal)
         }
         .navigationTitle(routine.name)
+        // Floating start button pinned to bottom; small, without a rectangular background
+        .safeAreaInset(edge: .bottom) {
+            HStack {
+                Spacer()
+
+                startButton
+                    // Make the floating button slightly smaller than before
+                    .controlSize(.regular)
+                    .frame(height: 36)
+                    // remove extra background—keep it compact
+                    .padding(.horizontal, 8)
+
+                Spacer()
+            }
+            .padding(.bottom, 6)
+        }
     }
 
     // MARK: - Subviews
@@ -54,7 +68,7 @@ struct RoutineDetailView: View {
         Button(action: onStartWorkout) {
             Label("Start Workout", systemImage: "play.fill")
         }
-//        .buttonStyle(.borderedProminent)
+        .buttonStyle(.borderedProminent)
         .tint(.green)
         .controlSize(.large)
         .padding(.top, 8)
