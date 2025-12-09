@@ -13,16 +13,50 @@ struct NewRestTimerView: View {
 
     @State private var lastHapticTriggerTime: Int? = nil
     @State private var pulse = false
+    @State private var backgroundPulse: CGFloat = 1.0
 
     var body: some View {
-        let _ = handleHaptics()
-
         ZStack {
             backgroundProgressLayer
             runningContent
         }
         .background(Color.black)
         .onAppear { pulse = true }
+        .onChange(of: shouldPulse) { isPulsing in
+            if isPulsing {
+                withAnimation(.easeInOut(duration: 0.6).repeatForever(autoreverses: true)) {
+                    backgroundPulse = 1.03
+                    pulse = true
+                }
+            } else {
+                withAnimation(.easeInOut(duration: 0.3)) {
+                    backgroundPulse = 1.0
+                    pulse = false
+                }
+            }
+        }
+        .onChange(of: timeRemaining) { newTime in
+            guard state == .running else { return }
+
+            let currentSecond = Int(newTime.rounded(.up))
+
+            // Play notification haptic at 3, 2, 1 seconds
+            if [3, 2, 1].contains(currentSecond) && currentSecond != lastHapticTriggerTime {
+                WKInterfaceDevice.current().play(.notification)
+                lastHapticTriggerTime = currentSecond
+            }
+
+            // Play strong success haptic at 0
+            if newTime <= 0.05 && lastHapticTriggerTime != 0 {
+                WKInterfaceDevice.current().play(.success)
+                lastHapticTriggerTime = 0
+            }
+
+            // Reset haptic tracking when above 3 seconds
+            if currentSecond > 3 && lastHapticTriggerTime != nil {
+                lastHapticTriggerTime = nil
+            }
+        }
         .animation(.spring(duration: 0.5, bounce: 0.35), value: state)
     }
 
@@ -31,40 +65,6 @@ struct NewRestTimerView: View {
             let hue: Double = 0.55 - (normalizedProgress * 0.25)
             return Color(hue: hue, saturation: 0.8, brightness: 0.8)
         }
-    private var pulseIntensity: Double {
-        if state == .running && timeRemaining <= 3.0 && timeRemaining > 0 {
-            return 1.0 + (sin(Date().timeIntervalSinceReferenceDate * 10) * 0.03)
-        }
-        return 1.0
-    }
-
-    private func handleHaptics() -> some View {
-        let currentSecond = Int(timeRemaining.rounded(.up))
-
-        if state == .running {
-            // Play notification haptic at 3, 2, 1 seconds
-            if [3, 2, 1].contains(currentSecond) && currentSecond != lastHapticTriggerTime {
-                WKInterfaceDevice.current().play(.notification)
-                DispatchQueue.main.async {
-                    lastHapticTriggerTime = currentSecond
-                }
-            }
-            // Play strong success haptic at 0
-            if timeRemaining <= 0.05 && lastHapticTriggerTime != 0 {
-                WKInterfaceDevice.current().play(.success)
-                DispatchQueue.main.async {
-                    lastHapticTriggerTime = 0
-                }
-            }
-            // Reset haptic tracking when above 3 seconds
-            if currentSecond > 3 && lastHapticTriggerTime != nil {
-                DispatchQueue.main.async {
-                    lastHapticTriggerTime = nil
-                }
-            }
-        }
-        return EmptyView()
-    }
 
     // MARK: ─── Gradient + Glow Background
     private var backgroundProgressLayer: some View {
@@ -79,7 +79,8 @@ struct NewRestTimerView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color.black)
-        .scaleEffect(pulseIntensity)
+        .scaleEffect(backgroundPulse)
+        .animation(.easeInOut(duration: 0.6), value: backgroundPulse)
         .ignoresSafeArea()
     }
 
@@ -101,12 +102,6 @@ struct NewRestTimerView: View {
                     .foregroundStyle(shouldPulse ? .red : .white)
                     .shadow(color: (shouldPulse ? Color.red : Color.white).opacity(0.5), radius: shouldPulse ? 8 : 4)
                     .scaleEffect(shouldPulse ? (pulse ? 1.15 : 1.0) : 1.0)
-                    .animation(
-                        shouldPulse
-                        ? .easeInOut(duration: 0.6).repeatForever(autoreverses: true)
-                        : .default,
-                        value: pulse
-                    )
                     .animation(.easeInOut(duration: 0.3), value: shouldPulse)
             }
 
@@ -147,101 +142,101 @@ struct NewRestTimerView: View {
 
 
 
-struct RestTimerView: View {
-    let timeRemaining: TimeInterval
-    let totalDuration: TimeInterval
-    let formattedTime: String
-    let state: WatchWorkoutViewModel.RestTimerState
-    let onSkip: () -> Void
-    let onMinimize: () -> Void
-
-    var body: some View {
-        let _ = print("🎨 Rendering RestTimerView - state: \(state)")
-        ZStack {
-            // Running timer state
-            VStack(spacing: 8) {
-                Text("Rest")
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-
-                // Large timer display
-                Text(formattedTime)
-                    .font(.system(.title, design: .rounded).monospacedDigit())
-                    .foregroundStyle(.yellow)
-                    .accessibilityLabel("Rest time remaining \(formattedTime)")
-
-                // Progress ring - slightly smaller
-                ZStack {
-                    Circle()
-                        .stroke(Color.gray.opacity(0.3), lineWidth: 5)
-
-                    Circle()
-                        .trim(from: 0, to: progress)
-                        .stroke(Color.yellow, style: StrokeStyle(lineWidth: 5, lineCap: .round))
-                        .rotationEffect(.degrees(-90))
-                        .animation(.linear(duration: 1), value: progress)
-                }
-                .frame(width: 55, height: 55)
-
-                // Horizontal button layout - only show in running state
-                HStack(spacing: 8) {
-                    Button {
-                        onMinimize()
-                    } label: {
-                        Image(systemName: "chevron.down")
-                            .font(.system(size: 14, weight: .semibold))
-                    }
-//                    .buttonStyle(.bordered)
-                    .tint(.blue)
-                    .accessibilityLabel("Minimize")
-                    .accessibilityHint("Double tap to minimize rest timer")
-
-                    Button {
-                        onSkip()
-                    } label: {
-                        Text("Skip")
-                            .font(.footnote.weight(.semibold))
-                    }
-//                    .buttonStyle(.bordered)
-                    .tint(.orange)
-                    .accessibilityHint("Double tap to skip rest")
-                }
-                .buttonBorderShape(.capsule)
-            }
-            .opacity(state == .running ? 1 : 0)
-
-            // Beautiful completion screen
-            VStack(spacing: 12) {
-                let _ = print("✅ Completion view in hierarchy - opacity: \(state == .completed ? 1.0 : 0.0)")
-                Image(systemName: "checkmark.circle.fill")
-                    .font(.system(size: 44))
-                    .foregroundStyle(.green)
-                    .symbolEffect(.bounce, value: state == .completed)
-
-                Text("Let's Go!")
-                    .font(.system(.title2, design: .rounded, weight: .bold))
-                    .foregroundStyle(.green)
-
-                Text("Rest Complete")
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-            }
-            .opacity(state == .completed ? 1 : 0)
-            .scaleEffect(state == .completed ? 1.0 : 0.85)
-            .accessibilityLabel("Rest complete. Let's go!")
-        }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 12)
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color(.black))
-        .animation(.spring(response: 0.4, dampingFraction: 0.65), value: state)
-    }
-
-    private var progress: Double {
-        guard totalDuration > 0 else { return 0 }
-        return timeRemaining / totalDuration
-    }
-}
+//struct RestTimerView: View {
+//    let timeRemaining: TimeInterval
+//    let totalDuration: TimeInterval
+//    let formattedTime: String
+//    let state: WatchWorkoutViewModel.RestTimerState
+//    let onSkip: () -> Void
+//    let onMinimize: () -> Void
+//
+//    var body: some View {
+//        let _ = print("🎨 Rendering RestTimerView - state: \(state)")
+//        ZStack {
+//            // Running timer state
+//            VStack(spacing: 8) {
+//                Text("Rest")
+//                    .font(.caption2)
+//                    .foregroundStyle(.secondary)
+//
+//                // Large timer display
+//                Text(formattedTime)
+//                    .font(.system(.title, design: .rounded).monospacedDigit())
+//                    .foregroundStyle(.yellow)
+//                    .accessibilityLabel("Rest time remaining \(formattedTime)")
+//
+//                // Progress ring - slightly smaller
+//                ZStack {
+//                    Circle()
+//                        .stroke(Color.gray.opacity(0.3), lineWidth: 5)
+//
+//                    Circle()
+//                        .trim(from: 0, to: progress)
+//                        .stroke(Color.yellow, style: StrokeStyle(lineWidth: 5, lineCap: .round))
+//                        .rotationEffect(.degrees(-90))
+//                        .animation(.linear(duration: 1), value: progress)
+//                }
+//                .frame(width: 55, height: 55)
+//
+//                // Horizontal button layout - only show in running state
+//                HStack(spacing: 8) {
+//                    Button {
+//                        onMinimize()
+//                    } label: {
+//                        Image(systemName: "chevron.down")
+//                            .font(.system(size: 14, weight: .semibold))
+//                    }
+////                    .buttonStyle(.bordered)
+//                    .tint(.blue)
+//                    .accessibilityLabel("Minimize")
+//                    .accessibilityHint("Double tap to minimize rest timer")
+//
+//                    Button {
+//                        onSkip()
+//                    } label: {
+//                        Text("Skip")
+//                            .font(.footnote.weight(.semibold))
+//                    }
+////                    .buttonStyle(.bordered)
+//                    .tint(.orange)
+//                    .accessibilityHint("Double tap to skip rest")
+//                }
+//                .buttonBorderShape(.capsule)
+//            }
+//            .opacity(state == .running ? 1 : 0)
+//
+//            // Beautiful completion screen
+//            VStack(spacing: 12) {
+//                let _ = print("✅ Completion view in hierarchy - opacity: \(state == .completed ? 1.0 : 0.0)")
+//                Image(systemName: "checkmark.circle.fill")
+//                    .font(.system(size: 44))
+//                    .foregroundStyle(.green)
+//                    .symbolEffect(.bounce, value: state == .completed)
+//
+//                Text("Let's Go!")
+//                    .font(.system(.title2, design: .rounded, weight: .bold))
+//                    .foregroundStyle(.green)
+//
+//                Text("Rest Complete")
+//                    .font(.caption2)
+//                    .foregroundStyle(.secondary)
+//            }
+//            .opacity(state == .completed ? 1 : 0)
+//            .scaleEffect(state == .completed ? 1.0 : 0.85)
+//            .accessibilityLabel("Rest complete. Let's go!")
+//        }
+//        .padding(.horizontal, 8)
+//        .padding(.vertical, 12)
+//        .frame(maxWidth: .infinity, maxHeight: .infinity)
+//        .background(Color(.black))
+//        .animation(.spring(response: 0.4, dampingFraction: 0.65), value: state)
+//    }
+//
+//    private var progress: Double {
+//        guard totalDuration > 0 else { return 0 }
+//        return timeRemaining / totalDuration
+//    }
+//}
 
 // MARK: - Compact Rest Timer
 
@@ -555,25 +550,25 @@ struct ShrinkingRestTimer: View {
     }
 }
 
-
-#Preview("Running") {
-    RestTimerView(
-        timeRemaining: 45,
-        totalDuration: 90,
-        formattedTime: "0:45",
-        state: .running,
-        onSkip: { },
-        onMinimize: { }
-    )
-}
-
-#Preview("Completed") {
-    RestTimerView(
-        timeRemaining: 0,
-        totalDuration: 90,
-        formattedTime: "0:00",
-        state: .completed,
-        onSkip: { },
-        onMinimize: { }
-    )
-}
+//
+//#Preview("Running") {
+//    RestTimerView(
+//        timeRemaining: 45,
+//        totalDuration: 90,
+//        formattedTime: "0:45",
+//        state: .running,
+//        onSkip: { },
+//        onMinimize: { }
+//    )
+//}
+//
+//#Preview("Completed") {
+//    RestTimerView(
+//        timeRemaining: 0,
+//        totalDuration: 90,
+//        formattedTime: "0:00",
+//        state: .completed,
+//        onSkip: { },
+//        onMinimize: { }
+//    )
+//}
