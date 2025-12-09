@@ -118,19 +118,33 @@ struct RoutineDetailView: View {
 }
 
 struct ShimmerView: View {
-    @State private var move = false
+    @State private var phase: CGFloat = 0
 
     var body: some View {
-        LinearGradient(
-            gradient: Gradient(colors: [Color.white.opacity(0.0), Color.white.opacity(0.3), Color.white.opacity(0.0)]),
-            startPoint: .leading,
-            endPoint: .trailing
-        )
-        .rotationEffect(.degrees(30))
-        .offset(x: move ? 200 : -200) // move left to right
-        .animation(.linear(duration: 1.5).repeatForever(autoreverses: false), value: move)
+        GeometryReader { geometry in
+            LinearGradient(
+                gradient: Gradient(stops: [
+                    .init(color: .clear, location: 0),
+                    .init(color: .clear, location: 0.3),
+                    .init(color: .white.opacity(0.4), location: 0.5),
+                    .init(color: .clear, location: 0.7),
+                    .init(color: .clear, location: 1)
+                ]),
+                startPoint: .leading,
+                endPoint: .trailing
+            )
+            .rotationEffect(.degrees(20))
+            .offset(x: phase * (geometry.size.width * 2.5) - geometry.size.width * 1.25)
+            .blendMode(.overlay)
+        }
         .onAppear {
-            move = true
+            withAnimation(
+                .easeInOut(duration: 2.0)
+                .repeatForever(autoreverses: false)
+                .delay(0.5)
+            ) {
+                phase = 1
+            }
         }
     }
 }
