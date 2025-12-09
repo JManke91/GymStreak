@@ -43,6 +43,7 @@ final class WatchWorkoutViewModel: ObservableObject {
 
     @Published var activeCalories: Int? = nil
     @Published var elapsedTime: TimeInterval? = nil
+    @Published var elapsedTimeString: String? = nil
 
     // Error handling
     @Published var errorMessage: String?
@@ -66,9 +67,15 @@ final class WatchWorkoutViewModel: ObservableObject {
         healthKitManager.$elapsedTime
             .receive(on: DispatchQueue.main)
             .compactMap { $0 }
-            .sink { elapsedTime in
-                self.elapsedTime = elapsedTime
-            }
+            .map { interval in
+                    let minutes = Int(interval) / 60
+                    let seconds = Int(interval) % 60
+                    return String(format: "%02d:%02d", minutes, seconds)
+                }
+            .assign(to: \.elapsedTimeString, on: self)
+//            .sink { elapsedTime in
+//                self.elapsedTime = elapsedTime
+//            }
             .store(in: &cancellabes)
 
         healthKitManager.$heartRate
@@ -88,7 +95,9 @@ final class WatchWorkoutViewModel: ObservableObject {
         }
         .store(in: &cancellabes)
 
-        healthKitManager.$activeCalories.compactMap { $0 }.combineLatest(healthKitManager.$heartRate.compactMap { $0 })
+        healthKitManager.$activeCalories.compactMap { $0 }.removeDuplicates().combineLatest(healthKitManager.$heartRate.compactMap { $0 }.removeDuplicates())
+        // state only needs to be set once
+            .prefix(1)
             .sink { combined in
                 print("wtf received workout metrics: \(combined.0 ?? 0), \(combined.1 ?? 0)")
                 self.workoutState = .running

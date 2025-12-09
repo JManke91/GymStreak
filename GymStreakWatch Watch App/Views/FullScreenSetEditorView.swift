@@ -116,7 +116,7 @@ struct FullScreenSetEditorView: View {
 
                     // Compact action bar (Complete + Prev/Next combined)
                     CompactActionBar(
-                        exerciseName: "dummy Name",
+                        exerciseName: exercise.name, // changed: use the actual exercise name instead of dummy string
                         isCompleted: exercise.sets[currentSetIndex].isCompleted,
                         currentSetIndex: currentSetIndex,
                         totalSets: totalSets,
@@ -147,29 +147,37 @@ struct FullScreenSetEditorView: View {
                     }
 //                    .accessibilityLabel("Back to exercises")
                 }
-                if viewModel.isResting && viewModel.isRestTimerMinimized {
+
+                // conditionally show rest timer
+                // TODO: 🚧 - if no rest timer is shown, show current elapsed time
+//                if viewModel.isResting && viewModel.isRestTimerMinimized {
                 ToolbarItem(placement: .topBarTrailing) {
+                    //                    CompactRestTimer
+                    if viewModel.isResting && viewModel.isRestTimerMinimized {
 
-                    // TODO: 🚧 - change small rest timer (remove circle) and show progress throughout horizontal view to not interfere with time at top
-                    // TODO: 🚧 - show set number within circle
-                    // TODO: 🚧 - when set is complete, instead of showing checkmark, just give circle background, such that set numbers are still visible
-                    // TODO: 🚧 - small "complete" text below button?
-//                    CompactRestTimer
-
-                    NewShrinkingRestTimer(
-                                timeRemaining: viewModel.restTimeRemaining,
-                                totalDuration: viewModel.restDuration,
-//                                formattedTime: viewModel.formattedRestTime,
-                                onExpand: viewModel.expandRestTimer, onSkip: viewModel.skipRest
-                            )
-//                            .padding(.top, 30)
-                            .frame(maxWidth: 100, maxHeight: 20)
-//                            .listRowIns/*ets(EdgeInsets(top: 4, leading: 8, bottom: 4, trailing: 8))*/
+                        NewShrinkingRestTimer(
+                            timeRemaining: viewModel.restTimeRemaining,
+                            totalDuration: viewModel.restDuration,
+                            //                                formattedTime: viewModel.formattedRestTime,
+                            onExpand: viewModel.expandRestTimer, onSkip: viewModel.skipRest
+                        )
+                        //                            .padding(.top, 30)
+                        .frame(maxWidth: 100, maxHeight: 20)
+                        //                            .listRowIns/*ets(EdgeInsets(top: 4, leading: 8, bottom: 4, trailing: 8))*/
                         .transition(.move(edge: .top).combined(with: .opacity))
+                    } else if let elapsedTime = viewModel.elapsedTimeString {
+                        Text(elapsedTime)
+                            .font(.system(size: 12, weight: .semibold))
+                            .frame(maxWidth: 100, maxHeight: 30)
                     }
-
-
                 }
+
+
+                //                }
+//                else {
+//                    Text("Hello")
+//                        .frame(maxWidth: 100, maxHeight: 20)
+//                }
             }
         }
         .animation(.easeInOut(duration: 0.2), value: focusedField)

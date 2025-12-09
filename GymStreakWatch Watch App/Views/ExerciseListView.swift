@@ -238,7 +238,7 @@ struct WorkoutMetricsView: View {
                         .symbolEffect(.breathe)
                 }
                 Text("\(heartRate)")
-                    .font(.system(size: size == .medium ? 18 : 16, weight: .bold))
+                    .font(.system(size: size == .medium ? 18 : 14, weight: .bold))
                 Text("BPM")
                     .font(.system(size: size == .medium ? 12 : 10, weight: .light))
             }
@@ -260,7 +260,7 @@ struct WorkoutMetricsView: View {
                         .symbolEffect(.breathe)
                 }
                 Text("\(calories)")
-                    .font(.system(size: size == .medium ? 18 : 16, weight: .bold))
+                    .font(.system(size: size == .medium ? 18 : 14, weight: .bold))
                 Text("kCal")
                     .font(.system(size: size == .medium ? 12 : 10, weight: .light))
             }

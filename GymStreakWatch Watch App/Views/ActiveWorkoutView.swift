@@ -31,7 +31,7 @@ struct ActiveWorkoutView: View {
 //                .overlay {
                     // Overlay full-screen timer on top
                     if viewModel.isResting && !viewModel.isRestTimerMinimized {
-                        RestTimerView(
+                        NewRestTimerView(
                             timeRemaining: viewModel.restTimeRemaining,
                             totalDuration: viewModel.restDuration,
                             formattedTime: viewModel.formattedRestTime,

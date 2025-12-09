@@ -89,7 +89,7 @@ struct CompactValueEditor: View {
                 VStack(spacing: 1) {
                     // Main number value (reduced from 32pt)
                     Text(formatValue(value))
-                        .font(.system(size: 24, weight: .bold, design: .rounded))
+                        .font(.system(size: 18, weight: .bold, design: .rounded))
                         .monospacedDigit()
                         .foregroundStyle(.primary)
 
@@ -103,10 +103,13 @@ struct CompactValueEditor: View {
                             .foregroundStyle(.secondary)
                     }
                 }
-                .frame(height: 50) // Fixed height for consistency
+
+                .frame(height: 40) // Fixed height for consistency
+                .padding(5)
             }
             .buttonStyle(.plain)
             .frame(maxWidth: .infinity)
+//            .frame(height: 60)
             .background {
                 RoundedRectangle(cornerRadius: 8, style: .continuous)
                     .fill(isFocused ? Color.blue.opacity(0.12) : Color.clear)
@@ -118,18 +121,20 @@ struct CompactValueEditor: View {
                         lineWidth: isFocused ? 1.5 : 1
                     )
             }
+//            .frame(height: 60)
         }
         .focusable(isFocused)
         .scrollIndicators(.hidden)
-        .digitalCrownRotation(
-            $value,
-            from: range.lowerBound,
-            through: range.upperBound,
-            by: step,
-            sensitivity: .medium,
-            isContinuous: false,
-            isHapticFeedbackEnabled: false
-        )
+//        .frame(height: 60)
+//        .digitalCrownRotation(
+//            $value,
+//            from: range.lowerBound,
+//            through: range.upperBound,
+//            by: step,
+//            sensitivity: .medium,
+//            isContinuous: false,
+//            isHapticFeedbackEnabled: false
+//        )
 //        .onChange(of: value) { oldValue, newValue in
 //            // Provide haptic feedback only when crossing meaningful boundaries
 //            if step == 1 {
