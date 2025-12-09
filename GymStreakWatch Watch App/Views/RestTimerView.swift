@@ -1,160 +1,6 @@
 import SwiftUI
 import WatchKit
 
-
-import SwiftUI
-import WatchKit
-
-//struct GeminiRestTimerView: View {
-//    let timeRemaining: TimeInterval
-//    let totalDuration: TimeInterval
-//    let formattedTime: String
-//    let state: WatchWorkoutViewModel.RestTimerState
-//    let onSkip: () -> Void
-//    let onMinimize: () -> Void
-//
-//    @State private var hapticsPlayed = false
-//    @State private var lastHapticTriggerTime: Int? = nil
-//
-//    // --- Computed Properties (omitted for brevity) ---
-//    private var progress: Double {
-//        guard totalDuration > 0 else { return 0 }
-//        return max(0, timeRemaining) / totalDuration
-//    }
-//    private var progressColor: Color {
-//        let normalizedProgress = 1.0 - progress
-//        let hue: Double = 0.55 - (normalizedProgress * 0.25)
-//        return Color(hue: hue, saturation: 0.8, brightness: 0.8)
-//    }
-//    private var pulseIntensity: Double {
-//        if state == .running && timeRemaining <= 3.0 && timeRemaining > 0 {
-//            return 1.0 + (sin(Date().timeIntervalSinceReferenceDate * 10) * 0.03)
-//        }
-//        return 1.0
-//    }
-//
-//    // --- Body ---
-//
-//    var body: some View {
-//        let _ = handleHaptics()
-//
-//        ZStack {
-//            // 1. Background Vertical Progress Indicator
-//            Group {
-//                LinearGradient(
-//                    gradient: Gradient(colors: [progressColor.opacity(0.8), .black]),
-//                    startPoint: .bottom,
-//                    endPoint: .top
-//                )
-//                .scaleEffect(x: 1, y: progress, anchor: .bottom)
-//                .animation(.linear(duration: 0.5), value: progress)
-//            }
-//            .frame(maxWidth: .infinity, maxHeight: .infinity)
-//            .background(Color.black)
-//            .scaleEffect(pulseIntensity)
-//
-//            // 2. Content (Timer, Text, Buttons)
-//            VStack(spacing: 8) { // This is the main content stack
-//
-//                // === Running Timer Content ===
-//                VStack(spacing: 8) {
-//
-//                    Text("Recovery")
-//                        .font(.caption2.weight(.semibold))
-//                        .foregroundStyle(.secondary)
-//
-//                    Text(formattedTime)
-//                        .padding(.top, 10)
-//                        .foregroundStyle(timeRemaining <= 3.0 && timeRemaining > 0 ? Color.red : .white)
-//                        .font(.system(.title, design: .rounded).monospacedDigit().weight(.bold))
-//                        .scaleEffect(pulseIntensity)
-//                        .animation(.easeInOut(duration: 0.3), value: timeRemaining <= 3.0)
-//                        .accessibilityLabel("Rest time remaining \(formattedTime)")
-//
-//                    // This Spacer is the key to pushing the following button HStack to the bottom.
-//                    Spacer()
-//
-//                    // Horizontal button layout
-//                    HStack(spacing: 16) {
-//                        // Minimize Button
-//                        Button { onMinimize() } label: {
-//                            Image(systemName: "rectangle.compress.vertical")
-//                                .font(.system(size: 24, weight: .semibold))
-//                                .padding(2)
-//                        }
-//                        .buttonStyle(.plain)
-//                        .tint(.gray)
-//                        .accessibilityLabel("Minimize View")
-//
-//                        // Skip Button
-//                        Button { onSkip() } label: {
-//                            Text("Skip")
-//                                .font(.headline.weight(.semibold))
-//                                .padding(.horizontal, 10)
-//                                .padding(.vertical, 5)
-//                        }
-//                        .buttonStyle(.borderedProminent)
-//                        .tint(Color.orange)
-//                        .buttonBorderShape(.capsule)
-//                        .accessibilityHint("Double tap to skip rest")
-//                    }
-//                    .padding(.bottom, 10) // Padding at the bottom
-//
-//                }
-//                .opacity(state == .running ? 1 : 0) // Only visible when running
-//                .frame(maxWidth: .infinity, maxHeight: .infinity) // IMPORTANT: Ensures this Vstack fills the screen
-//
-//                // === Completion screen ===
-//                VStack(spacing: 8) {
-//                    Image(systemName: "hand.raised.fill")
-//                        .font(.system(size: 40))
-//                        .foregroundStyle(.green)
-//                        .symbolEffect(.bounce, value: state == .completed)
-//
-//                    Text("Workout Time!")
-//                        .font(.system(.title2, design: .rounded, weight: .bold))
-//                        .foregroundStyle(.green)
-//
-//                    Text("Rest Complete")
-//                        .font(.caption2)
-//                        .foregroundStyle(.secondary)
-//                }
-//                .opacity(state == .completed ? 1 : 0)
-//                .scaleEffect(state == .completed ? 1.0 : 0.85)
-//                .accessibilityLabel("Rest complete. Let's go!")
-//                .frame(maxWidth: .infinity, maxHeight: .infinity) // IMPORTANT: Also ensures this Vstack fills the screen
-//            }
-//            .frame(maxWidth: .infinity, maxHeight: .infinity)
-//            .padding(.horizontal, 10)
-//            .padding(.vertical, 15)
-//            .animation(.spring(response: 0.5, dampingFraction: 0.8), value: state)
-//        }
-//    }
-//
-//    // --- Haptic Feedback Logic (omitted for brevity) ---
-//    private func handleHaptics() -> some View {
-//        let currentSecond = Int(timeRemaining.rounded(.up))
-//
-//        if state == .running {
-//            if [3, 2, 1].contains(currentSecond) && currentSecond != lastHapticTriggerTime {
-//                WKInterfaceDevice.current().play(.notification)
-//                lastHapticTriggerTime = currentSecond
-//            }
-//            if timeRemaining <= 0.05 && lastHapticTriggerTime != 0 {
-//                WKInterfaceDevice.current().play(.success)
-//                lastHapticTriggerTime = 0
-//            }
-//            if currentSecond > 3 && lastHapticTriggerTime != nil {
-//                lastHapticTriggerTime = nil
-//            }
-//        } else if state == .completed && lastHapticTriggerTime != 0 {
-//            WKInterfaceDevice.current().play(.success)
-//            lastHapticTriggerTime = 0
-//        }
-//        return EmptyView()
-//    }
-//}
-
 struct NewRestTimerView: View {
     @EnvironmentObject var viewModel: WatchWorkoutViewModel
 
@@ -165,22 +11,19 @@ struct NewRestTimerView: View {
     let onSkip: () -> Void
     let onMinimize: () -> Void
 
-    @State private var hapticsPlayed = false
-        @State private var lastHapticTriggerTime: Int? = nil
-
+    @State private var lastHapticTriggerTime: Int? = nil
     @State private var pulse = false
 
     var body: some View {
-//        let _ = handleHaptics()
+        let _ = handleHaptics()
+
         ZStack {
             backgroundProgressLayer
             runningContent
-            // TODO: 🚧 - present properly
-//            completionContent
         }
         .background(Color.black)
         .onAppear { pulse = true }
-        .animation(.spring(response: 0.4, dampingFraction: 0.65), value: state)
+        .animation(.spring(duration: 0.5, bounce: 0.35), value: state)
     }
 
     private var progressColor: Color {
@@ -195,27 +38,33 @@ struct NewRestTimerView: View {
         return 1.0
     }
 
-//    private func handleHaptics() -> some View {
-//            let currentSecond = Int(timeRemaining.rounded(.up))
-//
-//            if state == .running {
-//                if [3, 2, 1].contains(currentSecond) && currentSecond != lastHapticTriggerTime {
-//                    WKInterfaceDevice.current().play(.notification)
-//                    lastHapticTriggerTime = currentSecond
-//                }
-//                if timeRemaining <= 0.05 && lastHapticTriggerTime != 0 {
-//                    WKInterfaceDevice.current().play(.success)
-//                    lastHapticTriggerTime = 0
-//                }
-//                if currentSecond > 3 && lastHapticTriggerTime != nil {
-//                    lastHapticTriggerTime = nil
-//                }
-//            } else if state == .completed && lastHapticTriggerTime != 0 {
-//                WKInterfaceDevice.current().play(.success)
-//                lastHapticTriggerTime = 0
-//            }
-//            return EmptyView()
-//        }
+    private func handleHaptics() -> some View {
+        let currentSecond = Int(timeRemaining.rounded(.up))
+
+        if state == .running {
+            // Play notification haptic at 3, 2, 1 seconds
+            if [3, 2, 1].contains(currentSecond) && currentSecond != lastHapticTriggerTime {
+                WKInterfaceDevice.current().play(.notification)
+                DispatchQueue.main.async {
+                    lastHapticTriggerTime = currentSecond
+                }
+            }
+            // Play strong success haptic at 0
+            if timeRemaining <= 0.05 && lastHapticTriggerTime != 0 {
+                WKInterfaceDevice.current().play(.success)
+                DispatchQueue.main.async {
+                    lastHapticTriggerTime = 0
+                }
+            }
+            // Reset haptic tracking when above 3 seconds
+            if currentSecond > 3 && lastHapticTriggerTime != nil {
+                DispatchQueue.main.async {
+                    lastHapticTriggerTime = nil
+                }
+            }
+        }
+        return EmptyView()
+    }
 
     // MARK: ─── Gradient + Glow Background
     private var backgroundProgressLayer: some View {
@@ -231,40 +80,6 @@ struct NewRestTimerView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color.black)
         .scaleEffect(pulseIntensity)
-        //        Group {
-        //                        LinearGradient(
-        //                            gradient: Gradient(colors: [progressColor.opacity(0.8), .black]),
-        //                            startPoint: .bottom,
-        //                            endPoint: .top
-        //                        )
-        //                        .scaleEffect(x: 1, y: progress, anchor: .bottom)
-        //                        .animation(.linear(duration: 0.5), value: progress)
-        //                    }
-        //                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-        //                    .background(Color.black)
-        //                    .scaleEffect(pulseIntensity) are always black
-        //        GeometryReader { geo in
-        //            let height = geo.size.height
-        //            let filledHeight = height * progress
-        //
-        //            VStack(spacing: 0) {
-        //                LinearGradient(
-        //                    colors: dynamicColors,
-        //                    startPoint: .top,
-        //                    endPoint: .bottom
-        //                )
-        //                .blur(radius: 8)                          // soft modern glow
-        //                .overlay(
-        //                    RoundedRectangle(cornerRadius: 0)
-        //                        .fill(Color.white.opacity(glowAmount))
-        //                        .blur(radius: 25)
-        //                )
-        //                .frame(height: filledHeight)
-        //
-        //                Color.clear
-        //            }
-        //            .animation(.linear(duration: 1), value: progress)
-        //        }
         .ignoresSafeArea()
     }
 
@@ -283,15 +98,16 @@ struct NewRestTimerView: View {
 
                 Text(formattedTime)
                     .font(.system(.title, design: .rounded, weight: .bold).monospacedDigit())
-                    .foregroundStyle(.white)
-                    .shadow(color: Color.white.opacity(0.3), radius: 4)
-                    .scaleEffect(shouldPulse ? (pulse ? 1.07 : 1.0) : 1.0)
+                    .foregroundStyle(shouldPulse ? .red : .white)
+                    .shadow(color: (shouldPulse ? Color.red : Color.white).opacity(0.5), radius: shouldPulse ? 8 : 4)
+                    .scaleEffect(shouldPulse ? (pulse ? 1.15 : 1.0) : 1.0)
                     .animation(
                         shouldPulse
-                        ? .easeInOut(duration: 0.8).repeatForever()
+                        ? .easeInOut(duration: 0.6).repeatForever(autoreverses: true)
                         : .default,
                         value: pulse
                     )
+                    .animation(.easeInOut(duration: 0.3), value: shouldPulse)
             }
 
 
@@ -316,61 +132,6 @@ struct NewRestTimerView: View {
         .opacity(state == .running ? 1 : 0)
     }
 
-    // MARK: ─── Completion Screen
-    private var completionContent: some View {
-        VStack(spacing: 10) {
-            ZStack {
-                // Back glow
-                Circle()
-                    .fill(
-                        RadialGradient(
-                            colors: [.green.opacity(0.4), .clear],
-                            center: .center,
-                            startRadius: 0,
-                            endRadius: 90
-                        )
-                    )
-                    .blur(radius: 15)
-
-                // Icon
-                Image(systemName: "checkmark.circle.fill")
-                    .font(.system(size: 54))
-                    .foregroundStyle(.green)
-                    .symbolEffect(.bounce, value: state == .completed)
-            }
-
-            // Title card
-            VStack(spacing: 4) {
-                Text("Let's Go!")
-                    .font(.system(.title2, design: .rounded, weight: .bold))
-                    .foregroundStyle(.white)
-
-                Text("Rest Complete")
-                    .font(.caption2)
-                    .foregroundStyle(.white.opacity(0.6))
-            }
-            .padding(.vertical, 12)
-            .padding(.horizontal, 20)
-            .background(
-                LinearGradient(
-                    colors: [.green.opacity(0.25), .green.opacity(0.10)],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
-            )
-            .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
-            .overlay(
-                RoundedRectangle(cornerRadius: 20)
-                    .stroke(Color.white.opacity(0.12), lineWidth: 1)
-            )
-            .shadow(color: .green.opacity(0.2), radius: 12, y: 6)
-        }
-        .padding(.horizontal, 16)
-        .opacity(state == .completed ? 1 : 0)
-        .scaleEffect(state == .completed ? 1.0 : 0.5)
-        .animation(.spring(response: 0.4, dampingFraction: 0.6), value: state)
-    }
-
     // MARK: ─── Computed Properties
 
     private var progress: CGFloat {
@@ -378,29 +139,9 @@ struct NewRestTimerView: View {
         return CGFloat(timeRemaining / totalDuration)
     }
 
-    /// Gradient colors shift from green → yellow → red
-    private var dynamicColors: [Color] {
-        let pct = progress
-
-        switch pct {
-        case 0.66...1.0:
-            return [.green.opacity(0.9), .green.opacity(0.5)]
-        case 0.33..<0.66:
-            return [.yellow.opacity(0.9), .yellow.opacity(0.5)]
-        default:
-            return [.red.opacity(0.9), .red.opacity(0.5)]
-        }
-    }
-
-    /// Glow increases as time approaches zero
-    private var glowAmount: Double {
-        let pct = progress
-        return (1 - pct) * 0.35   // up to 35% white glow
-    }
-
-    /// Pulse for last 5 seconds
+    /// Pulse for last 3 seconds
     private var shouldPulse: Bool {
-        timeRemaining <= 5 && state == .running
+        timeRemaining <= 3 && state == .running
     }
 }
 
