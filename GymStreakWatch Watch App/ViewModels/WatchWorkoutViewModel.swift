@@ -82,6 +82,7 @@ final class WatchWorkoutViewModel: ObservableObject {
             .receive(on: DispatchQueue.main)
             .compactMap { $0 }
             .sink { heartRate in
+                print("wtf heartRate received: \(heartRate)")
                 self.heartRate = Int(heartRate)
             }
             .store(in: &cancellabes)
@@ -91,13 +92,16 @@ final class WatchWorkoutViewModel: ObservableObject {
             .receive(on: DispatchQueue.main)
             .compactMap { $0 }
             .sink { calories in
+                print("wtf calories received: \(calories)")
             self.activeCalories = Int(calories)
         }
         .store(in: &cancellabes)
 
         healthKitManager.$activeCalories.compactMap { $0 }.removeDuplicates().combineLatest(healthKitManager.$heartRate.compactMap { $0 }.removeDuplicates())
         // state only needs to be set once
-            .prefix(1)
+        // FIXME: prevents data showing in a subsequent workout
+//            .prefix(1)
+            .filter { _ in self.workoutState != .running }
             .sink { combined in
                 print("wtf received workout metrics: \(combined.0 ?? 0), \(combined.1 ?? 0)")
                 self.workoutState = .running
