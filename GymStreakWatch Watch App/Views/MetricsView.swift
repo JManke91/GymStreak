@@ -43,7 +43,6 @@ struct MetricsView: View {
                             .foregroundStyle(.secondary)
                     }
                     .accessibilityElement(children: .combine)
-//                    .accessibilityLabel("Heart rate \(heartRate) beats per minute")
 
                     // Calories
                     VStack {
@@ -57,7 +56,6 @@ struct MetricsView: View {
                             .foregroundStyle(.secondary)
                     }
                     .accessibilityElement(children: .combine)
-//                    .accessibilityLabel("\(Int(calories)) calories burned")
                 }
             }
             .scenePadding()
