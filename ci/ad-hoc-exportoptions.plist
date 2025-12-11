@@ -6,8 +6,6 @@
 	<string>ad-hoc</string>
 	<key>teamID</key>
 	<string>45VTMQ88RW</string>
-	<key>signingStyle</key>
-	<string>automatic</string>
 	<key>uploadSymbols</key>
 	<true/>
 	<key>compileBitcode</key>
