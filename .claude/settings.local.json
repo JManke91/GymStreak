@@ -5,7 +5,8 @@
       "Bash(wait)",
       "Bash(find:*)",
       "Bash(plutil:*)",
-      "Bash(git checkout:*)"
+      "Bash(git checkout:*)",
+      "Bash(xcrun simctl:*)"
     ],
     "defaultMode": "acceptEdits"
   }

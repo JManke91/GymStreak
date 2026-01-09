@@ -122,7 +122,7 @@ struct WorkoutExerciseDetailCard: View {
             HStack {
                 Image(systemName: muscleGroupIcon)
                     .symbolRenderingMode(.hierarchical)
-                    .foregroundStyle(.blue)
+                    .foregroundStyle(Color.appAccent)
                     .font(.title3)
 
                 VStack(alignment: .leading, spacing: 2) {

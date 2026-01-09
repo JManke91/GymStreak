@@ -41,6 +41,7 @@ struct RoutineDetailView: View {
                             showingAddExercise = true
                         }
                         .buttonStyle(.borderedProminent)
+                        .tint(Color.neonGreen)
                     }
                     .listRowInsets(EdgeInsets())
                     .listRowBackground(Color.clear)
@@ -201,7 +202,7 @@ struct RoutineDetailView: View {
                                             .font(.subheadline)
                                             .fontWeight(.semibold)
                                     }
-                                    .foregroundStyle(.blue)
+                                    .foregroundStyle(Color.appAccent)
                                     .frame(maxWidth: .infinity)
                                     .padding(.vertical, 12)
                                     .background(Color(.tertiarySystemFill))
@@ -292,12 +293,12 @@ struct RoutineDetailView: View {
                             }
                         }
                         .font(.body.weight(.semibold))
-                        .foregroundStyle(isEditMode ? .orange : .blue)
+                        .foregroundStyle(isEditMode ? .orange : Color.appAccent)
                         .padding(.horizontal, 12)
                         .padding(.vertical, 6)
                         .background(
                             RoundedRectangle(cornerRadius: 8)
-                                .fill(isEditMode ? Color.orange.opacity(0.1) : Color.blue.opacity(0.1))
+                                .fill(isEditMode ? Color.orange.opacity(0.1) : Color.appAccent.opacity(0.1))
                         )
                     }
                 }
@@ -321,6 +322,7 @@ struct RoutineDetailView: View {
                             .frame(height: 50)
                     }
                     .buttonStyle(.borderedProminent)
+                    .tint(Color.neonGreen)
                     .controlSize(.large)
                     .padding(.horizontal, 16)
                     .padding(.vertical, 12)
@@ -369,7 +371,7 @@ struct RoutineDetailView: View {
                     }
                     .padding(.horizontal, 16)
                     .padding(.vertical, 12)
-                    .background(.blue)
+                    .background(Color.neonGreen)
                     .clipShape(RoundedRectangle(cornerRadius: 12))
                     .shadow(color: .black.opacity(0.15), radius: 8, y: 4)
                 }
@@ -501,9 +503,9 @@ struct ExerciseHeaderView: View {
                 Image(systemName: muscleGroupIcon(for: exercise.muscleGroup))
                     .font(.title3)
                     .symbolRenderingMode(.hierarchical)
-                    .foregroundStyle(isEditMode ? Color.secondary : Color.blue)
+                    .foregroundStyle(isEditMode ? Color.secondary : Color.appAccent)
                     .frame(width: 40, height: 40)
-                    .background(isEditMode ? Color.secondary.opacity(0.1) : Color.blue.opacity(0.1))
+                    .background(isEditMode ? Color.secondary.opacity(0.1) : Color.appAccent.opacity(0.1))
                     .clipShape(RoundedRectangle(cornerRadius: 10))
             }
 
@@ -593,7 +595,7 @@ struct RoutineSetRowView: View {
                         .monospacedDigit()
                         .foregroundStyle(.white)
                         .frame(width: 28, height: 28)
-                        .background(.blue)
+                        .background(Color.neonGreen)
                         .clipShape(Circle())
 
                     Text("\(set.reps) reps × \(set.weight, specifier: "%.2f") kg")
@@ -604,7 +606,7 @@ struct RoutineSetRowView: View {
 
                     Image(systemName: "chevron.down")
                         .font(isExpanded ? .subheadline.weight(.bold) : .caption.weight(.semibold))
-                        .foregroundStyle(isExpanded ? .blue : .secondary)
+                        .foregroundStyle(isExpanded ? Color.appAccent : .secondary)
                         .rotationEffect(.degrees(isExpanded ? 180 : 0))
                 }
                 .contentShape(Rectangle())
@@ -705,7 +707,7 @@ struct RoutineSetRowView: View {
         )
         .overlay(
             RoundedRectangle(cornerRadius: 8)
-                .strokeBorder(isExpanded ? Color.blue.opacity(0.3) : Color.clear, lineWidth: 1)
+                .strokeBorder(isExpanded ? Color.appAccent.opacity(0.3) : Color.clear, lineWidth: 1)
         )
     }
 }

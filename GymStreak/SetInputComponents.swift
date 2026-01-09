@@ -49,7 +49,7 @@ struct HorizontalStepper: View {
                 Image(systemName: "minus.circle.fill")
                     .font(.title)
                     .symbolRenderingMode(.hierarchical)
-                    .foregroundStyle(value <= range.lowerBound ? Color.secondary : Color.blue)
+                    .foregroundStyle(value <= range.lowerBound ? Color.secondary : Color.appAccent)
                     .frame(width: 44, height: 44)
                     .contentShape(Rectangle())
             }
@@ -73,7 +73,7 @@ struct HorizontalStepper: View {
                 Image(systemName: "plus.circle.fill")
                     .font(.title)
                     .symbolRenderingMode(.hierarchical)
-                    .foregroundStyle(value >= range.upperBound ? Color.secondary : Color.blue)
+                    .foregroundStyle(value >= range.upperBound ? Color.secondary : Color.appAccent)
                     .frame(width: 44, height: 44)
                     .contentShape(Rectangle())
             }
@@ -130,7 +130,7 @@ struct WeightInput: View {
                 Image(systemName: "minus.circle.fill")
                     .font(.title)
                     .symbolRenderingMode(.hierarchical)
-                    .foregroundStyle(weight <= 0 ? Color.secondary : Color.blue)
+                    .foregroundStyle(weight <= 0 ? Color.secondary : Color.appAccent)
                     .frame(width: 44, height: 44)
                     .contentShape(Rectangle())
             }
@@ -177,7 +177,7 @@ struct WeightInput: View {
                 Image(systemName: "plus.circle.fill")
                     .font(.title)
                     .symbolRenderingMode(.hierarchical)
-                    .foregroundStyle(.blue)
+                    .foregroundStyle(Color.appAccent)
                     .frame(width: 44, height: 44)
                     .contentShape(Rectangle())
             }

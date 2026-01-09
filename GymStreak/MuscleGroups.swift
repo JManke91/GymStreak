@@ -19,6 +19,7 @@ struct MuscleGroups {
         "Lower Back",
 
         // Upper Body - Shoulders
+        "Shoulder",
         "Front Delts",
         "Side Delts",
         "Rear Delts",
@@ -50,7 +51,7 @@ struct MuscleGroups {
         case "Upper Back", "Lats", "Lower Back": return "figure.cooldown"
 
         // Shoulders
-        case "Front Delts", "Side Delts", "Rear Delts": return "figure.flexibility"
+        case "Shoulder", "Front Delts", "Side Delts", "Rear Delts": return "figure.flexibility"
 
         // Core
         case "Abs", "Obliques": return "figure.core.training"

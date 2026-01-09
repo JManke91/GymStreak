@@ -36,9 +36,9 @@ struct AddExerciseToWorkoutView: View {
                         HStack(spacing: 12) {
                             Image(systemName: "plus.circle.fill")
                                 .font(.title3)
-                                .foregroundStyle(.blue)
+                                .foregroundStyle(Color.appAccent)
                                 .frame(width: 40, height: 40)
-                                .background(Color.blue.opacity(0.1))
+                                .background(Color.appAccent.opacity(0.1))
                                 .clipShape(RoundedRectangle(cornerRadius: 10))
 
                             VStack(alignment: .leading, spacing: 4) {
@@ -119,9 +119,9 @@ struct AddExerciseToWorkoutView: View {
                                     Image(systemName: MuscleGroups.icon(for: exercise.muscleGroup))
                                         .font(.title3)
                                         .symbolRenderingMode(.hierarchical)
-                                        .foregroundStyle(.blue)
+                                        .foregroundStyle(Color.appAccent)
                                         .frame(width: 40, height: 40)
-                                        .background(Color.blue.opacity(0.1))
+                                        .background(Color.appAccent.opacity(0.1))
                                         .clipShape(RoundedRectangle(cornerRadius: 10))
 
                                     VStack(alignment: .leading, spacing: 4) {

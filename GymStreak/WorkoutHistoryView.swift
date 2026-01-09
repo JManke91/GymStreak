@@ -72,7 +72,7 @@ struct WorkoutHistoryCard: View {
             }
             .frame(width: 60)
             .padding(.vertical, 8)
-            .background(Color.blue.opacity(0.1))
+            .background(Color.appAccent.opacity(0.1))
             .clipShape(RoundedRectangle(cornerRadius: 8))
 
             VStack(alignment: .leading, spacing: 6) {

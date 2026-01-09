@@ -139,10 +139,10 @@ struct ConfigureExerciseView: View {
                 VStack(spacing: 4) {
                     Button(action: addNewSet) {
                         Text("Add Set")
-                            .foregroundColor(.blue)
+                            .foregroundColor(Color.appAccent)
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 8)
-                            .background(Color.blue.opacity(0.1))
+                            .background(Color.appAccent.opacity(0.1))
                             .cornerRadius(8)
                     }
                     .buttonStyle(PlainButtonStyle())

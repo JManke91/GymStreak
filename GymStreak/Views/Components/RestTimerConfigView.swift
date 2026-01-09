@@ -40,7 +40,7 @@ struct RestTimerConfigView: View {
                     HStack(spacing: 6) {
                         Image(systemName: isRestTimerEnabled ? "timer" : "timer.slash")
                             .font(.subheadline)
-                            .foregroundStyle(isRestTimerEnabled ? .blue : .secondary)
+                            .foregroundStyle(isRestTimerEnabled ? Color.appAccent : .secondary)
 
                         if isRestTimerEnabled {
                             Text("Rest:")
@@ -48,7 +48,7 @@ struct RestTimerConfigView: View {
                                 .foregroundStyle(.secondary)
                             Text(TimeFormatting.formatRestTime(restTime))
                                 .font(.subheadline.weight(.medium))
-                                .foregroundStyle(.blue)
+                                .foregroundStyle(Color.appAccent)
                         } else {
                             Text("Set Rest Timer")
                                 .font(.subheadline.weight(.medium))
@@ -59,7 +59,7 @@ struct RestTimerConfigView: View {
                     .padding(.vertical, 8)
                     .background(
                         RoundedRectangle(cornerRadius: 8)
-                            .fill(isRestTimerEnabled ? Color.blue.opacity(0.1) : Color.secondary.opacity(0.1))
+                            .fill(isRestTimerEnabled ? Color.appAccent.opacity(0.1) : Color.secondary.opacity(0.1))
                     )
 
                     Spacer()
@@ -95,7 +95,7 @@ struct RestTimerConfigView: View {
                             UIImpactFeedbackGenerator(style: .light).impactOccurred()
                         }
                     ), in: 0...300, step: 30)
-                    .tint(.blue)
+                    .tint(Color.neonGreen)
 
                     // Quick preset buttons
                     HStack(spacing: 8) {
@@ -110,12 +110,12 @@ struct RestTimerConfigView: View {
                             } label: {
                                 Text("\(Int(preset))s")
                                     .font(.subheadline.weight(.medium))
-                                    .foregroundStyle(restTime == preset ? .white : .blue)
+                                    .foregroundStyle(restTime == preset ? .white : Color.appAccent)
                                     .frame(maxWidth: .infinity)
                                     .padding(.vertical, 8)
                                     .background(
                                         RoundedRectangle(cornerRadius: 8)
-                                            .fill(restTime == preset ? Color.blue : Color.blue.opacity(0.1))
+                                            .fill(restTime == preset ? Color.neonGreen : Color.appAccent.opacity(0.1))
                                     )
                             }
                             .buttonStyle(.plain)
@@ -155,7 +155,7 @@ struct RestTimerConfigView: View {
         .padding(12)
         .background(
             RoundedRectangle(cornerRadius: 12)
-                .fill(isExpanded && isRestTimerEnabled ? Color.blue.opacity(0.05) : Color.clear)
+                .fill(isExpanded && isRestTimerEnabled ? Color.appAccent.opacity(0.05) : Color.clear)
         )
         .onAppear {
             // Initialize lastRestTime if restTime is already set

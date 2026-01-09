@@ -256,7 +256,7 @@ struct TimerHeader: View {
                             .clipShape(Capsule())
 
                         Rectangle()
-                            .fill(Color.blue)
+                            .fill(Color.neonGreen)
                             .frame(width: geometry.size.width * CGFloat(session.completedSetsCount) / CGFloat(session.totalSetsCount), height: 6)
                             .clipShape(Capsule())
                             .animation(.spring, value: session.completedSetsCount)
@@ -293,7 +293,7 @@ struct ExerciseCard: View {
             HStack {
                 Image(systemName: muscleGroupIcon)
                     .symbolRenderingMode(.hierarchical)
-                    .foregroundStyle(isCurrentExercise ? .blue : .secondary)
+                    .foregroundStyle(isCurrentExercise ? Color.appAccent : .secondary)
                     .font(.title3)
 
                 VStack(alignment: .leading, spacing: 2) {
@@ -391,7 +391,7 @@ struct ExerciseCard: View {
                         .font(.subheadline)
                         .fontWeight(.semibold)
                 }
-                .foregroundStyle(.blue)
+                .foregroundStyle(Color.appAccent)
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 12)
                 .background(Color(.tertiarySystemFill))
@@ -402,11 +402,11 @@ struct ExerciseCard: View {
             .accessibilityHint("Creates a new set with default values")
         }
         .padding()
-        .background(isCurrentExercise ? Color.blue.opacity(0.1) : Color(.secondarySystemGroupedBackground))
+        .background(isCurrentExercise ? Color.appAccent.opacity(0.1) : Color(.secondarySystemGroupedBackground))
         .clipShape(RoundedRectangle(cornerRadius: 12))
         .overlay(
             RoundedRectangle(cornerRadius: 12)
-                .strokeBorder(isCurrentExercise ? Color.blue : Color.clear, lineWidth: 2)
+                .strokeBorder(isCurrentExercise ? Color.appAccent : Color.clear, lineWidth: 2)
         )
     }
 
@@ -500,7 +500,7 @@ struct WorkoutSetRow: View {
         if isExpanded {
             return Color(.tertiarySystemGroupedBackground)
         } else if isNextSet {
-            return Color.blue.opacity(0.1)
+            return Color.appAccent.opacity(0.1)
         } else {
             return Color.clear
         }
@@ -540,7 +540,7 @@ struct WorkoutSetRow: View {
                     } label: {
                         ZStack {
                             Circle()
-                                .strokeBorder(set.isCompleted ? Color.green : (isNextSet ? Color.blue : Color.secondary), lineWidth: 2)
+                                .strokeBorder(set.isCompleted ? Color.green : (isNextSet ? Color.appAccent : Color.secondary), lineWidth: 2)
                                 .frame(width: 28, height: 28)
 
                             if set.isCompleted {
@@ -580,7 +580,7 @@ struct WorkoutSetRow: View {
                     // Expand/Collapse indicator
                     Image(systemName: "chevron.down")
                         .font(isExpanded ? .subheadline.weight(.bold) : .caption.weight(.semibold))
-                        .foregroundStyle(isExpanded ? .blue : .secondary)
+                        .foregroundStyle(isExpanded ? Color.appAccent : .secondary)
                         .rotationEffect(.degrees(isExpanded ? 180 : 0))
                 }
                 .contentShape(Rectangle())
@@ -717,7 +717,7 @@ struct WorkoutSetRow: View {
         )
         .overlay(
             RoundedRectangle(cornerRadius: 8)
-                .strokeBorder(isExpanded ? Color.blue.opacity(0.3) : Color.clear, lineWidth: 1)
+                .strokeBorder(isExpanded ? Color.appAccent.opacity(0.3) : Color.clear, lineWidth: 1)
         )
         .opacity(set.isCompleted ? 0.7 : 1.0)
         .onChange(of: set.actualReps) { _, newValue in
@@ -757,6 +757,7 @@ struct ActionBar: View {
                         .frame(height: 50)
                 }
                 .buttonStyle(.borderedProminent)
+                .tint(Color.neonGreen)
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 12)
@@ -781,7 +782,7 @@ struct CompactRestTimer: View {
 
                 Circle()
                     .trim(from: 0, to: progress)
-                    .stroke(Color.blue, style: StrokeStyle(lineWidth: 3, lineCap: .round))
+                    .stroke(Color.neonGreen, style: StrokeStyle(lineWidth: 3, lineCap: .round))
                     .frame(width: 32, height: 32)
                     .rotationEffect(.degrees(-90))
                     .animation(.linear(duration: 1), value: progress)

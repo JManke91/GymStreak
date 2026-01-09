@@ -29,12 +29,12 @@ struct ExerciseSelectionView: View {
                 Section {
                     HStack {
                         Image(systemName: "info.circle")
-                            .foregroundColor(.blue)
+                            .foregroundColor(Color.appAccent)
                         Text("\(alreadyAddedExercises.count) exercise\(alreadyAddedExercises.count == 1 ? "" : "s") already added")
                             .font(.caption)
                             .foregroundColor(.secondary)
                     }
-                    .listRowBackground(Color.blue.opacity(0.1))
+                    .listRowBackground(Color.appAccent.opacity(0.1))
                 }
             }
 
