@@ -95,7 +95,7 @@ struct RestTimerConfigView: View {
                             UIImpactFeedbackGenerator(style: .light).impactOccurred()
                         }
                     ), in: 0...300, step: 30)
-                    .tint(Color.neonGreen)
+                    .tint(Color.appAccent)
 
                     // Quick preset buttons
                     HStack(spacing: 8) {
@@ -115,7 +115,7 @@ struct RestTimerConfigView: View {
                                     .padding(.vertical, 8)
                                     .background(
                                         RoundedRectangle(cornerRadius: 8)
-                                            .fill(restTime == preset ? Color.neonGreen : Color.appAccent.opacity(0.1))
+                                            .fill(restTime == preset ? Color.appAccent : Color.appAccent.opacity(0.1))
                                     )
                             }
                             .buttonStyle(.plain)

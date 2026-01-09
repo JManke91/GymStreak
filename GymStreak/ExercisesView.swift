@@ -22,7 +22,7 @@ struct ExercisesView: View {
                             viewModel.showingAddExercise = true
                         }
                         .buttonStyle(.borderedProminent)
-                        .tint(Color.neonGreen)
+                        .tint(Color.appAccent)
                     }
                 } else {
                     List {

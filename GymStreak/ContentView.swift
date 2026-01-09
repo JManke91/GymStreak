@@ -35,7 +35,7 @@ struct ContentView: View {
                     Label("History", systemImage: "clock.fill")
                 }
         }
-        .tint(Color.neonGreen)
+        .tint(Color.appAccent)
         .onAppear {
             workoutViewModel.updateModelContext(modelContext)
         }

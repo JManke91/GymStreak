@@ -256,7 +256,7 @@ struct TimerHeader: View {
                             .clipShape(Capsule())
 
                         Rectangle()
-                            .fill(Color.neonGreen)
+                            .fill(Color.appAccent)
                             .frame(width: geometry.size.width * CGFloat(session.completedSetsCount) / CGFloat(session.totalSetsCount), height: 6)
                             .clipShape(Capsule())
                             .animation(.spring, value: session.completedSetsCount)
@@ -757,7 +757,7 @@ struct ActionBar: View {
                         .frame(height: 50)
                 }
                 .buttonStyle(.borderedProminent)
-                .tint(Color.neonGreen)
+                .tint(Color.appAccent)
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 12)
@@ -782,7 +782,7 @@ struct CompactRestTimer: View {
 
                 Circle()
                     .trim(from: 0, to: progress)
-                    .stroke(Color.neonGreen, style: StrokeStyle(lineWidth: 3, lineCap: .round))
+                    .stroke(Color.appAccent, style: StrokeStyle(lineWidth: 3, lineCap: .round))
                     .frame(width: 32, height: 32)
                     .rotationEffect(.degrees(-90))
                     .animation(.linear(duration: 1), value: progress)

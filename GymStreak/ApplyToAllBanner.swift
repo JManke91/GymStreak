@@ -86,7 +86,7 @@ struct ApplyToAllBanner: View {
                     .foregroundStyle(.white)
                     .padding(.horizontal, 12)
                     .padding(.vertical, 6)
-                    .background(Color.neonGreen, in: Capsule())
+                    .background(Color.appAccent, in: Capsule())
                     .lineLimit(1)
                     .fixedSize()
             }

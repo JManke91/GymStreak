@@ -28,7 +28,7 @@ struct RoutinesView: View {
                             viewModel.showingAddRoutine = true
                         }
                         .buttonStyle(.borderedProminent)
-                        .tint(Color.neonGreen)
+                        .tint(Color.appAccent)
                     }
                 } else {
                     List {

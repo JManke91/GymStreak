@@ -8,15 +8,15 @@
 import SwiftUI
 
 extension Color {
-    static let neonGreen = Color(red: 0/255, green: 255/255, blue: 136/255)
-    static let gymGreen = Color(red: 0/255, green: 204/255, blue: 106/255)
+    static let electricPurple = Color(red: 139/255, green: 92/255, blue: 246/255)
+    static let electricCyan = Color(red: 0/255, green: 212/255, blue: 255/255)
 
-    /// Adaptive accent color that provides good contrast in both light and dark modes
-    /// - Light mode: Uses gymGreen (darker) for better contrast on light backgrounds
-    /// - Dark mode: Uses neonGreen (brighter) for vibrant appearance on dark backgrounds
+    /// Adaptive accent color that provides excellent contrast in both light and dark modes
+    /// - Light mode: Uses electricPurple for a modern, vibrant appearance
+    /// - Dark mode: Uses electricCyan for vibrant, modern appearance on dark backgrounds
     static let appAccent = Color(
-        light: Color(red: 0/255, green: 204/255, blue: 106/255), // gymGreen
-        dark: Color(red: 0/255, green: 255/255, blue: 136/255)   // neonGreen
+        light: Color(red: 139/255, green: 92/255, blue: 246/255), // electricPurple
+        dark: Color(red: 0/255, green: 212/255, blue: 255/255)    // electricCyan
     )
 }
 

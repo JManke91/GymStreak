@@ -41,7 +41,7 @@ struct RoutineDetailView: View {
                             showingAddExercise = true
                         }
                         .buttonStyle(.borderedProminent)
-                        .tint(Color.neonGreen)
+                        .tint(Color.appAccent)
                     }
                     .listRowInsets(EdgeInsets())
                     .listRowBackground(Color.clear)
@@ -322,7 +322,7 @@ struct RoutineDetailView: View {
                             .frame(height: 50)
                     }
                     .buttonStyle(.borderedProminent)
-                    .tint(Color.neonGreen)
+                    .tint(Color.appAccent)
                     .controlSize(.large)
                     .padding(.horizontal, 16)
                     .padding(.vertical, 12)
@@ -371,7 +371,7 @@ struct RoutineDetailView: View {
                     }
                     .padding(.horizontal, 16)
                     .padding(.vertical, 12)
-                    .background(Color.neonGreen)
+                    .background(Color.appAccent)
                     .clipShape(RoundedRectangle(cornerRadius: 12))
                     .shadow(color: .black.opacity(0.15), radius: 8, y: 4)
                 }
@@ -595,7 +595,7 @@ struct RoutineSetRowView: View {
                         .monospacedDigit()
                         .foregroundStyle(.white)
                         .frame(width: 28, height: 28)
-                        .background(Color.neonGreen)
+                        .background(Color.appAccent)
                         .clipShape(Circle())
 
                     Text("\(set.reps) reps × \(set.weight, specifier: "%.2f") kg")
