@@ -14,11 +14,11 @@ struct ExercisesView: View {
             Group {
                 if viewModel.exercises.isEmpty {
                     ContentUnavailableView {
-                        Label("No Exercises Yet", systemImage: "dumbbell")
+                        Label("exercises.empty.title".localized, systemImage: "dumbbell")
                     } description: {
-                        Text("Add your first exercise to build your library")
+                        Text("exercises.empty.description".localized)
                     } actions: {
-                        Button("Add Exercise") {
+                        Button("exercises.add".localized) {
                             viewModel.showingAddExercise = true
                         }
                         .buttonStyle(.borderedProminent)
@@ -35,10 +35,10 @@ struct ExercisesView: View {
                     }
                 }
             }
-            .navigationTitle("Exercises")
+            .navigationTitle("exercises.title".localized)
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("Add Exercise") {
+                    Button("exercises.add".localized) {
                         viewModel.showingAddExercise = true
                     }
                 }

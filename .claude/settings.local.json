@@ -6,7 +6,10 @@
       "Bash(find:*)",
       "Bash(plutil:*)",
       "Bash(git checkout:*)",
-      "Bash(xcrun simctl:*)"
+      "Bash(xcrun simctl:*)",
+      "Bash(chmod:*)",
+      "Bash(open:*)",
+      "Bash(./verify_localization.sh:*)"
     ],
     "defaultMode": "acceptEdits"
   }

@@ -56,9 +56,9 @@ struct ActiveWorkoutView: View {
                                     )
 
                                 VStack(alignment: .leading, spacing: 2) {
-                                    Text("Add Exercise")
+                                    Text("workout.add_exercise".localized)
                                         .font(.headline)
-                                    Text("Browse exercise library")
+                                    Text("workout.add_exercise.description".localized)
                                         .font(.caption)
                                         .foregroundStyle(.secondary)
                                 }
@@ -77,8 +77,8 @@ struct ActiveWorkoutView: View {
                         }
                         .buttonStyle(.plain)
                         .padding(.top, 16)
-                        .accessibilityLabel("Add a new exercise to this workout")
-                        .accessibilityHint("Opens exercise picker to add another exercise")
+                        .accessibilityLabel("accessibility.add_exercise".localized)
+                        .accessibilityHint("accessibility.add_exercise.hint".localized)
                     }
                 }
                 .padding(.horizontal)
@@ -112,25 +112,25 @@ struct ActiveWorkoutView: View {
                 )
             }
         }
-        .alert("Cancel Workout?", isPresented: $showingCancelAlert) {
-            Button("Discard Workout", role: .destructive) {
+        .alert("workout.cancel.title".localized, isPresented: $showingCancelAlert) {
+            Button("workout.cancel.discard".localized, role: .destructive) {
                 viewModel.cancelWorkout()
                 dismiss()
             }
-            Button("Keep Working Out", role: .cancel) {}
+            Button("workout.cancel.keep".localized, role: .cancel) {}
         } message: {
-            Text("Your progress will not be saved.")
+            Text("workout.cancel.message".localized)
         }
-        .alert("Workout Complete!", isPresented: $viewModel.showingWorkoutCompletePrompt) {
-            Button("Finish Workout") {
+        .alert("workout.complete.title".localized, isPresented: $viewModel.showingWorkoutCompletePrompt) {
+            Button("workout.complete.finish".localized) {
                 showingSaveOptions = true
             }
-            Button("Continue", role: .cancel) {
+            Button("workout.complete.continue".localized, role: .cancel) {
                 viewModel.resumeAfterCompletionPrompt()
             }
         } message: {
             if let session = viewModel.currentSession {
-                Text("You completed all \(session.totalSetsCount) sets. Would you like to finish your workout?")
+                Text("workout.complete.message".localized(session.totalSetsCount))
             }
         }
         .sheet(item: $exerciseToDelete) { exercise in
@@ -149,16 +149,16 @@ struct ActiveWorkoutView: View {
             .presentationDetents([.height(280)])
             .presentationDragIndicator(.visible)
         }
-        .alert("Finish Workout?", isPresented: $showingFinishConfirmation) {
-            Button("Continue Workout") {}
-            Button("Save Workout") {
+        .alert("workout.finish.title".localized, isPresented: $showingFinishConfirmation) {
+            Button("workout.finish.continue".localized) {}
+            Button("workout.finish.save".localized) {
                 viewModel.pauseForCompletion()
                 showingSaveOptions = true
             }
             .keyboardShortcut(.defaultAction)
         } message: {
             if let session = viewModel.currentSession {
-                Text("You completed \(session.completedSetsCount) of \(session.totalSetsCount) sets.")
+                Text("workout.completed_sets".localized(session.completedSetsCount, session.totalSetsCount))
             }
         }
         .sheet(isPresented: $showingSaveOptions) {
@@ -223,7 +223,7 @@ struct TimerHeader: View {
         VStack(spacing: 12) {
             HStack {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("Workout Time")
+                    Text("workout.time".localized)
                         .font(.caption)
                         .foregroundStyle(.secondary)
 
@@ -236,7 +236,7 @@ struct TimerHeader: View {
 
                 if let session = viewModel.currentSession {
                     VStack(alignment: .trailing, spacing: 4) {
-                        Text("Progress")
+                        Text("workout.progress".localized)
                             .font(.caption)
                             .foregroundStyle(.secondary)
 
@@ -300,7 +300,7 @@ struct ExerciseCard: View {
                     Text(workoutExercise.exerciseName)
                         .font(.headline)
 
-                    Text("\(workoutExercise.completedSetsCount)/\(workoutExercise.sets.count) sets")
+                    Text("exercise.sets_completed".localized(workoutExercise.completedSetsCount, workoutExercise.sets.count))
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                 }
@@ -387,7 +387,7 @@ struct ExerciseCard: View {
                     Image(systemName: "plus.circle.fill")
                         .font(.subheadline)
                         .fontWeight(.medium)
-                    Text("Add Set")
+                    Text("exercise.add_set".localized)
                         .font(.subheadline)
                         .fontWeight(.semibold)
                 }
@@ -398,8 +398,8 @@ struct ExerciseCard: View {
                 .clipShape(RoundedRectangle(cornerRadius: 10))
             }
             .buttonStyle(.plain)
-            .accessibilityLabel("Add a new set to \(workoutExercise.exerciseName)")
-            .accessibilityHint("Creates a new set with default values")
+            .accessibilityLabel("accessibility.add_set".localized(workoutExercise.exerciseName))
+            .accessibilityHint("accessibility.add_set.hint".localized)
         }
         .padding()
         .background(isCurrentExercise ? Color.appAccent.opacity(0.1) : Color(.secondarySystemGroupedBackground))
@@ -554,15 +554,15 @@ struct WorkoutSetRow: View {
 
                     // Set Info
                     VStack(alignment: .leading, spacing: 2) {
-                        Text("Set \(set.order + 1)")
+                        Text("set.number".localized(set.order + 1))
                             .font(.subheadline.weight(.medium))
                             .foregroundStyle(.primary)
 
                         HStack(spacing: 8) {
-                            Text("\(set.actualReps) reps")
+                            Text("set.reps".localized(set.actualReps))
                             Text("×")
                                 .foregroundStyle(.secondary)
-                            Text(String(format: "%.2f kg", set.actualWeight))
+                            Text("set.weight".localized(set.actualWeight))
                         }
                         .font(.caption)
                         .foregroundStyle(.secondary)
@@ -589,8 +589,8 @@ struct WorkoutSetRow: View {
             .padding(.vertical, 8)
             .padding(.horizontal, 12)
             .accessibilityElement(children: .combine)
-            .accessibilityLabel("Set \(set.order + 1): \(set.actualReps) reps, \(String(format: "%.2f", set.actualWeight)) kilograms")
-            .accessibilityHint(isExpanded ? "Tap to collapse" : "Tap to expand and edit")
+            .accessibilityLabel("accessibility.set.label".localized(set.order + 1, set.actualReps, set.actualWeight))
+            .accessibilityHint(isExpanded ? "accessibility.set.hint.expanded".localized : "accessibility.set.hint.collapsed".localized)
             .accessibilityAddTraits(.isButton)
 
             // Expanded inline editor
@@ -603,7 +603,7 @@ struct WorkoutSetRow: View {
                         // Reps input with contextual banner
                         VStack(spacing: 8) {
                             HorizontalStepper(
-                                title: "Reps",
+                                title: "set.reps_label".localized,
                                 value: $editingReps,
                                 range: 1...100,
                                 step: 1
@@ -640,7 +640,7 @@ struct WorkoutSetRow: View {
                         // Weight input with contextual banner
                         VStack(spacing: 8) {
                             WeightInput(
-                                title: "Weight (kg)",
+                                title: "set.weight_label".localized,
                                 weight: $editingWeight,
                                 increment: 0.25
                             ) { newValue in
@@ -675,10 +675,10 @@ struct WorkoutSetRow: View {
 
                         // Show planned values for reference
                         HStack {
-                            Text("Planned:")
+                            Text("set.planned".localized)
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
-                            Text("\(set.plannedReps) reps × \(String(format: "%.2f kg", set.plannedWeight))")
+                            Text("set.planned_detail".localized(set.plannedReps, set.plannedWeight))
                                 .font(.caption.weight(.medium))
                                 .foregroundStyle(.secondary)
                             Spacer()
@@ -693,7 +693,7 @@ struct WorkoutSetRow: View {
                             HStack(spacing: 6) {
                                 Image(systemName: "trash")
                                     .font(.subheadline)
-                                Text("Delete Set")
+                                Text("set.delete".localized)
                                     .font(.subheadline.weight(.medium))
                             }
                             .foregroundStyle(.red)
@@ -743,7 +743,7 @@ struct ActionBar: View {
                 Button(role: .destructive) {
                     onCancel()
                 } label: {
-                    Text("Cancel")
+                    Text("workout.cancel".localized)
                         .frame(maxWidth: .infinity)
                         .frame(height: 50)
                 }
@@ -752,7 +752,7 @@ struct ActionBar: View {
                 Button {
                     onFinish()
                 } label: {
-                    Label("Finish Workout", systemImage: "checkmark.circle.fill")
+                    Label("workout.finish".localized, systemImage: "checkmark.circle.fill")
                         .frame(maxWidth: .infinity)
                         .frame(height: 50)
                 }
@@ -790,7 +790,7 @@ struct CompactRestTimer: View {
 
             // Timer text
             VStack(alignment: .leading, spacing: 2) {
-                Text("Rest Time")
+                Text("rest_timer.title".localized)
                     .font(.caption)
                     .foregroundStyle(.secondary)
 
@@ -865,17 +865,17 @@ struct DeleteExerciseConfirmationView: View {
 
             // Content
             VStack(spacing: 8) {
-                Text("Remove Exercise?")
+                Text("delete_exercise.title".localized)
                     .font(.title3.bold())
 
                 let completedCount = exercise.completedSetsCount
                 if completedCount > 0 {
-                    Text("This will remove \(completedCount) completed set\(completedCount == 1 ? "" : "s") and all other data for \(exercise.exerciseName).")
+                    Text("delete_exercise.message_with_sets".localized(completedCount, completedCount == 1 ? "" : "s", exercise.exerciseName))
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                         .multilineTextAlignment(.center)
                 } else {
-                    Text("This will remove all sets for \(exercise.exerciseName) from your workout.")
+                    Text("delete_exercise.message_no_sets".localized(exercise.exerciseName))
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                         .multilineTextAlignment(.center)
@@ -888,7 +888,7 @@ struct DeleteExerciseConfirmationView: View {
                 Button(role: .destructive) {
                     onConfirm()
                 } label: {
-                    Text("Remove")
+                    Text("delete_exercise.remove".localized)
                         .font(.headline)
                         .frame(maxWidth: .infinity)
                         .padding()
@@ -900,7 +900,7 @@ struct DeleteExerciseConfirmationView: View {
                 Button {
                     onCancel()
                 } label: {
-                    Text("Cancel")
+                    Text("delete_exercise.cancel".localized)
                         .font(.headline)
                         .frame(maxWidth: .infinity)
                         .padding()

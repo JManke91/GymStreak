@@ -42,10 +42,10 @@ struct AddExerciseToWorkoutView: View {
                                 .clipShape(RoundedRectangle(cornerRadius: 10))
 
                             VStack(alignment: .leading, spacing: 4) {
-                                Text("Create New Exercise")
+                                Text("add_to_workout.create_new".localized)
                                     .font(.headline)
                                     .foregroundStyle(.primary)
-                                Text("Add a custom exercise to your library")
+                                Text("add_to_workout.create_description".localized)
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
                             }
@@ -102,14 +102,14 @@ struct AddExerciseToWorkoutView: View {
                             .accessibilityHint("This exercise is already in your current workout")
                         }
                     } header: {
-                        Label("Already in Workout", systemImage: "checkmark.circle.fill")
+                        Label("add_to_workout.already_added".localized, systemImage: "checkmark.circle.fill")
                     }
                 }
 
                 // Section 2: Available Exercises
                 let availableExercises = filteredExercises.filter { !isExerciseAlreadyInWorkout($0) }
                 if !availableExercises.isEmpty {
-                    Section("Available Exercises") {
+                    Section("add_to_workout.available".localized) {
                         ForEach(availableExercises) { exercise in
                             Button {
                                 addExercise(exercise)
@@ -160,12 +160,12 @@ struct AddExerciseToWorkoutView: View {
                 }
             }
             .listStyle(.insetGrouped)
-            .navigationTitle("Add Exercise")
+            .navigationTitle("add_to_workout.title".localized)
             .navigationBarTitleDisplayMode(.inline)
-            .searchable(text: $searchText, prompt: "Search exercises or muscle groups")
+            .searchable(text: $searchText, prompt: "add_to_workout.search".localized)
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
-                    Button("Cancel") {
+                    Button("action.cancel".localized) {
                         dismiss()
                     }
                 }

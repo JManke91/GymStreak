@@ -43,14 +43,14 @@ struct RestTimerConfigView: View {
                             .foregroundStyle(isRestTimerEnabled ? Color.appAccent : .secondary)
 
                         if isRestTimerEnabled {
-                            Text("Rest:")
+                            Text("rest_timer.rest".localized)
                                 .font(.subheadline)
                                 .foregroundStyle(.secondary)
                             Text(TimeFormatting.formatRestTime(restTime))
                                 .font(.subheadline.weight(.medium))
                                 .foregroundStyle(Color.appAccent)
                         } else {
-                            Text("Set Rest Timer")
+                            Text("rest_timer.set".localized)
                                 .font(.subheadline.weight(.medium))
                                 .foregroundStyle(.secondary)
                         }
@@ -74,8 +74,8 @@ struct RestTimerConfigView: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .accessibilityLabel(isRestTimerEnabled ? "Rest timer: \(TimeFormatting.formatRestTime(restTime))" : "Rest timer disabled")
-            .accessibilityHint(isExpanded ? "Tap to collapse" : "Tap to enable and configure")
+            .accessibilityLabel(isRestTimerEnabled ? "rest_timer.config.enabled".localized(TimeFormatting.formatRestTime(restTime)) : "rest_timer.config.disabled".localized)
+            .accessibilityHint(isExpanded ? "accessibility.set.hint.expanded".localized : "Tap to enable and configure")
             .accessibilityAddTraits(.isButton)
 
             // Expanded configuration
@@ -131,7 +131,7 @@ struct RestTimerConfigView: View {
                             HStack {
                                 Image(systemName: "timer.slash")
                                     .font(.subheadline)
-                                Text("Disable Rest Timer")
+                                Text("rest_timer.disable".localized)
                                     .font(.subheadline.weight(.medium))
                             }
                             .foregroundStyle(.red)

@@ -21,43 +21,43 @@ struct EditExerciseView: View {
     var body: some View {
         NavigationView {
             List {
-                Section("Exercise Details") {
-                    TextField("Exercise Name", text: $exerciseName)
-                    
-                    Picker("Muscle Group", selection: $muscleGroup) {
+                Section("edit_exercise.details".localized) {
+                    TextField("exercises.name".localized, text: $exerciseName)
+
+                    Picker("exercises.muscle_group".localized, selection: $muscleGroup) {
                         ForEach(MuscleGroups.all, id: \.self) { muscleGroup in
                             Text(muscleGroup).tag(muscleGroup)
                         }
                     }
-                    
-                    TextField("Description (Optional)", text: $exerciseDescription, axis: .vertical)
+
+                    TextField("edit_exercise.description_optional".localized, text: $exerciseDescription, axis: .vertical)
                         .lineLimit(3...6)
                 }
             }
-            .navigationTitle("Edit Exercise")
+            .navigationTitle("edit_exercise.title".localized)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
-                    Button("Cancel") {
+                    Button("action.cancel".localized) {
                         dismiss()
                     }
                 }
-                
+
                 ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("Save") {
+                    Button("action.save".localized) {
                         saveExercise()
                     }
                     .disabled(exerciseName.isEmpty)
                 }
             }
-            .alert("Delete Exercise", isPresented: $showingDeleteAlert) {
-                Button("Delete", role: .destructive) {
+            .alert("edit_exercise.delete_title".localized, isPresented: $showingDeleteAlert) {
+                Button("action.delete".localized, role: .destructive) {
                     viewModel.deleteExercise(exercise)
                     dismiss()
                 }
-                Button("Cancel", role: .cancel) {}
+                Button("action.cancel".localized, role: .cancel) {}
             } message: {
-                Text("Are you sure you want to delete '\(exercise.name)'? This action cannot be undone.")
+                Text("edit_exercise.delete_message".localized(exercise.name))
             }
         }
     }

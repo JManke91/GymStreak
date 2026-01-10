@@ -76,14 +76,14 @@ struct AddExerciseToRoutineView: View {
                             .accessibilityHint("This exercise is already in your routine")
                         }
                     } header: {
-                        Label("Already in Routine", systemImage: "checkmark.circle.fill")
+                        Label("add_to_routine.already_added".localized, systemImage: "checkmark.circle.fill")
                     }
                 }
 
                 // Section 2: Available Exercises
                 let availableExercises = filteredExercises.filter { !isExerciseAlreadyInRoutine($0) }
                 if !availableExercises.isEmpty {
-                    Section("Available Exercises") {
+                    Section("add_to_routine.available".localized) {
                         ForEach(availableExercises) { exercise in
                             NavigationLink(value: exercise) {
                                 HStack(spacing: 12) {
@@ -134,19 +134,19 @@ struct AddExerciseToRoutineView: View {
                         HStack {
                             Image(systemName: "plus.circle.fill")
                                 .foregroundColor(.accentColor)
-                            Text("Create New Exercise")
+                            Text("add_to_routine.create_new".localized)
                                 .foregroundColor(.accentColor)
                         }
                     }
                 }
             }
             .listStyle(.insetGrouped)
-            .navigationTitle("Choose Exercise")
+            .navigationTitle("add_to_routine.title".localized)
             .navigationBarTitleDisplayMode(.inline)
-            .searchable(text: $searchText, prompt: "Search exercises or muscle groups")
+            .searchable(text: $searchText, prompt: "add_to_routine.search".localized)
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
-                    Button("Cancel") {
+                    Button("action.cancel".localized) {
                         dismiss()
                     }
                 }
@@ -213,16 +213,16 @@ struct ConfigureExerciseSetsView: View {
 
     var body: some View {
         List {
-            Section("Exercise Info") {
+            Section("configure_exercise.info".localized) {
                 HStack {
-                    Text("Name")
+                    Text("exercises.name".localized)
                     Spacer()
                     Text(exercise.name)
                         .foregroundColor(.secondary)
                 }
 
                 HStack {
-                    Text("Muscle Group")
+                    Text("exercises.muscle_group".localized)
                     Spacer()
                     Text(exercise.muscleGroup)
                         .foregroundColor(.secondary)
@@ -230,7 +230,7 @@ struct ConfigureExerciseSetsView: View {
 
                 if !exercise.exerciseDescription.isEmpty {
                     HStack {
-                        Text("Description")
+                        Text("exercises.description".localized)
                         Spacer()
                         Text(exercise.exerciseDescription)
                             .foregroundColor(.secondary)
@@ -239,7 +239,7 @@ struct ConfigureExerciseSetsView: View {
                 }
             }
 
-            Section("Sets") {
+            Section("configure_exercise.sets".localized) {
                 ForEach(Array(sets.enumerated()), id: \.offset) { index, set in
                     VStack(alignment: .leading, spacing: 0) {
                         Button(action: {
@@ -332,7 +332,7 @@ struct ConfigureExerciseSetsView: View {
 
                 VStack(spacing: 4) {
                     Button(action: addNewSet) {
-                        Text("Add Set")
+                        Text("exercise.add_set".localized)
                             .foregroundColor(Color.appAccent)
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 8)
@@ -343,7 +343,7 @@ struct ConfigureExerciseSetsView: View {
 
                     if !sets.isEmpty {
                         Button(action: duplicateLastSet) {
-                            Text("Duplicate Last Set")
+                            Text("configure_exercise.duplicate_set".localized)
                                 .foregroundColor(.green)
                                 .frame(maxWidth: .infinity)
                                 .padding(.vertical, 8)
@@ -355,9 +355,9 @@ struct ConfigureExerciseSetsView: View {
                 }
             }
 
-            Section("Rest Timer") {
+            Section("configure_exercise.rest_timer".localized) {
                 HStack {
-                    Text("Rest Time Between Sets")
+                    Text("configure_exercise.rest_time_between_sets".localized)
                     Spacer()
                     Text(TimeFormatting.formatRestTime(globalRestTime))
                 }
@@ -370,11 +370,11 @@ struct ConfigureExerciseSetsView: View {
                     }
             }
         }
-        .navigationTitle("Add to Routine")
+        .navigationTitle("add_to_routine.add_title".localized)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
-                Button("Save") {
+                Button("action.save".localized) {
                     saveExerciseToRoutine()
                 }
                 .disabled(sets.isEmpty)
@@ -467,24 +467,24 @@ struct CreateExerciseInlineView: View {
 
     var body: some View {
         Form {
-            Section("Exercise Details") {
-                TextField("Exercise Name", text: $exerciseName)
+            Section {
+                TextField("exercises.name".localized, text: $exerciseName)
 
-                Picker("Muscle Group", selection: $muscleGroup) {
+                Picker("exercises.muscle_group".localized, selection: $muscleGroup) {
                     ForEach(MuscleGroups.all, id: \.self) { muscleGroup in
                         Text(muscleGroup).tag(muscleGroup)
                     }
                 }
 
-                TextField("Description (Optional)", text: $exerciseDescription, axis: .vertical)
+                TextField("add_exercise.description_optional".localized, text: $exerciseDescription, axis: .vertical)
                     .lineLimit(3...6)
             }
         }
-        .navigationTitle("New Exercise")
+        .navigationTitle("add_exercise.title".localized)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
-                Button("Save") {
+                Button("action.save".localized) {
                     saveExercise()
                 }
                 .disabled(exerciseName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)

@@ -22,17 +22,17 @@ struct ContentView: View {
         TabView {
             RoutinesView()
                 .tabItem {
-                    Label("Routines", systemImage: "list.bullet")
+                    Label("tab.routines".localized, systemImage: "list.bullet")
                 }
 
             ExercisesView()
                 .tabItem {
-                    Label("Exercises", systemImage: "dumbbell.fill")
+                    Label("tab.exercises".localized, systemImage: "dumbbell.fill")
                 }
 
             WorkoutHistoryView(viewModel: workoutViewModel)
                 .tabItem {
-                    Label("History", systemImage: "clock.fill")
+                    Label("tab.history".localized, systemImage: "clock.fill")
                 }
         }
         .tint(Color.appAccent)

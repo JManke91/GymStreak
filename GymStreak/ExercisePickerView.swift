@@ -49,12 +49,12 @@ struct ExercisePickerView: View {
                     }
                 }
             }
-            .searchable(text: $searchText, prompt: "Search exercises or muscle groups")
-            .navigationTitle("Choose Exercise")
+            .searchable(text: $searchText, prompt: "exercise_picker.search".localized)
+            .navigationTitle("exercise_picker.title".localized)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("Cancel") {
+                    Button("action.cancel".localized) {
                         dismiss()
                     }
                 }

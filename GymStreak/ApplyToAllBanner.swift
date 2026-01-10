@@ -54,9 +54,13 @@ struct ApplyToAllBanner: View {
 
     private var labelText: String {
         if let type = type {
-            return "Apply \(type.label) to all \(setCount)?"
+            if type == .reps {
+                return "apply_to_all.reps".localized(setCount)
+            } else {
+                return "apply_to_all.weight".localized(setCount)
+            }
         } else {
-            return "Apply to all \(setCount)?"
+            return "apply_to_all.generic".localized(setCount)
         }
     }
 
@@ -81,7 +85,7 @@ struct ApplyToAllBanner: View {
                 UIImpactFeedbackGenerator(style: .medium).impactOccurred()
                 onApply()
             } label: {
-                Text("Apply")
+                Text("apply_to_all.apply".localized)
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.white)
                     .padding(.horizontal, 12)

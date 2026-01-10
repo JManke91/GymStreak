@@ -64,6 +64,20 @@
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		A67A49202F115F72002A3457 /* Exceptions for "GymStreak" folder in "GymStreakWidgetsExtension" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				"/Localized: Extensions/Localizable.strings",
+			);
+			target = A6FBC4E92EC91C1C0095483C /* GymStreakWidgetsExtension */;
+		};
+		A67A49212F115F72002A3457 /* Exceptions for "GymStreak" folder in "GymStreakWatch Watch App" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				"/Localized: Extensions/Localizable.strings",
+			);
+			target = A6FBC5CB2ECCED0F0095483C /* GymStreakWatch Watch App */;
+		};
 		A6FBC4FF2EC91C1E0095483C /* Exceptions for "GymStreakWidgets" folder in "GymStreakWidgetsExtension" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
@@ -76,6 +90,10 @@
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		A6A3406D2E4E6F360017A4F7 /* GymStreak */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				A67A49202F115F72002A3457 /* Exceptions for "GymStreak" folder in "GymStreakWidgetsExtension" target */,
+				A67A49212F115F72002A3457 /* Exceptions for "GymStreak" folder in "GymStreakWatch Watch App" target */,
+			);
 			path = GymStreak;
 			sourceTree = "<group>";
 		};
@@ -251,6 +269,7 @@
 			knownRegions = (
 				en,
 				Base,
+				de,
 			);
 			mainGroup = A6A340622E4E6F360017A4F7;
 			minimizedProjectReferenceProxies = 1;

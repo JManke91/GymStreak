@@ -10,9 +10,9 @@ struct WorkoutHistoryView: View {
             Group {
                 if viewModel.workoutHistory.isEmpty {
                     ContentUnavailableView {
-                        Label("No Workouts Yet", systemImage: "figure.strengthtraining.traditional")
+                        Label("history.empty.title".localized, systemImage: "figure.strengthtraining.traditional")
                     } description: {
-                        Text("Start your first workout to see your history here")
+                        Text("history.empty.description".localized)
                     }
                 } else {
                     List {
@@ -34,7 +34,7 @@ struct WorkoutHistoryView: View {
                     }
                 }
             }
-            .navigationTitle("History")
+            .navigationTitle("history.title".localized)
             .navigationBarTitleDisplayMode(.large)
             .onAppear {
                 viewModel.updateModelContext(modelContext)

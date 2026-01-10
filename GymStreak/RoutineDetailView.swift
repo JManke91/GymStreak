@@ -33,11 +33,11 @@ struct RoutineDetailView: View {
             Section {
                 if routine.routineExercises.isEmpty {
                     ContentUnavailableView {
-                        Label("No Exercises", systemImage: "dumbbell")
+                        Label("routine.empty.title".localized, systemImage: "dumbbell")
                     } description: {
-                        Text("Add exercises to build your workout routine")
+                        Text("routine.empty.description".localized)
                     } actions: {
-                        Button("Add Exercise") {
+                        Button("routine.add_exercise".localized) {
                             showingAddExercise = true
                         }
                         .buttonStyle(.borderedProminent)
@@ -198,7 +198,7 @@ struct RoutineDetailView: View {
                                         Image(systemName: "plus.circle.fill")
                                             .font(.subheadline)
                                             .fontWeight(.medium)
-                                        Text("Add Set")
+                                        Text("exercise.add_set".localized)
                                             .font(.subheadline)
                                             .fontWeight(.semibold)
                                     }
@@ -240,7 +240,7 @@ struct RoutineDetailView: View {
                                 .frame(width: 36, height: 36)
                                 .background(Circle().fill(Color.green))
 
-                            Text("Add Exercise")
+                            Text("routine.add_exercise".localized)
                                 .font(.body.weight(.semibold))
 
                             Spacer()
@@ -257,10 +257,10 @@ struct RoutineDetailView: View {
                 }
             } header: {
                 HStack {
-                    Text("Exercises")
+                    Text("routine.exercises".localized)
                     Spacer()
                     if !routine.routineExercises.isEmpty {
-                        Button(isEditMode ? "Done" : "Edit") {
+                        Button(isEditMode ? "action.done".localized : "action.edit".localized) {
                             withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
                                 isEditMode.toggle()
                                 if isEditMode {
@@ -271,7 +271,7 @@ struct RoutineDetailView: View {
                                     // Announce to VoiceOver users
                                     UIAccessibility.post(
                                         notification: .announcement,
-                                        argument: "Edit mode. Drag exercises to reorder them."
+                                        argument: "routine.edit_mode_announcement".localized
                                     )
 
                                     // Show hint for first-time users
@@ -316,7 +316,7 @@ struct RoutineDetailView: View {
                         workoutViewModel.startWorkout(routine: routine)
                         showingActiveWorkout = true
                     } label: {
-                        Label("Start Workout", systemImage: "play.circle.fill")
+                        Label("routine.start_workout".localized, systemImage: "play.circle.fill")
                             .font(.headline)
                             .frame(maxWidth: .infinity)
                             .frame(height: 50)
@@ -333,10 +333,10 @@ struct RoutineDetailView: View {
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
                 Menu {
-                    Button("Edit Routine") {
+                    Button("routine.edit".localized) {
                         showingEditRoutine = true
                     }
-                    Button("Delete Routine", role: .destructive) {
+                    Button("routine.delete".localized, role: .destructive) {
                         showingDeleteAlert = true
                     }
                 } label: {
@@ -352,7 +352,7 @@ struct RoutineDetailView: View {
                             .font(.title3)
                             .foregroundStyle(.white)
 
-                        Text("Drag exercises to reorder")
+                        Text("routine.drag_to_reorder".localized)
                             .font(.subheadline.weight(.medium))
                             .foregroundStyle(.white)
 
@@ -395,13 +395,13 @@ struct RoutineDetailView: View {
         .sheet(isPresented: $showingEditRoutine) {
             EditRoutineNameView(routine: routine, viewModel: viewModel)
         }
-        .alert("Delete Routine", isPresented: $showingDeleteAlert) {
-            Button("Delete", role: .destructive) {
+        .alert("routine.delete".localized, isPresented: $showingDeleteAlert) {
+            Button("action.delete".localized, role: .destructive) {
                 viewModel.deleteRoutine(routine)
             }
-            Button("Cancel", role: .cancel) {}
+            Button("action.cancel".localized, role: .cancel) {}
         } message: {
-            Text("Are you sure you want to delete '\(routine.name)'? This action cannot be undone.")
+            Text("routine.delete.confirm".localized)
         }
         .fullScreenCover(isPresented: $showingActiveWorkout) {
             ActiveWorkoutView(viewModel: workoutViewModel, exercisesViewModel: exercisesViewModel)
@@ -514,14 +514,9 @@ struct ExerciseHeaderView: View {
                     .font(.system(.body, design: .rounded, weight: .semibold))
                     .foregroundStyle(.primary)
 
-                HStack(spacing: 4) {
-                    Text("\(routineExercise.sets.count)")
-                        .font(.subheadline.weight(.medium))
-                        .monospacedDigit()
-                    Text(routineExercise.sets.count == 1 ? "set" : "sets")
-                        .font(.subheadline)
-                }
-                .foregroundStyle(.secondary)
+                Text("routine.sets_count".localized(routineExercise.sets.count))
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
             }
 
             Spacer()
@@ -598,9 +593,14 @@ struct RoutineSetRowView: View {
                         .background(Color.appAccent)
                         .clipShape(Circle())
 
-                    Text("\(set.reps) reps × \(set.weight, specifier: "%.2f") kg")
-                        .font(.subheadline.weight(.medium))
-                        .foregroundStyle(.primary)
+                    HStack(spacing: 8) {
+                        Text("set.reps".localized(set.reps))
+                        Text("×")
+                            .foregroundStyle(.secondary)
+                        Text("set.weight".localized(set.weight))
+                    }
+                    .font(.subheadline.weight(.medium))
+                    .foregroundStyle(.primary)
 
                     Spacer()
 
@@ -615,8 +615,8 @@ struct RoutineSetRowView: View {
             .padding(.vertical, 8)
             .padding(.horizontal, 12)
             .accessibilityElement(children: .combine)
-            .accessibilityLabel("Set \(index + 1): \(set.reps) reps, \(String(format: "%.2f", set.weight)) kilograms")
-            .accessibilityHint(isExpanded ? "Tap to collapse" : "Tap to expand and edit")
+            .accessibilityLabel("accessibility.set.label".localized(index + 1, set.reps, set.weight))
+            .accessibilityHint(isExpanded ? "accessibility.set.hint.expanded".localized : "accessibility.set.hint.collapsed".localized)
             .accessibilityAddTraits(.isButton)
 
             // Expanded edit form
@@ -628,7 +628,7 @@ struct RoutineSetRowView: View {
                     // Reps input with contextual banner
                     VStack(spacing: 8) {
                         HorizontalStepper(
-                            title: "Reps",
+                            title: "set.reps_label".localized,
                             value: $editingReps,
                             range: 1...100,
                             step: 1
@@ -654,7 +654,7 @@ struct RoutineSetRowView: View {
                     // Weight input with contextual banner
                     VStack(spacing: 8) {
                         WeightInput(
-                            title: "Weight (kg)",
+                            title: "set.weight_label".localized,
                             weight: $editingWeight,
                             increment: 0.25
                         ) { newValue in
@@ -683,7 +683,7 @@ struct RoutineSetRowView: View {
                         HStack(spacing: 6) {
                             Image(systemName: "trash")
                                 .font(.subheadline)
-                            Text("Delete Set")
+                            Text("set.delete".localized)
                                 .font(.subheadline.weight(.medium))
                         }
                         .foregroundStyle(.red)
@@ -734,17 +734,17 @@ struct EditRoutineNameView: View {
                     TextField("Routine Name", text: $routineName)
                 }
             }
-            .navigationTitle("Edit Routine")
+            .navigationTitle("routine.edit".localized)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") {
+                    Button("action.cancel".localized) {
                         dismiss()
                     }
                 }
 
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Save") {
+                    Button("action.save".localized) {
                         saveRoutine()
                     }
                     .disabled(routineName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)

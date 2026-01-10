@@ -186,7 +186,7 @@ struct WeightInput: View {
         .toolbar {
             ToolbarItemGroup(placement: .keyboard) {
                 Spacer()
-                Button("Done") {
+                Button("action.done".localized) {
                     isFocused = false
                 }
                 .fontWeight(.semibold)

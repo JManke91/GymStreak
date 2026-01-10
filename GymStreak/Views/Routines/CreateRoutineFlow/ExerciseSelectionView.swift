@@ -30,7 +30,7 @@ struct ExerciseSelectionView: View {
                     HStack {
                         Image(systemName: "info.circle")
                             .foregroundColor(Color.appAccent)
-                        Text("\(alreadyAddedExercises.count) exercise\(alreadyAddedExercises.count == 1 ? "" : "s") already added")
+                        Text("exercise_selection.already_added".localized(alreadyAddedExercises.count))
                             .font(.caption)
                             .foregroundColor(.secondary)
                     }
@@ -85,7 +85,7 @@ struct ExerciseSelectionView: View {
                         Image(systemName: "plus.circle.fill")
                             .foregroundColor(.accentColor)
 
-                        Text("Create New Exercise")
+                        Text("exercise_selection.create_new".localized)
                             .foregroundColor(.accentColor)
 
                         Spacer()
@@ -97,9 +97,9 @@ struct ExerciseSelectionView: View {
                 }
             }
         }
-        .navigationTitle("Select Exercise")
+        .navigationTitle("exercise_selection.title".localized)
         .navigationBarTitleDisplayMode(.inline)
-        .searchable(text: $searchText, prompt: "Search exercises")
+        .searchable(text: $searchText, prompt: "exercise_selection.search".localized)
         .navigationDestination(isPresented: $navigateToConfigureExercise) {
             if let exercise = selectedExercise {
                 ConfigureExerciseView(

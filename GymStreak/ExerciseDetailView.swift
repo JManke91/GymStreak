@@ -12,12 +12,12 @@ struct ExerciseDetailView: View {
 
     var body: some View {
         List {
-            Section("Exercise Details") {
+            Section("exercise_detail.details".localized) {
                 HStack {
-                    Text("Name")
+                    Text("exercises.name".localized)
                     Spacer()
                     if isEditing {
-                        TextField("Exercise Name", text: $exerciseName)
+                        TextField("exercises.name".localized, text: $exerciseName)
                             .multilineTextAlignment(.trailing)
                     } else {
                         Text(exercise.name)
@@ -26,10 +26,10 @@ struct ExerciseDetailView: View {
                 }
 
                 HStack {
-                    Text("Muscle Group")
+                    Text("exercises.muscle_group".localized)
                     Spacer()
                     if isEditing {
-                        Picker("Muscle Group", selection: $muscleGroup) {
+                        Picker("exercises.muscle_group".localized, selection: $muscleGroup) {
                             ForEach(MuscleGroups.all, id: \.self) { muscleGroup in
                                 Text(muscleGroup).tag(muscleGroup)
                             }
@@ -43,10 +43,10 @@ struct ExerciseDetailView: View {
 
                 if isEditing || !exercise.exerciseDescription.isEmpty {
                     HStack(alignment: .top) {
-                        Text("Description")
+                        Text("exercises.description".localized)
                         Spacer()
                         if isEditing {
-                            TextField("Optional", text: $exerciseDescription, axis: .vertical)
+                            TextField("exercise_detail.optional".localized, text: $exerciseDescription, axis: .vertical)
                                 .multilineTextAlignment(.trailing)
                                 .lineLimit(3...6)
                         } else {
@@ -58,16 +58,16 @@ struct ExerciseDetailView: View {
                 }
             }
 
-            Section("Info") {
+            Section("exercise_detail.info".localized) {
                 HStack {
-                    Text("Created")
+                    Text("exercise_detail.created".localized)
                     Spacer()
                     Text(exercise.createdAt, style: .date)
                         .foregroundColor(.secondary)
                 }
 
                 HStack {
-                    Text("Last Updated")
+                    Text("exercise_detail.last_updated".localized)
                     Spacer()
                     Text(exercise.updatedAt, style: .date)
                         .foregroundColor(.secondary)
@@ -79,16 +79,16 @@ struct ExerciseDetailView: View {
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
                 if isEditing {
-                    Button("Done") {
+                    Button("action.done".localized) {
                         saveExercise()
                     }
                     .disabled(exerciseName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 } else {
                     Menu {
-                        Button("Edit Exercise") {
+                        Button("exercise.edit".localized) {
                             enterEditMode()
                         }
-                        Button("Delete Exercise", role: .destructive) {
+                        Button("exercise.delete".localized, role: .destructive) {
                             showingDeleteAlert = true
                         }
                     } label: {
@@ -99,19 +99,19 @@ struct ExerciseDetailView: View {
 
             if isEditing {
                 ToolbarItem(placement: .navigationBarLeading) {
-                    Button("Cancel") {
+                    Button("action.cancel".localized) {
                         cancelEditing()
                     }
                 }
             }
         }
-        .alert("Delete Exercise", isPresented: $showingDeleteAlert) {
-            Button("Delete", role: .destructive) {
+        .alert("exercise_detail.delete_title".localized, isPresented: $showingDeleteAlert) {
+            Button("action.delete".localized, role: .destructive) {
                 viewModel.deleteExercise(exercise)
             }
-            Button("Cancel", role: .cancel) {}
+            Button("action.cancel".localized, role: .cancel) {}
         } message: {
-            Text("Are you sure you want to delete '\(exercise.name)'? This action cannot be undone.")
+            Text("exercise_detail.delete_message".localized(exercise.name))
         }
         .onAppear {
             loadExerciseData()

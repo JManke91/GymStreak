@@ -28,16 +28,16 @@ struct ConfigureExerciseView: View {
 
     var body: some View {
         Form {
-            Section("Exercise Info") {
+            Section("configure_exercise.info".localized) {
                 HStack {
-                    Text("Name")
+                    Text("exercises.name".localized)
                     Spacer()
                     Text(exercise.name)
                         .foregroundColor(.secondary)
                 }
 
                 HStack {
-                    Text("Muscle Group")
+                    Text("exercises.muscle_group".localized)
                     Spacer()
                     Text(exercise.muscleGroup)
                         .foregroundColor(.secondary)
@@ -45,7 +45,7 @@ struct ConfigureExerciseView: View {
 
                 if !exercise.exerciseDescription.isEmpty {
                     HStack(alignment: .top) {
-                        Text("Description")
+                        Text("exercises.description".localized)
                         Spacer()
                         Text(exercise.exerciseDescription)
                             .foregroundColor(.secondary)
@@ -54,15 +54,15 @@ struct ConfigureExerciseView: View {
                 }
             }
 
-            Section("Sets") {
+            Section("configure_exercise.sets".localized) {
                 if sets.isEmpty {
                     // Empty state
                     VStack(spacing: 8) {
-                        Text("No sets configured")
+                        Text("configure_exercise.empty.title".localized)
                             .foregroundColor(.secondary)
                             .font(.caption)
 
-                        Text("Tap 'Add Set' below to start")
+                        Text("configure_exercise.empty.description".localized)
                             .foregroundColor(.secondary)
                             .font(.caption2)
                     }
@@ -85,11 +85,11 @@ struct ConfigureExerciseView: View {
                                 }
                             }) {
                                 HStack {
-                                    Text("Set \(index + 1)")
+                                    Text("set.number".localized(index + 1))
                                         .font(.headline)
                                         .foregroundColor(.primary)
                                     Spacer()
-                                    Text("\(set.reps) reps • \(set.weight, specifier: "%.1f") kg")
+                                    Text("configure_exercise.set_detail".localized(set.reps, set.weight))
                                         .foregroundColor(.secondary)
                                     Image(systemName: "chevron.right")
                                         .font(.caption)
@@ -105,7 +105,7 @@ struct ConfigureExerciseView: View {
                             if editingSetIndex == index {
                                 VStack(spacing: 12) {
                                     HStack {
-                                        Text("Reps:")
+                                        Text("set.reps_label".localized + ":")
                                         Spacer()
                                         Stepper("\(editingReps)", value: $editingReps, in: 1...100)
                                             .onChange(of: editingReps) { _, _ in
@@ -114,7 +114,7 @@ struct ConfigureExerciseView: View {
                                     }
 
                                     HStack {
-                                        Text("Weight (kg):")
+                                        Text("set.weight_label".localized + ":")
                                         Spacer()
                                         TextField("0.0", value: $editingWeight, format: .number)
                                             .keyboardType(.decimalPad)
@@ -138,7 +138,7 @@ struct ConfigureExerciseView: View {
 
                 VStack(spacing: 4) {
                     Button(action: addNewSet) {
-                        Text("Add Set")
+                        Text("exercise.add_set".localized)
                             .foregroundColor(Color.appAccent)
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 8)
@@ -149,7 +149,7 @@ struct ConfigureExerciseView: View {
 
                     if !sets.isEmpty {
                         Button(action: duplicateLastSet) {
-                            Text("Duplicate Last Set")
+                            Text("configure_exercise.duplicate_set".localized)
                                 .foregroundColor(.green)
                                 .frame(maxWidth: .infinity)
                                 .padding(.vertical, 8)
@@ -161,9 +161,9 @@ struct ConfigureExerciseView: View {
                 }
             }
 
-            Section("Rest Timer") {
+            Section("configure_exercise.rest_timer".localized) {
                 HStack {
-                    Text("Rest Time Between Sets")
+                    Text("configure_exercise.rest_time_between_sets".localized)
                     Spacer()
                     Text(TimeFormatting.formatRestTime(globalRestTime))
                 }
@@ -181,7 +181,7 @@ struct ConfigureExerciseView: View {
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 if !isEditMode {
-                    Button("Add to Routine") {
+                    Button("configure_exercise.add_to_routine".localized) {
                         addToRoutine()
                     }
                     .disabled(sets.isEmpty)

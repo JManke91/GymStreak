@@ -14,30 +14,30 @@ struct AddExerciseView: View {
     var body: some View {
         NavigationView {
             Form {
-                Section("Exercise Details") {
-                    TextField("Exercise Name", text: $exerciseName)
-                    
-                    Picker("Muscle Group", selection: $muscleGroup) {
+                Section("add_exercise.details".localized) {
+                    TextField("exercises.name".localized, text: $exerciseName)
+
+                    Picker("exercises.muscle_group".localized, selection: $muscleGroup) {
                         ForEach(MuscleGroups.all, id: \.self) { muscleGroup in
                             Text(muscleGroup).tag(muscleGroup)
                         }
                     }
-                    
-                    TextField("Description (Optional)", text: $exerciseDescription, axis: .vertical)
+
+                    TextField("add_exercise.description_optional".localized, text: $exerciseDescription, axis: .vertical)
                         .lineLimit(3...6)
                 }
             }
-            .navigationTitle("New Exercise")
+            .navigationTitle("add_exercise.title".localized)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
-                    Button("Cancel") {
+                    Button("action.cancel".localized) {
                         dismiss()
                     }
                 }
-                
+
                 ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("Save") {
+                    Button("action.save".localized) {
                         saveExercise()
                     }
                     .disabled(exerciseName.isEmpty)

@@ -23,10 +23,10 @@ struct CreateRoutineView: View {
     var body: some View {
         Form {
             Section {
-                TextField("Routine Name", text: $routineName)
+                TextField("create_routine.name_placeholder".localized, text: $routineName)
                     .font(.title3)
             } header: {
-                Text("ROUTINE NAME")
+                Text("create_routine.name".localized.uppercased())
             }
 
             Section {
@@ -38,10 +38,10 @@ struct CreateRoutineView: View {
                             .foregroundColor(.secondary)
 
                         VStack(spacing: 4) {
-                            Text("Add Your First Exercise")
+                            Text("create_routine.empty.title".localized)
                                 .font(.headline)
 
-                            Text("Build your routine by adding exercises and configuring sets")
+                            Text("create_routine.empty.description".localized)
                                 .font(.caption)
                                 .foregroundColor(.secondary)
                                 .multilineTextAlignment(.center)
@@ -81,7 +81,7 @@ struct CreateRoutineView: View {
                             Button(role: .destructive) {
                                 deleteExercise(pending)
                             } label: {
-                                Label("Delete", systemImage: "trash")
+                                Label("action.delete".localized, systemImage: "trash")
                             }
                         }
                     }
@@ -100,7 +100,7 @@ struct CreateRoutineView: View {
                     }
                 )) {
                     HStack {
-                        Text("Add Exercise")
+                        Text("routine.add_exercise".localized)
                         Spacer()
                         Image(systemName: "chevron.right")
                             .font(.caption)
@@ -108,14 +108,14 @@ struct CreateRoutineView: View {
                     }
                 }
             } header: {
-                Text("EXERCISES")
+                Text("exercises.title".localized.uppercased())
             }
         }
-        .navigationTitle("New Routine")
+        .navigationTitle("create_routine.new_title".localized)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .cancellationAction) {
-                Button("Cancel") {
+                Button("action.cancel".localized) {
                     if hasUnsavedChanges {
                         showingCancelAlert = true
                     } else {
@@ -125,19 +125,19 @@ struct CreateRoutineView: View {
             }
 
             ToolbarItem(placement: .confirmationAction) {
-                Button("Save") {
+                Button("action.save".localized) {
                     saveRoutine()
                 }
                 .disabled(!canSave)
             }
         }
-        .alert("Discard Routine?", isPresented: $showingCancelAlert) {
-            Button("Keep Editing", role: .cancel) { }
-            Button("Discard", role: .destructive) {
+        .alert("create_routine.discard.title".localized, isPresented: $showingCancelAlert) {
+            Button("create_routine.keep_editing".localized, role: .cancel) { }
+            Button("create_routine.discard".localized, role: .destructive) {
                 dismiss()
             }
         } message: {
-            Text("You have unsaved changes. Are you sure you want to discard this routine?")
+            Text("create_routine.discard.message".localized)
         }
     }
 

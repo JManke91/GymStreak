@@ -17,25 +17,25 @@ struct RoutineExerciseDetailView: View {
     
     var body: some View {
         List {
-            Section("Exercise Info") {
+            Section("routine_exercise_detail.section.info".localized) {
                 if let exercise = routineExercise.exercise {
                     HStack {
-                        Text("Name")
+                        Text("routine_exercise_detail.label.name".localized)
                         Spacer()
                         Text(exercise.name)
                             .foregroundColor(.secondary)
                     }
-                    
+
                     HStack {
-                        Text("Muscle Group")
+                        Text("routine_exercise_detail.label.muscle_group".localized)
                         Spacer()
                         Text(exercise.muscleGroup)
                             .foregroundColor(.secondary)
                     }
-                    
+
                     if !exercise.exerciseDescription.isEmpty {
                         HStack {
-                            Text("Description")
+                            Text("routine_exercise_detail.label.description".localized)
                             Spacer()
                             Text(exercise.exerciseDescription)
                                 .foregroundColor(.secondary)
@@ -43,19 +43,19 @@ struct RoutineExerciseDetailView: View {
                         }
                     }
                 } else {
-                    Text("Exercise not found")
+                    Text("routine_exercise_detail.error.not_found".localized)
                         .foregroundColor(.red)
                 }
-                
+
                 HStack {
-                    Text("Sets")
+                    Text("routine_exercise_detail.label.sets".localized)
                     Spacer()
                     Text("\(routineExercise.sets.count)")
                         .foregroundColor(.secondary)
                 }
             }
             
-            Section("Sets") {
+            Section("routine_exercise_detail.section.sets".localized) {
                 ForEach(Array(routineExercise.sets.enumerated()), id: \.element.id) { index, set in
                     VStack(alignment: .leading, spacing: 0) {
                         // Collapsible set header
@@ -73,11 +73,11 @@ struct RoutineExerciseDetailView: View {
                             }
                         }) {
                             HStack {
-                                Text("Set \(index + 1)")
+                                Text("routine_exercise_detail.set_number".localized(index + 1))
                                     .font(.headline)
                                     .foregroundColor(.primary)
                                 Spacer()
-                                Text("\(set.reps) reps • \(set.weight, specifier: "%.1f") kg")
+                                Text("routine_exercise_detail.set_detail".localized(set.reps, set.weight))
                                     .foregroundColor(.secondary)
                                 Image(systemName: "chevron.right")
                                     .font(.caption)
@@ -93,7 +93,7 @@ struct RoutineExerciseDetailView: View {
                         if editingSetId == set.id {
                             VStack(spacing: 12) {
                                 HStack {
-                                    Text("Reps:")
+                                    Text("routine_exercise_detail.reps_label".localized)
                                     Spacer()
                                     Stepper("\(editingReps)", value: $editingReps, in: 1...100)
                                         .onChange(of: editingReps) { _, newValue in
@@ -102,7 +102,7 @@ struct RoutineExerciseDetailView: View {
                                 }
 
                                 HStack {
-                                    Text("Weight (kg):")
+                                    Text("routine_exercise_detail.weight_label".localized)
                                     Spacer()
                                     TextField("0.0", value: $editingWeight, format: .number)
                                         .keyboardType(.decimalPad)
@@ -123,7 +123,7 @@ struct RoutineExerciseDetailView: View {
                 }
                 .onDelete(perform: deleteSets)
 
-                Button("Add Set") {
+                Button("routine_exercise_detail.add_set".localized) {
                     addNewSet()
                 }
                 .foregroundColor(Color.appAccent)
@@ -141,27 +141,27 @@ struct RoutineExerciseDetailView: View {
                     showToggle: true
                 )
             } header: {
-                Text("Rest Timer")
+                Text("routine_exercise_detail.section.rest_timer".localized)
             }
         }
         .navigationTitle(routineExercise.exercise?.name ?? "Exercise")
         .navigationBarTitleDisplayMode(.large)
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
-                Button("Delete", role: .destructive) {
+                Button("routine_exercise_detail.delete".localized, role: .destructive) {
                     showingDeleteAlert = true
                 }
             }
         }
-        .alert("Delete Exercise", isPresented: $showingDeleteAlert) {
-            Button("Delete", role: .destructive) {
+        .alert("routine_exercise_detail.delete_alert.title".localized, isPresented: $showingDeleteAlert) {
+            Button("routine_exercise_detail.delete".localized, role: .destructive) {
                 if let routine = routineExercise.routine {
                     viewModel.removeRoutineExercise(routineExercise, from: routine)
                 }
             }
-            Button("Cancel", role: .cancel) {}
+            Button("action.cancel".localized, role: .cancel) {}
         } message: {
-            Text("Are you sure you want to delete this exercise from the routine? This action cannot be undone.")
+            Text("routine_exercise_detail.delete_alert.message".localized)
         }
     }
 

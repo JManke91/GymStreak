@@ -20,11 +20,11 @@ struct RoutinesView: View {
             Group {
                 if viewModel.routines.isEmpty {
                     ContentUnavailableView {
-                        Label("No Routines Yet", systemImage: "list.bullet.clipboard")
+                        Label("routines.empty.title".localized, systemImage: "list.bullet.clipboard")
                     } description: {
-                        Text("Create your first routine to get started")
+                        Text("routines.empty.description".localized)
                     } actions: {
-                        Button("Add Routine") {
+                        Button("routines.add".localized) {
                             viewModel.showingAddRoutine = true
                         }
                         .buttonStyle(.borderedProminent)
@@ -41,10 +41,10 @@ struct RoutinesView: View {
                     }
                 }
             }
-            .navigationTitle("Routines")
+            .navigationTitle("routines.title".localized)
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("Add Routine") {
+                    Button("routines.add".localized) {
                         viewModel.showingAddRoutine = true
                     }
                 }
@@ -76,12 +76,12 @@ struct RoutinesView: View {
 
 struct RoutineRowView: View {
     let routine: Routine
-    
+
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             Text(routine.name)
                 .font(.headline)
-            Text("\(routine.routineExercises.count) exercises")
+            Text("routines.exercise_count".localized(routine.routineExercises.count))
                 .font(.caption)
                 .foregroundColor(.secondary)
         }

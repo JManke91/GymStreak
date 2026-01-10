@@ -11,7 +11,7 @@ struct WorkoutDetailView: View {
                 Section {
                     HStack {
                         VStack(alignment: .leading, spacing: 4) {
-                            Text("Date")
+                            Text("workout_detail.date".localized)
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                             Text(workout.startTime, format: .dateTime.month().day().year())
@@ -21,7 +21,7 @@ struct WorkoutDetailView: View {
                         Spacer()
 
                         VStack(alignment: .trailing, spacing: 4) {
-                            Text("Time")
+                            Text("workout_detail.time".localized)
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                             Text(workout.startTime, format: .dateTime.hour().minute())
@@ -29,17 +29,17 @@ struct WorkoutDetailView: View {
                         }
                     }
 
-                    LabeledContent("Duration") {
+                    LabeledContent("workout_detail.duration".localized) {
                         Text(formatDuration(workout.duration))
                             .font(.headline)
                     }
 
-                    LabeledContent("Sets Completed") {
-                        Text("\(workout.completedSetsCount) of \(workout.totalSetsCount)")
+                    LabeledContent("workout_detail.sets_completed".localized) {
+                        Text("workout_detail.sets_of".localized(workout.completedSetsCount, workout.totalSetsCount))
                             .font(.headline)
                     }
 
-                    LabeledContent("Completion") {
+                    LabeledContent("workout_detail.completion".localized) {
                         HStack(spacing: 4) {
                             Text("\(workout.completionPercentage)%")
                                 .font(.headline)
@@ -50,18 +50,18 @@ struct WorkoutDetailView: View {
                         }
                     }
 
-                    LabeledContent("Total Volume") {
+                    LabeledContent("workout_detail.total_volume".localized) {
                         Text(String(format: "%.1f kg", workout.totalVolume))
                             .font(.headline)
                     }
 
                     if workout.didUpdateTemplate {
-                        Label("Routine template updated", systemImage: "checkmark.circle.fill")
+                        Label("workout_detail.template_updated".localized, systemImage: "checkmark.circle.fill")
                             .font(.caption)
                             .foregroundStyle(.green)
                     }
                 } header: {
-                    Text("Workout Summary")
+                    Text("workout_detail.summary".localized)
                 }
 
                 // Notes Section
@@ -70,7 +70,7 @@ struct WorkoutDetailView: View {
                         Text(workout.notes)
                             .font(.body)
                     } header: {
-                        Text("Notes")
+                        Text("save_workout.notes".localized)
                     }
                 }
 
@@ -80,7 +80,7 @@ struct WorkoutDetailView: View {
                         WorkoutExerciseDetailCard(workoutExercise: workoutExercise)
                     }
                 } header: {
-                    Text("Exercises")
+                    Text("exercises.title".localized)
                 }
             }
             .listStyle(.insetGrouped)
@@ -88,7 +88,7 @@ struct WorkoutDetailView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Done") {
+                    Button("action.done".localized) {
                         dismiss()
                     }
                 }
@@ -129,7 +129,7 @@ struct WorkoutExerciseDetailCard: View {
                     Text(workoutExercise.exerciseName)
                         .font(.headline)
 
-                    Text("\(workoutExercise.completedSetsCount) of \(workoutExercise.sets.count) sets completed")
+                    Text("workout_detail.exercise_sets".localized(workoutExercise.completedSetsCount, workoutExercise.sets.count))
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                 }
@@ -147,17 +147,17 @@ struct WorkoutExerciseDetailCard: View {
             VStack(spacing: 8) {
                 // Header Row
                 HStack {
-                    Text("Set")
+                    Text("workout_detail.set".localized)
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(.secondary)
                         .frame(width: 40, alignment: .leading)
 
-                    Text("Planned")
+                    Text("workout_detail.planned".localized)
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(.secondary)
                         .frame(maxWidth: .infinity, alignment: .leading)
 
-                    Text("Actual")
+                    Text("workout_detail.actual".localized)
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(.secondary)
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -224,7 +224,7 @@ struct WorkoutExerciseDetailCard: View {
                                 .font(.body)
                                 .frame(width: 24)
                         } else {
-                            Text("Skipped")
+                            Text("workout_detail.skipped".localized)
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                                 .frame(maxWidth: .infinity, alignment: .leading)

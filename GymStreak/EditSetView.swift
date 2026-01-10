@@ -22,23 +22,23 @@ struct EditSetView: View {
     var body: some View {
         NavigationView {
             Form {
-                Section("Set Details") {
+                Section("edit_set.details".localized) {
                     HorizontalStepper(
-                        title: "Reps",
+                        title: "set.reps_label".localized,
                         value: $reps,
                         range: 1...100,
                         step: 1
                     )
 
                     WeightInput(
-                        title: "Weight (kg)",
+                        title: "set.weight_label".localized,
                         weight: $weight,
                         increment: 0.25
                     )
 
                     VStack(spacing: 8) {
                         HStack {
-                            Text("Rest Time")
+                            Text("edit_set.rest_time".localized)
                                 .font(.subheadline)
                             Spacer()
                             Text(TimeFormatting.formatRestTime(restTime))
@@ -55,17 +55,17 @@ struct EditSetView: View {
                     }
                 }
             }
-            .navigationTitle("Edit Set")
+            .navigationTitle("edit_set.title".localized)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
-                    Button("Cancel") {
+                    Button("action.cancel".localized) {
                         dismiss()
                     }
                 }
 
                 ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("Save") {
+                    Button("action.save".localized) {
                         saveSet()
                     }
                 }
