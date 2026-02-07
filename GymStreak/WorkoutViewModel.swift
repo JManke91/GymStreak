@@ -55,10 +55,17 @@ class WorkoutViewModel: ObservableObject {
     // HealthKit workout manager
     let healthKitManager = HealthKitWorkoutManager()
 
+    private var isUITesting: Bool {
+        ProcessInfo.processInfo.arguments.contains("-UI_TESTING")
+    }
+
     init(modelContext: ModelContext) {
         self.modelContext = modelContext
         fetchWorkoutHistory()
-        requestNotificationPermission()
+        // Skip notification permission during UI testing to avoid alert in screenshots
+        if !isUITesting {
+            requestNotificationPermission()
+        }
         cleanupStaleActivities()
         loadHealthKitPreferences()
         healthKitManager.checkAuthorizationStatus()
@@ -300,7 +307,8 @@ class WorkoutViewModel: ObservableObject {
     }
 
     private func startHealthKitSession() {
-        guard healthKitSyncEnabled && healthKitManager.isHealthKitAvailable else {
+        // Skip HealthKit during UI testing to avoid authorization alert in screenshots
+        guard !isUITesting, healthKitSyncEnabled, healthKitManager.isHealthKitAvailable else {
             return
         }
 

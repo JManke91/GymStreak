@@ -1,0 +1,3 @@
+app_identifier("com.shotat24fps.GymStreak")
+apple_id(ENV["APPLE_ID"] || "your.email@example.com")
+team_id("45VTMQ88RW")

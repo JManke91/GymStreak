@@ -1,0 +1,62 @@
+# Device configurations for App Store screenshots
+# Using iPhone 17 Pro Max for largest display (required by App Store)
+devices([
+  "iPhone 17 Pro Max"
+])
+
+# Explicitly specify iOS version to match project deployment target
+ios_version("26.2")
+
+# Languages to generate screenshots for
+languages([
+  "en-US",
+  "de-DE"
+])
+
+# Scheme must match your UI test scheme
+scheme("GymStreakUITests")
+
+# Explicitly specify iOS SDK to prevent Mac Catalyst selection
+sdk("iphonesimulator")
+
+# Build configuration
+configuration("Debug")
+
+# Output directory
+output_directory("./fastlane/screenshots")
+
+# Clear previous screenshots before running
+clear_previous_screenshots(true)
+
+# Reinstall app before running tests
+reinstall_app(true)
+
+# Erase simulator before running
+erase_simulator(true)
+
+# Number of times to retry taking a screenshot
+number_of_retries(3)
+
+# Stop after first failed test
+stop_after_first_error(false)
+
+# Concurrent simulators (disabled due to Xcode 16+ detection issues)
+concurrent_simulators(false)
+
+# Override status bar for clean screenshots
+override_status_bar(true)
+
+# Status bar override settings
+override_status_bar_arguments("--time 9:41 --dataNetwork wifi --wifiBars 3 --cellularMode active --cellularBars 4 --batteryState charged --batteryLevel 100")
+
+# Launch arguments to pass to app (triggers test mode)
+launch_arguments([
+  "-UI_TESTING",
+  "1"
+])
+
+# Build settings to exclude Watch app from simulator builds
+buildlog_path("./fastlane/logs")
+
+# Custom xcodebuild arguments to skip unavailable platforms
+xcargs("-skipPackagePluginValidation -skipMacroValidation")

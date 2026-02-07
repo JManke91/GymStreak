@@ -1,0 +1,94 @@
+default_platform(:ios)
+
+platform :ios do
+  desc "Generate screenshots for App Store (light and dark mode)"
+  lane :screenshots do
+    begin
+      # Temporarily disable Watch app dependency for simulator build
+      sh("ruby", "./disable_watch_dependency.rb", "disable")
+
+      # Run light mode screenshots
+      snapshot(
+        clean: true,
+        reinstall_app: true,
+        erase_simulator: true,
+        skip_open_summary: true,
+        buildlog_path: "./fastlane/logs",
+        dark_mode: false,
+        only_testing: ["GymStreakUITests/GymStreakUITests/testGenerateScreenshots"],
+        clear_previous_screenshots: true
+      )
+
+      # Run dark mode screenshots (don't clear previous, append to them)
+      snapshot(
+        clean: false,
+        reinstall_app: false,
+        erase_simulator: false,
+        skip_open_summary: true,
+        buildlog_path: "./fastlane/logs",
+        dark_mode: true,
+        only_testing: ["GymStreakUITests/GymStreakUITests/testGenerateScreenshotsDarkMode"],
+        clear_previous_screenshots: false
+      )
+    ensure
+      # Always restore Watch app dependency
+      sh("ruby", "./disable_watch_dependency.rb", "restore")
+    end
+  end
+
+  desc "Generate only light mode screenshots"
+  lane :screenshots_light do
+    begin
+      sh("ruby", "./disable_watch_dependency.rb", "disable")
+      snapshot(
+        clean: true,
+        reinstall_app: true,
+        erase_simulator: true,
+        skip_open_summary: true,
+        buildlog_path: "./fastlane/logs",
+        dark_mode: false,
+        only_testing: ["GymStreakUITests/GymStreakUITests/testGenerateScreenshots"]
+      )
+    ensure
+      sh("ruby", "./disable_watch_dependency.rb", "restore")
+    end
+  end
+
+  desc "Generate only dark mode screenshots"
+  lane :screenshots_dark do
+    begin
+      sh("ruby", "./disable_watch_dependency.rb", "disable")
+      snapshot(
+        clean: true,
+        reinstall_app: true,
+        erase_simulator: true,
+        skip_open_summary: true,
+        buildlog_path: "./fastlane/logs",
+        dark_mode: true,
+        only_testing: ["GymStreakUITests/GymStreakUITests/testGenerateScreenshotsDarkMode"]
+      )
+    ensure
+      sh("ruby", "./disable_watch_dependency.rb", "restore")
+    end
+  end
+
+  desc "Run UI tests without capturing screenshots"
+  lane :test_ui do
+    run_tests(
+      scheme: "GymStreak",
+      devices: ["iPhone 17 Pro Max"],
+      test_without_building: false,
+      clean: true
+    )
+  end
+
+  desc "Upload screenshots to App Store Connect"
+  lane :upload_screenshots do
+    deliver(
+      skip_binary_upload: true,
+      skip_metadata: true,
+      overwrite_screenshots: true,
+      screenshots_path: "./fastlane/screenshots"
+    )
+  end
+end

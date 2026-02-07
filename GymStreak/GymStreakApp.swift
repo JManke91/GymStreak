@@ -10,10 +10,43 @@ import SwiftData
 
 @main
 struct GymStreakApp: App {
+    private var isUITesting: Bool {
+        ProcessInfo.processInfo.arguments.contains("-UI_TESTING")
+    }
+
+    var sharedModelContainer: ModelContainer = {
+        let schema = Schema([
+            Routine.self,
+            Exercise.self,
+            RoutineExercise.self,
+            ExerciseSet.self,
+            WorkoutSession.self,
+            WorkoutExercise.self,
+            WorkoutSet.self
+        ])
+        let modelConfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: false)
+
+        do {
+            return try ModelContainer(for: schema, configurations: [modelConfiguration])
+        } catch {
+            fatalError("Could not create ModelContainer: \(error)")
+        }
+    }()
+
     var body: some Scene {
         WindowGroup {
             ContentView()
+                .onAppear {
+                    if isUITesting {
+                        seedTestData()
+                    }
+                }
         }
-        .modelContainer(for: [Routine.self, Exercise.self, RoutineExercise.self, ExerciseSet.self, WorkoutSession.self, WorkoutExercise.self, WorkoutSet.self])
+        .modelContainer(sharedModelContainer)
+    }
+
+    @MainActor
+    private func seedTestData() {
+        TestDataSeeder.seedData(modelContext: sharedModelContainer.mainContext)
     }
 }
