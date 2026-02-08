@@ -169,7 +169,8 @@ struct ConfigureExerciseSetsView: View {
 
     @State private var sets: [ExerciseSet] = []
     @State private var globalRestTime: TimeInterval = 0.0
-    @State private var editingSetIndex: Int?
+    // Use UUID-based tracking (same pattern as RoutineDetailView/RoutineExerciseDetailView)
+    @State private var editingSetId: UUID?
     @State private var editingReps = 10
     @State private var editingWeight = 0.0
     @State private var initialReps = 10
@@ -179,6 +180,21 @@ struct ConfigureExerciseSetsView: View {
     // Computed property to check if values have changed
     private var hasChanges: Bool {
         editingReps != initialReps || editingWeight != initialWeight
+    }
+
+    // Save current editing set by UUID (same pattern as RoutineExerciseDetailView)
+    private func saveCurrentEditingSet() {
+        guard let currentId = editingSetId,
+              let currentSet = sets.first(where: { $0.id == currentId }) else { return }
+        if currentSet.reps != editingReps || currentSet.weight != editingWeight {
+            currentSet.reps = editingReps
+            currentSet.weight = editingWeight
+        }
+    }
+
+    // Helper to get index for display purposes
+    private func index(of set: ExerciseSet) -> Int {
+        sets.firstIndex(where: { $0.id == set.id }) ?? 0
     }
 
     var body: some View {
@@ -200,41 +216,46 @@ struct ConfigureExerciseSetsView: View {
             }
 
             Section("configure_exercise.sets".localized) {
-                ForEach(Array(sets.enumerated()), id: \.offset) { index, set in
+                ForEach(sets) { set in
                     VStack(alignment: .leading, spacing: 0) {
                         Button(action: {
                             withAnimation(.easeInOut(duration: 0.3)) {
-                                if editingSetIndex == index {
-                                    editingSetIndex = nil
+                                if editingSetId == set.id {
+                                    // Save before collapsing
+                                    saveCurrentEditingSet()
+                                    editingSetId = nil
                                 } else {
-                                    editingSetIndex = index
-                                    editingReps = sets[index].reps
-                                    editingWeight = sets[index].weight
-                                    initialReps = sets[index].reps
-                                    initialWeight = sets[index].weight
+                                    // Save currently expanded set before switching
+                                    saveCurrentEditingSet()
+                                    // Expand and load values
+                                    editingSetId = set.id
+                                    editingReps = set.reps
+                                    editingWeight = set.weight
+                                    initialReps = set.reps
+                                    initialWeight = set.weight
                                     // Reset banner dismissed state when opening a new set
                                     bannerDismissed = false
                                 }
                             }
                         }) {
                             HStack {
-                                Text("Set \(index + 1)")
+                                Text("Set \(index(of: set) + 1)")
                                     .font(.headline)
                                     .foregroundColor(.primary)
                                 Spacer()
-                                Text("\(sets[index].reps) reps • \(sets[index].weight, specifier: "%.1f") kg")
+                                Text("\(set.reps) reps • \(set.weight, specifier: "%.1f") kg")
                                     .foregroundColor(.secondary)
                                 Image(systemName: "chevron.right")
                                     .font(.caption)
                                     .foregroundColor(.secondary)
-                                    .rotationEffect(.degrees(editingSetIndex == index ? 90 : 0))
-                                    .animation(.easeInOut(duration: 0.2), value: editingSetIndex == index)
+                                    .rotationEffect(.degrees(editingSetId == set.id ? 90 : 0))
+                                    .animation(.easeInOut(duration: 0.2), value: editingSetId == set.id)
                             }
                             .contentShape(Rectangle())
                         }
                         .buttonStyle(PlainButtonStyle())
 
-                        if editingSetIndex == index {
+                        if editingSetId == set.id {
                             VStack(spacing: 12) {
                                 // Apply to All Banner (only if multiple sets AND changes were made AND not dismissed)
                                 if sets.count > 1 && hasChanges && !bannerDismissed {
@@ -243,9 +264,9 @@ struct ConfigureExerciseSetsView: View {
                                         onApply: {
                                             withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
                                                 // Apply to all sets
-                                                for i in sets.indices {
-                                                    sets[i].reps = editingReps
-                                                    sets[i].weight = editingWeight
+                                                for s in sets {
+                                                    s.reps = editingReps
+                                                    s.weight = editingWeight
                                                 }
                                                 bannerDismissed = true
                                             }
@@ -268,7 +289,9 @@ struct ConfigureExerciseSetsView: View {
                                     range: 1...100,
                                     step: 1
                                 ) { _ in
-                                    handleSetUpdate(at: index)
+                                    // Guard: only process updates for the currently expanded set
+                                    guard editingSetId == set.id else { return }
+                                    updateSet(set)
                                 }
 
                                 WeightInput(
@@ -276,7 +299,9 @@ struct ConfigureExerciseSetsView: View {
                                     weight: $editingWeight,
                                     increment: 0.25
                                 ) { _ in
-                                    handleSetUpdate(at: index)
+                                    // Guard: only process updates for the currently expanded set
+                                    guard editingSetId == set.id else { return }
+                                    updateSet(set)
                                 }
                             }
                             .padding(.top, 12)
@@ -343,26 +368,34 @@ struct ConfigureExerciseSetsView: View {
     }
 
     private func addNewSet() {
+        // Save current editing set before adding new one
+        saveCurrentEditingSet()
+
         let order = sets.count
         let newSet = ExerciseSet(reps: 10, weight: 0.0, restTime: globalRestTime, order: order)
         sets.append(newSet)
 
         withAnimation(.easeInOut(duration: 0.3)) {
-            editingSetIndex = sets.count - 1
+            editingSetId = newSet.id
             editingReps = newSet.reps
             editingWeight = newSet.weight
             initialReps = newSet.reps
             initialWeight = newSet.weight
+            bannerDismissed = false
         }
     }
 
     private func duplicateLastSet() {
+        // Save current editing set before duplicating
+        saveCurrentEditingSet()
+
         guard let lastSet = sets.last else { return }
 
+        // If the last set is currently being edited, use editing values
         let repsToUse: Int
         let weightToUse: Double
 
-        if let editingIndex = editingSetIndex, editingIndex == sets.count - 1 {
+        if editingSetId == lastSet.id {
             repsToUse = editingReps
             weightToUse = editingWeight
         } else {
@@ -375,35 +408,34 @@ struct ConfigureExerciseSetsView: View {
         sets.append(newSet)
 
         withAnimation(.easeInOut(duration: 0.3)) {
-            editingSetIndex = sets.count - 1
+            editingSetId = newSet.id
             editingReps = newSet.reps
             editingWeight = newSet.weight
             initialReps = newSet.reps
             initialWeight = newSet.weight
+            bannerDismissed = false
         }
     }
 
-    private func handleSetUpdate(at index: Int) {
-        // Apply only to current set (Apply to All is handled by the banner callback)
-        updateSet(at: index)
-    }
-
-    private func updateSet(at index: Int) {
-        guard index < sets.count else { return }
-        sets[index].reps = editingReps
-        sets[index].weight = editingWeight
-        // Force SwiftUI to detect the change by triggering array reassignment
-        sets = sets
+    private func updateSet(_ set: ExerciseSet) {
+        set.reps = editingReps
+        set.weight = editingWeight
     }
 
     private func deleteSets(offsets: IndexSet) {
-        sets.remove(atOffsets: offsets)
-        if let editingIndex = editingSetIndex, editingIndex >= sets.count {
-            editingSetIndex = nil
+        // Check if we're deleting the currently editing set
+        for index in offsets {
+            if sets[index].id == editingSetId {
+                editingSetId = nil
+                break
+            }
         }
+        sets.remove(atOffsets: offsets)
     }
 
     private func saveExerciseToRoutine() {
+        // Save any pending edits before saving
+        saveCurrentEditingSet()
         let routineExercise = RoutineExercise(exercise: exercise, order: routine.routineExercisesList.count)
         routineExercise.routine = routine
 
