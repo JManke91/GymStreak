@@ -121,11 +121,15 @@ class HealthKitWorkoutManager: NSObject, ObservableObject {
         }
     }
 
-    /// End the current workout session and save to HealthKit
+    /// End the current workout session and save to HealthKit.
+    /// Returns a tuple containing the saved HKWorkout and the external UUID used for deduplication.
     func endWorkoutSession(
         totalEnergyBurned: Double? = nil,
         metadata: [String: Any]? = nil
-    ) async throws -> HKWorkout? {
+    ) async throws -> (workout: HKWorkout?, healthKitWorkoutId: UUID) {
+        // Generate external UUID for deduplication and correlation with SwiftData
+        let healthKitWorkoutId = UUID()
+
         guard let session = workoutSession, let builder = workoutBuilder else {
             throw HealthKitError.noActiveWorkout
         }
@@ -152,10 +156,11 @@ class HealthKitWorkoutManager: NSObject, ObservableObject {
                 try await builder.addSamples([energySample])
             }
 
-            // Add metadata if provided
-            if let metadata = metadata {
-                try await builder.addMetadata(metadata)
-            }
+            // Merge provided metadata with external UUID
+            var finalMetadata = metadata ?? [:]
+            finalMetadata[HKMetadataKeyExternalUUID] = healthKitWorkoutId.uuidString
+
+            try await builder.addMetadata(finalMetadata)
 
             // Finish and save the workout
             let workout = try await builder.finishWorkout()
@@ -168,10 +173,10 @@ class HealthKitWorkoutManager: NSObject, ObservableObject {
             self.lastSyncError = nil
 
             if let workout = workout {
-                print("HealthKit workout saved successfully: \(workout.uuid)")
+                print("HealthKit workout saved successfully with ID: \(healthKitWorkoutId)")
             }
 
-            return workout
+            return (workout, healthKitWorkoutId)
 
         } catch {
             print("Failed to end HealthKit workout: \(error)")
@@ -209,13 +214,17 @@ class HealthKitWorkoutManager: NSObject, ObservableObject {
 
     // MARK: - Fallback: Save Workout Without Session
 
-    /// Save a completed workout directly without using a session (fallback)
+    /// Save a completed workout directly without using a session (fallback).
+    /// Returns a tuple containing the saved HKWorkout and the external UUID used for deduplication.
     func saveWorkoutDirectly(
         startDate: Date,
         endDate: Date,
         totalEnergyBurned: Double? = nil,
         metadata: [String: Any]? = nil
-    ) async throws -> HKWorkout? {
+    ) async throws -> (workout: HKWorkout?, healthKitWorkoutId: UUID) {
+        // Generate external UUID for deduplication and correlation with SwiftData
+        let healthKitWorkoutId = UUID()
+
         guard isAuthorized else {
             throw HealthKitError.notAuthorized
         }
@@ -242,10 +251,11 @@ class HealthKitWorkoutManager: NSObject, ObservableObject {
                 try await builder.addSamples([energySample])
             }
 
-            // Add metadata if provided
-            if let metadata = metadata {
-                try await builder.addMetadata(metadata)
-            }
+            // Merge provided metadata with external UUID
+            var finalMetadata = metadata ?? [:]
+            finalMetadata[HKMetadataKeyExternalUUID] = healthKitWorkoutId.uuidString
+
+            try await builder.addMetadata(finalMetadata)
 
             try await builder.endCollection(at: endDate)
 
@@ -255,10 +265,10 @@ class HealthKitWorkoutManager: NSObject, ObservableObject {
             self.lastSyncError = nil
 
             if let workout = workout {
-                print("HealthKit workout saved directly: \(workout.uuid)")
+                print("HealthKit workout saved directly with ID: \(healthKitWorkoutId)")
             }
 
-            return workout
+            return (workout, healthKitWorkoutId)
 
         } catch {
             print("Failed to save workout directly: \(error)")

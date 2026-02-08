@@ -121,6 +121,9 @@ final class WorkoutSession {
     var workoutExercises: [WorkoutExercise]? = []
     var notes: String = ""
     var didUpdateTemplate: Bool = false
+    /// The UUID used as HKMetadataKeyExternalUUID when the workout was saved to HealthKit.
+    /// Used to correlate this SwiftData record with its HealthKit counterpart.
+    var healthKitWorkoutId: UUID?
 
     init(routine: Routine) {
         self.id = UUID()

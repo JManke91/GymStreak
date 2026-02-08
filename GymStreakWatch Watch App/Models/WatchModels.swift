@@ -78,6 +78,9 @@ struct CompletedWatchWorkout: Codable {
     let endTime: Date
     let exercises: [CompletedWatchExercise]
     let shouldUpdateTemplate: Bool
+    /// The UUID used as HKMetadataKeyExternalUUID when saving to HealthKit.
+    /// Used to correlate SwiftData WorkoutSession with HealthKit workout.
+    let healthKitWorkoutId: UUID?
 
     var duration: TimeInterval {
         endTime.timeIntervalSince(startTime)

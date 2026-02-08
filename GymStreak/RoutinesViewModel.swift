@@ -169,6 +169,7 @@ class RoutinesViewModel: ObservableObject {
             workoutSession.endTime = workout.endTime
             workoutSession.didUpdateTemplate = workout.shouldUpdateTemplate
             workoutSession.routineName = workout.routineName
+            workoutSession.healthKitWorkoutId = workout.healthKitWorkoutId
 
             // Create workout exercises
             for completedExercise in workout.exercises {

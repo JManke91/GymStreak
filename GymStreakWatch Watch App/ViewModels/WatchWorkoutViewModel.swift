@@ -259,8 +259,8 @@ final class WatchWorkoutViewModel: ObservableObject {
         stopRestTimer()
 
         do {
-            _ = try await healthKitManager.endWorkout()
-            await sendCompletedWorkoutToiPhone(updateTemplate: updateTemplate)
+            let (_, healthKitWorkoutId) = try await healthKitManager.endWorkout()
+            await sendCompletedWorkoutToiPhone(updateTemplate: updateTemplate, healthKitWorkoutId: healthKitWorkoutId)
             isWorkoutActive = false
             workoutState = .stopped
             WKInterfaceDevice.current().play(.success)
@@ -558,7 +558,7 @@ final class WatchWorkoutViewModel: ObservableObject {
 
     // MARK: - Sync to iPhone
 
-    private func sendCompletedWorkoutToiPhone(updateTemplate: Bool) async {
+    private func sendCompletedWorkoutToiPhone(updateTemplate: Bool, healthKitWorkoutId: UUID) async {
         guard let routine = currentRoutine,
               let startTime = workoutStartTime else { return }
 
@@ -569,7 +569,8 @@ final class WatchWorkoutViewModel: ObservableObject {
             startTime: startTime,
             endTime: Date(),
             exercises: exercises.map { $0.toCompletedExercise() },
-            shouldUpdateTemplate: updateTemplate
+            shouldUpdateTemplate: updateTemplate,
+            healthKitWorkoutId: healthKitWorkoutId
         )
 
         connectivityManager.sendCompletedWorkout(completedWorkout)

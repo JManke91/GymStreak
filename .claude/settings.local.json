@@ -39,7 +39,11 @@
       "WebFetch(domain:sfsymbolslib.com)",
       "WebFetch(domain:medium.com)",
       "WebFetch(domain:symbolsdb.com)",
-      "WebFetch(domain:codecademy.com)"
+      "WebFetch(domain:codecademy.com)",
+      "WebFetch(domain:www.createwithswift.com)",
+      "WebFetch(domain:swiftwithmajid.com)",
+      "WebFetch(domain:www.kodeco.com)",
+      "WebFetch(domain:fatbobman.com)"
     ],
     "defaultMode": "acceptEdits"
   }

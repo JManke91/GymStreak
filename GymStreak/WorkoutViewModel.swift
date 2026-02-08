@@ -428,24 +428,32 @@ class WorkoutViewModel: ObservableObject {
                     metadata["Notes"] = session.notes
                 }
 
+                let healthKitWorkoutId: UUID
+
                 // Try to end the active session first
                 if healthKitManager.isWorkoutActive {
-                    _ = try await healthKitManager.endWorkoutSession(
+                    let result = try await healthKitManager.endWorkoutSession(
                         totalEnergyBurned: estimatedCalories,
                         metadata: metadata
                     )
+                    healthKitWorkoutId = result.healthKitWorkoutId
                 } else {
                     // Fall back to direct save if no active session
-                    _ = try await healthKitManager.saveWorkoutDirectly(
+                    let result = try await healthKitManager.saveWorkoutDirectly(
                         startDate: session.startTime,
                         endDate: session.endTime ?? Date(),
                         totalEnergyBurned: estimatedCalories,
                         metadata: metadata
                     )
+                    healthKitWorkoutId = result.healthKitWorkoutId
                 }
 
+                // Store the HealthKit workout ID in the session for correlation
+                session.healthKitWorkoutId = healthKitWorkoutId
+                save()
+
                 healthKitSyncStatus = .success
-                print("Workout synced to HealthKit successfully")
+                print("Workout synced to HealthKit successfully with ID: \(healthKitWorkoutId)")
 
             } catch {
                 healthKitSyncStatus = .failed(error.localizedDescription)
