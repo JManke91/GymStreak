@@ -29,6 +29,10 @@
 "routine.sets_count" = "%d Sätze";
 "routine.rest_time" = "Pause: %@";
 
+// MARK: - Routine Exercise Deletion
+"routine_exercise.delete.title" = "Übung entfernen?";
+"routine_exercise.delete.message" = "Möchtest du '%@' wirklich aus dieser Routine entfernen?";
+
 // MARK: - Exercises View
 "exercises.title" = "Übungen";
 "exercises.empty.title" = "Noch keine Übungen";
@@ -47,6 +51,7 @@
 // MARK: - Exercise Deletion Confirmation
 "exercises.delete.confirmation.title" = "Übung löschen?";
 "exercises.delete.confirmation.message" = "'%@' wird in folgenden Routinen verwendet: %@. Das Löschen entfernt die Übung auch aus diesen Routinen.";
+"exercises.delete.confirmation.message_standalone" = "Möchten Sie '%@' wirklich löschen? Diese Aktion kann nicht rückgängig gemacht werden.";
 "exercises.delete.confirm" = "Löschen";
 "exercises.deleteAll.confirmation.title" = "Alle Übungen löschen?";
 "exercises.deleteAll.confirmation.message" = "Dies löscht alle Übungen und entfernt sie aus allen Routinen. Diese Aktion kann nicht rückgängig gemacht werden.";
@@ -88,6 +93,9 @@
 "set.planned" = "Geplant:";
 "set.planned_detail" = "%d Wdh. × %.2f kg";
 "set.delete" = "Satz löschen";
+"set.delete.title" = "Satz löschen?";
+"set.delete.message" = "Möchtest du diesen Satz wirklich löschen? Diese Aktion kann nicht rückgängig gemacht werden.";
+"set.delete.confirm" = "Löschen";
 
 // MARK: - Rest Timer
 "rest_timer.title" = "Pausenzeit";
@@ -134,6 +142,8 @@
 "history.empty.description" = "Starte eine Routine um deine Workouts zu verfolgen";
 "history.date" = "%@";
 "history.duration" = "%@ • %d Sätze";
+"workout.history.delete.title" = "Workout löschen?";
+"workout.history.delete.message" = "Möchtest du dieses Workout wirklich löschen? Diese Aktion kann nicht rückgängig gemacht werden.";
 
 // MARK: - Create Routine Flow
 "create_routine.title" = "Routine erstellen";

@@ -481,6 +481,7 @@ struct WorkoutSetRow: View {
     @State private var initialWeight: Double
     @State private var repsBannerDismissed = false
     @State private var weightBannerDismissed = false
+    @State private var showingDeleteSetAlert = false
 
     init(set: WorkoutSet, workoutExercise: WorkoutExercise, viewModel: WorkoutViewModel, isNextSet: Bool, isExpanded: Bool, onToggleExpand: @escaping () -> Void, onSetInteraction: @escaping () -> Void, onSetCompleted: @escaping () -> Void) {
         self.set = set
@@ -714,9 +715,7 @@ struct WorkoutSetRow: View {
 
                         // Delete Set Button
                         Button(role: .destructive) {
-                            withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
-                                viewModel.removeSetFromExercise(set, from: workoutExercise)
-                            }
+                            showingDeleteSetAlert = true
                         } label: {
                             HStack(spacing: 6) {
                                 Image(systemName: "trash")
@@ -753,6 +752,16 @@ struct WorkoutSetRow: View {
         }
         .onChange(of: set.actualWeight) { _, newValue in
             editingWeight = newValue
+        }
+        .alert("set.delete.title".localized, isPresented: $showingDeleteSetAlert) {
+            Button("set.delete.confirm".localized, role: .destructive) {
+                withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                    viewModel.removeSetFromExercise(set, from: workoutExercise)
+                }
+            }
+            Button("action.cancel".localized, role: .cancel) {}
+        } message: {
+            Text("set.delete.message".localized)
         }
     }
 }

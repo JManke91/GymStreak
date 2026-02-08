@@ -7,6 +7,8 @@ struct RoutineDetailView: View {
     @ObservedObject var workoutViewModel: WorkoutViewModel
     @State private var showingAddExercise = false
     @State private var showingDeleteAlert = false
+    @State private var showingDeleteExerciseAlert = false
+    @State private var exercisePendingDeletion: RoutineExercise?
     @State private var showingActiveWorkout = false
     @State private var editingRoutineName: String = ""
     @State private var expandedExerciseId: UUID?
@@ -248,9 +250,8 @@ struct RoutineDetailView: View {
     private func editModeRow(for routineExercise: RoutineExercise) -> some View {
         HStack(spacing: 12) {
             Button {
-                withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
-                    viewModel.removeRoutineExercise(routineExercise, from: routine)
-                }
+                exercisePendingDeletion = routineExercise
+                showingDeleteExerciseAlert = true
             } label: {
                 Image(systemName: "minus.circle.fill")
                     .font(.title2)
@@ -556,9 +557,8 @@ struct RoutineDetailView: View {
                                     Divider()
 
                                     Button(role: .destructive) {
-                                        withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
-                                            viewModel.removeRoutineExercise(routineExercise, from: routine)
-                                        }
+                                        exercisePendingDeletion = routineExercise
+                                        showingDeleteExerciseAlert = true
                                     } label: {
                                         Label("exercise.delete".localized, systemImage: "trash")
                                     }
@@ -881,6 +881,23 @@ struct RoutineDetailView: View {
         } message: {
             Text("routine.delete.confirm".localized)
         }
+        .alert("routine_exercise.delete.title".localized, isPresented: $showingDeleteExerciseAlert) {
+            Button("action.delete".localized, role: .destructive) {
+                if let exercise = exercisePendingDeletion {
+                    withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                        viewModel.removeRoutineExercise(exercise, from: routine)
+                    }
+                }
+                exercisePendingDeletion = nil
+            }
+            Button("action.cancel".localized, role: .cancel) {
+                exercisePendingDeletion = nil
+            }
+        } message: {
+            if let exercise = exercisePendingDeletion {
+                Text("routine_exercise.delete.message".localized(exercise.exercise?.name ?? ""))
+            }
+        }
         .fullScreenCover(isPresented: $showingActiveWorkout) {
             ActiveWorkoutView(viewModel: workoutViewModel, exercisesViewModel: exercisesViewModel)
         }
@@ -1098,6 +1115,8 @@ struct RoutineSetRowView: View {
     let onDismissWeightBanner: () -> Void
     let onDelete: () -> Void
 
+    @State private var showingDeleteSetAlert = false
+
     // Computed property to check if reps have changed
     private var repsChanged: Bool {
         editingReps != initialReps
@@ -1218,7 +1237,7 @@ struct RoutineSetRowView: View {
 
                     // Delete Set Button
                     Button(role: .destructive) {
-                        onDelete()
+                        showingDeleteSetAlert = true
                     } label: {
                         HStack(spacing: 6) {
                             Image(systemName: "trash")
@@ -1249,6 +1268,14 @@ struct RoutineSetRowView: View {
             RoundedRectangle(cornerRadius: 8)
                 .strokeBorder(isExpanded ? DesignSystem.Colors.tint.opacity(0.3) : Color.clear, lineWidth: 1)
         )
+        .alert("set.delete.title".localized, isPresented: $showingDeleteSetAlert) {
+            Button("set.delete.confirm".localized, role: .destructive) {
+                onDelete()
+            }
+            Button("action.cancel".localized, role: .cancel) {}
+        } message: {
+            Text("set.delete.message".localized)
+        }
     }
 }
 

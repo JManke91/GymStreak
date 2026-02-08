@@ -46,7 +46,8 @@
       "WebFetch(domain:fatbobman.com)",
       "WebFetch(domain:stackoverflow.com)",
       "WebFetch(domain:forums.developer.apple.com)",
-      "WebFetch(domain:getslopes.com)"
+      "WebFetch(domain:getslopes.com)",
+      "WebFetch(domain:www.swiftbysundell.com)"
     ],
     "defaultMode": "acceptEdits"
   }

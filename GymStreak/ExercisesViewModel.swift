@@ -72,19 +72,12 @@ class ExercisesViewModel: ObservableObject {
         return uniqueRoutines
     }
 
-    /// Initiates the delete flow - shows confirmation if exercise is used in routines
+    /// Initiates the delete flow - always shows confirmation for safety
     func requestDeleteExercise(_ exercise: Exercise) {
         let routines = findRoutinesUsing(exercise)
         exerciseToDelete = exercise
         routinesUsingExercise = routines
-
-        if routines.isEmpty {
-            // No routines use this exercise, delete directly
-            performDeleteExercise(exercise)
-        } else {
-            // Show confirmation alert with routine names
-            showingDeleteConfirmation = true
-        }
+        showingDeleteConfirmation = true
     }
 
     /// Actually deletes the exercise and removes it from all routines

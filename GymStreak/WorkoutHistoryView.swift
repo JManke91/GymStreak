@@ -4,6 +4,8 @@ struct WorkoutHistoryView: View {
     @ObservedObject var viewModel: WorkoutViewModel
     @Environment(\.modelContext) private var modelContext
     @State private var selectedWorkout: WorkoutSession?
+    @State private var workoutToDelete: WorkoutSession?
+    @State private var showingDeleteAlert = false
 
     var body: some View {
         NavigationView {
@@ -42,14 +44,26 @@ struct WorkoutHistoryView: View {
             .sheet(item: $selectedWorkout) { workout in
                 WorkoutDetailView(workout: workout)
             }
+            .alert("workout.history.delete.title".localized, isPresented: $showingDeleteAlert) {
+                Button("action.delete".localized, role: .destructive) {
+                    if let workout = workoutToDelete {
+                        viewModel.deleteWorkout(workout)
+                        workoutToDelete = nil
+                    }
+                }
+                Button("action.cancel".localized, role: .cancel) {
+                    workoutToDelete = nil
+                }
+            } message: {
+                Text("workout.history.delete.message".localized)
+            }
         }
     }
 
     private func deleteWorkouts(offsets: IndexSet) {
-        for index in offsets {
-            let workout = viewModel.workoutHistory[index]
-            viewModel.deleteWorkout(workout)
-        }
+        guard let index = offsets.first else { return }
+        workoutToDelete = viewModel.workoutHistory[index]
+        showingDeleteAlert = true
     }
 }
 

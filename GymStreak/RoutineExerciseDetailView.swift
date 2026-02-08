@@ -5,6 +5,8 @@ struct RoutineExerciseDetailView: View {
     @ObservedObject var viewModel: RoutinesViewModel
     @State private var showingEditExercise = false
     @State private var showingDeleteAlert = false
+    @State private var showingDeleteSetAlert = false
+    @State private var setPendingDeletion: ExerciseSet?
     @State private var editingSetId: UUID?
     @State private var editingReps: Int = 10
     @State private var editingWeight: Double = 0.0
@@ -116,7 +118,13 @@ struct RoutineExerciseDetailView: View {
                         }
                     }
                 }
-                .onDelete(perform: deleteSets)
+                .onDelete { offsets in
+                    let sortedSets = routineExercise.setsList.sorted(by: { $0.order < $1.order })
+                    if let index = offsets.first {
+                        setPendingDeletion = sortedSets[index]
+                        showingDeleteSetAlert = true
+                    }
+                }
 
                 Button("routine_exercise_detail.add_set".localized) {
                     addNewSet()
@@ -157,6 +165,19 @@ struct RoutineExerciseDetailView: View {
             Button("action.cancel".localized, role: .cancel) {}
         } message: {
             Text("routine_exercise_detail.delete_alert.message".localized)
+        }
+        .alert("set.delete.title".localized, isPresented: $showingDeleteSetAlert) {
+            Button("set.delete.confirm".localized, role: .destructive) {
+                if let set = setPendingDeletion {
+                    viewModel.removeSet(set, from: routineExercise)
+                    setPendingDeletion = nil
+                }
+            }
+            Button("action.cancel".localized, role: .cancel) {
+                setPendingDeletion = nil
+            }
+        } message: {
+            Text("set.delete.message".localized)
         }
     }
 

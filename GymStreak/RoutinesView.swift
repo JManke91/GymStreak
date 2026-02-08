@@ -13,6 +13,8 @@ private struct RoutinesViewInternal: View {
     @StateObject private var viewModel: RoutinesViewModel
     @StateObject private var exercisesViewModel: ExercisesViewModel
     @StateObject private var workoutViewModel: WorkoutViewModel
+    @State private var routinePendingDeletion: Routine?
+    @State private var showingDeleteAlert = false
 
     init(modelContext: ModelContext) {
         self._viewModel = StateObject(wrappedValue: RoutinesViewModel(modelContext: modelContext))
@@ -62,6 +64,19 @@ private struct RoutinesViewInternal: View {
                     )
                 }
             }
+            .alert("routine.delete".localized, isPresented: $showingDeleteAlert) {
+                Button("action.delete".localized, role: .destructive) {
+                    if let routine = routinePendingDeletion {
+                        viewModel.deleteRoutine(routine)
+                        routinePendingDeletion = nil
+                    }
+                }
+                Button("action.cancel".localized, role: .cancel) {
+                    routinePendingDeletion = nil
+                }
+            } message: {
+                Text("routine.delete.confirm".localized)
+            }
         }
         .onAppear {
             viewModel.fetchRoutines()
@@ -69,9 +84,9 @@ private struct RoutinesViewInternal: View {
     }
 
     private func deleteRoutines(offsets: IndexSet) {
-        for index in offsets {
-            viewModel.deleteRoutine(viewModel.routines[index])
-        }
+        guard let index = offsets.first else { return }
+        routinePendingDeletion = viewModel.routines[index]
+        showingDeleteAlert = true
     }
 }
 
