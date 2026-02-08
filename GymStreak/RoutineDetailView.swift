@@ -608,6 +608,9 @@ struct RoutineDetailView: View {
                         Button(isEditMode ? "action.done".localized : "action.edit".localized) {
                             withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
                                 if isEditMode {
+                                    // Dismiss keyboard
+                                    UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+
                                     // Exiting edit mode - save routine name if changed
                                     let trimmedName = editingRoutineName.trimmingCharacters(in: .whitespacesAndNewlines)
                                     if !trimmedName.isEmpty && trimmedName != routine.name {
@@ -670,6 +673,14 @@ struct RoutineDetailView: View {
                     .opacity(isEditMode && !isSupersetSelectionMode ? 1 : 0)
                     .allowsHitTesting(isEditMode && !isSupersetSelectionMode)
                     .animation(.none, value: isEditMode)
+            }
+            ToolbarItemGroup(placement: .keyboard) {
+                Spacer()
+                Button {
+                    UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+                } label: {
+                    Image(systemName: "keyboard.chevron.compact.down")
+                }
             }
         }
         .safeAreaInset(edge: .bottom) {
