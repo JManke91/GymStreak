@@ -416,12 +416,15 @@ class WorkoutViewModel: ObservableObject {
                 )
 
                 // Create metadata for the workout
-                var metadata: [String: Any] = [
-                    HKMetadataKeyWorkoutBrandName: "GymStreak"
-                ]
+                var metadata: [String: Any] = [:]
 
-                if let routineName = session.routine?.name {
+                // Use routine name as the workout brand name (displayed in Fitness app)
+                // Fall back to "GymStreak" if no routine name available
+                if let routineName = session.routine?.name, !routineName.isEmpty {
+                    metadata[HKMetadataKeyWorkoutBrandName] = routineName
                     metadata["RoutineName"] = routineName
+                } else {
+                    metadata[HKMetadataKeyWorkoutBrandName] = "GymStreak"
                 }
 
                 if !session.notes.isEmpty {

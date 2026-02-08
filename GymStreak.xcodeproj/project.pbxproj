@@ -717,6 +717,7 @@
 				INFOPLIST_KEY_NSHealthShareUsageDescription = "GymStreak needs access to read your heart rate during workouts";
 				INFOPLIST_KEY_NSHealthUpdateUsageDescription = "GymStreak needs access to save your workouts";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown";
+				INFOPLIST_KEY_WKBackgroundModes = "workout-processing";
 				INFOPLIST_KEY_WKCompanionAppBundleIdentifier = com.shotat24fps.GymStreak;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -753,6 +754,7 @@
 				INFOPLIST_KEY_NSHealthShareUsageDescription = "GymStreak needs access to read your heart rate during workouts";
 				INFOPLIST_KEY_NSHealthUpdateUsageDescription = "GymStreak needs access to save your workouts";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown";
+				INFOPLIST_KEY_WKBackgroundModes = "workout-processing";
 				INFOPLIST_KEY_WKCompanionAppBundleIdentifier = com.shotat24fps.GymStreak;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
