@@ -44,6 +44,17 @@
 "exercise.save" = "Speichern";
 "exercise.cancel" = "Abbrechen";
 
+// MARK: - Exercise Deletion Confirmation
+"exercises.delete.confirmation.title" = "Übung löschen?";
+"exercises.delete.confirmation.message" = "'%@' wird in folgenden Routinen verwendet: %@. Das Löschen entfernt die Übung auch aus diesen Routinen.";
+"exercises.delete.confirm" = "Löschen";
+"exercises.deleteAll.confirmation.title" = "Alle Übungen löschen?";
+"exercises.deleteAll.confirmation.message" = "Dies löscht alle Übungen und entfernt sie aus allen Routinen. Diese Aktion kann nicht rückgängig gemacht werden.";
+"exercises.deleteAll.confirm" = "Alle löschen";
+
+// MARK: - Common
+"common.cancel" = "Abbrechen";
+
 // MARK: - Active Workout View
 "workout.time" = "Workout-Zeit";
 "workout.progress" = "Fortschritt";

@@ -3,7 +3,7 @@ import SwiftUI
 struct ExerciseDetailView: View {
     let exercise: Exercise
     @ObservedObject var viewModel: ExercisesViewModel
-    @State private var showingDeleteAlert = false
+    @Environment(\.dismiss) private var dismiss
     @State private var isEditing = false
 
     @State private var exerciseName: String = ""
@@ -52,7 +52,7 @@ struct ExerciseDetailView: View {
                             enterEditMode()
                         }
                         Button("exercise.delete".localized, role: .destructive) {
-                            showingDeleteAlert = true
+                            viewModel.requestDeleteExercise(exercise)
                         }
                     } label: {
                         Image(systemName: "ellipsis.circle")
@@ -68,16 +68,27 @@ struct ExerciseDetailView: View {
                 }
             }
         }
-        .alert("exercise_detail.delete_title".localized, isPresented: $showingDeleteAlert) {
-            Button("action.delete".localized, role: .destructive) {
-                viewModel.deleteExercise(exercise)
+        .alert("exercises.delete.confirmation.title".localized, isPresented: $viewModel.showingDeleteConfirmation) {
+            Button("common.cancel".localized, role: .cancel) {
+                viewModel.cancelDeleteExercise()
             }
-            Button("action.cancel".localized, role: .cancel) {}
+            Button("exercises.delete.confirm".localized, role: .destructive) {
+                viewModel.confirmDeleteExercise()
+                dismiss()
+            }
         } message: {
-            Text("exercise_detail.delete_message".localized(exercise.name))
+            let exerciseName = viewModel.exerciseToDelete?.name ?? ""
+            let routineNames = viewModel.routinesUsingExercise.map(\.name).joined(separator: ", ")
+            Text(String(format: "exercises.delete.confirmation.message".localized, exerciseName, routineNames))
         }
         .onAppear {
             loadExerciseData()
+        }
+        .onChange(of: viewModel.exercises) { _, exercises in
+            // Dismiss if the current exercise was deleted
+            if !exercises.contains(where: { $0.id == exercise.id }) {
+                dismiss()
+            }
         }
     }
 

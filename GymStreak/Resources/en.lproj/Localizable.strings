@@ -44,6 +44,17 @@
 "exercise.save" = "Save";
 "exercise.cancel" = "Cancel";
 
+// MARK: - Exercise Deletion Confirmation
+"exercises.delete.confirmation.title" = "Delete Exercise?";
+"exercises.delete.confirmation.message" = "'%@' is used in the following routines: %@. Deleting it will also remove it from these routines.";
+"exercises.delete.confirm" = "Delete";
+"exercises.deleteAll.confirmation.title" = "Delete All Exercises?";
+"exercises.deleteAll.confirmation.message" = "This will delete all exercises and remove them from all routines. This action cannot be undone.";
+"exercises.deleteAll.confirm" = "Delete All";
+
+// MARK: - Common
+"common.cancel" = "Cancel";
+
 // MARK: - Active Workout View
 "workout.time" = "Workout Time";
 "workout.progress" = "Progress";

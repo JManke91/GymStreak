@@ -44,6 +44,14 @@ private struct ExercisesViewInternal: View {
             }
             .navigationTitle("exercises.title".localized)
             .toolbar {
+                #if DEBUG
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button("Delete All", role: .destructive) {
+                        viewModel.requestDeleteAllExercises()
+                    }
+                    .foregroundColor(.red)
+                }
+                #endif
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button("exercises.add".localized) {
                         viewModel.showingAddExercise = true
@@ -53,6 +61,28 @@ private struct ExercisesViewInternal: View {
             .sheet(isPresented: $viewModel.showingAddExercise) {
                 AddExerciseView(viewModel: viewModel)
             }
+            .alert("exercises.delete.confirmation.title".localized, isPresented: $viewModel.showingDeleteConfirmation) {
+                Button("common.cancel".localized, role: .cancel) {
+                    viewModel.cancelDeleteExercise()
+                }
+                Button("exercises.delete.confirm".localized, role: .destructive) {
+                    viewModel.confirmDeleteExercise()
+                }
+            } message: {
+                let exerciseName = viewModel.exerciseToDelete?.name ?? ""
+                let routineNames = viewModel.routinesUsingExercise.map(\.name).joined(separator: ", ")
+                Text(String(format: "exercises.delete.confirmation.message".localized, exerciseName, routineNames))
+            }
+            .alert("exercises.deleteAll.confirmation.title".localized, isPresented: $viewModel.showingDeleteAllConfirmation) {
+                Button("common.cancel".localized, role: .cancel) {
+                    viewModel.cancelDeleteAllExercises()
+                }
+                Button("exercises.deleteAll.confirm".localized, role: .destructive) {
+                    viewModel.confirmDeleteAllExercises()
+                }
+            } message: {
+                Text("exercises.deleteAll.confirmation.message".localized)
+            }
         }
         .onAppear {
             viewModel.fetchExercises()
@@ -61,7 +91,7 @@ private struct ExercisesViewInternal: View {
 
     private func deleteExercises(offsets: IndexSet) {
         for index in offsets {
-            viewModel.deleteExercise(viewModel.exercises[index])
+            viewModel.requestDeleteExercise(viewModel.exercises[index])
         }
     }
 }

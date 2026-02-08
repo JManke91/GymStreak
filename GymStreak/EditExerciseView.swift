@@ -7,7 +7,6 @@ struct EditExerciseView: View {
 
     @State private var exerciseName: String
     @State private var muscleGroups: [String]
-    @State private var showingDeleteAlert = false
 
     init(exercise: Exercise, viewModel: ExercisesViewModel) {
         self.exercise = exercise
@@ -41,14 +40,24 @@ struct EditExerciseView: View {
                     .disabled(exerciseName.isEmpty || muscleGroups.isEmpty)
                 }
             }
-            .alert("edit_exercise.delete_title".localized, isPresented: $showingDeleteAlert) {
-                Button("action.delete".localized, role: .destructive) {
-                    viewModel.deleteExercise(exercise)
+            .alert("exercises.delete.confirmation.title".localized, isPresented: $viewModel.showingDeleteConfirmation) {
+                Button("common.cancel".localized, role: .cancel) {
+                    viewModel.cancelDeleteExercise()
+                }
+                Button("exercises.delete.confirm".localized, role: .destructive) {
+                    viewModel.confirmDeleteExercise()
                     dismiss()
                 }
-                Button("action.cancel".localized, role: .cancel) {}
             } message: {
-                Text("edit_exercise.delete_message".localized(exercise.name))
+                let exerciseName = viewModel.exerciseToDelete?.name ?? ""
+                let routineNames = viewModel.routinesUsingExercise.map(\.name).joined(separator: ", ")
+                Text(String(format: "exercises.delete.confirmation.message".localized, exerciseName, routineNames))
+            }
+            .onChange(of: viewModel.exercises) { _, exercises in
+                // Dismiss if the current exercise was deleted
+                if !exercises.contains(where: { $0.id == exercise.id }) {
+                    dismiss()
+                }
             }
         }
     }

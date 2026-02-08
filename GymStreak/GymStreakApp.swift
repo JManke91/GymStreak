@@ -57,17 +57,10 @@ struct GymStreakApp: App {
                 .onAppear {
                     if isUITesting {
                         seedTestData()
-                    } else {
-                        seedDefaultExercises()
                     }
                 }
         }
         .modelContainer(sharedModelContainer)
-    }
-
-    @MainActor
-    private func seedDefaultExercises() {
-        DefaultExerciseSeeder.seedIfNeeded(modelContext: sharedModelContainer.mainContext)
     }
 
     @MainActor
