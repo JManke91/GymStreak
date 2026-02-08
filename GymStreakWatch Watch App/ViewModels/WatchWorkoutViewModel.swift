@@ -442,18 +442,154 @@ final class WatchWorkoutViewModel: ObservableObject {
         return isLastSetInExercise && isLastExercise
     }
 
+    /// Gets exercises grouped by superset, mirroring the iOS WorkoutSession.exercisesGroupedBySupersets
+    private var exercisesGroupedBySupersets: [[ActiveWorkoutExercise]] {
+        let sorted = exercises.sorted { $0.order < $1.order }
+        var groups: [[ActiveWorkoutExercise]] = []
+        var processedSupersetIds: Set<UUID> = []
+
+        for exercise in sorted {
+            if let supersetId = exercise.supersetId {
+                guard !processedSupersetIds.contains(supersetId) else { continue }
+                processedSupersetIds.insert(supersetId)
+
+                let supersetExercises = sorted
+                    .filter { $0.supersetId == supersetId }
+                    .sorted { $0.supersetOrder < $1.supersetOrder }
+                groups.append(supersetExercises)
+            } else {
+                groups.append([exercise])
+            }
+        }
+
+        return groups
+    }
+
+    /// Finds the next incomplete set using superset-aware interleaving.
+    /// For supersets: A1 → B1 → A2 → B2 → A3 → B3
+    func findNextIncompleteSet() -> (exerciseIndex: Int, setIndex: Int)? {
+        for group in exercisesGroupedBySupersets {
+            if group.count > 1 {
+                // Superset group - interleave sets
+                let maxSets = group.map { $0.sets.count }.max() ?? 0
+                for setLevel in 0..<maxSets {
+                    for exercise in group {
+                        guard let exerciseIdx = exercises.firstIndex(where: { $0.id == exercise.id }) else {
+                            continue
+                        }
+                        let sets = exercise.sets.sorted { $0.order < $1.order }
+                        if let setIdx = sets.firstIndex(where: { $0.order == setLevel && !$0.isCompleted }) {
+                            return (exerciseIdx, setIdx)
+                        }
+                    }
+                }
+            } else if let exercise = group.first {
+                // Standalone exercise - sequential sets
+                guard let exerciseIdx = exercises.firstIndex(where: { $0.id == exercise.id }) else {
+                    continue
+                }
+                if let setIdx = exercise.sets.firstIndex(where: { !$0.isCompleted }) {
+                    return (exerciseIdx, setIdx)
+                }
+            }
+        }
+
+        return nil
+    }
+
+    /// Finds the next incomplete set in a superset after completing a set.
+    private func findNextIncompleteSetInSuperset(
+        afterSetIndex currentSetIdx: Int,
+        inExerciseIndex currentExerciseIdx: Int
+    ) -> (exerciseIndex: Int, setIndex: Int)? {
+        let exercise = exercises[currentExerciseIdx]
+
+        guard let supersetId = exercise.supersetId else {
+            // Not in a superset - find next set in same exercise
+            let sets = exercise.sets
+            for setIdx in (currentSetIdx + 1)..<sets.count {
+                if !sets[setIdx].isCompleted {
+                    return (currentExerciseIdx, setIdx)
+                }
+            }
+            return nil
+        }
+
+        // Get all exercises in this superset
+        let supersetExercises = exercises
+            .enumerated()
+            .filter { $0.element.supersetId == supersetId }
+            .sorted { $0.element.supersetOrder < $1.element.supersetOrder }
+
+        guard supersetExercises.count > 1 else {
+            // Single exercise in "superset" - treat as standalone
+            let sets = exercise.sets
+            for setIdx in (currentSetIdx + 1)..<sets.count {
+                if !sets[setIdx].isCompleted {
+                    return (currentExerciseIdx, setIdx)
+                }
+            }
+            return nil
+        }
+
+        // Find current exercise's position in the superset
+        guard let supersetPosition = supersetExercises.firstIndex(where: { $0.offset == currentExerciseIdx }) else {
+            return nil
+        }
+
+        let currentSetOrder = exercise.sets[currentSetIdx].order
+        let maxSets = supersetExercises.map { $0.element.sets.count }.max() ?? 0
+
+        // Interleaving: for set level N, go through all exercises before moving to N+1
+        for setLevel in currentSetOrder..<maxSets {
+            let startIdx = (setLevel == currentSetOrder) ? (supersetPosition + 1) : 0
+
+            for offset in 0..<supersetExercises.count {
+                let supersetIdx = (startIdx + offset) % supersetExercises.count
+
+                // Skip exercises we've already passed at current set level
+                if setLevel == currentSetOrder && supersetIdx <= supersetPosition {
+                    continue
+                }
+
+                let (exerciseIdx, ex) = supersetExercises[supersetIdx]
+                let sets = ex.sets.sorted { $0.order < $1.order }
+
+                if let setIdx = sets.firstIndex(where: { $0.order == setLevel && !$0.isCompleted }) {
+                    return (exerciseIdx, setIdx)
+                }
+            }
+        }
+
+        return nil
+    }
+
     private func advanceToNextSet() {
         guard let exercise = currentExercise else { return }
 
-        if currentSetIndex < exercise.sets.count - 1 {
-            // Move to next set in current exercise
-            currentSetIndex += 1
-        } else if currentExerciseIndex < exercises.count - 1 {
-            // Move to next exercise
-            currentExerciseIndex += 1
-            currentSetIndex = 0
+        // Use superset-aware navigation
+        if exercise.isInSuperset {
+            if let next = findNextIncompleteSetInSuperset(
+                afterSetIndex: currentSetIndex,
+                inExerciseIndex: currentExerciseIndex
+            ) {
+                currentExerciseIndex = next.exerciseIndex
+                currentSetIndex = next.setIndex
+            } else if let next = findNextIncompleteSet() {
+                // Superset complete, find next incomplete set anywhere
+                currentExerciseIndex = next.exerciseIndex
+                currentSetIndex = next.setIndex
+            }
+            // If no more sets, stay at current position
+        } else {
+            // Standard behavior for non-superset exercises
+            if currentSetIndex < exercise.sets.count - 1 {
+                currentSetIndex += 1
+            } else if currentExerciseIndex < exercises.count - 1 {
+                currentExerciseIndex += 1
+                currentSetIndex = 0
+            }
         }
-        // If we're at the last set of the last exercise, stay there
     }
 
     // MARK: - Rest Timer

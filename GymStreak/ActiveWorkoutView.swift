@@ -393,12 +393,14 @@ struct ExerciseCard: View {
                         }
                     },
                     onSetInteraction: {
-                        // Mark this exercise as active when user completes/uncompletes a set
+                        // Mark this exercise as active when user uncompletes a set
                         lastActiveExerciseId = workoutExercise.id
                     },
                     onSetCompleted: {
                         // Collapse the set when it's marked as complete
                         onSetCompleted?()
+                        // Clear lastActiveExerciseId so automatic navigation takes over
+                        lastActiveExerciseId = nil
                     }
                 )
                 .transition(.asymmetric(
@@ -554,16 +556,14 @@ struct WorkoutSetRow: View {
                         if set.isCompleted {
                             viewModel.uncompleteSet(set)
                             UINotificationFeedbackGenerator().notificationOccurred(.warning)
+                            // Notify that user interacted with this exercise
+                            onSetInteraction()
                         } else {
                             viewModel.completeSet(workoutExercise: workoutExercise, set: set)
                             UINotificationFeedbackGenerator().notificationOccurred(.success)
-                            // Collapse the set when marked as complete
-                            if isExpanded {
-                                onSetCompleted()
-                            }
+                            // Always call onSetCompleted to clear lastActiveExerciseId and allow auto-navigation
+                            onSetCompleted()
                         }
-                        // Notify that user interacted with this exercise
-                        onSetInteraction()
                     } label: {
                         ZStack {
                             Circle()
