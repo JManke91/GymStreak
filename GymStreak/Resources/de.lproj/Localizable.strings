@@ -328,6 +328,10 @@
 "add_routine.name_placeholder" = "Routinenname";
 "add_routine.next_steps_description" = "Nach dem Erstellen dieser Routine kannst du Übungen in der Routinendetailansicht hinzufügen.";
 
+// MARK: - Routine Name Editing
+"routine.name_accessibility" = "Routinenname";
+"routine.name_edit_hint" = "Doppeltippen zum Bearbeiten des Routinennamens";
+
 // MARK: - Routine Exercise Detail View
 "routine_exercise_detail.section.info" = "Übungsinformationen";
 "routine_exercise_detail.section.sets" = "Sätze";
@@ -346,6 +350,24 @@
 "routine_exercise_detail.delete_alert.title" = "Übung löschen";
 "routine_exercise_detail.delete_alert.message" = "Möchtest du diese Übung wirklich aus der Routine löschen? Diese Aktion kann nicht rückgängig gemacht werden.";
 "routine_exercise_detail.error.not_found" = "Übung nicht gefunden";
+
+// MARK: - Superset Feature
+"superset.link_exercises" = "Übungen verknüpfen";
+"superset.link" = "Verknüpfen";
+"superset.remove" = "Entfernen";
+"superset.remove_one" = "1 Übung entfernen";
+"superset.remove_multiple" = "%d Übungen entfernen";
+"superset.merge" = "Supersätze zusammenführen (%d)";
+"superset.create" = "Supersatz erstellen (%d)";
+"superset.link_count" = "Übungen verknüpfen (%d)";
+"superset.select_exercises" = "Übungen auswählen";
+"superset.remove_from" = "Aus Supersatz entfernen";
+"superset.dissolve" = "Supersatz auflösen";
+"superset.modify" = "Supersatz bearbeiten...";
+"superset.create_menu" = "Supersatz erstellen...";
+"superset.link_accessibility" = "Übungen zu Supersatz verknüpfen";
+"superset.hint_title" = "Supersätze erstellen";
+"superset.hint_description" = "Wähle 2+ Übungen zum Verknüpfen aus";
 
 // MARK: - Test Data (for UI Testing Screenshots)
 "testdata.routine.push_day" = "Drücken-Tag";

@@ -329,6 +329,10 @@
 "add_routine.name_placeholder" = "Routine Name";
 "add_routine.next_steps_description" = "After creating this routine, you can add exercises to it from the routine detail view.";
 
+// MARK: - Routine Name Editing
+"routine.name_accessibility" = "Routine name";
+"routine.name_edit_hint" = "Double tap to edit the routine name";
+
 // MARK: - Routine Exercise Detail View
 "routine_exercise_detail.section.info" = "Exercise Info";
 "routine_exercise_detail.section.sets" = "Sets";
@@ -347,6 +351,24 @@
 "routine_exercise_detail.delete_alert.title" = "Delete Exercise";
 "routine_exercise_detail.delete_alert.message" = "Are you sure you want to delete this exercise from the routine? This action cannot be undone.";
 "routine_exercise_detail.error.not_found" = "Exercise not found";
+
+// MARK: - Superset Feature
+"superset.link_exercises" = "Link Exercises";
+"superset.link" = "Link";
+"superset.remove" = "Remove";
+"superset.remove_one" = "Remove 1 Exercise";
+"superset.remove_multiple" = "Remove %d Exercises";
+"superset.merge" = "Merge Supersets (%d)";
+"superset.create" = "Create Superset (%d)";
+"superset.link_count" = "Link Exercises (%d)";
+"superset.select_exercises" = "Select Exercises";
+"superset.remove_from" = "Remove from Superset";
+"superset.dissolve" = "Dissolve Superset";
+"superset.modify" = "Modify Superset...";
+"superset.create_menu" = "Create Superset...";
+"superset.link_accessibility" = "Link exercises into superset";
+"superset.hint_title" = "Create Supersets";
+"superset.hint_description" = "Select 2+ exercises to link together";
 
 // MARK: - Test Data (for UI Testing Screenshots)
 "testdata.routine.push_day" = "Push Day";

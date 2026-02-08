@@ -7,8 +7,8 @@ struct RoutineDetailView: View {
     @ObservedObject var workoutViewModel: WorkoutViewModel
     @State private var showingAddExercise = false
     @State private var showingDeleteAlert = false
-    @State private var showingEditRoutine = false
     @State private var showingActiveWorkout = false
+    @State private var editingRoutineName: String = ""
     @State private var expandedExerciseId: UUID?
     @State private var expandedSetId: UUID?
     @State private var editingReps: Int = 10
@@ -138,18 +138,18 @@ struct RoutineDetailView: View {
         switch currentSupersetAction {
         case .updateSuperset:
             if removeCount == 1 {
-                return "Remove 1 Exercise"
+                return "superset.remove_one".localized
             } else {
-                return "Remove \(removeCount) Exercises"
+                return "superset.remove_multiple".localized(removeCount)
             }
         case .mergeSuperset:
-            return "Merge Supersets (\(selectedForSuperset.count))"
+            return "superset.merge".localized(selectedForSuperset.count)
         case .createSuperset:
-            return "Create Superset (\(selectedForSuperset.count))"
+            return "superset.create".localized(selectedForSuperset.count)
         case .linkExercises:
-            return "Link Exercises (\(selectedForSuperset.count))"
+            return "superset.link_count".localized(selectedForSuperset.count)
         case .noAction:
-            return "Select Exercises"
+            return "superset.select_exercises".localized
         }
     }
 
@@ -233,6 +233,7 @@ struct RoutineDetailView: View {
                 ExerciseHeaderView(
                     routineExercise: routineExercise,
                     isEditMode: true,
+                    showDragHandle: false,
                     supersetPosition: info?.position,
                     supersetTotal: info?.total
                 )
@@ -527,14 +528,14 @@ struct RoutineDetailView: View {
                                         Button {
                                             viewModel.removeExerciseFromSuperset(routineExercise, in: routine)
                                         } label: {
-                                            Label("Remove from Superset", systemImage: "link.badge.minus")
+                                            Label("superset.remove_from".localized, systemImage: "link.badge.minus")
                                         }
 
                                         if let supersetId = routineExercise.supersetId {
                                             Button(role: .destructive) {
                                                 viewModel.dissolveSuperset(supersetId, in: routine)
                                             } label: {
-                                                Label("Dissolve Superset", systemImage: "link.badge.xmark")
+                                                Label("superset.dissolve".localized, systemImage: "link.badge.xmark")
                                             }
                                         }
 
@@ -546,7 +547,7 @@ struct RoutineDetailView: View {
                                             enterSupersetSelectionMode(preselectedExerciseId: routineExercise.id)
                                         } label: {
                                             Label(
-                                                routineExercise.isInSuperset ? "Modify Superset..." : "Create Superset...",
+                                                routineExercise.isInSuperset ? "superset.modify".localized : "superset.create_menu".localized,
                                                 systemImage: "link.badge.plus"
                                             )
                                         }
@@ -559,7 +560,7 @@ struct RoutineDetailView: View {
                                             viewModel.removeRoutineExercise(routineExercise, from: routine)
                                         }
                                     } label: {
-                                        Label("Delete Exercise", systemImage: "trash")
+                                        Label("exercise.delete".localized, systemImage: "trash")
                                     }
                                 }
                             }
@@ -606,8 +607,24 @@ struct RoutineDetailView: View {
                     if !routine.routineExercisesList.isEmpty && !isSupersetSelectionMode {
                         Button(isEditMode ? "action.done".localized : "action.edit".localized) {
                             withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
-                                isEditMode.toggle()
                                 if isEditMode {
+                                    // Exiting edit mode - save routine name if changed
+                                    let trimmedName = editingRoutineName.trimmingCharacters(in: .whitespacesAndNewlines)
+                                    if !trimmedName.isEmpty && trimmedName != routine.name {
+                                        routine.name = trimmedName
+                                        routine.updatedAt = Date()
+                                        viewModel.updateRoutine(routine)
+                                    }
+
+                                    // Announce edit mode exit
+                                    UIAccessibility.post(
+                                        notification: .announcement,
+                                        argument: "Editing complete."
+                                    )
+                                } else {
+                                    // Entering edit mode
+                                    editingRoutineName = routine.name
+
                                     // Collapse any expanded exercises when entering edit mode
                                     expandedExerciseId = nil
                                     expandedSetId = nil
@@ -627,13 +644,8 @@ struct RoutineDetailView: View {
                                             }
                                         }
                                     }
-                                } else {
-                                    // Announce edit mode exit
-                                    UIAccessibility.post(
-                                        notification: .announcement,
-                                        argument: "Editing complete."
-                                    )
                                 }
+                                isEditMode.toggle()
                             }
                         }
                         .font(.body.weight(.semibold))
@@ -650,8 +662,16 @@ struct RoutineDetailView: View {
             }
         }
         .listStyle(.insetGrouped)
-        .navigationTitle(isSupersetSelectionMode ? "Link Exercises" : routine.name)
-        .navigationBarTitleDisplayMode(isSupersetSelectionMode ? .inline : .large)
+        .navigationTitle(isSupersetSelectionMode ? "superset.link_exercises".localized : (isEditMode ? "" : routine.name))
+        .navigationBarTitleDisplayMode(isSupersetSelectionMode || isEditMode ? .inline : .large)
+        .toolbar {
+            ToolbarItem(placement: .principal) {
+                EditableRoutineTitleView(name: $editingRoutineName)
+                    .opacity(isEditMode && !isSupersetSelectionMode ? 1 : 0)
+                    .allowsHitTesting(isEditMode && !isSupersetSelectionMode)
+                    .animation(.none, value: isEditMode)
+            }
+        }
         .safeAreaInset(edge: .bottom) {
             // Show action button when valid action is available
             if isSupersetSelectionMode && currentSupersetAction != .noAction {
@@ -700,7 +720,7 @@ struct RoutineDetailView: View {
             // Leading toolbar - Cancel button in superset selection mode
             ToolbarItem(placement: .navigationBarLeading) {
                 if isSupersetSelectionMode {
-                    Button("Cancel") {
+                    Button("action.cancel".localized) {
                         withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
                             isSupersetSelectionMode = false
                             selectedForSuperset.removeAll()
@@ -717,7 +737,7 @@ struct RoutineDetailView: View {
                     Button {
                         performSupersetAction()
                     } label: {
-                        Text(currentSupersetAction == .updateSuperset ? "Remove" : "Link")
+                        Text(currentSupersetAction == .updateSuperset ? "superset.remove".localized : "superset.link".localized)
                             .fontWeight(.semibold)
                     }
                     .disabled(currentSupersetAction == .noAction)
@@ -729,22 +749,17 @@ struct RoutineDetailView: View {
                         Image(systemName: "link.circle")
                             .font(.title3)
                     }
-                    .accessibilityLabel("Link exercises into superset")
+                    .accessibilityLabel("superset.link_accessibility".localized)
                 }
             }
 
-            // Additional trailing toolbar - ellipsis menu (only when not in selection mode)
+            // Additional trailing toolbar - delete button (only when not in selection mode or edit mode)
             ToolbarItem(placement: .navigationBarTrailing) {
-                if !isSupersetSelectionMode {
-                    Menu {
-                        Button("routine.edit".localized) {
-                            showingEditRoutine = true
-                        }
-                        Button("routine.delete".localized, role: .destructive) {
-                            showingDeleteAlert = true
-                        }
+                if !isSupersetSelectionMode && !isEditMode {
+                    Button(role: .destructive) {
+                        showingDeleteAlert = true
                     } label: {
-                        Image(systemName: "ellipsis.circle")
+                        Image(systemName: "trash")
                     }
                 }
             }
@@ -803,10 +818,10 @@ struct RoutineDetailView: View {
                             .foregroundStyle(.white)
 
                         VStack(alignment: .leading, spacing: 2) {
-                            Text("Create Supersets")
+                            Text("superset.hint_title".localized)
                                 .font(.subheadline.weight(.semibold))
                                 .foregroundStyle(.white)
-                            Text("Select 2+ exercises to link together")
+                            Text("superset.hint_description".localized)
                                 .font(.caption)
                                 .foregroundStyle(.white.opacity(0.85))
                         }
@@ -846,9 +861,6 @@ struct RoutineDetailView: View {
         }
         .sheet(isPresented: $showingAddExercise) {
             AddExerciseToRoutineView(routine: routine, viewModel: viewModel, exercisesViewModel: exercisesViewModel)
-        }
-        .sheet(isPresented: $showingEditRoutine) {
-            EditRoutineNameView(routine: routine, viewModel: viewModel)
         }
         .alert("routine.delete".localized, isPresented: $showingDeleteAlert) {
             Button("action.delete".localized, role: .destructive) {
@@ -958,9 +970,53 @@ struct RoutineDetailView: View {
 
 // MARK: - Supporting Views
 
+struct EditableRoutineTitleView: View {
+    @Binding var name: String
+    @FocusState private var isFocused: Bool
+
+    var body: some View {
+        HStack(spacing: 6) {
+            TextField("add_routine.name_placeholder".localized, text: $name)
+                .font(.headline)
+                .multilineTextAlignment(.center)
+                .textFieldStyle(.plain)
+                .focused($isFocused)
+                .accessibilityLabel("routine.name_accessibility".localized)
+                .accessibilityHint("routine.name_edit_hint".localized)
+
+            // Make the pencil icon tappable
+            Image(systemName: "pencil")
+                .font(.caption)
+                .foregroundStyle(.orange)
+                .contentTransition(.identity)
+                .onTapGesture {
+                    isFocused = true
+                }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 6)
+        .background {
+            // Invisible tap catcher for padding areas
+            Rectangle()
+                .fill(Color.clear)
+                .contentShape(Rectangle())
+                .onTapGesture {
+                    isFocused = true
+                }
+        }
+        .background(alignment: .bottom) {
+            Rectangle()
+                .fill(Color.orange.opacity(0.6))
+                .frame(height: 2)
+        }
+        .frame(maxWidth: 200)
+    }
+}
+
 struct ExerciseHeaderView: View {
     let routineExercise: RoutineExercise
     var isEditMode: Bool = false
+    var showDragHandle: Bool = true
     var supersetPosition: Int? = nil
     var supersetTotal: Int? = nil
 
@@ -999,8 +1055,8 @@ struct ExerciseHeaderView: View {
                 SupersetBadge(position: position, total: total)
             }
 
-            // Drag indicator in edit mode
-            if isEditMode {
+            // Drag indicator in edit mode (only if showDragHandle is true)
+            if isEditMode && showDragHandle {
                 Image(systemName: "line.3.horizontal")
                     .font(.body.weight(.medium))
                     .foregroundStyle(.tertiary)
@@ -1182,58 +1238,6 @@ struct RoutineSetRowView: View {
             RoundedRectangle(cornerRadius: 8)
                 .strokeBorder(isExpanded ? DesignSystem.Colors.tint.opacity(0.3) : Color.clear, lineWidth: 1)
         )
-    }
-}
-
-// MARK: - Edit Routine Name Sheet
-
-struct EditRoutineNameView: View {
-    let routine: Routine
-    @ObservedObject var viewModel: RoutinesViewModel
-    @Environment(\.dismiss) private var dismiss
-
-    @State private var routineName: String
-
-    init(routine: Routine, viewModel: RoutinesViewModel) {
-        self.routine = routine
-        self.viewModel = viewModel
-        self._routineName = State(initialValue: routine.name)
-    }
-
-    var body: some View {
-        NavigationView {
-            Form {
-                Section("Routine Name") {
-                    TextField("Routine Name", text: $routineName)
-                }
-            }
-            .navigationTitle("routine.edit".localized)
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("action.cancel".localized) {
-                        dismiss()
-                    }
-                }
-
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("action.save".localized) {
-                        saveRoutine()
-                    }
-                    .disabled(routineName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                }
-            }
-        }
-    }
-
-    private func saveRoutine() {
-        let trimmedName = routineName.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmedName.isEmpty else { return }
-
-        routine.name = trimmedName
-        routine.updatedAt = Date()
-        viewModel.updateRoutine(routine)
-        dismiss()
     }
 }
 
