@@ -20,7 +20,7 @@ struct NewRestTimerView: View {
             backgroundProgressLayer
             runningContent
         }
-        .background(Color.black)
+        .background(OnyxWatch.Colors.background)
         .onAppear { pulse = true }
         .onChange(of: shouldPulse) { isPulsing in
             if isPulsing {
@@ -78,7 +78,7 @@ struct NewRestTimerView: View {
             .animation(.linear(duration: 0.5), value: progress)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color.black)
+        .background(OnyxWatch.Colors.background)
         .scaleEffect(backgroundPulse)
         .animation(.easeInOut(duration: 0.6), value: backgroundPulse)
         .ignoresSafeArea()
@@ -118,7 +118,7 @@ struct NewRestTimerView: View {
                     Text("Skip")
                         .font(.footnote.weight(.semibold))
                 }
-                .tint(.orange)
+                .tint(OnyxWatch.Colors.warning)
             }
             .buttonBorderShape(.capsule)
         }
@@ -198,7 +198,7 @@ struct NewRestTimerView: View {
 //                            .font(.footnote.weight(.semibold))
 //                    }
 ////                    .buttonStyle(.bordered)
-//                    .tint(.orange)
+//                    .tint(OnyxWatch.Colors.warning)
 //                    .accessibilityHint("Double tap to skip rest")
 //                }
 //                .buttonBorderShape(.capsule)

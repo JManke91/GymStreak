@@ -33,7 +33,7 @@ private struct RoutinesViewInternal: View {
                             viewModel.showingAddRoutine = true
                         }
                         .buttonStyle(.borderedProminent)
-                        .tint(Color.appAccent)
+                        .tint(DesignSystem.Colors.tint)
                     }
                 } else {
                     List {

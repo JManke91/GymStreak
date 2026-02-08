@@ -54,7 +54,7 @@ struct ExerciseListView: View {
                     }
                     .frame(maxWidth: .infinity)
                 }
-                .foregroundStyle(.orange)
+                .foregroundStyle(OnyxWatch.Colors.warning)
                 .listRowBackground(Color.orange.opacity(0.15))
                 .accessibilityLabel("End workout")
                 .accessibilityHint("Double tap to finish or discard your workout")
@@ -154,7 +154,7 @@ struct WorkoutProgressHeader: View {
 
                         Circle()
                             .trim(from: 0, to: progress)
-                            .stroke(Color.green, style: StrokeStyle(lineWidth: 6, lineCap: .round))
+                            .stroke(OnyxWatch.Colors.success, style: StrokeStyle(lineWidth: 6, lineCap: .round))
                             .rotationEffect(.degrees(-90))
 
                         VStack(spacing: 0) {
@@ -349,16 +349,16 @@ struct StatusIcon: View {
             switch status {
             case .completed:
                 Image(systemName: "checkmark.circle.fill")
-                    .foregroundStyle(.green)
+                    .foregroundStyle(OnyxWatch.Colors.success)
 
             case .inProgress:
                 Image(systemName: "circle.dotted")
-                    .foregroundStyle(.blue)
+                    .foregroundStyle(OnyxWatch.Colors.tint)
                     .symbolEffect(.pulse, isActive: !reduceMotion)
 
             case .partiallyComplete:
                 Image(systemName: "circle.bottomhalf.filled")
-                    .foregroundStyle(.orange)
+                    .foregroundStyle(OnyxWatch.Colors.warning)
 
             case .pending:
                 Image(systemName: "circle")

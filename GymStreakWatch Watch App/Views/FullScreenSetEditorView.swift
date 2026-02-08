@@ -46,7 +46,7 @@ struct FullScreenSetEditorView: View {
         NavigationStack {
             ZStack {
                 // Background extends edge-to-edge
-                Color.black
+                OnyxWatch.Colors.background
                     .ignoresSafeArea()
 
                 // Content respects safe areas with explicit padding

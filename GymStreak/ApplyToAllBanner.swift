@@ -69,7 +69,7 @@ struct ApplyToAllBanner: View {
             Image(systemName: icon)
                 .font(.caption)
                 .symbolRenderingMode(.hierarchical)
-                .foregroundStyle(Color.appAccent)
+                .foregroundStyle(DesignSystem.Colors.tint)
                 .frame(width: 20, height: 20)
 
             Text(labelText)
@@ -90,7 +90,7 @@ struct ApplyToAllBanner: View {
                     .foregroundStyle(.white)
                     .padding(.horizontal, 12)
                     .padding(.vertical, 6)
-                    .background(Color.appAccent, in: Capsule())
+                    .background(DesignSystem.Colors.tint, in: Capsule())
                     .lineLimit(1)
                     .fixedSize()
             }
@@ -114,7 +114,7 @@ struct ApplyToAllBanner: View {
         .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 8))
         .overlay(
             RoundedRectangle(cornerRadius: 8)
-                .strokeBorder(Color.appAccent.opacity(0.3), lineWidth: 1)
+                .strokeBorder(DesignSystem.Colors.tint.opacity(0.3), lineWidth: 1)
         )
     }
 }

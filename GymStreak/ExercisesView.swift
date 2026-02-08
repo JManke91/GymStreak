@@ -29,7 +29,7 @@ private struct ExercisesViewInternal: View {
                             viewModel.showingAddExercise = true
                         }
                         .buttonStyle(.borderedProminent)
-                        .tint(Color.appAccent)
+                        .tint(DesignSystem.Colors.tint)
                     }
                 } else {
                     List {

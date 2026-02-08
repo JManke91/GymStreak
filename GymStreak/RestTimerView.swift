@@ -14,12 +14,12 @@ struct RestTimerView: View {
             // Circular Progress Ring
             ZStack {
                 Circle()
-                    .stroke(Color.secondary.opacity(0.2), lineWidth: 12)
+                    .stroke(DesignSystem.Colors.divider, lineWidth: 12)
                     .frame(width: 160, height: 160)
 
                 Circle()
                     .trim(from: 0, to: progress)
-                    .stroke(Color.appAccent, style: StrokeStyle(lineWidth: 12, lineCap: .round))
+                    .stroke(DesignSystem.Colors.tint, style: StrokeStyle(lineWidth: 12, lineCap: .round))
                     .frame(width: 160, height: 160)
                     .rotationEffect(.degrees(-90))
                     .animation(.linear(duration: 1), value: progress)

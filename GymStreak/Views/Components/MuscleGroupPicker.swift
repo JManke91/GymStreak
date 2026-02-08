@@ -112,7 +112,7 @@ private struct MuscleGroupRow: View {
                 if isSelected {
                     Image(systemName: "checkmark.circle.fill")
                         .font(.title3)
-                        .foregroundStyle(Color.appAccent)
+                        .foregroundStyle(DesignSystem.Colors.tint)
                         .transition(.scale.combined(with: .opacity))
                 }
             }

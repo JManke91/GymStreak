@@ -44,7 +44,7 @@ struct CompactValueEditor: View {
                     }
                     .buttonStyle(.bordered)
                     .buttonBorderShape(.circle)
-                    .tint(.blue)
+                    .tint(OnyxWatch.Colors.tint)
                     .disabled(value <= range.lowerBound)
                     .opacity(value <= range.lowerBound ? 0.4 : 1.0)
 
@@ -58,7 +58,7 @@ struct CompactValueEditor: View {
                     }
                     .buttonStyle(.bordered)
                     .buttonBorderShape(.circle)
-                    .tint(.blue)
+                    .tint(OnyxWatch.Colors.tint)
                     .disabled(value >= range.upperBound)
                     .opacity(value >= range.upperBound ? 0.4 : 1.0)
                 }
@@ -112,12 +112,12 @@ struct CompactValueEditor: View {
 //            .frame(height: 60)
             .background {
                 RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .fill(isFocused ? Color.blue.opacity(0.12) : Color.clear)
+                    .fill(isFocused ? OnyxWatch.Colors.tint.opacity(0.12) : Color.clear)
             }
             .overlay {
                 RoundedRectangle(cornerRadius: 8, style: .continuous)
                     .strokeBorder(
-                        isFocused ? Color.blue : Color.gray.opacity(0.25),
+                        isFocused ? OnyxWatch.Colors.tint : OnyxWatch.Colors.textSecondary.opacity(0.25),
                         lineWidth: isFocused ? 1.5 : 1
                     )
             }

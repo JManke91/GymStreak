@@ -36,9 +36,9 @@ struct AddExerciseToWorkoutView: View {
                         HStack(spacing: 12) {
                             Image(systemName: "plus.circle.fill")
                                 .font(.title3)
-                                .foregroundStyle(Color.appAccent)
+                                .foregroundStyle(DesignSystem.Colors.tint)
                                 .frame(width: 40, height: 40)
-                                .background(Color.appAccent.opacity(0.1))
+                                .background(DesignSystem.Colors.tint.opacity(0.1))
                                 .clipShape(RoundedRectangle(cornerRadius: 10))
 
                             VStack(alignment: .leading, spacing: 4) {

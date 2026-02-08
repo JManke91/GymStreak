@@ -52,7 +52,7 @@ struct ActiveWorkoutView: View {
                                     .frame(width: 44, height: 44)
                                     .background(
                                         Circle()
-                                            .fill(Color.green)
+                                            .fill(DesignSystem.Colors.success)
                                     )
 
                                 VStack(alignment: .leading, spacing: 2) {
@@ -60,19 +60,19 @@ struct ActiveWorkoutView: View {
                                         .font(.headline)
                                     Text("workout.add_exercise.description".localized)
                                         .font(.caption)
-                                        .foregroundStyle(.secondary)
+                                        .foregroundStyle(DesignSystem.Colors.textSecondary)
                                 }
 
                                 Spacer()
 
                                 Image(systemName: "chevron.right")
                                     .font(.caption.weight(.semibold))
-                                    .foregroundStyle(.tertiary)
+                                    .foregroundStyle(DesignSystem.Colors.textTertiary)
                             }
                             .padding(.vertical, 12)
                             .padding(.horizontal, 16)
-                            .background(Color(.secondarySystemGroupedBackground))
-                            .clipShape(RoundedRectangle(cornerRadius: 12))
+                            .background(DesignSystem.Colors.card)
+                            .clipShape(RoundedRectangle(cornerRadius: DesignSystem.Dimensions.cornerRadiusMD))
                             .contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)
@@ -224,12 +224,11 @@ struct TimerHeader: View {
             HStack {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("workout.time".localized)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .font(.onyxCaption)
+                        .foregroundStyle(DesignSystem.Colors.textSecondary)
 
                     Text(viewModel.formatDuration(viewModel.elapsedTime))
-                        .font(.system(.title, design: .rounded, weight: .semibold))
-                        .monospacedDigit()
+                        .font(.onyxNumberLarge)
                 }
 
                 Spacer()
@@ -237,11 +236,11 @@ struct TimerHeader: View {
                 if let session = viewModel.currentSession {
                     VStack(alignment: .trailing, spacing: 4) {
                         Text("workout.progress".localized)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .font(.onyxCaption)
+                            .foregroundStyle(DesignSystem.Colors.textSecondary)
 
                         Text("\(session.completedSetsCount)/\(session.totalSetsCount)")
-                            .font(.headline)
+                            .font(.onyxHeader)
                     }
                 }
             }
@@ -251,12 +250,12 @@ struct TimerHeader: View {
                 GeometryReader { geometry in
                     ZStack(alignment: .leading) {
                         Rectangle()
-                            .fill(Color.secondary.opacity(0.2))
+                            .fill(DesignSystem.Colors.divider)
                             .frame(height: 6)
                             .clipShape(Capsule())
 
                         Rectangle()
-                            .fill(Color.appAccent)
+                            .fill(DesignSystem.Colors.tint)
                             .frame(width: geometry.size.width * CGFloat(session.completedSetsCount) / CGFloat(session.totalSetsCount), height: 6)
                             .clipShape(Capsule())
                             .animation(.spring, value: session.completedSetsCount)
@@ -266,7 +265,7 @@ struct TimerHeader: View {
             }
         }
         .padding()
-        .background(.regularMaterial)
+        .background(DesignSystem.Colors.card)
     }
 }
 
@@ -391,22 +390,22 @@ struct ExerciseCard: View {
                         .font(.subheadline)
                         .fontWeight(.semibold)
                 }
-                .foregroundStyle(Color.appAccent)
+                .foregroundStyle(DesignSystem.Colors.tint)
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 12)
-                .background(Color(.tertiarySystemFill))
-                .clipShape(RoundedRectangle(cornerRadius: 10))
+                .background(DesignSystem.Colors.input)
+                .clipShape(RoundedRectangle(cornerRadius: DesignSystem.Dimensions.cornerRadiusSM))
             }
             .buttonStyle(.plain)
             .accessibilityLabel("accessibility.add_set".localized(workoutExercise.exerciseName))
             .accessibilityHint("accessibility.add_set.hint".localized)
         }
         .padding()
-        .background(isCurrentExercise ? Color.appAccent.opacity(0.1) : Color(.secondarySystemGroupedBackground))
-        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .background(isCurrentExercise ? DesignSystem.Colors.tint.opacity(0.1) : DesignSystem.Colors.card)
+        .clipShape(RoundedRectangle(cornerRadius: DesignSystem.Dimensions.cornerRadiusMD))
         .overlay(
-            RoundedRectangle(cornerRadius: 12)
-                .strokeBorder(isCurrentExercise ? Color.appAccent : Color.clear, lineWidth: 2)
+            RoundedRectangle(cornerRadius: DesignSystem.Dimensions.cornerRadiusMD)
+                .strokeBorder(isCurrentExercise ? DesignSystem.Colors.tint : Color.clear, lineWidth: 2)
         )
     }
 
@@ -494,9 +493,9 @@ struct WorkoutSetRow: View {
 
     private var backgroundColor: Color {
         if isExpanded {
-            return Color(.tertiarySystemGroupedBackground)
+            return DesignSystem.Colors.cardElevated
         } else if isNextSet {
-            return Color.appAccent.opacity(0.1)
+            return DesignSystem.Colors.tint.opacity(0.1)
         } else {
             return Color.clear
         }
@@ -536,13 +535,13 @@ struct WorkoutSetRow: View {
                     } label: {
                         ZStack {
                             Circle()
-                                .strokeBorder(set.isCompleted ? Color.green : (isNextSet ? Color.appAccent : Color.secondary), lineWidth: 2)
+                                .strokeBorder(set.isCompleted ? DesignSystem.Colors.success : (isNextSet ? DesignSystem.Colors.tint : DesignSystem.Colors.textSecondary), lineWidth: 2)
                                 .frame(width: 28, height: 28)
 
                             if set.isCompleted {
                                 Image(systemName: "checkmark")
                                     .font(.caption.weight(.bold))
-                                    .foregroundStyle(.green)
+                                    .foregroundStyle(DesignSystem.Colors.success)
                             }
                         }
                     }
@@ -576,7 +575,7 @@ struct WorkoutSetRow: View {
                     // Expand/Collapse indicator
                     Image(systemName: "chevron.down")
                         .font(isExpanded ? .subheadline.weight(.bold) : .caption.weight(.semibold))
-                        .foregroundStyle(isExpanded ? Color.appAccent : .secondary)
+                        .foregroundStyle(isExpanded ? DesignSystem.Colors.tint : DesignSystem.Colors.textSecondary)
                         .rotationEffect(.degrees(isExpanded ? 180 : 0))
                 }
                 .contentShape(Rectangle())
@@ -712,8 +711,8 @@ struct WorkoutSetRow: View {
                 .fill(backgroundColor)
         )
         .overlay(
-            RoundedRectangle(cornerRadius: 8)
-                .strokeBorder(isExpanded ? Color.appAccent.opacity(0.3) : Color.clear, lineWidth: 1)
+            RoundedRectangle(cornerRadius: DesignSystem.Dimensions.cornerRadiusSM)
+                .strokeBorder(isExpanded ? DesignSystem.Colors.tint.opacity(0.3) : Color.clear, lineWidth: 1)
         )
         .opacity(set.isCompleted ? 0.7 : 1.0)
         .onChange(of: set.actualReps) { _, newValue in
@@ -734,6 +733,7 @@ struct ActionBar: View {
     var body: some View {
         VStack(spacing: 0) {
             Divider()
+                .background(DesignSystem.Colors.divider)
 
             HStack(spacing: 12) {
                 Button(role: .destructive) {
@@ -741,7 +741,7 @@ struct ActionBar: View {
                 } label: {
                     Text("workout.cancel".localized)
                         .frame(maxWidth: .infinity)
-                        .frame(height: 50)
+                        .frame(height: DesignSystem.Dimensions.buttonHeight)
                 }
                 .buttonStyle(.bordered)
 
@@ -750,14 +750,14 @@ struct ActionBar: View {
                 } label: {
                     Label("workout.finish".localized, systemImage: "checkmark.circle.fill")
                         .frame(maxWidth: .infinity)
-                        .frame(height: 50)
+                        .frame(height: DesignSystem.Dimensions.buttonHeight)
                 }
                 .buttonStyle(.borderedProminent)
-                .tint(Color.appAccent)
+                .tint(DesignSystem.Colors.tint)
             }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 12)
-            .background(.regularMaterial)
+            .padding(.horizontal, DesignSystem.Spacing.lg)
+            .padding(.vertical, DesignSystem.Spacing.md)
+            .background(DesignSystem.Colors.card)
         }
     }
 }
@@ -773,12 +773,12 @@ struct CompactRestTimer: View {
             // Circular progress indicator (small)
             ZStack {
                 Circle()
-                    .stroke(Color.secondary.opacity(0.2), lineWidth: 3)
+                    .stroke(DesignSystem.Colors.divider, lineWidth: 3)
                     .frame(width: 32, height: 32)
 
                 Circle()
                     .trim(from: 0, to: progress)
-                    .stroke(Color.appAccent, style: StrokeStyle(lineWidth: 3, lineCap: .round))
+                    .stroke(DesignSystem.Colors.tint, style: StrokeStyle(lineWidth: 3, lineCap: .round))
                     .frame(width: 32, height: 32)
                     .rotationEffect(.degrees(-90))
                     .animation(.linear(duration: 1), value: progress)
@@ -787,12 +787,11 @@ struct CompactRestTimer: View {
             // Timer text
             VStack(alignment: .leading, spacing: 2) {
                 Text("rest_timer.title".localized)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .font(.onyxCaption)
+                    .foregroundStyle(DesignSystem.Colors.textSecondary)
 
                 Text(viewModel.formatTime(viewModel.restTimeRemaining))
-                    .font(.system(.subheadline, design: .rounded, weight: .semibold))
-                    .monospacedDigit()
+                    .font(.onyxNumber)
             }
 
             Spacer()
@@ -805,7 +804,7 @@ struct CompactRestTimer: View {
                 } label: {
                     Image(systemName: "forward.fill")
                         .font(.caption)
-                        .foregroundStyle(.orange)
+                        .foregroundStyle(DesignSystem.Colors.warning)
                 }
                 .buttonStyle(.bordered)
                 .controlSize(.small)
@@ -821,13 +820,13 @@ struct CompactRestTimer: View {
                 .controlSize(.small)
             }
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 12)
-        .background(.ultraThinMaterial)
+        .padding(.horizontal, DesignSystem.Spacing.lg)
+        .padding(.vertical, DesignSystem.Spacing.md)
+        .background(DesignSystem.Colors.card)
         .overlay(
             Rectangle()
                 .frame(height: 1)
-                .foregroundStyle(Color.secondary.opacity(0.2)),
+                .foregroundStyle(DesignSystem.Colors.divider),
             alignment: .bottom
         )
     }
@@ -900,13 +899,14 @@ struct DeleteExerciseConfirmationView: View {
                         .font(.headline)
                         .frame(maxWidth: .infinity)
                         .padding()
-                        .background(Color(.secondarySystemGroupedBackground))
-                        .foregroundStyle(.primary)
-                        .clipShape(RoundedRectangle(cornerRadius: 12))
+                        .background(DesignSystem.Colors.card)
+                        .foregroundStyle(DesignSystem.Colors.textPrimary)
+                        .clipShape(RoundedRectangle(cornerRadius: DesignSystem.Dimensions.cornerRadiusMD))
                 }
             }
             .padding(.horizontal)
         }
         .padding(.bottom, 20)
+        .background(DesignSystem.Colors.background)
     }
 }

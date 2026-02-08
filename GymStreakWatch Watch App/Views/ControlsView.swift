@@ -33,7 +33,7 @@ struct ControlsView: View {
                     )
                 }
                 .buttonStyle(.borderedProminent)
-                .tint(isPaused ? .green : .orange)
+                .tint(isPaused ? OnyxWatch.Colors.success : OnyxWatch.Colors.warning)
                 .controlSize(.large)
                 .accessibilityHint(isPaused ? "Double tap to resume workout" : "Double tap to pause workout")
 
@@ -42,7 +42,7 @@ struct ControlsView: View {
                     Label("End Workout", systemImage: "stop.fill")
                 }
                 .buttonStyle(.bordered)
-                .tint(.red)
+                .tint(OnyxWatch.Colors.destructive)
                 .accessibilityLabel("End workout")
                 .accessibilityHint("Double tap to end and save your workout")
             }

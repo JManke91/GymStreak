@@ -40,7 +40,8 @@ private struct ContentViewInternal: View {
                     Label("tab.history".localized, systemImage: "clock.fill")
                 }
         }
-        .tint(Color.appAccent)
+        .tint(DesignSystem.Colors.tint)
+        .preferredColorScheme(.dark)
     }
 }
 

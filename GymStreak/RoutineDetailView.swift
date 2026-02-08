@@ -41,7 +41,7 @@ struct RoutineDetailView: View {
                             showingAddExercise = true
                         }
                         .buttonStyle(.borderedProminent)
-                        .tint(Color.appAccent)
+                        .tint(DesignSystem.Colors.tint)
                     }
                     .listRowInsets(EdgeInsets())
                     .listRowBackground(Color.clear)
@@ -210,10 +210,10 @@ struct RoutineDetailView: View {
                                             .font(.subheadline)
                                             .fontWeight(.semibold)
                                     }
-                                    .foregroundStyle(Color.appAccent)
+                                    .foregroundStyle(DesignSystem.Colors.tint)
                                     .frame(maxWidth: .infinity)
                                     .padding(.vertical, 12)
-                                    .background(Color(.tertiarySystemFill))
+                                    .background(DesignSystem.Colors.input)
                                     .clipShape(RoundedRectangle(cornerRadius: 10))
                                 }
                                 .buttonStyle(.plain)
@@ -301,12 +301,12 @@ struct RoutineDetailView: View {
                             }
                         }
                         .font(.body.weight(.semibold))
-                        .foregroundStyle(isEditMode ? .orange : Color.appAccent)
+                        .foregroundStyle(isEditMode ? .orange : DesignSystem.Colors.tint)
                         .padding(.horizontal, 12)
                         .padding(.vertical, 6)
                         .background(
                             RoundedRectangle(cornerRadius: 8)
-                                .fill(isEditMode ? Color.orange.opacity(0.1) : Color.appAccent.opacity(0.1))
+                                .fill(isEditMode ? Color.orange.opacity(0.1) : DesignSystem.Colors.tint.opacity(0.1))
                         )
                     }
                 }
@@ -330,11 +330,11 @@ struct RoutineDetailView: View {
                             .frame(height: 50)
                     }
                     .buttonStyle(.borderedProminent)
-                    .tint(Color.appAccent)
+                    .tint(DesignSystem.Colors.tint)
                     .controlSize(.large)
                     .padding(.horizontal, 16)
                     .padding(.vertical, 12)
-                    .background(.regularMaterial)
+                    .background(DesignSystem.Colors.card)
                 }
             }
         }
@@ -379,7 +379,7 @@ struct RoutineDetailView: View {
                     }
                     .padding(.horizontal, 16)
                     .padding(.vertical, 12)
-                    .background(Color.appAccent)
+                    .background(DesignSystem.Colors.tint)
                     .clipShape(RoundedRectangle(cornerRadius: 12))
                     .shadow(color: .black.opacity(0.15), radius: 8, y: 4)
                 }
@@ -581,7 +581,7 @@ struct RoutineSetRowView: View {
 
     private var backgroundColor: Color {
         if isExpanded {
-            return Color(.tertiarySystemGroupedBackground)
+            return DesignSystem.Colors.cardElevated
         } else {
             return Color.clear
         }
@@ -601,7 +601,7 @@ struct RoutineSetRowView: View {
                         .monospacedDigit()
                         .foregroundStyle(.white)
                         .frame(width: 28, height: 28)
-                        .background(Color.appAccent)
+                        .background(DesignSystem.Colors.tint)
                         .clipShape(Circle())
 
                     HStack(spacing: 8) {
@@ -617,7 +617,7 @@ struct RoutineSetRowView: View {
 
                     Image(systemName: "chevron.down")
                         .font(isExpanded ? .subheadline.weight(.bold) : .caption.weight(.semibold))
-                        .foregroundStyle(isExpanded ? Color.appAccent : .secondary)
+                        .foregroundStyle(isExpanded ? DesignSystem.Colors.tint : .secondary)
                         .rotationEffect(.degrees(isExpanded ? 180 : 0))
                 }
                 .contentShape(Rectangle())
@@ -718,7 +718,7 @@ struct RoutineSetRowView: View {
         )
         .overlay(
             RoundedRectangle(cornerRadius: 8)
-                .strokeBorder(isExpanded ? Color.appAccent.opacity(0.3) : Color.clear, lineWidth: 1)
+                .strokeBorder(isExpanded ? DesignSystem.Colors.tint.opacity(0.3) : Color.clear, lineWidth: 1)
         )
     }
 }

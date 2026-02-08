@@ -10,14 +10,11 @@ import SwiftUI
 extension Color {
     static let electricPurple = Color(red: 139/255, green: 92/255, blue: 246/255)
     static let electricCyan = Color(red: 0/255, green: 212/255, blue: 255/255)
+    static let electricBlue = Color(red: 10/255, green: 132/255, blue: 255/255)
 
-    /// Adaptive accent color that provides excellent contrast in both light and dark modes
-    /// - Light mode: Uses electricPurple for a modern, vibrant appearance
-    /// - Dark mode: Uses electricCyan for vibrant, modern appearance on dark backgrounds
-    static let appAccent = Color(
-        light: Color(red: 139/255, green: 92/255, blue: 246/255), // electricPurple
-        dark: Color(red: 0/255, green: 212/255, blue: 255/255)    // electricCyan
-    )
+    /// App accent color - Electric Blue from Onyx Design System
+    /// Uses DesignSystem.Colors.tint for consistency across the app
+    static let appAccent = DesignSystem.Colors.tint
 }
 
 extension Color {

@@ -49,7 +49,7 @@ struct HorizontalStepper: View {
                 Image(systemName: "minus.circle.fill")
                     .font(.title)
                     .symbolRenderingMode(.hierarchical)
-                    .foregroundStyle(value <= range.lowerBound ? Color.secondary : Color.appAccent)
+                    .foregroundStyle(value <= range.lowerBound ? DesignSystem.Colors.textDisabled : DesignSystem.Colors.tint)
                     .frame(width: 44, height: 44)
                     .contentShape(Rectangle())
             }
@@ -58,7 +58,8 @@ struct HorizontalStepper: View {
 
             // Tappable number display
             Text("\(value)")
-                .font(.body.monospacedDigit().weight(.semibold))
+                .font(.onyxNumber)
+                .foregroundStyle(DesignSystem.Colors.textPrimary)
                 .frame(minWidth: 44)
                 .contentShape(Rectangle())
 
@@ -73,7 +74,7 @@ struct HorizontalStepper: View {
                 Image(systemName: "plus.circle.fill")
                     .font(.title)
                     .symbolRenderingMode(.hierarchical)
-                    .foregroundStyle(value >= range.upperBound ? Color.secondary : Color.appAccent)
+                    .foregroundStyle(value >= range.upperBound ? DesignSystem.Colors.textDisabled : DesignSystem.Colors.tint)
                     .frame(width: 44, height: 44)
                     .contentShape(Rectangle())
             }
@@ -130,7 +131,7 @@ struct WeightInput: View {
                 Image(systemName: "minus.circle.fill")
                     .font(.title)
                     .symbolRenderingMode(.hierarchical)
-                    .foregroundStyle(weight <= 0 ? Color.secondary : Color.appAccent)
+                    .foregroundStyle(weight <= 0 ? DesignSystem.Colors.textDisabled : DesignSystem.Colors.tint)
                     .frame(width: 44, height: 44)
                     .contentShape(Rectangle())
             }
@@ -141,12 +142,13 @@ struct WeightInput: View {
             TextField("0.0", value: $weight, format: .number.precision(.fractionLength(0...2)))
                 .keyboardType(.decimalPad)
                 .multilineTextAlignment(.center)
-                .font(.body.monospacedDigit().weight(.semibold))
+                .font(.onyxNumber)
+                .foregroundStyle(DesignSystem.Colors.textPrimary)
                 .frame(width: 70)
                 .padding(.vertical, 6)
                 .padding(.horizontal, 8)
-                .background(Color(.tertiarySystemGroupedBackground))
-                .clipShape(RoundedRectangle(cornerRadius: 8))
+                .background(DesignSystem.Colors.input)
+                .clipShape(RoundedRectangle(cornerRadius: DesignSystem.Dimensions.cornerRadiusSM))
                 .focused($isFocused)
                 .selectAllOnFocus()
                 .onChange(of: weight) { oldValue, newValue in
@@ -178,7 +180,7 @@ struct WeightInput: View {
                 Image(systemName: "plus.circle.fill")
                     .font(.title)
                     .symbolRenderingMode(.hierarchical)
-                    .foregroundStyle(Color.appAccent)
+                    .foregroundStyle(DesignSystem.Colors.tint)
                     .frame(width: 44, height: 44)
                     .contentShape(Rectangle())
             }

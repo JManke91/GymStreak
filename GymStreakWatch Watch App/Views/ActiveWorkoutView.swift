@@ -18,7 +18,7 @@ struct ActiveWorkoutView: View {
     var body: some View {
         ZStack {
             // Black background for entire workout view
-            Color.black.ignoresSafeArea()
+            OnyxWatch.Colors.background.ignoresSafeArea()
 
             // Keep workoutTabs always in hierarchy to preserve navigation state
 //            if viewModel.workoutState == .started {

@@ -121,7 +121,7 @@ struct RoutineExerciseDetailView: View {
                 Button("routine_exercise_detail.add_set".localized) {
                     addNewSet()
                 }
-                .foregroundColor(Color.appAccent)
+                .foregroundColor(DesignSystem.Colors.tint)
             }
 
             Section {

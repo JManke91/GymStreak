@@ -72,7 +72,7 @@ struct WorkoutHistoryCard: View {
             }
             .frame(width: 60)
             .padding(.vertical, 8)
-            .background(Color.appAccent.opacity(0.1))
+            .background(DesignSystem.Colors.tint.opacity(0.1))
             .clipShape(RoundedRectangle(cornerRadius: 8))
 
             VStack(alignment: .leading, spacing: 6) {
@@ -97,7 +97,7 @@ struct WorkoutHistoryCard: View {
                 .foregroundStyle(.tertiary)
         }
         .padding()
-        .background(Color(.secondarySystemGroupedBackground))
+        .background(DesignSystem.Colors.card)
         .clipShape(RoundedRectangle(cornerRadius: 12))
         .padding(.horizontal)
         .padding(.vertical, 4)
