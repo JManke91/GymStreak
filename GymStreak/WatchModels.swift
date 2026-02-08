@@ -24,6 +24,8 @@ struct WatchExercise: Codable, Identifiable, Hashable {
     let muscleGroup: String
     let sets: [WatchSet]
     let order: Int
+    let supersetId: UUID?
+    let supersetOrder: Int
 }
 
 struct WatchSet: Codable, Identifiable, Hashable {
@@ -74,6 +76,8 @@ struct CompletedWatchExercise: Codable {
     let muscleGroup: String
     let sets: [CompletedWatchSet]
     let order: Int
+    let supersetId: UUID?
+    let supersetOrder: Int
 }
 
 struct CompletedWatchSet: Codable {
@@ -109,7 +113,9 @@ extension Routine {
                             restTime: set.restTime
                         )
                     },
-                    order: routineExercise.order
+                    order: routineExercise.order,
+                    supersetId: routineExercise.supersetId,
+                    supersetOrder: routineExercise.supersetOrder
                 )
             }
         )

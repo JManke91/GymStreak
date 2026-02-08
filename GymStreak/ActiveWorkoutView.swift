@@ -21,23 +21,48 @@ struct ActiveWorkoutView: View {
             ScrollView {
                 LazyVStack(spacing: 16) {
                     if let session = viewModel.currentSession {
-                        ForEach(session.workoutExercisesList.sorted(by: { $0.order < $1.order }), id: \.id) { workoutExercise in
-                            ExerciseCard(
-                                workoutExercise: workoutExercise,
-                                viewModel: viewModel,
-                                isCurrentExercise: isCurrentExercise(workoutExercise),
-                                expandedSetId: $expandedSetId,
-                                lastActiveExerciseId: $lastActiveExerciseId,
-                                onDelete: {
-                                    exerciseToDelete = workoutExercise
-                                },
-                                onSetCompleted: {
-                                    // Collapse the expanded set when it's marked as complete
-                                    withAnimation(.snappy(duration: 0.35)) {
-                                        expandedSetId = nil
+                        ForEach(Array(session.exercisesGroupedBySupersets.enumerated()), id: \.offset) { groupIndex, exerciseGroup in
+                            if exerciseGroup.count > 1 {
+                                // Superset group
+                                SupersetWorkoutGroupView(exerciseCount: exerciseGroup.count) {
+                                    ForEach(Array(exerciseGroup.enumerated()), id: \.element.id) { index, workoutExercise in
+                                        ExerciseCard(
+                                            workoutExercise: workoutExercise,
+                                            viewModel: viewModel,
+                                            isCurrentExercise: isCurrentExercise(workoutExercise),
+                                            expandedSetId: $expandedSetId,
+                                            lastActiveExerciseId: $lastActiveExerciseId,
+                                            supersetPosition: index + 1,
+                                            supersetTotal: exerciseGroup.count,
+                                            onDelete: {
+                                                exerciseToDelete = workoutExercise
+                                            },
+                                            onSetCompleted: {
+                                                withAnimation(.snappy(duration: 0.35)) {
+                                                    expandedSetId = nil
+                                                }
+                                            }
+                                        )
                                     }
                                 }
-                            )
+                            } else if let workoutExercise = exerciseGroup.first {
+                                // Single exercise
+                                ExerciseCard(
+                                    workoutExercise: workoutExercise,
+                                    viewModel: viewModel,
+                                    isCurrentExercise: isCurrentExercise(workoutExercise),
+                                    expandedSetId: $expandedSetId,
+                                    lastActiveExerciseId: $lastActiveExerciseId,
+                                    onDelete: {
+                                        exerciseToDelete = workoutExercise
+                                    },
+                                    onSetCompleted: {
+                                        withAnimation(.snappy(duration: 0.35)) {
+                                            expandedSetId = nil
+                                        }
+                                    }
+                                )
+                            }
                         }
 
                         // Add Exercise Button - Card-style with chevron (navigation pattern)
@@ -277,6 +302,8 @@ struct ExerciseCard: View {
     let isCurrentExercise: Bool
     @Binding var expandedSetId: UUID?
     @Binding var lastActiveExerciseId: UUID?
+    var supersetPosition: Int? = nil
+    var supersetTotal: Int? = nil
     var onDelete: (() -> Void)?
     @State private var showingRestTimeConfig = false
     var onSetCompleted: (() -> Void)?
@@ -305,6 +332,11 @@ struct ExerciseCard: View {
                 }
 
                 Spacer()
+
+                // Superset position badge
+                if let position = supersetPosition, let total = supersetTotal {
+                    SupersetBadge(position: position, total: total)
+                }
 
                 if workoutExercise.completedSetsCount == workoutExercise.setsList.count {
                     Image(systemName: "checkmark.circle.fill")
@@ -908,5 +940,65 @@ struct DeleteExerciseConfirmationView: View {
         }
         .padding(.bottom, 20)
         .background(DesignSystem.Colors.background)
+    }
+}
+
+// MARK: - Superset Workout Group View
+
+struct SupersetWorkoutGroupView<Content: View>: View {
+    let exerciseCount: Int
+    let content: Content
+
+    init(exerciseCount: Int, @ViewBuilder content: () -> Content) {
+        self.exerciseCount = exerciseCount
+        self.content = content()
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            // Superset header
+            HStack(spacing: 6) {
+                Image(systemName: "link")
+                    .font(.caption.weight(.semibold))
+                Text("Superset")
+                    .font(.caption.weight(.semibold))
+                Text("(\(exerciseCount) exercises)")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            .foregroundStyle(DesignSystem.Colors.tint)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 6)
+            .background(
+                Capsule()
+                    .fill(DesignSystem.Colors.tint.opacity(0.15))
+            )
+            .padding(.bottom, 8)
+
+            // Content with connecting visual
+            HStack(alignment: .top, spacing: 0) {
+                // Vertical connecting line
+                Rectangle()
+                    .fill(DesignSystem.Colors.tint.opacity(0.4))
+                    .frame(width: 3)
+                    .clipShape(RoundedRectangle(cornerRadius: 1.5))
+                    .padding(.leading, 4)
+
+                // Grouped exercises
+                VStack(spacing: 12) {
+                    content
+                }
+                .padding(.leading, 12)
+            }
+        }
+        .padding(12)
+        .background(
+            RoundedRectangle(cornerRadius: DesignSystem.Dimensions.cornerRadiusMD)
+                .fill(DesignSystem.Colors.tint.opacity(0.05))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: DesignSystem.Dimensions.cornerRadiusMD)
+                .strokeBorder(DesignSystem.Colors.tint.opacity(0.2), lineWidth: 1)
+        )
     }
 }

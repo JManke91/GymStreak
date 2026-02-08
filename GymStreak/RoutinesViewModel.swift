@@ -139,6 +139,83 @@ class RoutinesViewModel: ObservableObject {
         }
     }
 
+    // MARK: - Superset Management
+
+    /// Creates a superset from 2+ selected exercises
+    func createSuperset(from exercises: [RoutineExercise], in routine: Routine) {
+        guard exercises.count >= 2 else { return }
+
+        let supersetId = UUID()
+
+        // Assign superset ID and order within superset
+        for (index, exercise) in exercises.enumerated() {
+            exercise.supersetId = supersetId
+            exercise.supersetOrder = index
+        }
+
+        updateRoutine(routine)
+    }
+
+    /// Adds an exercise to an existing superset
+    func addExerciseToSuperset(_ exercise: RoutineExercise, supersetId: UUID, in routine: Routine) {
+        // Find highest supersetOrder in this superset
+        let existingMaxOrder = routine.routineExercisesList
+            .filter { $0.supersetId == supersetId }
+            .map(\.supersetOrder)
+            .max() ?? -1
+
+        exercise.supersetId = supersetId
+        exercise.supersetOrder = existingMaxOrder + 1
+
+        updateRoutine(routine)
+    }
+
+    /// Removes an exercise from its superset; auto-dissolves if only 1 remains
+    func removeExerciseFromSuperset(_ exercise: RoutineExercise, in routine: Routine) {
+        guard let supersetId = exercise.supersetId else { return }
+
+        // Remove from superset
+        exercise.supersetId = nil
+        exercise.supersetOrder = 0
+
+        // Find remaining exercises in this superset
+        let remaining = routine.routineExercisesList.filter { $0.supersetId == supersetId }
+
+        // If only 1 exercise remains, auto-dissolve the superset
+        if remaining.count == 1 {
+            remaining.first?.supersetId = nil
+            remaining.first?.supersetOrder = 0
+        } else {
+            // Reorder remaining exercises
+            for (index, ex) in remaining.sorted(by: { $0.supersetOrder < $1.supersetOrder }).enumerated() {
+                ex.supersetOrder = index
+            }
+        }
+
+        updateRoutine(routine)
+    }
+
+    /// Dissolves a superset, unlinking all exercises
+    func dissolveSuperset(_ supersetId: UUID, in routine: Routine) {
+        let exercises = routine.routineExercisesList.filter { $0.supersetId == supersetId }
+
+        for exercise in exercises {
+            exercise.supersetId = nil
+            exercise.supersetOrder = 0
+        }
+
+        updateRoutine(routine)
+    }
+
+    /// Reorders exercises within a superset
+    func reorderSuperset(_ exercises: [RoutineExercise], in routine: Routine) {
+        for (index, exercise) in exercises.enumerated() {
+            exercise.supersetOrder = index
+        }
+
+        updateRoutine(routine)
+    }
+
     private func save() {
         do {
             try modelContext.save()
@@ -179,6 +256,9 @@ class RoutinesViewModel: ObservableObject {
                     order: completedExercise.order
                 )
                 workoutExercise.workoutSession = workoutSession
+                // Copy superset fields from completed exercise
+                workoutExercise.supersetId = completedExercise.supersetId
+                workoutExercise.supersetOrder = completedExercise.supersetOrder
 
                 // Create workout sets
                 for completedSet in completedExercise.sets {

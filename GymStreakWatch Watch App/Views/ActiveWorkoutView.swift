@@ -181,7 +181,9 @@ struct ActiveWorkoutView: View {
                         WatchSet(id: UUID(), reps: 10, weight: 135, restTime: 90),
                         WatchSet(id: UUID(), reps: 10, weight: 135, restTime: 90)
                     ],
-                    order: 0
+                    order: 0,
+                    supersetId: nil,
+                    supersetOrder: 0
                 ),
                 WatchExercise(
                     id: UUID(),
@@ -191,7 +193,9 @@ struct ActiveWorkoutView: View {
                         WatchSet(id: UUID(), reps: 10, weight: 65, restTime: 60),
                         WatchSet(id: UUID(), reps: 10, weight: 65, restTime: 60)
                     ],
-                    order: 1
+                    order: 1,
+                    supersetId: nil,
+                    supersetOrder: 0
                 )
             ]
         )

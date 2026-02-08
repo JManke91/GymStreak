@@ -191,15 +191,39 @@ class HealthKitWorkoutManager: NSObject, ObservableObject {
         }
     }
 
-    /// Cancel the current workout session without saving
+    /// Cancel the current workout session without saving to HealthKit
     func cancelWorkoutSession() {
-        workoutSession?.end()
+        guard let session = workoutSession, let builder = workoutBuilder else {
+            // No active session, just clean up
+            workoutSession = nil
+            workoutBuilder = nil
+            isWorkoutActive = false
+            lastSyncError = nil
+            return
+        }
+
+        // End the session first
+        session.end()
+
+        // Discard the workout builder to prevent saving to HealthKit
+        // This is the key - we call discardWorkout() instead of finishWorkout()
+        Task {
+            do {
+                try await builder.endCollection(at: Date())
+                builder.discardWorkout()
+                print("HealthKit workout discarded successfully")
+            } catch {
+                print("Error discarding HealthKit workout: \(error)")
+            }
+        }
+
+        // Clean up references
         workoutSession = nil
         workoutBuilder = nil
         isWorkoutActive = false
         lastSyncError = nil
 
-        print("HealthKit workout session cancelled")
+        print("HealthKit workout session cancelled - workout NOT saved to Health")
     }
 
     /// Pause the current workout session

@@ -294,10 +294,20 @@ struct ExerciseRow: View {
                 StatusIcon(status: status)
 
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(exercise.name)
-                        .font(.headline)
-                        .fontWeight(isCurrent ? .semibold : .regular)
-                        .lineLimit(1)
+                    HStack(spacing: 6) {
+                        Text(exercise.name)
+                            .font(.headline)
+                            .fontWeight(isCurrent ? .semibold : .regular)
+                            .lineLimit(1)
+
+                        // Superset badge
+                        if exercise.isInSuperset {
+                            WatchSupersetBadge(
+                                position: exercise.supersetOrder + 1,
+                                total: nil // We don't have total easily accessible here
+                            )
+                        }
+                    }
 
                     Text("\(exercise.completedSetsCount)/\(exercise.sets.count) sets")
                         .font(.caption)
@@ -314,11 +324,39 @@ struct ExerciseRow: View {
             }
         }
         .listRowBackground(
-            isCurrent ? Color.accentColor.opacity(0.15) : Color.clear
+            exercise.isInSuperset
+                ? Color.accentColor.opacity(0.1)
+                : (isCurrent ? Color.accentColor.opacity(0.15) : Color.clear)
         )
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(exercise.name), \(status.accessibilityLabel), \(exercise.completedSetsCount) of \(exercise.sets.count) sets completed")
+        .accessibilityLabel("\(exercise.name), \(status.accessibilityLabel), \(exercise.completedSetsCount) of \(exercise.sets.count) sets completed\(exercise.isInSuperset ? ", part of superset" : "")")
         .accessibilityHint("Double tap to view sets")
+    }
+}
+
+// MARK: - Watch Superset Badge
+
+struct WatchSupersetBadge: View {
+    let position: Int
+    let total: Int?
+
+    var body: some View {
+        HStack(spacing: 2) {
+            Image(systemName: "link")
+                .font(.system(size: 8, weight: .bold))
+            if let total = total {
+                Text("\(position)/\(total)")
+                    .font(.system(size: 9, weight: .semibold))
+                    .monospacedDigit()
+            }
+        }
+        .foregroundStyle(.white)
+        .padding(.horizontal, 4)
+        .padding(.vertical, 2)
+        .background(
+            Capsule()
+                .fill(OnyxWatch.Colors.tint.opacity(0.8))
+        )
     }
 }
 

@@ -155,17 +155,32 @@ struct ExercisePreviewRow: View {
     let exercise: WatchExercise
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text(exercise.name)
-                .font(.footnote)
-                .lineLimit(1)
+        HStack {
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(spacing: 4) {
+                    Text(exercise.name)
+                        .font(.footnote)
+                        .lineLimit(1)
 
-            Text("\(exercise.sets.count) sets")
-                .font(.caption2)
-                .foregroundStyle(.secondary)
+                    // Superset indicator
+                    if exercise.supersetId != nil {
+                        Image(systemName: "link")
+                            .font(.system(size: 8, weight: .bold))
+                            .foregroundStyle(.blue)
+                    }
+                }
+
+                Text("\(exercise.sets.count) sets")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+
+            Spacer()
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.vertical, 4)
+        .background(
+            exercise.supersetId != nil ? Color.blue.opacity(0.05) : Color.clear
+        )
     }
 }
 
@@ -185,7 +200,9 @@ struct ExercisePreviewRow: View {
                             WatchSet(id: UUID(), reps: 10, weight: 135, restTime: 90),
                             WatchSet(id: UUID(), reps: 10, weight: 135, restTime: 90)
                         ],
-                        order: 0
+                        order: 0,
+                        supersetId: nil,
+                        supersetOrder: 0
                     ),
                     WatchExercise(
                         id: UUID(),
@@ -195,7 +212,9 @@ struct ExercisePreviewRow: View {
                             WatchSet(id: UUID(), reps: 10, weight: 65, restTime: 60),
                             WatchSet(id: UUID(), reps: 10, weight: 65, restTime: 60)
                         ],
-                        order: 1
+                        order: 1,
+                        supersetId: nil,
+                        supersetOrder: 0
                     )
                 ]
             )

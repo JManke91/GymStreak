@@ -43,7 +43,10 @@
       "WebFetch(domain:www.createwithswift.com)",
       "WebFetch(domain:swiftwithmajid.com)",
       "WebFetch(domain:www.kodeco.com)",
-      "WebFetch(domain:fatbobman.com)"
+      "WebFetch(domain:fatbobman.com)",
+      "WebFetch(domain:stackoverflow.com)",
+      "WebFetch(domain:forums.developer.apple.com)",
+      "WebFetch(domain:getslopes.com)"
     ],
     "defaultMode": "acceptEdits"
   }

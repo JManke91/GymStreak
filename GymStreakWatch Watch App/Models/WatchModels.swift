@@ -23,6 +23,8 @@ struct WatchExercise: Codable, Identifiable, Hashable {
     let muscleGroup: String
     let sets: [WatchSet]
     let order: Int
+    let supersetId: UUID?
+    let supersetOrder: Int
 }
 
 struct WatchSet: Codable, Identifiable, Hashable {
@@ -40,6 +42,8 @@ struct ActiveWorkoutExercise: Identifiable {
     let muscleGroup: String
     var sets: [ActiveWorkoutSet]
     let order: Int
+    let supersetId: UUID?
+    let supersetOrder: Int
 
     var completedSetsCount: Int {
         sets.filter(\.isCompleted).count
@@ -47,6 +51,10 @@ struct ActiveWorkoutExercise: Identifiable {
 
     var isComplete: Bool {
         sets.allSatisfy(\.isCompleted)
+    }
+
+    var isInSuperset: Bool {
+        supersetId != nil
     }
 }
 
@@ -109,6 +117,8 @@ struct CompletedWatchExercise: Codable {
     let muscleGroup: String
     let sets: [CompletedWatchSet]
     let order: Int
+    let supersetId: UUID?
+    let supersetOrder: Int
 }
 
 struct CompletedWatchSet: Codable {
@@ -147,7 +157,9 @@ extension WatchExercise {
                     order: index
                 )
             },
-            order: order
+            order: order,
+            supersetId: supersetId,
+            supersetOrder: supersetOrder
         )
     }
 }
@@ -171,7 +183,9 @@ extension ActiveWorkoutExercise {
                     order: set.order
                 )
             },
-            order: order
+            order: order,
+            supersetId: supersetId,
+            supersetOrder: supersetOrder
         )
     }
 }

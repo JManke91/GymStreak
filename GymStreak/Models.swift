@@ -25,6 +25,34 @@ final class Routine {
     var routineExercisesList: [RoutineExercise] {
         routineExercises ?? []
     }
+
+    /// Groups exercises by superset for display purposes.
+    /// Returns arrays where standalone exercises are single-element arrays
+    /// and superset exercises are grouped together in order.
+    var exercisesGroupedBySupersets: [[RoutineExercise]] {
+        let sorted = routineExercisesList.sorted { $0.order < $1.order }
+        var groups: [[RoutineExercise]] = []
+        var processedSupersetIds: Set<UUID> = []
+
+        for exercise in sorted {
+            if let supersetId = exercise.supersetId {
+                // Skip if we've already processed this superset
+                guard !processedSupersetIds.contains(supersetId) else { continue }
+                processedSupersetIds.insert(supersetId)
+
+                // Gather all exercises in this superset, sorted by supersetOrder
+                let supersetExercises = sorted
+                    .filter { $0.supersetId == supersetId }
+                    .sorted { $0.supersetOrder < $1.supersetOrder }
+                groups.append(supersetExercises)
+            } else {
+                // Standalone exercise
+                groups.append([exercise])
+            }
+        }
+
+        return groups
+    }
 }
 
 @Model
@@ -66,6 +94,10 @@ final class RoutineExercise {
     var sets: [ExerciseSet]? = []
     var order: Int = 0
 
+    // Superset fields - iCloud compatible with default values
+    var supersetId: UUID? = nil  // Nil if not in superset; shared UUID groups exercises
+    var supersetOrder: Int = 0    // Order within superset (0 = first, 1 = second, etc.)
+
     init(exercise: Exercise, order: Int) {
         self.id = UUID()
         self.exercise = exercise
@@ -76,6 +108,10 @@ final class RoutineExercise {
     // Convenience accessor for non-optional usage
     var setsList: [ExerciseSet] {
         sets ?? []
+    }
+
+    var isInSuperset: Bool {
+        supersetId != nil
     }
 }
 
@@ -163,6 +199,29 @@ final class WorkoutSession {
             .filter(\.isCompleted)
             .reduce(0) { $0 + ($1.actualWeight * Double($1.actualReps)) }
     }
+
+    /// Groups workout exercises by superset for display purposes.
+    var exercisesGroupedBySupersets: [[WorkoutExercise]] {
+        let sorted = workoutExercisesList.sorted { $0.order < $1.order }
+        var groups: [[WorkoutExercise]] = []
+        var processedSupersetIds: Set<UUID> = []
+
+        for exercise in sorted {
+            if let supersetId = exercise.supersetId {
+                guard !processedSupersetIds.contains(supersetId) else { continue }
+                processedSupersetIds.insert(supersetId)
+
+                let supersetExercises = sorted
+                    .filter { $0.supersetId == supersetId }
+                    .sorted { $0.supersetOrder < $1.supersetOrder }
+                groups.append(supersetExercises)
+            } else {
+                groups.append([exercise])
+            }
+        }
+
+        return groups
+    }
 }
 
 @Model
@@ -175,11 +234,18 @@ final class WorkoutExercise {
     var sets: [WorkoutSet]? = []
     var order: Int = 0
 
+    // Superset fields - denormalized from RoutineExercise for history
+    var supersetId: UUID? = nil  // iCloud compatible - must have default
+    var supersetOrder: Int = 0    // iCloud compatible - must have default
+
     init(from routineExercise: RoutineExercise, order: Int) {
         self.id = UUID()
         self.exerciseName = routineExercise.exercise?.name ?? "Unknown"
         self.muscleGroups = routineExercise.exercise?.muscleGroups ?? ["General"]
         self.order = order
+        // Copy superset fields from routine
+        self.supersetId = routineExercise.supersetId
+        self.supersetOrder = routineExercise.supersetOrder
         // Copy sets from routine, sorted by order
         self.sets = routineExercise.setsList.sorted(by: { $0.order < $1.order }).enumerated().map { index, set in
             WorkoutSet(from: set, order: index)
@@ -206,6 +272,10 @@ final class WorkoutExercise {
 
     var completedSetsCount: Int {
         setsList.filter(\.isCompleted).count
+    }
+
+    var isInSuperset: Bool {
+        supersetId != nil
     }
 }
 
