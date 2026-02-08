@@ -21,7 +21,7 @@ struct ActiveWorkoutView: View {
             ScrollView {
                 LazyVStack(spacing: 16) {
                     if let session = viewModel.currentSession {
-                        ForEach(session.workoutExercises.sorted(by: { $0.order < $1.order }), id: \.id) { workoutExercise in
+                        ForEach(session.workoutExercisesList.sorted(by: { $0.order < $1.order }), id: \.id) { workoutExercise in
                             ExerciseCard(
                                 workoutExercise: workoutExercise,
                                 viewModel: viewModel,
@@ -284,7 +284,7 @@ struct ExerciseCard: View {
 
     // Computed property to get current rest time from the exercise's sets
     private var exerciseRestTime: TimeInterval {
-        workoutExercise.sets.first?.restTime ?? 0.0
+        workoutExercise.setsList.first?.restTime ?? 0.0
     }
 
     var body: some View {
@@ -300,14 +300,14 @@ struct ExerciseCard: View {
                     Text(workoutExercise.exerciseName)
                         .font(.headline)
 
-                    Text("exercise.sets_completed".localized(workoutExercise.completedSetsCount, workoutExercise.sets.count))
+                    Text("exercise.sets_completed".localized(workoutExercise.completedSetsCount, workoutExercise.setsList.count))
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                 }
 
                 Spacer()
 
-                if workoutExercise.completedSetsCount == workoutExercise.sets.count {
+                if workoutExercise.completedSetsCount == workoutExercise.setsList.count {
                     Image(systemName: "checkmark.circle.fill")
                         .foregroundStyle(.green)
                         .font(.title2)
@@ -343,7 +343,7 @@ struct ExerciseCard: View {
             )
 
             // Sets List
-            ForEach(workoutExercise.sets.sorted(by: { $0.order < $1.order }), id: \.id) { set in
+            ForEach(workoutExercise.setsList.sorted(by: { $0.order < $1.order }), id: \.id) { set in
                 WorkoutSetRow(
                     set: set,
                     workoutExercise: workoutExercise,
@@ -417,7 +417,7 @@ struct ExerciseCard: View {
         }
 
         // Find the first incomplete set in THIS exercise
-        let incompleteSetsInExercise = workoutExercise.sets
+        let incompleteSetsInExercise = workoutExercise.setsList
             .sorted(by: { $0.order < $1.order })
             .filter { !$0.isCompleted }
 
@@ -475,19 +475,19 @@ struct WorkoutSetRow: View {
 
     // Check if exercise has multiple incomplete sets
     private var hasMultipleIncompleteSets: Bool {
-        workoutExercise.sets.filter { !$0.isCompleted }.count > 1
+        workoutExercise.setsList.filter { !$0.isCompleted }.count > 1
     }
 
     // Apply current reps to all incomplete sets in this exercise
     private func applyRepsToAllIncompleteSets() {
-        for workoutSet in workoutExercise.sets where !workoutSet.isCompleted {
+        for workoutSet in workoutExercise.setsList where !workoutSet.isCompleted {
             viewModel.updateSet(workoutSet, reps: editingReps, weight: workoutSet.actualWeight)
         }
     }
 
     // Apply current weight to all incomplete sets in this exercise
     private func applyWeightToAllIncompleteSets() {
-        for workoutSet in workoutExercise.sets where !workoutSet.isCompleted {
+        for workoutSet in workoutExercise.setsList where !workoutSet.isCompleted {
             viewModel.updateSet(workoutSet, reps: workoutSet.actualReps, weight: editingWeight)
         }
     }
@@ -611,7 +611,7 @@ struct WorkoutSetRow: View {
                             if hasMultipleIncompleteSets && repsChanged && !repsBannerDismissed {
                                 ApplyToAllBanner(
                                     type: .reps,
-                                    setCount: workoutExercise.sets.filter { !$0.isCompleted }.count,
+                                    setCount: workoutExercise.setsList.filter { !$0.isCompleted }.count,
                                     onApply: {
                                         withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
                                             applyRepsToAllIncompleteSets()
@@ -647,7 +647,7 @@ struct WorkoutSetRow: View {
                             if hasMultipleIncompleteSets && weightChanged && !weightBannerDismissed {
                                 ApplyToAllBanner(
                                     type: .weight,
-                                    setCount: workoutExercise.sets.filter { !$0.isCompleted }.count,
+                                    setCount: workoutExercise.setsList.filter { !$0.isCompleted }.count,
                                     onApply: {
                                         withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
                                             applyWeightToAllIncompleteSets()

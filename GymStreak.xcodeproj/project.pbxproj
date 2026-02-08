@@ -53,6 +53,13 @@
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		A6D6C7142F38AF980071D28A /* Exceptions for "GymStreak" folder in "GymStreak" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = A6A3406A2E4E6F360017A4F7 /* GymStreak */;
+		};
 		A6FBC4FF2EC91C1E0095483C /* Exceptions for "GymStreakWidgets" folder in "GymStreakWidgetsExtension" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
@@ -70,6 +77,9 @@
 		};
 		A6A3406D2E4E6F360017A4F7 /* GymStreak */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				A6D6C7142F38AF980071D28A /* Exceptions for "GymStreak" folder in "GymStreak" target */,
+			);
 			path = GymStreak;
 			sourceTree = "<group>";
 		};
@@ -553,6 +563,7 @@
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = GymStreak/Info.plist;
 				INFOPLIST_KEY_NSHealthShareUsageDescription = "GymStreak needs access to read your workout data to display your fitness history and avoid duplicate entries.";
 				INFOPLIST_KEY_NSHealthUpdateUsageDescription = "GymStreak needs access to save your workouts to Apple Health so they appear in the Fitness app and contribute to your activity rings.";
 				INFOPLIST_KEY_NSSupportsLiveActivities = YES;
@@ -595,6 +606,7 @@
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = GymStreak/Info.plist;
 				INFOPLIST_KEY_NSHealthShareUsageDescription = "GymStreak needs access to read your workout data to display your fitness history and avoid duplicate entries.";
 				INFOPLIST_KEY_NSHealthUpdateUsageDescription = "GymStreak needs access to save your workouts to Apple Health so they appear in the Fitness app and contribute to your activity rings.";
 				INFOPLIST_KEY_NSSupportsLiveActivities = YES;

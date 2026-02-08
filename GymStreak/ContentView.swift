@@ -10,12 +10,17 @@ import SwiftData
 
 struct ContentView: View {
     @Environment(\.modelContext) private var modelContext
+
+    var body: some View {
+        ContentViewInternal(modelContext: modelContext)
+    }
+}
+
+private struct ContentViewInternal: View {
     @StateObject private var workoutViewModel: WorkoutViewModel
 
-    init() {
-        // Initialize with a temporary context, will be updated in onAppear
-        let tempContext = ModelContext(try! ModelContainer(for: Routine.self, Exercise.self, RoutineExercise.self, ExerciseSet.self, WorkoutSession.self, WorkoutExercise.self, WorkoutSet.self))
-        self._workoutViewModel = StateObject(wrappedValue: WorkoutViewModel(modelContext: tempContext))
+    init(modelContext: ModelContext) {
+        self._workoutViewModel = StateObject(wrappedValue: WorkoutViewModel(modelContext: modelContext))
     }
 
     var body: some View {
@@ -36,9 +41,6 @@ struct ContentView: View {
                 }
         }
         .tint(Color.appAccent)
-        .onAppear {
-            workoutViewModel.updateModelContext(modelContext)
-        }
     }
 }
 

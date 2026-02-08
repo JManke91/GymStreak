@@ -139,11 +139,11 @@ class TestDataSeeder {
                     restTime: exerciseData.restTime
                 )
                 set.routineExercise = routineExercise
-                routineExercise.sets.append(set)
+                routineExercise.sets?.append(set)
                 modelContext.insert(set)
             }
 
-            routine.routineExercises.append(routineExercise)
+            routine.routineExercises?.append(routineExercise)
             modelContext.insert(routineExercise)
         }
     }
@@ -169,17 +169,17 @@ class TestDataSeeder {
             session.endTime = date.addingTimeInterval(3600 + Double(index) * 300)
             session.didUpdateTemplate = true
 
-            for routineExercise in routine.routineExercises {
+            for routineExercise in routine.routineExercisesList {
                 let workoutExercise = WorkoutExercise(from: routineExercise, order: routineExercise.order)
                 workoutExercise.workoutSession = session
 
-                for set in workoutExercise.sets {
+                for set in workoutExercise.setsList {
                     set.isCompleted = true
                     set.completedAt = date.addingTimeInterval(Double(set.order) * 180)
                     modelContext.insert(set)
                 }
 
-                session.workoutExercises.append(workoutExercise)
+                session.workoutExercises?.append(workoutExercise)
                 modelContext.insert(workoutExercise)
             }
 

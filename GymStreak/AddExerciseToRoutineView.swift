@@ -24,7 +24,7 @@ struct AddExerciseToRoutineView: View {
     }
 
     private func isExerciseAlreadyInRoutine(_ exercise: Exercise) -> Bool {
-        routine.routineExercises.contains(where: { $0.exercise?.id == exercise.id })
+        routine.routineExercisesList.contains(where: { $0.exercise?.id == exercise.id })
     }
 
     var body: some View {
@@ -408,17 +408,17 @@ struct ConfigureExerciseSetsView: View {
     }
 
     private func saveExerciseToRoutine() {
-        let routineExercise = RoutineExercise(exercise: exercise, order: routine.routineExercises.count)
+        let routineExercise = RoutineExercise(exercise: exercise, order: routine.routineExercisesList.count)
         routineExercise.routine = routine
 
         for (index, set) in sets.enumerated() {
             set.restTime = globalRestTime
             set.order = index
             set.routineExercise = routineExercise
-            routineExercise.sets.append(set)
+            routineExercise.sets?.append(set)
         }
 
-        routine.routineExercises.append(routineExercise)
+        routine.routineExercises?.append(routineExercise)
         viewModel.updateRoutine(routine)
 
         onSave()

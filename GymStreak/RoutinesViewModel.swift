@@ -10,12 +10,26 @@ class RoutinesViewModel: ObservableObject {
 
     private var modelContext: ModelContext
     private let watchConnectivity = WatchConnectivityManager.shared
+    private var cloudSyncObserver: NSObjectProtocol?
 
     init(modelContext: ModelContext) {
         self.modelContext = modelContext
         fetchRoutines()
         observeWatchWorkoutCompletions()
         processPendingWatchWorkouts()
+        observeCloudKitChanges()
+    }
+
+    private func observeCloudKitChanges() {
+        cloudSyncObserver = NotificationCenter.default.addObserver(
+            forName: .cloudKitDataDidChange,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in
+                self?.fetchRoutines()
+            }
+        }
     }
 
     private func observeWatchWorkoutCompletions() {
@@ -82,33 +96,33 @@ class RoutinesViewModel: ObservableObject {
     }
     
     func removeRoutineExercise(_ routineExercise: RoutineExercise, from routine: Routine) {
-        if let index = routine.routineExercises.firstIndex(where: { $0.id == routineExercise.id }) {
-            routine.routineExercises.remove(at: index)
+        if let index = routine.routineExercisesList.firstIndex(where: { $0.id == routineExercise.id }) {
+            routine.routineExercises?.remove(at: index)
             modelContext.delete(routineExercise)
             updateRoutine(routine)
         }
     }
-    
+
     func addSet(to routineExercise: RoutineExercise) {
         // Get rest time from existing sets, or default to 0 (disabled)
-        let restTime = routineExercise.sets.first?.restTime ?? 0
+        let restTime = routineExercise.setsList.first?.restTime ?? 0
         // Calculate order from last set
-        let lastSet = routineExercise.sets.sorted(by: { $0.order < $1.order }).last
+        let lastSet = routineExercise.setsList.sorted(by: { $0.order < $1.order }).last
         let order = (lastSet?.order ?? -1) + 1
         let set = ExerciseSet(reps: 10, weight: 0.0, restTime: restTime, order: order)
         set.routineExercise = routineExercise
-        routineExercise.sets.append(set)
+        routineExercise.sets?.append(set)
         if let routine = routineExercise.routine {
             updateRoutine(routine)
         }
     }
-    
+
     func removeSet(_ set: ExerciseSet, from routineExercise: RoutineExercise) {
-        if let index = routineExercise.sets.firstIndex(where: { $0.id == set.id }) {
-            routineExercise.sets.remove(at: index)
+        if let index = routineExercise.setsList.firstIndex(where: { $0.id == set.id }) {
+            routineExercise.sets?.remove(at: index)
             modelContext.delete(set)
             // Reorder remaining sets to maintain sequential order
-            let sortedSets = routineExercise.sets.sorted(by: { $0.order < $1.order })
+            let sortedSets = routineExercise.setsList.sorted(by: { $0.order < $1.order })
             for (newOrder, remainingSet) in sortedSets.enumerated() {
                 remainingSet.order = newOrder
             }
@@ -178,11 +192,11 @@ class RoutinesViewModel: ObservableObject {
                     workoutSet.isCompleted = completedSet.isCompleted
                     workoutSet.completedAt = completedSet.completedAt
                     workoutSet.workoutExercise = workoutExercise
-                    workoutExercise.sets.append(workoutSet)
+                    workoutExercise.sets?.append(workoutSet)
                     modelContext.insert(workoutSet)
                 }
 
-                workoutSession.workoutExercises.append(workoutExercise)
+                workoutSession.workoutExercises?.append(workoutExercise)
                 modelContext.insert(workoutExercise)
             }
 
@@ -218,13 +232,13 @@ class RoutinesViewModel: ObservableObject {
 
             // Update each routine exercise's sets with the actual values
             for completedExercise in workout.exercises {
-                guard let routineExercise = routine.routineExercises.first(where: { $0.id == completedExercise.id }) else {
+                guard let routineExercise = routine.routineExercisesList.first(where: { $0.id == completedExercise.id }) else {
                     print("Could not find routine exercise with ID: \(completedExercise.id)")
                     continue
                 }
 
                 for completedSet in completedExercise.sets {
-                    guard let set = routineExercise.sets.first(where: { $0.id == completedSet.id }) else {
+                    guard let set = routineExercise.setsList.first(where: { $0.id == completedSet.id }) else {
                         print("Could not find set with ID: \(completedSet.id)")
                         continue
                     }

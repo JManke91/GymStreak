@@ -44,6 +44,7 @@ class WorkoutViewModel: ObservableObject {
     private var modelContext: ModelContext
     private var timer: Timer?
     private var restTimer: Timer?
+    private var cloudSyncObserver: NSObjectProtocol?
 
     // Date-based timer tracking for background persistence
     private var workoutStartTime: Date?
@@ -69,6 +70,19 @@ class WorkoutViewModel: ObservableObject {
         cleanupStaleActivities()
         loadHealthKitPreferences()
         healthKitManager.checkAuthorizationStatus()
+        observeCloudKitChanges()
+    }
+
+    private func observeCloudKitChanges() {
+        cloudSyncObserver = NotificationCenter.default.addObserver(
+            forName: .cloudKitDataDidChange,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in
+                self?.fetchWorkoutHistory()
+            }
+        }
     }
 
     // MARK: - HealthKit Preferences
@@ -164,7 +178,7 @@ class WorkoutViewModel: ObservableObject {
         // Get current exercise name if available
         let exerciseName: String? = {
             guard let session = currentSession else { return nil }
-            let exercises = session.workoutExercises.sorted(by: { $0.order < $1.order })
+            let exercises = session.workoutExercisesList.sorted(by: { $0.order < $1.order })
             guard currentExerciseIndex < exercises.count else { return nil }
             return exercises[currentExerciseIndex].exerciseName
         }()
@@ -284,11 +298,11 @@ class WorkoutViewModel: ObservableObject {
         let session = WorkoutSession(routine: routine)
 
         // Create workout exercises from routine (sorted by order to maintain routine sequence)
-        let sortedRoutineExercises = routine.routineExercises.sorted(by: { $0.order < $1.order })
+        let sortedRoutineExercises = routine.routineExercisesList.sorted(by: { $0.order < $1.order })
         for (index, routineExercise) in sortedRoutineExercises.enumerated() {
             let workoutExercise = WorkoutExercise(from: routineExercise, order: index)
             workoutExercise.workoutSession = session
-            session.workoutExercises.append(workoutExercise)
+            session.workoutExercises?.append(workoutExercise)
         }
 
         currentSession = session
@@ -494,7 +508,7 @@ class WorkoutViewModel: ObservableObject {
 
     func updateRestTimeForExercise(_ workoutExercise: WorkoutExercise, restTime: TimeInterval) {
         objectWillChange.send()
-        for set in workoutExercise.sets {
+        for set in workoutExercise.setsList {
             set.restTime = restTime
         }
         save()
@@ -506,7 +520,7 @@ class WorkoutViewModel: ObservableObject {
         objectWillChange.send()
 
         // Get the last set to copy its values
-        let lastSet = workoutExercise.sets.sorted(by: { $0.order < $1.order }).last
+        let lastSet = workoutExercise.setsList.sorted(by: { $0.order < $1.order }).last
 
         // Create new workout set using the last set's values (or defaults if no sets exist)
         let newSet = WorkoutSet(
@@ -518,7 +532,7 @@ class WorkoutViewModel: ObservableObject {
             order: (lastSet?.order ?? -1) + 1
         )
         newSet.workoutExercise = workoutExercise
-        workoutExercise.sets.append(newSet)
+        workoutExercise.sets?.append(newSet)
 
         modelContext.insert(newSet)
         save()
@@ -530,7 +544,7 @@ class WorkoutViewModel: ObservableObject {
         objectWillChange.send()
 
         // Determine the order for the new exercise
-        let nextOrder = session.workoutExercises.map(\.order).max().map { $0 + 1 } ?? 0
+        let nextOrder = (session.workoutExercisesList.map(\.order).max() ?? -1) + 1
 
         // Create a workout exercise from the library exercise
         let workoutExercise = WorkoutExercise(
@@ -550,9 +564,9 @@ class WorkoutViewModel: ObservableObject {
             order: 0
         )
         defaultSet.workoutExercise = workoutExercise
-        workoutExercise.sets.append(defaultSet)
+        workoutExercise.sets?.append(defaultSet)
 
-        session.workoutExercises.append(workoutExercise)
+        session.workoutExercises?.append(workoutExercise)
         modelContext.insert(workoutExercise)
         modelContext.insert(defaultSet)
         save()
@@ -563,8 +577,8 @@ class WorkoutViewModel: ObservableObject {
 
         objectWillChange.send()
 
-        if let index = workoutExercise.sets.firstIndex(where: { $0.id == set.id }) {
-            workoutExercise.sets.remove(at: index)
+        if let index = workoutExercise.setsList.firstIndex(where: { $0.id == set.id }) {
+            workoutExercise.sets?.remove(at: index)
             modelContext.delete(set)
             save()
         }
@@ -576,13 +590,13 @@ class WorkoutViewModel: ObservableObject {
         objectWillChange.send()
 
         // Remove all sets associated with this exercise
-        for set in workoutExercise.sets {
+        for set in workoutExercise.setsList {
             modelContext.delete(set)
         }
 
         // Remove the exercise from the session
-        if let index = session.workoutExercises.firstIndex(where: { $0.id == workoutExercise.id }) {
-            session.workoutExercises.remove(at: index)
+        if let index = session.workoutExercisesList.firstIndex(where: { $0.id == workoutExercise.id }) {
+            session.workoutExercises?.remove(at: index)
         }
 
         modelContext.delete(workoutExercise)
@@ -593,7 +607,7 @@ class WorkoutViewModel: ObservableObject {
         // Move to next set without marking complete
         if let nextSet = findNextIncompleteSet(after: set, in: workoutExercise) {
             // Update current set index
-            if let index = workoutExercise.sets.firstIndex(where: { $0.id == nextSet.id }) {
+            if let index = workoutExercise.setsList.firstIndex(where: { $0.id == nextSet.id }) {
                 currentSetIndex = index
             }
         } else {
@@ -723,13 +737,14 @@ class WorkoutViewModel: ObservableObject {
     // MARK: - Navigation Helpers
 
     private func findNextIncompleteSet(after currentSet: WorkoutSet, in workoutExercise: WorkoutExercise) -> WorkoutSet? {
-        guard let currentIndex = workoutExercise.sets.firstIndex(where: { $0.id == currentSet.id }) else {
+        let sets = workoutExercise.setsList
+        guard let currentIndex = sets.firstIndex(where: { $0.id == currentSet.id }) else {
             return nil
         }
 
         // Find next incomplete set in same exercise
-        for index in (currentIndex + 1)..<workoutExercise.sets.count {
-            let set = workoutExercise.sets[index]
+        for index in (currentIndex + 1)..<sets.count {
+            let set = sets[index]
             if !set.isCompleted {
                 currentSetIndex = index
                 return set
@@ -742,8 +757,8 @@ class WorkoutViewModel: ObservableObject {
     func findNextIncompleteSet() -> (exercise: WorkoutExercise, set: WorkoutSet)? {
         guard let session = currentSession else { return nil }
 
-        for exercise in session.workoutExercises.sorted(by: { $0.order < $1.order }) {
-            for set in exercise.sets.sorted(by: { $0.order < $1.order }) {
+        for exercise in session.workoutExercisesList.sorted(by: { $0.order < $1.order }) {
+            for set in exercise.setsList.sorted(by: { $0.order < $1.order }) {
                 if !set.isCompleted {
                     return (exercise, set)
                 }
@@ -756,7 +771,7 @@ class WorkoutViewModel: ObservableObject {
     private func moveToNextExercise() {
         guard let session = currentSession else { return }
 
-        let sortedExercises = session.workoutExercises.sorted(by: { $0.order < $1.order })
+        let sortedExercises = session.workoutExercisesList.sorted(by: { $0.order < $1.order })
 
         if currentExerciseIndex < sortedExercises.count - 1 {
             currentExerciseIndex += 1
@@ -769,22 +784,23 @@ class WorkoutViewModel: ObservableObject {
     private func updateRoutineTemplate(session: WorkoutSession) {
         guard let routine = session.routine else { return }
 
-        for workoutExercise in session.workoutExercises {
+        for workoutExercise in session.workoutExercisesList {
             // Find corresponding routine exercise
-            if let routineExercise = routine.routineExercises.first(where: {
+            if let routineExercise = routine.routineExercisesList.first(where: {
                 $0.exercise?.name == workoutExercise.exerciseName
             }) {
                 // Get the rest time from the first set (all sets should have same rest time)
-                let exerciseRestTime = workoutExercise.sets.first?.restTime ?? 60.0
+                let exerciseRestTime = workoutExercise.setsList.first?.restTime ?? 60.0
 
                 // Update all routine sets with the exercise rest time and completed set data
-                for (index, routineSet) in routineExercise.sets.enumerated() {
+                let workoutSets = workoutExercise.setsList
+                for (index, routineSet) in routineExercise.setsList.enumerated() {
                     // Always update rest time for all sets
                     routineSet.restTime = exerciseRestTime
 
                     // Update reps and weight only for completed sets
-                    if index < workoutExercise.sets.count {
-                        let workoutSet = workoutExercise.sets[index]
+                    if index < workoutSets.count {
+                        let workoutSet = workoutSets[index]
                         if workoutSet.isCompleted {
                             routineSet.reps = workoutSet.actualReps
                             routineSet.weight = workoutSet.actualWeight

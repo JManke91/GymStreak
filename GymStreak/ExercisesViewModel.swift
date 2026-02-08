@@ -7,14 +7,28 @@ class ExercisesViewModel: ObservableObject {
     @Published var exercises: [Exercise] = []
     @Published var showingAddExercise = false
     @Published var selectedExercise: Exercise?
-    
+
     private var modelContext: ModelContext
-    
+    private var cloudSyncObserver: NSObjectProtocol?
+
     init(modelContext: ModelContext) {
         self.modelContext = modelContext
         fetchExercises()
+        observeCloudKitChanges()
     }
-    
+
+    private func observeCloudKitChanges() {
+        cloudSyncObserver = NotificationCenter.default.addObserver(
+            forName: .cloudKitDataDidChange,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in
+                self?.fetchExercises()
+            }
+        }
+    }
+
     func updateModelContext(_ newContext: ModelContext) {
         self.modelContext = newContext
         fetchExercises()

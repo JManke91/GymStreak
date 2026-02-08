@@ -25,13 +25,13 @@ struct RoutineDetailView: View {
 
     // Helper function to get rest time for an exercise
     private func restTime(for exercise: RoutineExercise) -> TimeInterval {
-        exercise.sets.first?.restTime ?? 0.0
+        exercise.setsList.first?.restTime ?? 0.0
     }
 
     var body: some View {
         List {
             Section {
-                if routine.routineExercises.isEmpty {
+                if routine.routineExercisesList.isEmpty {
                     ContentUnavailableView {
                         Label("routine.empty.title".localized, systemImage: "dumbbell")
                     } description: {
@@ -46,7 +46,7 @@ struct RoutineDetailView: View {
                     .listRowInsets(EdgeInsets())
                     .listRowBackground(Color.clear)
                 } else {
-                    ForEach(routine.routineExercises.sorted(by: { $0.order < $1.order })) { routineExercise in
+                    ForEach(routine.routineExercisesList.sorted(by: { $0.order < $1.order })) { routineExercise in
                         Group {
                             if isEditMode {
                                 // Edit mode: Simple row with delete button
@@ -103,7 +103,7 @@ struct RoutineDetailView: View {
                                     showToggle: true
                                 )
 
-                                ForEach(Array(routineExercise.sets.sorted(by: { $0.order < $1.order }).enumerated()), id: \.element.id) { index, set in
+                                ForEach(Array(routineExercise.setsList.sorted(by: { $0.order < $1.order }).enumerated()), id: \.element.id) { index, set in
                                     RoutineSetRowView(
                                         set: set,
                                         index: index,
@@ -112,10 +112,10 @@ struct RoutineDetailView: View {
                                         editingWeight: $editingWeight,
                                         initialReps: initialReps,
                                         initialWeight: initialWeight,
-                                        hasMultipleSets: routineExercise.sets.count > 1,
+                                        hasMultipleSets: routineExercise.setsList.count > 1,
                                         repsBannerDismissed: repsBannerDismissedForExercise[routineExercise.id] ?? false,
                                         weightBannerDismissed: weightBannerDismissedForExercise[routineExercise.id] ?? false,
-                                        totalSets: routineExercise.sets.count,
+                                        totalSets: routineExercise.setsList.count,
                                         onTap: {
                                             withAnimation(.snappy(duration: 0.35)) {
                                                 if expandedSetId == set.id {
@@ -237,7 +237,7 @@ struct RoutineDetailView: View {
                     .onMove(perform: isEditMode ? moveRoutineExercises : nil)
                 }
 
-                if !routine.routineExercises.isEmpty {
+                if !routine.routineExercisesList.isEmpty {
                     Button {
                         showingAddExercise = true
                     } label: {
@@ -267,7 +267,7 @@ struct RoutineDetailView: View {
                 HStack {
                     Text("routine.exercises".localized)
                     Spacer()
-                    if !routine.routineExercises.isEmpty {
+                    if !routine.routineExercisesList.isEmpty {
                         Button(isEditMode ? "action.done".localized : "action.edit".localized) {
                             withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
                                 isEditMode.toggle()
@@ -283,7 +283,7 @@ struct RoutineDetailView: View {
                                     )
 
                                     // Show hint for first-time users
-                                    if !hasSeenReorderHint && routine.routineExercises.count > 1 {
+                                    if !hasSeenReorderHint && routine.routineExercisesList.count > 1 {
                                         // Delay to let wiggle animation start first
                                         DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
                                             withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
@@ -317,7 +317,7 @@ struct RoutineDetailView: View {
         .navigationTitle(routine.name)
         .navigationBarTitleDisplayMode(.large)
         .safeAreaInset(edge: .bottom) {
-            if !routine.routineExercises.isEmpty && !isEditMode {
+            if !routine.routineExercisesList.isEmpty && !isEditMode {
                 VStack(spacing: 0) {
                     Divider()
                     Button {
@@ -418,7 +418,7 @@ struct RoutineDetailView: View {
 
     private func deleteRoutineExercises(offsets: IndexSet) {
         for index in offsets {
-            let routineExercise = routine.routineExercises.sorted(by: { $0.order < $1.order })[index]
+            let routineExercise = routine.routineExercisesList.sorted(by: { $0.order < $1.order })[index]
             viewModel.removeRoutineExercise(routineExercise, from: routine)
         }
     }
@@ -428,7 +428,7 @@ struct RoutineDetailView: View {
         UIImpactFeedbackGenerator(style: .medium).impactOccurred()
 
         // Get sorted exercises
-        var sortedExercises = routine.routineExercises.sorted(by: { $0.order < $1.order })
+        var sortedExercises = routine.routineExercisesList.sorted(by: { $0.order < $1.order })
 
         // Move items
         sortedExercises.move(fromOffsets: source, toOffset: destination)
@@ -445,7 +445,7 @@ struct RoutineDetailView: View {
     private func saveCurrentExpandedSet() {
         guard let currentExpandedId = expandedSetId,
               let currentExercise = currentRoutineExercise,
-              let currentSet = currentExercise.sets.first(where: { $0.id == currentExpandedId }) else { return }
+              let currentSet = currentExercise.setsList.first(where: { $0.id == currentExpandedId }) else { return }
         if currentSet.reps != editingReps || currentSet.weight != editingWeight {
             currentSet.reps = editingReps
             currentSet.weight = editingWeight
@@ -464,7 +464,7 @@ struct RoutineDetailView: View {
     }
 
     private func updateAllSetsRestTime(for routineExercise: RoutineExercise, restTime: TimeInterval) {
-        for set in routineExercise.sets {
+        for set in routineExercise.setsList {
             set.restTime = restTime
             viewModel.updateSet(set)
         }
@@ -479,7 +479,7 @@ struct RoutineDetailView: View {
     ) {
         if applyToAll {
             // Apply to all sets in this exercise
-            for exerciseSet in routineExercise.sets {
+            for exerciseSet in routineExercise.setsList {
                 if let reps = reps {
                     exerciseSet.reps = reps
                 }
@@ -495,14 +495,14 @@ struct RoutineDetailView: View {
     }
 
     private func handleApplyRepsToAll(reps: Int, routineExercise: RoutineExercise) {
-        for exerciseSet in routineExercise.sets {
+        for exerciseSet in routineExercise.setsList {
             exerciseSet.reps = reps
             viewModel.updateSet(exerciseSet)
         }
     }
 
     private func handleApplyWeightToAll(weight: Double, routineExercise: RoutineExercise) {
-        for exerciseSet in routineExercise.sets {
+        for exerciseSet in routineExercise.setsList {
             exerciseSet.weight = weight
             viewModel.updateSet(exerciseSet)
         }
@@ -530,7 +530,7 @@ struct ExerciseHeaderView: View {
                     .font(.system(.body, design: .rounded, weight: .semibold))
                     .foregroundStyle(.primary)
 
-                Text("routine.sets_count".localized(routineExercise.sets.count))
+                Text("routine.sets_count".localized(routineExercise.setsList.count))
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
             }

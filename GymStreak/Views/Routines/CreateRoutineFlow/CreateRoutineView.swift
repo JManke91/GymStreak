@@ -201,11 +201,11 @@ struct CreateRoutineView: View {
                     order: index
                 )
                 newSet.routineExercise = routineExercise
-                routineExercise.sets.append(newSet)
+                routineExercise.sets?.append(newSet)
                 modelContext.insert(newSet)
             }
 
-            routine.routineExercises.append(routineExercise)
+            routine.routineExercises?.append(routineExercise)
             modelContext.insert(routineExercise)
         }
 

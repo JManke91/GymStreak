@@ -76,7 +76,7 @@ struct WorkoutDetailView: View {
 
                 // Exercises Section
                 Section {
-                    ForEach(workout.workoutExercises.sorted(by: { $0.order < $1.order }), id: \.id) { workoutExercise in
+                    ForEach(workout.workoutExercisesList.sorted(by: { $0.order < $1.order }), id: \.id) { workoutExercise in
                         WorkoutExerciseDetailCard(workoutExercise: workoutExercise)
                     }
                 } header: {
@@ -129,14 +129,14 @@ struct WorkoutExerciseDetailCard: View {
                     Text(workoutExercise.exerciseName)
                         .font(.headline)
 
-                    Text("workout_detail.exercise_sets".localized(workoutExercise.completedSetsCount, workoutExercise.sets.count))
+                    Text("workout_detail.exercise_sets".localized(workoutExercise.completedSetsCount, workoutExercise.setsList.count))
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                 }
 
                 Spacer()
 
-                if workoutExercise.completedSetsCount == workoutExercise.sets.count {
+                if workoutExercise.completedSetsCount == workoutExercise.setsList.count {
                     Image(systemName: "checkmark.circle.fill")
                         .foregroundStyle(.green)
                         .font(.title3)
@@ -170,7 +170,7 @@ struct WorkoutExerciseDetailCard: View {
                 Divider()
 
                 // Set Rows
-                ForEach(workoutExercise.sets.sorted(by: { $0.order < $1.order }), id: \.id) { set in
+                ForEach(workoutExercise.setsList.sorted(by: { $0.order < $1.order }), id: \.id) { set in
                     HStack {
                         Text("\(set.order + 1)")
                             .font(.subheadline.weight(.medium))

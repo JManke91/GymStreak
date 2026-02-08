@@ -10,6 +10,9 @@ import SwiftData
 
 @main
 struct GymStreakApp: App {
+    // Initialize CloudSyncObserver early to catch all sync events
+    @StateObject private var cloudSyncObserver = CloudSyncObserver.shared
+
     private var isUITesting: Bool {
         ProcessInfo.processInfo.arguments.contains("-UI_TESTING")
     }
@@ -24,12 +27,27 @@ struct GymStreakApp: App {
             WorkoutExercise.self,
             WorkoutSet.self
         ])
-        let modelConfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: false)
+        let modelConfiguration = ModelConfiguration(
+            schema: schema,
+            isStoredInMemoryOnly: false,
+            cloudKitDatabase: .private("iCloud.com.jmanke.gymstreak")
+        )
 
         do {
             return try ModelContainer(for: schema, configurations: [modelConfiguration])
         } catch {
-            fatalError("Could not create ModelContainer: \(error)")
+            // If CloudKit container fails (e.g., no iCloud account), fall back to local-only storage
+            print("Failed to create CloudKit container: \(error). Falling back to local storage.")
+            let localConfig = ModelConfiguration(
+                schema: schema,
+                isStoredInMemoryOnly: false,
+                cloudKitDatabase: .none
+            )
+            do {
+                return try ModelContainer(for: schema, configurations: [localConfig])
+            } catch {
+                fatalError("Could not create ModelContainer: \(error)")
+            }
         }
     }()
 

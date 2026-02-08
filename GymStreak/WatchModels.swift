@@ -89,7 +89,7 @@ struct CompletedWatchSet: Codable {
 
 extension Routine {
     func toWatchRoutine() -> WatchRoutine {
-        let sortedExercises = routineExercises.sorted { $0.order < $1.order }
+        let sortedExercises = routineExercisesList.sorted { $0.order < $1.order }
         return WatchRoutine(
             id: id,
             name: name,
@@ -98,7 +98,7 @@ extension Routine {
                     id: routineExercise.id,
                     name: routineExercise.exercise?.name ?? "Unknown",
                     muscleGroup: routineExercise.exercise?.primaryMuscleGroup ?? "General",
-                    sets: routineExercise.sets.map { set in
+                    sets: routineExercise.setsList.map { set in
                         WatchSet(
                             id: set.id,
                             reps: set.reps,

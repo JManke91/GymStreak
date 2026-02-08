@@ -24,7 +24,7 @@ struct AddExerciseToWorkoutView: View {
 
     private func isExerciseAlreadyInWorkout(_ exercise: Exercise) -> Bool {
         guard let session = workoutViewModel.currentSession else { return false }
-        return session.workoutExercises.contains(where: { $0.exerciseName == exercise.name })
+        return session.workoutExercisesList.contains(where: { $0.exerciseName == exercise.name })
     }
 
     var body: some View {

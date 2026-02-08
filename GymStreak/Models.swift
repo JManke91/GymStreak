@@ -3,33 +3,45 @@ import SwiftData
 
 @Model
 final class Routine {
-    var id: UUID
-    var name: String
-    var routineExercises: [RoutineExercise]
-    var createdAt: Date
-    var updatedAt: Date
-    
+    var id: UUID = UUID()
+    var name: String = ""
+    @Relationship(deleteRule: .cascade, inverse: \RoutineExercise.routine)
+    var routineExercises: [RoutineExercise]? = []
+    @Relationship(inverse: \WorkoutSession.routine)
+    var workoutSessions: [WorkoutSession]? = []
+    var createdAt: Date = Date()
+    var updatedAt: Date = Date()
+
     init(name: String) {
         self.id = UUID()
         self.name = name
         self.routineExercises = []
+        self.workoutSessions = []
         self.createdAt = Date()
         self.updatedAt = Date()
+    }
+
+    // Convenience accessor for non-optional usage
+    var routineExercisesList: [RoutineExercise] {
+        routineExercises ?? []
     }
 }
 
 @Model
 final class Exercise {
-    var id: UUID
-    var name: String
-    var muscleGroups: [String]
-    var createdAt: Date
-    var updatedAt: Date
+    var id: UUID = UUID()
+    var name: String = ""
+    var muscleGroups: [String] = ["General"]
+    @Relationship(inverse: \RoutineExercise.exercise)
+    var routineExercises: [RoutineExercise]? = []
+    var createdAt: Date = Date()
+    var updatedAt: Date = Date()
 
     init(name: String, muscleGroups: [String] = ["Chest"]) {
         self.id = UUID()
         self.name = name
         self.muscleGroups = muscleGroups
+        self.routineExercises = []
         self.createdAt = Date()
         self.updatedAt = Date()
     }
@@ -47,28 +59,34 @@ final class Exercise {
 
 @Model
 final class RoutineExercise {
-    var id: UUID
+    var id: UUID = UUID()
     var routine: Routine?
     var exercise: Exercise?
-    var sets: [ExerciseSet]
-    var order: Int
-    
+    @Relationship(deleteRule: .cascade, inverse: \ExerciseSet.routineExercise)
+    var sets: [ExerciseSet]? = []
+    var order: Int = 0
+
     init(exercise: Exercise, order: Int) {
         self.id = UUID()
         self.exercise = exercise
         self.sets = []
         self.order = order
     }
+
+    // Convenience accessor for non-optional usage
+    var setsList: [ExerciseSet] {
+        sets ?? []
+    }
 }
 
 @Model
 final class ExerciseSet {
-    var id: UUID
-    var reps: Int
-    var weight: Double
-    var restTime: TimeInterval
-    var isCompleted: Bool
-    var order: Int
+    var id: UUID = UUID()
+    var reps: Int = 0
+    var weight: Double = 0.0
+    var restTime: TimeInterval = 60
+    var isCompleted: Bool = false
+    var order: Int = 0
     var routineExercise: RoutineExercise?
 
     init(reps: Int, weight: Double, restTime: TimeInterval, order: Int = 0) {
@@ -94,14 +112,15 @@ struct ExerciseData {
 
 @Model
 final class WorkoutSession {
-    var id: UUID
+    var id: UUID = UUID()
     var routine: Routine?
-    var routineName: String // Denormalized for history display
-    var startTime: Date
+    var routineName: String = "" // Denormalized for history display
+    var startTime: Date = Date()
     var endTime: Date?
-    var workoutExercises: [WorkoutExercise]
-    var notes: String
-    var didUpdateTemplate: Bool
+    @Relationship(deleteRule: .cascade, inverse: \WorkoutExercise.workoutSession)
+    var workoutExercises: [WorkoutExercise]? = []
+    var notes: String = ""
+    var didUpdateTemplate: Bool = false
 
     init(routine: Routine) {
         self.id = UUID()
@@ -114,16 +133,21 @@ final class WorkoutSession {
         self.didUpdateTemplate = false
     }
 
+    // Convenience accessor for non-optional usage
+    var workoutExercisesList: [WorkoutExercise] {
+        workoutExercises ?? []
+    }
+
     var duration: TimeInterval {
         (endTime ?? Date()).timeIntervalSince(startTime)
     }
 
     var completedSetsCount: Int {
-        workoutExercises.flatMap(\.sets).filter(\.isCompleted).count
+        workoutExercisesList.flatMap(\.setsList).filter(\.isCompleted).count
     }
 
     var totalSetsCount: Int {
-        workoutExercises.flatMap(\.sets).count
+        workoutExercisesList.flatMap(\.setsList).count
     }
 
     var completionPercentage: Int {
@@ -132,7 +156,7 @@ final class WorkoutSession {
     }
 
     var totalVolume: Double {
-        workoutExercises.flatMap(\.sets)
+        workoutExercisesList.flatMap(\.setsList)
             .filter(\.isCompleted)
             .reduce(0) { $0 + ($1.actualWeight * Double($1.actualReps)) }
     }
@@ -140,12 +164,13 @@ final class WorkoutSession {
 
 @Model
 final class WorkoutExercise {
-    var id: UUID
+    var id: UUID = UUID()
     var workoutSession: WorkoutSession?
-    var exerciseName: String // Denormalized for history display
-    var muscleGroups: [String]
-    var sets: [WorkoutSet]
-    var order: Int
+    var exerciseName: String = "" // Denormalized for history display
+    var muscleGroups: [String] = []
+    @Relationship(deleteRule: .cascade, inverse: \WorkoutSet.workoutExercise)
+    var sets: [WorkoutSet]? = []
+    var order: Int = 0
 
     init(from routineExercise: RoutineExercise, order: Int) {
         self.id = UUID()
@@ -153,7 +178,7 @@ final class WorkoutExercise {
         self.muscleGroups = routineExercise.exercise?.muscleGroups ?? ["General"]
         self.order = order
         // Copy sets from routine, sorted by order
-        self.sets = routineExercise.sets.sorted(by: { $0.order < $1.order }).enumerated().map { index, set in
+        self.sets = routineExercise.setsList.sorted(by: { $0.order < $1.order }).enumerated().map { index, set in
             WorkoutSet(from: set, order: index)
         }
     }
@@ -166,27 +191,32 @@ final class WorkoutExercise {
         self.sets = []
     }
 
+    // Convenience accessor for non-optional usage
+    var setsList: [WorkoutSet] {
+        sets ?? []
+    }
+
     /// Convenience computed property for backwards compatibility
     var primaryMuscleGroup: String {
         muscleGroups.first ?? "General"
     }
 
     var completedSetsCount: Int {
-        sets.filter(\.isCompleted).count
+        setsList.filter(\.isCompleted).count
     }
 }
 
 @Model
 final class WorkoutSet {
-    var id: UUID
-    var plannedReps: Int
-    var actualReps: Int
-    var plannedWeight: Double
-    var actualWeight: Double
-    var restTime: TimeInterval
-    var isCompleted: Bool
+    var id: UUID = UUID()
+    var plannedReps: Int = 0
+    var actualReps: Int = 0
+    var plannedWeight: Double = 0.0
+    var actualWeight: Double = 0.0
+    var restTime: TimeInterval = 60
+    var isCompleted: Bool = false
     var completedAt: Date?
-    var order: Int
+    var order: Int = 0
     var workoutExercise: WorkoutExercise?
 
     init(from exerciseSet: ExerciseSet, order: Int) {

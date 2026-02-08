@@ -3,12 +3,19 @@ import SwiftData
 
 struct ExercisesView: View {
     @Environment(\.modelContext) private var modelContext
-    @StateObject private var viewModel: ExercisesViewModel
-    
-    init() {
-        self._viewModel = StateObject(wrappedValue: ExercisesViewModel(modelContext: ModelContext(try! ModelContainer(for: Exercise.self))))
+
+    var body: some View {
+        ExercisesViewInternal(modelContext: modelContext)
     }
-    
+}
+
+private struct ExercisesViewInternal: View {
+    @StateObject private var viewModel: ExercisesViewModel
+
+    init(modelContext: ModelContext) {
+        self._viewModel = StateObject(wrappedValue: ExercisesViewModel(modelContext: modelContext))
+    }
+
     var body: some View {
         NavigationView {
             Group {
@@ -48,11 +55,10 @@ struct ExercisesView: View {
             }
         }
         .onAppear {
-            viewModel.updateModelContext(modelContext)
             viewModel.fetchExercises()
         }
     }
-    
+
     private func deleteExercises(offsets: IndexSet) {
         for index in offsets {
             viewModel.deleteExercise(viewModel.exercises[index])

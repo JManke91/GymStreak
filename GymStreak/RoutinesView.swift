@@ -3,18 +3,23 @@ import SwiftData
 
 struct RoutinesView: View {
     @Environment(\.modelContext) private var modelContext
+
+    var body: some View {
+        RoutinesViewInternal(modelContext: modelContext)
+    }
+}
+
+private struct RoutinesViewInternal: View {
     @StateObject private var viewModel: RoutinesViewModel
     @StateObject private var exercisesViewModel: ExercisesViewModel
     @StateObject private var workoutViewModel: WorkoutViewModel
 
-    init() {
-        // Initialize with a temporary context, will be updated in onAppear
-        let tempContext = ModelContext(try! ModelContainer(for: Routine.self, Exercise.self, RoutineExercise.self, ExerciseSet.self, WorkoutSession.self, WorkoutExercise.self, WorkoutSet.self))
-        self._viewModel = StateObject(wrappedValue: RoutinesViewModel(modelContext: tempContext))
-        self._exercisesViewModel = StateObject(wrappedValue: ExercisesViewModel(modelContext: tempContext))
-        self._workoutViewModel = StateObject(wrappedValue: WorkoutViewModel(modelContext: tempContext))
+    init(modelContext: ModelContext) {
+        self._viewModel = StateObject(wrappedValue: RoutinesViewModel(modelContext: modelContext))
+        self._exercisesViewModel = StateObject(wrappedValue: ExercisesViewModel(modelContext: modelContext))
+        self._workoutViewModel = StateObject(wrappedValue: WorkoutViewModel(modelContext: modelContext))
     }
-    
+
     var body: some View {
         NavigationView {
             Group {
@@ -59,14 +64,10 @@ struct RoutinesView: View {
             }
         }
         .onAppear {
-            // Update viewModels with the actual modelContext from environment
-            viewModel.updateModelContext(modelContext)
-            exercisesViewModel.updateModelContext(modelContext)
-            workoutViewModel.updateModelContext(modelContext)
             viewModel.fetchRoutines()
         }
     }
-    
+
     private func deleteRoutines(offsets: IndexSet) {
         for index in offsets {
             viewModel.deleteRoutine(viewModel.routines[index])
@@ -81,7 +82,7 @@ struct RoutineRowView: View {
         VStack(alignment: .leading, spacing: 4) {
             Text(routine.name)
                 .font(.headline)
-            Text("routines.exercise_count".localized(routine.routineExercises.count))
+            Text("routines.exercise_count".localized(routine.routineExercisesList.count))
                 .font(.caption)
                 .foregroundColor(.secondary)
         }

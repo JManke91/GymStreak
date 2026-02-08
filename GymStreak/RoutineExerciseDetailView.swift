@@ -12,7 +12,7 @@ struct RoutineExerciseDetailView: View {
 
     // Computed property to get current rest time from sets
     private var globalRestTime: TimeInterval {
-        routineExercise.sets.first?.restTime ?? 0.0
+        routineExercise.setsList.first?.restTime ?? 0.0
     }
     
     var body: some View {
@@ -40,13 +40,13 @@ struct RoutineExerciseDetailView: View {
                 HStack {
                     Text("routine_exercise_detail.label.sets".localized)
                     Spacer()
-                    Text("\(routineExercise.sets.count)")
+                    Text("\(routineExercise.setsList.count)")
                         .foregroundColor(.secondary)
                 }
             }
             
             Section("routine_exercise_detail.section.sets".localized) {
-                ForEach(Array(routineExercise.sets.sorted(by: { $0.order < $1.order }).enumerated()), id: \.element.id) { index, set in
+                ForEach(Array(routineExercise.setsList.sorted(by: { $0.order < $1.order }).enumerated()), id: \.element.id) { index, set in
                     VStack(alignment: .leading, spacing: 0) {
                         // Collapsible set header
                         Button(action: {
@@ -161,7 +161,7 @@ struct RoutineExerciseDetailView: View {
     }
 
     private func deleteSets(offsets: IndexSet) {
-        let sortedSets = routineExercise.sets.sorted(by: { $0.order < $1.order })
+        let sortedSets = routineExercise.setsList.sorted(by: { $0.order < $1.order })
         for index in offsets {
             viewModel.removeSet(sortedSets[index], from: routineExercise)
         }
@@ -171,7 +171,7 @@ struct RoutineExerciseDetailView: View {
         viewModel.addSet(to: routineExercise)
 
         // Get the newly added set (last one)
-        if let newSet = routineExercise.sets.last {
+        if let newSet = routineExercise.setsList.last {
             // Update its rest time to match global setting
             newSet.restTime = globalRestTime
             viewModel.updateSet(newSet)
@@ -187,7 +187,7 @@ struct RoutineExerciseDetailView: View {
 
     private func saveCurrentEditingSet() {
         guard let currentId = editingSetId,
-              let currentSet = routineExercise.sets.first(where: { $0.id == currentId }) else { return }
+              let currentSet = routineExercise.setsList.first(where: { $0.id == currentId }) else { return }
         if currentSet.reps != editingReps || currentSet.weight != editingWeight {
             currentSet.reps = editingReps
             currentSet.weight = editingWeight
@@ -206,7 +206,7 @@ struct RoutineExerciseDetailView: View {
     }
 
     private func updateAllSetsRestTime(_ restTime: TimeInterval) {
-        for set in routineExercise.sets {
+        for set in routineExercise.setsList {
             set.restTime = restTime
             viewModel.updateSet(set)
         }
