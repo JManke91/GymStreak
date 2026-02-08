@@ -44,6 +44,20 @@ struct RoutineDetailView: View {
         return (position: index + 1, total: supersetExercises.count)
     }
 
+    // Helper to get superset line position for visual indicator
+    private func supersetLinePosition(for exercise: RoutineExercise) -> SupersetPosition? {
+        guard let info = supersetInfo(for: exercise) else { return nil }
+        if info.total == 1 {
+            return .only
+        } else if info.position == 1 {
+            return .first
+        } else if info.position == info.total {
+            return .last
+        } else {
+            return .middle
+        }
+    }
+
     // Helper for selection icon in superset selection mode
     private func selectionIcon(for exercise: RoutineExercise) -> String {
         if selectedForSuperset.contains(exercise.id) {
@@ -255,41 +269,57 @@ struct RoutineDetailView: View {
         }
     }
 
-    // Superset selection mode row background
+    // Superset selection mode row background with line indicator
+    @ViewBuilder
     private func supersetSelectionRowBackground(for routineExercise: RoutineExercise) -> some View {
-        HStack(spacing: 0) {
-            if routineExercise.isInSuperset {
-                SupersetLineIndicator()
+        let bgColor = selectedForSuperset.contains(routineExercise.id)
+            ? DesignSystem.Colors.tint.opacity(0.15)
+            : (routineExercise.isInSuperset ? DesignSystem.Colors.tint.opacity(0.08) : Color.clear)
+
+        if let position = supersetLinePosition(for: routineExercise) {
+            HStack(spacing: 0) {
+                SupersetLineIndicator(position: position)
+                    .padding(.leading, 8)
+                Spacer()
             }
-            Spacer()
+            .background(bgColor)
+        } else {
+            bgColor
         }
-        .background(
-            selectedForSuperset.contains(routineExercise.id)
-                ? DesignSystem.Colors.tint.opacity(0.15)
-                : (routineExercise.isInSuperset ? DesignSystem.Colors.tint.opacity(0.06) : Color.clear)
-        )
     }
 
     // Edit mode row background with superset indicator
+    @ViewBuilder
     private func editModeRowBackground(for routineExercise: RoutineExercise) -> some View {
-        HStack(spacing: 0) {
-            if routineExercise.isInSuperset {
-                SupersetLineIndicator()
+        let bgColor = routineExercise.isInSuperset ? DesignSystem.Colors.tint.opacity(0.08) : Color.clear
+
+        if let position = supersetLinePosition(for: routineExercise) {
+            HStack(spacing: 0) {
+                SupersetLineIndicator(position: position)
+                    .padding(.leading, 8)
+                Spacer()
             }
-            Spacer()
+            .background(bgColor)
+        } else {
+            bgColor
         }
-        .background(routineExercise.isInSuperset ? DesignSystem.Colors.tint.opacity(0.06) : Color.clear)
     }
 
     // Normal mode row background with superset indicator
+    @ViewBuilder
     private func normalModeRowBackground(for routineExercise: RoutineExercise) -> some View {
-        HStack(spacing: 0) {
-            if routineExercise.isInSuperset {
-                SupersetLineIndicator()
+        let bgColor = routineExercise.isInSuperset ? DesignSystem.Colors.tint.opacity(0.08) : Color.clear
+
+        if let position = supersetLinePosition(for: routineExercise) {
+            HStack(spacing: 0) {
+                SupersetLineIndicator(position: position)
+                    .padding(.leading, 8)
+                Spacer()
             }
-            Spacer()
+            .background(bgColor)
+        } else {
+            bgColor
         }
-        .background(routineExercise.isInSuperset ? DesignSystem.Colors.tint.opacity(0.05) : Color.clear)
     }
 
     var body: some View {
@@ -315,13 +345,15 @@ struct RoutineDetailView: View {
                             if isSupersetSelectionMode {
                                 // Superset selection mode (independent of edit mode)
                                 supersetSelectionRow(for: routineExercise)
-                                    .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16))
+                                    .listRowInsets(EdgeInsets(top: 0, leading: routineExercise.isInSuperset ? 32 : 16, bottom: 0, trailing: 16))
                                     .listRowBackground(supersetSelectionRowBackground(for: routineExercise))
+                                    .listRowSeparator(routineExercise.isInSuperset ? .hidden : .automatic)
                             } else if isEditMode {
                                 // Edit mode: Delete + reorder only
                                 editModeRow(for: routineExercise)
-                                    .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16))
+                                    .listRowInsets(EdgeInsets(top: 0, leading: routineExercise.isInSuperset ? 32 : 16, bottom: 0, trailing: 16))
                                     .listRowBackground(editModeRowBackground(for: routineExercise))
+                                    .listRowSeparator(routineExercise.isInSuperset ? .hidden : .automatic)
                             } else {
                                 // Normal mode: Full disclosure group
                                 DisclosureGroup(
@@ -483,8 +515,9 @@ struct RoutineDetailView: View {
                                         supersetTotal: info?.total
                                     )
                                 }
-                                .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16))
+                                .listRowInsets(EdgeInsets(top: 0, leading: routineExercise.isInSuperset ? 32 : 16, bottom: 0, trailing: 16))
                                 .listRowBackground(normalModeRowBackground(for: routineExercise))
+                                .listRowSeparator(routineExercise.isInSuperset ? .hidden : .automatic)
                                 .sensoryFeedback(.selection, trigger: expandedExerciseId)
                                 // Only allow deleting exercise when collapsed
                                 .deleteDisabled(expandedExerciseId == routineExercise.id)

@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Visual container for grouped superset exercises with connecting line
+/// Visual container for grouped superset exercises with connecting line and anchor dots
 struct SupersetGroupView<Content: View>: View {
     let exerciseCount: Int
     let content: Content
@@ -18,34 +18,54 @@ struct SupersetGroupView<Content: View>: View {
 
             // Content with connecting line
             HStack(alignment: .top, spacing: 0) {
-                // Vertical connecting line
+                // Vertical connecting line with anchor dots
                 SupersetConnectingLine()
-                    .frame(width: 3)
+                    .frame(width: 12)
                     .padding(.leading, 4)
 
                 // Grouped exercises
                 VStack(spacing: 0) {
                     content
                 }
-                .padding(.leading, 12)
+                .padding(.leading, 8)
             }
         }
     }
 }
 
-/// Vertical connecting line for superset exercises
+/// Vertical connecting line for superset exercises with anchor dots at start and end
 struct SupersetConnectingLine: View {
+    private let lineWidth: CGFloat = 3
+    private let dotSize: CGFloat = 8
+
     var body: some View {
         GeometryReader { geometry in
-            Path { path in
-                let x = geometry.size.width / 2
-                path.move(to: CGPoint(x: x, y: 0))
-                path.addLine(to: CGPoint(x: x, y: geometry.size.height))
+            let centerX = geometry.size.width / 2
+            let height = geometry.size.height
+
+            ZStack {
+                // Vertical line connecting the dots
+                Path { path in
+                    path.move(to: CGPoint(x: centerX, y: dotSize / 2))
+                    path.addLine(to: CGPoint(x: centerX, y: height - dotSize / 2))
+                }
+                .stroke(
+                    DesignSystem.Colors.tint.opacity(0.5),
+                    style: StrokeStyle(lineWidth: lineWidth, lineCap: .round)
+                )
+
+                // Top anchor dot
+                Circle()
+                    .fill(DesignSystem.Colors.tint)
+                    .frame(width: dotSize, height: dotSize)
+                    .position(x: centerX, y: dotSize / 2)
+
+                // Bottom anchor dot
+                Circle()
+                    .fill(DesignSystem.Colors.tint)
+                    .frame(width: dotSize, height: dotSize)
+                    .position(x: centerX, y: height - dotSize / 2)
             }
-            .stroke(
-                DesignSystem.Colors.tint.opacity(0.5),
-                style: StrokeStyle(lineWidth: 3, lineCap: .round)
-            )
         }
     }
 }
@@ -64,12 +84,6 @@ struct SupersetExerciseContainer<Content: View>: View {
 
     var body: some View {
         HStack(alignment: .center, spacing: 8) {
-            // Position indicator dot
-            Circle()
-                .fill(DesignSystem.Colors.tint)
-                .frame(width: 8, height: 8)
-                .offset(x: -15.5) // Align with connecting line
-
             content
 
             Spacer()
