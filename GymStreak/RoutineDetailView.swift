@@ -517,15 +517,12 @@ struct ExerciseHeaderView: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            // Muscle group icon
+            // Muscle group badge
             if let exercise = routineExercise.exercise {
-                Image(systemName: muscleGroupIcon(for: exercise.muscleGroups))
-                    .font(.title3)
-                    .symbolRenderingMode(.hierarchical)
-                    .foregroundStyle(isEditMode ? Color.secondary : Color.appAccent)
-                    .frame(width: 40, height: 40)
-                    .background(isEditMode ? Color.secondary.opacity(0.1) : Color.appAccent.opacity(0.1))
-                    .clipShape(RoundedRectangle(cornerRadius: 10))
+                MuscleGroupAbbreviationBadge(
+                    muscleGroups: exercise.muscleGroups,
+                    isActive: !isEditMode
+                )
             }
 
             VStack(alignment: .leading, spacing: 3) {
@@ -549,10 +546,6 @@ struct ExerciseHeaderView: View {
             }
         }
         .contentShape(Rectangle())
-    }
-
-    private func muscleGroupIcon(for groups: [String]) -> String {
-        return MuscleGroups.icon(for: groups)
     }
 }
 

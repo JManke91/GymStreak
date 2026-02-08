@@ -62,14 +62,11 @@ struct AddExerciseToWorkoutView: View {
                     Section {
                         ForEach(alreadyAddedExercises) { exercise in
                             HStack(spacing: 12) {
-                                // Muscle group icon (subdued)
-                                Image(systemName: MuscleGroups.icon(for: exercise.muscleGroups))
-                                    .font(.title3)
-                                    .symbolRenderingMode(.hierarchical)
-                                    .foregroundStyle(.secondary)
-                                    .frame(width: 40, height: 40)
-                                    .background(Color.secondary.opacity(0.1))
-                                    .clipShape(RoundedRectangle(cornerRadius: 10))
+                                // Muscle group badge (subdued)
+                                MuscleGroupAbbreviationBadge(
+                                    muscleGroups: exercise.muscleGroups,
+                                    isActive: false
+                                )
 
                                 VStack(alignment: .leading, spacing: 4) {
                                     Text(exercise.name)
@@ -105,14 +102,11 @@ struct AddExerciseToWorkoutView: View {
                                 addExercise(exercise)
                             } label: {
                                 HStack(spacing: 12) {
-                                    // Muscle group icon (active)
-                                    Image(systemName: MuscleGroups.icon(for: exercise.muscleGroups))
-                                        .font(.title3)
-                                        .symbolRenderingMode(.hierarchical)
-                                        .foregroundStyle(Color.appAccent)
-                                        .frame(width: 40, height: 40)
-                                        .background(Color.appAccent.opacity(0.1))
-                                        .clipShape(RoundedRectangle(cornerRadius: 10))
+                                    // Muscle group badge (active)
+                                    MuscleGroupAbbreviationBadge(
+                                        muscleGroups: exercise.muscleGroups,
+                                        isActive: true
+                                    )
 
                                     VStack(alignment: .leading, spacing: 4) {
                                         Text(exercise.name)

@@ -120,10 +120,10 @@ struct WorkoutExerciseDetailCard: View {
         VStack(alignment: .leading, spacing: 12) {
             // Exercise Header
             HStack {
-                Image(systemName: muscleGroupIcon)
-                    .symbolRenderingMode(.hierarchical)
-                    .foregroundStyle(Color.appAccent)
-                    .font(.title3)
+                MuscleGroupAbbreviationBadge(
+                    muscleGroups: workoutExercise.muscleGroups,
+                    isActive: true
+                )
 
                 VStack(alignment: .leading, spacing: 2) {
                     Text(workoutExercise.exerciseName)
@@ -246,9 +246,5 @@ struct WorkoutExerciseDetailCard: View {
             .clipShape(RoundedRectangle(cornerRadius: 8))
         }
         .padding(.vertical, 4)
-    }
-
-    private var muscleGroupIcon: String {
-        MuscleGroups.icon(for: workoutExercise.muscleGroups)
     }
 }

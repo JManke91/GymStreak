@@ -26,7 +26,20 @@
       "Bash(GymStreak/Resources/de.lproj/Localizable.strings << 'EOF'\n\n// MARK: - Test Data \\(for UI Testing Screenshots\\)\n\"testdata.routine.push_day\" = \"Drücken-Tag\";\n\"testdata.routine.pull_day\" = \"Ziehen-Tag\";\n\"testdata.routine.leg_day\" = \"Bein-Tag\";\n\"testdata.exercise.bench_press\" = \"Bankdrücken\";\n\"testdata.exercise.incline_dumbbell_press\" = \"Schrägbank-Kurzhanteldrücken\";\n\"testdata.exercise.cable_flyes\" = \"Kabelzug-Fliegende\";\n\"testdata.exercise.overhead_press\" = \"Schulterdrücken\";\n\"testdata.exercise.lateral_raises\" = \"Seitheben\";\n\"testdata.exercise.tricep_pushdowns\" = \"Trizepsdrücken\";\n\"testdata.exercise.deadlift\" = \"Kreuzheben\";\n\"testdata.exercise.pull_ups\" = \"Klimmzüge\";\n\"testdata.exercise.barbell_rows\" = \"Langhantelrudern\";\n\"testdata.exercise.face_pulls\" = \"Face Pulls\";\n\"testdata.exercise.hammer_curls\" = \"Hammercurls\";\n\"testdata.exercise.back_squat\" = \"Kniebeugen\";\n\"testdata.exercise.romanian_deadlift\" = \"Rumänisches Kreuzheben\";\n\"testdata.exercise.leg_press\" = \"Beinpresse\";\n\"testdata.exercise.leg_curls\" = \"Beincurls\";\n\"testdata.exercise.calf_raises\" = \"Wadenheben\";\n\"testdata.exercise.desc.bench_press\" = \"Grundübung für Brustmuskulatur\";\n\"testdata.exercise.desc.incline_dumbbell_press\" = \"Fokus auf obere Brust\";\n\"testdata.exercise.desc.cable_flyes\" = \"Brust-Isolationsübung\";\n\"testdata.exercise.desc.overhead_press\" = \"Schulter-Grundübung\";\n\"testdata.exercise.desc.lateral_raises\" = \"Seitliche Schulter-Isolation\";\n\"testdata.exercise.desc.tricep_pushdowns\" = \"Trizeps-Isolation\";\n\"testdata.exercise.desc.deadlift\" = \"Ganzkörper-Grundübung\";\n\"testdata.exercise.desc.pull_ups\" = \"Rückenübung mit Körpergewicht\";\n\"testdata.exercise.desc.barbell_rows\" = \"Rückendicke aufbauen\";\n\"testdata.exercise.desc.face_pulls\" = \"Hintere Schulter und oberer Rücken\";\n\"testdata.exercise.desc.hammer_curls\" = \"Bizeps und Unterarm-Entwicklung\";\n\"testdata.exercise.desc.back_squat\" = \"König der Beinübungen\";\n\"testdata.exercise.desc.romanian_deadlift\" = \"Fokus auf Beinbeuger\";\n\"testdata.exercise.desc.leg_press\" = \"Quadrizeps-Masseaufbau\";\n\"testdata.exercise.desc.leg_curls\" = \"Beinbeuger-Isolation\";\n\"testdata.exercise.desc.calf_raises\" = \"Wadenentwicklung\";\nEOF)",
       "Bash(git add:*)",
       "Bash(git commit:*)",
-      "mcp__ide__getDiagnostics"
+      "mcp__ide__getDiagnostics",
+      "WebSearch",
+      "WebFetch(domain:hotpot.ai)",
+      "WebFetch(domain:sfsymbols.com)",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "WebFetch(domain:nshipster.com)",
+      "WebFetch(domain:sarunw.com)",
+      "WebFetch(domain:www.avanderlee.com)",
+      "WebFetch(domain:www.hackingwithswift.com)",
+      "WebFetch(domain:sfsymbolslib.com)",
+      "WebFetch(domain:medium.com)",
+      "WebFetch(domain:symbolsdb.com)",
+      "WebFetch(domain:codecademy.com)"
     ],
     "defaultMode": "acceptEdits"
   }

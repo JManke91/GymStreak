@@ -291,10 +291,10 @@ struct ExerciseCard: View {
         VStack(alignment: .leading, spacing: 12) {
             // Exercise Header
             HStack {
-                Image(systemName: muscleGroupIcon)
-                    .symbolRenderingMode(.hierarchical)
-                    .foregroundStyle(isCurrentExercise ? Color.appAccent : .secondary)
-                    .font(.title3)
+                MuscleGroupAbbreviationBadge(
+                    muscleGroups: workoutExercise.muscleGroups,
+                    isActive: isCurrentExercise
+                )
 
                 VStack(alignment: .leading, spacing: 2) {
                     Text(workoutExercise.exerciseName)
@@ -408,10 +408,6 @@ struct ExerciseCard: View {
             RoundedRectangle(cornerRadius: 12)
                 .strokeBorder(isCurrentExercise ? Color.appAccent : Color.clear, lineWidth: 2)
         )
-    }
-
-    private var muscleGroupIcon: String {
-        MuscleGroups.icon(for: workoutExercise.muscleGroups)
     }
 
     private func isNextSet(_ set: WorkoutSet) -> Bool {

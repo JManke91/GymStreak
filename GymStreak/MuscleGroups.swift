@@ -1,4 +1,20 @@
 import Foundation
+import SwiftUI
+
+/// Body regions for color-coded muscle group categorization
+enum BodyRegion {
+    case upperBody
+    case core
+    case lowerBody
+
+    var color: Color {
+        switch self {
+        case .upperBody: return .blue
+        case .core: return .orange
+        case .lowerBody: return .green
+        }
+    }
+}
 
 /// Centralized muscle group definitions for the app
 /// Muscle groups are stored as English keys internally and localized for display
@@ -99,5 +115,81 @@ struct MuscleGroups {
     /// Returns formatted display string for multiple muscle groups
     static func displayString(for muscleGroups: [String]) -> String {
         muscleGroups.map { displayName(for: $0) }.joined(separator: ", ")
+    }
+
+    /// Returns the body region for a muscle group
+    static func bodyRegion(for muscleGroup: String) -> BodyRegion {
+        switch muscleGroup {
+        // Upper Body - Arms, Chest, Back, Shoulders
+        case "Biceps", "Triceps", "Forearms",
+             "Chest", "Upper Chest",
+             "Upper Back", "Lats", "Lower Back",
+             "Shoulders", "Front Delts", "Side Delts", "Rear Delts":
+            return .upperBody
+
+        // Core
+        case "Abs", "Obliques":
+            return .core
+
+        // Lower Body
+        case "Quadriceps", "Hamstrings", "Glutes", "Calves", "Hip Flexors":
+            return .lowerBody
+
+        default:
+            return .upperBody
+        }
+    }
+
+    /// Returns body region for the first muscle group in an array
+    static func bodyRegion(for muscleGroups: [String]) -> BodyRegion {
+        guard let first = muscleGroups.first else {
+            return .upperBody
+        }
+        return bodyRegion(for: first)
+    }
+
+    /// Returns a short abbreviation for a muscle group
+    static func abbreviation(for muscleGroup: String) -> String {
+        switch muscleGroup {
+        // Arms
+        case "Biceps": return "BI"
+        case "Triceps": return "TRI"
+        case "Forearms": return "FA"
+
+        // Chest
+        case "Chest", "Upper Chest": return "CH"
+
+        // Back
+        case "Upper Back": return "UB"
+        case "Lats": return "LAT"
+        case "Lower Back": return "LB"
+
+        // Shoulders
+        case "Shoulders": return "SH"
+        case "Front Delts": return "FD"
+        case "Side Delts": return "SD"
+        case "Rear Delts": return "RD"
+
+        // Core
+        case "Abs": return "ABS"
+        case "Obliques": return "OBL"
+
+        // Lower Body
+        case "Quadriceps": return "QD"
+        case "Hamstrings": return "HM"
+        case "Glutes": return "GL"
+        case "Calves": return "CV"
+        case "Hip Flexors": return "HF"
+
+        default: return "EX"
+        }
+    }
+
+    /// Returns abbreviation for the first muscle group in an array
+    static func abbreviation(for muscleGroups: [String]) -> String {
+        guard let first = muscleGroups.first else {
+            return "EX"
+        }
+        return abbreviation(for: first)
     }
 }

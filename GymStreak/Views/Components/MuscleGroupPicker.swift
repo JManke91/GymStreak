@@ -98,10 +98,11 @@ private struct MuscleGroupRow: View {
     var body: some View {
         Button(action: onToggle) {
             HStack(spacing: 12) {
-                Image(systemName: MuscleGroups.icon(for: muscleGroup))
-                    .font(.body)
-                    .foregroundStyle(isSelected ? Color.appAccent : .secondary)
-                    .frame(width: 24)
+                MuscleGroupAbbreviationBadge(
+                    muscleGroups: [muscleGroup],
+                    isActive: isSelected,
+                    size: .small
+                )
 
                 Text(MuscleGroups.displayName(for: muscleGroup))
                     .foregroundStyle(.primary)
