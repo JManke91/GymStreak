@@ -52,7 +52,7 @@ struct ExerciseSelectionView: View {
                                 Text(exercise.name)
                                     .font(.headline)
 
-                                Text(exercise.muscleGroup)
+                                Text(MuscleGroups.displayString(for: exercise.muscleGroups))
                                     .font(.caption)
                                     .foregroundColor(.secondary)
                             }
@@ -120,7 +120,7 @@ struct ExerciseSelectionView: View {
         } else {
             return allExercises.filter { exercise in
                 exercise.name.localizedCaseInsensitiveContains(searchText) ||
-                exercise.muscleGroup.localizedCaseInsensitiveContains(searchText)
+                exercise.muscleGroups.contains { $0.localizedCaseInsensitiveContains(searchText) }
             }
         }
     }

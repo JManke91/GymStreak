@@ -10,7 +10,6 @@
 		A6FBC4ED2EC91C1C0095483C /* WidgetKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A6FBC4EC2EC91C1C0095483C /* WidgetKit.framework */; };
 		A6FBC4EF2EC91C1C0095483C /* SwiftUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A6FBC4EE2EC91C1C0095483C /* SwiftUI.framework */; };
 		A6FBC4FE2EC91C1E0095483C /* GymStreakWidgetsExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = A6FBC4EA2EC91C1C0095483C /* GymStreakWidgetsExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
-		A6FBC5D62ECCED100095483C /* GymStreakWatch Watch App.app in Embed Watch Content */ = {isa = PBXBuildFile; fileRef = A6FBC5CC2ECCED0F0095483C /* GymStreakWatch Watch App.app */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -28,13 +27,6 @@
 			remoteGlobalIDString = A6FBC4E92EC91C1C0095483C;
 			remoteInfo = GymStreakWidgetsExtension;
 		};
-		A6FBC5D42ECCED100095483C /* PBXContainerItemProxy */ = {
-			isa = PBXContainerItemProxy;
-			containerPortal = A6A340632E4E6F360017A4F7 /* Project object */;
-			proxyType = 1;
-			remoteGlobalIDString = A6FBC5CB2ECCED0F0095483C;
-			remoteInfo = "GymStreakWatch Watch App";
-		};
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXCopyFilesBuildPhase section */
@@ -47,17 +39,6 @@
 				A6FBC4FE2EC91C1E0095483C /* GymStreakWidgetsExtension.appex in Embed Foundation Extensions */,
 			);
 			name = "Embed Foundation Extensions";
-			runOnlyForDeploymentPostprocessing = 0;
-		};
-		A6FBC5D72ECCED100095483C /* Embed Watch Content */ = {
-			isa = PBXCopyFilesBuildPhase;
-			buildActionMask = 2147483647;
-			dstPath = "$(CONTENTS_FOLDER_PATH)/Watch";
-			dstSubfolderSpec = 16;
-			files = (
-				A6FBC5D62ECCED100095483C /* GymStreakWatch Watch App.app in Embed Watch Content */,
-			);
-			name = "Embed Watch Content";
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXCopyFilesBuildPhase section */
@@ -387,11 +368,6 @@
 			isa = PBXTargetDependency;
 			target = A6FBC4E92EC91C1C0095483C /* GymStreakWidgetsExtension */;
 			targetProxy = A6FBC4FC2EC91C1E0095483C /* PBXContainerItemProxy */;
-		};
-		A6FBC5D52ECCED100095483C /* PBXTargetDependency */ = {
-			isa = PBXTargetDependency;
-			target = A6FBC5CB2ECCED0F0095483C /* GymStreakWatch Watch App */;
-			targetProxy = A6FBC5D42ECCED100095483C /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 

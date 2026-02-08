@@ -27,20 +27,10 @@ struct RoutineExerciseDetailView: View {
                     }
 
                     HStack {
-                        Text("routine_exercise_detail.label.muscle_group".localized)
+                        Text("routine_exercise_detail.label.muscle_groups".localized)
                         Spacer()
-                        Text(exercise.muscleGroup)
+                        Text(MuscleGroups.displayString(for: exercise.muscleGroups))
                             .foregroundColor(.secondary)
-                    }
-
-                    if !exercise.exerciseDescription.isEmpty {
-                        HStack {
-                            Text("routine_exercise_detail.label.description".localized)
-                            Spacer()
-                            Text(exercise.exerciseDescription)
-                                .foregroundColor(.secondary)
-                                .multilineTextAlignment(.trailing)
-                        }
                     }
                 } else {
                     Text("routine_exercise_detail.error.not_found".localized)
@@ -56,15 +46,18 @@ struct RoutineExerciseDetailView: View {
             }
             
             Section("routine_exercise_detail.section.sets".localized) {
-                ForEach(Array(routineExercise.sets.enumerated()), id: \.element.id) { index, set in
+                ForEach(Array(routineExercise.sets.sorted(by: { $0.order < $1.order }).enumerated()), id: \.element.id) { index, set in
                     VStack(alignment: .leading, spacing: 0) {
                         // Collapsible set header
                         Button(action: {
                             withAnimation(.easeInOut(duration: 0.3)) {
                                 if editingSetId == set.id {
-                                    // Collapse
+                                    // Save before collapsing
+                                    saveCurrentEditingSet()
                                     editingSetId = nil
                                 } else {
+                                    // Save currently expanded set before switching
+                                    saveCurrentEditingSet()
                                     // Expand and load values
                                     editingSetId = set.id
                                     editingReps = set.reps
@@ -97,6 +90,7 @@ struct RoutineExerciseDetailView: View {
                                     Spacer()
                                     Stepper("\(editingReps)", value: $editingReps, in: 1...100)
                                         .onChange(of: editingReps) { _, newValue in
+                                            guard editingSetId == set.id else { return }
                                             updateSet(set, reps: newValue)
                                         }
                                 }
@@ -109,6 +103,7 @@ struct RoutineExerciseDetailView: View {
                                         .multilineTextAlignment(.trailing)
                                         .frame(width: 80)
                                         .onChange(of: editingWeight) { _, newValue in
+                                            guard editingSetId == set.id else { return }
                                             updateSet(set, weight: newValue)
                                         }
                                 }
@@ -166,8 +161,9 @@ struct RoutineExerciseDetailView: View {
     }
 
     private func deleteSets(offsets: IndexSet) {
+        let sortedSets = routineExercise.sets.sorted(by: { $0.order < $1.order })
         for index in offsets {
-            viewModel.removeSet(routineExercise.sets[index], from: routineExercise)
+            viewModel.removeSet(sortedSets[index], from: routineExercise)
         }
     }
 
@@ -186,6 +182,16 @@ struct RoutineExerciseDetailView: View {
                 editingReps = newSet.reps
                 editingWeight = newSet.weight
             }
+        }
+    }
+
+    private func saveCurrentEditingSet() {
+        guard let currentId = editingSetId,
+              let currentSet = routineExercise.sets.first(where: { $0.id == currentId }) else { return }
+        if currentSet.reps != editingReps || currentSet.weight != editingWeight {
+            currentSet.reps = editingReps
+            currentSet.weight = editingWeight
+            viewModel.updateSet(currentSet)
         }
     }
 

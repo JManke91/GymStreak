@@ -1,62 +1,79 @@
 import Foundation
 
 /// Centralized muscle group definitions for the app
+/// Muscle groups are stored as English keys internally and localized for display
 struct MuscleGroups {
-    /// Returns all muscle groups as localized strings
-    static var all: [String] {
-        return [
-            // General
-            "muscle.general".localized,
-            "muscle.full_body".localized,
+    /// All muscle group keys (English, for storage)
+    static let allKeys: [String] = [
+        // Upper Body - Arms
+        "Biceps",
+        "Triceps",
+        "Forearms",
+        // Upper Body - Chest & Back
+        "Chest",
+        "Upper Chest",
+        "Upper Back",
+        "Lats",
+        "Lower Back",
+        // Upper Body - Shoulders
+        "Shoulders",
+        "Front Delts",
+        "Side Delts",
+        "Rear Delts",
+        // Core
+        "Abs",
+        "Obliques",
+        // Lower Body
+        "Quadriceps",
+        "Hamstrings",
+        "Glutes",
+        "Calves",
+        "Hip Flexors"
+    ]
 
-            // Upper Body - Arms
-            "muscle.biceps".localized,
-            "muscle.triceps".localized,
-            "muscle.forearms".localized,
+    /// Localization key mapping
+    private static let localizationKeys: [String: String] = [
+        "Biceps": "muscle.biceps",
+        "Triceps": "muscle.triceps",
+        "Forearms": "muscle.forearms",
+        "Chest": "muscle.chest",
+        "Upper Chest": "muscle.upper_chest",
+        "Upper Back": "muscle.upper_back",
+        "Lats": "muscle.lats",
+        "Lower Back": "muscle.lower_back",
+        "Shoulders": "muscle.shoulders",
+        "Front Delts": "muscle.front_delts",
+        "Side Delts": "muscle.side_delts",
+        "Rear Delts": "muscle.rear_delts",
+        "Abs": "muscle.abs",
+        "Obliques": "muscle.obliques",
+        "Quadriceps": "muscle.quadriceps",
+        "Hamstrings": "muscle.hamstrings",
+        "Glutes": "muscle.glutes",
+        "Calves": "muscle.calves",
+        "Hip Flexors": "muscle.hip_flexors"
+    ]
 
-            // Upper Body - Chest & Back
-            "muscle.chest".localized,
-            "muscle.upper_back".localized,
-            "muscle.lats".localized,
-            "muscle.lower_back".localized,
-
-            // Upper Body - Shoulders
-            "muscle.front_delts".localized,
-            "muscle.side_delts".localized,
-            "muscle.rear_delts".localized,
-
-            // Core
-            "muscle.abs".localized,
-            "muscle.obliques".localized,
-
-            // Lower Body
-            "muscle.quadriceps".localized,
-            "muscle.hamstrings".localized,
-            "muscle.glutes".localized,
-            "muscle.calves".localized,
-            "muscle.hip_flexors".localized
-        ]
+    /// Returns the localized display name for a muscle group key
+    static func displayName(for key: String) -> String {
+        if let locKey = localizationKeys[key] {
+            return locKey.localized
+        }
+        return key
     }
 
     /// Returns an appropriate SF Symbol for the given muscle group
-    /// Works with both localized and English muscle group names
     static func icon(for muscleGroup: String) -> String {
-        // Normalize the muscle group name by checking against all localized values
-        let normalizedGroup = normalizeMuscleName(muscleGroup)
-
-        switch normalizedGroup {
-        // General
-        case "General", "Full Body": return "figure.strengthtraining.traditional"
-
+        switch muscleGroup {
         // Arms
         case "Biceps", "Triceps", "Forearms": return "figure.arms.open"
 
         // Chest & Back
-        case "Chest": return "figure.strengthtraining.traditional"
+        case "Chest", "Upper Chest": return "figure.strengthtraining.traditional"
         case "Upper Back", "Lats", "Lower Back": return "figure.cooldown"
 
         // Shoulders
-        case "Front Delts", "Side Delts", "Rear Delts": return "figure.flexibility"
+        case "Shoulders", "Front Delts", "Side Delts", "Rear Delts": return "figure.flexibility"
 
         // Core
         case "Abs", "Obliques": return "figure.core.training"
@@ -71,30 +88,16 @@ struct MuscleGroups {
         }
     }
 
-    /// Helper to normalize muscle group names (convert localized back to English key for icon lookup)
-    private static func normalizeMuscleName(_ name: String) -> String {
-        let mappings: [String: String] = [
-            "muscle.general".localized: "General",
-            "muscle.full_body".localized: "Full Body",
-            "muscle.biceps".localized: "Biceps",
-            "muscle.triceps".localized: "Triceps",
-            "muscle.forearms".localized: "Forearms",
-            "muscle.chest".localized: "Chest",
-            "muscle.upper_back".localized: "Upper Back",
-            "muscle.lats".localized: "Lats",
-            "muscle.lower_back".localized: "Lower Back",
-            "muscle.front_delts".localized: "Front Delts",
-            "muscle.side_delts".localized: "Side Delts",
-            "muscle.rear_delts".localized: "Rear Delts",
-            "muscle.abs".localized: "Abs",
-            "muscle.obliques".localized: "Obliques",
-            "muscle.quadriceps".localized: "Quadriceps",
-            "muscle.hamstrings".localized: "Hamstrings",
-            "muscle.glutes".localized: "Glutes",
-            "muscle.calves".localized: "Calves",
-            "muscle.hip_flexors".localized: "Hip Flexors"
-        ]
+    /// Returns icon for the first muscle group in an array
+    static func icon(for muscleGroups: [String]) -> String {
+        guard let first = muscleGroups.first else {
+            return "figure.mixed.cardio"
+        }
+        return icon(for: first)
+    }
 
-        return mappings[name] ?? name
+    /// Returns formatted display string for multiple muscle groups
+    static func displayString(for muscleGroups: [String]) -> String {
+        muscleGroups.map { displayName(for: $0) }.joined(separator: ", ")
     }
 }

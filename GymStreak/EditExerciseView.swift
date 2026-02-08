@@ -4,34 +4,25 @@ struct EditExerciseView: View {
     let exercise: Exercise
     @ObservedObject var viewModel: ExercisesViewModel
     @Environment(\.dismiss) private var dismiss
-    
+
     @State private var exerciseName: String
-    @State private var muscleGroup: String
-    @State private var exerciseDescription: String
+    @State private var muscleGroups: [String]
     @State private var showingDeleteAlert = false
-    
+
     init(exercise: Exercise, viewModel: ExercisesViewModel) {
         self.exercise = exercise
         self.viewModel = viewModel
         self._exerciseName = State(initialValue: exercise.name)
-        self._muscleGroup = State(initialValue: exercise.muscleGroup)
-        self._exerciseDescription = State(initialValue: exercise.exerciseDescription)
+        self._muscleGroups = State(initialValue: exercise.muscleGroups)
     }
-    
+
     var body: some View {
         NavigationView {
             List {
-                Section("edit_exercise.details".localized) {
+                Section {
                     TextField("exercises.name".localized, text: $exerciseName)
 
-                    Picker("exercises.muscle_group".localized, selection: $muscleGroup) {
-                        ForEach(MuscleGroups.all, id: \.self) { muscleGroup in
-                            Text(muscleGroup).tag(muscleGroup)
-                        }
-                    }
-
-                    TextField("edit_exercise.description_optional".localized, text: $exerciseDescription, axis: .vertical)
-                        .lineLimit(3...6)
+                    MuscleGroupPicker(selectedMuscleGroups: $muscleGroups)
                 }
             }
             .navigationTitle("edit_exercise.title".localized)
@@ -47,7 +38,7 @@ struct EditExerciseView: View {
                     Button("action.save".localized) {
                         saveExercise()
                     }
-                    .disabled(exerciseName.isEmpty)
+                    .disabled(exerciseName.isEmpty || muscleGroups.isEmpty)
                 }
             }
             .alert("edit_exercise.delete_title".localized, isPresented: $showingDeleteAlert) {
@@ -61,11 +52,10 @@ struct EditExerciseView: View {
             }
         }
     }
-    
+
     private func saveExercise() {
         exercise.name = exerciseName
-        exercise.muscleGroup = muscleGroup
-        exercise.exerciseDescription = exerciseDescription
+        exercise.muscleGroups = muscleGroups
         viewModel.updateExercise(exercise)
         dismiss()
     }

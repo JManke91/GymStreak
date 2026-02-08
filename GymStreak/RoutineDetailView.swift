@@ -103,7 +103,7 @@ struct RoutineDetailView: View {
                                     showToggle: true
                                 )
 
-                                ForEach(Array(routineExercise.sets.enumerated()), id: \.element.id) { index, set in
+                                ForEach(Array(routineExercise.sets.sorted(by: { $0.order < $1.order }).enumerated()), id: \.element.id) { index, set in
                                     RoutineSetRowView(
                                         set: set,
                                         index: index,
@@ -119,9 +119,13 @@ struct RoutineDetailView: View {
                                         onTap: {
                                             withAnimation(.snappy(duration: 0.35)) {
                                                 if expandedSetId == set.id {
+                                                    // Save before collapsing
+                                                    saveCurrentExpandedSet()
                                                     expandedSetId = nil
                                                     currentRoutineExercise = nil
                                                 } else {
+                                                    // Save currently expanded set before switching
+                                                    saveCurrentExpandedSet()
                                                     expandedSetId = set.id
                                                     editingReps = set.reps
                                                     editingWeight = set.weight
@@ -135,6 +139,10 @@ struct RoutineDetailView: View {
                                             }
                                         },
                                         onUpdate: { reps, weight in
+                                            // Guard: only process updates for the currently expanded set.
+                                            // During animated set transitions, the old set's onChange handlers
+                                            // can fire with the new set's values, overwriting the old set's data.
+                                            guard expandedSetId == set.id else { return }
                                             handleSetUpdate(
                                                 set: set,
                                                 reps: reps,
@@ -434,6 +442,17 @@ struct RoutineDetailView: View {
         viewModel.updateRoutine(routine)
     }
 
+    private func saveCurrentExpandedSet() {
+        guard let currentExpandedId = expandedSetId,
+              let currentExercise = currentRoutineExercise,
+              let currentSet = currentExercise.sets.first(where: { $0.id == currentExpandedId }) else { return }
+        if currentSet.reps != editingReps || currentSet.weight != editingWeight {
+            currentSet.reps = editingReps
+            currentSet.weight = editingWeight
+            viewModel.updateSet(currentSet)
+        }
+    }
+
     private func updateSet(_ set: ExerciseSet, reps: Int? = nil, weight: Double? = nil) {
         if let reps = reps {
             set.reps = reps
@@ -500,7 +519,7 @@ struct ExerciseHeaderView: View {
         HStack(spacing: 12) {
             // Muscle group icon
             if let exercise = routineExercise.exercise {
-                Image(systemName: muscleGroupIcon(for: exercise.muscleGroup))
+                Image(systemName: muscleGroupIcon(for: exercise.muscleGroups))
                     .font(.title3)
                     .symbolRenderingMode(.hierarchical)
                     .foregroundStyle(isEditMode ? Color.secondary : Color.appAccent)
@@ -532,9 +551,8 @@ struct ExerciseHeaderView: View {
         .contentShape(Rectangle())
     }
 
-    private func muscleGroupIcon(for group: String?) -> String {
-        guard let group = group else { return "dumbbell.fill" }
-        return MuscleGroups.icon(for: group)
+    private func muscleGroupIcon(for groups: [String]) -> String {
+        return MuscleGroups.icon(for: groups)
     }
 }
 

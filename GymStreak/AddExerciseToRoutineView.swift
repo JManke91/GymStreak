@@ -18,7 +18,7 @@ struct AddExerciseToRoutineView: View {
         } else {
             return exercises.filter { exercise in
                 exercise.name.localizedCaseInsensitiveContains(searchText) ||
-                exercise.muscleGroup.localizedCaseInsensitiveContains(searchText)
+                exercise.muscleGroups.contains { $0.localizedCaseInsensitiveContains(searchText) }
             }
         }
     }
@@ -37,7 +37,7 @@ struct AddExerciseToRoutineView: View {
                         ForEach(alreadyAddedExercises) { exercise in
                             HStack(spacing: 12) {
                                 // Muscle group icon (subdued)
-                                Image(systemName: MuscleGroups.icon(for: exercise.muscleGroup))
+                                Image(systemName: MuscleGroups.icon(for: exercise.muscleGroups))
                                     .font(.title3)
                                     .symbolRenderingMode(.hierarchical)
                                     .foregroundStyle(.secondary)
@@ -49,19 +49,9 @@ struct AddExerciseToRoutineView: View {
                                     Text(exercise.name)
                                         .font(.headline)
                                         .foregroundStyle(.secondary)
-                                    HStack {
-                                        Text(exercise.muscleGroup)
-                                            .font(.caption)
-                                            .foregroundStyle(.tertiary)
-                                        if !exercise.exerciseDescription.isEmpty {
-                                            Text("•")
-                                                .foregroundStyle(.tertiary)
-                                            Text(exercise.exerciseDescription)
-                                                .font(.caption)
-                                                .foregroundStyle(.tertiary)
-                                                .lineLimit(1)
-                                        }
-                                    }
+                                    Text(MuscleGroups.displayString(for: exercise.muscleGroups))
+                                        .font(.caption)
+                                        .foregroundStyle(.tertiary)
                                 }
 
                                 Spacer()
@@ -72,7 +62,7 @@ struct AddExerciseToRoutineView: View {
                             }
                             .padding(.vertical, 4)
                             .listRowBackground(Color(.secondarySystemGroupedBackground))
-                            .accessibilityLabel("\(exercise.name), \(exercise.muscleGroup), already in routine")
+                            .accessibilityLabel("\(exercise.name), \(MuscleGroups.displayString(for: exercise.muscleGroups)), already in routine")
                             .accessibilityHint("This exercise is already in your routine")
                         }
                     } header: {
@@ -88,7 +78,7 @@ struct AddExerciseToRoutineView: View {
                             NavigationLink(value: exercise) {
                                 HStack(spacing: 12) {
                                     // Muscle group icon (active)
-                                    Image(systemName: MuscleGroups.icon(for: exercise.muscleGroup))
+                                    Image(systemName: MuscleGroups.icon(for: exercise.muscleGroups))
                                         .font(.title3)
                                         .symbolRenderingMode(.hierarchical)
                                         .foregroundStyle(Color.appAccent)
@@ -100,19 +90,9 @@ struct AddExerciseToRoutineView: View {
                                         Text(exercise.name)
                                             .font(.headline)
                                             .foregroundStyle(.primary)
-                                        HStack {
-                                            Text(exercise.muscleGroup)
-                                                .font(.caption)
-                                                .foregroundStyle(.secondary)
-                                            if !exercise.exerciseDescription.isEmpty {
-                                                Text("•")
-                                                    .foregroundStyle(.secondary)
-                                                Text(exercise.exerciseDescription)
-                                                    .font(.caption)
-                                                    .foregroundStyle(.secondary)
-                                                    .lineLimit(1)
-                                            }
-                                        }
+                                        Text(MuscleGroups.displayString(for: exercise.muscleGroups))
+                                            .font(.caption)
+                                            .foregroundStyle(.secondary)
                                     }
 
                                     Spacer()
@@ -123,7 +103,7 @@ struct AddExerciseToRoutineView: View {
                                 }
                                 .padding(.vertical, 4)
                             }
-                            .accessibilityLabel("Add \(exercise.name), \(exercise.muscleGroup) to routine")
+                            .accessibilityLabel("Add \(exercise.name), \(MuscleGroups.displayString(for: exercise.muscleGroups)) to routine")
                             .accessibilityHint("Opens configuration screen to add sets")
                         }
                     }
@@ -222,20 +202,10 @@ struct ConfigureExerciseSetsView: View {
                 }
 
                 HStack {
-                    Text("exercises.muscle_group".localized)
+                    Text("exercises.muscle_groups".localized)
                     Spacer()
-                    Text(exercise.muscleGroup)
+                    Text(MuscleGroups.displayString(for: exercise.muscleGroups))
                         .foregroundColor(.secondary)
-                }
-
-                if !exercise.exerciseDescription.isEmpty {
-                    HStack {
-                        Text("exercises.description".localized)
-                        Spacer()
-                        Text(exercise.exerciseDescription)
-                            .foregroundColor(.secondary)
-                            .multilineTextAlignment(.trailing)
-                    }
                 }
             }
 
@@ -248,10 +218,10 @@ struct ConfigureExerciseSetsView: View {
                                     editingSetIndex = nil
                                 } else {
                                     editingSetIndex = index
-                                    editingReps = set.reps
-                                    editingWeight = set.weight
-                                    initialReps = set.reps
-                                    initialWeight = set.weight
+                                    editingReps = sets[index].reps
+                                    editingWeight = sets[index].weight
+                                    initialReps = sets[index].reps
+                                    initialWeight = sets[index].weight
                                     // Reset banner dismissed state when opening a new set
                                     bannerDismissed = false
                                 }
@@ -262,7 +232,7 @@ struct ConfigureExerciseSetsView: View {
                                     .font(.headline)
                                     .foregroundColor(.primary)
                                 Spacer()
-                                Text("\(set.reps) reps • \(set.weight, specifier: "%.1f") kg")
+                                Text("\(sets[index].reps) reps • \(sets[index].weight, specifier: "%.1f") kg")
                                     .foregroundColor(.secondary)
                                 Image(systemName: "chevron.right")
                                     .font(.caption)
@@ -383,7 +353,8 @@ struct ConfigureExerciseSetsView: View {
     }
 
     private func addNewSet() {
-        let newSet = ExerciseSet(reps: 10, weight: 0.0, restTime: globalRestTime)
+        let order = sets.count
+        let newSet = ExerciseSet(reps: 10, weight: 0.0, restTime: globalRestTime, order: order)
         sets.append(newSet)
 
         withAnimation(.easeInOut(duration: 0.3)) {
@@ -409,7 +380,8 @@ struct ConfigureExerciseSetsView: View {
             weightToUse = lastSet.weight
         }
 
-        let newSet = ExerciseSet(reps: repsToUse, weight: weightToUse, restTime: globalRestTime)
+        let order = sets.count
+        let newSet = ExerciseSet(reps: repsToUse, weight: weightToUse, restTime: globalRestTime, order: order)
         sets.append(newSet)
 
         withAnimation(.easeInOut(duration: 0.3)) {
@@ -430,6 +402,8 @@ struct ConfigureExerciseSetsView: View {
         guard index < sets.count else { return }
         sets[index].reps = editingReps
         sets[index].weight = editingWeight
+        // Force SwiftUI to detect the change by triggering array reassignment
+        sets = sets
     }
 
     private func deleteSets(offsets: IndexSet) {
@@ -443,8 +417,9 @@ struct ConfigureExerciseSetsView: View {
         let routineExercise = RoutineExercise(exercise: exercise, order: routine.routineExercises.count)
         routineExercise.routine = routine
 
-        for set in sets {
+        for (index, set) in sets.enumerated() {
             set.restTime = globalRestTime
+            set.order = index
             set.routineExercise = routineExercise
             routineExercise.sets.append(set)
         }
@@ -462,22 +437,14 @@ struct CreateExerciseInlineView: View {
     var onExerciseCreated: (Exercise) -> Void
 
     @State private var exerciseName = ""
-    @State private var muscleGroup = "General"
-    @State private var exerciseDescription = ""
+    @State private var muscleGroups: [String] = ["Chest"]
 
     var body: some View {
         Form {
             Section {
                 TextField("exercises.name".localized, text: $exerciseName)
 
-                Picker("exercises.muscle_group".localized, selection: $muscleGroup) {
-                    ForEach(MuscleGroups.all, id: \.self) { muscleGroup in
-                        Text(muscleGroup).tag(muscleGroup)
-                    }
-                }
-
-                TextField("add_exercise.description_optional".localized, text: $exerciseDescription, axis: .vertical)
-                    .lineLimit(3...6)
+                MuscleGroupPicker(selectedMuscleGroups: $muscleGroups)
             }
         }
         .navigationTitle("add_exercise.title".localized)
@@ -487,7 +454,7 @@ struct CreateExerciseInlineView: View {
                 Button("action.save".localized) {
                     saveExercise()
                 }
-                .disabled(exerciseName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                .disabled(exerciseName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || muscleGroups.isEmpty)
             }
         }
     }
@@ -498,8 +465,7 @@ struct CreateExerciseInlineView: View {
 
         if let newExercise = exercisesViewModel.addExercise(
             name: trimmedName,
-            muscleGroup: muscleGroup,
-            exerciseDescription: exerciseDescription
+            muscleGroups: muscleGroups
         ) {
             onExerciseCreated(newExercise)
         }

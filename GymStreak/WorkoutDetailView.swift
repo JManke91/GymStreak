@@ -249,6 +249,6 @@ struct WorkoutExerciseDetailCard: View {
     }
 
     private var muscleGroupIcon: String {
-        MuscleGroups.icon(for: workoutExercise.muscleGroup)
+        MuscleGroups.icon(for: workoutExercise.muscleGroups)
     }
 }

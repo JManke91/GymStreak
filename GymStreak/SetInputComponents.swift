@@ -148,6 +148,7 @@ struct WeightInput: View {
                 .background(Color(.tertiarySystemGroupedBackground))
                 .clipShape(RoundedRectangle(cornerRadius: 8))
                 .focused($isFocused)
+                .selectAllOnFocus()
                 .onChange(of: weight) { oldValue, newValue in
                     // Round to nearest increment (e.g., 0.25kg)
                     let rounded = round(newValue / increment) * increment
@@ -240,6 +241,30 @@ struct WeightInput: View {
     }
 
     return PreviewWrapper()
+}
+
+// MARK: - Select All on Focus Modifier
+
+/// A view modifier that selects all text in a TextField when it receives focus
+struct SelectAllOnFocusModifier: ViewModifier {
+    func body(content: Content) -> some View {
+        content
+            .onReceive(NotificationCenter.default.publisher(for: UITextField.textDidBeginEditingNotification)) { notification in
+                if let textField = notification.object as? UITextField {
+                    // Delay slightly to ensure the text field is fully focused
+                    DispatchQueue.main.async {
+                        textField.selectAll(nil)
+                    }
+                }
+            }
+    }
+}
+
+extension View {
+    /// Selects all text in a TextField when it receives focus
+    func selectAllOnFocus() -> some View {
+        modifier(SelectAllOnFocusModifier())
+    }
 }
 
 #Preview("Combined Set Editor") {

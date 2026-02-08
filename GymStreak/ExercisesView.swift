@@ -62,24 +62,14 @@ struct ExercisesView: View {
 
 struct ExerciseRowView: View {
     let exercise: Exercise
-    
+
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             Text(exercise.name)
                 .font(.headline)
-            HStack {
-                Text(exercise.muscleGroup)
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-                if !exercise.exerciseDescription.isEmpty {
-                    Text("•")
-                        .foregroundColor(.secondary)
-                    Text(exercise.exerciseDescription)
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                        .lineLimit(1)
-                }
-            }
+            Text(MuscleGroups.displayString(for: exercise.muscleGroups))
+                .font(.caption)
+                .foregroundColor(.secondary)
         }
         .padding(.vertical, 4)
     }

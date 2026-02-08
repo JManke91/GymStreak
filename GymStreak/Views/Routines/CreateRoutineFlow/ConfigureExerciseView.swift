@@ -17,8 +17,6 @@ struct ConfigureExerciseView: View {
     @State private var sets: [ExerciseSet] = []
     @State private var globalRestTime: TimeInterval = 0.0
     @State private var editingSetIndex: Int?
-    @State private var editingReps = 10
-    @State private var editingWeight = 0.0
 
     init(exercise: Exercise, existingSets: [ExerciseSet]? = nil, onComplete: @escaping (Exercise, [ExerciseSet]) -> Void) {
         self.exercise = exercise
@@ -37,20 +35,10 @@ struct ConfigureExerciseView: View {
                 }
 
                 HStack {
-                    Text("exercises.muscle_group".localized)
+                    Text("exercises.muscle_groups".localized)
                     Spacer()
-                    Text(exercise.muscleGroup)
+                    Text(MuscleGroups.displayString(for: exercise.muscleGroups))
                         .foregroundColor(.secondary)
-                }
-
-                if !exercise.exerciseDescription.isEmpty {
-                    HStack(alignment: .top) {
-                        Text("exercises.description".localized)
-                        Spacer()
-                        Text(exercise.exerciseDescription)
-                            .foregroundColor(.secondary)
-                            .multilineTextAlignment(.trailing)
-                    }
                 }
             }
 
@@ -79,8 +67,6 @@ struct ConfigureExerciseView: View {
                                         editingSetIndex = nil
                                     } else {
                                         editingSetIndex = index
-                                        editingReps = set.reps
-                                        editingWeight = set.weight
                                     }
                                 }
                             }) {
@@ -89,7 +75,7 @@ struct ConfigureExerciseView: View {
                                         .font(.headline)
                                         .foregroundColor(.primary)
                                     Spacer()
-                                    Text("configure_exercise.set_detail".localized(set.reps, set.weight))
+                                    Text("configure_exercise.set_detail".localized(sets[index].reps, sets[index].weight))
                                         .foregroundColor(.secondary)
                                     Image(systemName: "chevron.right")
                                         .font(.caption)
@@ -107,22 +93,33 @@ struct ConfigureExerciseView: View {
                                     HStack {
                                         Text("set.reps_label".localized + ":")
                                         Spacer()
-                                        Stepper("\(editingReps)", value: $editingReps, in: 1...100)
-                                            .onChange(of: editingReps) { _, _ in
-                                                updateSet(at: index)
+                                        Stepper("\(sets[index].reps)", value: Binding(
+                                            get: { sets[index].reps },
+                                            set: { newValue in
+                                                sets[index].reps = newValue
+                                                // Force array update to trigger SwiftUI refresh
+                                                let temp = sets
+                                                sets = temp
                                             }
+                                        ), in: 1...100)
                                     }
 
                                     HStack {
                                         Text("set.weight_label".localized + ":")
                                         Spacer()
-                                        TextField("0.0", value: $editingWeight, format: .number)
+                                        TextField("0.0", value: Binding(
+                                            get: { sets[index].weight },
+                                            set: { newValue in
+                                                sets[index].weight = newValue
+                                                // Force array update to trigger SwiftUI refresh
+                                                let temp = sets
+                                                sets = temp
+                                            }
+                                        ), format: .number)
                                             .keyboardType(.decimalPad)
                                             .multilineTextAlignment(.trailing)
                                             .frame(width: 80)
-                                            .onChange(of: editingWeight) { _, _ in
-                                                updateSet(at: index)
-                                            }
+                                            .selectAllOnFocus()
                                     }
                                 }
                                 .padding(.top, 8)
@@ -231,41 +228,19 @@ struct ConfigureExerciseView: View {
         // Auto-open the newly added set for editing
         withAnimation(.easeInOut(duration: 0.3)) {
             editingSetIndex = sets.count - 1
-            editingReps = newSet.reps
-            editingWeight = newSet.weight
         }
     }
 
     private func duplicateLastSet() {
         guard let lastSet = sets.last else { return }
 
-        let repsToUse: Int
-        let weightToUse: Double
-
-        // If the last set is currently being edited, use the editing values
-        if let editingIndex = editingSetIndex, editingIndex == sets.count - 1 {
-            repsToUse = editingReps
-            weightToUse = editingWeight
-        } else {
-            repsToUse = lastSet.reps
-            weightToUse = lastSet.weight
-        }
-
-        let newSet = ExerciseSet(reps: repsToUse, weight: weightToUse, restTime: globalRestTime)
+        let newSet = ExerciseSet(reps: lastSet.reps, weight: lastSet.weight, restTime: globalRestTime)
         sets.append(newSet)
 
         // Open the new set for editing
         withAnimation(.easeInOut(duration: 0.3)) {
             editingSetIndex = sets.count - 1
-            editingReps = newSet.reps
-            editingWeight = newSet.weight
         }
-    }
-
-    private func updateSet(at index: Int) {
-        guard index < sets.count else { return }
-        sets[index].reps = editingReps
-        sets[index].weight = editingWeight
     }
 
     private func deleteSets(offsets: IndexSet) {

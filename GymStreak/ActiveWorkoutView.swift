@@ -411,7 +411,7 @@ struct ExerciseCard: View {
     }
 
     private var muscleGroupIcon: String {
-        MuscleGroups.icon(for: workoutExercise.muscleGroup)
+        MuscleGroups.icon(for: workoutExercise.muscleGroups)
     }
 
     private func isNextSet(_ set: WorkoutSet) -> Bool {

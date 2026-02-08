@@ -97,7 +97,7 @@ extension Routine {
                 WatchExercise(
                     id: routineExercise.id,
                     name: routineExercise.exercise?.name ?? "Unknown",
-                    muscleGroup: routineExercise.exercise?.muscleGroup ?? "General",
+                    muscleGroup: routineExercise.exercise?.primaryMuscleGroup ?? "General",
                     sets: routineExercise.sets.map { set in
                         WatchSet(
                             id: set.id,

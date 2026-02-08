@@ -171,9 +171,11 @@
 "muscle.triceps" = "Triceps";
 "muscle.forearms" = "Forearms";
 "muscle.chest" = "Chest";
+"muscle.upper_chest" = "Upper Chest";
 "muscle.upper_back" = "Upper Back";
 "muscle.lats" = "Lats";
 "muscle.lower_back" = "Lower Back";
+"muscle.shoulders" = "Shoulders";
 "muscle.front_delts" = "Front Delts";
 "muscle.side_delts" = "Side Delts";
 "muscle.rear_delts" = "Rear Delts";
@@ -184,6 +186,18 @@
 "muscle.glutes" = "Glutes";
 "muscle.calves" = "Calves";
 "muscle.hip_flexors" = "Hip Flexors";
+
+// MARK: - Muscle Group Picker
+"exercises.muscle_groups" = "Muscle Groups";
+"muscle_picker.title" = "Select Muscle Groups";
+"muscle_picker.select" = "Select";
+"muscle_category.general" = "General";
+"muscle_category.arms" = "Arms";
+"muscle_category.chest" = "Chest";
+"muscle_category.back" = "Back";
+"muscle_category.shoulders" = "Shoulders";
+"muscle_category.core" = "Core";
+"muscle_category.legs" = "Legs";
 
 // MARK: - Accessibility
 "accessibility.set.label" = "Set %d: %d reps, %.2f kilograms";
@@ -304,6 +318,7 @@
 "routine_exercise_detail.section.rest_timer" = "Rest Timer";
 "routine_exercise_detail.label.name" = "Name";
 "routine_exercise_detail.label.muscle_group" = "Muscle Group";
+"routine_exercise_detail.label.muscle_groups" = "Muscle Groups";
 "routine_exercise_detail.label.description" = "Description";
 "routine_exercise_detail.label.sets" = "Sets";
 "routine_exercise_detail.set_number" = "Set %d";

@@ -41,30 +41,29 @@ class TestDataSeeder {
     private static func seedExercises(modelContext: ModelContext) -> [String: Exercise] {
         var exerciseMap: [String: Exercise] = [:]
 
-        // Exercise data with localization keys: (nameKey, muscleGroup, descriptionKey)
-        let allExercises: [(nameKey: String, muscleGroup: String, descKey: String)] = [
-            ("testdata.exercise.bench_press", "Chest", "testdata.exercise.desc.bench_press"),
-            ("testdata.exercise.incline_dumbbell_press", "Chest", "testdata.exercise.desc.incline_dumbbell_press"),
-            ("testdata.exercise.cable_flyes", "Chest", "testdata.exercise.desc.cable_flyes"),
-            ("testdata.exercise.overhead_press", "Front Delts", "testdata.exercise.desc.overhead_press"),
-            ("testdata.exercise.lateral_raises", "Side Delts", "testdata.exercise.desc.lateral_raises"),
-            ("testdata.exercise.tricep_pushdowns", "Triceps", "testdata.exercise.desc.tricep_pushdowns"),
-            ("testdata.exercise.deadlift", "Lower Back", "testdata.exercise.desc.deadlift"),
-            ("testdata.exercise.pull_ups", "Lats", "testdata.exercise.desc.pull_ups"),
-            ("testdata.exercise.barbell_rows", "Upper Back", "testdata.exercise.desc.barbell_rows"),
-            ("testdata.exercise.face_pulls", "Rear Delts", "testdata.exercise.desc.face_pulls"),
-            ("testdata.exercise.hammer_curls", "Biceps", "testdata.exercise.desc.hammer_curls"),
-            ("testdata.exercise.back_squat", "Quadriceps", "testdata.exercise.desc.back_squat"),
-            ("testdata.exercise.romanian_deadlift", "Hamstrings", "testdata.exercise.desc.romanian_deadlift"),
-            ("testdata.exercise.leg_press", "Quadriceps", "testdata.exercise.desc.leg_press"),
-            ("testdata.exercise.leg_curls", "Hamstrings", "testdata.exercise.desc.leg_curls"),
-            ("testdata.exercise.calf_raises", "Calves", "testdata.exercise.desc.calf_raises")
+        // Exercise data with localization keys: (nameKey, muscleGroups)
+        let allExercises: [(nameKey: String, muscleGroups: [String])] = [
+            ("testdata.exercise.bench_press", ["Chest", "Triceps"]),
+            ("testdata.exercise.incline_dumbbell_press", ["Upper Chest", "Triceps"]),
+            ("testdata.exercise.cable_flyes", ["Chest"]),
+            ("testdata.exercise.overhead_press", ["Shoulders", "Front Delts", "Triceps"]),
+            ("testdata.exercise.lateral_raises", ["Side Delts"]),
+            ("testdata.exercise.tricep_pushdowns", ["Triceps"]),
+            ("testdata.exercise.deadlift", ["Lower Back", "Hamstrings", "Glutes"]),
+            ("testdata.exercise.pull_ups", ["Lats", "Biceps"]),
+            ("testdata.exercise.barbell_rows", ["Upper Back", "Lats", "Biceps"]),
+            ("testdata.exercise.face_pulls", ["Rear Delts", "Upper Back"]),
+            ("testdata.exercise.hammer_curls", ["Biceps", "Forearms"]),
+            ("testdata.exercise.back_squat", ["Quadriceps", "Glutes", "Hamstrings"]),
+            ("testdata.exercise.romanian_deadlift", ["Hamstrings", "Glutes", "Lower Back"]),
+            ("testdata.exercise.leg_press", ["Quadriceps", "Glutes"]),
+            ("testdata.exercise.leg_curls", ["Hamstrings"]),
+            ("testdata.exercise.calf_raises", ["Calves"])
         ]
 
         for exerciseData in allExercises {
             let name = exerciseData.nameKey.localized
-            let description = exerciseData.descKey.localized
-            let exercise = Exercise(name: name, muscleGroup: exerciseData.muscleGroup, exerciseDescription: description)
+            let exercise = Exercise(name: name, muscleGroups: exerciseData.muscleGroups)
             modelContext.insert(exercise)
             // Use the localization key as the map key for lookup
             exerciseMap[exerciseData.nameKey] = exercise

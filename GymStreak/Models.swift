@@ -22,18 +22,26 @@ final class Routine {
 final class Exercise {
     var id: UUID
     var name: String
-    var muscleGroup: String
-    var exerciseDescription: String
+    var muscleGroups: [String]
     var createdAt: Date
     var updatedAt: Date
-    
-    init(name: String, muscleGroup: String = "General", exerciseDescription: String = "") {
+
+    init(name: String, muscleGroups: [String] = ["Chest"]) {
         self.id = UUID()
         self.name = name
-        self.muscleGroup = muscleGroup
-        self.exerciseDescription = exerciseDescription
+        self.muscleGroups = muscleGroups
         self.createdAt = Date()
         self.updatedAt = Date()
+    }
+
+    /// Convenience computed property for backwards compatibility and display
+    var primaryMuscleGroup: String {
+        muscleGroups.first ?? "Chest"
+    }
+
+    /// Formatted string for displaying all muscle groups
+    var muscleGroupsDisplay: String {
+        muscleGroups.joined(separator: ", ")
     }
 }
 
@@ -60,14 +68,16 @@ final class ExerciseSet {
     var weight: Double
     var restTime: TimeInterval
     var isCompleted: Bool
+    var order: Int
     var routineExercise: RoutineExercise?
-    
-    init(reps: Int, weight: Double, restTime: TimeInterval) {
+
+    init(reps: Int, weight: Double, restTime: TimeInterval, order: Int = 0) {
         self.id = UUID()
         self.reps = reps
         self.weight = weight
         self.restTime = restTime
         self.isCompleted = false
+        self.order = order
     }
 }
 
@@ -133,27 +143,32 @@ final class WorkoutExercise {
     var id: UUID
     var workoutSession: WorkoutSession?
     var exerciseName: String // Denormalized for history display
-    var muscleGroup: String
+    var muscleGroups: [String]
     var sets: [WorkoutSet]
     var order: Int
 
     init(from routineExercise: RoutineExercise, order: Int) {
         self.id = UUID()
         self.exerciseName = routineExercise.exercise?.name ?? "Unknown"
-        self.muscleGroup = routineExercise.exercise?.muscleGroup ?? "General"
+        self.muscleGroups = routineExercise.exercise?.muscleGroups ?? ["General"]
         self.order = order
-        // Copy sets from routine
-        self.sets = routineExercise.sets.enumerated().map { index, set in
+        // Copy sets from routine, sorted by order
+        self.sets = routineExercise.sets.sorted(by: { $0.order < $1.order }).enumerated().map { index, set in
             WorkoutSet(from: set, order: index)
         }
     }
 
-    init(exerciseName: String, muscleGroup: String, order: Int) {
+    init(exerciseName: String, muscleGroups: [String], order: Int) {
         self.id = UUID()
         self.exerciseName = exerciseName
-        self.muscleGroup = muscleGroup
+        self.muscleGroups = muscleGroups
         self.order = order
         self.sets = []
+    }
+
+    /// Convenience computed property for backwards compatibility
+    var primaryMuscleGroup: String {
+        muscleGroups.first ?? "General"
     }
 
     var completedSetsCount: Int {

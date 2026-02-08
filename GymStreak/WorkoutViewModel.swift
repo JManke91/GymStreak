@@ -535,7 +535,7 @@ class WorkoutViewModel: ObservableObject {
         // Create a workout exercise from the library exercise
         let workoutExercise = WorkoutExercise(
             exerciseName: exercise.name,
-            muscleGroup: exercise.muscleGroup,
+            muscleGroups: exercise.muscleGroups,
             order: nextOrder
         )
         workoutExercise.workoutSession = session

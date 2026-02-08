@@ -5,26 +5,18 @@ struct AddExerciseView: View {
     @Environment(\.dismiss) private var dismiss
 
     @State private var exerciseName = ""
-    @State private var muscleGroup = "General"
-    @State private var exerciseDescription = ""
+    @State private var muscleGroups: [String] = ["Chest"]
 
     // Optional callback when exercise is created (for use in CreateRoutineFlow)
     var onExerciseCreated: ((Exercise) -> Void)?
-    
+
     var body: some View {
         NavigationView {
             Form {
-                Section("add_exercise.details".localized) {
+                Section {
                     TextField("exercises.name".localized, text: $exerciseName)
 
-                    Picker("exercises.muscle_group".localized, selection: $muscleGroup) {
-                        ForEach(MuscleGroups.all, id: \.self) { muscleGroup in
-                            Text(muscleGroup).tag(muscleGroup)
-                        }
-                    }
-
-                    TextField("add_exercise.description_optional".localized, text: $exerciseDescription, axis: .vertical)
-                        .lineLimit(3...6)
+                    MuscleGroupPicker(selectedMuscleGroups: $muscleGroups)
                 }
             }
             .navigationTitle("add_exercise.title".localized)
@@ -40,14 +32,14 @@ struct AddExerciseView: View {
                     Button("action.save".localized) {
                         saveExercise()
                     }
-                    .disabled(exerciseName.isEmpty)
+                    .disabled(exerciseName.isEmpty || muscleGroups.isEmpty)
                 }
             }
         }
     }
-    
+
     private func saveExercise() {
-        let newExercise = viewModel.addExercise(name: exerciseName, muscleGroup: muscleGroup, exerciseDescription: exerciseDescription)
+        let newExercise = viewModel.addExercise(name: exerciseName, muscleGroups: muscleGroups)
 
         // Call completion callback if provided (for CreateRoutineFlow integration)
         if let newExercise = newExercise {

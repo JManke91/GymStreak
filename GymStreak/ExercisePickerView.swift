@@ -15,7 +15,7 @@ struct ExercisePickerView: View {
         } else {
             return exercises.filter { exercise in
                 exercise.name.localizedCaseInsensitiveContains(searchText) ||
-                exercise.muscleGroup.localizedCaseInsensitiveContains(searchText)
+                exercise.muscleGroups.contains { $0.localizedCaseInsensitiveContains(searchText) }
             }
         }
     }
@@ -32,19 +32,9 @@ struct ExercisePickerView: View {
                             Text(exercise.name)
                                 .font(.headline)
                                 .foregroundColor(.primary)
-                            HStack {
-                                Text(exercise.muscleGroup)
-                                    .font(.caption)
-                                    .foregroundColor(.secondary)
-                                if !exercise.exerciseDescription.isEmpty {
-                                    Text("•")
-                                        .foregroundColor(.secondary)
-                                    Text(exercise.exerciseDescription)
-                                        .font(.caption)
-                                        .foregroundColor(.secondary)
-                                        .lineLimit(1)
-                                }
-                            }
+                            Text(MuscleGroups.displayString(for: exercise.muscleGroups))
+                                .font(.caption)
+                                .foregroundColor(.secondary)
                         }
                     }
                 }

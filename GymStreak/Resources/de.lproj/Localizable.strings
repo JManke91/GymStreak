@@ -171,9 +171,11 @@
 "muscle.triceps" = "Trizeps";
 "muscle.forearms" = "Unterarme";
 "muscle.chest" = "Brust";
+"muscle.upper_chest" = "Obere Brust";
 "muscle.upper_back" = "Oberer Rücken";
 "muscle.lats" = "Latissimus";
 "muscle.lower_back" = "Unterer Rücken";
+"muscle.shoulders" = "Schultern";
 "muscle.front_delts" = "Vordere Schulter";
 "muscle.side_delts" = "Seitliche Schulter";
 "muscle.rear_delts" = "Hintere Schulter";
@@ -184,6 +186,17 @@
 "muscle.glutes" = "Gesäßmuskel";
 "muscle.calves" = "Waden";
 "muscle.hip_flexors" = "Hüftbeuger";
+
+// MARK: - Muscle Group Picker
+"exercises.muscle_groups" = "Muskelgruppen";
+"muscle_picker.title" = "Muskelgruppen wählen";
+"muscle_picker.select" = "Auswählen";
+"muscle_category.arms" = "Arme";
+"muscle_category.chest" = "Brust";
+"muscle_category.back" = "Rücken";
+"muscle_category.shoulders" = "Schultern";
+"muscle_category.core" = "Rumpf";
+"muscle_category.legs" = "Beine";
 
 // MARK: - Accessibility
 "accessibility.set.label" = "Satz %d: %d Wiederholungen, %.2f Kilogramm";
@@ -304,6 +317,7 @@
 "routine_exercise_detail.section.rest_timer" = "Pausentimer";
 "routine_exercise_detail.label.name" = "Name";
 "routine_exercise_detail.label.muscle_group" = "Muskelgruppe";
+"routine_exercise_detail.label.muscle_groups" = "Muskelgruppen";
 "routine_exercise_detail.label.description" = "Beschreibung";
 "routine_exercise_detail.label.sets" = "Sätze";
 "routine_exercise_detail.set_number" = "Satz %d";

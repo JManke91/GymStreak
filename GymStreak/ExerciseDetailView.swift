@@ -7,12 +7,11 @@ struct ExerciseDetailView: View {
     @State private var isEditing = false
 
     @State private var exerciseName: String = ""
-    @State private var muscleGroup: String = ""
-    @State private var exerciseDescription: String = ""
+    @State private var muscleGroups: [String] = []
 
     var body: some View {
         List {
-            Section("exercise_detail.details".localized) {
+            Section {
                 HStack {
                     Text("exercises.name".localized)
                     Spacer()
@@ -25,52 +24,16 @@ struct ExerciseDetailView: View {
                     }
                 }
 
-                HStack {
-                    Text("exercises.muscle_group".localized)
-                    Spacer()
-                    if isEditing {
-                        Picker("exercises.muscle_group".localized, selection: $muscleGroup) {
-                            ForEach(MuscleGroups.all, id: \.self) { muscleGroup in
-                                Text(muscleGroup).tag(muscleGroup)
-                            }
-                        }
-                        .labelsHidden()
-                    } else {
-                        Text(exercise.muscleGroup)
-                            .foregroundColor(.secondary)
-                    }
-                }
-
-                if isEditing || !exercise.exerciseDescription.isEmpty {
-                    HStack(alignment: .top) {
-                        Text("exercises.description".localized)
+                if isEditing {
+                    MuscleGroupPicker(selectedMuscleGroups: $muscleGroups)
+                } else {
+                    HStack {
+                        Text("exercises.muscle_groups".localized)
                         Spacer()
-                        if isEditing {
-                            TextField("exercise_detail.optional".localized, text: $exerciseDescription, axis: .vertical)
-                                .multilineTextAlignment(.trailing)
-                                .lineLimit(3...6)
-                        } else {
-                            Text(exercise.exerciseDescription)
-                                .foregroundColor(.secondary)
-                                .multilineTextAlignment(.trailing)
-                        }
+                        Text(MuscleGroups.displayString(for: exercise.muscleGroups))
+                            .foregroundColor(.secondary)
+                            .multilineTextAlignment(.trailing)
                     }
-                }
-            }
-
-            Section("exercise_detail.info".localized) {
-                HStack {
-                    Text("exercise_detail.created".localized)
-                    Spacer()
-                    Text(exercise.createdAt, style: .date)
-                        .foregroundColor(.secondary)
-                }
-
-                HStack {
-                    Text("exercise_detail.last_updated".localized)
-                    Spacer()
-                    Text(exercise.updatedAt, style: .date)
-                        .foregroundColor(.secondary)
                 }
             }
         }
@@ -82,7 +45,7 @@ struct ExerciseDetailView: View {
                     Button("action.done".localized) {
                         saveExercise()
                     }
-                    .disabled(exerciseName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    .disabled(exerciseName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || muscleGroups.isEmpty)
                 } else {
                     Menu {
                         Button("exercise.edit".localized) {
@@ -120,8 +83,7 @@ struct ExerciseDetailView: View {
 
     private func loadExerciseData() {
         exerciseName = exercise.name
-        muscleGroup = exercise.muscleGroup
-        exerciseDescription = exercise.exerciseDescription
+        muscleGroups = exercise.muscleGroups
     }
 
     private func enterEditMode() {
@@ -143,8 +105,7 @@ struct ExerciseDetailView: View {
 
         withAnimation(.easeInOut(duration: 0.2)) {
             exercise.name = trimmedName
-            exercise.muscleGroup = muscleGroup
-            exercise.exerciseDescription = exerciseDescription
+            exercise.muscleGroups = muscleGroups
             viewModel.updateExercise(exercise)
             isEditing = false
         }

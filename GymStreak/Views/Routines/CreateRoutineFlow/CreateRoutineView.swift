@@ -193,11 +193,12 @@ struct CreateRoutineView: View {
             routineExercise.routine = routine
 
             // Create sets for this routine exercise
-            for set in pending.sets {
+            for (index, set) in pending.sets.enumerated() {
                 let newSet = ExerciseSet(
                     reps: set.reps,
                     weight: set.weight,
-                    restTime: set.restTime
+                    restTime: set.restTime,
+                    order: index
                 )
                 newSet.routineExercise = routineExercise
                 routineExercise.sets.append(newSet)

@@ -92,7 +92,10 @@ class RoutinesViewModel: ObservableObject {
     func addSet(to routineExercise: RoutineExercise) {
         // Get rest time from existing sets, or default to 0 (disabled)
         let restTime = routineExercise.sets.first?.restTime ?? 0
-        let set = ExerciseSet(reps: 10, weight: 0.0, restTime: restTime)
+        // Calculate order from last set
+        let lastSet = routineExercise.sets.sorted(by: { $0.order < $1.order }).last
+        let order = (lastSet?.order ?? -1) + 1
+        let set = ExerciseSet(reps: 10, weight: 0.0, restTime: restTime, order: order)
         set.routineExercise = routineExercise
         routineExercise.sets.append(set)
         if let routine = routineExercise.routine {
@@ -104,6 +107,11 @@ class RoutinesViewModel: ObservableObject {
         if let index = routineExercise.sets.firstIndex(where: { $0.id == set.id }) {
             routineExercise.sets.remove(at: index)
             modelContext.delete(set)
+            // Reorder remaining sets to maintain sequential order
+            let sortedSets = routineExercise.sets.sorted(by: { $0.order < $1.order })
+            for (newOrder, remainingSet) in sortedSets.enumerated() {
+                remainingSet.order = newOrder
+            }
             if let routine = routineExercise.routine {
                 updateRoutine(routine)
             }
@@ -152,7 +160,7 @@ class RoutinesViewModel: ObservableObject {
             for completedExercise in workout.exercises {
                 let workoutExercise = WorkoutExercise(
                     exerciseName: completedExercise.name,
-                    muscleGroup: completedExercise.muscleGroup,
+                    muscleGroups: [completedExercise.muscleGroup],
                     order: completedExercise.order
                 )
                 workoutExercise.workoutSession = workoutSession
