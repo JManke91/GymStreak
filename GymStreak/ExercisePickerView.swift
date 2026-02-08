@@ -32,9 +32,14 @@ struct ExercisePickerView: View {
                             Text(exercise.name)
                                 .font(.headline)
                                 .foregroundColor(.primary)
-                            Text(MuscleGroups.displayString(for: exercise.muscleGroups))
-                                .font(.caption)
-                                .foregroundColor(.secondary)
+                            HStack(spacing: 6) {
+                                Text(MuscleGroups.displayString(for: exercise.muscleGroups))
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                                Image(systemName: exercise.equipmentType.icon)
+                                    .font(.caption2)
+                                    .foregroundStyle(.tertiary)
+                            }
                         }
                     }
                 }

@@ -72,9 +72,14 @@ struct AddExerciseToWorkoutView: View {
                                     Text(exercise.name)
                                         .font(.headline)
                                         .foregroundStyle(.secondary)
-                                    Text(MuscleGroups.displayString(for: exercise.muscleGroups))
-                                        .font(.caption)
-                                        .foregroundStyle(.tertiary)
+                                    HStack(spacing: 6) {
+                                        Text(MuscleGroups.displayString(for: exercise.muscleGroups))
+                                            .font(.caption)
+                                            .foregroundStyle(.tertiary)
+                                        Image(systemName: exercise.equipmentType.icon)
+                                            .font(.caption2)
+                                            .foregroundStyle(.quaternary)
+                                    }
                                 }
 
                                 Spacer()
@@ -85,7 +90,7 @@ struct AddExerciseToWorkoutView: View {
                             }
                             .padding(.vertical, 4)
                             .listRowBackground(Color(.secondarySystemGroupedBackground))
-                            .accessibilityLabel("\(exercise.name), \(MuscleGroups.displayString(for: exercise.muscleGroups)), already in workout")
+                            .accessibilityLabel("\(exercise.name), \(MuscleGroups.displayString(for: exercise.muscleGroups)), \(exercise.equipmentType.displayName), already in workout")
                             .accessibilityHint("This exercise is already in your current workout")
                         }
                     } header: {
@@ -112,9 +117,14 @@ struct AddExerciseToWorkoutView: View {
                                         Text(exercise.name)
                                             .font(.headline)
                                             .foregroundStyle(.primary)
-                                        Text(MuscleGroups.displayString(for: exercise.muscleGroups))
-                                            .font(.caption)
-                                            .foregroundStyle(.secondary)
+                                        HStack(spacing: 6) {
+                                            Text(MuscleGroups.displayString(for: exercise.muscleGroups))
+                                                .font(.caption)
+                                                .foregroundStyle(.secondary)
+                                            Image(systemName: exercise.equipmentType.icon)
+                                                .font(.caption2)
+                                                .foregroundStyle(.tertiary)
+                                        }
                                     }
 
                                     Spacer()
@@ -127,7 +137,7 @@ struct AddExerciseToWorkoutView: View {
                                 .contentShape(Rectangle())
                             }
                             .buttonStyle(.plain)
-                            .accessibilityLabel("Add \(exercise.name), \(MuscleGroups.displayString(for: exercise.muscleGroups))")
+                            .accessibilityLabel("Add \(exercise.name), \(MuscleGroups.displayString(for: exercise.muscleGroups)), \(exercise.equipmentType.displayName)")
                             .accessibilityHint("Double-tap to add to workout")
                         }
                     }

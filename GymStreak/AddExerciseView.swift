@@ -6,6 +6,7 @@ struct AddExerciseView: View {
 
     @State private var exerciseName = ""
     @State private var muscleGroups: [String] = ["Chest"]
+    @State private var equipmentType: EquipmentType = .dumbbell
 
     // Optional callback when exercise is created (for use in CreateRoutineFlow)
     var onExerciseCreated: ((Exercise) -> Void)?
@@ -17,6 +18,8 @@ struct AddExerciseView: View {
                     TextField("exercises.name".localized, text: $exerciseName)
 
                     MuscleGroupPicker(selectedMuscleGroups: $muscleGroups)
+
+                    EquipmentTypePicker(selectedEquipmentType: $equipmentType)
                 }
             }
             .navigationTitle("add_exercise.title".localized)
@@ -39,7 +42,7 @@ struct AddExerciseView: View {
     }
 
     private func saveExercise() {
-        let newExercise = viewModel.addExercise(name: exerciseName, muscleGroups: muscleGroups)
+        let newExercise = viewModel.addExercise(name: exerciseName, muscleGroups: muscleGroups, equipmentType: equipmentType)
 
         // Call completion callback if provided (for CreateRoutineFlow integration)
         if let newExercise = newExercise {

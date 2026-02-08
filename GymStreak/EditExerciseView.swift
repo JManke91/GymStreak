@@ -7,12 +7,14 @@ struct EditExerciseView: View {
 
     @State private var exerciseName: String
     @State private var muscleGroups: [String]
+    @State private var equipmentType: EquipmentType
 
     init(exercise: Exercise, viewModel: ExercisesViewModel) {
         self.exercise = exercise
         self.viewModel = viewModel
         self._exerciseName = State(initialValue: exercise.name)
         self._muscleGroups = State(initialValue: exercise.muscleGroups)
+        self._equipmentType = State(initialValue: exercise.equipmentType)
     }
 
     var body: some View {
@@ -22,6 +24,8 @@ struct EditExerciseView: View {
                     TextField("exercises.name".localized, text: $exerciseName)
 
                     MuscleGroupPicker(selectedMuscleGroups: $muscleGroups)
+
+                    EquipmentTypePicker(selectedEquipmentType: $equipmentType)
                 }
             }
             .navigationTitle("edit_exercise.title".localized)
@@ -65,6 +69,7 @@ struct EditExerciseView: View {
     private func saveExercise() {
         exercise.name = exerciseName
         exercise.muscleGroups = muscleGroups
+        exercise.equipmentType = equipmentType
         viewModel.updateExercise(exercise)
         dismiss()
     }

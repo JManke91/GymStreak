@@ -175,6 +175,12 @@
 "time.minutes" = "%dm";
 "time.hours" = "%dh";
 
+// MARK: - Equipment Types
+"exercises.equipment_type" = "Ausrüstung";
+"equipment.dumbbell" = "Kurzhantel";
+"equipment.barbell" = "Langhantel";
+"equipment.machine" = "Maschine";
+
 // MARK: - Muscle Groups
 "muscle.general" = "Allgemein";
 "muscle.full_body" = "Ganzkörper";

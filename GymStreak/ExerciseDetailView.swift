@@ -8,6 +8,7 @@ struct ExerciseDetailView: View {
 
     @State private var exerciseName: String = ""
     @State private var muscleGroups: [String] = []
+    @State private var equipmentType: EquipmentType = .dumbbell
 
     var body: some View {
         List {
@@ -33,6 +34,17 @@ struct ExerciseDetailView: View {
                         Text(MuscleGroups.displayString(for: exercise.muscleGroups))
                             .foregroundColor(.secondary)
                             .multilineTextAlignment(.trailing)
+                    }
+                }
+
+                if isEditing {
+                    EquipmentTypePicker(selectedEquipmentType: $equipmentType)
+                } else {
+                    HStack {
+                        Text("exercises.equipment_type".localized)
+                        Spacer()
+                        Label(exercise.equipmentType.displayName, systemImage: exercise.equipmentType.icon)
+                            .foregroundColor(.secondary)
                     }
                 }
             }
@@ -95,6 +107,7 @@ struct ExerciseDetailView: View {
     private func loadExerciseData() {
         exerciseName = exercise.name
         muscleGroups = exercise.muscleGroups
+        equipmentType = exercise.equipmentType
     }
 
     private func enterEditMode() {
@@ -117,6 +130,7 @@ struct ExerciseDetailView: View {
         withAnimation(.easeInOut(duration: 0.2)) {
             exercise.name = trimmedName
             exercise.muscleGroups = muscleGroups
+            exercise.equipmentType = equipmentType
             viewModel.updateExercise(exercise)
             isEditing = false
         }

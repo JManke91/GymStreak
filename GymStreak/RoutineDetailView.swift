@@ -942,9 +942,17 @@ struct ExerciseHeaderView: View {
             }
 
             VStack(alignment: .leading, spacing: 3) {
-                Text(routineExercise.exercise?.name ?? "Unknown")
-                    .font(.system(.body, design: .rounded, weight: .semibold))
-                    .foregroundStyle(.primary)
+                HStack(spacing: 6) {
+                    Text(routineExercise.exercise?.name ?? "Unknown")
+                        .font(.system(.body, design: .rounded, weight: .semibold))
+                        .foregroundStyle(.primary)
+
+                    if let exercise = routineExercise.exercise {
+                        Image(systemName: exercise.equipmentType.icon)
+                            .font(.caption)
+                            .foregroundStyle(.tertiary)
+                    }
+                }
 
                 Text("routine.sets_count".localized(routineExercise.setsList.count))
                     .font(.subheadline)

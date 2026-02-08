@@ -46,9 +46,14 @@ struct AddExerciseToRoutineView: View {
                                     Text(exercise.name)
                                         .font(.headline)
                                         .foregroundStyle(.secondary)
-                                    Text(MuscleGroups.displayString(for: exercise.muscleGroups))
-                                        .font(.caption)
-                                        .foregroundStyle(.tertiary)
+                                    HStack(spacing: 6) {
+                                        Text(MuscleGroups.displayString(for: exercise.muscleGroups))
+                                            .font(.caption)
+                                            .foregroundStyle(.tertiary)
+                                        Image(systemName: exercise.equipmentType.icon)
+                                            .font(.caption2)
+                                            .foregroundStyle(.quaternary)
+                                    }
                                 }
 
                                 Spacer()
@@ -84,9 +89,14 @@ struct AddExerciseToRoutineView: View {
                                         Text(exercise.name)
                                             .font(.headline)
                                             .foregroundStyle(.primary)
-                                        Text(MuscleGroups.displayString(for: exercise.muscleGroups))
-                                            .font(.caption)
-                                            .foregroundStyle(.secondary)
+                                        HStack(spacing: 6) {
+                                            Text(MuscleGroups.displayString(for: exercise.muscleGroups))
+                                                .font(.caption)
+                                                .foregroundStyle(.secondary)
+                                            Image(systemName: exercise.equipmentType.icon)
+                                                .font(.caption2)
+                                                .foregroundStyle(.tertiary)
+                                        }
                                     }
 
                                     Spacer()

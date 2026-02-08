@@ -49,8 +49,8 @@ class ExercisesViewModel: ObservableObject {
         }
     }
     
-    func addExercise(name: String, muscleGroups: [String]) -> Exercise? {
-        let exercise = Exercise(name: name, muscleGroups: muscleGroups)
+    func addExercise(name: String, muscleGroups: [String], equipmentType: EquipmentType = .dumbbell) -> Exercise? {
+        let exercise = Exercise(name: name, muscleGroups: muscleGroups, equipmentType: equipmentType)
         modelContext.insert(exercise)
         save()
         fetchExercises()

@@ -60,15 +60,23 @@ final class Exercise {
     var id: UUID = UUID()
     var name: String = ""
     var muscleGroups: [String] = ["General"]
+    var equipmentTypeRaw: String = EquipmentType.dumbbell.rawValue
     @Relationship(inverse: \RoutineExercise.exercise)
     var routineExercises: [RoutineExercise]? = []
     var createdAt: Date = Date()
     var updatedAt: Date = Date()
 
-    init(name: String, muscleGroups: [String] = ["Chest"]) {
+    /// The equipment type for this exercise
+    var equipmentType: EquipmentType {
+        get { EquipmentType(rawValue: equipmentTypeRaw) ?? .dumbbell }
+        set { equipmentTypeRaw = newValue.rawValue }
+    }
+
+    init(name: String, muscleGroups: [String] = ["Chest"], equipmentType: EquipmentType = .dumbbell) {
         self.id = UUID()
         self.name = name
         self.muscleGroups = muscleGroups
+        self.equipmentTypeRaw = equipmentType.rawValue
         self.routineExercises = []
         self.createdAt = Date()
         self.updatedAt = Date()

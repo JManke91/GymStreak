@@ -175,6 +175,12 @@
 "time.minutes" = "%dm";
 "time.hours" = "%dh";
 
+// MARK: - Equipment Types
+"exercises.equipment_type" = "Equipment";
+"equipment.dumbbell" = "Dumbbell";
+"equipment.barbell" = "Barbell";
+"equipment.machine" = "Machine";
+
 // MARK: - Muscle Groups
 "muscle.general" = "General";
 "muscle.full_body" = "Full Body";
