@@ -30,34 +30,22 @@ def resize_screenshots_for_app_store
 end
 
 platform :ios do
-  desc "Generate screenshots for App Store (light and dark mode)"
+  desc "Generate screenshots for App Store (dark mode only)"
   lane :screenshots do
     begin
       # Temporarily disable Watch app dependency for simulator build
       sh("ruby", "./disable_watch_dependency.rb", "disable")
 
-      # Run light mode screenshots
+      # Run dark mode screenshots
       snapshot(
         clean: true,
         reinstall_app: true,
         erase_simulator: true,
         skip_open_summary: true,
         buildlog_path: "./fastlane/logs",
-        dark_mode: false,
-        only_testing: ["GymStreakUITests/GymStreakUITests/testGenerateScreenshots"],
-        clear_previous_screenshots: true
-      )
-
-      # Run dark mode screenshots (don't clear previous, append to them)
-      snapshot(
-        clean: false,
-        reinstall_app: false,
-        erase_simulator: false,
-        skip_open_summary: true,
-        buildlog_path: "./fastlane/logs",
         dark_mode: true,
         only_testing: ["GymStreakUITests/GymStreakUITests/testGenerateScreenshotsDarkMode"],
-        clear_previous_screenshots: false
+        clear_previous_screenshots: true
       )
 
       # Resize screenshots for App Store Connect (6.5" display requirement)
@@ -68,28 +56,7 @@ platform :ios do
     end
   end
 
-  desc "Generate only light mode screenshots"
-  lane :screenshots_light do
-    begin
-      sh("ruby", "./disable_watch_dependency.rb", "disable")
-      snapshot(
-        clean: true,
-        reinstall_app: true,
-        erase_simulator: true,
-        skip_open_summary: true,
-        buildlog_path: "./fastlane/logs",
-        dark_mode: false,
-        only_testing: ["GymStreakUITests/GymStreakUITests/testGenerateScreenshots"]
-      )
-
-      # Resize screenshots for App Store Connect (6.5" display requirement)
-      resize_screenshots_for_app_store
-    ensure
-      sh("ruby", "./disable_watch_dependency.rb", "restore")
-    end
-  end
-
-  desc "Generate only dark mode screenshots"
+  desc "Generate only dark mode screenshots (alias for screenshots lane)"
   lane :screenshots_dark do
     begin
       sh("ruby", "./disable_watch_dependency.rb", "disable")
