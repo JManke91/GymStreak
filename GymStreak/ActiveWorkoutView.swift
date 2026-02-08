@@ -186,6 +186,7 @@ struct ActiveWorkoutView: View {
                 Text("workout.completed_sets".localized(session.completedSetsCount, session.totalSetsCount))
             }
         }
+        .tint(DesignSystem.Colors.textPrimary)
         .sheet(isPresented: $showingSaveOptions) {
             SaveWorkoutView(viewModel: viewModel) {
                 dismiss()

@@ -4,7 +4,7 @@ struct SaveWorkoutView: View {
     @ObservedObject var viewModel: WorkoutViewModel
     @Environment(\.dismiss) private var dismiss
 
-    @State private var updateTemplate = false
+    @State private var updateTemplate = true
     @State private var notes = ""
     @State private var syncToHealthKit = true
 
