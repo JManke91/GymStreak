@@ -52,9 +52,14 @@ private struct ExercisesViewInternal: View {
                     .foregroundColor(.red)
                 }
                 #endif
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("exercises.add".localized) {
-                        viewModel.showingAddExercise = true
+                if !viewModel.exercises.isEmpty {
+                    ToolbarItem(placement: .navigationBarTrailing) {
+                        Button {
+                            viewModel.showingAddExercise = true
+                        } label: {
+                            Image(systemName: "plus")
+                        }
+                        .accessibilityLabel("exercises.add".localized)
                     }
                 }
             }

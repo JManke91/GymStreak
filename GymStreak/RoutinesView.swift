@@ -50,9 +50,14 @@ private struct RoutinesViewInternal: View {
             }
             .navigationTitle("routines.title".localized)
             .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("routines.add".localized) {
-                        viewModel.showingAddRoutine = true
+                if !viewModel.routines.isEmpty {
+                    ToolbarItem(placement: .navigationBarTrailing) {
+                        Button {
+                            viewModel.showingAddRoutine = true
+                        } label: {
+                            Image(systemName: "plus")
+                        }
+                        .accessibilityLabel("routines.add".localized)
                     }
                 }
             }
