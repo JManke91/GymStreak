@@ -794,8 +794,7 @@ struct ActionBar: View {
                         .frame(maxWidth: .infinity)
                         .frame(height: DesignSystem.Dimensions.buttonHeight)
                 }
-                .buttonStyle(.borderedProminent)
-                .tint(DesignSystem.Colors.tint)
+                .buttonStyle(.onyxProminent)
             }
             .padding(.horizontal, DesignSystem.Spacing.lg)
             .padding(.vertical, DesignSystem.Spacing.md)

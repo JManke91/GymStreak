@@ -34,8 +34,7 @@ private struct RoutinesViewInternal: View {
                         Button("routines.add".localized) {
                             viewModel.showingAddRoutine = true
                         }
-                        .buttonStyle(.borderedProminent)
-                        .tint(DesignSystem.Colors.tint)
+                        .buttonStyle(.onyxProminent)
                     }
                 } else {
                     List {

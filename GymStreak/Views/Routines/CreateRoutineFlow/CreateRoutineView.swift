@@ -59,19 +59,11 @@ struct CreateRoutineView: View {
                                 updateExercise(pendingExercise: pending, withSets: sets)
                             }
                         )) {
-                            HStack(spacing: 12) {
-                                VStack(alignment: .leading, spacing: 4) {
-                                    Text(pending.exercise.name)
-                                        .font(.headline)
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(pending.exercise.name)
+                                    .font(.headline)
 
-                                    Text(pending.setSummary)
-                                        .font(.caption)
-                                        .foregroundColor(.secondary)
-                                }
-
-                                Spacer()
-
-                                Image(systemName: "chevron.right")
+                                Text(pending.setSummary)
                                     .font(.caption)
                                     .foregroundColor(.secondary)
                             }
@@ -99,13 +91,7 @@ struct CreateRoutineView: View {
                         addExercise(exercise: exercise, sets: sets)
                     }
                 )) {
-                    HStack {
-                        Text("routine.add_exercise".localized)
-                        Spacer()
-                        Image(systemName: "chevron.right")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                    }
+                    Text("routine.add_exercise".localized)
                 }
             } header: {
                 Text("exercises.title".localized.uppercased())

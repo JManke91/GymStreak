@@ -21,7 +21,7 @@ struct OnyxWatch {
         static let input = Color(red: 44/255, green: 44/255, blue: 46/255) // Input Fields
 
         // Accents
-        static let tint = Color(red: 10/255, green: 132/255, blue: 255/255) // Electric Blue
+        static let tint = Color(red: 0/255, green: 255/255, blue: 133/255) // Vibrant Green
         static let success = Color(red: 48/255, green: 209/255, blue: 88/255) // Vibrant Green
         static let destructive = Color(red: 255/255, green: 69/255, blue: 58/255) // Red
         static let warning = Color(red: 255/255, green: 159/255, blue: 10/255) // Orange
@@ -30,6 +30,7 @@ struct OnyxWatch {
         static let textPrimary = Color.white
         static let textSecondary = Color(white: 0.6)
         static let textTertiary = Color(white: 0.4)
+        static let textOnTint = Color.black // Dark text for use on tint color background
 
         // UI Elements
         static let divider = Color(white: 0.15)

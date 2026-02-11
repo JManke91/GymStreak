@@ -52,7 +52,9 @@ struct OnyxButton: View {
 
     private var foregroundColor: Color {
         switch style {
-        case .primary, .destructive:
+        case .primary:
+            return DesignSystem.Colors.textOnTint
+        case .destructive:
             return .white
         case .secondary:
             return DesignSystem.Colors.textPrimary
@@ -90,6 +92,46 @@ struct OnyxButton: View {
             }
         }
         .buttonStyle(.plain)
+    }
+}
+
+// MARK: - Onyx Prominent Button Style
+
+/// A ButtonStyle for prominent actions that uses the app tint color with dark text
+/// Use this instead of .borderedProminent when you want dark text on the green background
+struct OnyxProminentButtonStyle: ButtonStyle {
+    let backgroundColor: Color
+    let foregroundColor: Color
+
+    @Environment(\.isEnabled) private var isEnabled
+
+    init(backgroundColor: Color = DesignSystem.Colors.tint, foregroundColor: Color = DesignSystem.Colors.textOnTint) {
+        self.backgroundColor = backgroundColor
+        self.foregroundColor = foregroundColor
+    }
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.body.weight(.semibold))
+            .foregroundStyle(foregroundColor)
+            .padding(.horizontal, DesignSystem.Spacing.lg)
+            .padding(.vertical, DesignSystem.Spacing.md)
+            .background(
+                RoundedRectangle(cornerRadius: 10)
+                    .fill(backgroundColor)
+                    .opacity(configuration.isPressed ? 0.8 : 1.0)
+            )
+            .opacity(isEnabled ? 1.0 : 0.5)
+    }
+}
+
+extension ButtonStyle where Self == OnyxProminentButtonStyle {
+    /// Default prominent style with tint color and dark text
+    static var onyxProminent: OnyxProminentButtonStyle { OnyxProminentButtonStyle() }
+
+    /// Prominent style with custom colors
+    static func onyxProminent(backgroundColor: Color, foregroundColor: Color = .white) -> OnyxProminentButtonStyle {
+        OnyxProminentButtonStyle(backgroundColor: backgroundColor, foregroundColor: foregroundColor)
     }
 }
 

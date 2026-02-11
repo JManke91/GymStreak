@@ -5,13 +5,24 @@ struct EquipmentTypePicker: View {
     @Binding var selectedEquipmentType: EquipmentType
 
     var body: some View {
-        Picker(selection: $selectedEquipmentType) {
-            ForEach(EquipmentType.allCases, id: \.self) { equipmentType in
-                Label(equipmentType.displayName, systemImage: equipmentType.icon)
-                    .tag(equipmentType)
+        LabeledContent("exercises.equipment_type".localized) {
+            Menu {
+                ForEach(EquipmentType.allCases, id: \.self) { equipmentType in
+                    Button {
+                        selectedEquipmentType = equipmentType
+                    } label: {
+                        Label(equipmentType.displayName, systemImage: equipmentType.icon)
+                    }
+                }
+            } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: selectedEquipmentType.icon)
+                    Text(selectedEquipmentType.displayName)
+                    Image(systemName: "chevron.up.chevron.down")
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                }
             }
-        } label: {
-            Text("exercises.equipment_type".localized)
         }
     }
 }

@@ -336,8 +336,7 @@ struct RoutineDetailView: View {
                         Button("routine.add_exercise".localized) {
                             showingAddExercise = true
                         }
-                        .buttonStyle(.borderedProminent)
-                        .tint(DesignSystem.Colors.tint)
+                        .buttonStyle(.onyxProminent)
                     }
                     .listRowInsets(EdgeInsets())
                     .listRowBackground(Color.clear)
@@ -697,8 +696,9 @@ struct RoutineDetailView: View {
                             .frame(maxWidth: .infinity)
                             .frame(height: 50)
                     }
-                    .buttonStyle(.borderedProminent)
-                    .tint(currentSupersetAction == .updateSuperset ? .orange : DesignSystem.Colors.tint)
+                    .buttonStyle(currentSupersetAction == .updateSuperset
+                        ? .onyxProminent(backgroundColor: .orange, foregroundColor: .white)
+                        : .onyxProminent)
                     .controlSize(.large)
                     .padding(.horizontal, 16)
                     .padding(.vertical, 12)
@@ -718,8 +718,7 @@ struct RoutineDetailView: View {
                             .frame(maxWidth: .infinity)
                             .frame(height: 50)
                     }
-                    .buttonStyle(.borderedProminent)
-                    .tint(DesignSystem.Colors.tint)
+                    .buttonStyle(.onyxProminent)
                     .controlSize(.large)
                     .padding(.horizontal, 16)
                     .padding(.vertical, 12)

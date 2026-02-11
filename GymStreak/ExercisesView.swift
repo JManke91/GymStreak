@@ -28,8 +28,7 @@ private struct ExercisesViewInternal: View {
                         Button("exercises.add".localized) {
                             viewModel.showingAddExercise = true
                         }
-                        .buttonStyle(.borderedProminent)
-                        .tint(DesignSystem.Colors.tint)
+                        .buttonStyle(.onyxProminent)
                     }
                 } else {
                     List {
