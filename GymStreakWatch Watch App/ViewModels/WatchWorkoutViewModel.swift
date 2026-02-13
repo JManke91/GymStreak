@@ -281,15 +281,30 @@ final class WatchWorkoutViewModel: ObservableObject {
     private func applyToggleSetCompletion(_ result: (exerciseIndex: Int, setIndex: Int, newState: Bool)?) {
         guard let r = result else { return }
 
-//        exercises[r.exerciseIndex].sets[r.setIndex].isCompleted = r.newState
-
         if r.newState {
             exercises[r.exerciseIndex].sets[r.setIndex].completedAt = Date()
             WKInterfaceDevice.current().play(.success)
 
-            let restTime = exercises[r.exerciseIndex].sets[r.setIndex].restTime
-            if restTime > 0 {
-                startRestTimer(duration: restTime)
+            let exercise = exercises[r.exerciseIndex]
+
+            // For superset exercises, only start rest timer at end of round
+            if exercise.isInSuperset {
+                if isEndOfSupersetRound(exerciseIndex: r.exerciseIndex, setIndex: r.setIndex) {
+                    let restTime = supersetRoundRestTime(exerciseIndex: r.exerciseIndex, setIndex: r.setIndex)
+                    if restTime > 0 {
+                        startRestTimer(duration: restTime)
+                    }
+                }
+                // Advance to next exercise in superset (or next incomplete set)
+                advanceToNextSetAfterCompletion(fromExerciseIndex: r.exerciseIndex, setIndex: r.setIndex)
+            } else {
+                // Standard behavior for non-superset exercises
+                let restTime = exercise.sets[r.setIndex].restTime
+                if restTime > 0 {
+                    startRestTimer(duration: restTime)
+                }
+                // Advance to next set in same exercise or next exercise
+                advanceToNextSetAfterCompletion(fromExerciseIndex: r.exerciseIndex, setIndex: r.setIndex)
             }
         } else {
             exercises[r.exerciseIndex].sets[r.setIndex].completedAt = nil
@@ -564,6 +579,77 @@ final class WatchWorkoutViewModel: ObservableObject {
         return nil
     }
 
+    // MARK: - Superset Round Detection (for rest timer)
+
+    /// Determines if completing this set ends a superset round (should trigger rest timer).
+    /// A round ends when ALL sets at the completed set's level are complete across all superset exercises.
+    private func isEndOfSupersetRound(exerciseIndex: Int, setIndex: Int) -> Bool {
+        let exercise = exercises[exerciseIndex]
+
+        guard let supersetId = exercise.supersetId else {
+            // Not in a superset - always trigger rest (standard behavior)
+            return true
+        }
+
+        // Get all exercises in this superset
+        let supersetExercises = exercises
+            .enumerated()
+            .filter { $0.element.supersetId == supersetId }
+
+        guard supersetExercises.count > 1 else {
+            // Single exercise "superset" - treat as standalone
+            return true
+        }
+
+        let completedSetLevel = exercise.sets[setIndex].order
+
+        // Check if ALL sets at this level are now complete
+        for (_, ex) in supersetExercises {
+            if let setAtLevel = ex.sets.first(where: { $0.order == completedSetLevel }) {
+                if !setAtLevel.isCompleted {
+                    // Still have an incomplete set in this round
+                    return false
+                }
+            }
+            // If exercise doesn't have a set at this level, skip it (uneven set counts)
+        }
+
+        // All sets at this level are complete - round is done
+        return true
+    }
+
+    /// Gets the rest time to use for a superset round.
+    /// Returns the rest time from the last exercise's set at the completed set's level.
+    private func supersetRoundRestTime(exerciseIndex: Int, setIndex: Int) -> TimeInterval {
+        let exercise = exercises[exerciseIndex]
+
+        guard let supersetId = exercise.supersetId else {
+            // Not in a superset - use the set's own rest time
+            return exercise.sets[setIndex].restTime
+        }
+
+        let supersetExercises = exercises
+            .filter { $0.supersetId == supersetId }
+            .sorted { $0.supersetOrder < $1.supersetOrder }
+
+        guard supersetExercises.count > 1 else {
+            // Single exercise "superset" - use set's own rest time
+            return exercise.sets[setIndex].restTime
+        }
+
+        let completedSetLevel = exercise.sets[setIndex].order
+
+        // Find the last exercise that has a set at this level and get its rest time
+        for ex in supersetExercises.reversed() {
+            if let setAtLevel = ex.sets.first(where: { $0.order == completedSetLevel }) {
+                return setAtLevel.restTime
+            }
+        }
+
+        // Fallback to the completed set's rest time
+        return exercise.sets[setIndex].restTime
+    }
+
     private func advanceToNextSet() {
         guard let exercise = currentExercise else { return }
 
@@ -589,6 +675,45 @@ final class WatchWorkoutViewModel: ObservableObject {
                 currentExerciseIndex += 1
                 currentSetIndex = 0
             }
+        }
+    }
+
+    /// Advances to the next set after completing a set, using superset-aware navigation.
+    /// This is called from applyToggleSetCompletion with the specific exercise/set that was just completed.
+    private func advanceToNextSetAfterCompletion(fromExerciseIndex exerciseIdx: Int, setIndex setIdx: Int) {
+        let exercise = exercises[exerciseIdx]
+
+        if exercise.isInSuperset {
+            // Superset: find next incomplete set in the superset interleaving pattern
+            if let next = findNextIncompleteSetInSuperset(
+                afterSetIndex: setIdx,
+                inExerciseIndex: exerciseIdx
+            ) {
+                currentExerciseIndex = next.exerciseIndex
+                currentSetIndex = next.setIndex
+            } else if let next = findNextIncompleteSet() {
+                // Superset complete, find next incomplete set anywhere in the workout
+                currentExerciseIndex = next.exerciseIndex
+                currentSetIndex = next.setIndex
+            }
+            // If no more sets, stay at current position (workout complete)
+        } else {
+            // Standard behavior for non-superset exercises
+            let sets = exercise.sets
+            // Find next incomplete set in same exercise
+            for nextSetIdx in (setIdx + 1)..<sets.count {
+                if !sets[nextSetIdx].isCompleted {
+                    currentExerciseIndex = exerciseIdx
+                    currentSetIndex = nextSetIdx
+                    return
+                }
+            }
+            // No more sets in this exercise, find next incomplete set anywhere
+            if let next = findNextIncompleteSet() {
+                currentExerciseIndex = next.exerciseIndex
+                currentSetIndex = next.setIndex
+            }
+            // If no more sets, stay at current position (workout complete)
         }
     }
 

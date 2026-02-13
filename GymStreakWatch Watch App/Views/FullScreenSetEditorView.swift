@@ -12,12 +12,12 @@ import WatchKit
 /// Eliminates scrolling conflicts by showing only the current set
 /// Digital Crown adjusts focused value without interfering with list scrolling
 struct FullScreenSetEditorView: View {
+    /// The initial exercise passed in (used as fallback)
     let exercise: ActiveWorkoutExercise
     let onBack: () -> Void
     @EnvironmentObject var viewModel: WatchWorkoutViewModel
 
     @State private var focusedField: FocusedField = .weight
-    @State private var currentSetIndex: Int
 
     enum FocusedField {
         case weight, reps
@@ -25,21 +25,36 @@ struct FullScreenSetEditorView: View {
 
     init(exercise: ActiveWorkoutExercise, initialSetIndex: Int, onBack: @escaping () -> Void) {
         self.exercise = exercise
-        self._currentSetIndex = State(initialValue: initialSetIndex)
+        // Note: initialSetIndex is kept for API compatibility but we use viewModel.currentSetIndex
         self.onBack = onBack
+    }
+
+    /// The current exercise from the ViewModel - used for superset navigation
+    /// Falls back to the passed-in exercise if ViewModel doesn't have one
+    private var displayedExercise: ActiveWorkoutExercise {
+        viewModel.currentExercise ?? exercise
+    }
+
+    /// Total sets for the current exercise being displayed
+    private var totalSets: Int {
+        displayedExercise.sets.count
+    }
+
+    /// The set index within the displayed exercise (from ViewModel)
+    private var displayedSetIndex: Int {
+        viewModel.currentSetIndex
     }
 
     private var currentSet: Binding<ActiveWorkoutSet> {
         Binding(
-            get: { exercise.sets[currentSetIndex] },
+            get: {
+                let setIndex = min(displayedSetIndex, displayedExercise.sets.count - 1)
+                return displayedExercise.sets[max(0, setIndex)]
+            },
             set: { updatedSet in
-                viewModel.updateSet(updatedSet, in: exercise.id)
+                viewModel.updateSet(updatedSet, in: displayedExercise.id)
             }
         )
-    }
-
-    private var totalSets: Int {
-        exercise.sets.count
     }
 
     var body: some View {
@@ -79,7 +94,7 @@ struct FullScreenSetEditorView: View {
                             onDecrement: {
                                 adjustWeight(by: -1)
                             },
-                            currentSetIndex: currentSetIndex,
+                            currentSetIndex: displayedSetIndex,
                             totalSets: totalSets
                         )
 
@@ -105,7 +120,7 @@ struct FullScreenSetEditorView: View {
                             onDecrement: {
                                 adjustReps(by: -1)
                             },
-                            currentSetIndex: currentSetIndex,
+                            currentSetIndex: displayedSetIndex,
                             totalSets: totalSets
                         )
                     }
@@ -116,9 +131,11 @@ struct FullScreenSetEditorView: View {
 
                     // Compact action bar (Complete + Prev/Next combined)
                     CompactActionBar(
-                        exerciseName: exercise.name, // changed: use the actual exercise name instead of dummy string
-                        isCompleted: exercise.sets[currentSetIndex].isCompleted,
-                        currentSetIndex: currentSetIndex,
+                        exerciseName: displayedExercise.name,
+                        isCompleted: displayedSetIndex < displayedExercise.sets.count
+                            ? displayedExercise.sets[displayedSetIndex].isCompleted
+                            : false,
+                        currentSetIndex: displayedSetIndex,
                         totalSets: totalSets,
                         onComplete: { toggleSetCompletion() },
                         onPrevious: { goToPreviousSet() },
@@ -181,7 +198,8 @@ struct FullScreenSetEditorView: View {
             }
         }
         .animation(.easeInOut(duration: 0.2), value: focusedField)
-        .animation(.easeInOut(duration: 0.25), value: currentSetIndex)
+        .animation(.easeInOut(duration: 0.25), value: viewModel.currentSetIndex)
+        .animation(.easeInOut(duration: 0.25), value: viewModel.currentExerciseIndex)
     }
 
     // MARK: - Actions
@@ -199,30 +217,26 @@ struct FullScreenSetEditorView: View {
     }
 
     private func toggleSetCompletion() {
-        viewModel.toggleSetCompletion(exercise.sets[currentSetIndex].id, in: exercise.id)
+        guard displayedSetIndex < displayedExercise.sets.count else { return }
+        viewModel.toggleSetCompletion(displayedExercise.sets[displayedSetIndex].id, in: displayedExercise.id)
     }
 
     private func goToPreviousSet() {
-        guard currentSetIndex > 0 else { return }
-        currentSetIndex -= 1
-        viewModel.currentSetIndex = currentSetIndex // Keep ViewModel in sync
+        guard displayedSetIndex > 0 else { return }
+        viewModel.currentSetIndex = displayedSetIndex - 1
         WKInterfaceDevice.current().play(.click)
     }
 
     private func goToNextSet() {
-        guard currentSetIndex < totalSets - 1 else { return }
-        currentSetIndex += 1
-        viewModel.currentSetIndex = currentSetIndex // Keep ViewModel in sync
+        guard displayedSetIndex < totalSets - 1 else { return }
+        viewModel.currentSetIndex = displayedSetIndex + 1
         WKInterfaceDevice.current().play(.click)
     }
 
-    // New: Advance to the next exercise when current exercise's sets are finished
+    // Advance to the next exercise when current exercise's sets are finished
     private func goToNextExercise() {
         guard viewModel.canGoToNextExercise else { return }
-        // Ask the ViewModel to move to the next exercise (it sets its currentSetIndex appropriately)
         viewModel.goToNextExercise()
-        // Sync local state to ViewModel
-        currentSetIndex = viewModel.currentSetIndex
         WKInterfaceDevice.current().play(.click)
     }
 }

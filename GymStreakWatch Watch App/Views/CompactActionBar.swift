@@ -49,20 +49,9 @@ struct CompactActionBar: View {
                     ZStack {
                         // Put visuals inside the Button label so the entire area responds to taps
                         Button {
-                            // IMPORTANT: decide navigation based on prior state (isCompleted).
-                            // If the set is already completed, treat this as an "uncomplete" -> do NOT navigate.
-                            if isCompleted {
-                                // Uncomplete case: only toggle state / haptic
-                                handleComplete()
-                            } else {
-                                // Complete case: toggle then advance appropriately
-                                handleComplete()
-                                if hasNext {
-                                    onNext()
-                                } else {
-                                    onAdvance()
-                                }
-                            }
+                            // Toggle completion - navigation is handled by the ViewModel
+                            // (supports both regular exercises and supersets)
+                            handleComplete()
                         } label: {
     //                        VStack(spacing: 0) {
                                 ZStack {
@@ -120,14 +109,8 @@ struct CompactActionBar: View {
             } else {
                 // Single set layout: Full-width Complete button
                 Button {
-                    // If already completed -> uncomplete only, don't advance.
-                    if isCompleted {
-                        handleComplete()
-                    } else {
-                        handleComplete()
-                        // Single-set exercise - after completing, attempt to advance to next exercise
-                        onAdvance()
-                    }
+                    // Toggle completion - navigation is handled by the ViewModel
+                    handleComplete()
                 } label: {
                     Image(systemName: isCompleted ? "checkmark.circle.fill" : "circle")
                         .symbolRenderingMode(.hierarchical)
