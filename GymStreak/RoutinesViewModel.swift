@@ -18,6 +18,7 @@ class RoutinesViewModel: ObservableObject {
         observeWatchWorkoutCompletions()
         processPendingWatchWorkouts()
         observeCloudKitChanges()
+        observeWatchAvailability()
     }
 
     private func observeCloudKitChanges() {
@@ -28,6 +29,18 @@ class RoutinesViewModel: ObservableObject {
         ) { [weak self] _ in
             Task { @MainActor in
                 self?.fetchRoutines()
+            }
+        }
+    }
+
+    private func observeWatchAvailability() {
+        NotificationCenter.default.addObserver(
+            forName: .watchAppBecameAvailable,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in
+                self?.syncRoutinesToWatch()
             }
         }
     }

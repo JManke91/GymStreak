@@ -415,3 +415,41 @@
 "testdata.exercise.desc.leg_press" = "Quadrizeps-Masseaufbau";
 "testdata.exercise.desc.leg_curls" = "Beinbeuger-Isolation";
 "testdata.exercise.desc.calf_raises" = "Wadenentwicklung";
+
+// MARK: - History View Mode
+"history.mode" = "Ansicht";
+"history.mode.workouts" = "Trainings";
+"history.mode.progress" = "Fortschritt";
+
+// MARK: - Progress View
+"progress.empty.title" = "Noch kein Fortschritt";
+"progress.empty.description" = "Absolviere dein erstes Workout um deinen Fortschritt zu verfolgen";
+"progress.search" = "Übungen suchen";
+"progress.workout_count" = "%d Workouts";
+
+// MARK: - Progress Comparison
+"progress.compared_to_previous" = "Verglichen mit";
+"progress.first_workout" = "Erstes Workout!";
+"progress.new_exercise" = "Neu";
+"progress.improved" = "verbessert";
+"progress.same" = "gleich";
+"progress.regressed" = "rückläufig";
+"progress.last_time" = "Letztes Mal";
+"progress.this_time" = "Dieses Mal";
+
+// MARK: - Charts
+"chart.timeframe.week" = "1W";
+"chart.timeframe.month" = "1M";
+"chart.timeframe.three_months" = "3M";
+"chart.timeframe.year" = "1J";
+"chart.timeframe.all" = "Alle";
+"chart.metric" = "Metrik";
+"chart.metric.max_weight" = "Max. Gewicht";
+"chart.metric.estimated_1rm" = "Gesch. 1RM";
+"chart.metric.volume" = "Volumen";
+"chart.empty.title" = "Noch keine Daten";
+"chart.empty.message" = "Absolviere Workouts mit dieser Übung, um deinen Fortschritt zu sehen";
+"chart.personal_record" = "Persönlicher Rekord";
+"chart.trend" = "Trend";
+"chart.sessions" = "Workouts";
+"chart.switch_exercise" = "Übung wechseln, aktuell: %@";

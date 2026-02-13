@@ -10,6 +10,7 @@
 		A6FBC4ED2EC91C1C0095483C /* WidgetKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A6FBC4EC2EC91C1C0095483C /* WidgetKit.framework */; };
 		A6FBC4EF2EC91C1C0095483C /* SwiftUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A6FBC4EE2EC91C1C0095483C /* SwiftUI.framework */; };
 		A6FBC4FE2EC91C1E0095483C /* GymStreakWidgetsExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = A6FBC4EA2EC91C1C0095483C /* GymStreakWidgetsExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		A6WATCH0012F3D5A10095483C /* GymStreakWatch Watch App.app in Embed Watch Content */ = {isa = PBXBuildFile; fileRef = A6FBC5CC2ECCED0F0095483C /* GymStreakWatch Watch App.app */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, CodeSignOnCopy, ); }; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -27,6 +28,13 @@
 			remoteGlobalIDString = A6FBC4E92EC91C1C0095483C;
 			remoteInfo = GymStreakWidgetsExtension;
 		};
+		A6WATCH0022F3D5A10095483C /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = A6A340632E4E6F360017A4F7 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = A6FBC5CB2ECCED0F0095483C;
+			remoteInfo = "GymStreakWatch Watch App";
+		};
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXCopyFilesBuildPhase section */
@@ -39,6 +47,17 @@
 				A6FBC4FE2EC91C1E0095483C /* GymStreakWidgetsExtension.appex in Embed Foundation Extensions */,
 			);
 			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A6WATCH0032F3D5A10095483C /* Embed Watch Content */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "$(CONTENTS_FOLDER_PATH)/Watch";
+			dstSubfolderSpec = 16;
+			files = (
+				A6WATCH0012F3D5A10095483C /* GymStreakWatch Watch App.app in Embed Watch Content */,
+			);
+			name = "Embed Watch Content";
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXCopyFilesBuildPhase section */
@@ -198,11 +217,13 @@
 				A6A340682E4E6F360017A4F7 /* Frameworks */,
 				A6A340692E4E6F360017A4F7 /* Resources */,
 				A6FBC5032EC91C1E0095483C /* Embed Foundation Extensions */,
+				A6WATCH0032F3D5A10095483C /* Embed Watch Content */,
 			);
 			buildRules = (
 			);
 			dependencies = (
 				A6FBC4FD2EC91C1E0095483C /* PBXTargetDependency */,
+				A6WATCH0042F3D5A10095483C /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				A6A3406D2E4E6F360017A4F7 /* GymStreak */,
@@ -378,6 +399,11 @@
 			isa = PBXTargetDependency;
 			target = A6FBC4E92EC91C1C0095483C /* GymStreakWidgetsExtension */;
 			targetProxy = A6FBC4FC2EC91C1E0095483C /* PBXContainerItemProxy */;
+		};
+		A6WATCH0042F3D5A10095483C /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = A6FBC5CB2ECCED0F0095483C /* GymStreakWatch Watch App */;
+			targetProxy = A6WATCH0022F3D5A10095483C /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -727,7 +753,7 @@
 				PRODUCT_BUNDLE_IDENTIFIER = com.shotat24fps.GymStreak.watchkitapp;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = watchos;
-				SKIP_INSTALL = YES;
+				SKIP_INSTALL = NO;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
@@ -764,7 +790,7 @@
 				PRODUCT_BUNDLE_IDENTIFIER = com.shotat24fps.GymStreak.watchkitapp;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = watchos;
-				SKIP_INSTALL = YES;
+				SKIP_INSTALL = NO;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;

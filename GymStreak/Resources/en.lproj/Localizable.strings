@@ -416,3 +416,41 @@
 "testdata.exercise.desc.leg_press" = "Quad mass builder";
 "testdata.exercise.desc.leg_curls" = "Hamstring isolation";
 "testdata.exercise.desc.calf_raises" = "Calf development";
+
+// MARK: - History View Mode
+"history.mode" = "View";
+"history.mode.workouts" = "Workouts";
+"history.mode.progress" = "Progress";
+
+// MARK: - Progress View
+"progress.empty.title" = "No Progress Yet";
+"progress.empty.description" = "Complete your first workout to start tracking progress";
+"progress.search" = "Search exercises";
+"progress.workout_count" = "%d workouts";
+
+// MARK: - Progress Comparison
+"progress.compared_to_previous" = "Compared to";
+"progress.first_workout" = "First workout!";
+"progress.new_exercise" = "New";
+"progress.improved" = "improved";
+"progress.same" = "same";
+"progress.regressed" = "decreased";
+"progress.last_time" = "Last Time";
+"progress.this_time" = "This Time";
+
+// MARK: - Charts
+"chart.timeframe.week" = "1W";
+"chart.timeframe.month" = "1M";
+"chart.timeframe.three_months" = "3M";
+"chart.timeframe.year" = "1Y";
+"chart.timeframe.all" = "All";
+"chart.metric" = "Metric";
+"chart.metric.max_weight" = "Max Weight";
+"chart.metric.estimated_1rm" = "Est. 1RM";
+"chart.metric.volume" = "Volume";
+"chart.empty.title" = "No Data Yet";
+"chart.empty.message" = "Complete workouts with this exercise to see your progress";
+"chart.personal_record" = "Personal Record";
+"chart.trend" = "Trend";
+"chart.sessions" = "Sessions";
+"chart.switch_exercise" = "Switch exercise, currently showing %@";

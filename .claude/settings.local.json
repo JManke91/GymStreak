@@ -47,7 +47,25 @@
       "WebFetch(domain:stackoverflow.com)",
       "WebFetch(domain:forums.developer.apple.com)",
       "WebFetch(domain:getslopes.com)",
-      "WebFetch(domain:www.swiftbysundell.com)"
+      "WebFetch(domain:www.swiftbysundell.com)",
+      "WebFetch(domain:www.strong.app)",
+      "WebFetch(domain:www.hevyapp.com)",
+      "WebFetch(domain:fitbod.me)",
+      "WebFetch(domain:uxplanet.org)",
+      "WebFetch(domain:dribbble.com)",
+      "WebFetch(domain:support.apple.com)",
+      "WebFetch(domain:discussions.apple.com)",
+      "WebFetch(domain:9to5mac.com)",
+      "WebFetch(domain:www.iphonefaq.org)",
+      "WebFetch(domain:www.imore.com)",
+      "WebFetch(domain:www.reddit.com)",
+      "WebFetch(domain:osxdaily.com)",
+      "WebFetch(domain:appleinsider.com)",
+      "WebFetch(domain:www.appcoda.com)",
+      "WebFetch(domain:www.donnywals.com)",
+      "WebFetch(domain:www.raywenderlich.com)",
+      "WebFetch(domain:useyourloaf.com)",
+      "WebFetch(domain:www.swiftyplace.com)"
     ],
     "defaultMode": "acceptEdits"
   }

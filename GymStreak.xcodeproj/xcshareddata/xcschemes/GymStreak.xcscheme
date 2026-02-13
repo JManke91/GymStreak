@@ -15,6 +15,20 @@
             buildForAnalyzing = "YES">
             <BuildableReference
                BuildableIdentifier = "primary"
+               BlueprintIdentifier = "A6FBC5CB2ECCED0F0095483C"
+               BuildableName = "GymStreakWatch Watch App.app"
+               BlueprintName = "GymStreakWatch Watch App"
+               ReferencedContainer = "container:GymStreak.xcodeproj">
+            </BuildableReference>
+         </BuildActionEntry>
+         <BuildActionEntry
+            buildForTesting = "YES"
+            buildForRunning = "YES"
+            buildForProfiling = "YES"
+            buildForArchiving = "YES"
+            buildForAnalyzing = "YES">
+            <BuildableReference
+               BuildableIdentifier = "primary"
                BlueprintIdentifier = "A6A3406A2E4E6F360017A4F7"
                BuildableName = "GymStreak.app"
                BlueprintName = "GymStreak"
