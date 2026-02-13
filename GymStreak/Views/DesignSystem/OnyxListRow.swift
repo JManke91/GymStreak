@@ -89,7 +89,7 @@ struct OnyxSimpleListRow: View {
             OnyxSimpleListRow(title: "Squats", subtitle: "4 sets")
 
             OnyxListRow(title: "Deadlift", subtitle: "3 sets") {
-                OnyxBadge(text: "LT", color: .blue)
+                OnyxBadge(text: "LT", color: DesignSystem.Colors.tint)
             } trailing: {
                 Text("120 kg")
                     .font(.onyxCaption)

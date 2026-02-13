@@ -378,6 +378,7 @@
 "superset.link_accessibility" = "Übungen zu Supersatz verknüpfen";
 "superset.hint_title" = "Supersätze erstellen";
 "superset.hint_description" = "Wähle 2+ Übungen zum Verknüpfen aus";
+"superset.rest_timer.explanation" = "Pause beginnt nach Abschluss aller Übungen in jeder Runde";
 
 // MARK: - Test Data (for UI Testing Screenshots)
 "testdata.routine.push_day" = "Drücken-Tag";

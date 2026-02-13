@@ -75,6 +75,7 @@ struct ExerciseSelectionView: View {
             Section {
                 NavigationLink(destination: AddExerciseView(
                     viewModel: exercisesViewModel,
+                    presentationMode: .navigation,
                     onExerciseCreated: { newExercise in
                         // After creating the exercise, navigate to configure it
                         selectedExercise = newExercise

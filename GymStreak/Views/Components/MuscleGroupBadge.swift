@@ -27,8 +27,8 @@ enum MuscleGroupBadgeSize {
     }
 }
 
-/// A badge displaying a muscle group abbreviation in a color-coded square
-/// Color indicates body region: blue = upper body, orange = core, green = lower body
+/// A badge displaying a muscle group abbreviation in a colored square
+/// Uses the app's tint color for visual consistency
 struct MuscleGroupAbbreviationBadge: View {
     let muscleGroups: [String]
     var isActive: Bool = true
@@ -38,10 +38,6 @@ struct MuscleGroupAbbreviationBadge: View {
         MuscleGroups.abbreviation(for: muscleGroups)
     }
 
-    private var regionColor: Color {
-        MuscleGroups.bodyRegion(for: muscleGroups).color
-    }
-
     var body: some View {
         Text(abbreviation)
             .font(.system(size: size.fontSize, weight: .bold, design: .rounded))
@@ -49,7 +45,7 @@ struct MuscleGroupAbbreviationBadge: View {
             .frame(width: size.dimension, height: size.dimension)
             .background(
                 RoundedRectangle(cornerRadius: size.cornerRadius)
-                    .fill(isActive ? regionColor : Color.secondary.opacity(0.2))
+                    .fill(isActive ? DesignSystem.Colors.tint : Color.secondary.opacity(0.2))
             )
     }
 }

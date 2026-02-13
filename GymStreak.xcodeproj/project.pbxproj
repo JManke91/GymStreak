@@ -10,7 +10,7 @@
 		A6FBC4ED2EC91C1C0095483C /* WidgetKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A6FBC4EC2EC91C1C0095483C /* WidgetKit.framework */; };
 		A6FBC4EF2EC91C1C0095483C /* SwiftUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A6FBC4EE2EC91C1C0095483C /* SwiftUI.framework */; };
 		A6FBC4FE2EC91C1E0095483C /* GymStreakWidgetsExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = A6FBC4EA2EC91C1C0095483C /* GymStreakWidgetsExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
-		A6WATCH0012F3D5A10095483C /* GymStreakWatch Watch App.app in Embed Watch Content */ = {isa = PBXBuildFile; fileRef = A6FBC5CC2ECCED0F0095483C /* GymStreakWatch Watch App.app */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, CodeSignOnCopy, ); }; };
+		A6WATCH0012F3D5A10095483C /* GymStreakWatch Watch App.app in Embed Watch Content */ = {isa = PBXBuildFile; fileRef = A6FBC5CC2ECCED0F0095483C /* GymStreakWatch Watch App.app */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */

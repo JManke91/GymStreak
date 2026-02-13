@@ -146,8 +146,9 @@ struct AddExerciseToRoutineView: View {
             }
             .navigationDestination(for: String.self) { destination in
                 if destination == "createNewExercise" {
-                    CreateExerciseInlineView(
-                        exercisesViewModel: exercisesViewModel,
+                    AddExerciseView(
+                        viewModel: exercisesViewModel,
+                        presentationMode: .navigation,
                         onExerciseCreated: { newExercise in
                             // Pop back and push to configure view
                             navigationPath.removeLast()
@@ -460,47 +461,6 @@ struct ConfigureExerciseSetsView: View {
         viewModel.updateRoutine(routine)
 
         onSave()
-    }
-}
-
-// MARK: - Create Exercise Inline View
-struct CreateExerciseInlineView: View {
-    @ObservedObject var exercisesViewModel: ExercisesViewModel
-    var onExerciseCreated: (Exercise) -> Void
-
-    @State private var exerciseName = ""
-    @State private var muscleGroups: [String] = ["Chest"]
-
-    var body: some View {
-        Form {
-            Section {
-                TextField("exercises.name".localized, text: $exerciseName)
-
-                MuscleGroupPicker(selectedMuscleGroups: $muscleGroups)
-            }
-        }
-        .navigationTitle("add_exercise.title".localized)
-        .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            ToolbarItem(placement: .navigationBarTrailing) {
-                Button("action.save".localized) {
-                    saveExercise()
-                }
-                .disabled(exerciseName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || muscleGroups.isEmpty)
-            }
-        }
-    }
-
-    private func saveExercise() {
-        let trimmedName = exerciseName.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmedName.isEmpty else { return }
-
-        if let newExercise = exercisesViewModel.addExercise(
-            name: trimmedName,
-            muscleGroups: muscleGroups
-        ) {
-            onExerciseCreated(newExercise)
-        }
     }
 }
 

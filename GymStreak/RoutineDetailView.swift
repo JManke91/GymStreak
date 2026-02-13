@@ -46,6 +46,35 @@ struct RoutineDetailView: View {
         return (position: index + 1, total: supersetExercises.count)
     }
 
+    // Check if this exercise is the first in its superset
+    private func isFirstInSuperset(_ exercise: RoutineExercise) -> Bool {
+        guard let info = supersetInfo(for: exercise) else { return false }
+        return info.position == 1
+    }
+
+    // Get the last exercise in a superset for rest time config
+    private func lastExerciseInSuperset(for exercise: RoutineExercise) -> RoutineExercise? {
+        guard let supersetId = exercise.supersetId else { return nil }
+        return routine.routineExercisesList
+            .filter { $0.supersetId == supersetId }
+            .sorted { $0.supersetOrder < $1.supersetOrder }
+            .last
+    }
+
+    // Get the superset rest time (from the last exercise's first set)
+    private func supersetRestTime(for exercise: RoutineExercise) -> TimeInterval {
+        guard let lastExercise = lastExerciseInSuperset(for: exercise) else {
+            return restTime(for: exercise)
+        }
+        return lastExercise.setsList.first?.restTime ?? 60.0
+    }
+
+    // Update rest time for all sets of the last exercise in a superset
+    private func updateSupersetRestTime(for exercise: RoutineExercise, restTime: TimeInterval) {
+        guard let lastExercise = lastExerciseInSuperset(for: exercise) else { return }
+        updateAllSetsRestTime(for: lastExercise, restTime: restTime)
+    }
+
     // Helper to get superset line position for visual indicator
     private func supersetLinePosition(for exercise: RoutineExercise) -> SupersetPosition? {
         guard let info = supersetInfo(for: exercise) else { return nil }
@@ -232,12 +261,14 @@ struct RoutineDetailView: View {
 
                 // Exercise header with superset info
                 let info = supersetInfo(for: routineExercise)
+                let linePos = supersetLinePosition(for: routineExercise)
                 ExerciseHeaderView(
                     routineExercise: routineExercise,
                     isEditMode: true,
                     showDragHandle: false,
                     supersetPosition: info?.position,
-                    supersetTotal: info?.total
+                    supersetTotal: info?.total,
+                    supersetLinePosition: linePos
                 )
             }
             .contentShape(Rectangle())
@@ -262,66 +293,36 @@ struct RoutineDetailView: View {
 
             // Exercise header with superset info
             let info = supersetInfo(for: routineExercise)
+            let linePos = supersetLinePosition(for: routineExercise)
             ExerciseHeaderView(
                 routineExercise: routineExercise,
                 isEditMode: true,
                 supersetPosition: info?.position,
-                supersetTotal: info?.total
+                supersetTotal: info?.total,
+                supersetLinePosition: linePos
             )
         }
     }
 
-    // Superset selection mode row background with line indicator
-    @ViewBuilder
-    private func supersetSelectionRowBackground(for routineExercise: RoutineExercise) -> some View {
-        let bgColor = selectedForSuperset.contains(routineExercise.id)
-            ? DesignSystem.Colors.tint.opacity(0.15)
-            : (routineExercise.isInSuperset ? DesignSystem.Colors.tint.opacity(0.08) : Color.clear)
-
-        if let position = supersetLinePosition(for: routineExercise) {
-            HStack(spacing: 0) {
-                SupersetLineIndicator(position: position)
-                    .padding(.leading, 8)
-                Spacer()
-            }
-            .background(bgColor)
+    // Superset selection mode row background color (indicator is now in row content)
+    private func supersetSelectionRowBackgroundColor(for routineExercise: RoutineExercise) -> Color {
+        if selectedForSuperset.contains(routineExercise.id) {
+            return DesignSystem.Colors.tint.opacity(0.15)
+        } else if routineExercise.isInSuperset {
+            return DesignSystem.Colors.tint.opacity(0.08)
         } else {
-            bgColor
+            return Color.clear
         }
     }
 
-    // Edit mode row background with superset indicator
-    @ViewBuilder
-    private func editModeRowBackground(for routineExercise: RoutineExercise) -> some View {
-        let bgColor = routineExercise.isInSuperset ? DesignSystem.Colors.tint.opacity(0.08) : Color.clear
-
-        if let position = supersetLinePosition(for: routineExercise) {
-            HStack(spacing: 0) {
-                SupersetLineIndicator(position: position)
-                    .padding(.leading, 8)
-                Spacer()
-            }
-            .background(bgColor)
-        } else {
-            bgColor
-        }
+    // Edit mode row background color (indicator is now in row content)
+    private func editModeRowBackgroundColor(for routineExercise: RoutineExercise) -> Color {
+        routineExercise.isInSuperset ? DesignSystem.Colors.tint.opacity(0.08) : Color.clear
     }
 
-    // Normal mode row background with superset indicator
-    @ViewBuilder
-    private func normalModeRowBackground(for routineExercise: RoutineExercise) -> some View {
-        let bgColor = routineExercise.isInSuperset ? DesignSystem.Colors.tint.opacity(0.08) : Color.clear
-
-        if let position = supersetLinePosition(for: routineExercise) {
-            HStack(spacing: 0) {
-                SupersetLineIndicator(position: position)
-                    .padding(.leading, 8)
-                Spacer()
-            }
-            .background(bgColor)
-        } else {
-            bgColor
-        }
+    // Normal mode row background color (indicator is now in row content)
+    private func normalModeRowBackgroundColor(for routineExercise: RoutineExercise) -> Color {
+        routineExercise.isInSuperset ? DesignSystem.Colors.tint.opacity(0.08) : Color.clear
     }
 
     var body: some View {
@@ -344,16 +345,16 @@ struct RoutineDetailView: View {
                     ForEach(routine.routineExercisesList.sorted(by: { $0.order < $1.order })) { routineExercise in
                         Group {
                             if isSupersetSelectionMode {
-                                // Superset selection mode (independent of edit mode)
+                                // Superset selection mode (indicator now in row content via ExerciseHeaderView)
                                 supersetSelectionRow(for: routineExercise)
-                                    .listRowInsets(EdgeInsets(top: 0, leading: routineExercise.isInSuperset ? 32 : 16, bottom: 0, trailing: 16))
-                                    .listRowBackground(supersetSelectionRowBackground(for: routineExercise))
+                                    .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 0, trailing: 16))
+                                    .listRowBackground(supersetSelectionRowBackgroundColor(for: routineExercise))
                                     .listRowSeparator(routineExercise.isInSuperset ? .hidden : .automatic)
                             } else if isEditMode {
-                                // Edit mode: Delete + reorder only
+                                // Edit mode (indicator now in row content via ExerciseHeaderView)
                                 editModeRow(for: routineExercise)
-                                    .listRowInsets(EdgeInsets(top: 0, leading: routineExercise.isInSuperset ? 32 : 16, bottom: 0, trailing: 16))
-                                    .listRowBackground(editModeRowBackground(for: routineExercise))
+                                    .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 0, trailing: 16))
+                                    .listRowBackground(editModeRowBackgroundColor(for: routineExercise))
                                     .listRowSeparator(routineExercise.isInSuperset ? .hidden : .automatic)
                             } else {
                                 // Normal mode: Full disclosure group
@@ -375,20 +376,42 @@ struct RoutineDetailView: View {
                                 ) {
                             // Sets content
                             VStack(spacing: 12) {
-                                // Rest Timer Configuration (placed at top like in ActiveWorkoutView)
-                                RestTimerConfigView(
-                                    restTime: Binding(
-                                        get: { restTime(for: routineExercise) },
-                                        set: { newValue in
-                                            updateAllSetsRestTime(for: routineExercise, restTime: newValue)
-                                        }
-                                    ),
-                                    isExpanded: Binding(
-                                        get: { restTimerExpandedForExercise[routineExercise.id] ?? false },
-                                        set: { restTimerExpandedForExercise[routineExercise.id] = $0 }
-                                    ),
-                                    showToggle: true
-                                )
+                                // Rest Timer Configuration
+                                // For superset exercises: show SupersetRestTimerConfig only for the first exercise
+                                // For standalone exercises: show regular RestTimerConfigView
+                                if routineExercise.isInSuperset {
+                                    if isFirstInSuperset(routineExercise) {
+                                        // Show superset rest timer config for the first exercise in the superset
+                                        SupersetRestTimerConfig(
+                                            restTime: Binding(
+                                                get: { supersetRestTime(for: routineExercise) },
+                                                set: { newValue in
+                                                    updateSupersetRestTime(for: routineExercise, restTime: newValue)
+                                                }
+                                            ),
+                                            isExpanded: Binding(
+                                                get: { restTimerExpandedForExercise[routineExercise.id] ?? false },
+                                                set: { restTimerExpandedForExercise[routineExercise.id] = $0 }
+                                            )
+                                        )
+                                    }
+                                    // Other superset exercises don't show rest timer config
+                                } else {
+                                    // Standalone exercise - show regular config
+                                    RestTimerConfigView(
+                                        restTime: Binding(
+                                            get: { restTime(for: routineExercise) },
+                                            set: { newValue in
+                                                updateAllSetsRestTime(for: routineExercise, restTime: newValue)
+                                            }
+                                        ),
+                                        isExpanded: Binding(
+                                            get: { restTimerExpandedForExercise[routineExercise.id] ?? false },
+                                            set: { restTimerExpandedForExercise[routineExercise.id] = $0 }
+                                        ),
+                                        showToggle: true
+                                    )
+                                }
 
                                 ForEach(Array(routineExercise.setsList.sorted(by: { $0.order < $1.order }).enumerated()), id: \.element.id) { index, set in
                                     RoutineSetRowView(
@@ -509,15 +532,17 @@ struct RoutineDetailView: View {
 
                                 } label: {
                                     let info = supersetInfo(for: routineExercise)
+                                    let linePos = supersetLinePosition(for: routineExercise)
                                     ExerciseHeaderView(
                                         routineExercise: routineExercise,
                                         isEditMode: false,
                                         supersetPosition: info?.position,
-                                        supersetTotal: info?.total
+                                        supersetTotal: info?.total,
+                                        supersetLinePosition: linePos
                                     )
                                 }
-                                .listRowInsets(EdgeInsets(top: 0, leading: routineExercise.isInSuperset ? 32 : 16, bottom: 0, trailing: 16))
-                                .listRowBackground(normalModeRowBackground(for: routineExercise))
+                                .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 0, trailing: 16))
+                                .listRowBackground(normalModeRowBackgroundColor(for: routineExercise))
                                 .listRowSeparator(routineExercise.isInSuperset ? .hidden : .automatic)
                                 .sensoryFeedback(.selection, trigger: expandedExerciseId)
                                 // Only allow deleting exercise when collapsed
@@ -1046,48 +1071,66 @@ struct ExerciseHeaderView: View {
     var showDragHandle: Bool = true
     var supersetPosition: Int? = nil
     var supersetTotal: Int? = nil
+    var supersetLinePosition: SupersetPosition? = nil
+
+    // Fixed width for the superset indicator area - ensures consistent alignment for all exercises
+    private let indicatorAreaWidth: CGFloat = 16
+    private let indicatorTrailingSpacing: CGFloat = 8
 
     var body: some View {
-        HStack(spacing: 12) {
-            // Muscle group badge
-            if let exercise = routineExercise.exercise {
-                MuscleGroupAbbreviationBadge(
-                    muscleGroups: exercise.muscleGroups,
-                    isActive: !isEditMode
-                )
+        HStack(spacing: 0) {
+            // FIXED-WIDTH superset indicator area (always present for consistent alignment)
+            // For superset exercises: shows the line indicator
+            // For standalone exercises: empty but reserves the same space
+            ZStack {
+                if let linePosition = supersetLinePosition {
+                    SupersetLineIndicator(position: linePosition)
+                }
             }
+            .frame(width: indicatorAreaWidth)
+            .padding(.trailing, indicatorTrailingSpacing)
 
-            VStack(alignment: .leading, spacing: 3) {
-                HStack(spacing: 6) {
-                    Text(routineExercise.exercise?.name ?? "Unknown")
-                        .font(.system(.body, design: .rounded, weight: .semibold))
-                        .foregroundStyle(.primary)
-
-                    if let exercise = routineExercise.exercise {
-                        Image(systemName: exercise.equipmentType.icon)
-                            .font(.caption)
-                            .foregroundStyle(.tertiary)
-                    }
+            HStack(spacing: 12) {
+                // Muscle group badge
+                if let exercise = routineExercise.exercise {
+                    MuscleGroupAbbreviationBadge(
+                        muscleGroups: exercise.muscleGroups,
+                        isActive: !isEditMode
+                    )
                 }
 
-                Text("routine.sets_count".localized(routineExercise.setsList.count))
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-            }
+                VStack(alignment: .leading, spacing: 3) {
+                    HStack(spacing: 6) {
+                        Text(routineExercise.exercise?.name ?? "Unknown")
+                            .font(.system(.body, design: .rounded, weight: .semibold))
+                            .foregroundStyle(.primary)
 
-            Spacer()
+                        if let exercise = routineExercise.exercise {
+                            Image(systemName: exercise.equipmentType.icon)
+                                .font(.caption)
+                                .foregroundStyle(.tertiary)
+                        }
+                    }
 
-            // Superset position badge
-            if let position = supersetPosition, let total = supersetTotal {
-                SupersetBadge(position: position, total: total)
-            }
+                    Text("routine.sets_count".localized(routineExercise.setsList.count))
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
 
-            // Drag indicator in edit mode (only if showDragHandle is true)
-            if isEditMode && showDragHandle {
-                Image(systemName: "line.3.horizontal")
-                    .font(.body.weight(.medium))
-                    .foregroundStyle(.tertiary)
-                    .symbolEffect(.pulse.byLayer, options: .repeating)
+                Spacer()
+
+                // Superset position badge
+                if let position = supersetPosition, let total = supersetTotal {
+                    SupersetBadge(position: position, total: total)
+                }
+
+                // Drag indicator in edit mode (only if showDragHandle is true)
+                if isEditMode && showDragHandle {
+                    Image(systemName: "line.3.horizontal")
+                        .font(.body.weight(.medium))
+                        .foregroundStyle(.tertiary)
+                        .symbolEffect(.pulse.byLayer, options: .repeating)
+                }
             }
         }
         .contentShape(Rectangle())

@@ -159,8 +159,9 @@ struct AddExerciseToWorkoutView: View {
             }
             .navigationDestination(for: String.self) { destination in
                 if destination == "createNewExercise" {
-                    CreateExerciseInlineView(
-                        exercisesViewModel: exercisesViewModel,
+                    AddExerciseView(
+                        viewModel: exercisesViewModel,
+                        presentationMode: .navigation,
                         onExerciseCreated: { newExercise in
                             // Add the newly created exercise to the workout
                             addExercise(newExercise)

@@ -379,6 +379,7 @@
 "superset.link_accessibility" = "Link exercises into superset";
 "superset.hint_title" = "Create Supersets";
 "superset.hint_description" = "Select 2+ exercises to link together";
+"superset.rest_timer.explanation" = "Rest starts after completing all exercises in each round";
 
 // MARK: - Test Data (for UI Testing Screenshots)
 "testdata.routine.push_day" = "Push Day";

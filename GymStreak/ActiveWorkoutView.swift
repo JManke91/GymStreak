@@ -24,7 +24,11 @@ struct ActiveWorkoutView: View {
                         ForEach(Array(session.exercisesGroupedBySupersets.enumerated()), id: \.offset) { groupIndex, exerciseGroup in
                             if exerciseGroup.count > 1 {
                                 // Superset group
-                                SupersetWorkoutGroupView(exerciseCount: exerciseGroup.count) {
+                                SupersetWorkoutGroupView(
+                                    exerciseCount: exerciseGroup.count,
+                                    supersetExercises: exerciseGroup,
+                                    viewModel: viewModel
+                                ) {
                                     ForEach(Array(exerciseGroup.enumerated()), id: \.element.id) { index, workoutExercise in
                                         ExerciseCard(
                                             workoutExercise: workoutExercise,
@@ -34,6 +38,7 @@ struct ActiveWorkoutView: View {
                                             lastActiveExerciseId: $lastActiveExerciseId,
                                             supersetPosition: index + 1,
                                             supersetTotal: exerciseGroup.count,
+                                            isPartOfSuperset: true,
                                             onDelete: {
                                                 exerciseToDelete = workoutExercise
                                             },
@@ -305,6 +310,7 @@ struct ExerciseCard: View {
     @Binding var lastActiveExerciseId: UUID?
     var supersetPosition: Int? = nil
     var supersetTotal: Int? = nil
+    var isPartOfSuperset: Bool = false
     var onDelete: (() -> Void)?
     @State private var showingRestTimeConfig = false
     var onSetCompleted: (() -> Void)?
@@ -359,20 +365,22 @@ struct ExerciseCard: View {
                 }
             }
 
-            // Rest Timer Configuration
-            RestTimerConfigView(
-                restTime: Binding(
-                    get: { exerciseRestTime },
-                    set: { newValue in
+            // Rest Timer Configuration - Only show for standalone exercises (supersets have their own config)
+            if !isPartOfSuperset {
+                RestTimerConfigView(
+                    restTime: Binding(
+                        get: { exerciseRestTime },
+                        set: { newValue in
+                            viewModel.updateRestTimeForExercise(workoutExercise, restTime: newValue)
+                        }
+                    ),
+                    isExpanded: $showingRestTimeConfig,
+                    showToggle: true,
+                    onRestTimeChange: { newValue in
                         viewModel.updateRestTimeForExercise(workoutExercise, restTime: newValue)
                     }
-                ),
-                isExpanded: $showingRestTimeConfig,
-                showToggle: true,
-                onRestTimeChange: { newValue in
-                    viewModel.updateRestTimeForExercise(workoutExercise, restTime: newValue)
-                }
-            )
+                )
+            }
 
             // Sets List
             ForEach(workoutExercise.setsList.sorted(by: { $0.order < $1.order }), id: \.id) { set in
@@ -956,16 +964,35 @@ struct DeleteExerciseConfirmationView: View {
 
 struct SupersetWorkoutGroupView<Content: View>: View {
     let exerciseCount: Int
+    let supersetExercises: [WorkoutExercise]
+    @ObservedObject var viewModel: WorkoutViewModel
     let content: Content
+    @State private var showingRestTimeConfig = false
 
-    init(exerciseCount: Int, @ViewBuilder content: () -> Content) {
+    // Get rest time from the last exercise's first set (since rest triggers after last exercise in round)
+    private var supersetRestTime: TimeInterval {
+        guard let lastExercise = supersetExercises.sorted(by: { $0.supersetOrder < $1.supersetOrder }).last,
+              let firstSet = lastExercise.setsList.sorted(by: { $0.order < $1.order }).first else {
+            return 60.0
+        }
+        return firstSet.restTime
+    }
+
+    init(
+        exerciseCount: Int,
+        supersetExercises: [WorkoutExercise],
+        viewModel: WorkoutViewModel,
+        @ViewBuilder content: () -> Content
+    ) {
         self.exerciseCount = exerciseCount
+        self.supersetExercises = supersetExercises
+        self.viewModel = viewModel
         self.content = content()
     }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            // Superset header
+            // Superset header with rest time indicator
             HStack(spacing: 6) {
                 Image(systemName: "link")
                     .font(.caption.weight(.semibold))
@@ -974,6 +1001,19 @@ struct SupersetWorkoutGroupView<Content: View>: View {
                 Text("(\(exerciseCount) exercises)")
                     .font(.caption)
                     .foregroundStyle(.secondary)
+
+                Spacer()
+
+                // Rest time indicator
+                if supersetRestTime > 0 {
+                    HStack(spacing: 4) {
+                        Image(systemName: "timer")
+                            .font(.caption2)
+                        Text(TimeFormatting.formatRestTime(supersetRestTime))
+                            .font(.caption2.weight(.medium))
+                    }
+                    .foregroundStyle(DesignSystem.Colors.tint)
+                }
             }
             .foregroundStyle(DesignSystem.Colors.tint)
             .padding(.horizontal, 12)
@@ -981,6 +1021,27 @@ struct SupersetWorkoutGroupView<Content: View>: View {
             .background(
                 Capsule()
                     .fill(DesignSystem.Colors.tint.opacity(0.15))
+            )
+            .padding(.bottom, 8)
+
+            // Superset Rest Timer Configuration
+            SupersetRestTimerConfig(
+                restTime: Binding(
+                    get: { supersetRestTime },
+                    set: { newValue in
+                        // Update rest time on the last exercise's sets
+                        if let lastExercise = supersetExercises.sorted(by: { $0.supersetOrder < $1.supersetOrder }).last {
+                            viewModel.updateRestTimeForExercise(lastExercise, restTime: newValue)
+                        }
+                    }
+                ),
+                isExpanded: $showingRestTimeConfig,
+                onRestTimeChange: { newValue in
+                    // Update rest time on the last exercise's sets
+                    if let lastExercise = supersetExercises.sorted(by: { $0.supersetOrder < $1.supersetOrder }).last {
+                        viewModel.updateRestTimeForExercise(lastExercise, restTime: newValue)
+                    }
+                }
             )
             .padding(.bottom, 8)
 

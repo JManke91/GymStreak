@@ -53,7 +53,7 @@ struct OnyxBadge: View {
     }
 }
 
-/// A muscle group badge using the body region color system
+/// A muscle group badge using the app's tint color for visual consistency
 struct OnyxMuscleGroupBadge: View {
     let muscleGroups: [String]
     var isActive: Bool = true
@@ -63,14 +63,10 @@ struct OnyxMuscleGroupBadge: View {
         MuscleGroups.abbreviation(for: muscleGroups)
     }
 
-    private var regionColor: Color {
-        MuscleGroups.bodyRegion(for: muscleGroups).color
-    }
-
     var body: some View {
         OnyxBadge(
             text: abbreviation,
-            color: regionColor,
+            color: DesignSystem.Colors.tint,
             isActive: isActive,
             size: size
         )
@@ -85,27 +81,27 @@ struct OnyxMuscleGroupBadge: View {
 
         VStack(spacing: 16) {
             HStack(spacing: 12) {
-                OnyxBadge(text: "CH", color: .blue, isActive: true)
-                OnyxBadge(text: "BI", color: .blue, isActive: true)
-                OnyxBadge(text: "AB", color: .orange, isActive: true)
+                OnyxBadge(text: "CH", color: DesignSystem.Colors.tint, isActive: true)
+                OnyxBadge(text: "BI", color: DesignSystem.Colors.tint, isActive: true)
+                OnyxBadge(text: "AB", color: DesignSystem.Colors.tint, isActive: true)
             }
 
             HStack(spacing: 12) {
-                OnyxBadge(text: "QD", color: .green, isActive: true)
-                OnyxBadge(text: "GL", color: .green, isActive: true)
-                OnyxBadge(text: "CF", color: .green, isActive: true)
+                OnyxBadge(text: "QD", color: DesignSystem.Colors.tint, isActive: true)
+                OnyxBadge(text: "GL", color: DesignSystem.Colors.tint, isActive: true)
+                OnyxBadge(text: "CF", color: DesignSystem.Colors.tint, isActive: true)
             }
 
             HStack(spacing: 12) {
-                OnyxBadge(text: "CH", color: .blue, isActive: false)
-                OnyxBadge(text: "AB", color: .orange, isActive: false)
-                OnyxBadge(text: "QD", color: .green, isActive: false)
+                OnyxBadge(text: "CH", color: DesignSystem.Colors.tint, isActive: false)
+                OnyxBadge(text: "AB", color: DesignSystem.Colors.tint, isActive: false)
+                OnyxBadge(text: "QD", color: DesignSystem.Colors.tint, isActive: false)
             }
 
             HStack(spacing: 12) {
-                OnyxBadge(text: "SM", color: .blue, size: .small)
-                OnyxBadge(text: "SM", color: .orange, size: .small)
-                OnyxBadge(text: "SM", color: .green, size: .small)
+                OnyxBadge(text: "SM", color: DesignSystem.Colors.tint, size: .small)
+                OnyxBadge(text: "SM", color: DesignSystem.Colors.success, size: .small)
+                OnyxBadge(text: "SM", color: DesignSystem.Colors.warning, size: .small)
             }
         }
         .padding()
