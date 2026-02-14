@@ -604,9 +604,9 @@ struct RoutineDetailView: View {
                         HStack(spacing: 12) {
                             Image(systemName: "dumbbell.fill")
                                 .font(.title3)
-                                .foregroundStyle(.white)
+                                .foregroundStyle(DesignSystem.Colors.textOnTint)
                                 .frame(width: 36, height: 36)
-                                .background(Circle().fill(Color.green))
+                                .background(Circle().fill(DesignSystem.Colors.tint))
 
                             Text("routine.add_exercise".localized)
                                 .font(.body.weight(.semibold))
@@ -805,11 +805,11 @@ struct RoutineDetailView: View {
                     HStack(spacing: 10) {
                         Image(systemName: "hand.draw")
                             .font(.title3)
-                            .foregroundStyle(.white)
+                            .foregroundStyle(DesignSystem.Colors.textOnTint)
 
                         Text("routine.drag_to_reorder".localized)
                             .font(.subheadline.weight(.medium))
-                            .foregroundStyle(.white)
+                            .foregroundStyle(DesignSystem.Colors.textOnTint)
 
                         Spacer()
 
@@ -821,7 +821,7 @@ struct RoutineDetailView: View {
                         } label: {
                             Image(systemName: "xmark.circle.fill")
                                 .font(.title3)
-                                .foregroundStyle(.white.opacity(0.8))
+                                .foregroundStyle(DesignSystem.Colors.textOnTint.opacity(0.8))
                         }
                     }
                     .padding(.horizontal, 16)
@@ -850,15 +850,15 @@ struct RoutineDetailView: View {
                     HStack(spacing: 10) {
                         Image(systemName: "link")
                             .font(.title3)
-                            .foregroundStyle(.white)
+                            .foregroundStyle(DesignSystem.Colors.textOnTint)
 
                         VStack(alignment: .leading, spacing: 2) {
                             Text("superset.hint_title".localized)
                                 .font(.subheadline.weight(.semibold))
-                                .foregroundStyle(.white)
+                                .foregroundStyle(DesignSystem.Colors.textOnTint)
                             Text("superset.hint_description".localized)
                                 .font(.caption)
-                                .foregroundStyle(.white.opacity(0.85))
+                                .foregroundStyle(DesignSystem.Colors.textOnTint.opacity(0.85))
                         }
 
                         Spacer()
@@ -871,7 +871,7 @@ struct RoutineDetailView: View {
                         } label: {
                             Image(systemName: "xmark.circle.fill")
                                 .font(.title3)
-                                .foregroundStyle(.white.opacity(0.8))
+                                .foregroundStyle(DesignSystem.Colors.textOnTint.opacity(0.8))
                         }
                     }
                     .padding(.horizontal, 16)
@@ -1189,7 +1189,7 @@ struct RoutineSetRowView: View {
                     Text("\(index + 1)")
                         .font(.caption.weight(.semibold))
                         .monospacedDigit()
-                        .foregroundStyle(.white)
+                        .foregroundStyle(DesignSystem.Colors.textOnTint)
                         .frame(width: 28, height: 28)
                         .background(DesignSystem.Colors.tint)
                         .clipShape(Circle())

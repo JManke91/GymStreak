@@ -44,7 +44,7 @@ struct OnyxBadge: View {
     var body: some View {
         Text(text)
             .font(.system(size: size.fontSize, weight: .bold, design: .rounded))
-            .foregroundStyle(isActive ? .white : DesignSystem.Colors.textSecondary)
+            .foregroundStyle(isActive ? DesignSystem.Colors.textOnTint : DesignSystem.Colors.textSecondary)
             .frame(width: size.dimension, height: size.dimension)
             .background(
                 RoundedRectangle(cornerRadius: size.cornerRadius)

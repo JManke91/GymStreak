@@ -87,7 +87,7 @@ struct ApplyToAllBanner: View {
             } label: {
                 Text("apply_to_all.apply".localized)
                     .font(.caption.weight(.semibold))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(DesignSystem.Colors.textOnTint)
                     .padding(.horizontal, 12)
                     .padding(.vertical, 6)
                     .background(DesignSystem.Colors.tint, in: Capsule())

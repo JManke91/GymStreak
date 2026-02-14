@@ -350,7 +350,7 @@ struct WatchSupersetBadge: View {
                     .monospacedDigit()
             }
         }
-        .foregroundStyle(.white)
+        .foregroundStyle(OnyxWatch.Colors.textOnTint)
         .padding(.horizontal, 4)
         .padding(.vertical, 2)
         .background(

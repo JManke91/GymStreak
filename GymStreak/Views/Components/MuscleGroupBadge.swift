@@ -41,7 +41,7 @@ struct MuscleGroupAbbreviationBadge: View {
     var body: some View {
         Text(abbreviation)
             .font(.system(size: size.fontSize, weight: .bold, design: .rounded))
-            .foregroundStyle(isActive ? .white : .secondary)
+            .foregroundStyle(isActive ? DesignSystem.Colors.textOnTint : .secondary)
             .frame(width: size.dimension, height: size.dimension)
             .background(
                 RoundedRectangle(cornerRadius: size.cornerRadius)

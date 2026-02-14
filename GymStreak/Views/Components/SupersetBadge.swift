@@ -9,7 +9,7 @@ struct SupersetBadge: View {
         Text("\(position)/\(total)")
             .font(.caption2.weight(.semibold))
             .monospacedDigit()
-            .foregroundStyle(.white)
+            .foregroundStyle(DesignSystem.Colors.textOnTint)
             .padding(.horizontal, 6)
             .padding(.vertical, 2)
             .background(

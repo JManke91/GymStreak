@@ -187,6 +187,12 @@ Use Mappers to translate DTO <-> Domain Model
 - Handle all screen sizes and orientations
 - Implement proper keyboard handling
 
+### Color Contrast Guidelines
+- **IMPORTANT**: Never use white text on the app's green tint color (`DesignSystem.Colors.tint`) - it lacks sufficient contrast
+- Always use `DesignSystem.Colors.textOnTint` (black) for text/icons displayed on tint-colored backgrounds
+- This applies to: badges, buttons with tint backgrounds, hint banners, and any UI element with a green background
+- The design system provides `textOnTint` specifically for this purpose in both iOS (`DesignSystem.Colors.textOnTint`) and watchOS (`OnyxWatch.Colors.textOnTint`)
+
 ### Key Components
 
 #### HealthKit Integration

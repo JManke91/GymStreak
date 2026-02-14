@@ -78,11 +78,11 @@ struct ActiveWorkoutView: View {
                             HStack(spacing: 12) {
                                 Image(systemName: "dumbbell.fill")
                                     .font(.title2)
-                                    .foregroundStyle(.white)
+                                    .foregroundStyle(DesignSystem.Colors.textOnTint)
                                     .frame(width: 44, height: 44)
                                     .background(
                                         Circle()
-                                            .fill(DesignSystem.Colors.success)
+                                            .fill(DesignSystem.Colors.tint)
                                     )
 
                                 VStack(alignment: .leading, spacing: 2) {
