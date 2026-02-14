@@ -21,23 +21,60 @@ struct ActiveWorkoutView: View {
             ScrollView {
                 LazyVStack(spacing: 16) {
                     if let session = viewModel.currentSession {
-                        ForEach(session.workoutExercises.sorted(by: { $0.order < $1.order }), id: \.id) { workoutExercise in
-                            ExerciseCard(
-                                workoutExercise: workoutExercise,
-                                viewModel: viewModel,
-                                isCurrentExercise: isCurrentExercise(workoutExercise),
-                                expandedSetId: $expandedSetId,
-                                lastActiveExerciseId: $lastActiveExerciseId,
-                                onDelete: {
-                                    exerciseToDelete = workoutExercise
-                                },
-                                onSetCompleted: {
-                                    // Collapse the expanded set when it's marked as complete
-                                    withAnimation(.snappy(duration: 0.35)) {
-                                        expandedSetId = nil
+                        let workoutLabels = SupersetLabelProvider.labels(for: session.workoutExercisesList)
+                        ForEach(Array(session.exercisesGroupedBySupersets.enumerated()), id: \.offset) { groupIndex, exerciseGroup in
+                            if exerciseGroup.count > 1 {
+                                // Superset group
+                                let groupSupersetId = exerciseGroup.first?.supersetId ?? UUID()
+                                let groupLetter = workoutLabels[groupSupersetId] ?? "A"
+                                let groupColor = SupersetLabelProvider.color(for: groupLetter)
+                                SupersetWorkoutGroupView(
+                                    exerciseCount: exerciseGroup.count,
+                                    supersetExercises: exerciseGroup,
+                                    letter: groupLetter,
+                                    color: groupColor,
+                                    viewModel: viewModel
+                                ) {
+                                    ForEach(Array(exerciseGroup.enumerated()), id: \.element.id) { index, workoutExercise in
+                                        ExerciseCard(
+                                            workoutExercise: workoutExercise,
+                                            viewModel: viewModel,
+                                            isCurrentExercise: isCurrentExercise(workoutExercise),
+                                            expandedSetId: $expandedSetId,
+                                            lastActiveExerciseId: $lastActiveExerciseId,
+                                            supersetPosition: index + 1,
+                                            supersetTotal: exerciseGroup.count,
+                                            supersetColor: groupColor,
+                                            isPartOfSuperset: true,
+                                            onDelete: {
+                                                exerciseToDelete = workoutExercise
+                                            },
+                                            onSetCompleted: {
+                                                withAnimation(.snappy(duration: 0.35)) {
+                                                    expandedSetId = nil
+                                                }
+                                            }
+                                        )
                                     }
                                 }
-                            )
+                            } else if let workoutExercise = exerciseGroup.first {
+                                // Single exercise
+                                ExerciseCard(
+                                    workoutExercise: workoutExercise,
+                                    viewModel: viewModel,
+                                    isCurrentExercise: isCurrentExercise(workoutExercise),
+                                    expandedSetId: $expandedSetId,
+                                    lastActiveExerciseId: $lastActiveExerciseId,
+                                    onDelete: {
+                                        exerciseToDelete = workoutExercise
+                                    },
+                                    onSetCompleted: {
+                                        withAnimation(.snappy(duration: 0.35)) {
+                                            expandedSetId = nil
+                                        }
+                                    }
+                                )
+                            }
                         }
 
                         // Add Exercise Button - Card-style with chevron (navigation pattern)
@@ -48,37 +85,37 @@ struct ActiveWorkoutView: View {
                             HStack(spacing: 12) {
                                 Image(systemName: "dumbbell.fill")
                                     .font(.title2)
-                                    .foregroundStyle(.white)
+                                    .foregroundStyle(DesignSystem.Colors.textOnTint)
                                     .frame(width: 44, height: 44)
                                     .background(
                                         Circle()
-                                            .fill(Color.green)
+                                            .fill(DesignSystem.Colors.tint)
                                     )
 
                                 VStack(alignment: .leading, spacing: 2) {
-                                    Text("Add Exercise")
+                                    Text("workout.add_exercise".localized)
                                         .font(.headline)
-                                    Text("Browse exercise library")
+                                    Text("workout.add_exercise.description".localized)
                                         .font(.caption)
-                                        .foregroundStyle(.secondary)
+                                        .foregroundStyle(DesignSystem.Colors.textSecondary)
                                 }
 
                                 Spacer()
 
                                 Image(systemName: "chevron.right")
                                     .font(.caption.weight(.semibold))
-                                    .foregroundStyle(.tertiary)
+                                    .foregroundStyle(DesignSystem.Colors.textTertiary)
                             }
                             .padding(.vertical, 12)
                             .padding(.horizontal, 16)
-                            .background(Color(.secondarySystemGroupedBackground))
-                            .clipShape(RoundedRectangle(cornerRadius: 12))
+                            .background(DesignSystem.Colors.card)
+                            .clipShape(RoundedRectangle(cornerRadius: DesignSystem.Dimensions.cornerRadiusMD))
                             .contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)
                         .padding(.top, 16)
-                        .accessibilityLabel("Add a new exercise to this workout")
-                        .accessibilityHint("Opens exercise picker to add another exercise")
+                        .accessibilityLabel("accessibility.add_exercise".localized)
+                        .accessibilityHint("accessibility.add_exercise.hint".localized)
                     }
                 }
                 .padding(.horizontal)
@@ -112,25 +149,25 @@ struct ActiveWorkoutView: View {
                 )
             }
         }
-        .alert("Cancel Workout?", isPresented: $showingCancelAlert) {
-            Button("Discard Workout", role: .destructive) {
+        .alert("workout.cancel.title".localized, isPresented: $showingCancelAlert) {
+            Button("workout.cancel.discard".localized, role: .destructive) {
                 viewModel.cancelWorkout()
                 dismiss()
             }
-            Button("Keep Working Out", role: .cancel) {}
+            Button("workout.cancel.keep".localized, role: .cancel) {}
         } message: {
-            Text("Your progress will not be saved.")
+            Text("workout.cancel.message".localized)
         }
-        .alert("Workout Complete!", isPresented: $viewModel.showingWorkoutCompletePrompt) {
-            Button("Finish Workout") {
+        .alert("workout.complete.title".localized, isPresented: $viewModel.showingWorkoutCompletePrompt) {
+            Button("workout.complete.finish".localized) {
                 showingSaveOptions = true
             }
-            Button("Continue", role: .cancel) {
+            Button("workout.complete.continue".localized, role: .cancel) {
                 viewModel.resumeAfterCompletionPrompt()
             }
         } message: {
             if let session = viewModel.currentSession {
-                Text("You completed all \(session.totalSetsCount) sets. Would you like to finish your workout?")
+                Text("workout.complete.message".localized(session.totalSetsCount))
             }
         }
         .sheet(item: $exerciseToDelete) { exercise in
@@ -149,18 +186,19 @@ struct ActiveWorkoutView: View {
             .presentationDetents([.height(280)])
             .presentationDragIndicator(.visible)
         }
-        .alert("Finish Workout?", isPresented: $showingFinishConfirmation) {
-            Button("Continue Workout") {}
-            Button("Save Workout") {
+        .alert("workout.finish.title".localized, isPresented: $showingFinishConfirmation) {
+            Button("workout.finish.continue".localized) {}
+            Button("workout.finish.save".localized) {
                 viewModel.pauseForCompletion()
                 showingSaveOptions = true
             }
             .keyboardShortcut(.defaultAction)
         } message: {
             if let session = viewModel.currentSession {
-                Text("You completed \(session.completedSetsCount) of \(session.totalSetsCount) sets.")
+                Text("workout.completed_sets".localized(session.completedSetsCount, session.totalSetsCount))
             }
         }
+        .tint(DesignSystem.Colors.textPrimary)
         .sheet(isPresented: $showingSaveOptions) {
             SaveWorkoutView(viewModel: viewModel) {
                 dismiss()
@@ -223,25 +261,24 @@ struct TimerHeader: View {
         VStack(spacing: 12) {
             HStack {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("Workout Time")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                    Text("workout.time".localized)
+                        .font(.onyxCaption)
+                        .foregroundStyle(DesignSystem.Colors.textSecondary)
 
                     Text(viewModel.formatDuration(viewModel.elapsedTime))
-                        .font(.system(.title, design: .rounded, weight: .semibold))
-                        .monospacedDigit()
+                        .font(.onyxNumberLarge)
                 }
 
                 Spacer()
 
                 if let session = viewModel.currentSession {
                     VStack(alignment: .trailing, spacing: 4) {
-                        Text("Progress")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+                        Text("workout.progress".localized)
+                            .font(.onyxCaption)
+                            .foregroundStyle(DesignSystem.Colors.textSecondary)
 
                         Text("\(session.completedSetsCount)/\(session.totalSetsCount)")
-                            .font(.headline)
+                            .font(.onyxHeader)
                     }
                 }
             }
@@ -251,12 +288,12 @@ struct TimerHeader: View {
                 GeometryReader { geometry in
                     ZStack(alignment: .leading) {
                         Rectangle()
-                            .fill(Color.secondary.opacity(0.2))
+                            .fill(DesignSystem.Colors.divider)
                             .frame(height: 6)
                             .clipShape(Capsule())
 
                         Rectangle()
-                            .fill(Color.blue)
+                            .fill(DesignSystem.Colors.tint)
                             .frame(width: geometry.size.width * CGFloat(session.completedSetsCount) / CGFloat(session.totalSetsCount), height: 6)
                             .clipShape(Capsule())
                             .animation(.spring, value: session.completedSetsCount)
@@ -266,7 +303,7 @@ struct TimerHeader: View {
             }
         }
         .padding()
-        .background(.regularMaterial)
+        .background(DesignSystem.Colors.card)
     }
 }
 
@@ -278,36 +315,49 @@ struct ExerciseCard: View {
     let isCurrentExercise: Bool
     @Binding var expandedSetId: UUID?
     @Binding var lastActiveExerciseId: UUID?
+    var supersetPosition: Int? = nil
+    var supersetTotal: Int? = nil
+    var supersetColor: Color? = nil
+    var isPartOfSuperset: Bool = false
     var onDelete: (() -> Void)?
     @State private var showingRestTimeConfig = false
     var onSetCompleted: (() -> Void)?
 
     // Computed property to get current rest time from the exercise's sets
     private var exerciseRestTime: TimeInterval {
-        workoutExercise.sets.first?.restTime ?? 0.0
+        workoutExercise.setsList.first?.restTime ?? 0.0
     }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             // Exercise Header
             HStack {
-                Image(systemName: muscleGroupIcon)
-                    .symbolRenderingMode(.hierarchical)
-                    .foregroundStyle(isCurrentExercise ? .blue : .secondary)
-                    .font(.title3)
+                MuscleGroupAbbreviationBadge(
+                    muscleGroups: workoutExercise.muscleGroups,
+                    isActive: isCurrentExercise
+                )
 
                 VStack(alignment: .leading, spacing: 2) {
                     Text(workoutExercise.exerciseName)
                         .font(.headline)
 
-                    Text("\(workoutExercise.completedSetsCount)/\(workoutExercise.sets.count) sets")
+                    Text("exercise.sets_completed".localized(workoutExercise.completedSetsCount, workoutExercise.setsList.count))
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                 }
 
                 Spacer()
 
-                if workoutExercise.completedSetsCount == workoutExercise.sets.count {
+                // Superset position badge
+                if let position = supersetPosition, let total = supersetTotal {
+                    SupersetBadge(
+                        position: position,
+                        total: total,
+                        color: supersetColor ?? DesignSystem.Colors.tint
+                    )
+                }
+
+                if workoutExercise.completedSetsCount == workoutExercise.setsList.count {
                     Image(systemName: "checkmark.circle.fill")
                         .foregroundStyle(.green)
                         .font(.title2)
@@ -327,23 +377,25 @@ struct ExerciseCard: View {
                 }
             }
 
-            // Rest Timer Configuration
-            RestTimerConfigView(
-                restTime: Binding(
-                    get: { exerciseRestTime },
-                    set: { newValue in
+            // Rest Timer Configuration - Only show for standalone exercises (supersets have their own config)
+            if !isPartOfSuperset {
+                RestTimerConfigView(
+                    restTime: Binding(
+                        get: { exerciseRestTime },
+                        set: { newValue in
+                            viewModel.updateRestTimeForExercise(workoutExercise, restTime: newValue)
+                        }
+                    ),
+                    isExpanded: $showingRestTimeConfig,
+                    showToggle: true,
+                    onRestTimeChange: { newValue in
                         viewModel.updateRestTimeForExercise(workoutExercise, restTime: newValue)
                     }
-                ),
-                isExpanded: $showingRestTimeConfig,
-                showToggle: true,
-                onRestTimeChange: { newValue in
-                    viewModel.updateRestTimeForExercise(workoutExercise, restTime: newValue)
-                }
-            )
+                )
+            }
 
             // Sets List
-            ForEach(workoutExercise.sets.sorted(by: { $0.order < $1.order }), id: \.id) { set in
+            ForEach(workoutExercise.setsList.sorted(by: { $0.order < $1.order }), id: \.id) { set in
                 WorkoutSetRow(
                     set: set,
                     workoutExercise: workoutExercise,
@@ -362,12 +414,14 @@ struct ExerciseCard: View {
                         }
                     },
                     onSetInteraction: {
-                        // Mark this exercise as active when user completes/uncompletes a set
+                        // Mark this exercise as active when user uncompletes a set
                         lastActiveExerciseId = workoutExercise.id
                     },
                     onSetCompleted: {
                         // Collapse the set when it's marked as complete
                         onSetCompleted?()
+                        // Clear lastActiveExerciseId so automatic navigation takes over
+                        lastActiveExerciseId = nil
                     }
                 )
                 .transition(.asymmetric(
@@ -387,31 +441,27 @@ struct ExerciseCard: View {
                     Image(systemName: "plus.circle.fill")
                         .font(.subheadline)
                         .fontWeight(.medium)
-                    Text("Add Set")
+                    Text("exercise.add_set".localized)
                         .font(.subheadline)
                         .fontWeight(.semibold)
                 }
-                .foregroundStyle(.blue)
+                .foregroundStyle(DesignSystem.Colors.tint)
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 12)
-                .background(Color(.tertiarySystemFill))
-                .clipShape(RoundedRectangle(cornerRadius: 10))
+                .background(DesignSystem.Colors.input)
+                .clipShape(RoundedRectangle(cornerRadius: DesignSystem.Dimensions.cornerRadiusSM))
             }
             .buttonStyle(.plain)
-            .accessibilityLabel("Add a new set to \(workoutExercise.exerciseName)")
-            .accessibilityHint("Creates a new set with default values")
+            .accessibilityLabel("accessibility.add_set".localized(workoutExercise.exerciseName))
+            .accessibilityHint("accessibility.add_set.hint".localized)
         }
         .padding()
-        .background(isCurrentExercise ? Color.blue.opacity(0.1) : Color(.secondarySystemGroupedBackground))
-        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .background(isCurrentExercise ? DesignSystem.Colors.tint.opacity(0.1) : DesignSystem.Colors.card)
+        .clipShape(RoundedRectangle(cornerRadius: DesignSystem.Dimensions.cornerRadiusMD))
         .overlay(
-            RoundedRectangle(cornerRadius: 12)
-                .strokeBorder(isCurrentExercise ? Color.blue : Color.clear, lineWidth: 2)
+            RoundedRectangle(cornerRadius: DesignSystem.Dimensions.cornerRadiusMD)
+                .strokeBorder(isCurrentExercise ? DesignSystem.Colors.tint : Color.clear, lineWidth: 2)
         )
-    }
-
-    private var muscleGroupIcon: String {
-        MuscleGroups.icon(for: workoutExercise.muscleGroup)
     }
 
     private func isNextSet(_ set: WorkoutSet) -> Bool {
@@ -421,7 +471,7 @@ struct ExerciseCard: View {
         }
 
         // Find the first incomplete set in THIS exercise
-        let incompleteSetsInExercise = workoutExercise.sets
+        let incompleteSetsInExercise = workoutExercise.setsList
             .sorted(by: { $0.order < $1.order })
             .filter { !$0.isCompleted }
 
@@ -451,6 +501,7 @@ struct WorkoutSetRow: View {
     @State private var initialWeight: Double
     @State private var repsBannerDismissed = false
     @State private var weightBannerDismissed = false
+    @State private var showingDeleteSetAlert = false
 
     init(set: WorkoutSet, workoutExercise: WorkoutExercise, viewModel: WorkoutViewModel, isNextSet: Bool, isExpanded: Bool, onToggleExpand: @escaping () -> Void, onSetInteraction: @escaping () -> Void, onSetCompleted: @escaping () -> Void) {
         self.set = set
@@ -479,28 +530,28 @@ struct WorkoutSetRow: View {
 
     // Check if exercise has multiple incomplete sets
     private var hasMultipleIncompleteSets: Bool {
-        workoutExercise.sets.filter { !$0.isCompleted }.count > 1
+        workoutExercise.setsList.filter { !$0.isCompleted }.count > 1
     }
 
     // Apply current reps to all incomplete sets in this exercise
     private func applyRepsToAllIncompleteSets() {
-        for workoutSet in workoutExercise.sets where !workoutSet.isCompleted {
+        for workoutSet in workoutExercise.setsList where !workoutSet.isCompleted {
             viewModel.updateSet(workoutSet, reps: editingReps, weight: workoutSet.actualWeight)
         }
     }
 
     // Apply current weight to all incomplete sets in this exercise
     private func applyWeightToAllIncompleteSets() {
-        for workoutSet in workoutExercise.sets where !workoutSet.isCompleted {
+        for workoutSet in workoutExercise.setsList where !workoutSet.isCompleted {
             viewModel.updateSet(workoutSet, reps: workoutSet.actualReps, weight: editingWeight)
         }
     }
 
     private var backgroundColor: Color {
         if isExpanded {
-            return Color(.tertiarySystemGroupedBackground)
+            return DesignSystem.Colors.cardElevated
         } else if isNextSet {
-            return Color.blue.opacity(0.1)
+            return DesignSystem.Colors.tint.opacity(0.1)
         } else {
             return Color.clear
         }
@@ -527,26 +578,24 @@ struct WorkoutSetRow: View {
                         if set.isCompleted {
                             viewModel.uncompleteSet(set)
                             UINotificationFeedbackGenerator().notificationOccurred(.warning)
+                            // Notify that user interacted with this exercise
+                            onSetInteraction()
                         } else {
                             viewModel.completeSet(workoutExercise: workoutExercise, set: set)
                             UINotificationFeedbackGenerator().notificationOccurred(.success)
-                            // Collapse the set when marked as complete
-                            if isExpanded {
-                                onSetCompleted()
-                            }
+                            // Always call onSetCompleted to clear lastActiveExerciseId and allow auto-navigation
+                            onSetCompleted()
                         }
-                        // Notify that user interacted with this exercise
-                        onSetInteraction()
                     } label: {
                         ZStack {
                             Circle()
-                                .strokeBorder(set.isCompleted ? Color.green : (isNextSet ? Color.blue : Color.secondary), lineWidth: 2)
+                                .strokeBorder(set.isCompleted ? DesignSystem.Colors.success : (isNextSet ? DesignSystem.Colors.tint : DesignSystem.Colors.textSecondary), lineWidth: 2)
                                 .frame(width: 28, height: 28)
 
                             if set.isCompleted {
                                 Image(systemName: "checkmark")
                                     .font(.caption.weight(.bold))
-                                    .foregroundStyle(.green)
+                                    .foregroundStyle(DesignSystem.Colors.success)
                             }
                         }
                     }
@@ -554,15 +603,15 @@ struct WorkoutSetRow: View {
 
                     // Set Info
                     VStack(alignment: .leading, spacing: 2) {
-                        Text("Set \(set.order + 1)")
+                        Text("set.number".localized(set.order + 1))
                             .font(.subheadline.weight(.medium))
                             .foregroundStyle(.primary)
 
                         HStack(spacing: 8) {
-                            Text("\(set.actualReps) reps")
+                            Text("set.reps".localized(set.actualReps))
                             Text("×")
                                 .foregroundStyle(.secondary)
-                            Text(String(format: "%.2f kg", set.actualWeight))
+                            Text("set.weight".localized(set.actualWeight))
                         }
                         .font(.caption)
                         .foregroundStyle(.secondary)
@@ -580,7 +629,7 @@ struct WorkoutSetRow: View {
                     // Expand/Collapse indicator
                     Image(systemName: "chevron.down")
                         .font(isExpanded ? .subheadline.weight(.bold) : .caption.weight(.semibold))
-                        .foregroundStyle(isExpanded ? .blue : .secondary)
+                        .foregroundStyle(isExpanded ? DesignSystem.Colors.tint : DesignSystem.Colors.textSecondary)
                         .rotationEffect(.degrees(isExpanded ? 180 : 0))
                 }
                 .contentShape(Rectangle())
@@ -589,8 +638,8 @@ struct WorkoutSetRow: View {
             .padding(.vertical, 8)
             .padding(.horizontal, 12)
             .accessibilityElement(children: .combine)
-            .accessibilityLabel("Set \(set.order + 1): \(set.actualReps) reps, \(String(format: "%.2f", set.actualWeight)) kilograms")
-            .accessibilityHint(isExpanded ? "Tap to collapse" : "Tap to expand and edit")
+            .accessibilityLabel("accessibility.set.label".localized(set.order + 1, set.actualReps, set.actualWeight))
+            .accessibilityHint(isExpanded ? "accessibility.set.hint.expanded".localized : "accessibility.set.hint.collapsed".localized)
             .accessibilityAddTraits(.isButton)
 
             // Expanded inline editor
@@ -603,7 +652,7 @@ struct WorkoutSetRow: View {
                         // Reps input with contextual banner
                         VStack(spacing: 8) {
                             HorizontalStepper(
-                                title: "Reps",
+                                title: "set.reps_label".localized,
                                 value: $editingReps,
                                 range: 1...100,
                                 step: 1
@@ -615,7 +664,7 @@ struct WorkoutSetRow: View {
                             if hasMultipleIncompleteSets && repsChanged && !repsBannerDismissed {
                                 ApplyToAllBanner(
                                     type: .reps,
-                                    setCount: workoutExercise.sets.filter { !$0.isCompleted }.count,
+                                    setCount: workoutExercise.setsList.filter { !$0.isCompleted }.count,
                                     onApply: {
                                         withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
                                             applyRepsToAllIncompleteSets()
@@ -640,7 +689,7 @@ struct WorkoutSetRow: View {
                         // Weight input with contextual banner
                         VStack(spacing: 8) {
                             WeightInput(
-                                title: "Weight (kg)",
+                                title: "set.weight_label".localized,
                                 weight: $editingWeight,
                                 increment: 0.25
                             ) { newValue in
@@ -651,7 +700,7 @@ struct WorkoutSetRow: View {
                             if hasMultipleIncompleteSets && weightChanged && !weightBannerDismissed {
                                 ApplyToAllBanner(
                                     type: .weight,
-                                    setCount: workoutExercise.sets.filter { !$0.isCompleted }.count,
+                                    setCount: workoutExercise.setsList.filter { !$0.isCompleted }.count,
                                     onApply: {
                                         withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
                                             applyWeightToAllIncompleteSets()
@@ -675,10 +724,10 @@ struct WorkoutSetRow: View {
 
                         // Show planned values for reference
                         HStack {
-                            Text("Planned:")
+                            Text("set.planned".localized)
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
-                            Text("\(set.plannedReps) reps × \(String(format: "%.2f kg", set.plannedWeight))")
+                            Text("set.planned_detail".localized(set.plannedReps, set.plannedWeight))
                                 .font(.caption.weight(.medium))
                                 .foregroundStyle(.secondary)
                             Spacer()
@@ -686,14 +735,12 @@ struct WorkoutSetRow: View {
 
                         // Delete Set Button
                         Button(role: .destructive) {
-                            withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
-                                viewModel.removeSetFromExercise(set, from: workoutExercise)
-                            }
+                            showingDeleteSetAlert = true
                         } label: {
                             HStack(spacing: 6) {
                                 Image(systemName: "trash")
                                     .font(.subheadline)
-                                Text("Delete Set")
+                                Text("set.delete".localized)
                                     .font(.subheadline.weight(.medium))
                             }
                             .foregroundStyle(.red)
@@ -716,8 +763,8 @@ struct WorkoutSetRow: View {
                 .fill(backgroundColor)
         )
         .overlay(
-            RoundedRectangle(cornerRadius: 8)
-                .strokeBorder(isExpanded ? Color.blue.opacity(0.3) : Color.clear, lineWidth: 1)
+            RoundedRectangle(cornerRadius: DesignSystem.Dimensions.cornerRadiusSM)
+                .strokeBorder(isExpanded ? DesignSystem.Colors.tint.opacity(0.3) : Color.clear, lineWidth: 1)
         )
         .opacity(set.isCompleted ? 0.7 : 1.0)
         .onChange(of: set.actualReps) { _, newValue in
@@ -725,6 +772,16 @@ struct WorkoutSetRow: View {
         }
         .onChange(of: set.actualWeight) { _, newValue in
             editingWeight = newValue
+        }
+        .alert("set.delete.title".localized, isPresented: $showingDeleteSetAlert) {
+            Button("set.delete.confirm".localized, role: .destructive) {
+                withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                    viewModel.removeSetFromExercise(set, from: workoutExercise)
+                }
+            }
+            Button("action.cancel".localized, role: .cancel) {}
+        } message: {
+            Text("set.delete.message".localized)
         }
     }
 }
@@ -738,29 +795,30 @@ struct ActionBar: View {
     var body: some View {
         VStack(spacing: 0) {
             Divider()
+                .background(DesignSystem.Colors.divider)
 
             HStack(spacing: 12) {
                 Button(role: .destructive) {
                     onCancel()
                 } label: {
-                    Text("Cancel")
+                    Text("workout.cancel".localized)
                         .frame(maxWidth: .infinity)
-                        .frame(height: 50)
+                        .frame(height: DesignSystem.Dimensions.buttonHeight)
                 }
                 .buttonStyle(.bordered)
 
                 Button {
                     onFinish()
                 } label: {
-                    Label("Finish Workout", systemImage: "checkmark.circle.fill")
+                    Label("workout.finish".localized, systemImage: "checkmark.circle.fill")
                         .frame(maxWidth: .infinity)
-                        .frame(height: 50)
+                        .frame(height: DesignSystem.Dimensions.buttonHeight)
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(.onyxProminent)
             }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 12)
-            .background(.regularMaterial)
+            .padding(.horizontal, DesignSystem.Spacing.lg)
+            .padding(.vertical, DesignSystem.Spacing.md)
+            .background(DesignSystem.Colors.card)
         }
     }
 }
@@ -776,12 +834,12 @@ struct CompactRestTimer: View {
             // Circular progress indicator (small)
             ZStack {
                 Circle()
-                    .stroke(Color.secondary.opacity(0.2), lineWidth: 3)
+                    .stroke(DesignSystem.Colors.divider, lineWidth: 3)
                     .frame(width: 32, height: 32)
 
                 Circle()
                     .trim(from: 0, to: progress)
-                    .stroke(Color.blue, style: StrokeStyle(lineWidth: 3, lineCap: .round))
+                    .stroke(DesignSystem.Colors.tint, style: StrokeStyle(lineWidth: 3, lineCap: .round))
                     .frame(width: 32, height: 32)
                     .rotationEffect(.degrees(-90))
                     .animation(.linear(duration: 1), value: progress)
@@ -789,13 +847,12 @@ struct CompactRestTimer: View {
 
             // Timer text
             VStack(alignment: .leading, spacing: 2) {
-                Text("Rest Time")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                Text("rest_timer.title".localized)
+                    .font(.onyxCaption)
+                    .foregroundStyle(DesignSystem.Colors.textSecondary)
 
                 Text(viewModel.formatTime(viewModel.restTimeRemaining))
-                    .font(.system(.subheadline, design: .rounded, weight: .semibold))
-                    .monospacedDigit()
+                    .font(.onyxNumber)
             }
 
             Spacer()
@@ -808,7 +865,7 @@ struct CompactRestTimer: View {
                 } label: {
                     Image(systemName: "forward.fill")
                         .font(.caption)
-                        .foregroundStyle(.orange)
+                        .foregroundStyle(DesignSystem.Colors.warning)
                 }
                 .buttonStyle(.bordered)
                 .controlSize(.small)
@@ -824,13 +881,13 @@ struct CompactRestTimer: View {
                 .controlSize(.small)
             }
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 12)
-        .background(.ultraThinMaterial)
+        .padding(.horizontal, DesignSystem.Spacing.lg)
+        .padding(.vertical, DesignSystem.Spacing.md)
+        .background(DesignSystem.Colors.card)
         .overlay(
             Rectangle()
                 .frame(height: 1)
-                .foregroundStyle(Color.secondary.opacity(0.2)),
+                .foregroundStyle(DesignSystem.Colors.divider),
             alignment: .bottom
         )
     }
@@ -864,17 +921,17 @@ struct DeleteExerciseConfirmationView: View {
 
             // Content
             VStack(spacing: 8) {
-                Text("Remove Exercise?")
+                Text("delete_exercise.title".localized)
                     .font(.title3.bold())
 
                 let completedCount = exercise.completedSetsCount
                 if completedCount > 0 {
-                    Text("This will remove \(completedCount) completed set\(completedCount == 1 ? "" : "s") and all other data for \(exercise.exerciseName).")
+                    Text("delete_exercise.message_with_sets".localized(completedCount, completedCount == 1 ? "" : "s", exercise.exerciseName))
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                         .multilineTextAlignment(.center)
                 } else {
-                    Text("This will remove all sets for \(exercise.exerciseName) from your workout.")
+                    Text("delete_exercise.message_no_sets".localized(exercise.exerciseName))
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                         .multilineTextAlignment(.center)
@@ -887,7 +944,7 @@ struct DeleteExerciseConfirmationView: View {
                 Button(role: .destructive) {
                     onConfirm()
                 } label: {
-                    Text("Remove")
+                    Text("delete_exercise.remove".localized)
                         .font(.headline)
                         .frame(maxWidth: .infinity)
                         .padding()
@@ -899,17 +956,137 @@ struct DeleteExerciseConfirmationView: View {
                 Button {
                     onCancel()
                 } label: {
-                    Text("Cancel")
+                    Text("delete_exercise.cancel".localized)
                         .font(.headline)
                         .frame(maxWidth: .infinity)
                         .padding()
-                        .background(Color(.secondarySystemGroupedBackground))
-                        .foregroundStyle(.primary)
-                        .clipShape(RoundedRectangle(cornerRadius: 12))
+                        .background(DesignSystem.Colors.card)
+                        .foregroundStyle(DesignSystem.Colors.textPrimary)
+                        .clipShape(RoundedRectangle(cornerRadius: DesignSystem.Dimensions.cornerRadiusMD))
                 }
             }
             .padding(.horizontal)
         }
         .padding(.bottom, 20)
+        .background(DesignSystem.Colors.background)
+    }
+}
+
+// MARK: - Superset Workout Group View
+
+struct SupersetWorkoutGroupView<Content: View>: View {
+    let exerciseCount: Int
+    let supersetExercises: [WorkoutExercise]
+    let letter: String
+    let color: Color
+    @ObservedObject var viewModel: WorkoutViewModel
+    let content: Content
+    @State private var showingRestTimeConfig = false
+
+    // Get rest time from the last exercise's first set (since rest triggers after last exercise in round)
+    private var supersetRestTime: TimeInterval {
+        guard let lastExercise = supersetExercises.sorted(by: { $0.supersetOrder < $1.supersetOrder }).last,
+              let firstSet = lastExercise.setsList.sorted(by: { $0.order < $1.order }).first else {
+            return 60.0
+        }
+        return firstSet.restTime
+    }
+
+    init(
+        exerciseCount: Int,
+        supersetExercises: [WorkoutExercise],
+        letter: String,
+        color: Color,
+        viewModel: WorkoutViewModel,
+        @ViewBuilder content: () -> Content
+    ) {
+        self.exerciseCount = exerciseCount
+        self.supersetExercises = supersetExercises
+        self.letter = letter
+        self.color = color
+        self.viewModel = viewModel
+        self.content = content()
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            // Superset header with rest time indicator
+            HStack(spacing: 6) {
+                Image(systemName: "link")
+                    .font(.caption.weight(.semibold))
+                Text("Superset \(letter)")
+                    .font(.caption.weight(.semibold))
+                Text("(\(exerciseCount) exercises)")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
+                Spacer()
+
+                // Rest time indicator
+                if supersetRestTime > 0 {
+                    HStack(spacing: 4) {
+                        Image(systemName: "timer")
+                            .font(.caption2)
+                        Text(TimeFormatting.formatRestTime(supersetRestTime))
+                            .font(.caption2.weight(.medium))
+                    }
+                    .foregroundStyle(color)
+                }
+            }
+            .foregroundStyle(color)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 6)
+            .background(
+                Capsule()
+                    .fill(color.opacity(0.15))
+            )
+            .padding(.bottom, 8)
+
+            // Superset Rest Timer Configuration
+            SupersetRestTimerConfig(
+                restTime: Binding(
+                    get: { supersetRestTime },
+                    set: { newValue in
+                        // Update rest time on the last exercise's sets
+                        if let lastExercise = supersetExercises.sorted(by: { $0.supersetOrder < $1.supersetOrder }).last {
+                            viewModel.updateRestTimeForExercise(lastExercise, restTime: newValue)
+                        }
+                    }
+                ),
+                isExpanded: $showingRestTimeConfig,
+                onRestTimeChange: { newValue in
+                    // Update rest time on the last exercise's sets
+                    if let lastExercise = supersetExercises.sorted(by: { $0.supersetOrder < $1.supersetOrder }).last {
+                        viewModel.updateRestTimeForExercise(lastExercise, restTime: newValue)
+                    }
+                }
+            )
+            .padding(.bottom, 8)
+
+            // Content with connecting visual
+            HStack(alignment: .top, spacing: 0) {
+                // Vertical connecting line
+                Rectangle()
+                    .fill(color.opacity(0.4))
+                    .frame(width: 3)
+                    .clipShape(RoundedRectangle(cornerRadius: 1.5))
+                    .padding(.leading, 4)
+
+                // Grouped exercises
+                VStack(spacing: 12) {
+                    content
+                }
+                .padding(.leading, 12)
+            }
+        }
+        .padding(12)
+        .background(
+            RoundedRectangle(cornerRadius: DesignSystem.Dimensions.cornerRadiusMD)
+                .fill(color.opacity(0.05))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: DesignSystem.Dimensions.cornerRadiusMD)
+                .strokeBorder(color.opacity(0.2), lineWidth: 1)
+        )
     }
 }

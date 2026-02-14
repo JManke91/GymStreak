@@ -29,12 +29,12 @@ struct ExerciseSelectionView: View {
                 Section {
                     HStack {
                         Image(systemName: "info.circle")
-                            .foregroundColor(.blue)
-                        Text("\(alreadyAddedExercises.count) exercise\(alreadyAddedExercises.count == 1 ? "" : "s") already added")
+                            .foregroundColor(DesignSystem.Colors.tint)
+                        Text("exercise_selection.already_added".localized(alreadyAddedExercises.count))
                             .font(.caption)
                             .foregroundColor(.secondary)
                     }
-                    .listRowBackground(Color.blue.opacity(0.1))
+                    .listRowBackground(DesignSystem.Colors.tint.opacity(0.1))
                 }
             }
 
@@ -52,7 +52,7 @@ struct ExerciseSelectionView: View {
                                 Text(exercise.name)
                                     .font(.headline)
 
-                                Text(exercise.muscleGroup)
+                                Text(MuscleGroups.displayString(for: exercise.muscleGroups))
                                     .font(.caption)
                                     .foregroundColor(.secondary)
                             }
@@ -75,6 +75,7 @@ struct ExerciseSelectionView: View {
             Section {
                 NavigationLink(destination: AddExerciseView(
                     viewModel: exercisesViewModel,
+                    presentationMode: .navigation,
                     onExerciseCreated: { newExercise in
                         // After creating the exercise, navigate to configure it
                         selectedExercise = newExercise
@@ -85,7 +86,7 @@ struct ExerciseSelectionView: View {
                         Image(systemName: "plus.circle.fill")
                             .foregroundColor(.accentColor)
 
-                        Text("Create New Exercise")
+                        Text("exercise_selection.create_new".localized)
                             .foregroundColor(.accentColor)
 
                         Spacer()
@@ -97,9 +98,9 @@ struct ExerciseSelectionView: View {
                 }
             }
         }
-        .navigationTitle("Select Exercise")
+        .navigationTitle("exercise_selection.title".localized)
         .navigationBarTitleDisplayMode(.inline)
-        .searchable(text: $searchText, prompt: "Search exercises")
+        .searchable(text: $searchText, prompt: "exercise_selection.search".localized)
         .navigationDestination(isPresented: $navigateToConfigureExercise) {
             if let exercise = selectedExercise {
                 ConfigureExerciseView(
@@ -120,7 +121,7 @@ struct ExerciseSelectionView: View {
         } else {
             return allExercises.filter { exercise in
                 exercise.name.localizedCaseInsensitiveContains(searchText) ||
-                exercise.muscleGroup.localizedCaseInsensitiveContains(searchText)
+                exercise.muscleGroups.contains { $0.localizedCaseInsensitiveContains(searchText) }
             }
         }
     }

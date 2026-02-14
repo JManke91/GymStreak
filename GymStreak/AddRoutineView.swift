@@ -9,27 +9,27 @@ struct AddRoutineView: View {
     var body: some View {
         NavigationView {
             Form {
-                Section("Routine Details") {
-                    TextField("Routine Name", text: $routineName)
+                Section("add_routine.section.details".localized) {
+                    TextField("add_routine.name_placeholder".localized, text: $routineName)
                 }
-                
-                Section("Next Steps") {
-                    Text("After creating this routine, you can add exercises to it from the routine detail view.")
+
+                Section("add_routine.section.next_steps".localized) {
+                    Text("add_routine.next_steps_description".localized)
                         .font(.caption)
                         .foregroundColor(.secondary)
                 }
             }
-            .navigationTitle("New Routine")
+            .navigationTitle("add_routine.title".localized)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
-                    Button("Cancel") {
+                    Button("action.cancel".localized) {
                         dismiss()
                     }
                 }
-                
+
                 ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("Save") {
+                    Button("action.save".localized) {
                         saveRoutine()
                     }
                     .disabled(routineName.isEmpty)

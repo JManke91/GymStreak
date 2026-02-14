@@ -15,7 +15,7 @@ struct ExercisePickerView: View {
         } else {
             return exercises.filter { exercise in
                 exercise.name.localizedCaseInsensitiveContains(searchText) ||
-                exercise.muscleGroup.localizedCaseInsensitiveContains(searchText)
+                exercise.muscleGroups.contains { $0.localizedCaseInsensitiveContains(searchText) }
             }
         }
     }
@@ -32,29 +32,24 @@ struct ExercisePickerView: View {
                             Text(exercise.name)
                                 .font(.headline)
                                 .foregroundColor(.primary)
-                            HStack {
-                                Text(exercise.muscleGroup)
+                            HStack(spacing: 6) {
+                                Text(MuscleGroups.displayString(for: exercise.muscleGroups))
                                     .font(.caption)
                                     .foregroundColor(.secondary)
-                                if !exercise.exerciseDescription.isEmpty {
-                                    Text("•")
-                                        .foregroundColor(.secondary)
-                                    Text(exercise.exerciseDescription)
-                                        .font(.caption)
-                                        .foregroundColor(.secondary)
-                                        .lineLimit(1)
-                                }
+                                Image(systemName: exercise.equipmentType.icon)
+                                    .font(.caption2)
+                                    .foregroundStyle(.tertiary)
                             }
                         }
                     }
                 }
             }
-            .searchable(text: $searchText, prompt: "Search exercises or muscle groups")
-            .navigationTitle("Choose Exercise")
+            .searchable(text: $searchText, prompt: "exercise_picker.search".localized)
+            .navigationTitle("exercise_picker.title".localized)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("Cancel") {
+                    Button("action.cancel".localized) {
                         dismiss()
                     }
                 }

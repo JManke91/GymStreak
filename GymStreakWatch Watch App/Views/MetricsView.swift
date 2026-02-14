@@ -27,14 +27,14 @@ struct MetricsView: View {
                 // Elapsed time
                 Text(elapsedTime)
                     .font(.system(.title, design: .rounded).monospacedDigit())
-                    .foregroundStyle(.yellow)
+                    .foregroundStyle(OnyxWatch.Colors.tint)
                     .accessibilityLabel("Elapsed time \(elapsedTime)")
 
                 HStack(spacing: 20) {
                     // Heart rate
                     VStack {
                         Image(systemName: "heart.fill")
-                            .foregroundStyle(.red)
+                            .foregroundStyle(OnyxWatch.Colors.destructive)
                         Text("\(heartRate ?? 0)")
                             .font(.title3.monospacedDigit())
                             .fontWeight(.semibold)
@@ -47,7 +47,7 @@ struct MetricsView: View {
                     // Calories
                     VStack {
                         Image(systemName: "flame.fill")
-                            .foregroundStyle(.orange)
+                            .foregroundStyle(OnyxWatch.Colors.warning)
                         Text("\(Int(calories ?? 0))")
                             .font(.title3.monospacedDigit())
                             .fontWeight(.semibold)

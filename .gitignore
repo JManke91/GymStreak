@@ -80,7 +80,12 @@ Dependencies/
 fastlane/report.xml
 fastlane/Preview.html
 fastlane/screenshots/**/*.png
+fastlane/screenshots/**/*.jpg
 fastlane/test_output
+
+# Ruby/Bundler
+vendor/bundle/
+.bundle/
 
 # Code Injection
 #

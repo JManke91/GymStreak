@@ -1,55 +1,125 @@
 import SwiftUI
 
+// MARK: - History View Mode
+
+enum HistoryViewMode: String, CaseIterable {
+    case workouts
+    case progress
+
+    var title: String {
+        switch self {
+        case .workouts: return "history.mode.workouts".localized
+        case .progress: return "history.mode.progress".localized
+        }
+    }
+}
+
+// MARK: - Workout History View
+
 struct WorkoutHistoryView: View {
     @ObservedObject var viewModel: WorkoutViewModel
     @Environment(\.modelContext) private var modelContext
-    @State private var selectedWorkout: WorkoutSession?
+    @State private var selectedMode: HistoryViewMode = .workouts
+    @State private var workoutToDelete: WorkoutSession?
+    @State private var showingDeleteAlert = false
 
     var body: some View {
-        NavigationView {
-            Group {
-                if viewModel.workoutHistory.isEmpty {
-                    ContentUnavailableView {
-                        Label("No Workouts Yet", systemImage: "figure.strengthtraining.traditional")
-                    } description: {
-                        Text("Start your first workout to see your history here")
+        NavigationStack {
+            VStack(spacing: 0) {
+                // Segmented Control
+                Picker("history.mode".localized, selection: $selectedMode) {
+                    ForEach(HistoryViewMode.allCases, id: \.self) { mode in
+                        Text(mode.title).tag(mode)
                     }
-                } else {
-                    List {
-                        ForEach(viewModel.workoutHistory) { workout in
-                            Button {
-                                selectedWorkout = workout
-                            } label: {
-                                WorkoutHistoryCard(workout: workout)
-                            }
-                            .buttonStyle(.plain)
-                            .listRowInsets(EdgeInsets())
-                            .listRowSeparator(.hidden)
-                        }
-                        .onDelete(perform: deleteWorkouts)
-                    }
-                    .listStyle(.plain)
-                    .refreshable {
-                        viewModel.fetchWorkoutHistory()
+                }
+                .pickerStyle(.segmented)
+                .padding(.horizontal)
+                .padding(.vertical, 8)
+
+                // Content based on selection
+                Group {
+                    switch selectedMode {
+                    case .workouts:
+                        WorkoutListContent(
+                            viewModel: viewModel,
+                            workoutToDelete: $workoutToDelete,
+                            showingDeleteAlert: $showingDeleteAlert
+                        )
+                    case .progress:
+                        ExerciseProgressListView()
                     }
                 }
             }
-            .navigationTitle("History")
+            .navigationTitle("history.title".localized)
             .navigationBarTitleDisplayMode(.large)
+            .navigationDestination(for: WorkoutSession.self) { workout in
+                WorkoutDetailView(workout: workout, viewModel: viewModel)
+            }
+            .navigationDestination(for: ExerciseWithHistory.self) { exercise in
+                ExerciseProgressChartView(
+                    exerciseName: exercise.name,
+                    availableExercises: exercise.allExercises
+                )
+            }
             .onAppear {
                 viewModel.updateModelContext(modelContext)
             }
-            .sheet(item: $selectedWorkout) { workout in
-                WorkoutDetailView(workout: workout)
+            .alert("workout.history.delete.title".localized, isPresented: $showingDeleteAlert) {
+                Button("action.delete".localized, role: .destructive) {
+                    if let workout = workoutToDelete {
+                        viewModel.deleteWorkout(workout)
+                        workoutToDelete = nil
+                    }
+                }
+                Button("action.cancel".localized, role: .cancel) {
+                    workoutToDelete = nil
+                }
+            } message: {
+                Text("workout.history.delete.message".localized)
+            }
+        }
+    }
+}
+
+// MARK: - Workout List Content
+
+struct WorkoutListContent: View {
+    @ObservedObject var viewModel: WorkoutViewModel
+    @Binding var workoutToDelete: WorkoutSession?
+    @Binding var showingDeleteAlert: Bool
+
+    var body: some View {
+        Group {
+            if viewModel.workoutHistory.isEmpty {
+                ContentUnavailableView {
+                    Label("history.empty.title".localized, systemImage: "figure.strengthtraining.traditional")
+                } description: {
+                    Text("history.empty.description".localized)
+                }
+            } else {
+                List {
+                    ForEach(viewModel.workoutHistory) { workout in
+                        NavigationLink(value: workout) {
+                            WorkoutHistoryCard(workout: workout)
+                        }
+                        .buttonStyle(.plain)
+                        .listRowInsets(EdgeInsets())
+                        .listRowSeparator(.hidden)
+                    }
+                    .onDelete(perform: deleteWorkouts)
+                }
+                .listStyle(.plain)
+                .refreshable {
+                    viewModel.fetchWorkoutHistory()
+                }
             }
         }
     }
 
     private func deleteWorkouts(offsets: IndexSet) {
-        for index in offsets {
-            let workout = viewModel.workoutHistory[index]
-            viewModel.deleteWorkout(workout)
-        }
+        guard let index = offsets.first else { return }
+        workoutToDelete = viewModel.workoutHistory[index]
+        showingDeleteAlert = true
     }
 }
 
@@ -72,7 +142,7 @@ struct WorkoutHistoryCard: View {
             }
             .frame(width: 60)
             .padding(.vertical, 8)
-            .background(Color.blue.opacity(0.1))
+            .background(DesignSystem.Colors.tint.opacity(0.1))
             .clipShape(RoundedRectangle(cornerRadius: 8))
 
             VStack(alignment: .leading, spacing: 6) {
@@ -91,13 +161,9 @@ struct WorkoutHistoryCard: View {
             }
 
             Spacer()
-
-            Image(systemName: "chevron.right")
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(.tertiary)
         }
         .padding()
-        .background(Color(.secondarySystemGroupedBackground))
+        .background(DesignSystem.Colors.card)
         .clipShape(RoundedRectangle(cornerRadius: 12))
         .padding(.horizontal)
         .padding(.vertical, 4)

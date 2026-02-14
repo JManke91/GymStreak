@@ -32,9 +32,17 @@ final class WatchConnectivityManager: NSObject, ObservableObject {
 
     func syncRoutines(_ routines: [Routine]) {
         guard let session = session, session.activationState == .activated else {
-            print("WatchConnectivity: Session not activated")
+            print("WatchConnectivity: Cannot sync - session not activated")
             return
         }
+
+        // On simulator, isWatchAppInstalled is always false even when Watch app is running
+        #if !targetEnvironment(simulator)
+        guard session.isWatchAppInstalled else {
+            print("WatchConnectivity: Cannot sync - Watch app not installed")
+            return
+        }
+        #endif
 
         let watchRoutines = routines.map { $0.toWatchRoutine() }
 
@@ -106,6 +114,19 @@ extension WatchConnectivityManager: WCSessionDelegate {
         }
     }
 
+    nonisolated func sessionWatchStateDidChange(_ session: WCSession) {
+        Task { @MainActor in
+            self.isPaired = session.isPaired
+            self.isWatchAppInstalled = session.isWatchAppInstalled
+            print("WatchConnectivity: Watch state changed - paired: \(session.isPaired), installed: \(session.isWatchAppInstalled)")
+
+            // Notify so RoutinesViewModel can trigger sync
+            if session.isWatchAppInstalled {
+                NotificationCenter.default.post(name: .watchAppBecameAvailable, object: nil)
+            }
+        }
+    }
+
     nonisolated func session(_ session: WCSession, didReceiveUserInfo userInfo: [String: Any] = [:]) {
         // Handle completed workouts sent back from Watch
         if let workoutData = userInfo["completedWorkout"] as? Data {
@@ -139,4 +160,5 @@ extension WatchConnectivityManager: WCSessionDelegate {
 
 extension Notification.Name {
     static let watchWorkoutCompleted = Notification.Name("watchWorkoutCompleted")
+    static let watchAppBecameAvailable = Notification.Name("watchAppBecameAvailable")
 }

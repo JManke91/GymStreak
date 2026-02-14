@@ -17,14 +17,14 @@ struct AddExerciseToWorkoutView: View {
         } else {
             return exercises.filter { exercise in
                 exercise.name.localizedCaseInsensitiveContains(searchText) ||
-                exercise.muscleGroup.localizedCaseInsensitiveContains(searchText)
+                exercise.muscleGroups.contains { $0.localizedCaseInsensitiveContains(searchText) }
             }
         }
     }
 
     private func isExerciseAlreadyInWorkout(_ exercise: Exercise) -> Bool {
         guard let session = workoutViewModel.currentSession else { return false }
-        return session.workoutExercises.contains(where: { $0.exerciseName == exercise.name })
+        return session.workoutExercisesList.contains(where: { $0.exerciseName == exercise.name })
     }
 
     var body: some View {
@@ -36,16 +36,16 @@ struct AddExerciseToWorkoutView: View {
                         HStack(spacing: 12) {
                             Image(systemName: "plus.circle.fill")
                                 .font(.title3)
-                                .foregroundStyle(.blue)
+                                .foregroundStyle(DesignSystem.Colors.tint)
                                 .frame(width: 40, height: 40)
-                                .background(Color.blue.opacity(0.1))
+                                .background(DesignSystem.Colors.tint.opacity(0.1))
                                 .clipShape(RoundedRectangle(cornerRadius: 10))
 
                             VStack(alignment: .leading, spacing: 4) {
-                                Text("Create New Exercise")
+                                Text("add_to_workout.create_new".localized)
                                     .font(.headline)
                                     .foregroundStyle(.primary)
-                                Text("Add a custom exercise to your library")
+                                Text("add_to_workout.create_description".localized)
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
                             }
@@ -62,31 +62,23 @@ struct AddExerciseToWorkoutView: View {
                     Section {
                         ForEach(alreadyAddedExercises) { exercise in
                             HStack(spacing: 12) {
-                                // Muscle group icon (subdued)
-                                Image(systemName: MuscleGroups.icon(for: exercise.muscleGroup))
-                                    .font(.title3)
-                                    .symbolRenderingMode(.hierarchical)
-                                    .foregroundStyle(.secondary)
-                                    .frame(width: 40, height: 40)
-                                    .background(Color.secondary.opacity(0.1))
-                                    .clipShape(RoundedRectangle(cornerRadius: 10))
+                                // Muscle group badge (subdued)
+                                MuscleGroupAbbreviationBadge(
+                                    muscleGroups: exercise.muscleGroups,
+                                    isActive: false
+                                )
 
                                 VStack(alignment: .leading, spacing: 4) {
                                     Text(exercise.name)
                                         .font(.headline)
                                         .foregroundStyle(.secondary)
-                                    HStack {
-                                        Text(exercise.muscleGroup)
+                                    HStack(spacing: 6) {
+                                        Text(MuscleGroups.displayString(for: exercise.muscleGroups))
                                             .font(.caption)
                                             .foregroundStyle(.tertiary)
-                                        if !exercise.exerciseDescription.isEmpty {
-                                            Text("•")
-                                                .foregroundStyle(.tertiary)
-                                            Text(exercise.exerciseDescription)
-                                                .font(.caption)
-                                                .foregroundStyle(.tertiary)
-                                                .lineLimit(1)
-                                        }
+                                        Image(systemName: exercise.equipmentType.icon)
+                                            .font(.caption2)
+                                            .foregroundStyle(.quaternary)
                                     }
                                 }
 
@@ -98,48 +90,40 @@ struct AddExerciseToWorkoutView: View {
                             }
                             .padding(.vertical, 4)
                             .listRowBackground(Color(.secondarySystemGroupedBackground))
-                            .accessibilityLabel("\(exercise.name), \(exercise.muscleGroup), already in workout")
+                            .accessibilityLabel("\(exercise.name), \(MuscleGroups.displayString(for: exercise.muscleGroups)), \(exercise.equipmentType.displayName), already in workout")
                             .accessibilityHint("This exercise is already in your current workout")
                         }
                     } header: {
-                        Label("Already in Workout", systemImage: "checkmark.circle.fill")
+                        Label("add_to_workout.already_added".localized, systemImage: "checkmark.circle.fill")
                     }
                 }
 
                 // Section 2: Available Exercises
                 let availableExercises = filteredExercises.filter { !isExerciseAlreadyInWorkout($0) }
                 if !availableExercises.isEmpty {
-                    Section("Available Exercises") {
+                    Section("add_to_workout.available".localized) {
                         ForEach(availableExercises) { exercise in
                             Button {
                                 addExercise(exercise)
                             } label: {
                                 HStack(spacing: 12) {
-                                    // Muscle group icon (active)
-                                    Image(systemName: MuscleGroups.icon(for: exercise.muscleGroup))
-                                        .font(.title3)
-                                        .symbolRenderingMode(.hierarchical)
-                                        .foregroundStyle(.blue)
-                                        .frame(width: 40, height: 40)
-                                        .background(Color.blue.opacity(0.1))
-                                        .clipShape(RoundedRectangle(cornerRadius: 10))
+                                    // Muscle group badge (active)
+                                    MuscleGroupAbbreviationBadge(
+                                        muscleGroups: exercise.muscleGroups,
+                                        isActive: true
+                                    )
 
                                     VStack(alignment: .leading, spacing: 4) {
                                         Text(exercise.name)
                                             .font(.headline)
                                             .foregroundStyle(.primary)
-                                        HStack {
-                                            Text(exercise.muscleGroup)
+                                        HStack(spacing: 6) {
+                                            Text(MuscleGroups.displayString(for: exercise.muscleGroups))
                                                 .font(.caption)
                                                 .foregroundStyle(.secondary)
-                                            if !exercise.exerciseDescription.isEmpty {
-                                                Text("•")
-                                                    .foregroundStyle(.secondary)
-                                                Text(exercise.exerciseDescription)
-                                                    .font(.caption)
-                                                    .foregroundStyle(.secondary)
-                                                    .lineLimit(1)
-                                            }
+                                            Image(systemName: exercise.equipmentType.icon)
+                                                .font(.caption2)
+                                                .foregroundStyle(.tertiary)
                                         }
                                     }
 
@@ -153,19 +137,19 @@ struct AddExerciseToWorkoutView: View {
                                 .contentShape(Rectangle())
                             }
                             .buttonStyle(.plain)
-                            .accessibilityLabel("Add \(exercise.name), \(exercise.muscleGroup)")
+                            .accessibilityLabel("Add \(exercise.name), \(MuscleGroups.displayString(for: exercise.muscleGroups)), \(exercise.equipmentType.displayName)")
                             .accessibilityHint("Double-tap to add to workout")
                         }
                     }
                 }
             }
             .listStyle(.insetGrouped)
-            .navigationTitle("Add Exercise")
+            .navigationTitle("add_to_workout.title".localized)
             .navigationBarTitleDisplayMode(.inline)
-            .searchable(text: $searchText, prompt: "Search exercises or muscle groups")
+            .searchable(text: $searchText, prompt: "add_to_workout.search".localized)
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
-                    Button("Cancel") {
+                    Button("action.cancel".localized) {
                         dismiss()
                     }
                 }
@@ -175,8 +159,9 @@ struct AddExerciseToWorkoutView: View {
             }
             .navigationDestination(for: String.self) { destination in
                 if destination == "createNewExercise" {
-                    CreateExerciseInlineView(
-                        exercisesViewModel: exercisesViewModel,
+                    AddExerciseView(
+                        viewModel: exercisesViewModel,
+                        presentationMode: .navigation,
                         onExerciseCreated: { newExercise in
                             // Add the newly created exercise to the workout
                             addExercise(newExercise)

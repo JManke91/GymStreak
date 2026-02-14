@@ -6,7 +6,7 @@ struct WorkoutView: View {
             VStack(spacing: 20) {
                 Image(systemName: "dumbbell")
                     .font(.system(size: 60))
-                    .foregroundColor(.blue)
+                    .foregroundColor(DesignSystem.Colors.tint)
                 
                 Text("Workout Tab")
                     .font(.title)

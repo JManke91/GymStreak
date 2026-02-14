@@ -3,21 +3,21 @@ import SwiftUI
 struct ExerciseDetailView: View {
     let exercise: Exercise
     @ObservedObject var viewModel: ExercisesViewModel
-    @State private var showingDeleteAlert = false
+    @Environment(\.dismiss) private var dismiss
     @State private var isEditing = false
 
     @State private var exerciseName: String = ""
-    @State private var muscleGroup: String = ""
-    @State private var exerciseDescription: String = ""
+    @State private var muscleGroups: [String] = []
+    @State private var equipmentType: EquipmentType = .dumbbell
 
     var body: some View {
         List {
-            Section("Exercise Details") {
+            Section {
                 HStack {
-                    Text("Name")
+                    Text("exercises.name".localized)
                     Spacer()
                     if isEditing {
-                        TextField("Exercise Name", text: $exerciseName)
+                        TextField("exercises.name".localized, text: $exerciseName)
                             .multilineTextAlignment(.trailing)
                     } else {
                         Text(exercise.name)
@@ -25,52 +25,27 @@ struct ExerciseDetailView: View {
                     }
                 }
 
-                HStack {
-                    Text("Muscle Group")
-                    Spacer()
-                    if isEditing {
-                        Picker("Muscle Group", selection: $muscleGroup) {
-                            ForEach(MuscleGroups.all, id: \.self) { muscleGroup in
-                                Text(muscleGroup).tag(muscleGroup)
-                            }
-                        }
-                        .labelsHidden()
-                    } else {
-                        Text(exercise.muscleGroup)
+                if isEditing {
+                    MuscleGroupPicker(selectedMuscleGroups: $muscleGroups)
+                } else {
+                    HStack {
+                        Text("exercises.muscle_groups".localized)
+                        Spacer()
+                        Text(MuscleGroups.displayString(for: exercise.muscleGroups))
+                            .foregroundColor(.secondary)
+                            .multilineTextAlignment(.trailing)
+                    }
+                }
+
+                if isEditing {
+                    EquipmentTypePicker(selectedEquipmentType: $equipmentType)
+                } else {
+                    HStack {
+                        Text("exercises.equipment_type".localized)
+                        Spacer()
+                        Label(exercise.equipmentType.displayName, systemImage: exercise.equipmentType.icon)
                             .foregroundColor(.secondary)
                     }
-                }
-
-                if isEditing || !exercise.exerciseDescription.isEmpty {
-                    HStack(alignment: .top) {
-                        Text("Description")
-                        Spacer()
-                        if isEditing {
-                            TextField("Optional", text: $exerciseDescription, axis: .vertical)
-                                .multilineTextAlignment(.trailing)
-                                .lineLimit(3...6)
-                        } else {
-                            Text(exercise.exerciseDescription)
-                                .foregroundColor(.secondary)
-                                .multilineTextAlignment(.trailing)
-                        }
-                    }
-                }
-            }
-
-            Section("Info") {
-                HStack {
-                    Text("Created")
-                    Spacer()
-                    Text(exercise.createdAt, style: .date)
-                        .foregroundColor(.secondary)
-                }
-
-                HStack {
-                    Text("Last Updated")
-                    Spacer()
-                    Text(exercise.updatedAt, style: .date)
-                        .foregroundColor(.secondary)
                 }
             }
         }
@@ -79,17 +54,17 @@ struct ExerciseDetailView: View {
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
                 if isEditing {
-                    Button("Done") {
+                    Button("action.done".localized) {
                         saveExercise()
                     }
-                    .disabled(exerciseName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    .disabled(exerciseName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || muscleGroups.isEmpty)
                 } else {
                     Menu {
-                        Button("Edit Exercise") {
+                        Button("exercise.edit".localized) {
                             enterEditMode()
                         }
-                        Button("Delete Exercise", role: .destructive) {
-                            showingDeleteAlert = true
+                        Button("exercise.delete".localized, role: .destructive) {
+                            viewModel.requestDeleteExercise(exercise)
                         }
                     } label: {
                         Image(systemName: "ellipsis.circle")
@@ -99,29 +74,40 @@ struct ExerciseDetailView: View {
 
             if isEditing {
                 ToolbarItem(placement: .navigationBarLeading) {
-                    Button("Cancel") {
+                    Button("action.cancel".localized) {
                         cancelEditing()
                     }
                 }
             }
         }
-        .alert("Delete Exercise", isPresented: $showingDeleteAlert) {
-            Button("Delete", role: .destructive) {
-                viewModel.deleteExercise(exercise)
+        .alert("exercises.delete.confirmation.title".localized, isPresented: $viewModel.showingDeleteConfirmation) {
+            Button("common.cancel".localized, role: .cancel) {
+                viewModel.cancelDeleteExercise()
             }
-            Button("Cancel", role: .cancel) {}
+            Button("exercises.delete.confirm".localized, role: .destructive) {
+                viewModel.confirmDeleteExercise()
+                dismiss()
+            }
         } message: {
-            Text("Are you sure you want to delete '\(exercise.name)'? This action cannot be undone.")
+            let exerciseName = viewModel.exerciseToDelete?.name ?? ""
+            let routineNames = viewModel.routinesUsingExercise.map(\.name).joined(separator: ", ")
+            Text(String(format: "exercises.delete.confirmation.message".localized, exerciseName, routineNames))
         }
         .onAppear {
             loadExerciseData()
+        }
+        .onChange(of: viewModel.exercises) { _, exercises in
+            // Dismiss if the current exercise was deleted
+            if !exercises.contains(where: { $0.id == exercise.id }) {
+                dismiss()
+            }
         }
     }
 
     private func loadExerciseData() {
         exerciseName = exercise.name
-        muscleGroup = exercise.muscleGroup
-        exerciseDescription = exercise.exerciseDescription
+        muscleGroups = exercise.muscleGroups
+        equipmentType = exercise.equipmentType
     }
 
     private func enterEditMode() {
@@ -143,8 +129,8 @@ struct ExerciseDetailView: View {
 
         withAnimation(.easeInOut(duration: 0.2)) {
             exercise.name = trimmedName
-            exercise.muscleGroup = muscleGroup
-            exercise.exerciseDescription = exerciseDescription
+            exercise.muscleGroups = muscleGroups
+            exercise.equipmentType = equipmentType
             viewModel.updateExercise(exercise)
             isEditing = false
         }

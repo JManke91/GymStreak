@@ -22,6 +22,10 @@ final class WatchConnectivityManager: NSObject, ObservableObject {
 
     func setRoutineStore(_ store: RoutineStore) {
         self.routineStore = store
+        // Process any context that arrived before store was set
+        if let session = session, !session.receivedApplicationContext.isEmpty {
+            processApplicationContext(session.receivedApplicationContext)
+        }
     }
 
     // MARK: - Send Completed Workout to iOS

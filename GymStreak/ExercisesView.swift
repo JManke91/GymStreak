@@ -3,25 +3,32 @@ import SwiftData
 
 struct ExercisesView: View {
     @Environment(\.modelContext) private var modelContext
-    @StateObject private var viewModel: ExercisesViewModel
-    
-    init() {
-        self._viewModel = StateObject(wrappedValue: ExercisesViewModel(modelContext: ModelContext(try! ModelContainer(for: Exercise.self))))
+
+    var body: some View {
+        ExercisesViewInternal(modelContext: modelContext)
     }
-    
+}
+
+private struct ExercisesViewInternal: View {
+    @StateObject private var viewModel: ExercisesViewModel
+
+    init(modelContext: ModelContext) {
+        self._viewModel = StateObject(wrappedValue: ExercisesViewModel(modelContext: modelContext))
+    }
+
     var body: some View {
         NavigationView {
             Group {
                 if viewModel.exercises.isEmpty {
                     ContentUnavailableView {
-                        Label("No Exercises Yet", systemImage: "dumbbell")
+                        Label("exercises.empty.title".localized, systemImage: "dumbbell")
                     } description: {
-                        Text("Add your first exercise to build your library")
+                        Text("exercises.empty.description".localized)
                     } actions: {
-                        Button("Add Exercise") {
+                        Button("exercises.add".localized) {
                             viewModel.showingAddExercise = true
                         }
-                        .buttonStyle(.borderedProminent)
+                        .buttonStyle(.onyxProminent)
                     }
                 } else {
                     List {
@@ -34,50 +41,83 @@ struct ExercisesView: View {
                     }
                 }
             }
-            .navigationTitle("Exercises")
+            .navigationTitle("exercises.title".localized)
             .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("Add Exercise") {
-                        viewModel.showingAddExercise = true
+                #if DEBUG
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button("Delete All", role: .destructive) {
+                        viewModel.requestDeleteAllExercises()
+                    }
+                    .foregroundColor(.red)
+                }
+                #endif
+                if !viewModel.exercises.isEmpty {
+                    ToolbarItem(placement: .navigationBarTrailing) {
+                        Button {
+                            viewModel.showingAddExercise = true
+                        } label: {
+                            Image(systemName: "plus")
+                        }
+                        .accessibilityLabel("exercises.add".localized)
                     }
                 }
             }
             .sheet(isPresented: $viewModel.showingAddExercise) {
                 AddExerciseView(viewModel: viewModel)
             }
+            .alert("exercises.delete.confirmation.title".localized, isPresented: $viewModel.showingDeleteConfirmation) {
+                Button("common.cancel".localized, role: .cancel) {
+                    viewModel.cancelDeleteExercise()
+                }
+                Button("exercises.delete.confirm".localized, role: .destructive) {
+                    viewModel.confirmDeleteExercise()
+                }
+            } message: {
+                let exerciseName = viewModel.exerciseToDelete?.name ?? ""
+                if viewModel.routinesUsingExercise.isEmpty {
+                    Text(String(format: "exercises.delete.confirmation.message_standalone".localized, exerciseName))
+                } else {
+                    let routineNames = viewModel.routinesUsingExercise.map(\.name).joined(separator: ", ")
+                    Text(String(format: "exercises.delete.confirmation.message".localized, exerciseName, routineNames))
+                }
+            }
+            .alert("exercises.deleteAll.confirmation.title".localized, isPresented: $viewModel.showingDeleteAllConfirmation) {
+                Button("common.cancel".localized, role: .cancel) {
+                    viewModel.cancelDeleteAllExercises()
+                }
+                Button("exercises.deleteAll.confirm".localized, role: .destructive) {
+                    viewModel.confirmDeleteAllExercises()
+                }
+            } message: {
+                Text("exercises.deleteAll.confirmation.message".localized)
+            }
         }
         .onAppear {
-            viewModel.updateModelContext(modelContext)
             viewModel.fetchExercises()
         }
     }
-    
+
     private func deleteExercises(offsets: IndexSet) {
         for index in offsets {
-            viewModel.deleteExercise(viewModel.exercises[index])
+            viewModel.requestDeleteExercise(viewModel.exercises[index])
         }
     }
 }
 
 struct ExerciseRowView: View {
     let exercise: Exercise
-    
+
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             Text(exercise.name)
                 .font(.headline)
-            HStack {
-                Text(exercise.muscleGroup)
+            HStack(spacing: 6) {
+                Text(MuscleGroups.displayString(for: exercise.muscleGroups))
                     .font(.caption)
                     .foregroundColor(.secondary)
-                if !exercise.exerciseDescription.isEmpty {
-                    Text("•")
-                        .foregroundColor(.secondary)
-                    Text(exercise.exerciseDescription)
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                        .lineLimit(1)
-                }
+                Image(systemName: exercise.equipmentType.icon)
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
             }
         }
         .padding(.vertical, 4)

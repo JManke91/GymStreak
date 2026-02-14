@@ -5,6 +5,8 @@ struct RoutineExerciseDetailView: View {
     @ObservedObject var viewModel: RoutinesViewModel
     @State private var showingEditExercise = false
     @State private var showingDeleteAlert = false
+    @State private var showingDeleteSetAlert = false
+    @State private var setPendingDeletion: ExerciseSet?
     @State private var editingSetId: UUID?
     @State private var editingReps: Int = 10
     @State private var editingWeight: Double = 0.0
@@ -12,59 +14,52 @@ struct RoutineExerciseDetailView: View {
 
     // Computed property to get current rest time from sets
     private var globalRestTime: TimeInterval {
-        routineExercise.sets.first?.restTime ?? 0.0
+        routineExercise.setsList.first?.restTime ?? 0.0
     }
     
     var body: some View {
         List {
-            Section("Exercise Info") {
+            Section("routine_exercise_detail.section.info".localized) {
                 if let exercise = routineExercise.exercise {
                     HStack {
-                        Text("Name")
+                        Text("routine_exercise_detail.label.name".localized)
                         Spacer()
                         Text(exercise.name)
                             .foregroundColor(.secondary)
                     }
-                    
+
                     HStack {
-                        Text("Muscle Group")
+                        Text("routine_exercise_detail.label.muscle_groups".localized)
                         Spacer()
-                        Text(exercise.muscleGroup)
+                        Text(MuscleGroups.displayString(for: exercise.muscleGroups))
                             .foregroundColor(.secondary)
                     }
-                    
-                    if !exercise.exerciseDescription.isEmpty {
-                        HStack {
-                            Text("Description")
-                            Spacer()
-                            Text(exercise.exerciseDescription)
-                                .foregroundColor(.secondary)
-                                .multilineTextAlignment(.trailing)
-                        }
-                    }
                 } else {
-                    Text("Exercise not found")
+                    Text("routine_exercise_detail.error.not_found".localized)
                         .foregroundColor(.red)
                 }
-                
+
                 HStack {
-                    Text("Sets")
+                    Text("routine_exercise_detail.label.sets".localized)
                     Spacer()
-                    Text("\(routineExercise.sets.count)")
+                    Text("\(routineExercise.setsList.count)")
                         .foregroundColor(.secondary)
                 }
             }
             
-            Section("Sets") {
-                ForEach(Array(routineExercise.sets.enumerated()), id: \.element.id) { index, set in
+            Section("routine_exercise_detail.section.sets".localized) {
+                ForEach(Array(routineExercise.setsList.sorted(by: { $0.order < $1.order }).enumerated()), id: \.element.id) { index, set in
                     VStack(alignment: .leading, spacing: 0) {
                         // Collapsible set header
                         Button(action: {
                             withAnimation(.easeInOut(duration: 0.3)) {
                                 if editingSetId == set.id {
-                                    // Collapse
+                                    // Save before collapsing
+                                    saveCurrentEditingSet()
                                     editingSetId = nil
                                 } else {
+                                    // Save currently expanded set before switching
+                                    saveCurrentEditingSet()
                                     // Expand and load values
                                     editingSetId = set.id
                                     editingReps = set.reps
@@ -73,11 +68,11 @@ struct RoutineExerciseDetailView: View {
                             }
                         }) {
                             HStack {
-                                Text("Set \(index + 1)")
+                                Text("routine_exercise_detail.set_number".localized(index + 1))
                                     .font(.headline)
                                     .foregroundColor(.primary)
                                 Spacer()
-                                Text("\(set.reps) reps • \(set.weight, specifier: "%.1f") kg")
+                                Text("routine_exercise_detail.set_detail".localized(set.reps, set.weight))
                                     .foregroundColor(.secondary)
                                 Image(systemName: "chevron.right")
                                     .font(.caption)
@@ -93,22 +88,24 @@ struct RoutineExerciseDetailView: View {
                         if editingSetId == set.id {
                             VStack(spacing: 12) {
                                 HStack {
-                                    Text("Reps:")
+                                    Text("routine_exercise_detail.reps_label".localized)
                                     Spacer()
                                     Stepper("\(editingReps)", value: $editingReps, in: 1...100)
                                         .onChange(of: editingReps) { _, newValue in
+                                            guard editingSetId == set.id else { return }
                                             updateSet(set, reps: newValue)
                                         }
                                 }
 
                                 HStack {
-                                    Text("Weight (kg):")
+                                    Text("routine_exercise_detail.weight_label".localized)
                                     Spacer()
                                     TextField("0.0", value: $editingWeight, format: .number)
                                         .keyboardType(.decimalPad)
                                         .multilineTextAlignment(.trailing)
                                         .frame(width: 80)
                                         .onChange(of: editingWeight) { _, newValue in
+                                            guard editingSetId == set.id else { return }
                                             updateSet(set, weight: newValue)
                                         }
                                 }
@@ -121,12 +118,18 @@ struct RoutineExerciseDetailView: View {
                         }
                     }
                 }
-                .onDelete(perform: deleteSets)
+                .onDelete { offsets in
+                    let sortedSets = routineExercise.setsList.sorted(by: { $0.order < $1.order })
+                    if let index = offsets.first {
+                        setPendingDeletion = sortedSets[index]
+                        showingDeleteSetAlert = true
+                    }
+                }
 
-                Button("Add Set") {
+                Button("routine_exercise_detail.add_set".localized) {
                     addNewSet()
                 }
-                .foregroundColor(.blue)
+                .foregroundColor(DesignSystem.Colors.tint)
             }
 
             Section {
@@ -141,33 +144,47 @@ struct RoutineExerciseDetailView: View {
                     showToggle: true
                 )
             } header: {
-                Text("Rest Timer")
+                Text("routine_exercise_detail.section.rest_timer".localized)
             }
         }
         .navigationTitle(routineExercise.exercise?.name ?? "Exercise")
         .navigationBarTitleDisplayMode(.large)
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
-                Button("Delete", role: .destructive) {
+                Button("routine_exercise_detail.delete".localized, role: .destructive) {
                     showingDeleteAlert = true
                 }
             }
         }
-        .alert("Delete Exercise", isPresented: $showingDeleteAlert) {
-            Button("Delete", role: .destructive) {
+        .alert("routine_exercise_detail.delete_alert.title".localized, isPresented: $showingDeleteAlert) {
+            Button("routine_exercise_detail.delete".localized, role: .destructive) {
                 if let routine = routineExercise.routine {
                     viewModel.removeRoutineExercise(routineExercise, from: routine)
                 }
             }
-            Button("Cancel", role: .cancel) {}
+            Button("action.cancel".localized, role: .cancel) {}
         } message: {
-            Text("Are you sure you want to delete this exercise from the routine? This action cannot be undone.")
+            Text("routine_exercise_detail.delete_alert.message".localized)
+        }
+        .alert("set.delete.title".localized, isPresented: $showingDeleteSetAlert) {
+            Button("set.delete.confirm".localized, role: .destructive) {
+                if let set = setPendingDeletion {
+                    viewModel.removeSet(set, from: routineExercise)
+                    setPendingDeletion = nil
+                }
+            }
+            Button("action.cancel".localized, role: .cancel) {
+                setPendingDeletion = nil
+            }
+        } message: {
+            Text("set.delete.message".localized)
         }
     }
 
     private func deleteSets(offsets: IndexSet) {
+        let sortedSets = routineExercise.setsList.sorted(by: { $0.order < $1.order })
         for index in offsets {
-            viewModel.removeSet(routineExercise.sets[index], from: routineExercise)
+            viewModel.removeSet(sortedSets[index], from: routineExercise)
         }
     }
 
@@ -175,7 +192,7 @@ struct RoutineExerciseDetailView: View {
         viewModel.addSet(to: routineExercise)
 
         // Get the newly added set (last one)
-        if let newSet = routineExercise.sets.last {
+        if let newSet = routineExercise.setsList.last {
             // Update its rest time to match global setting
             newSet.restTime = globalRestTime
             viewModel.updateSet(newSet)
@@ -186,6 +203,16 @@ struct RoutineExerciseDetailView: View {
                 editingReps = newSet.reps
                 editingWeight = newSet.weight
             }
+        }
+    }
+
+    private func saveCurrentEditingSet() {
+        guard let currentId = editingSetId,
+              let currentSet = routineExercise.setsList.first(where: { $0.id == currentId }) else { return }
+        if currentSet.reps != editingReps || currentSet.weight != editingWeight {
+            currentSet.reps = editingReps
+            currentSet.weight = editingWeight
+            viewModel.updateSet(currentSet)
         }
     }
 
@@ -200,7 +227,7 @@ struct RoutineExerciseDetailView: View {
     }
 
     private func updateAllSetsRestTime(_ restTime: TimeInterval) {
-        for set in routineExercise.sets {
+        for set in routineExercise.setsList {
             set.restTime = restTime
             viewModel.updateSet(set)
         }

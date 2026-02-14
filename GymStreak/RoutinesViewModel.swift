@@ -10,12 +10,39 @@ class RoutinesViewModel: ObservableObject {
 
     private var modelContext: ModelContext
     private let watchConnectivity = WatchConnectivityManager.shared
+    private var cloudSyncObserver: NSObjectProtocol?
 
     init(modelContext: ModelContext) {
         self.modelContext = modelContext
         fetchRoutines()
         observeWatchWorkoutCompletions()
         processPendingWatchWorkouts()
+        observeCloudKitChanges()
+        observeWatchAvailability()
+    }
+
+    private func observeCloudKitChanges() {
+        cloudSyncObserver = NotificationCenter.default.addObserver(
+            forName: .cloudKitDataDidChange,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in
+                self?.fetchRoutines()
+            }
+        }
+    }
+
+    private func observeWatchAvailability() {
+        NotificationCenter.default.addObserver(
+            forName: .watchAppBecameAvailable,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in
+                self?.syncRoutinesToWatch()
+            }
+        }
     }
 
     private func observeWatchWorkoutCompletions() {
@@ -82,28 +109,36 @@ class RoutinesViewModel: ObservableObject {
     }
     
     func removeRoutineExercise(_ routineExercise: RoutineExercise, from routine: Routine) {
-        if let index = routine.routineExercises.firstIndex(where: { $0.id == routineExercise.id }) {
-            routine.routineExercises.remove(at: index)
+        if let index = routine.routineExercisesList.firstIndex(where: { $0.id == routineExercise.id }) {
+            routine.routineExercises?.remove(at: index)
             modelContext.delete(routineExercise)
             updateRoutine(routine)
         }
     }
-    
+
     func addSet(to routineExercise: RoutineExercise) {
         // Get rest time from existing sets, or default to 0 (disabled)
-        let restTime = routineExercise.sets.first?.restTime ?? 0
-        let set = ExerciseSet(reps: 10, weight: 0.0, restTime: restTime)
+        let restTime = routineExercise.setsList.first?.restTime ?? 0
+        // Calculate order from last set
+        let lastSet = routineExercise.setsList.sorted(by: { $0.order < $1.order }).last
+        let order = (lastSet?.order ?? -1) + 1
+        let set = ExerciseSet(reps: 10, weight: 0.0, restTime: restTime, order: order)
         set.routineExercise = routineExercise
-        routineExercise.sets.append(set)
+        routineExercise.sets?.append(set)
         if let routine = routineExercise.routine {
             updateRoutine(routine)
         }
     }
-    
+
     func removeSet(_ set: ExerciseSet, from routineExercise: RoutineExercise) {
-        if let index = routineExercise.sets.firstIndex(where: { $0.id == set.id }) {
-            routineExercise.sets.remove(at: index)
+        if let index = routineExercise.setsList.firstIndex(where: { $0.id == set.id }) {
+            routineExercise.sets?.remove(at: index)
             modelContext.delete(set)
+            // Reorder remaining sets to maintain sequential order
+            let sortedSets = routineExercise.setsList.sorted(by: { $0.order < $1.order })
+            for (newOrder, remainingSet) in sortedSets.enumerated() {
+                remainingSet.order = newOrder
+            }
             if let routine = routineExercise.routine {
                 updateRoutine(routine)
             }
@@ -115,6 +150,83 @@ class RoutinesViewModel: ObservableObject {
         if let routine = set.routineExercise?.routine {
             updateRoutine(routine)
         }
+    }
+
+    // MARK: - Superset Management
+
+    /// Creates a superset from 2+ selected exercises
+    func createSuperset(from exercises: [RoutineExercise], in routine: Routine) {
+        guard exercises.count >= 2 else { return }
+
+        let supersetId = UUID()
+
+        // Assign superset ID and order within superset
+        for (index, exercise) in exercises.enumerated() {
+            exercise.supersetId = supersetId
+            exercise.supersetOrder = index
+        }
+
+        updateRoutine(routine)
+    }
+
+    /// Adds an exercise to an existing superset
+    func addExerciseToSuperset(_ exercise: RoutineExercise, supersetId: UUID, in routine: Routine) {
+        // Find highest supersetOrder in this superset
+        let existingMaxOrder = routine.routineExercisesList
+            .filter { $0.supersetId == supersetId }
+            .map(\.supersetOrder)
+            .max() ?? -1
+
+        exercise.supersetId = supersetId
+        exercise.supersetOrder = existingMaxOrder + 1
+
+        updateRoutine(routine)
+    }
+
+    /// Removes an exercise from its superset; auto-dissolves if only 1 remains
+    func removeExerciseFromSuperset(_ exercise: RoutineExercise, in routine: Routine) {
+        guard let supersetId = exercise.supersetId else { return }
+
+        // Remove from superset
+        exercise.supersetId = nil
+        exercise.supersetOrder = 0
+
+        // Find remaining exercises in this superset
+        let remaining = routine.routineExercisesList.filter { $0.supersetId == supersetId }
+
+        // If only 1 exercise remains, auto-dissolve the superset
+        if remaining.count == 1 {
+            remaining.first?.supersetId = nil
+            remaining.first?.supersetOrder = 0
+        } else {
+            // Reorder remaining exercises
+            for (index, ex) in remaining.sorted(by: { $0.supersetOrder < $1.supersetOrder }).enumerated() {
+                ex.supersetOrder = index
+            }
+        }
+
+        updateRoutine(routine)
+    }
+
+    /// Dissolves a superset, unlinking all exercises
+    func dissolveSuperset(_ supersetId: UUID, in routine: Routine) {
+        let exercises = routine.routineExercisesList.filter { $0.supersetId == supersetId }
+
+        for exercise in exercises {
+            exercise.supersetId = nil
+            exercise.supersetOrder = 0
+        }
+
+        updateRoutine(routine)
+    }
+
+    /// Reorders exercises within a superset
+    func reorderSuperset(_ exercises: [RoutineExercise], in routine: Routine) {
+        for (index, exercise) in exercises.enumerated() {
+            exercise.supersetOrder = index
+        }
+
+        updateRoutine(routine)
     }
 
     private func save() {
@@ -147,15 +259,19 @@ class RoutinesViewModel: ObservableObject {
             workoutSession.endTime = workout.endTime
             workoutSession.didUpdateTemplate = workout.shouldUpdateTemplate
             workoutSession.routineName = workout.routineName
+            workoutSession.healthKitWorkoutId = workout.healthKitWorkoutId
 
             // Create workout exercises
             for completedExercise in workout.exercises {
                 let workoutExercise = WorkoutExercise(
                     exerciseName: completedExercise.name,
-                    muscleGroup: completedExercise.muscleGroup,
+                    muscleGroups: [completedExercise.muscleGroup],
                     order: completedExercise.order
                 )
                 workoutExercise.workoutSession = workoutSession
+                // Copy superset fields from completed exercise
+                workoutExercise.supersetId = completedExercise.supersetId
+                workoutExercise.supersetOrder = completedExercise.supersetOrder
 
                 // Create workout sets
                 for completedSet in completedExercise.sets {
@@ -170,11 +286,11 @@ class RoutinesViewModel: ObservableObject {
                     workoutSet.isCompleted = completedSet.isCompleted
                     workoutSet.completedAt = completedSet.completedAt
                     workoutSet.workoutExercise = workoutExercise
-                    workoutExercise.sets.append(workoutSet)
+                    workoutExercise.sets?.append(workoutSet)
                     modelContext.insert(workoutSet)
                 }
 
-                workoutSession.workoutExercises.append(workoutExercise)
+                workoutSession.workoutExercises?.append(workoutExercise)
                 modelContext.insert(workoutExercise)
             }
 
@@ -210,13 +326,13 @@ class RoutinesViewModel: ObservableObject {
 
             // Update each routine exercise's sets with the actual values
             for completedExercise in workout.exercises {
-                guard let routineExercise = routine.routineExercises.first(where: { $0.id == completedExercise.id }) else {
+                guard let routineExercise = routine.routineExercisesList.first(where: { $0.id == completedExercise.id }) else {
                     print("Could not find routine exercise with ID: \(completedExercise.id)")
                     continue
                 }
 
                 for completedSet in completedExercise.sets {
-                    guard let set = routineExercise.sets.first(where: { $0.id == completedSet.id }) else {
+                    guard let set = routineExercise.setsList.first(where: { $0.id == completedSet.id }) else {
                         print("Could not find set with ID: \(completedSet.id)")
                         continue
                     }

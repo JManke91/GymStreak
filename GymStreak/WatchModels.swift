@@ -24,6 +24,8 @@ struct WatchExercise: Codable, Identifiable, Hashable {
     let muscleGroup: String
     let sets: [WatchSet]
     let order: Int
+    let supersetId: UUID?
+    let supersetOrder: Int
 }
 
 struct WatchSet: Codable, Identifiable, Hashable {
@@ -43,6 +45,9 @@ struct CompletedWatchWorkout: Codable {
     let endTime: Date
     let exercises: [CompletedWatchExercise]
     let shouldUpdateTemplate: Bool
+    /// The UUID used as HKMetadataKeyExternalUUID when saving to HealthKit.
+    /// Used to correlate SwiftData WorkoutSession with HealthKit workout.
+    let healthKitWorkoutId: UUID?
 
     var duration: TimeInterval {
         endTime.timeIntervalSince(startTime)
@@ -71,6 +76,8 @@ struct CompletedWatchExercise: Codable {
     let muscleGroup: String
     let sets: [CompletedWatchSet]
     let order: Int
+    let supersetId: UUID?
+    let supersetOrder: Int
 }
 
 struct CompletedWatchSet: Codable {
@@ -89,7 +96,7 @@ struct CompletedWatchSet: Codable {
 
 extension Routine {
     func toWatchRoutine() -> WatchRoutine {
-        let sortedExercises = routineExercises.sorted { $0.order < $1.order }
+        let sortedExercises = routineExercisesList.sorted { $0.order < $1.order }
         return WatchRoutine(
             id: id,
             name: name,
@@ -97,8 +104,8 @@ extension Routine {
                 WatchExercise(
                     id: routineExercise.id,
                     name: routineExercise.exercise?.name ?? "Unknown",
-                    muscleGroup: routineExercise.exercise?.muscleGroup ?? "General",
-                    sets: routineExercise.sets.map { set in
+                    muscleGroup: routineExercise.exercise?.primaryMuscleGroup ?? "General",
+                    sets: routineExercise.setsList.map { set in
                         WatchSet(
                             id: set.id,
                             reps: set.reps,
@@ -106,7 +113,9 @@ extension Routine {
                             restTime: set.restTime
                         )
                     },
-                    order: routineExercise.order
+                    order: routineExercise.order,
+                    supersetId: routineExercise.supersetId,
+                    supersetOrder: routineExercise.supersetOrder
                 )
             }
         )

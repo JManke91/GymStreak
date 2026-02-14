@@ -44,6 +44,7 @@ class WorkoutViewModel: ObservableObject {
     private var modelContext: ModelContext
     private var timer: Timer?
     private var restTimer: Timer?
+    private var cloudSyncObserver: NSObjectProtocol?
 
     // Date-based timer tracking for background persistence
     private var workoutStartTime: Date?
@@ -55,13 +56,33 @@ class WorkoutViewModel: ObservableObject {
     // HealthKit workout manager
     let healthKitManager = HealthKitWorkoutManager()
 
+    private var isUITesting: Bool {
+        ProcessInfo.processInfo.arguments.contains("-UI_TESTING")
+    }
+
     init(modelContext: ModelContext) {
         self.modelContext = modelContext
         fetchWorkoutHistory()
-        requestNotificationPermission()
+        // Skip notification permission during UI testing to avoid alert in screenshots
+        if !isUITesting {
+            requestNotificationPermission()
+        }
         cleanupStaleActivities()
         loadHealthKitPreferences()
         healthKitManager.checkAuthorizationStatus()
+        observeCloudKitChanges()
+    }
+
+    private func observeCloudKitChanges() {
+        cloudSyncObserver = NotificationCenter.default.addObserver(
+            forName: .cloudKitDataDidChange,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in
+                self?.fetchWorkoutHistory()
+            }
+        }
     }
 
     // MARK: - HealthKit Preferences
@@ -157,7 +178,7 @@ class WorkoutViewModel: ObservableObject {
         // Get current exercise name if available
         let exerciseName: String? = {
             guard let session = currentSession else { return nil }
-            let exercises = session.workoutExercises.sorted(by: { $0.order < $1.order })
+            let exercises = session.workoutExercisesList.sorted(by: { $0.order < $1.order })
             guard currentExerciseIndex < exercises.count else { return nil }
             return exercises[currentExerciseIndex].exerciseName
         }()
@@ -277,11 +298,11 @@ class WorkoutViewModel: ObservableObject {
         let session = WorkoutSession(routine: routine)
 
         // Create workout exercises from routine (sorted by order to maintain routine sequence)
-        let sortedRoutineExercises = routine.routineExercises.sorted(by: { $0.order < $1.order })
+        let sortedRoutineExercises = routine.routineExercisesList.sorted(by: { $0.order < $1.order })
         for (index, routineExercise) in sortedRoutineExercises.enumerated() {
             let workoutExercise = WorkoutExercise(from: routineExercise, order: index)
             workoutExercise.workoutSession = session
-            session.workoutExercises.append(workoutExercise)
+            session.workoutExercises?.append(workoutExercise)
         }
 
         currentSession = session
@@ -300,7 +321,8 @@ class WorkoutViewModel: ObservableObject {
     }
 
     private func startHealthKitSession() {
-        guard healthKitSyncEnabled && healthKitManager.isHealthKitAvailable else {
+        // Skip HealthKit during UI testing to avoid authorization alert in screenshots
+        guard !isUITesting, healthKitSyncEnabled, healthKitManager.isHealthKitAvailable else {
             return
         }
 
@@ -394,36 +416,47 @@ class WorkoutViewModel: ObservableObject {
                 )
 
                 // Create metadata for the workout
-                var metadata: [String: Any] = [
-                    HKMetadataKeyWorkoutBrandName: "GymStreak"
-                ]
+                var metadata: [String: Any] = [:]
 
-                if let routineName = session.routine?.name {
+                // Use routine name as the workout brand name (displayed in Fitness app)
+                // Fall back to "GymStreak" if no routine name available
+                if let routineName = session.routine?.name, !routineName.isEmpty {
+                    metadata[HKMetadataKeyWorkoutBrandName] = routineName
                     metadata["RoutineName"] = routineName
+                } else {
+                    metadata[HKMetadataKeyWorkoutBrandName] = "GymStreak"
                 }
 
                 if !session.notes.isEmpty {
                     metadata["Notes"] = session.notes
                 }
 
+                let healthKitWorkoutId: UUID
+
                 // Try to end the active session first
                 if healthKitManager.isWorkoutActive {
-                    _ = try await healthKitManager.endWorkoutSession(
+                    let result = try await healthKitManager.endWorkoutSession(
                         totalEnergyBurned: estimatedCalories,
                         metadata: metadata
                     )
+                    healthKitWorkoutId = result.healthKitWorkoutId
                 } else {
                     // Fall back to direct save if no active session
-                    _ = try await healthKitManager.saveWorkoutDirectly(
+                    let result = try await healthKitManager.saveWorkoutDirectly(
                         startDate: session.startTime,
                         endDate: session.endTime ?? Date(),
                         totalEnergyBurned: estimatedCalories,
                         metadata: metadata
                     )
+                    healthKitWorkoutId = result.healthKitWorkoutId
                 }
 
+                // Store the HealthKit workout ID in the session for correlation
+                session.healthKitWorkoutId = healthKitWorkoutId
+                save()
+
                 healthKitSyncStatus = .success
-                print("Workout synced to HealthKit successfully")
+                print("Workout synced to HealthKit successfully with ID: \(healthKitWorkoutId)")
 
             } catch {
                 healthKitSyncStatus = .failed(error.localizedDescription)
@@ -445,26 +478,50 @@ class WorkoutViewModel: ObservableObject {
         // Check if there's any more work to do in the workout
         let hasMoreWork = findNextIncompleteSet() != nil
 
-        // Find next incomplete set in current exercise
-        if findNextIncompleteSet(after: set, in: workoutExercise) != nil {
-            // More sets in same exercise - start rest timer if configured
-            if set.restTime > 0 {
-                startRestTimer(duration: set.restTime)
+        // For superset exercises, use interleaving logic with round-based rest
+        if workoutExercise.isInSuperset {
+            if findNextIncompleteSetForSuperset(after: set, in: workoutExercise) != nil {
+                // More sets in superset - only start rest timer if this completes a round
+                // (i.e., all exercises at this set level are now complete)
+                if isEndOfSupersetRound(completedSet: set, in: workoutExercise) {
+                    let restTime = supersetRoundRestTime(for: set, in: workoutExercise)
+                    if restTime > 0 {
+                        startRestTimer(duration: restTime)
+                    }
+                }
+                // Navigation is handled by findNextIncompleteSet() which ActiveWorkoutView uses
+            } else if hasMoreWork {
+                // Superset complete, but more exercises remain - trigger rest for final round
+                let restTime = supersetRoundRestTime(for: set, in: workoutExercise)
+                if restTime > 0 {
+                    startRestTimer(duration: restTime)
+                }
+                moveToNextExercise()
+            } else {
+                // Workout complete
+                moveToNextExercise()
+                pauseForCompletion()
+                showingWorkoutCompletePrompt = true
             }
-        } else if hasMoreWork {
-            // No more sets in current exercise, but more exercises remain
-            // Start rest timer before moving to next exercise
-            if set.restTime > 0 {
-                startRestTimer(duration: set.restTime)
-            }
-            moveToNextExercise()
         } else {
-            // Workout complete - no more work to do
-            moveToNextExercise()
-
-            // Prompt user to finish workout
-            pauseForCompletion()
-            showingWorkoutCompletePrompt = true
+            // Standard (non-superset) behavior
+            if findNextIncompleteSet(after: set, in: workoutExercise) != nil {
+                // More sets in same exercise - start rest timer if configured
+                if set.restTime > 0 {
+                    startRestTimer(duration: set.restTime)
+                }
+            } else if hasMoreWork {
+                // No more sets in current exercise, but more exercises remain
+                if set.restTime > 0 {
+                    startRestTimer(duration: set.restTime)
+                }
+                moveToNextExercise()
+            } else {
+                // Workout complete - no more work to do
+                moveToNextExercise()
+                pauseForCompletion()
+                showingWorkoutCompletePrompt = true
+            }
         }
     }
 
@@ -486,7 +543,7 @@ class WorkoutViewModel: ObservableObject {
 
     func updateRestTimeForExercise(_ workoutExercise: WorkoutExercise, restTime: TimeInterval) {
         objectWillChange.send()
-        for set in workoutExercise.sets {
+        for set in workoutExercise.setsList {
             set.restTime = restTime
         }
         save()
@@ -498,7 +555,7 @@ class WorkoutViewModel: ObservableObject {
         objectWillChange.send()
 
         // Get the last set to copy its values
-        let lastSet = workoutExercise.sets.sorted(by: { $0.order < $1.order }).last
+        let lastSet = workoutExercise.setsList.sorted(by: { $0.order < $1.order }).last
 
         // Create new workout set using the last set's values (or defaults if no sets exist)
         let newSet = WorkoutSet(
@@ -510,7 +567,7 @@ class WorkoutViewModel: ObservableObject {
             order: (lastSet?.order ?? -1) + 1
         )
         newSet.workoutExercise = workoutExercise
-        workoutExercise.sets.append(newSet)
+        workoutExercise.sets?.append(newSet)
 
         modelContext.insert(newSet)
         save()
@@ -522,12 +579,12 @@ class WorkoutViewModel: ObservableObject {
         objectWillChange.send()
 
         // Determine the order for the new exercise
-        let nextOrder = session.workoutExercises.map(\.order).max().map { $0 + 1 } ?? 0
+        let nextOrder = (session.workoutExercisesList.map(\.order).max() ?? -1) + 1
 
         // Create a workout exercise from the library exercise
         let workoutExercise = WorkoutExercise(
             exerciseName: exercise.name,
-            muscleGroup: exercise.muscleGroup,
+            muscleGroups: exercise.muscleGroups,
             order: nextOrder
         )
         workoutExercise.workoutSession = session
@@ -542,9 +599,9 @@ class WorkoutViewModel: ObservableObject {
             order: 0
         )
         defaultSet.workoutExercise = workoutExercise
-        workoutExercise.sets.append(defaultSet)
+        workoutExercise.sets?.append(defaultSet)
 
-        session.workoutExercises.append(workoutExercise)
+        session.workoutExercises?.append(workoutExercise)
         modelContext.insert(workoutExercise)
         modelContext.insert(defaultSet)
         save()
@@ -555,8 +612,8 @@ class WorkoutViewModel: ObservableObject {
 
         objectWillChange.send()
 
-        if let index = workoutExercise.sets.firstIndex(where: { $0.id == set.id }) {
-            workoutExercise.sets.remove(at: index)
+        if let index = workoutExercise.setsList.firstIndex(where: { $0.id == set.id }) {
+            workoutExercise.sets?.remove(at: index)
             modelContext.delete(set)
             save()
         }
@@ -568,13 +625,13 @@ class WorkoutViewModel: ObservableObject {
         objectWillChange.send()
 
         // Remove all sets associated with this exercise
-        for set in workoutExercise.sets {
+        for set in workoutExercise.setsList {
             modelContext.delete(set)
         }
 
         // Remove the exercise from the session
-        if let index = session.workoutExercises.firstIndex(where: { $0.id == workoutExercise.id }) {
-            session.workoutExercises.remove(at: index)
+        if let index = session.workoutExercisesList.firstIndex(where: { $0.id == workoutExercise.id }) {
+            session.workoutExercises?.remove(at: index)
         }
 
         modelContext.delete(workoutExercise)
@@ -585,7 +642,7 @@ class WorkoutViewModel: ObservableObject {
         // Move to next set without marking complete
         if let nextSet = findNextIncompleteSet(after: set, in: workoutExercise) {
             // Update current set index
-            if let index = workoutExercise.sets.firstIndex(where: { $0.id == nextSet.id }) {
+            if let index = workoutExercise.setsList.firstIndex(where: { $0.id == nextSet.id }) {
                 currentSetIndex = index
             }
         } else {
@@ -715,13 +772,14 @@ class WorkoutViewModel: ObservableObject {
     // MARK: - Navigation Helpers
 
     private func findNextIncompleteSet(after currentSet: WorkoutSet, in workoutExercise: WorkoutExercise) -> WorkoutSet? {
-        guard let currentIndex = workoutExercise.sets.firstIndex(where: { $0.id == currentSet.id }) else {
+        let sets = workoutExercise.setsList
+        guard let currentIndex = sets.firstIndex(where: { $0.id == currentSet.id }) else {
             return nil
         }
 
         // Find next incomplete set in same exercise
-        for index in (currentIndex + 1)..<workoutExercise.sets.count {
-            let set = workoutExercise.sets[index]
+        for index in (currentIndex + 1)..<sets.count {
+            let set = sets[index]
             if !set.isCompleted {
                 currentSetIndex = index
                 return set
@@ -731,12 +789,61 @@ class WorkoutViewModel: ObservableObject {
         return nil
     }
 
-    func findNextIncompleteSet() -> (exercise: WorkoutExercise, set: WorkoutSet)? {
-        guard let session = currentSession else { return nil }
+    /// Finds the next incomplete set following superset interleaving logic.
+    /// For supersets, alternates between exercises: A1 → B1 → A2 → B2 → A3 → B3
+    /// For standalone exercises, returns the next incomplete set in that exercise.
+    func findNextIncompleteSetForSuperset(
+        after currentSet: WorkoutSet,
+        in workoutExercise: WorkoutExercise
+    ) -> (exercise: WorkoutExercise, set: WorkoutSet)? {
+        guard let session = currentSession,
+              let supersetId = workoutExercise.supersetId else {
+            // Not in a superset - fall back to standard behavior
+            if let nextSet = findNextIncompleteSet(after: currentSet, in: workoutExercise) {
+                return (workoutExercise, nextSet)
+            }
+            return nil
+        }
 
-        for exercise in session.workoutExercises.sorted(by: { $0.order < $1.order }) {
-            for set in exercise.sets.sorted(by: { $0.order < $1.order }) {
-                if !set.isCompleted {
+        // Get all exercises in this superset, sorted by supersetOrder
+        let supersetExercises = session.workoutExercisesList
+            .filter { $0.supersetId == supersetId }
+            .sorted { $0.supersetOrder < $1.supersetOrder }
+
+        guard supersetExercises.count > 1 else {
+            // Single exercise in "superset" - treat as standalone
+            if let nextSet = findNextIncompleteSet(after: currentSet, in: workoutExercise) {
+                return (workoutExercise, nextSet)
+            }
+            return nil
+        }
+
+        // Find current exercise's position in the superset
+        guard let currentExerciseIdx = supersetExercises.firstIndex(where: { $0.id == workoutExercise.id }) else {
+            return nil
+        }
+
+        let currentSetOrder = currentSet.order
+        let maxSets = supersetExercises.map { $0.setsList.count }.max() ?? 0
+
+        // Interleaving pattern: for set level N, go through all exercises before moving to N+1
+        // Starting from current position, find the next incomplete set
+        for setLevel in currentSetOrder..<maxSets {
+            // Determine starting exercise index for this set level
+            let startIdx = (setLevel == currentSetOrder) ? (currentExerciseIdx + 1) : 0
+
+            for offset in 0..<supersetExercises.count {
+                let exerciseIdx = (startIdx + offset) % supersetExercises.count
+
+                // For the current set level, skip exercises we've already passed
+                if setLevel == currentSetOrder && exerciseIdx <= currentExerciseIdx {
+                    continue
+                }
+
+                let exercise = supersetExercises[exerciseIdx]
+                let sets = exercise.setsList.sorted { $0.order < $1.order }
+
+                if let set = sets.first(where: { $0.order == setLevel && !$0.isCompleted }) {
                     return (exercise, set)
                 }
             }
@@ -745,10 +852,115 @@ class WorkoutViewModel: ObservableObject {
         return nil
     }
 
+    func findNextIncompleteSet() -> (exercise: WorkoutExercise, set: WorkoutSet)? {
+        guard let session = currentSession else { return nil }
+
+        // Use superset-aware ordering: iterate through grouped exercises
+        for group in session.exercisesGroupedBySupersets {
+            if group.count > 1 {
+                // Superset group - interleave sets (A1 → B1 → A2 → B2 → ...)
+                let maxSets = group.map { $0.setsList.count }.max() ?? 0
+                for setLevel in 0..<maxSets {
+                    for exercise in group {
+                        let sets = exercise.setsList.sorted { $0.order < $1.order }
+                        if let set = sets.first(where: { $0.order == setLevel && !$0.isCompleted }) {
+                            return (exercise, set)
+                        }
+                    }
+                }
+            } else if let exercise = group.first {
+                // Standalone exercise - sequential sets
+                for set in exercise.setsList.sorted(by: { $0.order < $1.order }) {
+                    if !set.isCompleted {
+                        return (exercise, set)
+                    }
+                }
+            }
+        }
+
+        return nil
+    }
+
+    // MARK: - Superset Round Detection
+
+    /// Determines if completing this set ends a superset round (should trigger rest timer).
+    /// A round ends when ALL sets at the completed set's level are complete across all superset exercises.
+    /// For example, in superset [A, B]: A1→B1 is round 1, A2→B2 is round 2, etc.
+    private func isEndOfSupersetRound(
+        completedSet: WorkoutSet,
+        in workoutExercise: WorkoutExercise
+    ) -> Bool {
+        guard let session = currentSession,
+              let supersetId = workoutExercise.supersetId else {
+            // Not in a superset - always trigger rest (standard behavior)
+            return true
+        }
+
+        // Get all exercises in this superset, sorted by supersetOrder
+        let supersetExercises = session.workoutExercisesList
+            .filter { $0.supersetId == supersetId }
+            .sorted { $0.supersetOrder < $1.supersetOrder }
+
+        guard supersetExercises.count > 1 else {
+            // Single exercise "superset" - treat as standalone
+            return true
+        }
+
+        let completedSetLevel = completedSet.order
+
+        // Check if ALL sets at this level are now complete
+        for exercise in supersetExercises {
+            if let setAtLevel = exercise.setsList.first(where: { $0.order == completedSetLevel }) {
+                if !setAtLevel.isCompleted {
+                    // Still have an incomplete set in this round
+                    return false
+                }
+            }
+            // If exercise doesn't have a set at this level, skip it (uneven set counts)
+        }
+
+        // All sets at this level are complete - round is done
+        return true
+    }
+
+    /// Gets the rest time to use for a superset round.
+    /// Returns the rest time from the last exercise's set at the completed set's level.
+    private func supersetRoundRestTime(
+        for completedSet: WorkoutSet,
+        in workoutExercise: WorkoutExercise
+    ) -> TimeInterval {
+        guard let session = currentSession,
+              let supersetId = workoutExercise.supersetId else {
+            // Not in a superset - use the set's own rest time
+            return completedSet.restTime
+        }
+
+        let supersetExercises = session.workoutExercisesList
+            .filter { $0.supersetId == supersetId }
+            .sorted { $0.supersetOrder < $1.supersetOrder }
+
+        guard supersetExercises.count > 1 else {
+            // Single exercise "superset" - use set's own rest time
+            return completedSet.restTime
+        }
+
+        let completedSetLevel = completedSet.order
+
+        // Find the last exercise that has a set at this level and get its rest time
+        for exercise in supersetExercises.reversed() {
+            if let setAtLevel = exercise.setsList.first(where: { $0.order == completedSetLevel }) {
+                return setAtLevel.restTime
+            }
+        }
+
+        // Fallback to the completed set's rest time
+        return completedSet.restTime
+    }
+
     private func moveToNextExercise() {
         guard let session = currentSession else { return }
 
-        let sortedExercises = session.workoutExercises.sorted(by: { $0.order < $1.order })
+        let sortedExercises = session.workoutExercisesList.sorted(by: { $0.order < $1.order })
 
         if currentExerciseIndex < sortedExercises.count - 1 {
             currentExerciseIndex += 1
@@ -761,22 +973,23 @@ class WorkoutViewModel: ObservableObject {
     private func updateRoutineTemplate(session: WorkoutSession) {
         guard let routine = session.routine else { return }
 
-        for workoutExercise in session.workoutExercises {
+        for workoutExercise in session.workoutExercisesList {
             // Find corresponding routine exercise
-            if let routineExercise = routine.routineExercises.first(where: {
+            if let routineExercise = routine.routineExercisesList.first(where: {
                 $0.exercise?.name == workoutExercise.exerciseName
             }) {
                 // Get the rest time from the first set (all sets should have same rest time)
-                let exerciseRestTime = workoutExercise.sets.first?.restTime ?? 60.0
+                let exerciseRestTime = workoutExercise.setsList.first?.restTime ?? 60.0
 
                 // Update all routine sets with the exercise rest time and completed set data
-                for (index, routineSet) in routineExercise.sets.enumerated() {
+                let workoutSets = workoutExercise.setsList
+                for (index, routineSet) in routineExercise.setsList.enumerated() {
                     // Always update rest time for all sets
                     routineSet.restTime = exerciseRestTime
 
                     // Update reps and weight only for completed sets
-                    if index < workoutExercise.sets.count {
-                        let workoutSet = workoutExercise.sets[index]
+                    if index < workoutSets.count {
+                        let workoutSet = workoutSets[index]
                         if workoutSet.isCompleted {
                             routineSet.reps = workoutSet.actualReps
                             routineSet.weight = workoutSet.actualWeight

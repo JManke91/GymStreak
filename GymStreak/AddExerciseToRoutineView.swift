@@ -18,13 +18,13 @@ struct AddExerciseToRoutineView: View {
         } else {
             return exercises.filter { exercise in
                 exercise.name.localizedCaseInsensitiveContains(searchText) ||
-                exercise.muscleGroup.localizedCaseInsensitiveContains(searchText)
+                exercise.muscleGroups.contains { $0.localizedCaseInsensitiveContains(searchText) }
             }
         }
     }
 
     private func isExerciseAlreadyInRoutine(_ exercise: Exercise) -> Bool {
-        routine.routineExercises.contains(where: { $0.exercise?.id == exercise.id })
+        routine.routineExercisesList.contains(where: { $0.exercise?.id == exercise.id })
     }
 
     var body: some View {
@@ -36,31 +36,23 @@ struct AddExerciseToRoutineView: View {
                     Section {
                         ForEach(alreadyAddedExercises) { exercise in
                             HStack(spacing: 12) {
-                                // Muscle group icon (subdued)
-                                Image(systemName: MuscleGroups.icon(for: exercise.muscleGroup))
-                                    .font(.title3)
-                                    .symbolRenderingMode(.hierarchical)
-                                    .foregroundStyle(.secondary)
-                                    .frame(width: 40, height: 40)
-                                    .background(Color.secondary.opacity(0.1))
-                                    .clipShape(RoundedRectangle(cornerRadius: 10))
+                                // Muscle group badge (subdued)
+                                MuscleGroupAbbreviationBadge(
+                                    muscleGroups: exercise.muscleGroups,
+                                    isActive: false
+                                )
 
                                 VStack(alignment: .leading, spacing: 4) {
                                     Text(exercise.name)
                                         .font(.headline)
                                         .foregroundStyle(.secondary)
-                                    HStack {
-                                        Text(exercise.muscleGroup)
+                                    HStack(spacing: 6) {
+                                        Text(MuscleGroups.displayString(for: exercise.muscleGroups))
                                             .font(.caption)
                                             .foregroundStyle(.tertiary)
-                                        if !exercise.exerciseDescription.isEmpty {
-                                            Text("•")
-                                                .foregroundStyle(.tertiary)
-                                            Text(exercise.exerciseDescription)
-                                                .font(.caption)
-                                                .foregroundStyle(.tertiary)
-                                                .lineLimit(1)
-                                        }
+                                        Image(systemName: exercise.equipmentType.icon)
+                                            .font(.caption2)
+                                            .foregroundStyle(.quaternary)
                                     }
                                 }
 
@@ -72,58 +64,46 @@ struct AddExerciseToRoutineView: View {
                             }
                             .padding(.vertical, 4)
                             .listRowBackground(Color(.secondarySystemGroupedBackground))
-                            .accessibilityLabel("\(exercise.name), \(exercise.muscleGroup), already in routine")
+                            .accessibilityLabel("\(exercise.name), \(MuscleGroups.displayString(for: exercise.muscleGroups)), already in routine")
                             .accessibilityHint("This exercise is already in your routine")
                         }
                     } header: {
-                        Label("Already in Routine", systemImage: "checkmark.circle.fill")
+                        Label("add_to_routine.already_added".localized, systemImage: "checkmark.circle.fill")
                     }
                 }
 
                 // Section 2: Available Exercises
                 let availableExercises = filteredExercises.filter { !isExerciseAlreadyInRoutine($0) }
                 if !availableExercises.isEmpty {
-                    Section("Available Exercises") {
+                    Section("add_to_routine.available".localized) {
                         ForEach(availableExercises) { exercise in
                             NavigationLink(value: exercise) {
                                 HStack(spacing: 12) {
-                                    // Muscle group icon (active)
-                                    Image(systemName: MuscleGroups.icon(for: exercise.muscleGroup))
-                                        .font(.title3)
-                                        .symbolRenderingMode(.hierarchical)
-                                        .foregroundStyle(.blue)
-                                        .frame(width: 40, height: 40)
-                                        .background(Color.blue.opacity(0.1))
-                                        .clipShape(RoundedRectangle(cornerRadius: 10))
+                                    // Muscle group badge (active)
+                                    MuscleGroupAbbreviationBadge(
+                                        muscleGroups: exercise.muscleGroups,
+                                        isActive: true
+                                    )
 
                                     VStack(alignment: .leading, spacing: 4) {
                                         Text(exercise.name)
                                             .font(.headline)
                                             .foregroundStyle(.primary)
-                                        HStack {
-                                            Text(exercise.muscleGroup)
+                                        HStack(spacing: 6) {
+                                            Text(MuscleGroups.displayString(for: exercise.muscleGroups))
                                                 .font(.caption)
                                                 .foregroundStyle(.secondary)
-                                            if !exercise.exerciseDescription.isEmpty {
-                                                Text("•")
-                                                    .foregroundStyle(.secondary)
-                                                Text(exercise.exerciseDescription)
-                                                    .font(.caption)
-                                                    .foregroundStyle(.secondary)
-                                                    .lineLimit(1)
-                                            }
+                                            Image(systemName: exercise.equipmentType.icon)
+                                                .font(.caption2)
+                                                .foregroundStyle(.tertiary)
                                         }
                                     }
 
                                     Spacer()
-
-                                    Image(systemName: "chevron.right")
-                                        .font(.caption.weight(.semibold))
-                                        .foregroundStyle(.tertiary)
                                 }
                                 .padding(.vertical, 4)
                             }
-                            .accessibilityLabel("Add \(exercise.name), \(exercise.muscleGroup) to routine")
+                            .accessibilityLabel("Add \(exercise.name), \(MuscleGroups.displayString(for: exercise.muscleGroups)) to routine")
                             .accessibilityHint("Opens configuration screen to add sets")
                         }
                     }
@@ -134,19 +114,19 @@ struct AddExerciseToRoutineView: View {
                         HStack {
                             Image(systemName: "plus.circle.fill")
                                 .foregroundColor(.accentColor)
-                            Text("Create New Exercise")
+                            Text("add_to_routine.create_new".localized)
                                 .foregroundColor(.accentColor)
                         }
                     }
                 }
             }
             .listStyle(.insetGrouped)
-            .navigationTitle("Choose Exercise")
+            .navigationTitle("add_to_routine.title".localized)
             .navigationBarTitleDisplayMode(.inline)
-            .searchable(text: $searchText, prompt: "Search exercises or muscle groups")
+            .searchable(text: $searchText, prompt: "add_to_routine.search".localized)
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
-                    Button("Cancel") {
+                    Button("action.cancel".localized) {
                         dismiss()
                     }
                 }
@@ -166,8 +146,9 @@ struct AddExerciseToRoutineView: View {
             }
             .navigationDestination(for: String.self) { destination in
                 if destination == "createNewExercise" {
-                    CreateExerciseInlineView(
-                        exercisesViewModel: exercisesViewModel,
+                    AddExerciseView(
+                        viewModel: exercisesViewModel,
+                        presentationMode: .navigation,
                         onExerciseCreated: { newExercise in
                             // Pop back and push to configure view
                             navigationPath.removeLast()
@@ -199,7 +180,8 @@ struct ConfigureExerciseSetsView: View {
 
     @State private var sets: [ExerciseSet] = []
     @State private var globalRestTime: TimeInterval = 0.0
-    @State private var editingSetIndex: Int?
+    // Use UUID-based tracking (same pattern as RoutineDetailView/RoutineExerciseDetailView)
+    @State private var editingSetId: UUID?
     @State private var editingReps = 10
     @State private var editingWeight = 0.0
     @State private var initialReps = 10
@@ -211,43 +193,53 @@ struct ConfigureExerciseSetsView: View {
         editingReps != initialReps || editingWeight != initialWeight
     }
 
+    // Save current editing set by UUID (same pattern as RoutineExerciseDetailView)
+    private func saveCurrentEditingSet() {
+        guard let currentId = editingSetId,
+              let currentSet = sets.first(where: { $0.id == currentId }) else { return }
+        if currentSet.reps != editingReps || currentSet.weight != editingWeight {
+            currentSet.reps = editingReps
+            currentSet.weight = editingWeight
+        }
+    }
+
+    // Helper to get index for display purposes
+    private func index(of set: ExerciseSet) -> Int {
+        sets.firstIndex(where: { $0.id == set.id }) ?? 0
+    }
+
     var body: some View {
         List {
-            Section("Exercise Info") {
+            Section("configure_exercise.info".localized) {
                 HStack {
-                    Text("Name")
+                    Text("exercises.name".localized)
                     Spacer()
                     Text(exercise.name)
                         .foregroundColor(.secondary)
                 }
 
                 HStack {
-                    Text("Muscle Group")
+                    Text("exercises.muscle_groups".localized)
                     Spacer()
-                    Text(exercise.muscleGroup)
+                    Text(MuscleGroups.displayString(for: exercise.muscleGroups))
                         .foregroundColor(.secondary)
-                }
-
-                if !exercise.exerciseDescription.isEmpty {
-                    HStack {
-                        Text("Description")
-                        Spacer()
-                        Text(exercise.exerciseDescription)
-                            .foregroundColor(.secondary)
-                            .multilineTextAlignment(.trailing)
-                    }
                 }
             }
 
-            Section("Sets") {
-                ForEach(Array(sets.enumerated()), id: \.offset) { index, set in
+            Section("configure_exercise.sets".localized) {
+                ForEach(sets) { set in
                     VStack(alignment: .leading, spacing: 0) {
                         Button(action: {
                             withAnimation(.easeInOut(duration: 0.3)) {
-                                if editingSetIndex == index {
-                                    editingSetIndex = nil
+                                if editingSetId == set.id {
+                                    // Save before collapsing
+                                    saveCurrentEditingSet()
+                                    editingSetId = nil
                                 } else {
-                                    editingSetIndex = index
+                                    // Save currently expanded set before switching
+                                    saveCurrentEditingSet()
+                                    // Expand and load values
+                                    editingSetId = set.id
                                     editingReps = set.reps
                                     editingWeight = set.weight
                                     initialReps = set.reps
@@ -258,7 +250,7 @@ struct ConfigureExerciseSetsView: View {
                             }
                         }) {
                             HStack {
-                                Text("Set \(index + 1)")
+                                Text("Set \(index(of: set) + 1)")
                                     .font(.headline)
                                     .foregroundColor(.primary)
                                 Spacer()
@@ -267,14 +259,14 @@ struct ConfigureExerciseSetsView: View {
                                 Image(systemName: "chevron.right")
                                     .font(.caption)
                                     .foregroundColor(.secondary)
-                                    .rotationEffect(.degrees(editingSetIndex == index ? 90 : 0))
-                                    .animation(.easeInOut(duration: 0.2), value: editingSetIndex == index)
+                                    .rotationEffect(.degrees(editingSetId == set.id ? 90 : 0))
+                                    .animation(.easeInOut(duration: 0.2), value: editingSetId == set.id)
                             }
                             .contentShape(Rectangle())
                         }
                         .buttonStyle(PlainButtonStyle())
 
-                        if editingSetIndex == index {
+                        if editingSetId == set.id {
                             VStack(spacing: 12) {
                                 // Apply to All Banner (only if multiple sets AND changes were made AND not dismissed)
                                 if sets.count > 1 && hasChanges && !bannerDismissed {
@@ -283,9 +275,9 @@ struct ConfigureExerciseSetsView: View {
                                         onApply: {
                                             withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
                                                 // Apply to all sets
-                                                for i in sets.indices {
-                                                    sets[i].reps = editingReps
-                                                    sets[i].weight = editingWeight
+                                                for s in sets {
+                                                    s.reps = editingReps
+                                                    s.weight = editingWeight
                                                 }
                                                 bannerDismissed = true
                                             }
@@ -308,7 +300,9 @@ struct ConfigureExerciseSetsView: View {
                                     range: 1...100,
                                     step: 1
                                 ) { _ in
-                                    handleSetUpdate(at: index)
+                                    // Guard: only process updates for the currently expanded set
+                                    guard editingSetId == set.id else { return }
+                                    updateSet(set)
                                 }
 
                                 WeightInput(
@@ -316,7 +310,9 @@ struct ConfigureExerciseSetsView: View {
                                     weight: $editingWeight,
                                     increment: 0.25
                                 ) { _ in
-                                    handleSetUpdate(at: index)
+                                    // Guard: only process updates for the currently expanded set
+                                    guard editingSetId == set.id else { return }
+                                    updateSet(set)
                                 }
                             }
                             .padding(.top, 12)
@@ -332,18 +328,18 @@ struct ConfigureExerciseSetsView: View {
 
                 VStack(spacing: 4) {
                     Button(action: addNewSet) {
-                        Text("Add Set")
-                            .foregroundColor(.blue)
+                        Text("exercise.add_set".localized)
+                            .foregroundColor(DesignSystem.Colors.tint)
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 8)
-                            .background(Color.blue.opacity(0.1))
+                            .background(DesignSystem.Colors.tint.opacity(0.1))
                             .cornerRadius(8)
                     }
                     .buttonStyle(PlainButtonStyle())
 
                     if !sets.isEmpty {
                         Button(action: duplicateLastSet) {
-                            Text("Duplicate Last Set")
+                            Text("configure_exercise.duplicate_set".localized)
                                 .foregroundColor(.green)
                                 .frame(maxWidth: .infinity)
                                 .padding(.vertical, 8)
@@ -355,9 +351,9 @@ struct ConfigureExerciseSetsView: View {
                 }
             }
 
-            Section("Rest Timer") {
+            Section("configure_exercise.rest_timer".localized) {
                 HStack {
-                    Text("Rest Time Between Sets")
+                    Text("configure_exercise.rest_time_between_sets".localized)
                     Spacer()
                     Text(TimeFormatting.formatRestTime(globalRestTime))
                 }
@@ -370,11 +366,11 @@ struct ConfigureExerciseSetsView: View {
                     }
             }
         }
-        .navigationTitle("Add to Routine")
+        .navigationTitle("add_to_routine.add_title".localized)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
-                Button("Save") {
+                Button("action.save".localized) {
                     saveExerciseToRoutine()
                 }
                 .disabled(sets.isEmpty)
@@ -383,25 +379,34 @@ struct ConfigureExerciseSetsView: View {
     }
 
     private func addNewSet() {
-        let newSet = ExerciseSet(reps: 10, weight: 0.0, restTime: globalRestTime)
+        // Save current editing set before adding new one
+        saveCurrentEditingSet()
+
+        let order = sets.count
+        let newSet = ExerciseSet(reps: 10, weight: 0.0, restTime: globalRestTime, order: order)
         sets.append(newSet)
 
         withAnimation(.easeInOut(duration: 0.3)) {
-            editingSetIndex = sets.count - 1
+            editingSetId = newSet.id
             editingReps = newSet.reps
             editingWeight = newSet.weight
             initialReps = newSet.reps
             initialWeight = newSet.weight
+            bannerDismissed = false
         }
     }
 
     private func duplicateLastSet() {
+        // Save current editing set before duplicating
+        saveCurrentEditingSet()
+
         guard let lastSet = sets.last else { return }
 
+        // If the last set is currently being edited, use editing values
         let repsToUse: Int
         let weightToUse: Double
 
-        if let editingIndex = editingSetIndex, editingIndex == sets.count - 1 {
+        if editingSetId == lastSet.id {
             repsToUse = editingReps
             weightToUse = editingWeight
         } else {
@@ -409,100 +414,53 @@ struct ConfigureExerciseSetsView: View {
             weightToUse = lastSet.weight
         }
 
-        let newSet = ExerciseSet(reps: repsToUse, weight: weightToUse, restTime: globalRestTime)
+        let order = sets.count
+        let newSet = ExerciseSet(reps: repsToUse, weight: weightToUse, restTime: globalRestTime, order: order)
         sets.append(newSet)
 
         withAnimation(.easeInOut(duration: 0.3)) {
-            editingSetIndex = sets.count - 1
+            editingSetId = newSet.id
             editingReps = newSet.reps
             editingWeight = newSet.weight
             initialReps = newSet.reps
             initialWeight = newSet.weight
+            bannerDismissed = false
         }
     }
 
-    private func handleSetUpdate(at index: Int) {
-        // Apply only to current set (Apply to All is handled by the banner callback)
-        updateSet(at: index)
-    }
-
-    private func updateSet(at index: Int) {
-        guard index < sets.count else { return }
-        sets[index].reps = editingReps
-        sets[index].weight = editingWeight
+    private func updateSet(_ set: ExerciseSet) {
+        set.reps = editingReps
+        set.weight = editingWeight
     }
 
     private func deleteSets(offsets: IndexSet) {
-        sets.remove(atOffsets: offsets)
-        if let editingIndex = editingSetIndex, editingIndex >= sets.count {
-            editingSetIndex = nil
+        // Check if we're deleting the currently editing set
+        for index in offsets {
+            if sets[index].id == editingSetId {
+                editingSetId = nil
+                break
+            }
         }
+        sets.remove(atOffsets: offsets)
     }
 
     private func saveExerciseToRoutine() {
-        let routineExercise = RoutineExercise(exercise: exercise, order: routine.routineExercises.count)
+        // Save any pending edits before saving
+        saveCurrentEditingSet()
+        let routineExercise = RoutineExercise(exercise: exercise, order: routine.routineExercisesList.count)
         routineExercise.routine = routine
 
-        for set in sets {
+        for (index, set) in sets.enumerated() {
             set.restTime = globalRestTime
+            set.order = index
             set.routineExercise = routineExercise
-            routineExercise.sets.append(set)
+            routineExercise.sets?.append(set)
         }
 
-        routine.routineExercises.append(routineExercise)
+        routine.routineExercises?.append(routineExercise)
         viewModel.updateRoutine(routine)
 
         onSave()
-    }
-}
-
-// MARK: - Create Exercise Inline View
-struct CreateExerciseInlineView: View {
-    @ObservedObject var exercisesViewModel: ExercisesViewModel
-    var onExerciseCreated: (Exercise) -> Void
-
-    @State private var exerciseName = ""
-    @State private var muscleGroup = "General"
-    @State private var exerciseDescription = ""
-
-    var body: some View {
-        Form {
-            Section("Exercise Details") {
-                TextField("Exercise Name", text: $exerciseName)
-
-                Picker("Muscle Group", selection: $muscleGroup) {
-                    ForEach(MuscleGroups.all, id: \.self) { muscleGroup in
-                        Text(muscleGroup).tag(muscleGroup)
-                    }
-                }
-
-                TextField("Description (Optional)", text: $exerciseDescription, axis: .vertical)
-                    .lineLimit(3...6)
-            }
-        }
-        .navigationTitle("New Exercise")
-        .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            ToolbarItem(placement: .navigationBarTrailing) {
-                Button("Save") {
-                    saveExercise()
-                }
-                .disabled(exerciseName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-            }
-        }
-    }
-
-    private func saveExercise() {
-        let trimmedName = exerciseName.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmedName.isEmpty else { return }
-
-        if let newExercise = exercisesViewModel.addExercise(
-            name: trimmedName,
-            muscleGroup: muscleGroup,
-            exerciseDescription: exerciseDescription
-        ) {
-            onExerciseCreated(newExercise)
-        }
     }
 }
 

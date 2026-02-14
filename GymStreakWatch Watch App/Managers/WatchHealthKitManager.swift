@@ -114,10 +114,15 @@ final class WatchHealthKitManager: NSObject, ObservableObject {
         workoutSession?.resume()
     }
 
-    func endWorkout() async throws -> HKWorkout? {
+    /// Ends the workout and saves it to HealthKit.
+    /// Returns a tuple containing the saved HKWorkout and the external UUID used for deduplication.
+    func endWorkout() async throws -> (workout: HKWorkout?, healthKitWorkoutId: UUID) {
+        // Generate external UUID for deduplication and correlation with SwiftData
+        let healthKitWorkoutId = UUID()
+
         guard let workoutSession = workoutSession,
               let workoutBuilder = workoutBuilder else {
-            return nil
+            return (nil, healthKitWorkoutId)
         }
 
         workoutSession.end()
@@ -127,15 +132,18 @@ final class WatchHealthKitManager: NSObject, ObservableObject {
 
             // Add metadata. Use the routine name alone as the brand name so Health displays only the workout name.
             var metadata: [String: Any] = [:]
+
+            // Add external UUID for deduplication across devices
+            metadata[HKMetadataKeyExternalUUID] = healthKitWorkoutId.uuidString
+
             if let name = currentRoutineName, !name.isEmpty {
                 metadata[HKMetadataKeyWorkoutBrandName] = name
                 metadata["RoutineName"] = name
             } else {
                 metadata[HKMetadataKeyWorkoutBrandName] = "GymStreak"
             }
-            if !metadata.isEmpty {
-                try? await workoutBuilder.addMetadata(metadata)
-            }
+
+            try? await workoutBuilder.addMetadata(metadata)
 
             let workout = try await workoutBuilder.finishWorkout()
 
@@ -147,8 +155,8 @@ final class WatchHealthKitManager: NSObject, ObservableObject {
             self.workoutBuilder = nil
             self.currentRoutineName = nil
 
-            print("HealthKit: Workout ended and saved")
-            return workout
+            print("HealthKit: Workout ended and saved with ID: \(healthKitWorkoutId)")
+            return (workout, healthKitWorkoutId)
         } catch {
             print("HealthKit: Failed to end workout - \(error.localizedDescription)")
             throw error

@@ -7,19 +7,19 @@ struct RestTimerView: View {
 
     var body: some View {
         VStack(spacing: 32) {
-            Text("Rest Time")
+            Text("rest_timer.title".localized)
                 .font(.headline)
                 .foregroundStyle(.secondary)
 
             // Circular Progress Ring
             ZStack {
                 Circle()
-                    .stroke(Color.secondary.opacity(0.2), lineWidth: 12)
+                    .stroke(DesignSystem.Colors.divider, lineWidth: 12)
                     .frame(width: 160, height: 160)
 
                 Circle()
                     .trim(from: 0, to: progress)
-                    .stroke(Color.blue, style: StrokeStyle(lineWidth: 12, lineCap: .round))
+                    .stroke(DesignSystem.Colors.tint, style: StrokeStyle(lineWidth: 12, lineCap: .round))
                     .frame(width: 160, height: 160)
                     .rotationEffect(.degrees(-90))
                     .animation(.linear(duration: 1), value: progress)
@@ -28,7 +28,7 @@ struct RestTimerView: View {
                     Text(viewModel.formatTime(viewModel.restTimeRemaining))
                         .font(.system(.largeTitle, design: .rounded, weight: .bold))
                         .monospacedDigit()
-                    Text("remaining")
+                    Text("rest_timer.remaining".localized)
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                 }
@@ -41,7 +41,7 @@ struct RestTimerView: View {
                     dismiss()
                     onDismiss()
                 } label: {
-                    Text("Minimize")
+                    Text("rest_timer.minimize".localized)
                         .font(.headline)
                         .frame(maxWidth: .infinity)
                         .frame(height: 50)
@@ -54,7 +54,7 @@ struct RestTimerView: View {
                     dismiss()
                     onDismiss()
                 } label: {
-                    Text("Skip Rest")
+                    Text("rest_timer.skip".localized)
                         .font(.headline)
                         .frame(maxWidth: .infinity)
                         .frame(height: 50)

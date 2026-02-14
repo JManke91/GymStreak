@@ -23,10 +23,10 @@ struct CreateRoutineView: View {
     var body: some View {
         Form {
             Section {
-                TextField("Routine Name", text: $routineName)
+                TextField("create_routine.name_placeholder".localized, text: $routineName)
                     .font(.title3)
             } header: {
-                Text("ROUTINE NAME")
+                Text("create_routine.name".localized.uppercased())
             }
 
             Section {
@@ -38,10 +38,10 @@ struct CreateRoutineView: View {
                             .foregroundColor(.secondary)
 
                         VStack(spacing: 4) {
-                            Text("Add Your First Exercise")
+                            Text("create_routine.empty.title".localized)
                                 .font(.headline)
 
-                            Text("Build your routine by adding exercises and configuring sets")
+                            Text("create_routine.empty.description".localized)
                                 .font(.caption)
                                 .foregroundColor(.secondary)
                                 .multilineTextAlignment(.center)
@@ -59,19 +59,11 @@ struct CreateRoutineView: View {
                                 updateExercise(pendingExercise: pending, withSets: sets)
                             }
                         )) {
-                            HStack(spacing: 12) {
-                                VStack(alignment: .leading, spacing: 4) {
-                                    Text(pending.exercise.name)
-                                        .font(.headline)
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(pending.exercise.name)
+                                    .font(.headline)
 
-                                    Text(pending.setSummary)
-                                        .font(.caption)
-                                        .foregroundColor(.secondary)
-                                }
-
-                                Spacer()
-
-                                Image(systemName: "chevron.right")
+                                Text(pending.setSummary)
                                     .font(.caption)
                                     .foregroundColor(.secondary)
                             }
@@ -81,7 +73,7 @@ struct CreateRoutineView: View {
                             Button(role: .destructive) {
                                 deleteExercise(pending)
                             } label: {
-                                Label("Delete", systemImage: "trash")
+                                Label("action.delete".localized, systemImage: "trash")
                             }
                         }
                     }
@@ -99,23 +91,17 @@ struct CreateRoutineView: View {
                         addExercise(exercise: exercise, sets: sets)
                     }
                 )) {
-                    HStack {
-                        Text("Add Exercise")
-                        Spacer()
-                        Image(systemName: "chevron.right")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                    }
+                    Text("routine.add_exercise".localized)
                 }
             } header: {
-                Text("EXERCISES")
+                Text("exercises.title".localized.uppercased())
             }
         }
-        .navigationTitle("New Routine")
+        .navigationTitle("create_routine.new_title".localized)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .cancellationAction) {
-                Button("Cancel") {
+                Button("action.cancel".localized) {
                     if hasUnsavedChanges {
                         showingCancelAlert = true
                     } else {
@@ -125,19 +111,19 @@ struct CreateRoutineView: View {
             }
 
             ToolbarItem(placement: .confirmationAction) {
-                Button("Save") {
+                Button("action.save".localized) {
                     saveRoutine()
                 }
                 .disabled(!canSave)
             }
         }
-        .alert("Discard Routine?", isPresented: $showingCancelAlert) {
-            Button("Keep Editing", role: .cancel) { }
-            Button("Discard", role: .destructive) {
+        .alert("create_routine.discard.title".localized, isPresented: $showingCancelAlert) {
+            Button("create_routine.keep_editing".localized, role: .cancel) { }
+            Button("create_routine.discard".localized, role: .destructive) {
                 dismiss()
             }
         } message: {
-            Text("You have unsaved changes. Are you sure you want to discard this routine?")
+            Text("create_routine.discard.message".localized)
         }
     }
 
@@ -193,18 +179,19 @@ struct CreateRoutineView: View {
             routineExercise.routine = routine
 
             // Create sets for this routine exercise
-            for set in pending.sets {
+            for (index, set) in pending.sets.enumerated() {
                 let newSet = ExerciseSet(
                     reps: set.reps,
                     weight: set.weight,
-                    restTime: set.restTime
+                    restTime: set.restTime,
+                    order: index
                 )
                 newSet.routineExercise = routineExercise
-                routineExercise.sets.append(newSet)
+                routineExercise.sets?.append(newSet)
                 modelContext.insert(newSet)
             }
 
-            routine.routineExercises.append(routineExercise)
+            routine.routineExercises?.append(routineExercise)
             modelContext.insert(routineExercise)
         }
 

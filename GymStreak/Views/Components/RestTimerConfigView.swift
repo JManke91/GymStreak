@@ -40,17 +40,17 @@ struct RestTimerConfigView: View {
                     HStack(spacing: 6) {
                         Image(systemName: isRestTimerEnabled ? "timer" : "timer.slash")
                             .font(.subheadline)
-                            .foregroundStyle(isRestTimerEnabled ? .blue : .secondary)
+                            .foregroundStyle(isRestTimerEnabled ? DesignSystem.Colors.tint : .secondary)
 
                         if isRestTimerEnabled {
-                            Text("Rest:")
+                            Text("rest_timer.rest".localized)
                                 .font(.subheadline)
                                 .foregroundStyle(.secondary)
                             Text(TimeFormatting.formatRestTime(restTime))
                                 .font(.subheadline.weight(.medium))
-                                .foregroundStyle(.blue)
+                                .foregroundStyle(DesignSystem.Colors.tint)
                         } else {
-                            Text("Set Rest Timer")
+                            Text("rest_timer.set".localized)
                                 .font(.subheadline.weight(.medium))
                                 .foregroundStyle(.secondary)
                         }
@@ -59,7 +59,7 @@ struct RestTimerConfigView: View {
                     .padding(.vertical, 8)
                     .background(
                         RoundedRectangle(cornerRadius: 8)
-                            .fill(isRestTimerEnabled ? Color.blue.opacity(0.1) : Color.secondary.opacity(0.1))
+                            .fill(isRestTimerEnabled ? DesignSystem.Colors.tint.opacity(0.1) : Color.secondary.opacity(0.1))
                     )
 
                     Spacer()
@@ -74,8 +74,8 @@ struct RestTimerConfigView: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .accessibilityLabel(isRestTimerEnabled ? "Rest timer: \(TimeFormatting.formatRestTime(restTime))" : "Rest timer disabled")
-            .accessibilityHint(isExpanded ? "Tap to collapse" : "Tap to enable and configure")
+            .accessibilityLabel(isRestTimerEnabled ? "rest_timer.config.enabled".localized(TimeFormatting.formatRestTime(restTime)) : "rest_timer.config.disabled".localized)
+            .accessibilityHint(isExpanded ? "accessibility.set.hint.expanded".localized : "Tap to enable and configure")
             .accessibilityAddTraits(.isButton)
 
             // Expanded configuration
@@ -95,7 +95,7 @@ struct RestTimerConfigView: View {
                             UIImpactFeedbackGenerator(style: .light).impactOccurred()
                         }
                     ), in: 0...300, step: 30)
-                    .tint(.blue)
+                    .tint(DesignSystem.Colors.tint)
 
                     // Quick preset buttons
                     HStack(spacing: 8) {
@@ -110,12 +110,12 @@ struct RestTimerConfigView: View {
                             } label: {
                                 Text("\(Int(preset))s")
                                     .font(.subheadline.weight(.medium))
-                                    .foregroundStyle(restTime == preset ? .white : .blue)
+                                    .foregroundStyle(restTime == preset ? .white : DesignSystem.Colors.tint)
                                     .frame(maxWidth: .infinity)
                                     .padding(.vertical, 8)
                                     .background(
                                         RoundedRectangle(cornerRadius: 8)
-                                            .fill(restTime == preset ? Color.blue : Color.blue.opacity(0.1))
+                                            .fill(restTime == preset ? DesignSystem.Colors.tint : DesignSystem.Colors.tint.opacity(0.1))
                                     )
                             }
                             .buttonStyle(.plain)
@@ -131,7 +131,7 @@ struct RestTimerConfigView: View {
                             HStack {
                                 Image(systemName: "timer.slash")
                                     .font(.subheadline)
-                                Text("Disable Rest Timer")
+                                Text("rest_timer.disable".localized)
                                     .font(.subheadline.weight(.medium))
                             }
                             .foregroundStyle(.red)
@@ -155,7 +155,7 @@ struct RestTimerConfigView: View {
         .padding(12)
         .background(
             RoundedRectangle(cornerRadius: 12)
-                .fill(isExpanded && isRestTimerEnabled ? Color.blue.opacity(0.05) : Color.clear)
+                .fill(isExpanded && isRestTimerEnabled ? DesignSystem.Colors.tint.opacity(0.05) : Color.clear)
         )
         .onAppear {
             // Initialize lastRestTime if restTime is already set

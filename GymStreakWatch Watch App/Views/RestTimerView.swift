@@ -20,7 +20,7 @@ struct NewRestTimerView: View {
             backgroundProgressLayer
             runningContent
         }
-        .background(Color.black)
+        .background(OnyxWatch.Colors.background)
         .onAppear { pulse = true }
         .onChange(of: shouldPulse) { isPulsing in
             if isPulsing {
@@ -78,7 +78,7 @@ struct NewRestTimerView: View {
             .animation(.linear(duration: 0.5), value: progress)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color.black)
+        .background(OnyxWatch.Colors.background)
         .scaleEffect(backgroundPulse)
         .animation(.easeInOut(duration: 0.6), value: backgroundPulse)
         .ignoresSafeArea()
@@ -118,7 +118,7 @@ struct NewRestTimerView: View {
                     Text("Skip")
                         .font(.footnote.weight(.semibold))
                 }
-                .tint(.orange)
+                .tint(OnyxWatch.Colors.warning)
             }
             .buttonBorderShape(.capsule)
         }
@@ -139,6 +139,104 @@ struct NewRestTimerView: View {
         timeRemaining <= 3 && state == .running
     }
 }
+
+
+
+//struct RestTimerView: View {
+//    let timeRemaining: TimeInterval
+//    let totalDuration: TimeInterval
+//    let formattedTime: String
+//    let state: WatchWorkoutViewModel.RestTimerState
+//    let onSkip: () -> Void
+//    let onMinimize: () -> Void
+//
+//    var body: some View {
+//        let _ = print("🎨 Rendering RestTimerView - state: \(state)")
+//        ZStack {
+//            // Running timer state
+//            VStack(spacing: 8) {
+//                Text("Rest")
+//                    .font(.caption2)
+//                    .foregroundStyle(.secondary)
+//
+//                // Large timer display
+//                Text(formattedTime)
+//                    .font(.system(.title, design: .rounded).monospacedDigit())
+//                    .foregroundStyle(.yellow)
+//                    .accessibilityLabel("Rest time remaining \(formattedTime)")
+//
+//                // Progress ring - slightly smaller
+//                ZStack {
+//                    Circle()
+//                        .stroke(Color.gray.opacity(0.3), lineWidth: 5)
+//
+//                    Circle()
+//                        .trim(from: 0, to: progress)
+//                        .stroke(Color.yellow, style: StrokeStyle(lineWidth: 5, lineCap: .round))
+//                        .rotationEffect(.degrees(-90))
+//                        .animation(.linear(duration: 1), value: progress)
+//                }
+//                .frame(width: 55, height: 55)
+//
+//                // Horizontal button layout - only show in running state
+//                HStack(spacing: 8) {
+//                    Button {
+//                        onMinimize()
+//                    } label: {
+//                        Image(systemName: "chevron.down")
+//                            .font(.system(size: 14, weight: .semibold))
+//                    }
+////                    .buttonStyle(.bordered)
+//                    .tint(.blue)
+//                    .accessibilityLabel("Minimize")
+//                    .accessibilityHint("Double tap to minimize rest timer")
+//
+//                    Button {
+//                        onSkip()
+//                    } label: {
+//                        Text("Skip")
+//                            .font(.footnote.weight(.semibold))
+//                    }
+////                    .buttonStyle(.bordered)
+//                    .tint(OnyxWatch.Colors.warning)
+//                    .accessibilityHint("Double tap to skip rest")
+//                }
+//                .buttonBorderShape(.capsule)
+//            }
+//            .opacity(state == .running ? 1 : 0)
+//
+//            // Beautiful completion screen
+//            VStack(spacing: 12) {
+//                let _ = print("✅ Completion view in hierarchy - opacity: \(state == .completed ? 1.0 : 0.0)")
+//                Image(systemName: "checkmark.circle.fill")
+//                    .font(.system(size: 44))
+//                    .foregroundStyle(.green)
+//                    .symbolEffect(.bounce, value: state == .completed)
+//
+//                Text("Let's Go!")
+//                    .font(.system(.title2, design: .rounded, weight: .bold))
+//                    .foregroundStyle(.green)
+//
+//                Text("Rest Complete")
+//                    .font(.caption2)
+//                    .foregroundStyle(.secondary)
+//            }
+//            .opacity(state == .completed ? 1 : 0)
+//            .scaleEffect(state == .completed ? 1.0 : 0.85)
+//            .accessibilityLabel("Rest complete. Let's go!")
+//        }
+//        .padding(.horizontal, 8)
+//        .padding(.vertical, 12)
+//        .frame(maxWidth: .infinity, maxHeight: .infinity)
+//        .background(Color(.black))
+//        .animation(.spring(response: 0.4, dampingFraction: 0.65), value: state)
+//    }
+//
+//    private var progress: Double {
+//        guard totalDuration > 0 else { return 0 }
+//        return timeRemaining / totalDuration
+//    }
+//}
 
 // MARK: - Compact Rest Timer
 

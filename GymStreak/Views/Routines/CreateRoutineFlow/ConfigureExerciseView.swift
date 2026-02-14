@@ -17,8 +17,6 @@ struct ConfigureExerciseView: View {
     @State private var sets: [ExerciseSet] = []
     @State private var globalRestTime: TimeInterval = 0.0
     @State private var editingSetIndex: Int?
-    @State private var editingReps = 10
-    @State private var editingWeight = 0.0
 
     init(exercise: Exercise, existingSets: [ExerciseSet]? = nil, onComplete: @escaping (Exercise, [ExerciseSet]) -> Void) {
         self.exercise = exercise
@@ -28,41 +26,31 @@ struct ConfigureExerciseView: View {
 
     var body: some View {
         Form {
-            Section("Exercise Info") {
+            Section("configure_exercise.info".localized) {
                 HStack {
-                    Text("Name")
+                    Text("exercises.name".localized)
                     Spacer()
                     Text(exercise.name)
                         .foregroundColor(.secondary)
                 }
 
                 HStack {
-                    Text("Muscle Group")
+                    Text("exercises.muscle_groups".localized)
                     Spacer()
-                    Text(exercise.muscleGroup)
+                    Text(MuscleGroups.displayString(for: exercise.muscleGroups))
                         .foregroundColor(.secondary)
-                }
-
-                if !exercise.exerciseDescription.isEmpty {
-                    HStack(alignment: .top) {
-                        Text("Description")
-                        Spacer()
-                        Text(exercise.exerciseDescription)
-                            .foregroundColor(.secondary)
-                            .multilineTextAlignment(.trailing)
-                    }
                 }
             }
 
-            Section("Sets") {
+            Section("configure_exercise.sets".localized) {
                 if sets.isEmpty {
                     // Empty state
                     VStack(spacing: 8) {
-                        Text("No sets configured")
+                        Text("configure_exercise.empty.title".localized)
                             .foregroundColor(.secondary)
                             .font(.caption)
 
-                        Text("Tap 'Add Set' below to start")
+                        Text("configure_exercise.empty.description".localized)
                             .foregroundColor(.secondary)
                             .font(.caption2)
                     }
@@ -79,17 +67,15 @@ struct ConfigureExerciseView: View {
                                         editingSetIndex = nil
                                     } else {
                                         editingSetIndex = index
-                                        editingReps = set.reps
-                                        editingWeight = set.weight
                                     }
                                 }
                             }) {
                                 HStack {
-                                    Text("Set \(index + 1)")
+                                    Text("set.number".localized(index + 1))
                                         .font(.headline)
                                         .foregroundColor(.primary)
                                     Spacer()
-                                    Text("\(set.reps) reps • \(set.weight, specifier: "%.1f") kg")
+                                    Text("configure_exercise.set_detail".localized(sets[index].reps, sets[index].weight))
                                         .foregroundColor(.secondary)
                                     Image(systemName: "chevron.right")
                                         .font(.caption)
@@ -105,24 +91,35 @@ struct ConfigureExerciseView: View {
                             if editingSetIndex == index {
                                 VStack(spacing: 12) {
                                     HStack {
-                                        Text("Reps:")
+                                        Text("set.reps_label".localized + ":")
                                         Spacer()
-                                        Stepper("\(editingReps)", value: $editingReps, in: 1...100)
-                                            .onChange(of: editingReps) { _, _ in
-                                                updateSet(at: index)
+                                        Stepper("\(sets[index].reps)", value: Binding(
+                                            get: { sets[index].reps },
+                                            set: { newValue in
+                                                sets[index].reps = newValue
+                                                // Force array update to trigger SwiftUI refresh
+                                                let temp = sets
+                                                sets = temp
                                             }
+                                        ), in: 1...100)
                                     }
 
                                     HStack {
-                                        Text("Weight (kg):")
+                                        Text("set.weight_label".localized + ":")
                                         Spacer()
-                                        TextField("0.0", value: $editingWeight, format: .number)
+                                        TextField("0.0", value: Binding(
+                                            get: { sets[index].weight },
+                                            set: { newValue in
+                                                sets[index].weight = newValue
+                                                // Force array update to trigger SwiftUI refresh
+                                                let temp = sets
+                                                sets = temp
+                                            }
+                                        ), format: .number)
                                             .keyboardType(.decimalPad)
                                             .multilineTextAlignment(.trailing)
                                             .frame(width: 80)
-                                            .onChange(of: editingWeight) { _, _ in
-                                                updateSet(at: index)
-                                            }
+                                            .selectAllOnFocus()
                                     }
                                 }
                                 .padding(.top, 8)
@@ -138,18 +135,18 @@ struct ConfigureExerciseView: View {
 
                 VStack(spacing: 4) {
                     Button(action: addNewSet) {
-                        Text("Add Set")
-                            .foregroundColor(.blue)
+                        Text("exercise.add_set".localized)
+                            .foregroundColor(DesignSystem.Colors.tint)
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 8)
-                            .background(Color.blue.opacity(0.1))
+                            .background(DesignSystem.Colors.tint.opacity(0.1))
                             .cornerRadius(8)
                     }
                     .buttonStyle(PlainButtonStyle())
 
                     if !sets.isEmpty {
                         Button(action: duplicateLastSet) {
-                            Text("Duplicate Last Set")
+                            Text("configure_exercise.duplicate_set".localized)
                                 .foregroundColor(.green)
                                 .frame(maxWidth: .infinity)
                                 .padding(.vertical, 8)
@@ -161,9 +158,9 @@ struct ConfigureExerciseView: View {
                 }
             }
 
-            Section("Rest Timer") {
+            Section("configure_exercise.rest_timer".localized) {
                 HStack {
-                    Text("Rest Time Between Sets")
+                    Text("configure_exercise.rest_time_between_sets".localized)
                     Spacer()
                     Text(TimeFormatting.formatRestTime(globalRestTime))
                 }
@@ -181,7 +178,7 @@ struct ConfigureExerciseView: View {
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 if !isEditMode {
-                    Button("Add to Routine") {
+                    Button("configure_exercise.add_to_routine".localized) {
                         addToRoutine()
                     }
                     .disabled(sets.isEmpty)
@@ -231,41 +228,19 @@ struct ConfigureExerciseView: View {
         // Auto-open the newly added set for editing
         withAnimation(.easeInOut(duration: 0.3)) {
             editingSetIndex = sets.count - 1
-            editingReps = newSet.reps
-            editingWeight = newSet.weight
         }
     }
 
     private func duplicateLastSet() {
         guard let lastSet = sets.last else { return }
 
-        let repsToUse: Int
-        let weightToUse: Double
-
-        // If the last set is currently being edited, use the editing values
-        if let editingIndex = editingSetIndex, editingIndex == sets.count - 1 {
-            repsToUse = editingReps
-            weightToUse = editingWeight
-        } else {
-            repsToUse = lastSet.reps
-            weightToUse = lastSet.weight
-        }
-
-        let newSet = ExerciseSet(reps: repsToUse, weight: weightToUse, restTime: globalRestTime)
+        let newSet = ExerciseSet(reps: lastSet.reps, weight: lastSet.weight, restTime: globalRestTime)
         sets.append(newSet)
 
         // Open the new set for editing
         withAnimation(.easeInOut(duration: 0.3)) {
             editingSetIndex = sets.count - 1
-            editingReps = newSet.reps
-            editingWeight = newSet.weight
         }
-    }
-
-    private func updateSet(at index: Int) {
-        guard index < sets.count else { return }
-        sets[index].reps = editingReps
-        sets[index].weight = editingWeight
     }
 
     private func deleteSets(offsets: IndexSet) {

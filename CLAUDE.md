@@ -4,6 +4,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Development Commands
 
+## Buildind new features/updating exisitng features
+- After building a new feature, make sure the app still compiles
+- When building a new feature make sure to create a .md file in the /docs folder that summarizes all the important details inlcuding what the feature does, how it works, how it's architecutlly structured, what components are involved etc. make sure to include the ios and watch target for documentation. the goal is to be able to reference this file later for quick context
+- For every code change check if an existing feature is modified and if there already is a corresponsing .md file in the /docs folder make sure to update according to the criteria stated for building new .md files.
+
 This is an iOS app built with Xcode:
 
 - **Build & Run**: Open `GymStreak.xcodeproj` in Xcode and use Cmd+R to build and run
@@ -186,6 +191,12 @@ Use Mappers to translate DTO <-> Domain Model
 - SafeArea and GeometryReader for layout
 - Handle all screen sizes and orientations
 - Implement proper keyboard handling
+
+### Color Contrast Guidelines
+- **IMPORTANT**: Never use white text on the app's green tint color (`DesignSystem.Colors.tint`) - it lacks sufficient contrast
+- Always use `DesignSystem.Colors.textOnTint` (black) for text/icons displayed on tint-colored backgrounds
+- This applies to: badges, buttons with tint backgrounds, hint banners, and any UI element with a green background
+- The design system provides `textOnTint` specifically for this purpose in both iOS (`DesignSystem.Colors.textOnTint`) and watchOS (`OnyxWatch.Colors.textOnTint`)
 
 ### Key Components
 

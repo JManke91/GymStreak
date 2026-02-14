@@ -3,31 +3,38 @@ import SwiftData
 
 struct RoutinesView: View {
     @Environment(\.modelContext) private var modelContext
+
+    var body: some View {
+        RoutinesViewInternal(modelContext: modelContext)
+    }
+}
+
+private struct RoutinesViewInternal: View {
     @StateObject private var viewModel: RoutinesViewModel
     @StateObject private var exercisesViewModel: ExercisesViewModel
     @StateObject private var workoutViewModel: WorkoutViewModel
+    @State private var routinePendingDeletion: Routine?
+    @State private var showingDeleteAlert = false
 
-    init() {
-        // Initialize with a temporary context, will be updated in onAppear
-        let tempContext = ModelContext(try! ModelContainer(for: Routine.self, Exercise.self, RoutineExercise.self, ExerciseSet.self, WorkoutSession.self, WorkoutExercise.self, WorkoutSet.self))
-        self._viewModel = StateObject(wrappedValue: RoutinesViewModel(modelContext: tempContext))
-        self._exercisesViewModel = StateObject(wrappedValue: ExercisesViewModel(modelContext: tempContext))
-        self._workoutViewModel = StateObject(wrappedValue: WorkoutViewModel(modelContext: tempContext))
+    init(modelContext: ModelContext) {
+        self._viewModel = StateObject(wrappedValue: RoutinesViewModel(modelContext: modelContext))
+        self._exercisesViewModel = StateObject(wrappedValue: ExercisesViewModel(modelContext: modelContext))
+        self._workoutViewModel = StateObject(wrappedValue: WorkoutViewModel(modelContext: modelContext))
     }
-    
+
     var body: some View {
         NavigationView {
             Group {
                 if viewModel.routines.isEmpty {
                     ContentUnavailableView {
-                        Label("No Routines Yet", systemImage: "list.bullet.clipboard")
+                        Label("routines.empty.title".localized, systemImage: "list.bullet.clipboard")
                     } description: {
-                        Text("Create your first routine to get started")
+                        Text("routines.empty.description".localized)
                     } actions: {
-                        Button("Add Routine") {
+                        Button("routines.add".localized) {
                             viewModel.showingAddRoutine = true
                         }
-                        .buttonStyle(.borderedProminent)
+                        .buttonStyle(.onyxProminent)
                     }
                 } else {
                     List {
@@ -40,11 +47,16 @@ struct RoutinesView: View {
                     }
                 }
             }
-            .navigationTitle("Routines")
+            .navigationTitle("routines.title".localized)
             .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("Add Routine") {
-                        viewModel.showingAddRoutine = true
+                if !viewModel.routines.isEmpty {
+                    ToolbarItem(placement: .navigationBarTrailing) {
+                        Button {
+                            viewModel.showingAddRoutine = true
+                        } label: {
+                            Image(systemName: "plus")
+                        }
+                        .accessibilityLabel("routines.add".localized)
                     }
                 }
             }
@@ -56,31 +68,40 @@ struct RoutinesView: View {
                     )
                 }
             }
+            .alert("routine.delete".localized, isPresented: $showingDeleteAlert) {
+                Button("action.delete".localized, role: .destructive) {
+                    if let routine = routinePendingDeletion {
+                        viewModel.deleteRoutine(routine)
+                        routinePendingDeletion = nil
+                    }
+                }
+                Button("action.cancel".localized, role: .cancel) {
+                    routinePendingDeletion = nil
+                }
+            } message: {
+                Text("routine.delete.confirm".localized)
+            }
         }
         .onAppear {
-            // Update viewModels with the actual modelContext from environment
-            viewModel.updateModelContext(modelContext)
-            exercisesViewModel.updateModelContext(modelContext)
-            workoutViewModel.updateModelContext(modelContext)
             viewModel.fetchRoutines()
         }
     }
-    
+
     private func deleteRoutines(offsets: IndexSet) {
-        for index in offsets {
-            viewModel.deleteRoutine(viewModel.routines[index])
-        }
+        guard let index = offsets.first else { return }
+        routinePendingDeletion = viewModel.routines[index]
+        showingDeleteAlert = true
     }
 }
 
 struct RoutineRowView: View {
     let routine: Routine
-    
+
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             Text(routine.name)
                 .font(.headline)
-            Text("\(routine.routineExercises.count) exercises")
+            Text("routines.exercise_count".localized(routine.routineExercisesList.count))
                 .font(.caption)
                 .foregroundColor(.secondary)
         }

@@ -54,9 +54,13 @@ struct ApplyToAllBanner: View {
 
     private var labelText: String {
         if let type = type {
-            return "Apply \(type.label) to all \(setCount)?"
+            if type == .reps {
+                return "apply_to_all.reps".localized(setCount)
+            } else {
+                return "apply_to_all.weight".localized(setCount)
+            }
         } else {
-            return "Apply to all \(setCount)?"
+            return "apply_to_all.generic".localized(setCount)
         }
     }
 
@@ -65,7 +69,7 @@ struct ApplyToAllBanner: View {
             Image(systemName: icon)
                 .font(.caption)
                 .symbolRenderingMode(.hierarchical)
-                .foregroundStyle(.blue)
+                .foregroundStyle(DesignSystem.Colors.tint)
                 .frame(width: 20, height: 20)
 
             Text(labelText)
@@ -81,12 +85,12 @@ struct ApplyToAllBanner: View {
                 UIImpactFeedbackGenerator(style: .medium).impactOccurred()
                 onApply()
             } label: {
-                Text("Apply")
+                Text("apply_to_all.apply".localized)
                     .font(.caption.weight(.semibold))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(DesignSystem.Colors.textOnTint)
                     .padding(.horizontal, 12)
                     .padding(.vertical, 6)
-                    .background(.blue, in: Capsule())
+                    .background(DesignSystem.Colors.tint, in: Capsule())
                     .lineLimit(1)
                     .fixedSize()
             }
@@ -110,7 +114,7 @@ struct ApplyToAllBanner: View {
         .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 8))
         .overlay(
             RoundedRectangle(cornerRadius: 8)
-                .strokeBorder(Color.blue.opacity(0.3), lineWidth: 1)
+                .strokeBorder(DesignSystem.Colors.tint.opacity(0.3), lineWidth: 1)
         )
     }
 }

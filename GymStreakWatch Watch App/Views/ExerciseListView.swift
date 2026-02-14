@@ -54,7 +54,7 @@ struct ExerciseListView: View {
                     }
                     .frame(maxWidth: .infinity)
                 }
-                .foregroundStyle(.orange)
+                .foregroundStyle(OnyxWatch.Colors.warning)
                 .listRowBackground(Color.orange.opacity(0.15))
                 .accessibilityLabel("End workout")
                 .accessibilityHint("Double tap to finish or discard your workout")
@@ -154,7 +154,7 @@ struct WorkoutProgressHeader: View {
 
                         Circle()
                             .trim(from: 0, to: progress)
-                            .stroke(Color.green, style: StrokeStyle(lineWidth: 6, lineCap: .round))
+                            .stroke(OnyxWatch.Colors.success, style: StrokeStyle(lineWidth: 6, lineCap: .round))
                             .rotationEffect(.degrees(-90))
 
                         VStack(spacing: 0) {
@@ -294,10 +294,20 @@ struct ExerciseRow: View {
                 StatusIcon(status: status)
 
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(exercise.name)
-                        .font(.headline)
-                        .fontWeight(isCurrent ? .semibold : .regular)
-                        .lineLimit(1)
+                    HStack(spacing: 6) {
+                        Text(exercise.name)
+                            .font(.headline)
+                            .fontWeight(isCurrent ? .semibold : .regular)
+                            .lineLimit(1)
+
+                        // Superset badge
+                        if exercise.isInSuperset {
+                            WatchSupersetBadge(
+                                position: exercise.supersetOrder + 1,
+                                total: nil // We don't have total easily accessible here
+                            )
+                        }
+                    }
 
                     Text("\(exercise.completedSetsCount)/\(exercise.sets.count) sets")
                         .font(.caption)
@@ -314,11 +324,39 @@ struct ExerciseRow: View {
             }
         }
         .listRowBackground(
-            isCurrent ? Color.accentColor.opacity(0.15) : Color.clear
+            exercise.isInSuperset
+                ? Color.accentColor.opacity(0.1)
+                : (isCurrent ? Color.accentColor.opacity(0.15) : Color.clear)
         )
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(exercise.name), \(status.accessibilityLabel), \(exercise.completedSetsCount) of \(exercise.sets.count) sets completed")
+        .accessibilityLabel("\(exercise.name), \(status.accessibilityLabel), \(exercise.completedSetsCount) of \(exercise.sets.count) sets completed\(exercise.isInSuperset ? ", part of superset" : "")")
         .accessibilityHint("Double tap to view sets")
+    }
+}
+
+// MARK: - Watch Superset Badge
+
+struct WatchSupersetBadge: View {
+    let position: Int
+    let total: Int?
+
+    var body: some View {
+        HStack(spacing: 2) {
+            Image(systemName: "link")
+                .font(.system(size: 8, weight: .bold))
+            if let total = total {
+                Text("\(position)/\(total)")
+                    .font(.system(size: 9, weight: .semibold))
+                    .monospacedDigit()
+            }
+        }
+        .foregroundStyle(OnyxWatch.Colors.textOnTint)
+        .padding(.horizontal, 4)
+        .padding(.vertical, 2)
+        .background(
+            Capsule()
+                .fill(OnyxWatch.Colors.tint.opacity(0.8))
+        )
     }
 }
 
@@ -349,16 +387,16 @@ struct StatusIcon: View {
             switch status {
             case .completed:
                 Image(systemName: "checkmark.circle.fill")
-                    .foregroundStyle(.green)
+                    .foregroundStyle(OnyxWatch.Colors.success)
 
             case .inProgress:
                 Image(systemName: "circle.dotted")
-                    .foregroundStyle(.blue)
+                    .foregroundStyle(OnyxWatch.Colors.tint)
                     .symbolEffect(.pulse, isActive: !reduceMotion)
 
             case .partiallyComplete:
                 Image(systemName: "circle.bottomhalf.filled")
-                    .foregroundStyle(.orange)
+                    .foregroundStyle(OnyxWatch.Colors.warning)
 
             case .pending:
                 Image(systemName: "circle")

@@ -1,0 +1,99 @@
+default_platform(:ios)
+
+# Resize screenshots from 1320x2868 (iPhone 17 Pro Max) to 1284x2778 (App Store 6.5" requirement)
+def resize_screenshots_for_app_store
+  # Fastlane runs from the fastlane directory, so use relative path from there
+  screenshots_dir = "./screenshots"
+  target_width = 1284
+  target_height = 2778
+
+  png_files = Dir.glob("#{screenshots_dir}/**/*.png")
+  UI.message("Found #{png_files.count} PNG files to process")
+
+  png_files.each do |file|
+    # Get current dimensions
+    dimensions = `sips -g pixelWidth -g pixelHeight "#{file}" 2>/dev/null`
+    width = dimensions.match(/pixelWidth: (\d+)/)&.[](1)&.to_i
+    height = dimensions.match(/pixelHeight: (\d+)/)&.[](1)&.to_i
+
+    # Only resize if it's the iPhone 17 Pro Max resolution (portrait or landscape)
+    if (width == 1320 && height == 2868)
+      UI.message("Resizing #{File.basename(file)} from #{width}x#{height} to #{target_width}x#{target_height}")
+      `sips -z #{target_height} #{target_width} "#{file}"`
+    elsif (width == 2868 && height == 1320)
+      UI.message("Resizing #{File.basename(file)} from #{width}x#{height} to #{target_height}x#{target_width} (landscape)")
+      `sips -z #{target_width} #{target_height} "#{file}"`
+    end
+  end
+
+  UI.success("Screenshots resized for App Store Connect (6.5\" display: #{target_width}x#{target_height})")
+end
+
+platform :ios do
+  desc "Generate screenshots for App Store (dark mode only)"
+  lane :screenshots do
+    begin
+      # Temporarily disable Watch app dependency for simulator build
+      sh("ruby", "./disable_watch_dependency.rb", "disable")
+
+      # Run dark mode screenshots
+      snapshot(
+        clean: true,
+        reinstall_app: true,
+        erase_simulator: true,
+        skip_open_summary: true,
+        buildlog_path: "./fastlane/logs",
+        dark_mode: true,
+        only_testing: ["GymStreakUITests/GymStreakUITests/testGenerateScreenshotsDarkMode"],
+        clear_previous_screenshots: true
+      )
+
+      # Resize screenshots for App Store Connect (6.5" display requirement)
+      resize_screenshots_for_app_store
+    ensure
+      # Always restore Watch app dependency
+      sh("ruby", "./disable_watch_dependency.rb", "restore")
+    end
+  end
+
+  desc "Generate only dark mode screenshots (alias for screenshots lane)"
+  lane :screenshots_dark do
+    begin
+      sh("ruby", "./disable_watch_dependency.rb", "disable")
+      snapshot(
+        clean: true,
+        reinstall_app: true,
+        erase_simulator: true,
+        skip_open_summary: true,
+        buildlog_path: "./fastlane/logs",
+        dark_mode: true,
+        only_testing: ["GymStreakUITests/GymStreakUITests/testGenerateScreenshotsDarkMode"]
+      )
+
+      # Resize screenshots for App Store Connect (6.5" display requirement)
+      resize_screenshots_for_app_store
+    ensure
+      sh("ruby", "./disable_watch_dependency.rb", "restore")
+    end
+  end
+
+  desc "Run UI tests without capturing screenshots"
+  lane :test_ui do
+    run_tests(
+      scheme: "GymStreak",
+      devices: ["iPhone 17 Pro Max"],
+      test_without_building: false,
+      clean: true
+    )
+  end
+
+  desc "Upload screenshots to App Store Connect"
+  lane :upload_screenshots do
+    deliver(
+      skip_binary_upload: true,
+      skip_metadata: true,
+      overwrite_screenshots: true,
+      screenshots_path: "./fastlane/screenshots"
+    )
+  end
+end

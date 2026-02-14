@@ -1,55 +1,79 @@
 import SwiftUI
 
+enum ExerciseFormPresentationMode {
+    case sheet      // Wrapped in NavigationView, has cancel button
+    case navigation // No NavigationView wrapper, uses nav back button
+}
+
 struct AddExerciseView: View {
     @ObservedObject var viewModel: ExercisesViewModel
     @Environment(\.dismiss) private var dismiss
 
     @State private var exerciseName = ""
-    @State private var muscleGroup = "General"
-    @State private var exerciseDescription = ""
+    @State private var muscleGroups: [String] = ["Chest"]
+    @State private var equipmentType: EquipmentType = .dumbbell
 
-    // Optional callback when exercise is created (for use in CreateRoutineFlow)
+    var presentationMode: ExerciseFormPresentationMode = .sheet
     var onExerciseCreated: ((Exercise) -> Void)?
-    
+
     var body: some View {
-        NavigationView {
-            Form {
-                Section("Exercise Details") {
-                    TextField("Exercise Name", text: $exerciseName)
-                    
-                    Picker("Muscle Group", selection: $muscleGroup) {
-                        ForEach(MuscleGroups.all, id: \.self) { muscleGroup in
-                            Text(muscleGroup).tag(muscleGroup)
+        Group {
+            if presentationMode == .sheet {
+                NavigationView {
+                    formContent
+                        .toolbar {
+                            ToolbarItem(placement: .navigationBarLeading) {
+                                Button("action.cancel".localized) {
+                                    dismiss()
+                                }
+                            }
+                            ToolbarItem(placement: .navigationBarTrailing) {
+                                saveButton
+                            }
+                        }
+                }
+            } else {
+                formContent
+                    .toolbar {
+                        ToolbarItem(placement: .navigationBarTrailing) {
+                            saveButton
                         }
                     }
-                    
-                    TextField("Description (Optional)", text: $exerciseDescription, axis: .vertical)
-                        .lineLimit(3...6)
-                }
-            }
-            .navigationTitle("New Exercise")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarLeading) {
-                    Button("Cancel") {
-                        dismiss()
-                    }
-                }
-                
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("Save") {
-                        saveExercise()
-                    }
-                    .disabled(exerciseName.isEmpty)
-                }
             }
         }
     }
-    
-    private func saveExercise() {
-        let newExercise = viewModel.addExercise(name: exerciseName, muscleGroup: muscleGroup, exerciseDescription: exerciseDescription)
 
-        // Call completion callback if provided (for CreateRoutineFlow integration)
+    private var formContent: some View {
+        Form {
+            Section {
+                TextField("exercises.name".localized, text: $exerciseName)
+
+                MuscleGroupPicker(selectedMuscleGroups: $muscleGroups)
+
+                EquipmentTypePicker(selectedEquipmentType: $equipmentType)
+            }
+        }
+        .navigationTitle("add_exercise.title".localized)
+        .navigationBarTitleDisplayMode(.inline)
+    }
+
+    private var saveButton: some View {
+        Button("action.save".localized) {
+            saveExercise()
+        }
+        .disabled(exerciseName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || muscleGroups.isEmpty)
+    }
+
+    private func saveExercise() {
+        let trimmedName = exerciseName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedName.isEmpty else { return }
+
+        let newExercise = viewModel.addExercise(
+            name: trimmedName,
+            muscleGroups: muscleGroups,
+            equipmentType: equipmentType
+        )
+
         if let newExercise = newExercise {
             onExerciseCreated?(newExercise)
         }
