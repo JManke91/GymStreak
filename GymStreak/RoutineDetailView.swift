@@ -368,13 +368,12 @@ struct RoutineDetailView: View {
             // Exercise header with superset info
             let info = supersetInfo(for: routineExercise)
             let linePos = supersetLinePosition(for: routineExercise)
-            let letter = supersetLetter(for: routineExercise)
             let color = supersetColor(for: routineExercise)
             ExerciseHeaderView(
                 routineExercise: routineExercise,
                 isEditMode: true,
                 supersetPosition: info?.position,
-                supersetLetter: letter,
+                supersetTotal: info?.total,
                 supersetColor: color,
                 supersetLinePosition: linePos
             )
@@ -596,13 +595,12 @@ struct RoutineDetailView: View {
                                 } label: {
                                     let info = supersetInfo(for: routineExercise)
                                     let linePos = supersetLinePosition(for: routineExercise)
-                                    let letter = supersetLetter(for: routineExercise)
                                     let color = supersetColor(for: routineExercise)
                                     ExerciseHeaderView(
                                         routineExercise: routineExercise,
                                         isEditMode: false,
                                         supersetPosition: info?.position,
-                                        supersetLetter: letter,
+                                        supersetTotal: info?.total,
                                         supersetColor: color,
                                         supersetLinePosition: linePos,
                                         onSupersetAction: routine.routineExercisesList.count >= 2 ? {
@@ -645,32 +643,6 @@ struct RoutineDetailView: View {
                     .onMove(perform: isEditMode ? moveRoutineExercises : nil)
                 }
 
-                if !routine.routineExercisesList.isEmpty && supersetEditMode == nil {
-                    Button {
-                        showingAddExercise = true
-                    } label: {
-                        HStack(spacing: 12) {
-                            Image(systemName: "dumbbell.fill")
-                                .font(.title3)
-                                .foregroundStyle(DesignSystem.Colors.textOnTint)
-                                .frame(width: 36, height: 36)
-                                .background(Circle().fill(DesignSystem.Colors.tint))
-
-                            Text("routine.add_exercise".localized)
-                                .font(.body.weight(.semibold))
-
-                            Spacer()
-
-                            Image(systemName: "chevron.right")
-                                .font(.caption.weight(.semibold))
-                                .foregroundStyle(.tertiary)
-                        }
-                        .frame(maxWidth: .infinity)
-                        .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                    .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
-                }
             } header: {
                 HStack {
                     if let editMode = supersetEditMode {
@@ -743,6 +715,34 @@ struct RoutineDetailView: View {
                     }
                 }
                 .textCase(nil)
+            }
+
+            if !routine.routineExercisesList.isEmpty && supersetEditMode == nil {
+                Section {
+                    Button {
+                        showingAddExercise = true
+                    } label: {
+                        HStack(spacing: 12) {
+                            Image(systemName: "dumbbell.fill")
+                                .font(.title3)
+                                .foregroundStyle(DesignSystem.Colors.textOnTint)
+                                .frame(width: 36, height: 36)
+                                .background(Circle().fill(DesignSystem.Colors.tint))
+
+                            Text("routine.add_exercise".localized)
+                                .font(.body.weight(.semibold))
+
+                            Spacer()
+
+                            Image(systemName: "chevron.right")
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(.tertiary)
+                        }
+                        .frame(maxWidth: .infinity)
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                }
             }
         }
         .listStyle(.insetGrouped)
@@ -1049,7 +1049,7 @@ struct ExerciseHeaderView: View {
     var isEditMode: Bool = false
     var showDragHandle: Bool = true
     var supersetPosition: Int? = nil
-    var supersetLetter: String? = nil
+    var supersetTotal: Int? = nil
     var supersetColor: Color? = nil
     var supersetLinePosition: SupersetPosition? = nil
     var onSupersetAction: (() -> Void)? = nil
@@ -1100,11 +1100,11 @@ struct ExerciseHeaderView: View {
 
                 Spacer()
 
-                // Superset position badge with letter label
-                if let position = supersetPosition, let letter = supersetLetter {
+                // Superset position badge
+                if let position = supersetPosition, let total = supersetTotal {
                     SupersetBadge(
-                        letter: letter,
                         position: position,
+                        total: total,
                         color: supersetColor ?? DesignSystem.Colors.tint
                     )
                 }

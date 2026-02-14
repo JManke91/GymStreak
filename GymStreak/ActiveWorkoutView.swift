@@ -43,7 +43,7 @@ struct ActiveWorkoutView: View {
                                             expandedSetId: $expandedSetId,
                                             lastActiveExerciseId: $lastActiveExerciseId,
                                             supersetPosition: index + 1,
-                                            supersetLetter: groupLetter,
+                                            supersetTotal: exerciseGroup.count,
                                             supersetColor: groupColor,
                                             isPartOfSuperset: true,
                                             onDelete: {
@@ -316,7 +316,7 @@ struct ExerciseCard: View {
     @Binding var expandedSetId: UUID?
     @Binding var lastActiveExerciseId: UUID?
     var supersetPosition: Int? = nil
-    var supersetLetter: String? = nil
+    var supersetTotal: Int? = nil
     var supersetColor: Color? = nil
     var isPartOfSuperset: Bool = false
     var onDelete: (() -> Void)?
@@ -349,10 +349,10 @@ struct ExerciseCard: View {
                 Spacer()
 
                 // Superset position badge
-                if let position = supersetPosition, let letter = supersetLetter {
+                if let position = supersetPosition, let total = supersetTotal {
                     SupersetBadge(
-                        letter: letter,
                         position: position,
+                        total: total,
                         color: supersetColor ?? DesignSystem.Colors.tint
                     )
                 }

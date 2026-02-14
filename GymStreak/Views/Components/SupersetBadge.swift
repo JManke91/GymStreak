@@ -1,13 +1,13 @@
 import SwiftUI
 
-/// A small badge showing superset letter and position (e.g., "A1", "B2")
+/// A small badge showing superset position (e.g., "1/2", "2/3")
 struct SupersetBadge: View {
-    let letter: String
     let position: Int
+    let total: Int
     var color: Color = DesignSystem.Colors.tint
 
     var body: some View {
-        Text("\(letter)\(position)")
+        Text("\(position)/\(total)")
             .font(.caption2.weight(.semibold))
             .monospacedDigit()
             .foregroundStyle(DesignSystem.Colors.textOnTint)
@@ -45,10 +45,10 @@ struct SupersetIndicatorBadge: View {
 
 #Preview {
     VStack(spacing: 20) {
-        SupersetBadge(letter: "A", position: 1)
-        SupersetBadge(letter: "A", position: 2)
-        SupersetBadge(letter: "B", position: 1, color: Color(red: 94/255, green: 92/255, blue: 230/255))
-        SupersetBadge(letter: "B", position: 2, color: Color(red: 94/255, green: 92/255, blue: 230/255))
+        SupersetBadge(position: 1, total: 3)
+        SupersetBadge(position: 2, total: 3)
+        SupersetBadge(position: 1, total: 2, color: Color(red: 94/255, green: 92/255, blue: 230/255))
+        SupersetBadge(position: 2, total: 2, color: Color(red: 94/255, green: 92/255, blue: 230/255))
 
         SupersetIndicatorBadge(letter: "A", exerciseCount: 3)
         SupersetIndicatorBadge(letter: "B", exerciseCount: 2, color: Color(red: 94/255, green: 92/255, blue: 230/255))
