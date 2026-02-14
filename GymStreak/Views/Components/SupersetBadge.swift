@@ -1,12 +1,13 @@
 import SwiftUI
 
-/// A small badge showing position within a superset (e.g., "1/3")
+/// A small badge showing superset letter and position (e.g., "A1", "B2")
 struct SupersetBadge: View {
+    let letter: String
     let position: Int
-    let total: Int
+    var color: Color = DesignSystem.Colors.tint
 
     var body: some View {
-        Text("\(position)/\(total)")
+        Text("\(letter)\(position)")
             .font(.caption2.weight(.semibold))
             .monospacedDigit()
             .foregroundStyle(DesignSystem.Colors.textOnTint)
@@ -14,39 +15,43 @@ struct SupersetBadge: View {
             .padding(.vertical, 2)
             .background(
                 Capsule()
-                    .fill(DesignSystem.Colors.tint.opacity(0.8))
+                    .fill(color.opacity(0.8))
             )
     }
 }
 
 /// A badge indicating an exercise is part of a superset with link icon
 struct SupersetIndicatorBadge: View {
+    let letter: String
     let exerciseCount: Int
+    var color: Color = DesignSystem.Colors.tint
 
     var body: some View {
         HStack(spacing: 4) {
             Image(systemName: "link")
                 .font(.caption2.weight(.semibold))
-            Text("Superset (\(exerciseCount))")
+            Text("Superset \(letter) (\(exerciseCount))")
                 .font(.caption2.weight(.semibold))
         }
-        .foregroundStyle(DesignSystem.Colors.tint)
+        .foregroundStyle(color)
         .padding(.horizontal, 8)
         .padding(.vertical, 4)
         .background(
             Capsule()
-                .fill(DesignSystem.Colors.tint.opacity(0.15))
+                .fill(color.opacity(0.15))
         )
     }
 }
 
 #Preview {
     VStack(spacing: 20) {
-        SupersetBadge(position: 1, total: 3)
-        SupersetBadge(position: 2, total: 3)
-        SupersetBadge(position: 3, total: 3)
+        SupersetBadge(letter: "A", position: 1)
+        SupersetBadge(letter: "A", position: 2)
+        SupersetBadge(letter: "B", position: 1, color: Color(red: 94/255, green: 92/255, blue: 230/255))
+        SupersetBadge(letter: "B", position: 2, color: Color(red: 94/255, green: 92/255, blue: 230/255))
 
-        SupersetIndicatorBadge(exerciseCount: 3)
+        SupersetIndicatorBadge(letter: "A", exerciseCount: 3)
+        SupersetIndicatorBadge(letter: "B", exerciseCount: 2, color: Color(red: 94/255, green: 92/255, blue: 230/255))
     }
     .padding()
 }

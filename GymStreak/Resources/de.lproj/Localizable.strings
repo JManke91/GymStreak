@@ -362,22 +362,16 @@
 "routine_exercise_detail.error.not_found" = "Übung nicht gefunden";
 
 // MARK: - Superset Feature
-"superset.link_exercises" = "Übungen verknüpfen";
-"superset.link" = "Verknüpfen";
-"superset.remove" = "Entfernen";
-"superset.remove_one" = "1 Übung entfernen";
-"superset.remove_multiple" = "%d Übungen entfernen";
-"superset.merge" = "Supersätze zusammenführen (%d)";
-"superset.create" = "Supersatz erstellen (%d)";
-"superset.link_count" = "Übungen verknüpfen (%d)";
-"superset.select_exercises" = "Übungen auswählen";
 "superset.remove_from" = "Aus Supersatz entfernen";
+"superset.remove_from_named" = "Aus Supersatz %@ entfernen";
 "superset.dissolve" = "Supersatz auflösen";
-"superset.modify" = "Supersatz bearbeiten...";
-"superset.create_menu" = "Supersatz erstellen...";
-"superset.link_accessibility" = "Übungen zu Supersatz verknüpfen";
-"superset.hint_title" = "Supersätze erstellen";
-"superset.hint_description" = "Wähle 2+ Übungen zum Verknüpfen aus";
+"superset.dissolve_named" = "Supersatz %@ auflösen";
+"superset.create_with" = "Supersatz erstellen mit...";
+"superset.add_to" = "Zu Supersatz %@ hinzufügen";
+"superset.link_exercises" = "Übungen als Supersatz verknüpfen";
+"superset.selected_count" = "%d ausgewählt";
+"superset.edit_named" = "Supersatz %@ bearbeiten";
+"superset.create_new" = "Supersatz erstellen";
 "superset.rest_timer.explanation" = "Pause beginnt nach Abschluss aller Übungen in jeder Runde";
 
 // MARK: - Test Data (for UI Testing Screenshots)

@@ -11,6 +11,7 @@ enum SupersetPosition {
 /// A visual indicator for superset exercises showing a vertical line with anchor dots
 struct SupersetLineIndicator: View {
     let position: SupersetPosition
+    var color: Color = DesignSystem.Colors.tint
 
     private let lineWidth: CGFloat = 3
     private let dotSize: CGFloat = 8
@@ -46,14 +47,14 @@ struct SupersetLineIndicator: View {
                     path.addLine(to: CGPoint(x: centerX, y: endY))
                 }
                 .stroke(
-                    DesignSystem.Colors.tint.opacity(0.6),
+                    color.opacity(0.6),
                     style: StrokeStyle(lineWidth: lineWidth, lineCap: .round)
                 )
 
                 // Top anchor dot
                 if position == .first || position == .only {
                     Circle()
-                        .fill(DesignSystem.Colors.tint)
+                        .fill(color)
                         .frame(width: dotSize, height: dotSize)
                         .position(x: centerX, y: dotY)
                 }
@@ -61,7 +62,7 @@ struct SupersetLineIndicator: View {
                 // Bottom anchor dot
                 if position == .last || position == .only {
                     Circle()
-                        .fill(DesignSystem.Colors.tint)
+                        .fill(color)
                         .frame(width: dotSize, height: dotSize)
                         .position(x: centerX, y: dotY)
                 }

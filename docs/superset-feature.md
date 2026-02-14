@@ -116,36 +116,52 @@ Rest time is stored on the **last exercise's sets** in the superset. Rationale: 
 
 ## iOS UI Components
 
+### Multiple Supersets Per Routine
+
+The app supports **multiple independent supersets** within a single routine. Each superset is identified by a unique `supersetId` UUID and gets a computed letter label (A, B, C...) assigned at display time by `SupersetLabelProvider`.
+
+### Superset Label Provider
+
+**File:** `GymStreak/Helpers/SupersetLabelProvider.swift`
+
+- `SupersetLabelProvider.labels(for:)` - Computes `[UUID: String]` mapping from supersetId to letter (A, B, C...) based on exercise order
+- `SupersetLabelProvider.color(for:)` - Returns a unique color per letter: green (A), indigo (B), orange (C), blue (D), pink (E), cycling
+- `SupersetGroupable` protocol - Shared by `RoutineExercise` and `WorkoutExercise` for generic label computation
+
+Labels are computed at render time, not stored. If superset A is dissolved, B automatically becomes A.
+
 ### Superset Visual Indicators
 
 | Component | File | Purpose |
 |-----------|------|---------|
-| `SupersetBadge` | `GymStreak/Views/Components/SupersetBadge.swift` | Position badge (e.g., "1/3", "2/3") |
-| `SupersetIndicatorBadge` | Same file | Header badge: "Superset (3)" with link icon |
-| `SupersetLineIndicator` | `GymStreak/Views/Components/SupersetLineIndicator.swift` | Vertical connecting line between grouped exercises. Positions: `.first`, `.middle`, `.last`, `.only` |
-| `SupersetGroupView` | `GymStreak/Views/Components/SupersetGroupView.swift` | Container for grouped exercises with connecting line |
+| `SupersetBadge` | `GymStreak/Views/Components/SupersetBadge.swift` | Letter+position badge (e.g., "A1", "B2") with per-group color |
+| `SupersetIndicatorBadge` | Same file | Header badge: "Superset A (3)" with link icon and per-group color |
+| `SupersetLineIndicator` | `GymStreak/Views/Components/SupersetLineIndicator.swift` | Vertical connecting line with per-group color. Positions: `.first`, `.middle`, `.last`, `.only` |
+| `SupersetGroupView` | `GymStreak/Views/Components/SupersetGroupView.swift` | Container for grouped exercises with connecting line and per-group color |
 | `SupersetRestTimerConfig` | `GymStreak/Views/Components/SupersetRestTimerConfig.swift` | Single rest timer config for entire superset. Shows only on first exercise |
 
 ### Routine Detail - Superset Management
 
 **File:** `GymStreak/RoutineDetailView.swift`
 
-**Selection Mode** (independent of edit mode):
-- `isSupersetSelectionMode: Bool` - Activates selection UI
-- `selectedForSuperset: Set<UUID>` - Tracks selected exercise IDs
-- Toolbar link button appears when 2+ exercises exist
-- Context menu provides per-exercise superset options
+**Context Menu** (per-exercise, supports multiple supersets):
 
-**Action Types** (`SupersetAction` enum):
-- `createSuperset` - Create new from standalone exercises
-- `updateSuperset` - Remove unselected from existing superset
-- `linkExercises` - Add standalone exercises to existing superset
-- `mergeSuperset` - Merge multiple supersets together
-- `noAction` - Insufficient selection
+For exercises **in a superset**:
+- "Remove from Superset A" → `viewModel.removeExerciseFromSuperset()`
+- "Dissolve Superset A" → `viewModel.dissolveSuperset()`
+
+For **standalone exercises** (not in any superset):
+- "Create Superset With..." submenu → lists other standalone exercises → `viewModel.createSuperset(from:in:)`
+- "Add to Superset A" / "Add to Superset B" → `viewModel.addExerciseToSuperset(_:supersetId:in:)`
+
+For **deleting**:
+- "Delete Exercise" → confirms and removes
 
 **Visual styling:**
-- Superset exercises: `tint.opacity(0.08)` background
-- 16pt indicator area for `SupersetLineIndicator` (ensures vertical alignment across all exercises)
+- Each superset group gets a unique color from `SupersetLabelProvider`
+- Superset exercises: `groupColor.opacity(0.08)` background
+- 16pt indicator area for `SupersetLineIndicator` (ensures vertical alignment)
+- Badges show letter+position: "A1", "A2", "B1", "B2"
 
 ### Active Workout - Superset Display
 
@@ -153,8 +169,10 @@ Rest time is stored on the **last exercise's sets** in the superset. Rationale: 
 
 | Component | Purpose |
 |-----------|---------|
-| `SupersetWorkoutGroupView` | Groups superset exercises in a card with header badge, rest time indicator, connecting line |
-| `ExerciseCard` | Shows `SupersetBadge` when part of superset. Hides individual rest timer config (shown in group instead). Highlighted border when current exercise |
+| `SupersetWorkoutGroupView` | Groups superset exercises in a card with header "Superset A (3)", per-group colored connecting line, rest time indicator |
+| `ExerciseCard` | Shows `SupersetBadge` (e.g., "A1") with per-group color when part of superset. Hides individual rest timer config. Highlighted border when current exercise |
+
+Workout labels are computed from `WorkoutSession.workoutExercisesList` using `SupersetLabelProvider.labels(for:)`.
 
 ### Rest Timer Config
 
@@ -164,6 +182,8 @@ Rest time is stored on the **last exercise's sets** in the superset. Rationale: 
   - Includes explanation: "Rest starts after completing all exercises in each round"
 
 **Helper functions in RoutineDetailView:**
+- `supersetLabels` - Computed `[UUID: String]` from `SupersetLabelProvider`
+- `supersetColor(for:)` / `supersetLetter(for:)` - Per-exercise color/letter accessors
 - `supersetRestTime(for:)` - Gets rest time from last exercise
 - `updateSupersetRestTime(for:restTime:)` - Updates all sets of last exercise
 - `supersetInfo(for:)` - Returns `(position: Int, total: Int)` (1-indexed)
@@ -241,7 +261,6 @@ Rest time is stored on the **last exercise's sets** in the superset. Rationale: 
 | Hint | Storage Key | Behavior |
 |------|-------------|----------|
 | Reorder hint | `hasSeenReorderHint` | Shows in edit mode, auto-dismisses after 4-5s |
-| Superset hint | `hasSeenSupersetHint` | Shows when toolbar link button appears, auto-dismisses |
 
 Stored in `@AppStorage` (UserDefaults).
 
@@ -249,12 +268,13 @@ Stored in `@AppStorage` (UserDefaults).
 
 ## Localization
 
-Key strings in `GymStreak/Resources/en.lproj/Localizable.strings` (~lines 365-382):
+Key strings in `GymStreak/Resources/en.lproj/Localizable.strings`:
 
 - `superset.rest_timer.explanation` - "Rest starts after completing all exercises in each round"
-- `superset.create`, `superset.merge`, `superset.link_count` - Action labels
-- `superset.remove_from`, `superset.dissolve` - Modification actions
-- `superset.hint_title`, `superset.hint_description` - User onboarding hints
+- `superset.remove_from` / `superset.remove_from_named` - Remove from superset actions
+- `superset.dissolve` / `superset.dissolve_named` - Dissolve superset actions
+- `superset.create_with` - "Create Superset With..." context menu label
+- `superset.add_to` - "Add to Superset %@" context menu label
 
 ---
 
@@ -267,6 +287,11 @@ Key strings in `GymStreak/Resources/en.lproj/Localizable.strings` (~lines 365-38
 | `GymStreak/WatchModels.swift` | `WatchExercise`, `CompletedWatchExercise` with superset fields |
 | `GymStreakWatch Watch App/Models/WatchModels.swift` | `ActiveWorkoutExercise.isInSuperset`, watch-side models |
 
+### Helpers
+| File | Contains |
+|------|----------|
+| `GymStreak/Helpers/SupersetLabelProvider.swift` | `SupersetGroupable` protocol, letter label computation (A/B/C), per-group color assignment |
+
 ### ViewModels
 | File | Contains |
 |------|----------|
@@ -277,16 +302,16 @@ Key strings in `GymStreak/Resources/en.lproj/Localizable.strings` (~lines 365-38
 ### iOS UI Components
 | File | Contains |
 |------|----------|
-| `GymStreak/Views/Components/SupersetBadge.swift` | `SupersetBadge`, `SupersetIndicatorBadge` |
-| `GymStreak/Views/Components/SupersetLineIndicator.swift` | Vertical connecting line with position variants |
-| `GymStreak/Views/Components/SupersetGroupView.swift` | Grouped container with connecting line |
+| `GymStreak/Views/Components/SupersetBadge.swift` | `SupersetBadge` (letter+position+color), `SupersetIndicatorBadge` (letter+count+color) |
+| `GymStreak/Views/Components/SupersetLineIndicator.swift` | Vertical connecting line with position variants and per-group color |
+| `GymStreak/Views/Components/SupersetGroupView.swift` | Grouped container with connecting line, letter, and per-group color |
 | `GymStreak/Views/Components/SupersetRestTimerConfig.swift` | Rest timer config wrapper for supersets |
 
 ### iOS Views
 | File | Contains |
 |------|----------|
-| `GymStreak/RoutineDetailView.swift` | Selection mode, superset management UI, visual indicators |
-| `GymStreak/ActiveWorkoutView.swift` | `SupersetWorkoutGroupView`, `ExerciseCard` with superset support |
+| `GymStreak/RoutineDetailView.swift` | Context menu-based superset management, per-group visual indicators, `ExerciseHeaderView` with letter/color |
+| `GymStreak/ActiveWorkoutView.swift` | `SupersetWorkoutGroupView` with letter/color, `ExerciseCard` with per-group badges |
 
 ### watchOS Views
 | File | Contains |

@@ -1,5 +1,10 @@
 import SwiftUI
 
+enum SupersetEditMode: Equatable {
+    case editing(UUID)    // Editing existing superset (supersetId)
+    case creating         // Creating new superset from scratch
+}
+
 struct RoutineDetailView: View {
     @Bindable var routine: Routine
     @ObservedObject var viewModel: RoutinesViewModel
@@ -22,14 +27,10 @@ struct RoutineDetailView: View {
     @State private var currentRoutineExercise: RoutineExercise?
     @State private var restTimerExpandedForExercise: [UUID: Bool] = [:]
     @State private var isEditMode: Bool = false
+    @State private var supersetEditMode: SupersetEditMode? = nil
+    @State private var supersetEditSelection: Set<UUID> = []
     @AppStorage("hasSeenReorderHint") private var hasSeenReorderHint = false
-    @AppStorage("hasSeenSupersetHint") private var hasSeenSupersetHint = false
     @State private var showReorderHint = false
-    @State private var showSupersetHint = false
-
-    // Superset selection mode (independent of edit mode)
-    @State private var isSupersetSelectionMode = false
-    @State private var selectedForSuperset: Set<UUID> = []
 
     // Helper function to get rest time for an exercise
     private func restTime(for exercise: RoutineExercise) -> TimeInterval {
@@ -89,191 +90,264 @@ struct RoutineDetailView: View {
         }
     }
 
-    // Helper for selection icon in superset selection mode
-    private func selectionIcon(for exercise: RoutineExercise) -> String {
-        if selectedForSuperset.contains(exercise.id) {
-            return "checkmark.circle.fill"
+    // Computed superset labels for the current routine
+    private var supersetLabels: [UUID: String] {
+        SupersetLabelProvider.labels(for: routine.routineExercisesList)
+    }
+
+    // Get superset color for an exercise
+    private func supersetColor(for exercise: RoutineExercise) -> Color? {
+        guard let supersetId = exercise.supersetId,
+              let letter = supersetLabels[supersetId] else { return nil }
+        return SupersetLabelProvider.color(for: letter)
+    }
+
+    // Get superset letter for an exercise
+    private func supersetLetter(for exercise: RoutineExercise) -> String? {
+        guard let supersetId = exercise.supersetId else { return nil }
+        return supersetLabels[supersetId]
+    }
+
+    // MARK: - Superset Link Button Helpers
+
+    /// Whether to show a link button between two adjacent exercises
+    private func shouldShowLinkButton(between current: RoutineExercise, and next: RoutineExercise) -> Bool {
+        // Don't show if both are in the same superset (already linked)
+        if let id1 = current.supersetId, let id2 = next.supersetId, id1 == id2 {
+            return false
+        }
+        // Show if at least one is standalone
+        return !current.isInSuperset || !next.isInSuperset
+    }
+
+    /// Link two adjacent exercises into a superset
+    private func linkExercises(_ exercise1: RoutineExercise, _ exercise2: RoutineExercise) {
+        if let supersetId = exercise1.supersetId {
+            viewModel.addExerciseToSuperset(exercise2, supersetId: supersetId, in: routine)
+        } else if let supersetId = exercise2.supersetId {
+            viewModel.addExerciseToSuperset(exercise1, supersetId: supersetId, in: routine)
         } else {
-            return "circle"
+            viewModel.createSuperset(from: [exercise1, exercise2], in: routine)
+        }
+        UINotificationFeedbackGenerator().notificationOccurred(.success)
+    }
+
+    // MARK: - Superset Edit Mode
+
+    /// Enter superset edit mode for an existing superset
+    private func enterSupersetEdit(for supersetId: UUID) {
+        let memberIds = routine.routineExercisesList
+            .filter { $0.supersetId == supersetId }
+            .map(\.id)
+        supersetEditSelection = Set(memberIds)
+        expandedExerciseId = nil
+        expandedSetId = nil
+        withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+            supersetEditMode = .editing(supersetId)
         }
     }
 
-    // Helper for selection color in superset selection mode
-    private func selectionColor(for exercise: RoutineExercise) -> Color {
-        if selectedForSuperset.contains(exercise.id) {
-            return DesignSystem.Colors.tint
-        } else {
-            return .secondary
+    /// Enter superset edit mode to create a new superset
+    private func enterSupersetCreate(initiatingExercise: RoutineExercise) {
+        supersetEditSelection = [initiatingExercise.id]
+        expandedExerciseId = nil
+        expandedSetId = nil
+        withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+            supersetEditMode = .creating
         }
     }
 
-    // Check if all selected exercises are already in the same superset
-    private var allSelectedInSameSuperset: Bool {
-        let selectedExercises = routine.routineExercisesList.filter { selectedForSuperset.contains($0.id) }
-        let supersetIds = Set(selectedExercises.compactMap(\.supersetId))
-        let hasStandaloneSelections = selectedExercises.contains { $0.supersetId == nil }
-
-        // If all selected are from the same superset and no standalone exercises
-        return supersetIds.count == 1 && !hasStandaloneSelections
-    }
-
-    // Check if there are exercises that will be removed from superset (unselected superset exercises)
-    private var canUpdateSuperset: Bool {
-        !exercisesToRemoveFromSuperset.isEmpty
-    }
-
-    // Determine the action type for the superset button
-    private enum SupersetAction {
-        case createSuperset       // Create new superset from standalone exercises
-        case updateSuperset       // Keep selected exercises in superset (remove unselected)
-        case linkExercises        // Add standalone exercises to existing superset
-        case mergeSuperset        // Merge multiple supersets together
-        case noAction
-    }
-
-    // Get exercises that would be removed (in superset but not selected)
-    private var exercisesToRemoveFromSuperset: [RoutineExercise] {
-        routine.routineExercisesList.filter { $0.isInSuperset && !selectedForSuperset.contains($0.id) }
-    }
-
-    private var currentSupersetAction: SupersetAction {
-        let selectedExercises = routine.routineExercisesList.filter { selectedForSuperset.contains($0.id) }
-        let supersetIds = Set(selectedExercises.compactMap(\.supersetId))
-        let hasStandaloneSelections = selectedExercises.contains { $0.supersetId == nil }
-        let hasUnselectedSupersetExercises = !exercisesToRemoveFromSuperset.isEmpty
-
-        // If there are unselected superset exercises, we're updating (removing the unselected)
-        // Allow this even if only 1 exercise remains selected (superset will auto-dissolve)
-        if hasUnselectedSupersetExercises {
-            return .updateSuperset
-        }
-        // Multiple supersets selected - offer to merge
-        if supersetIds.count > 1 && !hasStandaloneSelections {
-            return .mergeSuperset
-        }
-        // Only standalone exercises - create new superset
-        if hasStandaloneSelections && supersetIds.isEmpty && selectedExercises.count >= 2 {
-            return .createSuperset
-        }
-        // Mix of standalone and superset exercises - link them together
-        if hasStandaloneSelections && !supersetIds.isEmpty && selectedExercises.count >= 2 {
-            return .linkExercises
-        }
-
-        return .noAction
-    }
-
-    // Determine the label for the superset action button
-    private var supersetActionLabel: String {
-        let removeCount = exercisesToRemoveFromSuperset.count
-        switch currentSupersetAction {
-        case .updateSuperset:
-            if removeCount == 1 {
-                return "superset.remove_one".localized
+    /// Toggle an exercise's membership in the superset selection
+    private func toggleSupersetSelection(_ exercise: RoutineExercise) {
+        withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+            if supersetEditSelection.contains(exercise.id) {
+                supersetEditSelection.remove(exercise.id)
             } else {
-                return "superset.remove_multiple".localized(removeCount)
+                supersetEditSelection.insert(exercise.id)
             }
-        case .mergeSuperset:
-            return "superset.merge".localized(selectedForSuperset.count)
-        case .createSuperset:
-            return "superset.create".localized(selectedForSuperset.count)
-        case .linkExercises:
-            return "superset.link_count".localized(selectedForSuperset.count)
-        case .noAction:
-            return "superset.select_exercises".localized
         }
     }
 
-    // Perform the superset action
-    private func performSupersetAction() {
-        let selectedExercises = routine.routineExercisesList.filter { selectedForSuperset.contains($0.id) }
+    /// Whether an exercise can be toggled in the current superset edit mode
+    private func canToggleForSuperset(_ exercise: RoutineExercise) -> Bool {
+        guard let editMode = supersetEditMode else { return false }
+        switch editMode {
+        case .editing(let supersetId):
+            return exercise.supersetId == supersetId || !exercise.isInSuperset
+        case .creating:
+            return !exercise.isInSuperset || supersetEditSelection.contains(exercise.id)
+        }
+    }
 
-        switch currentSupersetAction {
-        case .updateSuperset:
-            // Remove UNSELECTED exercises from their supersets
-            for exercise in exercisesToRemoveFromSuperset {
-                viewModel.removeExerciseFromSuperset(exercise, in: routine)
+    /// Whether the Done button should be enabled in superset edit mode
+    private var canApplySupersetEdit: Bool {
+        switch supersetEditMode {
+        case .creating:
+            return supersetEditSelection.count >= 2
+        case .editing:
+            return true  // Always allow — 0 or 1 selected will dissolve/remove
+        case .none:
+            return false
+        }
+    }
+
+    /// Apply superset edit changes on Done
+    private func applySupersetEdit() {
+        let selectedExercises = routine.routineExercisesList
+            .filter { supersetEditSelection.contains($0.id) }
+            .sorted { $0.order < $1.order }
+
+        switch supersetEditMode {
+        case .editing(let supersetId):
+            if selectedExercises.count < 2 {
+                // Dissolve the entire superset (0 or 1 remaining)
+                viewModel.dissolveSuperset(supersetId, in: routine)
+            } else {
+                let currentMembers = Set(routine.routineExercisesList
+                    .filter { $0.supersetId == supersetId }.map(\.id))
+                let toAdd = supersetEditSelection.subtracting(currentMembers)
+                let toRemove = currentMembers.subtracting(supersetEditSelection)
+
+                for exercise in routine.routineExercisesList where toRemove.contains(exercise.id) {
+                    viewModel.removeExerciseFromSuperset(exercise, in: routine)
+                }
+                for exercise in routine.routineExercisesList where toAdd.contains(exercise.id) {
+                    viewModel.addExerciseToSuperset(exercise, supersetId: supersetId, in: routine)
+                }
             }
-            UINotificationFeedbackGenerator().notificationOccurred(.success)
-
-        case .createSuperset, .linkExercises, .mergeSuperset:
-            // Create/merge superset from selected exercises
+        case .creating:
+            guard selectedExercises.count >= 2 else { return }
             viewModel.createSuperset(from: selectedExercises, in: routine)
-            UINotificationFeedbackGenerator().notificationOccurred(.success)
-
-        case .noAction:
+        case .none:
             break
         }
 
-        isSupersetSelectionMode = false
-        selectedForSuperset.removeAll()
+        UINotificationFeedbackGenerator().notificationOccurred(.success)
+        withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+            supersetEditMode = nil
+            supersetEditSelection = []
+        }
     }
 
-    // Enter superset selection mode with appropriate pre-selection
-    private func enterSupersetSelectionMode(preselectedExerciseId: UUID? = nil) {
+    /// Cancel superset edit mode
+    private func cancelSupersetEdit() {
         withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
-            isSupersetSelectionMode = true
-            // Collapse any expanded exercises
-            expandedExerciseId = nil
-            expandedSetId = nil
+            supersetEditMode = nil
+            supersetEditSelection = []
+        }
+    }
 
-            // Pre-select exercises based on context
-            if let preselectedId = preselectedExerciseId {
-                // Coming from context menu - pre-select this exercise
-                selectedForSuperset = [preselectedId]
-            } else {
-                // Coming from toolbar - pre-select all exercises that are in supersets
-                let supersetExerciseIds = routine.routineExercisesList
-                    .filter { $0.isInSuperset }
-                    .map { $0.id }
-                selectedForSuperset = Set(supersetExerciseIds)
+    // MARK: - Superset Edit Mode Row
+    @ViewBuilder
+    private func supersetEditRow(for routineExercise: RoutineExercise) -> some View {
+        let isSelected = supersetEditSelection.contains(routineExercise.id)
+        let canToggle = canToggleForSuperset(routineExercise)
+
+        Button {
+            if canToggle {
+                toggleSupersetSelection(routineExercise)
+            }
+        } label: {
+            HStack(spacing: 12) {
+                Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
+                    .font(.title2)
+                    .foregroundStyle(
+                        isSelected ? DesignSystem.Colors.tint : (canToggle ? Color.secondary : Color.secondary.opacity(0.3))
+                    )
+                    .contentTransition(.symbolEffect(.replace))
+
+                ExerciseHeaderView(
+                    routineExercise: routineExercise,
+                    isEditMode: false,
+                    showDragHandle: false
+                )
+            }
+            .opacity(canToggle ? 1.0 : 0.4)
+        }
+        .buttonStyle(.plain)
+        .disabled(!canToggle)
+    }
+
+    /// Row background for superset edit mode
+    private func supersetEditRowBackground(for exercise: RoutineExercise) -> Color {
+        supersetEditSelection.contains(exercise.id) ? DesignSystem.Colors.tint.opacity(0.08) : .clear
+    }
+
+    // MARK: - Superset Context Menu
+    @ViewBuilder
+    private func supersetContextMenu(for routineExercise: RoutineExercise) -> some View {
+        // If in superset: remove/dissolve options
+        if routineExercise.isInSuperset {
+            let letter = supersetLetter(for: routineExercise) ?? "?"
+            Button {
+                viewModel.removeExerciseFromSuperset(routineExercise, in: routine)
+            } label: {
+                Label(
+                    String(format: "superset.remove_from_named".localized, letter),
+                    systemImage: "link.badge.minus"
+                )
             }
 
-            // Show hint for first-time users (only if no pre-selection)
-            if !hasSeenSupersetHint && selectedForSuperset.isEmpty {
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                    withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
-                        showSupersetHint = true
+            if let supersetId = routineExercise.supersetId {
+                Button(role: .destructive) {
+                    viewModel.dissolveSuperset(supersetId, in: routine)
+                } label: {
+                    Label(
+                        String(format: "superset.dissolve_named".localized, letter),
+                        systemImage: "link.badge.xmark"
+                    )
+                }
+            }
+
+            Divider()
+        }
+
+        // If standalone: create new superset with another exercise
+        if !routineExercise.isInSuperset && routine.routineExercisesList.count >= 2 {
+            let standaloneExercises = routine.routineExercisesList
+                .filter { $0.id != routineExercise.id && !$0.isInSuperset }
+                .sorted { $0.order < $1.order }
+
+            if !standaloneExercises.isEmpty {
+                Menu {
+                    ForEach(standaloneExercises) { other in
+                        Button(other.exercise?.name ?? "Unknown") {
+                            viewModel.createSuperset(from: [routineExercise, other], in: routine)
+                            UINotificationFeedbackGenerator().notificationOccurred(.success)
+                        }
+                    }
+                } label: {
+                    Label("superset.create_with".localized, systemImage: "link.badge.plus")
+                }
+            }
+
+            // Add to existing superset options
+            let existingSupersetIds = supersetLabels.keys.sorted { (supersetLabels[$0] ?? "") < (supersetLabels[$1] ?? "") }
+            if !existingSupersetIds.isEmpty {
+                ForEach(existingSupersetIds, id: \.self) { supersetId in
+                    let letter = supersetLabels[supersetId] ?? "?"
+                    Button {
+                        viewModel.addExerciseToSuperset(routineExercise, supersetId: supersetId, in: routine)
+                        UINotificationFeedbackGenerator().notificationOccurred(.success)
+                    } label: {
+                        Label(
+                            String(format: "superset.add_to".localized, letter),
+                            systemImage: "plus.circle"
+                        )
                     }
                 }
             }
-        }
-    }
 
-    // MARK: - Superset Selection Mode Row View Builder
-    @ViewBuilder
-    private func supersetSelectionRow(for routineExercise: RoutineExercise) -> some View {
-        Button {
-            withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
-                if selectedForSuperset.contains(routineExercise.id) {
-                    selectedForSuperset.remove(routineExercise.id)
-                } else {
-                    selectedForSuperset.insert(routineExercise.id)
-                }
-            }
-            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+            Divider()
+        }
+
+        // Delete exercise
+        Button(role: .destructive) {
+            exercisePendingDeletion = routineExercise
+            showingDeleteExerciseAlert = true
         } label: {
-            HStack(spacing: 12) {
-                // Selection indicator
-                Image(systemName: selectionIcon(for: routineExercise))
-                    .font(.title2)
-                    .foregroundStyle(selectionColor(for: routineExercise))
-
-                // Exercise header with superset info
-                let info = supersetInfo(for: routineExercise)
-                let linePos = supersetLinePosition(for: routineExercise)
-                ExerciseHeaderView(
-                    routineExercise: routineExercise,
-                    isEditMode: true,
-                    showDragHandle: false,
-                    supersetPosition: info?.position,
-                    supersetTotal: info?.total,
-                    supersetLinePosition: linePos
-                )
-            }
-            .contentShape(Rectangle())
+            Label("exercise.delete".localized, systemImage: "trash")
         }
-        .buttonStyle(.plain)
     }
 
     // MARK: - Edit Mode Row View Builder
@@ -294,35 +368,23 @@ struct RoutineDetailView: View {
             // Exercise header with superset info
             let info = supersetInfo(for: routineExercise)
             let linePos = supersetLinePosition(for: routineExercise)
+            let letter = supersetLetter(for: routineExercise)
+            let color = supersetColor(for: routineExercise)
             ExerciseHeaderView(
                 routineExercise: routineExercise,
                 isEditMode: true,
                 supersetPosition: info?.position,
-                supersetTotal: info?.total,
+                supersetLetter: letter,
+                supersetColor: color,
                 supersetLinePosition: linePos
             )
         }
     }
 
-    // Superset selection mode row background color (indicator is now in row content)
-    private func supersetSelectionRowBackgroundColor(for routineExercise: RoutineExercise) -> Color {
-        if selectedForSuperset.contains(routineExercise.id) {
-            return DesignSystem.Colors.tint.opacity(0.15)
-        } else if routineExercise.isInSuperset {
-            return DesignSystem.Colors.tint.opacity(0.08)
-        } else {
-            return Color.clear
-        }
-    }
-
-    // Edit mode row background color (indicator is now in row content)
-    private func editModeRowBackgroundColor(for routineExercise: RoutineExercise) -> Color {
-        routineExercise.isInSuperset ? DesignSystem.Colors.tint.opacity(0.08) : Color.clear
-    }
-
-    // Normal mode row background color (indicator is now in row content)
-    private func normalModeRowBackgroundColor(for routineExercise: RoutineExercise) -> Color {
-        routineExercise.isInSuperset ? DesignSystem.Colors.tint.opacity(0.08) : Color.clear
+    // Row background color using per-group superset color
+    private func rowBackgroundColor(for routineExercise: RoutineExercise) -> Color {
+        guard let color = supersetColor(for: routineExercise) else { return Color.clear }
+        return color.opacity(0.08)
     }
 
     var body: some View {
@@ -342,19 +404,20 @@ struct RoutineDetailView: View {
                     .listRowInsets(EdgeInsets())
                     .listRowBackground(Color.clear)
                 } else {
-                    ForEach(routine.routineExercisesList.sorted(by: { $0.order < $1.order })) { routineExercise in
+                    let sortedExercises = routine.routineExercisesList.sorted(by: { $0.order < $1.order })
+                    ForEach(Array(sortedExercises.enumerated()), id: \.element.id) { index, routineExercise in
                         Group {
-                            if isSupersetSelectionMode {
-                                // Superset selection mode (indicator now in row content via ExerciseHeaderView)
-                                supersetSelectionRow(for: routineExercise)
+                            if supersetEditMode != nil {
+                                // Superset edit mode: selection row
+                                supersetEditRow(for: routineExercise)
                                     .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 0, trailing: 16))
-                                    .listRowBackground(supersetSelectionRowBackgroundColor(for: routineExercise))
-                                    .listRowSeparator(routineExercise.isInSuperset ? .hidden : .automatic)
+                                    .listRowBackground(supersetEditRowBackground(for: routineExercise))
+                                    .listRowSeparator(.automatic)
                             } else if isEditMode {
                                 // Edit mode (indicator now in row content via ExerciseHeaderView)
                                 editModeRow(for: routineExercise)
                                     .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 0, trailing: 16))
-                                    .listRowBackground(editModeRowBackgroundColor(for: routineExercise))
+                                    .listRowBackground(rowBackgroundColor(for: routineExercise))
                                     .listRowSeparator(routineExercise.isInSuperset ? .hidden : .automatic)
                             } else {
                                 // Normal mode: Full disclosure group
@@ -533,59 +596,44 @@ struct RoutineDetailView: View {
                                 } label: {
                                     let info = supersetInfo(for: routineExercise)
                                     let linePos = supersetLinePosition(for: routineExercise)
+                                    let letter = supersetLetter(for: routineExercise)
+                                    let color = supersetColor(for: routineExercise)
                                     ExerciseHeaderView(
                                         routineExercise: routineExercise,
                                         isEditMode: false,
                                         supersetPosition: info?.position,
-                                        supersetTotal: info?.total,
-                                        supersetLinePosition: linePos
+                                        supersetLetter: letter,
+                                        supersetColor: color,
+                                        supersetLinePosition: linePos,
+                                        onSupersetAction: routine.routineExercisesList.count >= 2 ? {
+                                            if let supersetId = routineExercise.supersetId {
+                                                enterSupersetEdit(for: supersetId)
+                                            } else {
+                                                enterSupersetCreate(initiatingExercise: routineExercise)
+                                            }
+                                        } : nil
                                     )
                                 }
                                 .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 0, trailing: 16))
-                                .listRowBackground(normalModeRowBackgroundColor(for: routineExercise))
+                                .listRowBackground(rowBackgroundColor(for: routineExercise))
                                 .listRowSeparator(routineExercise.isInSuperset ? .hidden : .automatic)
                                 .sensoryFeedback(.selection, trigger: expandedExerciseId)
                                 // Only allow deleting exercise when collapsed
                                 .deleteDisabled(expandedExerciseId == routineExercise.id)
                                 // Context menu for superset management
                                 .contextMenu {
-                                    if routineExercise.isInSuperset {
-                                        Button {
-                                            viewModel.removeExerciseFromSuperset(routineExercise, in: routine)
-                                        } label: {
-                                            Label("superset.remove_from".localized, systemImage: "link.badge.minus")
-                                        }
+                                    supersetContextMenu(for: routineExercise)
+                                }
 
-                                        if let supersetId = routineExercise.supersetId {
-                                            Button(role: .destructive) {
-                                                viewModel.dissolveSuperset(supersetId, in: routine)
-                                            } label: {
-                                                Label("superset.dissolve".localized, systemImage: "link.badge.xmark")
-                                            }
-                                        }
-
-                                        Divider()
+                                // Link button between this exercise and the next
+                                if index < sortedExercises.count - 1,
+                                   shouldShowLinkButton(between: routineExercise, and: sortedExercises[index + 1]) {
+                                    SupersetLinkButton {
+                                        linkExercises(routineExercise, sortedExercises[index + 1])
                                     }
-
-                                    if routine.routineExercisesList.count >= 2 {
-                                        Button {
-                                            enterSupersetSelectionMode(preselectedExerciseId: routineExercise.id)
-                                        } label: {
-                                            Label(
-                                                routineExercise.isInSuperset ? "superset.modify".localized : "superset.create_menu".localized,
-                                                systemImage: "link.badge.plus"
-                                            )
-                                        }
-                                    }
-
-                                    Divider()
-
-                                    Button(role: .destructive) {
-                                        exercisePendingDeletion = routineExercise
-                                        showingDeleteExerciseAlert = true
-                                    } label: {
-                                        Label("exercise.delete".localized, systemImage: "trash")
-                                    }
+                                    .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 0, trailing: 16))
+                                    .listRowBackground(Color.clear)
+                                    .listRowSeparator(.hidden)
                                 }
                             }
                         }
@@ -597,7 +645,7 @@ struct RoutineDetailView: View {
                     .onMove(perform: isEditMode ? moveRoutineExercises : nil)
                 }
 
-                if !routine.routineExercisesList.isEmpty {
+                if !routine.routineExercisesList.isEmpty && supersetEditMode == nil {
                     Button {
                         showingAddExercise = true
                     } label: {
@@ -625,10 +673,19 @@ struct RoutineDetailView: View {
                 }
             } header: {
                 HStack {
-                    Text("routine.exercises".localized)
+                    if let editMode = supersetEditMode {
+                        switch editMode {
+                        case .editing(let supersetId):
+                            let letter = supersetLabels[supersetId] ?? "?"
+                            Text("superset.edit_named".localized(letter))
+                        case .creating:
+                            Text("superset.create_new".localized)
+                        }
+                    } else {
+                        Text("routine.exercises".localized)
+                    }
                     Spacer()
-                    // Only show Edit button when not in superset selection mode
-                    if !routine.routineExercisesList.isEmpty && !isSupersetSelectionMode {
+                    if !routine.routineExercisesList.isEmpty && supersetEditMode == nil {
                         Button(isEditMode ? "action.done".localized : "action.edit".localized) {
                             withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
                                 if isEditMode {
@@ -689,13 +746,13 @@ struct RoutineDetailView: View {
             }
         }
         .listStyle(.insetGrouped)
-        .navigationTitle(isSupersetSelectionMode ? "superset.link_exercises".localized : (isEditMode ? "" : routine.name))
-        .navigationBarTitleDisplayMode(isSupersetSelectionMode || isEditMode ? .inline : .large)
+        .navigationTitle(isEditMode ? "" : routine.name)
+        .navigationBarTitleDisplayMode(isEditMode ? .inline : .large)
         .toolbar {
             ToolbarItem(placement: .principal) {
                 EditableRoutineTitleView(name: $editingRoutineName)
-                    .opacity(isEditMode && !isSupersetSelectionMode ? 1 : 0)
-                    .allowsHitTesting(isEditMode && !isSupersetSelectionMode)
+                    .opacity(isEditMode ? 1 : 0)
+                    .allowsHitTesting(isEditMode)
                     .animation(.none, value: isEditMode)
             }
             ToolbarItemGroup(placement: .keyboard) {
@@ -708,29 +765,36 @@ struct RoutineDetailView: View {
             }
         }
         .safeAreaInset(edge: .bottom) {
-            // Show action button when valid action is available
-            if isSupersetSelectionMode && currentSupersetAction != .noAction {
-                // Superset action button
+            if supersetEditMode != nil {
+                // Superset edit toolbar
                 VStack(spacing: 0) {
                     Divider()
-                    Button {
-                        performSupersetAction()
-                    } label: {
-                        Text(supersetActionLabel)
-                            .font(.headline)
-                            .frame(maxWidth: .infinity)
-                            .frame(height: 50)
+                    HStack {
+                        Button("action.cancel".localized) {
+                            cancelSupersetEdit()
+                        }
+                        .foregroundStyle(.secondary)
+
+                        Spacer()
+
+                        Text("superset.selected_count".localized(supersetEditSelection.count))
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+
+                        Spacer()
+
+                        Button("action.done".localized) {
+                            applySupersetEdit()
+                        }
+                        .fontWeight(.semibold)
+                        .foregroundStyle(canApplySupersetEdit ? DesignSystem.Colors.tint : .secondary)
+                        .disabled(!canApplySupersetEdit)
                     }
-                    .buttonStyle(currentSupersetAction == .updateSuperset
-                        ? .onyxProminent(backgroundColor: .orange, foregroundColor: .white)
-                        : .onyxProminent)
-                    .controlSize(.large)
                     .padding(.horizontal, 16)
                     .padding(.vertical, 12)
                     .background(DesignSystem.Colors.card)
                 }
-                .transition(.move(edge: .bottom).combined(with: .opacity))
-            } else if !routine.routineExercisesList.isEmpty && !isEditMode && !isSupersetSelectionMode {
+            } else if !routine.routineExercisesList.isEmpty && !isEditMode {
                 // Start Workout button (only in normal mode)
                 VStack(spacing: 0) {
                     Divider()
@@ -752,45 +816,9 @@ struct RoutineDetailView: View {
             }
         }
         .toolbar {
-            // Leading toolbar - Cancel button in superset selection mode
-            ToolbarItem(placement: .navigationBarLeading) {
-                if isSupersetSelectionMode {
-                    Button("action.cancel".localized) {
-                        withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
-                            isSupersetSelectionMode = false
-                            selectedForSuperset.removeAll()
-                        }
-                    }
-                    .foregroundStyle(.red)
-                }
-            }
-
-            // Trailing toolbar - action button or link button
+            // Trailing toolbar - delete button
             ToolbarItem(placement: .navigationBarTrailing) {
-                if isSupersetSelectionMode {
-                    // Done/action button in selection mode
-                    Button {
-                        performSupersetAction()
-                    } label: {
-                        Text(currentSupersetAction == .updateSuperset ? "superset.remove".localized : "superset.link".localized)
-                            .fontWeight(.semibold)
-                    }
-                    .disabled(currentSupersetAction == .noAction)
-                } else if !isEditMode && routine.routineExercisesList.count >= 2 {
-                    // Link button - visible when 2+ exercises and not in edit mode
-                    Button {
-                        enterSupersetSelectionMode()
-                    } label: {
-                        Image(systemName: "link.circle")
-                            .font(.title3)
-                    }
-                    .accessibilityLabel("superset.link_accessibility".localized)
-                }
-            }
-
-            // Additional trailing toolbar - delete button (only when not in selection mode or edit mode)
-            ToolbarItem(placement: .navigationBarTrailing) {
-                if !isSupersetSelectionMode && !isEditMode {
+                if !isEditMode && supersetEditMode == nil {
                     Button(role: .destructive) {
                         showingDeleteAlert = true
                     } label: {
@@ -844,55 +872,6 @@ struct RoutineDetailView: View {
                 }
             }
 
-            // Superset selection hint
-            if showSupersetHint {
-                VStack(spacing: 8) {
-                    HStack(spacing: 10) {
-                        Image(systemName: "link")
-                            .font(.title3)
-                            .foregroundStyle(DesignSystem.Colors.textOnTint)
-
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("superset.hint_title".localized)
-                                .font(.subheadline.weight(.semibold))
-                                .foregroundStyle(DesignSystem.Colors.textOnTint)
-                            Text("superset.hint_description".localized)
-                                .font(.caption)
-                                .foregroundStyle(DesignSystem.Colors.textOnTint.opacity(0.85))
-                        }
-
-                        Spacer()
-
-                        Button {
-                            withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
-                                showSupersetHint = false
-                                hasSeenSupersetHint = true
-                            }
-                        } label: {
-                            Image(systemName: "xmark.circle.fill")
-                                .font(.title3)
-                                .foregroundStyle(DesignSystem.Colors.textOnTint.opacity(0.8))
-                        }
-                    }
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 12)
-                    .background(DesignSystem.Colors.tint)
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
-                    .shadow(color: .black.opacity(0.15), radius: 8, y: 4)
-                }
-                .padding(.horizontal, 16)
-                .padding(.top, 8)
-                .transition(.move(edge: .top).combined(with: .opacity))
-                .onAppear {
-                    // Auto-dismiss after 5 seconds
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 5) {
-                        withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
-                            showSupersetHint = false
-                            hasSeenSupersetHint = true
-                        }
-                    }
-                }
-            }
         }
         .sheet(isPresented: $showingAddExercise) {
             AddExerciseToRoutineView(routine: routine, viewModel: viewModel, exercisesViewModel: exercisesViewModel)
@@ -1070,8 +1049,10 @@ struct ExerciseHeaderView: View {
     var isEditMode: Bool = false
     var showDragHandle: Bool = true
     var supersetPosition: Int? = nil
-    var supersetTotal: Int? = nil
+    var supersetLetter: String? = nil
+    var supersetColor: Color? = nil
     var supersetLinePosition: SupersetPosition? = nil
+    var onSupersetAction: (() -> Void)? = nil
 
     // Fixed width for the superset indicator area - ensures consistent alignment for all exercises
     private let indicatorAreaWidth: CGFloat = 16
@@ -1084,7 +1065,7 @@ struct ExerciseHeaderView: View {
             // For standalone exercises: empty but reserves the same space
             ZStack {
                 if let linePosition = supersetLinePosition {
-                    SupersetLineIndicator(position: linePosition)
+                    SupersetLineIndicator(position: linePosition, color: supersetColor ?? DesignSystem.Colors.tint)
                 }
             }
             .frame(width: indicatorAreaWidth)
@@ -1119,9 +1100,23 @@ struct ExerciseHeaderView: View {
 
                 Spacer()
 
-                // Superset position badge
-                if let position = supersetPosition, let total = supersetTotal {
-                    SupersetBadge(position: position, total: total)
+                // Superset position badge with letter label
+                if let position = supersetPosition, let letter = supersetLetter {
+                    SupersetBadge(
+                        letter: letter,
+                        position: position,
+                        color: supersetColor ?? DesignSystem.Colors.tint
+                    )
+                }
+
+                // Superset action button (visible in normal mode when closure provided)
+                if let action = onSupersetAction {
+                    Button(action: action) {
+                        Image(systemName: routineExercise.isInSuperset ? "pencil.circle" : "link")
+                            .font(.body)
+                            .foregroundStyle(supersetColor ?? .secondary)
+                    }
+                    .buttonStyle(.plain)
                 }
 
                 // Drag indicator in edit mode (only if showDragHandle is true)

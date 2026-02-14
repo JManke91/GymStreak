@@ -363,22 +363,16 @@
 "routine_exercise_detail.error.not_found" = "Exercise not found";
 
 // MARK: - Superset Feature
-"superset.link_exercises" = "Link Exercises";
-"superset.link" = "Link";
-"superset.remove" = "Remove";
-"superset.remove_one" = "Remove 1 Exercise";
-"superset.remove_multiple" = "Remove %d Exercises";
-"superset.merge" = "Merge Supersets (%d)";
-"superset.create" = "Create Superset (%d)";
-"superset.link_count" = "Link Exercises (%d)";
-"superset.select_exercises" = "Select Exercises";
 "superset.remove_from" = "Remove from Superset";
+"superset.remove_from_named" = "Remove from Superset %@";
 "superset.dissolve" = "Dissolve Superset";
-"superset.modify" = "Modify Superset...";
-"superset.create_menu" = "Create Superset...";
-"superset.link_accessibility" = "Link exercises into superset";
-"superset.hint_title" = "Create Supersets";
-"superset.hint_description" = "Select 2+ exercises to link together";
+"superset.dissolve_named" = "Dissolve Superset %@";
+"superset.create_with" = "Create Superset With...";
+"superset.add_to" = "Add to Superset %@";
+"superset.link_exercises" = "Link exercises as superset";
+"superset.selected_count" = "%d selected";
+"superset.edit_named" = "Edit Superset %@";
+"superset.create_new" = "Create Superset";
 "superset.rest_timer.explanation" = "Rest starts after completing all exercises in each round";
 
 // MARK: - Test Data (for UI Testing Screenshots)

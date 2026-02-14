@@ -21,12 +21,18 @@ struct ActiveWorkoutView: View {
             ScrollView {
                 LazyVStack(spacing: 16) {
                     if let session = viewModel.currentSession {
+                        let workoutLabels = SupersetLabelProvider.labels(for: session.workoutExercisesList)
                         ForEach(Array(session.exercisesGroupedBySupersets.enumerated()), id: \.offset) { groupIndex, exerciseGroup in
                             if exerciseGroup.count > 1 {
                                 // Superset group
+                                let groupSupersetId = exerciseGroup.first?.supersetId ?? UUID()
+                                let groupLetter = workoutLabels[groupSupersetId] ?? "A"
+                                let groupColor = SupersetLabelProvider.color(for: groupLetter)
                                 SupersetWorkoutGroupView(
                                     exerciseCount: exerciseGroup.count,
                                     supersetExercises: exerciseGroup,
+                                    letter: groupLetter,
+                                    color: groupColor,
                                     viewModel: viewModel
                                 ) {
                                     ForEach(Array(exerciseGroup.enumerated()), id: \.element.id) { index, workoutExercise in
@@ -37,7 +43,8 @@ struct ActiveWorkoutView: View {
                                             expandedSetId: $expandedSetId,
                                             lastActiveExerciseId: $lastActiveExerciseId,
                                             supersetPosition: index + 1,
-                                            supersetTotal: exerciseGroup.count,
+                                            supersetLetter: groupLetter,
+                                            supersetColor: groupColor,
                                             isPartOfSuperset: true,
                                             onDelete: {
                                                 exerciseToDelete = workoutExercise
@@ -309,7 +316,8 @@ struct ExerciseCard: View {
     @Binding var expandedSetId: UUID?
     @Binding var lastActiveExerciseId: UUID?
     var supersetPosition: Int? = nil
-    var supersetTotal: Int? = nil
+    var supersetLetter: String? = nil
+    var supersetColor: Color? = nil
     var isPartOfSuperset: Bool = false
     var onDelete: (() -> Void)?
     @State private var showingRestTimeConfig = false
@@ -341,8 +349,12 @@ struct ExerciseCard: View {
                 Spacer()
 
                 // Superset position badge
-                if let position = supersetPosition, let total = supersetTotal {
-                    SupersetBadge(position: position, total: total)
+                if let position = supersetPosition, let letter = supersetLetter {
+                    SupersetBadge(
+                        letter: letter,
+                        position: position,
+                        color: supersetColor ?? DesignSystem.Colors.tint
+                    )
                 }
 
                 if workoutExercise.completedSetsCount == workoutExercise.setsList.count {
@@ -965,6 +977,8 @@ struct DeleteExerciseConfirmationView: View {
 struct SupersetWorkoutGroupView<Content: View>: View {
     let exerciseCount: Int
     let supersetExercises: [WorkoutExercise]
+    let letter: String
+    let color: Color
     @ObservedObject var viewModel: WorkoutViewModel
     let content: Content
     @State private var showingRestTimeConfig = false
@@ -981,11 +995,15 @@ struct SupersetWorkoutGroupView<Content: View>: View {
     init(
         exerciseCount: Int,
         supersetExercises: [WorkoutExercise],
+        letter: String,
+        color: Color,
         viewModel: WorkoutViewModel,
         @ViewBuilder content: () -> Content
     ) {
         self.exerciseCount = exerciseCount
         self.supersetExercises = supersetExercises
+        self.letter = letter
+        self.color = color
         self.viewModel = viewModel
         self.content = content()
     }
@@ -996,7 +1014,7 @@ struct SupersetWorkoutGroupView<Content: View>: View {
             HStack(spacing: 6) {
                 Image(systemName: "link")
                     .font(.caption.weight(.semibold))
-                Text("Superset")
+                Text("Superset \(letter)")
                     .font(.caption.weight(.semibold))
                 Text("(\(exerciseCount) exercises)")
                     .font(.caption)
@@ -1012,15 +1030,15 @@ struct SupersetWorkoutGroupView<Content: View>: View {
                         Text(TimeFormatting.formatRestTime(supersetRestTime))
                             .font(.caption2.weight(.medium))
                     }
-                    .foregroundStyle(DesignSystem.Colors.tint)
+                    .foregroundStyle(color)
                 }
             }
-            .foregroundStyle(DesignSystem.Colors.tint)
+            .foregroundStyle(color)
             .padding(.horizontal, 12)
             .padding(.vertical, 6)
             .background(
                 Capsule()
-                    .fill(DesignSystem.Colors.tint.opacity(0.15))
+                    .fill(color.opacity(0.15))
             )
             .padding(.bottom, 8)
 
@@ -1049,7 +1067,7 @@ struct SupersetWorkoutGroupView<Content: View>: View {
             HStack(alignment: .top, spacing: 0) {
                 // Vertical connecting line
                 Rectangle()
-                    .fill(DesignSystem.Colors.tint.opacity(0.4))
+                    .fill(color.opacity(0.4))
                     .frame(width: 3)
                     .clipShape(RoundedRectangle(cornerRadius: 1.5))
                     .padding(.leading, 4)
@@ -1064,11 +1082,11 @@ struct SupersetWorkoutGroupView<Content: View>: View {
         .padding(12)
         .background(
             RoundedRectangle(cornerRadius: DesignSystem.Dimensions.cornerRadiusMD)
-                .fill(DesignSystem.Colors.tint.opacity(0.05))
+                .fill(color.opacity(0.05))
         )
         .overlay(
             RoundedRectangle(cornerRadius: DesignSystem.Dimensions.cornerRadiusMD)
-                .strokeBorder(DesignSystem.Colors.tint.opacity(0.2), lineWidth: 1)
+                .strokeBorder(color.opacity(0.2), lineWidth: 1)
         )
     }
 }

@@ -2,24 +2,28 @@ import SwiftUI
 
 /// Visual container for grouped superset exercises with connecting line and anchor dots
 struct SupersetGroupView<Content: View>: View {
+    let letter: String
     let exerciseCount: Int
+    var color: Color = DesignSystem.Colors.tint
     let content: Content
 
-    init(exerciseCount: Int, @ViewBuilder content: () -> Content) {
+    init(letter: String, exerciseCount: Int, color: Color = DesignSystem.Colors.tint, @ViewBuilder content: () -> Content) {
+        self.letter = letter
         self.exerciseCount = exerciseCount
+        self.color = color
         self.content = content()
     }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             // Superset header
-            SupersetIndicatorBadge(exerciseCount: exerciseCount)
+            SupersetIndicatorBadge(letter: letter, exerciseCount: exerciseCount, color: color)
                 .padding(.bottom, 8)
 
             // Content with connecting line
             HStack(alignment: .top, spacing: 0) {
                 // Vertical connecting line with anchor dots
-                SupersetConnectingLine()
+                SupersetConnectingLine(color: color)
                     .frame(width: 12)
                     .padding(.leading, 4)
 
@@ -35,6 +39,8 @@ struct SupersetGroupView<Content: View>: View {
 
 /// Vertical connecting line for superset exercises with anchor dots at start and end
 struct SupersetConnectingLine: View {
+    var color: Color = DesignSystem.Colors.tint
+
     private let lineWidth: CGFloat = 3
     private let dotSize: CGFloat = 8
 
@@ -50,19 +56,19 @@ struct SupersetConnectingLine: View {
                     path.addLine(to: CGPoint(x: centerX, y: height - dotSize / 2))
                 }
                 .stroke(
-                    DesignSystem.Colors.tint.opacity(0.5),
+                    color.opacity(0.5),
                     style: StrokeStyle(lineWidth: lineWidth, lineCap: .round)
                 )
 
                 // Top anchor dot
                 Circle()
-                    .fill(DesignSystem.Colors.tint)
+                    .fill(color)
                     .frame(width: dotSize, height: dotSize)
                     .position(x: centerX, y: dotSize / 2)
 
                 // Bottom anchor dot
                 Circle()
-                    .fill(DesignSystem.Colors.tint)
+                    .fill(color)
                     .frame(width: dotSize, height: dotSize)
                     .position(x: centerX, y: height - dotSize / 2)
             }
@@ -72,13 +78,15 @@ struct SupersetConnectingLine: View {
 
 /// Container for a single exercise within a superset (shows position badge)
 struct SupersetExerciseContainer<Content: View>: View {
+    let letter: String
     let position: Int
-    let total: Int
+    var color: Color = DesignSystem.Colors.tint
     let content: Content
 
-    init(position: Int, total: Int, @ViewBuilder content: () -> Content) {
+    init(letter: String, position: Int, color: Color = DesignSystem.Colors.tint, @ViewBuilder content: () -> Content) {
+        self.letter = letter
         self.position = position
-        self.total = total
+        self.color = color
         self.content = content()
     }
 
@@ -88,7 +96,7 @@ struct SupersetExerciseContainer<Content: View>: View {
 
             Spacer()
 
-            SupersetBadge(position: position, total: total)
+            SupersetBadge(letter: letter, position: position, color: color)
         }
         .padding(.vertical, 4)
     }
@@ -97,9 +105,9 @@ struct SupersetExerciseContainer<Content: View>: View {
 #Preview {
     List {
         Section {
-            SupersetGroupView(exerciseCount: 3) {
+            SupersetGroupView(letter: "A", exerciseCount: 3) {
                 ForEach(1...3, id: \.self) { index in
-                    SupersetExerciseContainer(position: index, total: 3) {
+                    SupersetExerciseContainer(letter: "A", position: index) {
                         VStack(alignment: .leading, spacing: 2) {
                             Text("Exercise \(index)")
                                 .font(.headline)
@@ -109,6 +117,27 @@ struct SupersetExerciseContainer<Content: View>: View {
                         }
                     }
                     if index < 3 {
+                        Divider()
+                            .padding(.leading, 8)
+                    }
+                }
+            }
+        }
+
+        Section {
+            let indigo = Color(red: 94/255, green: 92/255, blue: 230/255)
+            SupersetGroupView(letter: "B", exerciseCount: 2, color: indigo) {
+                ForEach(1...2, id: \.self) { index in
+                    SupersetExerciseContainer(letter: "B", position: index, color: indigo) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Exercise \(index)")
+                                .font(.headline)
+                            Text("3 sets")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    if index < 2 {
                         Divider()
                             .padding(.leading, 8)
                     }
