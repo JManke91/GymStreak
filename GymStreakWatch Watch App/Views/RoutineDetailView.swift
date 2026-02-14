@@ -4,6 +4,28 @@ struct RoutineDetailView: View {
     let routine: WatchRoutine
     let onStartWorkout: () -> Void
 
+    /// Groups exercises by superset - exercises with same supersetId are grouped together
+    private var exerciseGroups: [[WatchExercise]] {
+        var groups: [[WatchExercise]] = []
+        var processedSupersetIds: Set<UUID> = []
+        let sorted = routine.exercises.sorted { $0.order < $1.order }
+
+        for exercise in sorted {
+            if let supersetId = exercise.supersetId {
+                guard !processedSupersetIds.contains(supersetId) else { continue }
+                processedSupersetIds.insert(supersetId)
+
+                let supersetExercises = sorted
+                    .filter { $0.supersetId == supersetId }
+                    .sorted { $0.supersetOrder < $1.supersetOrder }
+                groups.append(supersetExercises)
+            } else {
+                groups.append([exercise])
+            }
+        }
+        return groups
+    }
+
     var body: some View {
         // Main scrollable content; no large bottom spacer required because safeAreaInset reserves space
         ScrollView {
@@ -11,29 +33,28 @@ struct RoutineDetailView: View {
                 // Exercise summary
                 exerciseSummary
 
-                // Exercise list
-                ForEach(routine.exercises) { exercise in
-                    ExercisePreviewRow(exercise: exercise)
+                // Exercise list grouped by supersets
+                ForEach(Array(exerciseGroups.enumerated()), id: \.offset) { _, group in
+                    if group.count > 1 {
+                        // Superset group
+                        SupersetGroupView(exercises: group)
+                    } else if let exercise = group.first {
+                        // Single exercise in card
+                        ExercisePreviewRow(exercise: exercise, showSupersetBadge: false)
+                            .background(
+                                RoundedRectangle(cornerRadius: OnyxWatch.Dimensions.cornerRadiusSM)
+                                    .fill(OnyxWatch.Colors.card)
+                            )
+                    }
                 }
             }
             .padding(.horizontal)
         }
         .navigationTitle(routine.name)
-        // Floating start button pinned to bottom; small, without a rectangular background
         .safeAreaInset(edge: .bottom) {
-//            HStack {
-//                Spacer()
-
             startButton
-                    // Make the floating button slightly smaller than before
-//                    .controlSize(.regular)
-                    .frame(height: 36)
-                    // remove extra background—keep it compact
-                    .padding(.horizontal, 8)
-
-//                Spacer()
-//            }
-//            .padding(.bottom, 6)
+                .frame(height: 36)
+                .padding(.horizontal, 8)
         }
     }
 
@@ -68,13 +89,13 @@ struct RoutineDetailView: View {
         Button(action: onStartWorkout) {
             Label("Start Workout", systemImage: "play.fill")
         }
-        .tint(.white)
+        .tint(OnyxWatch.Colors.textOnTint)
         .controlSize(.small)
         .background(
             LinearGradient(
                 colors: [
-                    Color(red: 0.0, green: 0.6, blue: 1.0), // light blue
-                    Color(red: 0.0, green: 0.3, blue: 0.8)  // darker blue
+                    OnyxWatch.Colors.tint,
+                    OnyxWatch.Colors.tint.opacity(0.8)
                 ],
                 startPoint: .topLeading,
                 endPoint: .bottomTrailing
@@ -86,35 +107,7 @@ struct RoutineDetailView: View {
                 .clipShape(Capsule())
         )
         .padding(.top, 24)
-//        .accessibilityHint("Double tap to begin workout")
     }
-
-//    private var nweStartButton: some View {
-//        Button(action: onStartWorkout) {
-//            HStack {
-//                Image(systemName: "play.fill")
-//                    .font(.title2.bold())
-//                Text("Start Workout")
-//                    .fontWeight(.semibold)
-//            }
-////            .foregroundColor(.white)
-//            .padding(.vertical, 10)
-//            .padding(.horizontal, 20)
-//            .background(
-//                LinearGradient(
-//                    colors: [Color.red, Color.orange],
-//                    startPoint: .topLeading,
-//                    endPoint: .bottomTrailing
-//                )
-//            )
-//            .clipShape(Capsule())
-////            .shadow(color: Color.orange.opacity(0.5), radius: 5, x: 0, y: 3)
-////            .overlay(
-////                Capsule()
-////                    .stroke(Color.white.opacity(0.2), lineWidth: 1)
-////            )
-//        }
-//    }
 }
 
 struct ShimmerView: View {
@@ -149,10 +142,64 @@ struct ShimmerView: View {
     }
 }
 
+// MARK: - Superset Group View
+
+struct SupersetGroupView: View {
+    let exercises: [WatchExercise]
+
+    var body: some View {
+        VStack(spacing: 0) {
+            // Superset header
+            HStack(spacing: 4) {
+                Image(systemName: "link")
+                    .font(.system(size: 9, weight: .bold))
+                Text("Superset (\(exercises.count))")
+                    .font(.system(size: 10, weight: .semibold))
+                Spacer()
+            }
+            .foregroundStyle(OnyxWatch.Colors.tint)
+            .padding(.horizontal, 8)
+            .padding(.top, 6)
+            .padding(.bottom, 4)
+
+            // Exercises in superset
+            ForEach(Array(exercises.enumerated()), id: \.element.id) { index, exercise in
+                ExercisePreviewRow(
+                    exercise: exercise,
+                    showSupersetBadge: true,
+                    supersetPosition: index + 1,
+                    supersetTotal: exercises.count
+                )
+
+                // Divider between exercises (except last)
+                if index < exercises.count - 1 {
+                    Rectangle()
+                        .fill(OnyxWatch.Colors.tint.opacity(0.3))
+                        .frame(height: 1)
+                        .padding(.leading, 8)
+                }
+            }
+
+            Spacer().frame(height: 2)
+        }
+        .background(
+            RoundedRectangle(cornerRadius: OnyxWatch.Dimensions.cornerRadiusSM)
+                .fill(OnyxWatch.Colors.tint.opacity(0.1))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: OnyxWatch.Dimensions.cornerRadiusSM)
+                .strokeBorder(OnyxWatch.Colors.tint.opacity(0.3), lineWidth: 1)
+        )
+    }
+}
+
 // MARK: - Exercise Preview Row
 
 struct ExercisePreviewRow: View {
     let exercise: WatchExercise
+    var showSupersetBadge: Bool = false
+    var supersetPosition: Int = 0
+    var supersetTotal: Int = 0
 
     var body: some View {
         HStack {
@@ -162,29 +209,41 @@ struct ExercisePreviewRow: View {
                         .font(.footnote)
                         .lineLimit(1)
 
-                    // Superset indicator
-                    if exercise.supersetId != nil {
-                        Image(systemName: "link")
-                            .font(.system(size: 8, weight: .bold))
-                            .foregroundStyle(.blue)
+                    // Superset position badge (when part of a grouped superset)
+                    if showSupersetBadge {
+                        Text("\(supersetPosition)/\(supersetTotal)")
+                            .font(.system(size: 9, weight: .semibold))
+                            .monospacedDigit()
+                            .foregroundStyle(OnyxWatch.Colors.textOnTint)
+                            .padding(.horizontal, 4)
+                            .padding(.vertical, 1)
+                            .background(
+                                Capsule()
+                                    .fill(OnyxWatch.Colors.tint.opacity(0.8))
+                            )
                     }
                 }
 
-                Text("\(exercise.sets.count) sets")
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
+                HStack(spacing: 4) {
+                    Text("\(exercise.sets.count) sets")
+                    Text("·")
+                    Text(exercise.muscleGroup)
+                }
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
             }
 
             Spacer()
         }
-        .padding(.vertical, 4)
-        .background(
-            exercise.supersetId != nil ? Color.blue.opacity(0.05) : Color.clear
-        )
+        .padding(.horizontal, 8)
+        .padding(.vertical, showSupersetBadge ? 4 : 6)
     }
 }
 
 #Preview {
+    let supersetId = UUID()
+
     NavigationStack {
         RoutineDetailView(
             routine: WatchRoutine(
@@ -204,6 +263,31 @@ struct ExercisePreviewRow: View {
                         supersetId: nil,
                         supersetOrder: 0
                     ),
+                    // Superset exercises
+                    WatchExercise(
+                        id: UUID(),
+                        name: "Bicep Curls",
+                        muscleGroup: "Biceps",
+                        sets: [
+                            WatchSet(id: UUID(), reps: 12, weight: 25, restTime: 60),
+                            WatchSet(id: UUID(), reps: 12, weight: 25, restTime: 60)
+                        ],
+                        order: 1,
+                        supersetId: supersetId,
+                        supersetOrder: 0
+                    ),
+                    WatchExercise(
+                        id: UUID(),
+                        name: "Tricep Pushdowns",
+                        muscleGroup: "Triceps",
+                        sets: [
+                            WatchSet(id: UUID(), reps: 12, weight: 30, restTime: 60),
+                            WatchSet(id: UUID(), reps: 12, weight: 30, restTime: 60)
+                        ],
+                        order: 2,
+                        supersetId: supersetId,
+                        supersetOrder: 1
+                    ),
                     WatchExercise(
                         id: UUID(),
                         name: "Shoulder Press",
@@ -212,7 +296,7 @@ struct ExercisePreviewRow: View {
                             WatchSet(id: UUID(), reps: 10, weight: 65, restTime: 60),
                             WatchSet(id: UUID(), reps: 10, weight: 65, restTime: 60)
                         ],
-                        order: 1,
+                        order: 3,
                         supersetId: nil,
                         supersetOrder: 0
                     )
