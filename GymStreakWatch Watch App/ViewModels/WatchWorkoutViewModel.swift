@@ -222,7 +222,7 @@ final class WatchWorkoutViewModel: ObservableObject {
 
     func startWorkout(with routine: WatchRoutine) async {
         currentRoutine = routine
-        exercises = routine.exercises.map { $0.toActiveWorkoutExercise() }
+        exercises = routine.exercises.sorted { $0.order < $1.order }.map { $0.toActiveWorkoutExercise() }
         currentExerciseIndex = 0
         currentSetIndex = 0
         workoutStartTime = Date()

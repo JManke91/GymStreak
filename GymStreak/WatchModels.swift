@@ -105,7 +105,7 @@ extension Routine {
                     id: routineExercise.id,
                     name: routineExercise.exercise?.name ?? "Unknown",
                     muscleGroup: routineExercise.exercise?.primaryMuscleGroup ?? "General",
-                    sets: routineExercise.setsList.map { set in
+                    sets: routineExercise.setsList.sorted(by: { $0.order < $1.order }).map { set in
                         WatchSet(
                             id: set.id,
                             reps: set.reps,
