@@ -30,7 +30,7 @@ struct CompactValueEditor: View {
     @State private var lastHapticStepBoundary: Int = 0
 
     var body: some View {
-        VStack(spacing: 3) {
+        VStack(spacing: 2) {
             // Compact stepper buttons (only show when focused)
             if isFocused {
                 HStack(spacing: 8) {
@@ -62,7 +62,6 @@ struct CompactValueEditor: View {
                     .disabled(value >= range.upperBound)
                     .opacity(value >= range.upperBound ? 0.4 : 1.0)
                 }
-                .padding(.top, 2)
                 .transition(.opacity.combined(with: .scale(scale: 0.85)))
             }
             // Set indicator - only show on NON-focused editor'
@@ -104,8 +103,9 @@ struct CompactValueEditor: View {
                     }
                 }
 
-                .frame(height: 40) // Fixed height for consistency
-                .padding(5)
+                .frame(height: 36)
+                .padding(.horizontal, 5)
+                .padding(.vertical, 3)
             }
             .buttonStyle(.plain)
             .frame(maxWidth: .infinity)

@@ -56,30 +56,25 @@ struct CompactActionBar: View {
     //                        VStack(spacing: 0) {
                                 ZStack {
                                     Image(systemName: "circle")
-                                        .font(.system(size: 40))
+                                        .font(.system(size: 36))
 
                                     // Subtle translucent background when completed to keep visual cue
                                     if isCompleted {
                                         Circle()
                                             .fill(Color.green)
-                                            .frame(width: 30, height: 30)
+                                            .frame(width: 26, height: 26)
                                             .opacity(0.32)
                                     }
 
-                                    // Set index overlay text (kept small)
-                                    HStack(spacing: 0) {
-                                        Text("\(currentSetIndex + 1)/")
+                                    // Set index overlay text
+                                    HStack(alignment: .firstTextBaseline, spacing: 0) {
+                                        Text("\(currentSetIndex + 1)")
                                             .font(.system(size: 14, weight: .semibold))
-                                        VStack {
-                                            Spacer()
-                                            Text("\(totalSets)")
-                                                .font(.system(size: 8))
-                                                .padding(.bottom, 14)
-                                        }
+                                        Text("/\(totalSets)")
+                                            .font(.system(size: 10, weight: .medium))
                                     }
                                 }
                                 // Explicitly increase hit area for watch: full tappable rectangle
-                                .padding(.vertical, 2)
                                 .contentShape(Rectangle())
 
     //                            Text(exerciseName ?? "")
@@ -122,6 +117,8 @@ struct CompactActionBar: View {
             // show current exercise name
             Text(exerciseName ?? "")
                 .font(.system(size: 12, weight: .light))
+                .lineLimit(1)
+                .truncationMode(.tail)
         }
 
 

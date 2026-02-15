@@ -247,8 +247,8 @@ Workout labels are computed from `WorkoutSession.workoutExercisesList` using `Su
 
 1. Watch completes workout, creates `CompletedWatchWorkout` with superset metadata on each `CompletedWatchExercise`
 2. Sent via `transferUserInfo()` (guaranteed delivery)
-3. iOS receives via `didReceiveUserInfo`, posts `watchWorkoutCompleted` notification
-4. `RoutinesViewModel` processes completed workout, creates `WorkoutSession` with denormalized superset data
+3. iOS `WatchConnectivityManager` receives via `didReceiveUserInfo`, persists workout to UserDefaults, and processes it directly (creates `WorkoutSession`, optionally updates routine template)
+4. Posts `.watchWorkoutProcessed` notification so `RoutinesViewModel` refreshes the UI
 
 **Files:**
 - `GymStreak/WatchConnectivityManager.swift` - iOS side

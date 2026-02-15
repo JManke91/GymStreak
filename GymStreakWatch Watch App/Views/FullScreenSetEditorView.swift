@@ -67,7 +67,7 @@ struct FullScreenSetEditorView: View {
                 // Content respects safe areas with explicit padding
                 VStack(spacing: 0) {
                     Spacer()
-                        .frame(height: 8)
+                        .frame(height: 4)
 
                     // CRITICAL CHANGE: Side-by-side layout
                     // Set indicator now appears on top of the NON-focused editor
@@ -127,7 +127,7 @@ struct FullScreenSetEditorView: View {
                     .padding(.horizontal, 8)
 
                     Spacer()
-                        .frame(height: 5)
+                        .frame(height: 2)
 
                     // Compact action bar (Complete + Prev/Next combined)
                     CompactActionBar(
