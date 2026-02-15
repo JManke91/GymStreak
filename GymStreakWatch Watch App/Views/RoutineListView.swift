@@ -1,5 +1,8 @@
 import SwiftUI
 import SwiftData
+import os
+
+private let logger = Logger(subsystem: "com.jmanke.gymstreak.watch", category: "RoutineList")
 
 struct RoutineListView: View {
     @Query(sort: \Routine.updatedAt, order: .reverse) var routines: [Routine]
@@ -16,6 +19,9 @@ struct RoutineListView: View {
             }
         }
         .navigationTitle("Routines")
+        .onChange(of: routines.count) {
+            logger.info("Routine list updated — now showing \(self.routines.count) routines")
+        }
         .fullScreenCover(item: $selectedRoutine) { routine in
             ActiveWorkoutView(routine: routine)
                 .environmentObject(workoutViewModel)

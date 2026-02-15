@@ -1,6 +1,9 @@
 import Foundation
 import SwiftData
 import SwiftUI
+import os
+
+private let logger = Logger(subsystem: "com.jmanke.gymstreak", category: "RoutinesSync")
 
 @MainActor
 class RoutinesViewModel: ObservableObject {
@@ -27,6 +30,7 @@ class RoutinesViewModel: ObservableObject {
             queue: .main
         ) { [weak self] _ in
             Task { @MainActor in
+                logger.info("CloudKit change notification received — refreshing routines")
                 self?.fetchRoutines()
             }
         }
@@ -50,7 +54,7 @@ class RoutinesViewModel: ObservableObject {
     private func processPendingWatchWorkouts() {
         // Check for any workouts that arrived before we started observing
         if let pendingWorkout = watchConnectivity.processPendingWorkout() {
-            print("Processing pending watch workout: \(pendingWorkout.routineName)")
+            logger.info("Processing pending watch workout: \(pendingWorkout.routineName)")
             handleCompletedWatchWorkout(pendingWorkout)
         }
     }
@@ -63,9 +67,11 @@ class RoutinesViewModel: ObservableObject {
     func fetchRoutines() {
         let descriptor = FetchDescriptor<Routine>(sortBy: [SortDescriptor(\.updatedAt, order: .reverse)])
         do {
+            let previousCount = routines.count
             routines = try modelContext.fetch(descriptor)
+            logger.info("Fetched routines: \(self.routines.count) (was \(previousCount))")
         } catch {
-            print("Error fetching routines: \(error)")
+            logger.error("Error fetching routines: \(error.localizedDescription)")
         }
     }
 
@@ -212,15 +218,16 @@ class RoutinesViewModel: ObservableObject {
     private func save() {
         do {
             try modelContext.save()
+            logger.debug("ModelContext saved successfully")
         } catch {
-            print("Error saving context: \(error)")
+            logger.error("Error saving context: \(error.localizedDescription)")
         }
     }
 
     // MARK: - Watch Workout Handling
 
     private func handleCompletedWatchWorkout(_ workout: CompletedWatchWorkout) {
-        print("Received completed watch workout: \(workout.routineName)")
+        logger.info("Received completed watch workout: \(workout.routineName)")
 
         // Create WorkoutSession to appear in history
         // (Template updates are now handled by the watch via SwiftData + CloudKit)
@@ -277,10 +284,10 @@ class RoutinesViewModel: ObservableObject {
 
             modelContext.insert(workoutSession)
             try modelContext.save()
-            print("Created workout session from watch workout: \(workout.routineName)")
+            logger.info("Created workout session from watch workout: \(workout.routineName)")
 
         } catch {
-            print("Error creating workout session from watch workout: \(error)")
+            logger.error("Error creating workout session from watch workout: \(error.localizedDescription)")
         }
     }
 

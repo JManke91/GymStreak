@@ -3,6 +3,9 @@ import Combine
 import SwiftData
 import WatchKit
 import UserNotifications
+import os
+
+private let logger = Logger(subsystem: "com.jmanke.gymstreak.watch", category: "Workout")
 
 @MainActor
 final class WatchWorkoutViewModel: ObservableObject {
@@ -89,7 +92,7 @@ final class WatchWorkoutViewModel: ObservableObject {
             .receive(on: DispatchQueue.main)
             .compactMap { $0 }
             .sink { heartRate in
-                print("wtf heartRate received: \(heartRate)")
+                logger.debug("Heart rate received: \(heartRate)")
                 self.heartRate = Int(heartRate)
             }
             .store(in: &cancellabes)
@@ -99,7 +102,7 @@ final class WatchWorkoutViewModel: ObservableObject {
             .receive(on: DispatchQueue.main)
             .compactMap { $0 }
             .sink { calories in
-                print("wtf calories received: \(calories)")
+                logger.debug("Calories received: \(calories)")
             self.activeCalories = Int(calories)
         }
         .store(in: &cancellabes)
@@ -110,7 +113,7 @@ final class WatchWorkoutViewModel: ObservableObject {
 //            .prefix(1)
             .filter { _ in self.workoutState != .running }
             .sink { combined in
-                print("wtf received workout metrics: \(combined.0 ?? 0), \(combined.1 ?? 0)")
+                logger.debug("Workout metrics received — calories: \(combined.0 ?? 0), heartRate: \(combined.1 ?? 0)")
                 self.workoutState = .running
             }
             .store(in: &cancellabes)
@@ -121,12 +124,12 @@ final class WatchWorkoutViewModel: ObservableObject {
     private func requestNotificationPermission() {
         UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge]) { granted, error in
             if let error = error {
-                print("Watch notification permission error: \(error)")
+                logger.error("Notification permission error: \(error.localizedDescription)")
             }
             if granted {
-                print("Watch notification permission granted")
+                logger.debug("Notification permission granted")
             } else {
-                print("Watch notification permission denied")
+                logger.debug("Notification permission denied")
             }
         }
     }
@@ -146,7 +149,7 @@ final class WatchWorkoutViewModel: ObservableObject {
 
         UNUserNotificationCenter.current().add(request) { error in
             if let error = error {
-                print("Error scheduling watch rest timer notification: \(error)")
+                logger.error("Failed to schedule rest timer notification: \(error.localizedDescription)")
             }
         }
     }
@@ -409,7 +412,7 @@ final class WatchWorkoutViewModel: ObservableObject {
         }
 
         WKInterfaceDevice.current().play(.success)
-        print("Updated rest time for exercise \(exercises[exerciseIndex].name) to \(newRestTime)s")
+        logger.debug("Updated rest time for exercise \(self.exercises[exerciseIndex].name) to \(newRestTime)s")
     }
 
     func completeCurrentSet() {
@@ -740,11 +743,11 @@ final class WatchWorkoutViewModel: ObservableObject {
     // MARK: - Rest Timer
 
     private func startRestTimer(duration: TimeInterval) {
-        print("▶️ startRestTimer called - duration: \(duration)s")
+        logger.debug("Rest timer started — duration: \(duration)s")
 
         // Cancel any existing timer first
         if isResting {
-            print("⚠️ Cancelling existing timer")
+            logger.debug("Cancelling existing rest timer")
             stopRestTimer()
         }
 
@@ -763,13 +766,13 @@ final class WatchWorkoutViewModel: ObservableObject {
                     self.restTimeRemaining -= 1
                     let remaining = Int(self.restTimeRemaining)
                     if remaining % 10 == 0 || remaining < 5 {
-                        print("⏱️ Timer tick - remaining: \(remaining)s")
+                        logger.debug("Rest timer tick — remaining: \(remaining)s")
                     }
                 } else {
                     // Prevent multiple executions
                     guard self.restTimerState == .running else { return }
 
-                    print("✅ Timer completed naturally")
+                    logger.debug("Rest timer completed")
 
                     // Set completion state FIRST (prevents re-entry)
                     self.restTimerState = .completed
@@ -809,8 +812,7 @@ final class WatchWorkoutViewModel: ObservableObject {
     }
 
     private func stopRestTimer() {
-        print("⏹️ stopRestTimer called - remaining: \(restTimeRemaining)s of \(restDuration)s")
-        print("⏹️ Call stack: \(Thread.callStackSymbols.prefix(5).joined(separator: "\n"))")
+        logger.debug("Rest timer stopped — remaining: \(self.restTimeRemaining)s of \(self.restDuration)s")
 
         restTimer?.invalidate()
         restTimer = nil
@@ -911,8 +913,12 @@ final class WatchWorkoutViewModel: ObservableObject {
 
         if updatedAny {
             routine.updatedAt = Date()
-            try? modelContext.save()
-            print("WatchWorkoutViewModel: Template updated via SwiftData")
+            do {
+                try modelContext.save()
+                logger.info("Template updated via SwiftData for routine: \(routine.name) — CloudKit will sync to iOS")
+            } catch {
+                logger.error("Failed to save template update: \(error.localizedDescription)")
+            }
         }
 
         return updatedAny

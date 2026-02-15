@@ -1,6 +1,9 @@
 import Foundation
 import Combine
 import WatchConnectivity
+import os
+
+private let logger = Logger(subsystem: "com.jmanke.gymstreak.watch", category: "WatchConnectivity")
 
 @MainActor
 final class WatchConnectivityManager: NSObject, ObservableObject {
@@ -23,7 +26,7 @@ final class WatchConnectivityManager: NSObject, ObservableObject {
 
     func sendCompletedWorkout(_ workout: CompletedWatchWorkout) {
         guard let session = session, session.activationState == .activated else {
-            print("WatchConnectivity: Session not activated")
+            logger.error("Cannot send workout — session not activated")
             return
         }
 
@@ -33,9 +36,9 @@ final class WatchConnectivityManager: NSObject, ObservableObject {
 
             // Use transferUserInfo for guaranteed delivery
             session.transferUserInfo(userInfo)
-            print("WatchConnectivity: Sent completed workout to iPhone")
+            logger.info("Sent completed workout to iPhone: \(workout.routineName)")
         } catch {
-            print("WatchConnectivity: Failed to send workout - \(error.localizedDescription)")
+            logger.error("Failed to send workout: \(error.localizedDescription)")
         }
     }
 }
@@ -46,19 +49,19 @@ extension WatchConnectivityManager: WCSessionDelegate {
     nonisolated func session(_ session: WCSession, activationDidCompleteWith activationState: WCSessionActivationState, error: Error?) {
         Task { @MainActor in
             if let error = error {
-                print("WatchConnectivity: Activation failed - \(error.localizedDescription)")
+                logger.error("Activation failed: \(error.localizedDescription)")
                 return
             }
 
             self.isReachable = session.isReachable
-            print("WatchConnectivity: Activated on Watch")
+            logger.info("Activated on Watch — reachable: \(session.isReachable)")
         }
     }
 
     nonisolated func sessionReachabilityDidChange(_ session: WCSession) {
         Task { @MainActor in
             self.isReachable = session.isReachable
-            print("WatchConnectivity: Reachability changed - \(session.isReachable)")
+            logger.info("Reachability changed: \(session.isReachable)")
         }
     }
 }

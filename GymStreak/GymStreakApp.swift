@@ -7,6 +7,9 @@
 
 import SwiftUI
 import SwiftData
+import os
+
+private let logger = Logger(subsystem: "com.jmanke.gymstreak", category: "App")
 
 @main
 struct GymStreakApp: App {
@@ -37,7 +40,7 @@ struct GymStreakApp: App {
             return try ModelContainer(for: schema, configurations: [modelConfiguration])
         } catch {
             // If CloudKit container fails (e.g., no iCloud account), fall back to local-only storage
-            print("Failed to create CloudKit container: \(error). Falling back to local storage.")
+            logger.error("Failed to create CloudKit container: \(error.localizedDescription). Falling back to local storage.")
             let localConfig = ModelConfiguration(
                 schema: schema,
                 isStoredInMemoryOnly: false,
