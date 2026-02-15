@@ -5,10 +5,17 @@ struct WatchWorkoutSummaryView: View {
     let summary: WatchWorkoutSummary
     let onDismiss: () -> Void
 
+    @EnvironmentObject private var viewModel: WatchWorkoutViewModel
+
     var body: some View {
         ScrollView {
             VStack(spacing: OnyxWatch.Spacing.lg) {
                 headerSection
+
+                if viewModel.templateWasUpdated {
+                    templateUpdateBanner
+                }
+
                 statsCard
                 exercisesCard
                 doneButton
@@ -39,6 +46,27 @@ struct WatchWorkoutSummaryView: View {
                 .foregroundStyle(OnyxWatch.Colors.textSecondary)
         }
         .padding(.top, OnyxWatch.Spacing.md)
+    }
+
+    // MARK: - Template Update Banner
+
+    private var templateUpdateBanner: some View {
+        HStack(spacing: OnyxWatch.Spacing.sm) {
+            Image(systemName: "arrow.triangle.2.circlepath")
+                .font(.caption2)
+                .foregroundStyle(OnyxWatch.Colors.textOnTint)
+
+            Text("Template updated")
+                .font(.watchCaption)
+                .foregroundStyle(OnyxWatch.Colors.textOnTint)
+        }
+        .padding(.horizontal, OnyxWatch.Spacing.md)
+        .padding(.vertical, OnyxWatch.Spacing.sm)
+        .frame(maxWidth: .infinity)
+        .background(
+            RoundedRectangle(cornerRadius: OnyxWatch.Dimensions.cornerRadiusMD)
+                .fill(OnyxWatch.Colors.tint)
+        )
     }
 
     // MARK: - Stats Card
@@ -172,4 +200,9 @@ struct WatchWorkoutSummaryView: View {
         ),
         onDismiss: {}
     )
+    .environmentObject(WatchWorkoutViewModel(
+        healthKitManager: WatchHealthKitManager(),
+        connectivityManager: WatchConnectivityManager.shared,
+        routineStore: RoutineStore()
+    ))
 }

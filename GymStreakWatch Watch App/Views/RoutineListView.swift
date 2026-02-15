@@ -92,7 +92,8 @@ struct RoutineRowView: View {
             .environmentObject(RoutineStore())
             .environmentObject(WatchWorkoutViewModel(
                 healthKitManager: WatchHealthKitManager(),
-                connectivityManager: WatchConnectivityManager.shared
+                connectivityManager: WatchConnectivityManager.shared,
+                routineStore: RoutineStore()
             ))
     }
 }

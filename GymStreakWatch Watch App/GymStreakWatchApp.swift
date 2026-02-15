@@ -47,7 +47,8 @@ final class AppState: ObservableObject {
         self.healthKitManager = healthKit
         self.workoutViewModel = WatchWorkoutViewModel(
             healthKitManager: healthKit,
-            connectivityManager: connectivity
+            connectivityManager: connectivity,
+            routineStore: store
         )
     }
 

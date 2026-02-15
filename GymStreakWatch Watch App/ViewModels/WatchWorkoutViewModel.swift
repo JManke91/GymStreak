@@ -47,6 +47,7 @@ final class WatchWorkoutViewModel: ObservableObject {
 
     // Workout Summary (shown after saving)
     @Published var workoutSummary: WatchWorkoutSummary?
+    @Published var templateWasUpdated = false
 
     // Error handling
     @Published var errorMessage: String?
@@ -55,15 +56,17 @@ final class WatchWorkoutViewModel: ObservableObject {
 
     private let healthKitManager: WatchHealthKitManager
     private let connectivityManager: WatchConnectivityManager
+    private let routineStore: RoutineStore
     private var workoutStartTime: Date?
     private var restTimer: Timer?
     private var cancellabes = Set<AnyCancellable>()
 
     // MARK: - Initialization
 
-    init(healthKitManager: WatchHealthKitManager, connectivityManager: WatchConnectivityManager) {
+    init(healthKitManager: WatchHealthKitManager, connectivityManager: WatchConnectivityManager, routineStore: RoutineStore) {
         self.healthKitManager = healthKitManager
         self.connectivityManager = connectivityManager
+        self.routineStore = routineStore
 //        observeHealthKitMetrics()
         requestNotificationPermission()
 
@@ -263,6 +266,11 @@ final class WatchWorkoutViewModel: ObservableObject {
         workoutSummary = generateWorkoutSummary()
 
         stopRestTimer()
+
+        // Apply template update locally on watch BEFORE syncing to iOS
+        if updateTemplate, let routineId = currentRoutine?.id {
+            templateWasUpdated = routineStore.applyWorkoutChanges(routineId: routineId, exercises: exercises)
+        }
 
         do {
             let (_, healthKitWorkoutId) = try await healthKitManager.endWorkout()
@@ -891,5 +899,6 @@ final class WatchWorkoutViewModel: ObservableObject {
         isResting = false
         restTimeRemaining = 0
         isPaused = false
+        templateWasUpdated = false
     }
 }

@@ -65,7 +65,10 @@
       "WebFetch(domain:www.donnywals.com)",
       "WebFetch(domain:www.raywenderlich.com)",
       "WebFetch(domain:useyourloaf.com)",
-      "WebFetch(domain:www.swiftyplace.com)"
+      "WebFetch(domain:www.swiftyplace.com)",
+      "WebFetch(domain:wwdcnotes.com)",
+      "WebFetch(domain:alexanderweiss.dev)",
+      "WebFetch(domain:code.tutsplus.com)"
     ],
     "defaultMode": "acceptEdits"
   }

@@ -14,9 +14,9 @@ class RoutinesViewModel: ObservableObject {
 
     init(modelContext: ModelContext) {
         self.modelContext = modelContext
-        fetchRoutines()
         observeWatchWorkoutCompletions()
         processPendingWatchWorkouts()
+        fetchRoutines()
         observeCloudKitChanges()
         observeWatchAvailability()
     }

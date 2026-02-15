@@ -29,6 +29,58 @@ final class RoutineStore: ObservableObject {
         routines.first { $0.id == id }
     }
 
+    /// Applies modified workout values back to the stored routine template.
+    /// Returns `true` if the routine was found and updated.
+    @discardableResult
+    func applyWorkoutChanges(routineId: UUID, exercises: [ActiveWorkoutExercise]) -> Bool {
+        guard let routineIndex = routines.firstIndex(where: { $0.id == routineId }) else {
+            print("RoutineStore: Could not find routine \(routineId) for local update")
+            return false
+        }
+
+        let routine = routines[routineIndex]
+
+        let updatedExercises = routine.exercises.map { watchExercise -> WatchExercise in
+            guard let activeExercise = exercises.first(where: { $0.id == watchExercise.id }) else {
+                return watchExercise
+            }
+
+            let updatedSets = watchExercise.sets.map { watchSet -> WatchSet in
+                guard let activeSet = activeExercise.sets.first(where: { $0.id == watchSet.id }),
+                      activeSet.wasModified else {
+                    return watchSet
+                }
+
+                return WatchSet(
+                    id: watchSet.id,
+                    reps: activeSet.actualReps,
+                    weight: activeSet.actualWeight,
+                    restTime: watchSet.restTime
+                )
+            }
+
+            return WatchExercise(
+                id: watchExercise.id,
+                name: watchExercise.name,
+                muscleGroup: watchExercise.muscleGroup,
+                sets: updatedSets,
+                order: watchExercise.order,
+                supersetId: watchExercise.supersetId,
+                supersetOrder: watchExercise.supersetOrder
+            )
+        }
+
+        routines[routineIndex] = WatchRoutine(
+            id: routine.id,
+            name: routine.name,
+            exercises: updatedExercises
+        )
+
+        saveRoutines()
+        print("RoutineStore: Locally updated routine '\(routine.name)' with workout changes")
+        return true
+    }
+
     // MARK: - Persistence
 
     private func loadRoutines() {

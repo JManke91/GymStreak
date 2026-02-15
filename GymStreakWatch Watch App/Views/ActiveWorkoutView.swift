@@ -191,6 +191,7 @@ struct ActiveWorkoutView: View {
     )
     .environmentObject(WatchWorkoutViewModel(
         healthKitManager: WatchHealthKitManager(),
-        connectivityManager: WatchConnectivityManager.shared
+        connectivityManager: WatchConnectivityManager.shared,
+        routineStore: RoutineStore()
     ))
 }
