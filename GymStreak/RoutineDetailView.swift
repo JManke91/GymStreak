@@ -788,9 +788,8 @@ struct RoutineDetailView: View {
                 HStack {
                     if let editMode = supersetEditMode {
                         switch editMode {
-                        case .editing(let supersetId):
-                            let letter = supersetLabels[supersetId] ?? "?"
-                            Text("superset.edit_named".localized(letter))
+                        case .editing:
+                            Text("superset.edit".localized)
                         case .creating:
                             Text("superset.create_new".localized)
                         }

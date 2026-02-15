@@ -373,7 +373,7 @@
 "superset.add_to" = "Zu Supersatz %@ hinzufügen";
 "superset.link_exercises" = "Übungen als Supersatz verknüpfen";
 "superset.selected_count" = "%d ausgewählt";
-"superset.edit_named" = "Supersatz %@ bearbeiten";
+"superset.edit" = "Supersatz bearbeiten";
 "superset.create_new" = "Supersatz erstellen";
 "superset.rest_timer.explanation" = "Pause beginnt nach Abschluss aller Übungen in jeder Runde";
 

@@ -374,7 +374,7 @@
 "superset.add_to" = "Add to Superset %@";
 "superset.link_exercises" = "Link exercises as superset";
 "superset.selected_count" = "%d selected";
-"superset.edit_named" = "Edit Superset %@";
+"superset.edit" = "Edit Superset";
 "superset.create_new" = "Create Superset";
 "superset.rest_timer.explanation" = "Rest starts after completing all exercises in each round";
 
