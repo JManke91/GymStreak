@@ -260,10 +260,13 @@
 // MARK: - Save Workout View
 "save_workout.duration_label" = "Dauer";
 "save_workout.sets_completed_label" = "Abgeschlossene Sätze";
+"save_workout.sets_label" = "Sätze";
 "save_workout.total_volume" = "Gesamtvolumen";
 "save_workout.completion" = "Abschluss";
 "save_workout.calories" = "Geschätzte Kalorien";
 "save_workout.summary" = "Workout-Zusammenfassung";
+"save_workout.performance" = "Übungsfortschritt";
+"save_workout.new_exercise" = "Neu";
 "save_workout.apple_health" = "In Apple Health speichern";
 "save_workout.apple_health_footer" = "Dein Workout erscheint in der Fitness-App und trägt zu deinen Aktivitätsringen bei";
 "save_workout.update_template" = "Routinenvorlage aktualisieren";

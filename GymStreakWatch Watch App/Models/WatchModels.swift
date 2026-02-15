@@ -76,6 +76,37 @@ struct ActiveWorkoutSet: Identifiable {
     }
 }
 
+// MARK: - Workout Summary (shown after completing a workout on watch)
+
+struct WatchWorkoutSummary {
+    let routineName: String
+    let duration: TimeInterval
+    let completedSets: Int
+    let totalSets: Int
+    let completionPercentage: Int
+    let activeCalories: Int?
+    let exercises: [ExerciseSummary]
+
+    struct ExerciseSummary: Identifiable {
+        let id: UUID
+        let name: String
+        let muscleGroup: String
+        let completedSets: Int
+        let totalSets: Int
+        let isComplete: Bool
+    }
+
+    var formattedDuration: String {
+        let hours = Int(duration) / 3600
+        let minutes = Int(duration) / 60 % 60
+        let seconds = Int(duration) % 60
+        if hours > 0 {
+            return String(format: "%d:%02d:%02d", hours, minutes, seconds)
+        }
+        return String(format: "%d:%02d", minutes, seconds)
+    }
+}
+
 // MARK: - Completed Workout for syncing back to iOS
 
 struct CompletedWatchWorkout: Codable {

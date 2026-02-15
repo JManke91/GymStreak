@@ -17,38 +17,30 @@ struct ActiveWorkoutView: View {
 
     var body: some View {
         ZStack {
-            // Black background for entire workout view
             OnyxWatch.Colors.background.ignoresSafeArea()
 
-            // Keep workoutTabs always in hierarchy to preserve navigation state
-//            if viewModel.workoutState == .started {
-//                ProgressView("Loading...") // Shows spinner with optional text
-//                    .progressViewStyle(CircularProgressViewStyle())
-//            } else {
+            if let summary = viewModel.workoutSummary {
+                // Show summary after workout is saved
+                WatchWorkoutSummaryView(summary: summary) {
+                    viewModel.dismissSummary()
+                    dismiss()
+                }
+            } else {
                 workoutTabs
-//            }
 
-//                .overlay {
-                    // Overlay full-screen timer on top
-                    if viewModel.isResting && !viewModel.isRestTimerMinimized {
-                        NewRestTimerView(
-                            timeRemaining: viewModel.restTimeRemaining,
-                            totalDuration: viewModel.restDuration,
-                            formattedTime: viewModel.formattedRestTime,
-                            state: viewModel.restTimerState,
-                            onSkip: viewModel.skipRest,
-                            onMinimize: viewModel.minimizeRestTimer
-                        )
-                        .transition(.opacity)
-                    }
-
-//            if viewModel.isResting {
-//                Text("hello world")
-//            }
-//                }
-//                .animation(.easeInOut(duration: 0.25), value: viewModel.isResting)
-//                .animation(.easeInOut(duration: 0.25), value: viewModel.isRestTimerMinimized)
-//                .animation(.easeInOut(duration: 0.3), value: viewModel.restTimerState)
+                // Overlay full-screen rest timer on top
+                if viewModel.isResting && !viewModel.isRestTimerMinimized {
+                    NewRestTimerView(
+                        timeRemaining: viewModel.restTimeRemaining,
+                        totalDuration: viewModel.restDuration,
+                        formattedTime: viewModel.formattedRestTime,
+                        state: viewModel.restTimerState,
+                        onSkip: viewModel.skipRest,
+                        onMinimize: viewModel.minimizeRestTimer
+                    )
+                    .transition(.opacity)
+                }
+            }
         }
         .toolbar(.hidden, for: .navigationBar)
         .task {
@@ -63,21 +55,18 @@ struct ActiveWorkoutView: View {
                 Button("Save & Update Template") {
                     Task {
                         await viewModel.endWorkout(updateTemplate: true)
-                        dismiss()
                     }
                 }
 
                 Button("Save (Don't Update)") {
                     Task {
                         await viewModel.endWorkout(updateTemplate: false)
-                        dismiss()
                     }
                 }
             } else {
                 Button("Save Workout") {
                     Task {
                         await viewModel.endWorkout()
-                        dismiss()
                     }
                 }
             }

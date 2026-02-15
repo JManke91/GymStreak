@@ -45,6 +45,9 @@ final class WatchWorkoutViewModel: ObservableObject {
     @Published var elapsedTime: TimeInterval? = nil
     @Published var elapsedTimeString: String? = nil
 
+    // Workout Summary (shown after saving)
+    @Published var workoutSummary: WatchWorkoutSummary?
+
     // Error handling
     @Published var errorMessage: String?
 
@@ -256,6 +259,9 @@ final class WatchWorkoutViewModel: ObservableObject {
     }
 
     func endWorkout(updateTemplate: Bool = false) async {
+        // Capture summary BEFORE ending HealthKit session (metrics stop updating after)
+        workoutSummary = generateWorkoutSummary()
+
         stopRestTimer()
 
         do {
@@ -267,6 +273,11 @@ final class WatchWorkoutViewModel: ObservableObject {
         } catch {
             errorMessage = "Failed to save workout: \(error.localizedDescription)"
         }
+    }
+
+    func dismissSummary() {
+        workoutSummary = nil
+        resetState()
     }
 
     func discardWorkout() {
@@ -835,6 +846,38 @@ final class WatchWorkoutViewModel: ObservableObject {
         )
 
         connectivityManager.sendCompletedWorkout(completedWorkout)
+    }
+
+    // MARK: - Workout Summary
+
+    private func generateWorkoutSummary() -> WatchWorkoutSummary {
+        let exerciseSummaries = exercises.sorted(by: { $0.order < $1.order }).map { exercise in
+            WatchWorkoutSummary.ExerciseSummary(
+                id: exercise.id,
+                name: exercise.name,
+                muscleGroup: exercise.muscleGroup,
+                completedSets: exercise.completedSetsCount,
+                totalSets: exercise.sets.count,
+                isComplete: exercise.isComplete
+            )
+        }
+
+        let duration: TimeInterval
+        if let startTime = workoutStartTime {
+            duration = Date().timeIntervalSince(startTime)
+        } else {
+            duration = elapsedTime ?? 0
+        }
+
+        return WatchWorkoutSummary(
+            routineName: currentRoutine?.name ?? "Workout",
+            duration: duration,
+            completedSets: completedSetsCount,
+            totalSets: totalSetsCount,
+            completionPercentage: Int(progress * 100),
+            activeCalories: activeCalories,
+            exercises: exerciseSummaries
+        )
     }
 
     // MARK: - Helper Methods

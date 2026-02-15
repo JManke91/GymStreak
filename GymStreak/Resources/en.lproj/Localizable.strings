@@ -261,10 +261,13 @@
 // MARK: - Save Workout View
 "save_workout.duration_label" = "Duration";
 "save_workout.sets_completed_label" = "Sets Completed";
+"save_workout.sets_label" = "Sets";
 "save_workout.total_volume" = "Total Volume";
 "save_workout.completion" = "Completion";
 "save_workout.calories" = "Est. Calories";
 "save_workout.summary" = "Workout Summary";
+"save_workout.performance" = "Exercise Progress";
+"save_workout.new_exercise" = "New";
 "save_workout.apple_health" = "Save to Apple Health";
 "save_workout.apple_health_footer" = "Your workout will appear in the Fitness app and contribute to your activity rings";
 "save_workout.update_template" = "Update Routine Template";
