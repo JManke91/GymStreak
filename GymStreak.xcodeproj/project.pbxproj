@@ -733,7 +733,6 @@
 				DEVELOPMENT_TEAM = 45VTMQ88RW;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_FILE = "GymStreakWatch-Watch-App-Info.plist";
 				INFOPLIST_KEY_CFBundleDisplayName = GymStreakWatch;
 				INFOPLIST_KEY_NSHealthShareUsageDescription = "GymStreak needs access to read your heart rate during workouts";
 				INFOPLIST_KEY_NSHealthUpdateUsageDescription = "GymStreak needs access to save your workouts";
@@ -771,7 +770,6 @@
 				DEVELOPMENT_TEAM = 45VTMQ88RW;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_FILE = "GymStreakWatch-Watch-App-Info.plist";
 				INFOPLIST_KEY_CFBundleDisplayName = GymStreakWatch;
 				INFOPLIST_KEY_NSHealthShareUsageDescription = "GymStreak needs access to read your heart rate during workouts";
 				INFOPLIST_KEY_NSHealthUpdateUsageDescription = "GymStreak needs access to save your workouts";

@@ -200,5 +200,9 @@ struct WatchWorkoutSummaryView: View {
         ),
         onDismiss: {}
     )
-    .environmentObject(WatchWorkoutViewModel.preview)
+    .environmentObject(WatchWorkoutViewModel(
+        healthKitManager: WatchHealthKitManager(),
+        connectivityManager: WatchConnectivityManager.shared,
+        routineStore: RoutineStore()
+    ))
 }

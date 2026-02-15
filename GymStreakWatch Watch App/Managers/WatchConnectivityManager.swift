@@ -1,9 +1,6 @@
 import Foundation
 import Combine
 import WatchConnectivity
-import os
-
-private let logger = Logger(subsystem: "com.jmanke.gymstreak.watch", category: "WatchConnectivity")
 
 @MainActor
 final class WatchConnectivityManager: NSObject, ObservableObject {
@@ -12,6 +9,7 @@ final class WatchConnectivityManager: NSObject, ObservableObject {
     @Published var isReachable = false
 
     private var session: WCSession?
+    private var routineStore: RoutineStore?
 
     private override init() {
         super.init()
@@ -22,11 +20,19 @@ final class WatchConnectivityManager: NSObject, ObservableObject {
         }
     }
 
+    func setRoutineStore(_ store: RoutineStore) {
+        self.routineStore = store
+        // Process any context that arrived before store was set
+        if let session = session, !session.receivedApplicationContext.isEmpty {
+            processApplicationContext(session.receivedApplicationContext)
+        }
+    }
+
     // MARK: - Send Completed Workout to iOS
 
     func sendCompletedWorkout(_ workout: CompletedWatchWorkout) {
         guard let session = session, session.activationState == .activated else {
-            logger.error("Cannot send workout — session not activated")
+            print("WatchConnectivity: Session not activated")
             return
         }
 
@@ -36,9 +42,9 @@ final class WatchConnectivityManager: NSObject, ObservableObject {
 
             // Use transferUserInfo for guaranteed delivery
             session.transferUserInfo(userInfo)
-            logger.info("Sent completed workout to iPhone: \(workout.routineName)")
+            print("WatchConnectivity: Sent completed workout to iPhone")
         } catch {
-            logger.error("Failed to send workout: \(error.localizedDescription)")
+            print("WatchConnectivity: Failed to send workout - \(error.localizedDescription)")
         }
     }
 }
@@ -49,19 +55,50 @@ extension WatchConnectivityManager: WCSessionDelegate {
     nonisolated func session(_ session: WCSession, activationDidCompleteWith activationState: WCSessionActivationState, error: Error?) {
         Task { @MainActor in
             if let error = error {
-                logger.error("Activation failed: \(error.localizedDescription)")
+                print("WatchConnectivity: Activation failed - \(error.localizedDescription)")
                 return
             }
 
             self.isReachable = session.isReachable
-            logger.info("Activated on Watch — reachable: \(session.isReachable)")
+            print("WatchConnectivity: Activated on Watch")
+
+            // Check for any pending context
+            if !session.receivedApplicationContext.isEmpty {
+                self.processApplicationContext(session.receivedApplicationContext)
+            }
         }
     }
 
     nonisolated func sessionReachabilityDidChange(_ session: WCSession) {
         Task { @MainActor in
             self.isReachable = session.isReachable
-            logger.info("Reachability changed: \(session.isReachable)")
+            print("WatchConnectivity: Reachability changed - \(session.isReachable)")
+        }
+    }
+
+    nonisolated func session(_ session: WCSession, didReceiveApplicationContext applicationContext: [String: Any]) {
+        Task { @MainActor in
+            self.processApplicationContext(applicationContext)
+        }
+    }
+
+    nonisolated func session(_ session: WCSession, didReceiveMessage message: [String: Any]) {
+        Task { @MainActor in
+            self.processApplicationContext(message)
+        }
+    }
+
+    private func processApplicationContext(_ context: [String: Any]) {
+        guard let routineData = context["routines"] as? Data else {
+            return
+        }
+
+        do {
+            let routines = try JSONDecoder().decode([WatchRoutine].self, from: routineData)
+            routineStore?.updateRoutines(routines)
+            print("WatchConnectivity: Received \(routines.count) routines from iPhone")
+        } catch {
+            print("WatchConnectivity: Failed to decode routines - \(error.localizedDescription)")
         }
     }
 }

@@ -1,8 +1,5 @@
 import Foundation
 import WatchConnectivity
-import os
-
-private let logger = Logger(subsystem: "com.jmanke.gymstreak", category: "WatchConnectivity")
 
 @MainActor
 final class WatchConnectivityManager: NSObject, ObservableObject {
@@ -30,6 +27,56 @@ final class WatchConnectivityManager: NSObject, ObservableObject {
         defer { pendingWorkout = nil }
         return pendingWorkout
     }
+
+    // MARK: - Public Methods
+
+    func syncRoutines(_ routines: [Routine]) {
+        guard let session = session, session.activationState == .activated else {
+            print("WatchConnectivity: Cannot sync - session not activated")
+            return
+        }
+
+        // On simulator, isWatchAppInstalled is always false even when Watch app is running
+        #if !targetEnvironment(simulator)
+        guard session.isWatchAppInstalled else {
+            print("WatchConnectivity: Cannot sync - Watch app not installed")
+            return
+        }
+        #endif
+
+        let watchRoutines = routines.map { $0.toWatchRoutine() }
+
+        do {
+            let data = try JSONEncoder().encode(watchRoutines)
+            let context: [String: Any] = ["routines": data]
+
+            try session.updateApplicationContext(context)
+            print("WatchConnectivity: Synced \(routines.count) routines to Watch")
+        } catch {
+            print("WatchConnectivity: Failed to sync routines - \(error.localizedDescription)")
+        }
+    }
+
+    func sendRoutinesIfReachable(_ routines: [Routine]) {
+        guard let session = session, session.isReachable else {
+            // Fall back to application context
+            syncRoutines(routines)
+            return
+        }
+
+        let watchRoutines = routines.map { $0.toWatchRoutine() }
+
+        do {
+            let data = try JSONEncoder().encode(watchRoutines)
+            let message: [String: Any] = ["routines": data]
+
+            session.sendMessage(message, replyHandler: nil) { error in
+                print("WatchConnectivity: Failed to send message - \(error.localizedDescription)")
+            }
+        } catch {
+            print("WatchConnectivity: Failed to encode routines - \(error.localizedDescription)")
+        }
+    }
 }
 
 // MARK: - WCSessionDelegate
@@ -38,7 +85,7 @@ extension WatchConnectivityManager: WCSessionDelegate {
     nonisolated func session(_ session: WCSession, activationDidCompleteWith activationState: WCSessionActivationState, error: Error?) {
         Task { @MainActor in
             if let error = error {
-                logger.error("Activation failed: \(error.localizedDescription)")
+                print("WatchConnectivity: Activation failed - \(error.localizedDescription)")
                 return
             }
 
@@ -46,16 +93,16 @@ extension WatchConnectivityManager: WCSessionDelegate {
             self.isWatchAppInstalled = session.isWatchAppInstalled
             self.isReachable = session.isReachable
 
-            logger.info("Activated — paired: \(session.isPaired), watchAppInstalled: \(session.isWatchAppInstalled)")
+            print("WatchConnectivity: Activated - paired: \(session.isPaired), installed: \(session.isWatchAppInstalled)")
         }
     }
 
     nonisolated func sessionDidBecomeInactive(_ session: WCSession) {
-        logger.info("Session became inactive")
+        print("WatchConnectivity: Session became inactive")
     }
 
     nonisolated func sessionDidDeactivate(_ session: WCSession) {
-        logger.info("Session deactivated — reactivating")
+        print("WatchConnectivity: Session deactivated")
         // Reactivate session for switching watches
         session.activate()
     }
@@ -63,7 +110,7 @@ extension WatchConnectivityManager: WCSessionDelegate {
     nonisolated func sessionReachabilityDidChange(_ session: WCSession) {
         Task { @MainActor in
             self.isReachable = session.isReachable
-            logger.info("Reachability changed: \(session.isReachable)")
+            print("WatchConnectivity: Reachability changed - \(session.isReachable)")
         }
     }
 
@@ -71,7 +118,12 @@ extension WatchConnectivityManager: WCSessionDelegate {
         Task { @MainActor in
             self.isPaired = session.isPaired
             self.isWatchAppInstalled = session.isWatchAppInstalled
-            logger.info("Watch state changed — paired: \(session.isPaired), watchAppInstalled: \(session.isWatchAppInstalled)")
+            print("WatchConnectivity: Watch state changed - paired: \(session.isPaired), installed: \(session.isWatchAppInstalled)")
+
+            // Notify so RoutinesViewModel can trigger sync
+            if session.isWatchAppInstalled {
+                NotificationCenter.default.post(name: .watchAppBecameAvailable, object: nil)
+            }
         }
     }
 
@@ -84,7 +136,7 @@ extension WatchConnectivityManager: WCSessionDelegate {
                     self.handleCompletedWorkout(workout)
                 }
             } catch {
-                logger.error("Failed to decode workout: \(error.localizedDescription)")
+                print("WatchConnectivity: Failed to decode workout - \(error.localizedDescription)")
             }
         }
     }
@@ -100,7 +152,7 @@ extension WatchConnectivityManager: WCSessionDelegate {
             object: nil,
             userInfo: ["workout": workout]
         )
-        logger.info("Received completed workout from Watch: \(workout.routineName)")
+        print("WatchConnectivity: Received completed workout from Watch - \(workout.routineName)")
     }
 }
 
@@ -108,4 +160,5 @@ extension WatchConnectivityManager: WCSessionDelegate {
 
 extension Notification.Name {
     static let watchWorkoutCompleted = Notification.Name("watchWorkoutCompleted")
+    static let watchAppBecameAvailable = Notification.Name("watchAppBecameAvailable")
 }

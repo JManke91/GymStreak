@@ -1,13 +1,29 @@
 import SwiftUI
-import SwiftData
 
 struct RoutineDetailView: View {
-    let routine: Routine
+    let routine: WatchRoutine
     let onStartWorkout: () -> Void
 
-    /// Groups exercises by superset using the model's built-in grouping
-    private var exerciseGroups: [[RoutineExercise]] {
-        routine.exercisesGroupedBySupersets
+    /// Groups exercises by superset - exercises with same supersetId are grouped together
+    private var exerciseGroups: [[WatchExercise]] {
+        var groups: [[WatchExercise]] = []
+        var processedSupersetIds: Set<UUID> = []
+        let sorted = routine.exercises.sorted { $0.order < $1.order }
+
+        for exercise in sorted {
+            if let supersetId = exercise.supersetId {
+                guard !processedSupersetIds.contains(supersetId) else { continue }
+                processedSupersetIds.insert(supersetId)
+
+                let supersetExercises = sorted
+                    .filter { $0.supersetId == supersetId }
+                    .sorted { $0.supersetOrder < $1.supersetOrder }
+                groups.append(supersetExercises)
+            } else {
+                groups.append([exercise])
+            }
+        }
+        return groups
     }
 
     var body: some View {
@@ -47,7 +63,7 @@ struct RoutineDetailView: View {
     private var exerciseSummary: some View {
         HStack {
             VStack {
-                Text("\(routine.routineExercisesList.count)")
+                Text("\(routine.exerciseCount)")
                     .font(.title3.monospacedDigit())
                     .fontWeight(.semibold)
                 Text("exercises")
@@ -58,7 +74,7 @@ struct RoutineDetailView: View {
             Spacer()
 
             VStack {
-                Text("\(routine.routineExercisesList.reduce(0) { $0 + $1.setsList.count })")
+                Text("\(routine.totalSets)")
                     .font(.title3.monospacedDigit())
                     .fontWeight(.semibold)
                 Text("sets")
@@ -129,7 +145,7 @@ struct ShimmerView: View {
 // MARK: - Superset Group View
 
 struct SupersetGroupView: View {
-    let exercises: [RoutineExercise]
+    let exercises: [WatchExercise]
 
     var body: some View {
         VStack(spacing: 0) {
@@ -180,7 +196,7 @@ struct SupersetGroupView: View {
 // MARK: - Exercise Preview Row
 
 struct ExercisePreviewRow: View {
-    let exercise: RoutineExercise
+    let exercise: WatchExercise
     var showSupersetBadge: Bool = false
     var supersetPosition: Int = 0
     var supersetTotal: Int = 0
@@ -189,7 +205,7 @@ struct ExercisePreviewRow: View {
         HStack {
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 4) {
-                    Text(exercise.exercise?.name ?? "Unknown")
+                    Text(exercise.name)
                         .font(.footnote)
                         .lineLimit(1)
 
@@ -209,9 +225,9 @@ struct ExercisePreviewRow: View {
                 }
 
                 HStack(spacing: 4) {
-                    Text("\(exercise.setsList.count) sets")
+                    Text("\(exercise.sets.count) sets")
                     Text("·")
-                    Text(exercise.exercise?.primaryMuscleGroup ?? "General")
+                    Text(exercise.muscleGroup)
                 }
                 .font(.caption2)
                 .foregroundStyle(.secondary)
@@ -226,7 +242,68 @@ struct ExercisePreviewRow: View {
 }
 
 #Preview {
+    let supersetId = UUID()
+
     NavigationStack {
-        Text("Preview requires SwiftData container")
+        RoutineDetailView(
+            routine: WatchRoutine(
+                id: UUID(),
+                name: "Push Day",
+                exercises: [
+                    WatchExercise(
+                        id: UUID(),
+                        name: "Bench Press",
+                        muscleGroup: "Chest",
+                        sets: [
+                            WatchSet(id: UUID(), reps: 10, weight: 135, restTime: 90),
+                            WatchSet(id: UUID(), reps: 10, weight: 135, restTime: 90),
+                            WatchSet(id: UUID(), reps: 10, weight: 135, restTime: 90)
+                        ],
+                        order: 0,
+                        supersetId: nil,
+                        supersetOrder: 0
+                    ),
+                    // Superset exercises
+                    WatchExercise(
+                        id: UUID(),
+                        name: "Bicep Curls",
+                        muscleGroup: "Biceps",
+                        sets: [
+                            WatchSet(id: UUID(), reps: 12, weight: 25, restTime: 60),
+                            WatchSet(id: UUID(), reps: 12, weight: 25, restTime: 60)
+                        ],
+                        order: 1,
+                        supersetId: supersetId,
+                        supersetOrder: 0
+                    ),
+                    WatchExercise(
+                        id: UUID(),
+                        name: "Tricep Pushdowns",
+                        muscleGroup: "Triceps",
+                        sets: [
+                            WatchSet(id: UUID(), reps: 12, weight: 30, restTime: 60),
+                            WatchSet(id: UUID(), reps: 12, weight: 30, restTime: 60)
+                        ],
+                        order: 2,
+                        supersetId: supersetId,
+                        supersetOrder: 1
+                    ),
+                    WatchExercise(
+                        id: UUID(),
+                        name: "Shoulder Press",
+                        muscleGroup: "Shoulders",
+                        sets: [
+                            WatchSet(id: UUID(), reps: 10, weight: 65, restTime: 60),
+                            WatchSet(id: UUID(), reps: 10, weight: 65, restTime: 60)
+                        ],
+                        order: 3,
+                        supersetId: nil,
+                        supersetOrder: 0
+                    )
+                ]
+            )
+        ) {
+            print("Start workout")
+        }
     }
 }

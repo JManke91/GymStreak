@@ -1,5 +1,38 @@
 import Foundation
-import SwiftData
+
+// MARK: - Lightweight models for Watch app
+// These are Codable structs used for syncing between iOS and watchOS
+
+struct WatchRoutine: Codable, Identifiable, Hashable {
+    let id: UUID
+    let name: String
+    let exercises: [WatchExercise]
+
+    var totalSets: Int {
+        exercises.reduce(0) { $0 + $1.sets.count }
+    }
+
+    var exerciseCount: Int {
+        exercises.count
+    }
+}
+
+struct WatchExercise: Codable, Identifiable, Hashable {
+    let id: UUID
+    let name: String
+    let muscleGroup: String
+    let sets: [WatchSet]
+    let order: Int
+    let supersetId: UUID?
+    let supersetOrder: Int
+}
+
+struct WatchSet: Codable, Identifiable, Hashable {
+    let id: UUID
+    let reps: Int
+    let weight: Double
+    let restTime: TimeInterval
+}
 
 // MARK: - Active Workout State Models
 
@@ -133,20 +166,24 @@ struct CompletedWatchSet: Codable {
 
 // MARK: - Conversion Extensions
 
-extension RoutineExercise {
+extension WatchExercise {
     func toActiveWorkoutExercise() -> ActiveWorkoutExercise {
+        // Preserve the original IDs from the lightweight Watch models so that
+        // CompletedWatchWorkout sent back to the iPhone can be matched to the
+        // iOS Routine/RoutineExercise/ExerciseSet by id.
         ActiveWorkoutExercise(
-            id: id,
-            name: exercise?.name ?? "Unknown",
-            muscleGroup: exercise?.primaryMuscleGroup ?? "General",
-            sets: setsList.sorted(by: { $0.order < $1.order }).enumerated().map { index, set in
+            id: id, // <-- preserve original WatchExercise id (was previously UUID())
+            name: name,
+            muscleGroup: muscleGroup,
+            sets: sets.enumerated().map { index, set in
                 ActiveWorkoutSet(
-                    id: set.id,
+                    id: set.id, // <-- preserve original WatchSet id (was previously UUID())
                     plannedReps: set.reps,
                     actualReps: set.reps,
                     plannedWeight: set.weight,
                     actualWeight: set.weight,
                     restTime: set.restTime,
+//                    isCompleted: false,
                     completedAt: nil,
                     order: index
                 )

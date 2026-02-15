@@ -1,9 +1,6 @@
 import Foundation
 import SwiftData
 import SwiftUI
-import os
-
-private let logger = Logger(subsystem: "com.jmanke.gymstreak", category: "ExercisesSync")
 
 @MainActor
 class ExercisesViewModel: ObservableObject {
@@ -33,7 +30,6 @@ class ExercisesViewModel: ObservableObject {
             queue: .main
         ) { [weak self] _ in
             Task { @MainActor in
-                logger.info("CloudKit change notification received — refreshing exercises")
                 self?.fetchExercises()
             }
         }
@@ -47,11 +43,9 @@ class ExercisesViewModel: ObservableObject {
     func fetchExercises() {
         let descriptor = FetchDescriptor<Exercise>(sortBy: [SortDescriptor(\.name, order: .forward)])
         do {
-            let previousCount = exercises.count
             exercises = try modelContext.fetch(descriptor)
-            logger.info("Fetched exercises: \(self.exercises.count) (was \(previousCount))")
         } catch {
-            logger.error("Error fetching exercises: \(error.localizedDescription)")
+            print("Error fetching exercises: \(error)")
         }
     }
     
@@ -149,7 +143,7 @@ class ExercisesViewModel: ObservableObject {
         do {
             try modelContext.save()
         } catch {
-            logger.error("Error saving context: \(error.localizedDescription)")
+            print("Error saving context: \(error)")
         }
     }
 }

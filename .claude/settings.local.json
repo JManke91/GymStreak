@@ -68,13 +68,7 @@
       "WebFetch(domain:www.swiftyplace.com)",
       "WebFetch(domain:wwdcnotes.com)",
       "WebFetch(domain:alexanderweiss.dev)",
-      "WebFetch(domain:code.tutsplus.com)",
-      "Bash(ln:*)",
-      "Bash(ln -s:*)",
-      "Bash(git -C \"/Users/jmanke/Documents/Code/iOS/AI/GymStreak\" diff 3e2177f~1..3e2177f --stat)",
-      "Bash(git -C \"/Users/jmanke/Documents/Code/iOS/AI/GymStreak\" log --oneline -5)",
-      "Bash(git -C \"/Users/jmanke/Documents/Code/iOS/AI/GymStreak\" diff 3e2177f~1..3e2177f)",
-      "WebFetch(domain:www.cocoaswitch.com)"
+      "WebFetch(domain:code.tutsplus.com)"
     ],
     "defaultMode": "acceptEdits"
   }

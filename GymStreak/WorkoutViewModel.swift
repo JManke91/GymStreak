@@ -5,7 +5,6 @@ import Combine
 import UserNotifications
 import ActivityKit
 import HealthKit
-import os
 
 // MARK: - HealthKit Sync Status
 
@@ -24,8 +23,6 @@ enum HealthKitSyncStatus: Equatable {
         }
     }
 }
-
-private let workoutLogger = Logger(subsystem: "com.jmanke.gymstreak", category: "WorkoutSync")
 
 @MainActor
 class WorkoutViewModel: ObservableObject {
@@ -83,7 +80,6 @@ class WorkoutViewModel: ObservableObject {
             queue: .main
         ) { [weak self] _ in
             Task { @MainActor in
-                workoutLogger.info("CloudKit change notification received — refreshing workout history")
                 self?.fetchWorkoutHistory()
             }
         }

@@ -1,9 +1,6 @@
 import Foundation
 import CoreData
 import Combine
-import os
-
-private let logger = Logger(subsystem: "com.jmanke.gymstreak", category: "CloudSync")
 
 /// Notification name posted when CloudKit remote changes are detected
 extension Notification.Name {
@@ -22,7 +19,6 @@ final class CloudSyncObserver: ObservableObject {
     private var notificationObserver: NSObjectProtocol?
 
     private init() {
-        logger.info("CloudSyncObserver initialized — listening for NSPersistentStoreRemoteChange")
         setupRemoteChangeObserver()
     }
 
@@ -32,17 +28,16 @@ final class CloudSyncObserver: ObservableObject {
             forName: .NSPersistentStoreRemoteChange,
             object: nil,
             queue: .main
-        ) { [weak self] notification in
+        ) { [weak self] _ in
             Task { @MainActor in
-                self?.handleRemoteChange(notification: notification)
+                self?.handleRemoteChange()
             }
         }
     }
 
-    private func handleRemoteChange(notification: Notification) {
+    private func handleRemoteChange() {
+        print("CloudSyncObserver: Remote change detected from CloudKit")
         syncVersion += 1
-        let storeName = (notification.object as? NSPersistentStore)?.identifier ?? "unknown"
-        logger.info("Remote change detected from CloudKit (syncVersion: \(self.syncVersion), store: \(storeName))")
 
         // Post notification for ViewModels that prefer notification-based updates
         NotificationCenter.default.post(name: .cloudKitDataDidChange, object: nil)

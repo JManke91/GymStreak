@@ -1,11 +1,7 @@
 import Foundation
 import Combine
-import SwiftData
 import WatchKit
 import UserNotifications
-import os
-
-private let logger = Logger(subsystem: "com.jmanke.gymstreak.watch", category: "Workout")
 
 @MainActor
 final class WatchWorkoutViewModel: ObservableObject {
@@ -20,7 +16,7 @@ final class WatchWorkoutViewModel: ObservableObject {
 
     @Published var isWorkoutActive = false
     @Published var isPaused = false
-    @Published var currentRoutine: Routine?
+    @Published var currentRoutine: WatchRoutine?
     @Published var exercises: [ActiveWorkoutExercise] = []
     @Published var currentExerciseIndex = 0
     @Published var currentSetIndex = 0
@@ -60,17 +56,17 @@ final class WatchWorkoutViewModel: ObservableObject {
 
     private let healthKitManager: WatchHealthKitManager
     private let connectivityManager: WatchConnectivityManager
-    private let modelContext: ModelContext
+    private let routineStore: RoutineStore
     private var workoutStartTime: Date?
     private var restTimer: Timer?
     private var cancellabes = Set<AnyCancellable>()
 
     // MARK: - Initialization
 
-    init(healthKitManager: WatchHealthKitManager, connectivityManager: WatchConnectivityManager, modelContext: ModelContext) {
+    init(healthKitManager: WatchHealthKitManager, connectivityManager: WatchConnectivityManager, routineStore: RoutineStore) {
         self.healthKitManager = healthKitManager
         self.connectivityManager = connectivityManager
-        self.modelContext = modelContext
+        self.routineStore = routineStore
 //        observeHealthKitMetrics()
         requestNotificationPermission()
 
@@ -92,7 +88,7 @@ final class WatchWorkoutViewModel: ObservableObject {
             .receive(on: DispatchQueue.main)
             .compactMap { $0 }
             .sink { heartRate in
-                logger.debug("Heart rate received: \(heartRate)")
+                print("wtf heartRate received: \(heartRate)")
                 self.heartRate = Int(heartRate)
             }
             .store(in: &cancellabes)
@@ -102,7 +98,7 @@ final class WatchWorkoutViewModel: ObservableObject {
             .receive(on: DispatchQueue.main)
             .compactMap { $0 }
             .sink { calories in
-                logger.debug("Calories received: \(calories)")
+                print("wtf calories received: \(calories)")
             self.activeCalories = Int(calories)
         }
         .store(in: &cancellabes)
@@ -113,7 +109,7 @@ final class WatchWorkoutViewModel: ObservableObject {
 //            .prefix(1)
             .filter { _ in self.workoutState != .running }
             .sink { combined in
-                logger.debug("Workout metrics received — calories: \(combined.0 ?? 0), heartRate: \(combined.1 ?? 0)")
+                print("wtf received workout metrics: \(combined.0 ?? 0), \(combined.1 ?? 0)")
                 self.workoutState = .running
             }
             .store(in: &cancellabes)
@@ -124,12 +120,12 @@ final class WatchWorkoutViewModel: ObservableObject {
     private func requestNotificationPermission() {
         UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge]) { granted, error in
             if let error = error {
-                logger.error("Notification permission error: \(error.localizedDescription)")
+                print("Watch notification permission error: \(error)")
             }
             if granted {
-                logger.debug("Notification permission granted")
+                print("Watch notification permission granted")
             } else {
-                logger.debug("Notification permission denied")
+                print("Watch notification permission denied")
             }
         }
     }
@@ -149,7 +145,7 @@ final class WatchWorkoutViewModel: ObservableObject {
 
         UNUserNotificationCenter.current().add(request) { error in
             if let error = error {
-                logger.error("Failed to schedule rest timer notification: \(error.localizedDescription)")
+                print("Error scheduling watch rest timer notification: \(error)")
             }
         }
     }
@@ -230,9 +226,9 @@ final class WatchWorkoutViewModel: ObservableObject {
 
     // MARK: - Workout Lifecycle
 
-    func startWorkout(with routine: Routine) async {
+    func startWorkout(with routine: WatchRoutine) async {
         currentRoutine = routine
-        exercises = routine.routineExercisesList.sorted { $0.order < $1.order }.map { $0.toActiveWorkoutExercise() }
+        exercises = routine.exercises.sorted { $0.order < $1.order }.map { $0.toActiveWorkoutExercise() }
         currentExerciseIndex = 0
         currentSetIndex = 0
         workoutStartTime = Date()
@@ -271,9 +267,9 @@ final class WatchWorkoutViewModel: ObservableObject {
 
         stopRestTimer()
 
-        // Apply template update directly via SwiftData (CloudKit syncs to iOS)
-        if updateTemplate, let routine = currentRoutine {
-            templateWasUpdated = applyTemplateUpdate(routine: routine)
+        // Apply template update locally on watch BEFORE syncing to iOS
+        if updateTemplate, let routineId = currentRoutine?.id {
+            templateWasUpdated = routineStore.applyWorkoutChanges(routineId: routineId, exercises: exercises)
         }
 
         do {
@@ -412,7 +408,7 @@ final class WatchWorkoutViewModel: ObservableObject {
         }
 
         WKInterfaceDevice.current().play(.success)
-        logger.debug("Updated rest time for exercise \(self.exercises[exerciseIndex].name) to \(newRestTime)s")
+        print("Updated rest time for exercise \(exercises[exerciseIndex].name) to \(newRestTime)s")
     }
 
     func completeCurrentSet() {
@@ -743,11 +739,11 @@ final class WatchWorkoutViewModel: ObservableObject {
     // MARK: - Rest Timer
 
     private func startRestTimer(duration: TimeInterval) {
-        logger.debug("Rest timer started — duration: \(duration)s")
+        print("▶️ startRestTimer called - duration: \(duration)s")
 
         // Cancel any existing timer first
         if isResting {
-            logger.debug("Cancelling existing rest timer")
+            print("⚠️ Cancelling existing timer")
             stopRestTimer()
         }
 
@@ -766,13 +762,13 @@ final class WatchWorkoutViewModel: ObservableObject {
                     self.restTimeRemaining -= 1
                     let remaining = Int(self.restTimeRemaining)
                     if remaining % 10 == 0 || remaining < 5 {
-                        logger.debug("Rest timer tick — remaining: \(remaining)s")
+                        print("⏱️ Timer tick - remaining: \(remaining)s")
                     }
                 } else {
                     // Prevent multiple executions
                     guard self.restTimerState == .running else { return }
 
-                    logger.debug("Rest timer completed")
+                    print("✅ Timer completed naturally")
 
                     // Set completion state FIRST (prevents re-entry)
                     self.restTimerState = .completed
@@ -812,7 +808,8 @@ final class WatchWorkoutViewModel: ObservableObject {
     }
 
     private func stopRestTimer() {
-        logger.debug("Rest timer stopped — remaining: \(self.restTimeRemaining)s of \(self.restDuration)s")
+        print("⏹️ stopRestTimer called - remaining: \(restTimeRemaining)s of \(restDuration)s")
+        print("⏹️ Call stack: \(Thread.callStackSymbols.prefix(5).joined(separator: "\n"))")
 
         restTimer?.invalidate()
         restTimer = nil
@@ -888,55 +885,6 @@ final class WatchWorkoutViewModel: ObservableObject {
             completionPercentage: Int(progress * 100),
             activeCalories: activeCalories,
             exercises: exerciseSummaries
-        )
-    }
-
-    // MARK: - Template Update
-
-    private func applyTemplateUpdate(routine: Routine) -> Bool {
-        var updatedAny = false
-
-        for activeExercise in exercises {
-            guard let routineExercise = routine.routineExercisesList.first(where: { $0.id == activeExercise.id }) else {
-                continue
-            }
-
-            for activeSet in activeExercise.sets where activeSet.wasModified {
-                guard let set = routineExercise.setsList.first(where: { $0.id == activeSet.id }) else {
-                    continue
-                }
-                set.reps = activeSet.actualReps
-                set.weight = activeSet.actualWeight
-                updatedAny = true
-            }
-        }
-
-        if updatedAny {
-            routine.updatedAt = Date()
-            do {
-                try modelContext.save()
-                logger.info("Template updated via SwiftData for routine: \(routine.name) — CloudKit will sync to iOS")
-            } catch {
-                logger.error("Failed to save template update: \(error.localizedDescription)")
-            }
-        }
-
-        return updatedAny
-    }
-
-    // MARK: - Preview Helper
-
-    static var preview: WatchWorkoutViewModel {
-        let schema = Schema([
-            Routine.self, Exercise.self, RoutineExercise.self, ExerciseSet.self,
-            WorkoutSession.self, WorkoutExercise.self, WorkoutSet.self
-        ])
-        let config = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
-        let container = try! ModelContainer(for: schema, configurations: [config])
-        return WatchWorkoutViewModel(
-            healthKitManager: WatchHealthKitManager(),
-            connectivityManager: WatchConnectivityManager.shared,
-            modelContext: container.mainContext
         )
     }
 
