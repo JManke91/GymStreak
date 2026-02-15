@@ -1,41 +1,6 @@
 import Foundation
 
-// MARK: - Lightweight models for Watch app
-// These are Codable structs used for syncing between iOS and watchOS
-// This file is shared between iOS and Watch targets
-
-struct WatchRoutine: Codable, Identifiable, Hashable {
-    let id: UUID
-    let name: String
-    let exercises: [WatchExercise]
-
-    var totalSets: Int {
-        exercises.reduce(0) { $0 + $1.sets.count }
-    }
-
-    var exerciseCount: Int {
-        exercises.count
-    }
-}
-
-struct WatchExercise: Codable, Identifiable, Hashable {
-    let id: UUID
-    let name: String
-    let muscleGroup: String
-    let sets: [WatchSet]
-    let order: Int
-    let supersetId: UUID?
-    let supersetOrder: Int
-}
-
-struct WatchSet: Codable, Identifiable, Hashable {
-    let id: UUID
-    let reps: Int
-    let weight: Double
-    let restTime: TimeInterval
-}
-
-// MARK: - Completed Workout for syncing back to iOS
+// MARK: - Completed Workout for syncing back from Watch to iOS
 
 struct CompletedWatchWorkout: Codable {
     let id: UUID
@@ -90,34 +55,4 @@ struct CompletedWatchSet: Codable {
     let isCompleted: Bool
     let completedAt: Date?
     let order: Int
-}
-
-// MARK: - SwiftData to Watch Model Conversion
-
-extension Routine {
-    func toWatchRoutine() -> WatchRoutine {
-        let sortedExercises = routineExercisesList.sorted { $0.order < $1.order }
-        return WatchRoutine(
-            id: id,
-            name: name,
-            exercises: sortedExercises.map { routineExercise in
-                WatchExercise(
-                    id: routineExercise.id,
-                    name: routineExercise.exercise?.name ?? "Unknown",
-                    muscleGroup: routineExercise.exercise?.primaryMuscleGroup ?? "General",
-                    sets: routineExercise.setsList.sorted(by: { $0.order < $1.order }).map { set in
-                        WatchSet(
-                            id: set.id,
-                            reps: set.reps,
-                            weight: set.weight,
-                            restTime: set.restTime
-                        )
-                    },
-                    order: routineExercise.order,
-                    supersetId: routineExercise.supersetId,
-                    supersetOrder: routineExercise.supersetOrder
-                )
-            }
-        )
-    }
 }

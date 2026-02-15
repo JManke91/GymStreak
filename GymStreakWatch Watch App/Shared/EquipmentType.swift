@@ -1,0 +1,1 @@
+../../GymStreak/EquipmentType.swift

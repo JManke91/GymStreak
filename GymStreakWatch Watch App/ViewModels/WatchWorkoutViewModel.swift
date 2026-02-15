@@ -1,5 +1,6 @@
 import Foundation
 import Combine
+import SwiftData
 import WatchKit
 import UserNotifications
 
@@ -16,7 +17,7 @@ final class WatchWorkoutViewModel: ObservableObject {
 
     @Published var isWorkoutActive = false
     @Published var isPaused = false
-    @Published var currentRoutine: WatchRoutine?
+    @Published var currentRoutine: Routine?
     @Published var exercises: [ActiveWorkoutExercise] = []
     @Published var currentExerciseIndex = 0
     @Published var currentSetIndex = 0
@@ -56,17 +57,17 @@ final class WatchWorkoutViewModel: ObservableObject {
 
     private let healthKitManager: WatchHealthKitManager
     private let connectivityManager: WatchConnectivityManager
-    private let routineStore: RoutineStore
+    private let modelContext: ModelContext
     private var workoutStartTime: Date?
     private var restTimer: Timer?
     private var cancellabes = Set<AnyCancellable>()
 
     // MARK: - Initialization
 
-    init(healthKitManager: WatchHealthKitManager, connectivityManager: WatchConnectivityManager, routineStore: RoutineStore) {
+    init(healthKitManager: WatchHealthKitManager, connectivityManager: WatchConnectivityManager, modelContext: ModelContext) {
         self.healthKitManager = healthKitManager
         self.connectivityManager = connectivityManager
-        self.routineStore = routineStore
+        self.modelContext = modelContext
 //        observeHealthKitMetrics()
         requestNotificationPermission()
 
@@ -226,9 +227,9 @@ final class WatchWorkoutViewModel: ObservableObject {
 
     // MARK: - Workout Lifecycle
 
-    func startWorkout(with routine: WatchRoutine) async {
+    func startWorkout(with routine: Routine) async {
         currentRoutine = routine
-        exercises = routine.exercises.sorted { $0.order < $1.order }.map { $0.toActiveWorkoutExercise() }
+        exercises = routine.routineExercisesList.sorted { $0.order < $1.order }.map { $0.toActiveWorkoutExercise() }
         currentExerciseIndex = 0
         currentSetIndex = 0
         workoutStartTime = Date()
@@ -267,9 +268,9 @@ final class WatchWorkoutViewModel: ObservableObject {
 
         stopRestTimer()
 
-        // Apply template update locally on watch BEFORE syncing to iOS
-        if updateTemplate, let routineId = currentRoutine?.id {
-            templateWasUpdated = routineStore.applyWorkoutChanges(routineId: routineId, exercises: exercises)
+        // Apply template update directly via SwiftData (CloudKit syncs to iOS)
+        if updateTemplate, let routine = currentRoutine {
+            templateWasUpdated = applyTemplateUpdate(routine: routine)
         }
 
         do {
@@ -885,6 +886,51 @@ final class WatchWorkoutViewModel: ObservableObject {
             completionPercentage: Int(progress * 100),
             activeCalories: activeCalories,
             exercises: exerciseSummaries
+        )
+    }
+
+    // MARK: - Template Update
+
+    private func applyTemplateUpdate(routine: Routine) -> Bool {
+        var updatedAny = false
+
+        for activeExercise in exercises {
+            guard let routineExercise = routine.routineExercisesList.first(where: { $0.id == activeExercise.id }) else {
+                continue
+            }
+
+            for activeSet in activeExercise.sets where activeSet.wasModified {
+                guard let set = routineExercise.setsList.first(where: { $0.id == activeSet.id }) else {
+                    continue
+                }
+                set.reps = activeSet.actualReps
+                set.weight = activeSet.actualWeight
+                updatedAny = true
+            }
+        }
+
+        if updatedAny {
+            routine.updatedAt = Date()
+            try? modelContext.save()
+            print("WatchWorkoutViewModel: Template updated via SwiftData")
+        }
+
+        return updatedAny
+    }
+
+    // MARK: - Preview Helper
+
+    static var preview: WatchWorkoutViewModel {
+        let schema = Schema([
+            Routine.self, Exercise.self, RoutineExercise.self, ExerciseSet.self,
+            WorkoutSession.self, WorkoutExercise.self, WorkoutSet.self
+        ])
+        let config = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
+        let container = try! ModelContainer(for: schema, configurations: [config])
+        return WatchWorkoutViewModel(
+            healthKitManager: WatchHealthKitManager(),
+            connectivityManager: WatchConnectivityManager.shared,
+            modelContext: container.mainContext
         )
     }
 

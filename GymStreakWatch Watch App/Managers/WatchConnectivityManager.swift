@@ -9,7 +9,6 @@ final class WatchConnectivityManager: NSObject, ObservableObject {
     @Published var isReachable = false
 
     private var session: WCSession?
-    private var routineStore: RoutineStore?
 
     private override init() {
         super.init()
@@ -17,14 +16,6 @@ final class WatchConnectivityManager: NSObject, ObservableObject {
             session = WCSession.default
             session?.delegate = self
             session?.activate()
-        }
-    }
-
-    func setRoutineStore(_ store: RoutineStore) {
-        self.routineStore = store
-        // Process any context that arrived before store was set
-        if let session = session, !session.receivedApplicationContext.isEmpty {
-            processApplicationContext(session.receivedApplicationContext)
         }
     }
 
@@ -61,11 +52,6 @@ extension WatchConnectivityManager: WCSessionDelegate {
 
             self.isReachable = session.isReachable
             print("WatchConnectivity: Activated on Watch")
-
-            // Check for any pending context
-            if !session.receivedApplicationContext.isEmpty {
-                self.processApplicationContext(session.receivedApplicationContext)
-            }
         }
     }
 
@@ -73,32 +59,6 @@ extension WatchConnectivityManager: WCSessionDelegate {
         Task { @MainActor in
             self.isReachable = session.isReachable
             print("WatchConnectivity: Reachability changed - \(session.isReachable)")
-        }
-    }
-
-    nonisolated func session(_ session: WCSession, didReceiveApplicationContext applicationContext: [String: Any]) {
-        Task { @MainActor in
-            self.processApplicationContext(applicationContext)
-        }
-    }
-
-    nonisolated func session(_ session: WCSession, didReceiveMessage message: [String: Any]) {
-        Task { @MainActor in
-            self.processApplicationContext(message)
-        }
-    }
-
-    private func processApplicationContext(_ context: [String: Any]) {
-        guard let routineData = context["routines"] as? Data else {
-            return
-        }
-
-        do {
-            let routines = try JSONDecoder().decode([WatchRoutine].self, from: routineData)
-            routineStore?.updateRoutines(routines)
-            print("WatchConnectivity: Received \(routines.count) routines from iPhone")
-        } catch {
-            print("WatchConnectivity: Failed to decode routines - \(error.localizedDescription)")
         }
     }
 }
