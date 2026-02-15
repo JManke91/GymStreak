@@ -264,7 +264,7 @@ Workout labels are computed from `WorkoutSession.workoutExercisesList` using `Su
 
 - TabView with 3 tabs: Exercises, Metrics, Controls
 - Set editor (`FullScreenSetEditorView`) displays current exercise name, supports superset switching via ViewModel
-- Rest timer overlay (full-screen or minimized)
+- Rest timer overlay (full-screen or minimized) — full-screen view (`NewRestTimerView`) shows total elapsed workout time (top-right, secondary styling) alongside the rest countdown
 
 **File:** `GymStreakWatch Watch App/Views/ExerciseListView.swift`
 

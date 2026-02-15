@@ -87,10 +87,31 @@ struct NewRestTimerView: View {
     // MARK: ─── Running UI
     private var runningContent: some View {
         VStack(spacing: 10) {
-            Text("Rest")
-                .font(.headline)
-                .foregroundStyle(.secondary)
+            HStack {
+                Text("Rest")
+                    .font(.headline)
+                    .foregroundStyle(.secondary)
 
+                Spacer()
+
+                if let elapsedTime = viewModel.elapsedTimeString {
+                    VStack(alignment: .trailing, spacing: 1) {
+                        Text("Total")
+                            .font(.system(size: 9, weight: .regular))
+                            .foregroundStyle(.tertiary)
+                        HStack(spacing: 3) {
+                            Image(systemName: "clock")
+                                .font(.system(size: 10))
+                                .foregroundStyle(.secondary)
+                            Text(elapsedTime)
+                                .font(.system(.caption2, design: .rounded).monospacedDigit())
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    .accessibilityLabel("Total workout time \(elapsedTime)")
+                }
+            }
+            .padding(.horizontal, 6)
 
             HStack(spacing: 8) {
                 if let heartRate = viewModel.heartRate, let calories = viewModel.activeCalories {
