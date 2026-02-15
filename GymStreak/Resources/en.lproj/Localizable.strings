@@ -378,6 +378,11 @@
 "superset.create_new" = "Create Superset";
 "superset.rest_timer.explanation" = "Rest starts after completing all exercises in each round";
 
+// MARK: - Exercise Menu
+"exercise.menu.superset" = "Superset";
+"exercise.menu.edit_superset" = "Edit Superset";
+"exercise.menu.edit_sets" = "Edit Sets";
+
 // MARK: - Test Data (for UI Testing Screenshots)
 "testdata.routine.push_day" = "Push Day";
 "testdata.routine.pull_day" = "Pull Day";

@@ -53,6 +53,7 @@ All superset management is in `RoutinesViewModel` (~lines 155-230):
 | **Remove** | `removeExerciseFromSuperset(_:in:)` | Clears fields. Auto-dissolves if only 1 exercise remains |
 | **Dissolve** | `dissolveSuperset(_:in:)` | Clears `supersetId`/`supersetOrder` on all exercises in the group |
 | **Reorder** | `reorderSuperset(_:in:)` | Reassigns sequential `supersetOrder` values |
+| **Move Sets** | `moveExerciseSets(from:to:for:)` | Reorders sets within a single exercise using `IndexSet` move pattern |
 
 **Auto-dissolution**: Removing an exercise from a 2-exercise superset automatically dissolves it (prevents single-exercise supersets).
 
@@ -140,11 +141,59 @@ Labels are computed at render time, not stored. If superset A is dissolved, B au
 | `SupersetGroupView` | `GymStreak/Views/Components/SupersetGroupView.swift` | Container for grouped exercises with connecting line and per-group color |
 | `SupersetRestTimerConfig` | `GymStreak/Views/Components/SupersetRestTimerConfig.swift` | Single rest timer config for entire superset. Shows only on first exercise |
 
-### Routine Detail - Superset Management
+### Routine Detail - Exercise Actions
 
 **File:** `GymStreak/RoutineDetailView.swift`
 
-**Context Menu** (per-exercise, supports multiple supersets):
+#### Custom DisclosureGroupStyle (Leading Chevron)
+
+Exercise rows use `LeadingChevronDisclosureStyle`, a custom `DisclosureGroupStyle` that moves the expand/collapse chevron to the **leading edge**. This solves the misclick issue where the default trailing chevron sat too close to the three-dot menu.
+
+**Layout:**
+```
+[Chevron ▸ (style)] [SupersetIndicator] [MuscleGroupBadge] [Name+Sets] [Spacer] [SupersetBadge] [Menu ⋯]
+```
+
+Key details:
+- Chevron rotates 90° when expanded with spring animation
+- 28pt chevron frame provides adequate tap target
+- `.buttonStyle(.plain)` allows the nested `Menu` in the label to intercept its own taps
+- Expanded content is indented 28pt (`.padding(.leading, 28)`) to align past the chevron
+- The `isExpanded` binding setter already contains `withAnimation` and the `setEditExerciseId` guard
+
+#### Three-Dot Menu (Ellipsis)
+
+Each exercise row in normal mode displays a `Menu` (ellipsis icon) in `ExerciseHeaderView` at the **trailing edge**, well separated (~300pt) from the leading chevron.
+
+Menu options:
+- **Superset** / **Edit Superset** — Opens superset create or edit mode (only shown when routine has 2+ exercises)
+- **Edit Sets** — Enters inline set edit mode (always available)
+
+#### Set Edit Mode
+
+Activated via the three-dot menu or context menu "Edit Sets" option. State tracked by `setEditExerciseId: UUID?`.
+
+Consolidates all set structural operations (add, delete, reorder) in one mode:
+
+- Shows simplified set rows with set number badge, reps × weight summary
+- **Delete button** (`minus.circle.fill`) on the leading edge of each row — removes the set immediately
+- **Up/down chevron buttons** on the trailing edge (only shown when 2+ sets) — calls `moveSetUp(at:for:)` / `moveSetDown(at:for:)` which delegate to `viewModel.moveExerciseSets(from:to:for:)`
+- First set's up button and last set's down button are disabled (dimmed to `.quaternary`)
+- **Add Set** button at the bottom — creates a new set with default values
+- **Done** button exits edit mode
+- Haptic feedback (`UIImpactFeedbackGenerator(.light)`) on reorder moves
+- DisclosureGroup collapse is prevented while edit mode is active
+- Mutually exclusive with exercise edit mode and superset edit mode
+
+Normal mode (collapsed DisclosureGroup content) only shows set value editors — no add/delete/reorder controls.
+
+**Why up/down buttons instead of drag handles:** `.onMove` only works on `ForEach` that are direct children of `List`/`Section`. The set `ForEach` is nested inside `DisclosureGroup > VStack`, so drag-based `.onMove` is non-functional. Up/down buttons work reliably regardless of nesting.
+
+**ViewModel method:** `RoutinesViewModel.moveExerciseSets(from:to:for:)` — reorders sets and persists via SwiftData.
+
+#### Context Menu (Long Press)
+
+Per-exercise context menu (supports multiple supersets):
 
 For exercises **in a superset**:
 - "Remove from Superset A" → `viewModel.removeExerciseFromSuperset()`
@@ -153,6 +202,9 @@ For exercises **in a superset**:
 For **standalone exercises** (not in any superset):
 - "Create Superset With..." submenu → lists other standalone exercises → `viewModel.createSuperset(from:in:)`
 - "Add to Superset A" / "Add to Superset B" → `viewModel.addExerciseToSuperset(_:supersetId:in:)`
+
+For **all exercises**:
+- "Edit Sets" → enters set edit mode (add, delete, reorder)
 
 For **deleting**:
 - "Delete Exercise" → confirms and removes

@@ -152,6 +152,17 @@ class RoutinesViewModel: ObservableObject {
         }
     }
 
+    func moveExerciseSets(from source: IndexSet, to destination: Int, for routineExercise: RoutineExercise) {
+        var sortedSets = routineExercise.setsList.sorted(by: { $0.order < $1.order })
+        sortedSets.move(fromOffsets: source, toOffset: destination)
+        for (index, set) in sortedSets.enumerated() {
+            set.order = index
+        }
+        if let routine = routineExercise.routine {
+            updateRoutine(routine)
+        }
+    }
+
     // MARK: - Superset Management
 
     /// Creates a superset from 2+ selected exercises

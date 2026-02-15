@@ -377,6 +377,11 @@
 "superset.create_new" = "Supersatz erstellen";
 "superset.rest_timer.explanation" = "Pause beginnt nach Abschluss aller Übungen in jeder Runde";
 
+// MARK: - Exercise Menu
+"exercise.menu.superset" = "Supersatz";
+"exercise.menu.edit_superset" = "Supersatz bearbeiten";
+"exercise.menu.edit_sets" = "Sätze bearbeiten";
+
 // MARK: - Test Data (for UI Testing Screenshots)
 "testdata.routine.push_day" = "Drücken-Tag";
 "testdata.routine.pull_day" = "Ziehen-Tag";
