@@ -145,18 +145,19 @@ Labels are computed at render time, not stored. If superset A is dissolved, B au
 
 **File:** `GymStreak/RoutineDetailView.swift`
 
-#### Custom DisclosureGroupStyle (Leading Chevron)
+#### Leading Chevron Expand/Collapse
 
-Exercise rows use `LeadingChevronDisclosureStyle`, a custom `DisclosureGroupStyle` that moves the expand/collapse chevron to the **leading edge**. This solves the misclick issue where the default trailing chevron sat too close to the three-dot menu.
+Exercise rows use a manual expand/collapse pattern (not `DisclosureGroup`) with a leading chevron button. The header row and expanded content are **separate list rows**, which allows `List` to smoothly animate row insertion/removal. A custom `DisclosureGroupStyle` was avoided because `List` cannot animate cell height changes within a single row.
 
 **Layout:**
 ```
-[Chevron ▸ (style)] [SupersetIndicator] [MuscleGroupBadge] [Name+Sets] [Spacer] [SupersetBadge] [Menu ⋯]
+[Chevron ▸ (button)] [SupersetIndicator] [MuscleGroupBadge] [Name+Sets] [Spacer] [SupersetBadge] [Menu ⋯]
 ```
 
 Key details:
 - Chevron rotates 90° when expanded with spring animation
 - 28pt chevron frame provides adequate tap target
+- Expanded sets content renders as a separate list row for smooth animation
 - `.buttonStyle(.plain)` allows the nested `Menu` in the label to intercept its own taps
 - Expanded content is indented 28pt (`.padding(.leading, 28)`) to align past the chevron
 - The `isExpanded` binding setter already contains `withAnimation` and the `setEditExerciseId` guard

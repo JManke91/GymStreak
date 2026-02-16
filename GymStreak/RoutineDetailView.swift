@@ -144,7 +144,7 @@ struct RoutineDetailView: View {
         expandedExerciseId = nil
         expandedSetId = nil
         setEditExerciseId = nil
-        withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+        withAnimation(DesignSystem.Animation.spring) {
             supersetEditMode = .editing(supersetId)
         }
     }
@@ -155,14 +155,14 @@ struct RoutineDetailView: View {
         expandedExerciseId = nil
         expandedSetId = nil
         setEditExerciseId = nil
-        withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+        withAnimation(DesignSystem.Animation.spring) {
             supersetEditMode = .creating
         }
     }
 
     /// Toggle an exercise's membership in the superset selection
     private func toggleSupersetSelection(_ exercise: RoutineExercise) {
-        withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+        withAnimation(DesignSystem.Animation.spring) {
             if supersetEditSelection.contains(exercise.id) {
                 supersetEditSelection.remove(exercise.id)
             } else {
@@ -226,7 +226,7 @@ struct RoutineDetailView: View {
         }
 
         UINotificationFeedbackGenerator().notificationOccurred(.success)
-        withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+        withAnimation(DesignSystem.Animation.spring) {
             supersetEditMode = nil
             supersetEditSelection = []
         }
@@ -234,7 +234,7 @@ struct RoutineDetailView: View {
 
     /// Cancel superset edit mode
     private func cancelSupersetEdit() {
-        withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+        withAnimation(DesignSystem.Animation.spring) {
             supersetEditMode = nil
             supersetEditSelection = []
         }
@@ -244,7 +244,7 @@ struct RoutineDetailView: View {
 
     private func enterSetEditMode(for routineExercise: RoutineExercise) {
         guard !isEditMode, supersetEditMode == nil else { return }
-        withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+        withAnimation(DesignSystem.Animation.spring) {
             expandedExerciseId = routineExercise.id
             expandedSetId = nil
             setEditExerciseId = routineExercise.id
@@ -253,7 +253,7 @@ struct RoutineDetailView: View {
     }
 
     private func exitSetEditMode() {
-        withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+        withAnimation(DesignSystem.Animation.spring) {
             setEditExerciseId = nil
         }
     }
@@ -320,7 +320,7 @@ struct RoutineDetailView: View {
                 weightBannerDismissed: weightBannerDismissedForExercise[routineExercise.id] ?? false,
                 totalSets: routineExercise.setsList.count,
                 onTap: {
-                    withAnimation(.snappy(duration: 0.35)) {
+                    withAnimation(DesignSystem.Animation.spring) {
                         if expandedSetId == set.id {
                             saveCurrentExpandedSet()
                             expandedSetId = nil
@@ -349,7 +349,7 @@ struct RoutineDetailView: View {
                     )
                 },
                 onApplyRepsToAll: {
-                    withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                    withAnimation(DesignSystem.Animation.spring) {
                         handleApplyRepsToAll(
                             reps: editingReps,
                             routineExercise: routineExercise
@@ -359,7 +359,7 @@ struct RoutineDetailView: View {
                     }
                 },
                 onApplyWeightToAll: {
-                    withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                    withAnimation(DesignSystem.Animation.spring) {
                         handleApplyWeightToAll(
                             weight: editingWeight,
                             routineExercise: routineExercise
@@ -369,17 +369,17 @@ struct RoutineDetailView: View {
                     }
                 },
                 onDismissRepsBanner: {
-                    withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                    withAnimation(DesignSystem.Animation.spring) {
                         repsBannerDismissedForExercise[routineExercise.id] = true
                     }
                 },
                 onDismissWeightBanner: {
-                    withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                    withAnimation(DesignSystem.Animation.spring) {
                         weightBannerDismissedForExercise[routineExercise.id] = true
                     }
                 },
                 onDelete: {
-                    withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                    withAnimation(DesignSystem.Animation.spring) {
                         viewModel.removeSet(set, from: routineExercise)
                         if expandedSetId == set.id {
                             expandedSetId = nil
@@ -387,10 +387,7 @@ struct RoutineDetailView: View {
                     }
                 }
             )
-            .transition(.asymmetric(
-                insertion: .opacity.combined(with: .move(edge: .top)),
-                removal: .opacity.combined(with: .move(edge: .leading))
-            ))
+            .transition(.opacity.combined(with: .move(edge: .top)))
         }
     }
 
@@ -402,7 +399,7 @@ struct RoutineDetailView: View {
             HStack(spacing: 8) {
                 // Delete button
                 Button {
-                    withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                    withAnimation(DesignSystem.Animation.spring) {
                         viewModel.removeSet(set, from: routineExercise)
                     }
                 } label: {
@@ -466,7 +463,7 @@ struct RoutineDetailView: View {
 
         // Add Set button
         Button {
-            withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+            withAnimation(DesignSystem.Animation.spring) {
                 viewModel.addSet(to: routineExercise)
             }
         } label: {
@@ -698,70 +695,80 @@ struct RoutineDetailView: View {
                                     .listRowBackground(rowBackgroundColor(for: routineExercise))
                                     .listRowSeparator(routineExercise.isInSuperset ? .hidden : .automatic)
                             } else {
-                                // Normal mode: Full disclosure group
-                                DisclosureGroup(
-                                    isExpanded: Binding(
-                                        get: { expandedExerciseId == routineExercise.id },
-                                        set: { isExpanded in
-                                            // Prevent collapse during set reorder mode
-                                            guard setEditExerciseId != routineExercise.id else { return }
-                                            withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
-                                                if isExpanded {
-                                                    expandedExerciseId = routineExercise.id
-                                                    expandedSetId = nil
-                                                } else {
-                                                    expandedExerciseId = nil
-                                                    expandedSetId = nil
-                                                }
-                                            }
+                                // Normal mode: Header row with leading chevron
+                                let isExerciseExpanded = expandedExerciseId == routineExercise.id
+                                Button {
+                                    // Prevent collapse during set reorder mode
+                                    guard setEditExerciseId != routineExercise.id else { return }
+                                    withAnimation(DesignSystem.Animation.spring) {
+                                        if isExerciseExpanded {
+                                            expandedExerciseId = nil
+                                            expandedSetId = nil
+                                        } else {
+                                            expandedExerciseId = routineExercise.id
+                                            expandedSetId = nil
                                         }
-                                    )
-                                ) {
-                            // Sets content
-                            VStack(spacing: 12) {
-                                if setEditExerciseId == routineExercise.id {
-                                    // Set reorder mode: simplified rows with drag handles
-                                    setEditContent(for: routineExercise)
-                                } else {
-                                    // Normal mode: full set editors
-                                    normalSetContent(for: routineExercise)
-                                }
-                            }
-                            .padding(.vertical, 8)
-
+                                    }
                                 } label: {
                                     let info = supersetInfo(for: routineExercise)
                                     let linePos = supersetLinePosition(for: routineExercise)
                                     let color = supersetColor(for: routineExercise)
-                                    ExerciseHeaderView(
-                                        routineExercise: routineExercise,
-                                        isEditMode: false,
-                                        supersetPosition: info?.position,
-                                        supersetTotal: info?.total,
-                                        supersetColor: color,
-                                        supersetLinePosition: linePos,
-                                        onSupersetAction: routine.routineExercisesList.count >= 2 ? {
-                                            if let supersetId = routineExercise.supersetId {
-                                                enterSupersetEdit(for: supersetId)
-                                            } else {
-                                                enterSupersetCreate(initiatingExercise: routineExercise)
+                                    HStack(spacing: 0) {
+                                        Image(systemName: "chevron.right")
+                                            .font(.caption.weight(.semibold))
+                                            .foregroundStyle(.secondary)
+                                            .rotationEffect(.degrees(isExerciseExpanded ? 90 : 0))
+                                            .animation(DesignSystem.Animation.spring, value: isExerciseExpanded)
+                                            .frame(width: 28, height: 44)
+                                            .contentShape(Rectangle())
+
+                                        ExerciseHeaderView(
+                                            routineExercise: routineExercise,
+                                            isEditMode: false,
+                                            supersetPosition: info?.position,
+                                            supersetTotal: info?.total,
+                                            supersetColor: color,
+                                            supersetLinePosition: linePos,
+                                            onSupersetAction: routine.routineExercisesList.count >= 2 ? {
+                                                if let supersetId = routineExercise.supersetId {
+                                                    enterSupersetEdit(for: supersetId)
+                                                } else {
+                                                    enterSupersetCreate(initiatingExercise: routineExercise)
+                                                }
+                                            } : nil,
+                                            onEditSets: {
+                                                enterSetEditMode(for: routineExercise)
                                             }
-                                        } : nil,
-                                        onEditSets: {
-                                            enterSetEditMode(for: routineExercise)
-                                        }
-                                    )
+                                        )
+                                    }
+                                    .contentShape(Rectangle())
                                 }
-                                .disclosureGroupStyle(LeadingChevronDisclosureStyle())
+                                .buttonStyle(.plain)
                                 .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 0, trailing: 16))
                                 .listRowBackground(rowBackgroundColor(for: routineExercise))
-                                .listRowSeparator(routineExercise.isInSuperset ? .hidden : .automatic)
+                                .listRowSeparator((isExerciseExpanded || routineExercise.isInSuperset) ? .hidden : .automatic)
                                 .sensoryFeedback(.selection, trigger: expandedExerciseId)
                                 // Only allow deleting exercise when collapsed
-                                .deleteDisabled(expandedExerciseId == routineExercise.id)
+                                .deleteDisabled(isExerciseExpanded)
                                 // Context menu for superset management
                                 .contextMenu {
                                     supersetContextMenu(for: routineExercise)
+                                }
+
+                                // Expanded sets content (separate list row for smooth animation)
+                                if isExerciseExpanded {
+                                    VStack(spacing: 12) {
+                                        if setEditExerciseId == routineExercise.id {
+                                            setEditContent(for: routineExercise)
+                                        } else {
+                                            normalSetContent(for: routineExercise)
+                                        }
+                                    }
+                                    .padding(.vertical, 8)
+                                    .padding(.leading, 28)
+                                    .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 0, trailing: 16))
+                                    .listRowBackground(rowBackgroundColor(for: routineExercise))
+                                    .listRowSeparator(routineExercise.isInSuperset ? .hidden : .automatic)
                                 }
 
                                 // Link button between this exercise and the next
@@ -779,7 +786,7 @@ struct RoutineDetailView: View {
                         // Edit mode visual effects
                         .modifier(WiggleModifier(isWiggling: isEditMode))
                         .scaleEffect(isEditMode ? 0.98 : 1.0)
-                        .animation(.spring(response: 0.3, dampingFraction: 0.7), value: isEditMode)
+                        .animation(DesignSystem.Animation.spring, value: isEditMode)
                     }
                     .onMove(perform: isEditMode ? moveRoutineExercises : nil)
                 }
@@ -799,7 +806,7 @@ struct RoutineDetailView: View {
                     Spacer()
                     if !routine.routineExercisesList.isEmpty && supersetEditMode == nil {
                         Button(isEditMode ? "action.done".localized : "action.edit".localized) {
-                            withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                            withAnimation(DesignSystem.Animation.spring) {
                                 if isEditMode {
                                     // Dismiss keyboard
                                     UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
@@ -836,7 +843,7 @@ struct RoutineDetailView: View {
                                     if !hasSeenReorderHint && routine.routineExercisesList.count > 1 {
                                         // Delay to let wiggle animation start first
                                         DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                                            withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                                            withAnimation(DesignSystem.Animation.spring) {
                                                 showReorderHint = true
                                             }
                                         }
@@ -983,7 +990,7 @@ struct RoutineDetailView: View {
                         Spacer()
 
                         Button {
-                            withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                            withAnimation(DesignSystem.Animation.spring) {
                                 showReorderHint = false
                                 hasSeenReorderHint = true
                             }
@@ -1005,7 +1012,7 @@ struct RoutineDetailView: View {
                 .onAppear {
                     // Auto-dismiss after 4 seconds
                     DispatchQueue.main.asyncAfter(deadline: .now() + 4) {
-                        withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                        withAnimation(DesignSystem.Animation.spring) {
                             showReorderHint = false
                             hasSeenReorderHint = true
                         }
@@ -1028,7 +1035,7 @@ struct RoutineDetailView: View {
         .alert("routine_exercise.delete.title".localized, isPresented: $showingDeleteExerciseAlert) {
             Button("action.delete".localized, role: .destructive) {
                 if let exercise = exercisePendingDeletion {
-                    withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                    withAnimation(DesignSystem.Animation.spring) {
                         viewModel.removeRoutineExercise(exercise, from: routine)
                     }
                 }
@@ -1367,6 +1374,7 @@ struct RoutineSetRowView: View {
                         .font(isExpanded ? .subheadline.weight(.bold) : .caption.weight(.semibold))
                         .foregroundStyle(isExpanded ? DesignSystem.Colors.tint : .secondary)
                         .rotationEffect(.degrees(isExpanded ? 180 : 0))
+                        .animation(DesignSystem.Animation.spring, value: isExpanded)
                 }
                 .contentShape(Rectangle())
             }
@@ -1454,10 +1462,7 @@ struct RoutineSetRowView: View {
                 .padding(.horizontal, 12)
                 .padding(.top, 12)
                 .padding(.bottom, 12)
-                .transition(.asymmetric(
-                    insertion: .opacity.combined(with: .scale(scale: 0.95, anchor: .top)),
-                    removal: .opacity.combined(with: .scale(scale: 0.95, anchor: .top))
-                ))
+                .transition(.opacity)
             }
         }
         .background(
@@ -1479,36 +1484,6 @@ struct RoutineSetRowView: View {
     }
 }
 
-// MARK: - Leading Chevron Disclosure Style
-
-struct LeadingChevronDisclosureStyle: DisclosureGroupStyle {
-    func makeBody(configuration: Configuration) -> some View {
-        VStack(spacing: 0) {
-            Button {
-                configuration.isExpanded.toggle()
-            } label: {
-                HStack(spacing: 0) {
-                    Image(systemName: "chevron.right")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(.secondary)
-                        .rotationEffect(.degrees(configuration.isExpanded ? 90 : 0))
-                        .animation(.spring(response: 0.3, dampingFraction: 0.7), value: configuration.isExpanded)
-                        .frame(width: 28, height: 44)
-                        .contentShape(Rectangle())
-
-                    configuration.label
-                }
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-
-            if configuration.isExpanded {
-                configuration.content
-                    .padding(.leading, 28)
-            }
-        }
-    }
-}
 
 #Preview {
     Text("RoutineDetailView Preview")
@@ -1543,7 +1518,7 @@ struct WiggleModifier: ViewModifier {
         }
         // Return to center
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.7) {
-            withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+            withAnimation(DesignSystem.Animation.spring) {
                 wiggleCount = 0
             }
         }
