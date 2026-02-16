@@ -32,13 +32,28 @@ private struct ExercisesViewInternal: View {
                     }
                 } else {
                     List {
-                        ForEach(viewModel.exercises) { exercise in
-                            NavigationLink(destination: ExerciseDetailView(exercise: exercise, viewModel: viewModel)) {
-                                ExerciseRowView(exercise: exercise)
+                        ForEach(viewModel.groupedExercises) { section in
+                            Section {
+                                ForEach(section.exercises) { exercise in
+                                    NavigationLink(destination: ExerciseDetailView(exercise: exercise, viewModel: viewModel)) {
+                                        ExerciseRowView(exercise: exercise)
+                                    }
+                                }
+                                .onDelete { offsets in
+                                    deleteExercises(in: section, at: offsets)
+                                }
+                            } header: {
+                                HStack {
+                                    Text(section.localizedTitle)
+                                    Spacer()
+                                    Text("\(section.exercises.count)")
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
                             }
                         }
-                        .onDelete(perform: deleteExercises)
                     }
+                    .listStyle(.insetGrouped)
                 }
             }
             .navigationTitle("exercises.title".localized)
@@ -97,9 +112,9 @@ private struct ExercisesViewInternal: View {
         }
     }
 
-    private func deleteExercises(offsets: IndexSet) {
+    private func deleteExercises(in section: ExerciseSection, at offsets: IndexSet) {
         for index in offsets {
-            viewModel.requestDeleteExercise(viewModel.exercises[index])
+            viewModel.requestDeleteExercise(section.exercises[index])
         }
     }
 }

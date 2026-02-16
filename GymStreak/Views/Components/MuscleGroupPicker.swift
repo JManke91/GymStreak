@@ -38,23 +38,16 @@ struct MuscleGroupSelectionSheet: View {
     @Binding var selectedMuscleGroups: [String]
     @Environment(\.dismiss) private var dismiss
 
-    // Grouped muscle groups for better organization
-    // Keys are localization keys, groups are internal English keys
-    private let muscleGroupCategories: [(titleKey: String, groups: [String])] = [
-        ("muscle_category.arms", ["Biceps", "Triceps", "Forearms"]),
-        ("muscle_category.chest", ["Chest", "Upper Chest"]),
-        ("muscle_category.back", ["Upper Back", "Lats", "Lower Back"]),
-        ("muscle_category.shoulders", ["Shoulders", "Front Delts", "Side Delts", "Rear Delts"]),
-        ("muscle_category.core", ["Abs", "Obliques"]),
-        ("muscle_category.legs", ["Quadriceps", "Hamstrings", "Glutes", "Calves", "Hip Flexors"])
-    ]
+    // Derived from shared MuscleGroups.categories, excluding "General"
+    private let muscleGroupCategories: [MuscleGroups.Category] = MuscleGroups.categories
+        .filter { $0.titleKey != "muscle_category.general" }
 
     var body: some View {
         NavigationView {
             List {
-                ForEach(muscleGroupCategories, id: \.titleKey) { category in
+                ForEach(muscleGroupCategories) { category in
                     Section(category.titleKey.localized) {
-                        ForEach(category.groups, id: \.self) { muscleGroup in
+                        ForEach(category.muscleGroupKeys, id: \.self) { muscleGroup in
                             MuscleGroupRow(
                                 muscleGroup: muscleGroup,
                                 isSelected: selectedMuscleGroups.contains(muscleGroup),

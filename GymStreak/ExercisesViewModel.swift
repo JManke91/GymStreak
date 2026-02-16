@@ -2,6 +2,14 @@ import Foundation
 import SwiftData
 import SwiftUI
 
+/// A section of exercises grouped by muscle category
+struct ExerciseSection: Identifiable {
+    let categoryTitleKey: String
+    let exercises: [Exercise]
+    var id: String { categoryTitleKey }
+    var localizedTitle: String { categoryTitleKey.localized }
+}
+
 @MainActor
 class ExercisesViewModel: ObservableObject {
     @Published var exercises: [Exercise] = []
@@ -13,6 +21,17 @@ class ExercisesViewModel: ObservableObject {
     @Published var routinesUsingExercise: [Routine] = []
     @Published var showingDeleteConfirmation = false
     @Published var showingDeleteAllConfirmation = false
+
+    /// Exercises grouped by muscle category, sorted anatomically top-to-bottom
+    var groupedExercises: [ExerciseSection] {
+        let grouped = Dictionary(grouping: exercises) { exercise -> String in
+            let primaryMuscle = exercise.muscleGroups.first ?? "General"
+            return MuscleGroups.categoryTitleKey(for: primaryMuscle)
+        }
+        return grouped
+            .map { ExerciseSection(categoryTitleKey: $0.key, exercises: $0.value) }
+            .sorted { MuscleGroups.categorySortOrder(for: $0.categoryTitleKey) < MuscleGroups.categorySortOrder(for: $1.categoryTitleKey) }
+    }
 
     private var modelContext: ModelContext
     private var cloudSyncObserver: NSObjectProtocol?

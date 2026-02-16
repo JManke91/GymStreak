@@ -224,6 +224,7 @@
 "muscle_category.shoulders" = "Schultern";
 "muscle_category.core" = "Rumpf";
 "muscle_category.legs" = "Beine";
+"muscle_category.general" = "Allgemein";
 
 // MARK: - Accessibility
 "accessibility.set.label" = "Satz %d: %d Wiederholungen, %.2f Kilogramm";

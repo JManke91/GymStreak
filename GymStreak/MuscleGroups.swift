@@ -19,6 +19,45 @@ enum BodyRegion {
 /// Centralized muscle group definitions for the app
 /// Muscle groups are stored as English keys internally and localized for display
 struct MuscleGroups {
+    /// A category grouping related muscle groups (e.g. "Arms" contains Biceps, Triceps, Forearms)
+    struct Category: Identifiable {
+        let titleKey: String
+        let muscleGroupKeys: [String]
+        var id: String { titleKey }
+    }
+
+    /// Canonical categories in anatomical top-to-bottom order (General last)
+    static let categories: [Category] = [
+        Category(titleKey: "muscle_category.shoulders", muscleGroupKeys: ["Shoulders", "Front Delts", "Side Delts", "Rear Delts"]),
+        Category(titleKey: "muscle_category.chest", muscleGroupKeys: ["Chest", "Upper Chest"]),
+        Category(titleKey: "muscle_category.back", muscleGroupKeys: ["Upper Back", "Lats", "Lower Back"]),
+        Category(titleKey: "muscle_category.arms", muscleGroupKeys: ["Biceps", "Triceps", "Forearms"]),
+        Category(titleKey: "muscle_category.core", muscleGroupKeys: ["Abs", "Obliques"]),
+        Category(titleKey: "muscle_category.legs", muscleGroupKeys: ["Quadriceps", "Hamstrings", "Glutes", "Calves", "Hip Flexors"]),
+        Category(titleKey: "muscle_category.general", muscleGroupKeys: ["General"]),
+    ]
+
+    /// Reverse lookup: muscle group key → parent category title key
+    private static let muscleGroupToCategoryMap: [String: String] = {
+        var map: [String: String] = [:]
+        for category in categories {
+            for key in category.muscleGroupKeys {
+                map[key] = category.titleKey
+            }
+        }
+        return map
+    }()
+
+    /// Returns the category title key for a given muscle group key (defaults to General)
+    static func categoryTitleKey(for muscleGroupKey: String) -> String {
+        muscleGroupToCategoryMap[muscleGroupKey] ?? "muscle_category.general"
+    }
+
+    /// Returns a sort index for the given category title key (matches `categories` order)
+    static func categorySortOrder(for categoryTitleKey: String) -> Int {
+        categories.firstIndex(where: { $0.titleKey == categoryTitleKey }) ?? categories.count
+    }
+
     /// All muscle group keys (English, for storage)
     static let allKeys: [String] = [
         // Upper Body - Arms
