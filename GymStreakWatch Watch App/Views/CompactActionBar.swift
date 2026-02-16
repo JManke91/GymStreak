@@ -39,6 +39,7 @@ struct CompactActionBar: View {
                     } label: {
                         Image(systemName: "chevron.left")
                     }
+                    .buttonStyle(.bordered)
                     .controlSize(.mini)
                     .disabled(!hasPrevious)
                     .opacity(hasPrevious ? 1.0 : 0.3)
@@ -46,47 +47,27 @@ struct CompactActionBar: View {
                     Spacer()
 
                     // Complete button
-                    ZStack {
-                        // Put visuals inside the Button label so the entire area responds to taps
-                        Button {
-                            // Toggle completion - navigation is handled by the ViewModel
-                            // (supports both regular exercises and supersets)
-                            handleComplete()
-                        } label: {
-    //                        VStack(spacing: 0) {
-                                ZStack {
-                                    Image(systemName: "circle")
-                                        .font(.system(size: 36))
+                    Button {
+                        handleComplete()
+                    } label: {
+                        HStack(spacing: 4) {
+                            Image(systemName: isCompleted ? "checkmark.circle.fill" : "checkmark.circle")
+                                .font(.system(size: 16, weight: .semibold))
+                                .symbolRenderingMode(.hierarchical)
 
-                                    // Subtle translucent background when completed to keep visual cue
-                                    if isCompleted {
-                                        Circle()
-                                            .fill(Color.green)
-                                            .frame(width: 26, height: 26)
-                                            .opacity(0.32)
-                                    }
-
-                                    // Set index overlay text
-                                    HStack(alignment: .firstTextBaseline, spacing: 0) {
-                                        Text("\(currentSetIndex + 1)")
-                                            .font(.system(size: 14, weight: .semibold))
-                                        Text("/\(totalSets)")
-                                            .font(.system(size: 10, weight: .medium))
-                                    }
-                                }
-                                // Explicitly increase hit area for watch: full tappable rectangle
-                                .contentShape(Rectangle())
-
-    //                            Text(exerciseName ?? "")
-    //                                .font(.system(size: 12, weight: .light))
-    //                        }
-    //                        .frame(minWidth: 68, minHeight: 44)
-
+                            HStack(alignment: .firstTextBaseline, spacing: 0) {
+                                Text("\(currentSetIndex + 1)")
+                                    .font(.system(size: 13, weight: .semibold))
+                                Text("/\(totalSets)")
+                                    .font(.system(size: 10, weight: .medium))
+                            }
+                            .monospacedDigit()
                         }
-                        .controlSize(.mini)
-                        .buttonStyle(.plain)
-                        .accessibilityLabel(isCompleted ? "Set completed. Tap to mark incomplete" : "Complete set")
                     }
+                    .buttonStyle(.borderedProminent)
+                    .tint(isCompleted ? .green : .blue)
+                    .buttonBorderShape(.capsule)
+                    .accessibilityLabel(isCompleted ? "Set completed. Tap to mark incomplete" : "Complete set")
 
                     Spacer()
 
@@ -96,6 +77,7 @@ struct CompactActionBar: View {
                     } label: {
                         Image(systemName: "chevron.right")
                     }
+                    .buttonStyle(.bordered)
                     .controlSize(.mini)
                     .disabled(!hasNext)
                     .opacity(hasNext ? 1.0 : 0.3)
@@ -104,14 +86,19 @@ struct CompactActionBar: View {
             } else {
                 // Single set layout: Full-width Complete button
                 Button {
-                    // Toggle completion - navigation is handled by the ViewModel
                     handleComplete()
                 } label: {
-                    Image(systemName: isCompleted ? "checkmark.circle.fill" : "circle")
-                        .symbolRenderingMode(.hierarchical)
+                    HStack(spacing: 6) {
+                        Image(systemName: isCompleted ? "checkmark.circle.fill" : "checkmark.circle")
+                            .font(.system(size: 18, weight: .semibold))
+                            .symbolRenderingMode(.hierarchical)
+                        Text(isCompleted ? "Done" : "Complete")
+                            .font(.system(size: 13, weight: .semibold))
+                    }
                 }
-                .controlSize(.mini)
+                .buttonStyle(.borderedProminent)
                 .tint(isCompleted ? .green : .blue)
+                .buttonBorderShape(.capsule)
             }
 
             // show current exercise name
