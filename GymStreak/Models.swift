@@ -106,6 +106,10 @@ final class RoutineExercise {
     var supersetId: UUID? = nil  // Nil if not in superset; shared UUID groups exercises
     var supersetOrder: Int = 0    // Order within superset (0 = first, 1 = second, etc.)
 
+    // Rep range goal - iCloud compatible with default values
+    var targetRepMin: Int? = nil   // e.g., 8
+    var targetRepMax: Int? = nil   // e.g., 12
+
     init(exercise: Exercise, order: Int) {
         self.id = UUID()
         self.exercise = exercise
@@ -120,6 +124,17 @@ final class RoutineExercise {
 
     var isInSuperset: Bool {
         supersetId != nil
+    }
+
+    var hasRepRangeGoal: Bool {
+        targetRepMin != nil && targetRepMax != nil
+    }
+
+    var allSetsAtUpperLimit: Bool {
+        guard let max = targetRepMax else { return false }
+        let sets = setsList
+        guard !sets.isEmpty else { return false }
+        return sets.allSatisfy { $0.reps >= max }
     }
 }
 
@@ -203,9 +218,14 @@ final class WorkoutSession {
     }
 
     var totalVolume: Double {
-        workoutExercisesList.flatMap(\.setsList)
-            .filter(\.isCompleted)
-            .reduce(0) { $0 + ($1.actualWeight * Double($1.actualReps)) }
+        workoutExercisesList.reduce(0) { total, exercise in
+            let completedSets = exercise.setsList.filter(\.isCompleted)
+            return total + completedSets.reduce(0) { subtotal, set in
+                let weight = exercise.progressiveOverloadApplied ? set.plannedWeight : set.actualWeight
+                let reps = exercise.progressiveOverloadApplied ? set.plannedReps : set.actualReps
+                return subtotal + (weight * Double(reps))
+            }
+        }
     }
 
     /// Groups workout exercises by superset for display purposes.
@@ -246,6 +266,14 @@ final class WorkoutExercise {
     var supersetId: UUID? = nil  // iCloud compatible - must have default
     var supersetOrder: Int = 0    // iCloud compatible - must have default
 
+    // Rep range goal - denormalized from RoutineExercise for history
+    var targetRepMin: Int? = nil
+    var targetRepMax: Int? = nil
+
+    // Progressive overload tracking - when true, plannedWeight/plannedReps on sets
+    // represent the actual performance (before overload was applied to actual values)
+    var progressiveOverloadApplied: Bool = false
+
     init(from routineExercise: RoutineExercise, order: Int) {
         self.id = UUID()
         self.exerciseName = routineExercise.exercise?.name ?? "Unknown"
@@ -254,6 +282,9 @@ final class WorkoutExercise {
         // Copy superset fields from routine
         self.supersetId = routineExercise.supersetId
         self.supersetOrder = routineExercise.supersetOrder
+        // Copy rep range fields from routine
+        self.targetRepMin = routineExercise.targetRepMin
+        self.targetRepMax = routineExercise.targetRepMax
         // Copy sets from routine, sorted by order
         self.sets = routineExercise.setsList.sorted(by: { $0.order < $1.order }).enumerated().map { index, set in
             WorkoutSet(from: set, order: index)
@@ -284,6 +315,20 @@ final class WorkoutExercise {
 
     var isInSuperset: Bool {
         supersetId != nil
+    }
+
+    var hasRepRangeGoal: Bool {
+        targetRepMin != nil && targetRepMax != nil
+    }
+
+    var allCompletedSetsAtUpperLimit: Bool {
+        // If progressive overload was applied, the user already hit the upper limit
+        // (that's what triggered the overload in the first place)
+        if progressiveOverloadApplied { return true }
+        guard let max = targetRepMax else { return false }
+        let allSets = setsList
+        guard !allSets.isEmpty else { return false }
+        return allSets.allSatisfy { $0.isCompleted && $0.actualReps >= max }
     }
 }
 

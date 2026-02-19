@@ -19,6 +19,7 @@ struct SaveWorkoutView: View {
             Form {
                 summarySection
                 exerciseProgressSection
+                repGoalAchievedSection
                 healthKitSection
                 templateUpdateSection
                 notesSection
@@ -91,6 +92,49 @@ struct SaveWorkoutView: View {
                 }
             } header: {
                 Text("save_workout.performance".localized)
+            }
+        }
+    }
+
+    // MARK: - Rep Goal Achieved Section
+
+    @ViewBuilder
+    private var repGoalAchievedSection: some View {
+        let achievedExercises = viewModel.currentSession?.workoutExercisesList.filter {
+            $0.allCompletedSetsAtUpperLimit
+        } ?? []
+
+        if !achievedExercises.isEmpty {
+            Section {
+                ForEach(achievedExercises, id: \.id) { exercise in
+                    HStack(spacing: 10) {
+                        Image(systemName: "trophy.fill")
+                            .foregroundStyle(.orange)
+                            .font(.body)
+
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(exercise.exerciseName)
+                                .font(.subheadline.weight(.medium))
+
+                            if let max = exercise.targetRepMax {
+                                Text("rep_range.goal_achieved_detail".localized(
+                                    exercise.setsList.count,
+                                    max
+                                ))
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                            }
+                        }
+
+                        Spacer()
+
+                        Image(systemName: "checkmark.seal.fill")
+                            .foregroundStyle(.orange)
+                            .font(.caption)
+                    }
+                }
+            } header: {
+                Text("rep_range.goal_achieved".localized)
             }
         }
     }

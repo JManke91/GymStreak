@@ -321,7 +321,17 @@ struct ExerciseCard: View {
     var isPartOfSuperset: Bool = false
     var onDelete: (() -> Void)?
     @State private var showingRestTimeConfig = false
+    @State private var overloadBannerDismissed = false
+    @State private var selectedRoutineExerciseForOverload: RoutineExercise?
+    @State private var overloadAppliedInfo: (weight: Double, reps: Int)?
     var onSetCompleted: (() -> Void)?
+
+    /// Find the matching RoutineExercise from the source routine (by exercise name)
+    private var matchingRoutineExercise: RoutineExercise? {
+        viewModel.currentSession?.routine?.routineExercisesList
+            .sorted { $0.order < $1.order }
+            .first { $0.exercise?.name == workoutExercise.exerciseName }
+    }
 
     // Computed property to get current rest time from the exercise's sets
     private var exerciseRestTime: TimeInterval {
@@ -394,6 +404,68 @@ struct ExerciseCard: View {
                 )
             }
 
+            // Progressive Overload Banner or Applied Confirmation
+            if let info = overloadAppliedInfo {
+                // Confirmation: routine was updated
+                HStack(spacing: 8) {
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.caption)
+                        .foregroundStyle(.green)
+                        .frame(width: 20, height: 20)
+
+                    Text("rep_range.routine_updated".localized(
+                        String(format: "%.1f", info.weight),
+                        info.reps
+                    ))
+                    .font(.caption.weight(.medium))
+                    .foregroundStyle(.primary)
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.75)
+
+                    Spacer(minLength: 4)
+
+                    Button {
+                        withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                            overloadAppliedInfo = nil
+                        }
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.body)
+                            .symbolRenderingMode(.hierarchical)
+                            .foregroundStyle(.secondary)
+                            .frame(width: 24, height: 24)
+                    }
+                    .buttonStyle(.borderless)
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+                .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 8))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 8)
+                        .strokeBorder(Color.green.opacity(0.3), lineWidth: 1)
+                )
+                .transition(.asymmetric(
+                    insertion: .move(edge: .top).combined(with: .opacity),
+                    removal: .move(edge: .top).combined(with: .opacity)
+                ))
+            } else if workoutExercise.allCompletedSetsAtUpperLimit && !overloadBannerDismissed {
+                ProgressiveOverloadBanner(
+                    targetRepMax: workoutExercise.targetRepMax ?? 0,
+                    onIncrease: {
+                        selectedRoutineExerciseForOverload = matchingRoutineExercise
+                    },
+                    onDismiss: {
+                        withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                            overloadBannerDismissed = true
+                        }
+                    }
+                )
+                .transition(.asymmetric(
+                    insertion: .move(edge: .top).combined(with: .opacity),
+                    removal: .move(edge: .top).combined(with: .opacity)
+                ))
+            }
+
             // Sets List
             ForEach(workoutExercise.setsList.sorted(by: { $0.order < $1.order }), id: \.id) { set in
                 WorkoutSetRow(
@@ -462,6 +534,24 @@ struct ExerciseCard: View {
             RoundedRectangle(cornerRadius: DesignSystem.Dimensions.cornerRadiusMD)
                 .strokeBorder(isCurrentExercise ? DesignSystem.Colors.tint : Color.clear, lineWidth: 2)
         )
+        .sheet(item: $selectedRoutineExerciseForOverload) { routineExercise in
+            WeightIncreaseSheet(
+                routineExercise: routineExercise,
+                onApply: { increment in
+                    let newWeight = (routineExercise.setsList.first?.weight ?? 0) + increment
+                    let minReps = routineExercise.targetRepMin ?? 0
+                    viewModel.applyProgressiveOverload(for: workoutExercise, weightIncrement: increment)
+                    selectedRoutineExerciseForOverload = nil
+                    withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                        overloadBannerDismissed = true
+                        overloadAppliedInfo = (weight: newWeight, reps: minReps)
+                    }
+                },
+                onCancel: {
+                    selectedRoutineExerciseForOverload = nil
+                }
+            )
+        }
     }
 
     private func isNextSet(_ set: WorkoutSet) -> Bool {
@@ -547,6 +637,18 @@ struct WorkoutSetRow: View {
         }
     }
 
+    private var repRangeColor: Color? {
+        guard let min = workoutExercise.targetRepMin,
+              let max = workoutExercise.targetRepMax else { return nil }
+        if set.actualReps >= max {
+            return .orange
+        } else if set.actualReps >= min {
+            return DesignSystem.Colors.tint
+        } else {
+            return .secondary
+        }
+    }
+
     private var backgroundColor: Color {
         if isExpanded {
             return DesignSystem.Colors.cardElevated
@@ -609,12 +711,24 @@ struct WorkoutSetRow: View {
 
                         HStack(spacing: 8) {
                             Text("set.reps".localized(set.actualReps))
+                                .foregroundStyle(repRangeColor ?? .secondary)
                             Text("×")
                                 .foregroundStyle(.secondary)
                             Text("set.weight".localized(set.actualWeight))
+                                .foregroundStyle(.secondary)
+
+                            // Rep range progress badge
+                            if let max = workoutExercise.targetRepMax {
+                                Text("\(set.actualReps)/\(max)")
+                                    .font(.caption2.weight(.medium))
+                                    .monospacedDigit()
+                                    .foregroundStyle(repRangeColor ?? .secondary)
+                                    .padding(.horizontal, 4)
+                                    .padding(.vertical, 1)
+                                    .background((repRangeColor ?? .secondary).opacity(0.1), in: Capsule())
+                            }
                         }
                         .font(.caption)
-                        .foregroundStyle(.secondary)
                     }
 
                     Spacer()

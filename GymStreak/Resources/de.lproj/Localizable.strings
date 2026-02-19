@@ -226,6 +226,26 @@
 "muscle_category.legs" = "Beine";
 "muscle_category.general" = "Allgemein";
 
+// MARK: - Rep Range & Progressive Overload
+"rep_range.set_goal" = "Wdh.-Ziel setzen";
+"rep_range.target" = "Ziel: %d-%d Wdh.";
+"rep_range.min" = "Min. Wdh.";
+"rep_range.max" = "Max. Wdh.";
+"rep_range.clear" = "Wdh.-Ziel entfernen";
+"rep_range.strength" = "Kraft";
+"rep_range.hypertrophy" = "Hypertrophie";
+"rep_range.endurance" = "Ausdauer";
+"rep_range.all_sets_maxed" = "%d Wdh. erreicht! Gewicht erhöhen?";
+"rep_range.increase" = "Erhöhen";
+"rep_range.increase_weight" = "Gewicht erhöhen";
+"rep_range.current_state" = "Aktuell: %@kg × %d Wdh. (%d Sätze)";
+"rep_range.new_state" = "Neu: %@kg × %d Wdh. (alle Sätze)";
+"rep_range.apply" = "Anwenden";
+"rep_range.goal_achieved" = "Wdh.-Ziel erreicht";
+"rep_range.goal_achieved_detail" = "Alle %d Sätze haben %d Wdh. erreicht";
+"rep_range.routine_updated" = "Routine aktualisiert: %@kg × %d Wdh. beim nächsten Mal";
+"rep_range.sets_with_range" = "%d Sätze | %d-%d Wdh.";
+
 // MARK: - Accessibility
 "accessibility.set.label" = "Satz %d: %d Wiederholungen, %.2f Kilogramm";
 "accessibility.set.hint.collapsed" = "Zum Erweitern und Bearbeiten tippen";

@@ -866,7 +866,8 @@ final class WatchWorkoutViewModel: ObservableObject {
                 muscleGroup: exercise.muscleGroup,
                 completedSets: exercise.completedSetsCount,
                 totalSets: exercise.sets.count,
-                isComplete: exercise.isComplete
+                isComplete: exercise.isComplete,
+                repGoalAchieved: exercise.allCompletedSetsAtUpperLimit
             )
         }
 

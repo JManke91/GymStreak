@@ -549,6 +549,40 @@ class WorkoutViewModel: ObservableObject {
         save()
     }
 
+    /// Apply progressive overload: updates both the active workout sets (for immediate UI feedback)
+    /// and the routine template (for future workouts).
+    /// plannedWeight/plannedReps are preserved as the actual pre-overload performance for history/comparison.
+    func applyProgressiveOverload(for workoutExercise: WorkoutExercise, weightIncrement: Double) {
+        let minReps = workoutExercise.targetRepMin ?? 1
+
+        objectWillChange.send()
+
+        // Snapshot current actual performance into planned values (for comparison/history accuracy),
+        // then update actual values with overloaded values for UI display
+        for set in workoutExercise.setsList {
+            set.plannedReps = set.actualReps
+            set.plannedWeight = set.actualWeight
+
+            set.actualWeight += weightIncrement
+            set.actualReps = minReps
+        }
+
+        // Mark that progressive overload was applied
+        workoutExercise.progressiveOverloadApplied = true
+
+        // Update routine template (so it persists for future workouts)
+        if let routine = currentSession?.routine,
+           let routineExercise = routine.routineExercisesList
+            .first(where: { $0.exercise?.name == workoutExercise.exerciseName }) {
+            for set in routineExercise.setsList {
+                set.weight += weightIncrement
+                set.reps = minReps
+            }
+        }
+
+        save()
+    }
+
     func addSetToExercise(_ workoutExercise: WorkoutExercise) {
         guard currentSession != nil else { return }
 

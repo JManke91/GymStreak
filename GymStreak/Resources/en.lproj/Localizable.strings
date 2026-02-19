@@ -226,6 +226,26 @@
 "muscle_category.core" = "Core";
 "muscle_category.legs" = "Legs";
 
+// MARK: - Rep Range & Progressive Overload
+"rep_range.set_goal" = "Set Rep Goal";
+"rep_range.target" = "Target: %d-%d reps";
+"rep_range.min" = "Min Reps";
+"rep_range.max" = "Max Reps";
+"rep_range.clear" = "Remove Rep Goal";
+"rep_range.strength" = "Strength";
+"rep_range.hypertrophy" = "Hypertrophy";
+"rep_range.endurance" = "Endurance";
+"rep_range.all_sets_maxed" = "All sets at %d reps! Increase weight?";
+"rep_range.increase" = "Increase";
+"rep_range.increase_weight" = "Increase Weight";
+"rep_range.current_state" = "Current: %@kg × %d reps (%d sets)";
+"rep_range.new_state" = "New: %@kg × %d reps (all sets)";
+"rep_range.apply" = "Apply";
+"rep_range.goal_achieved" = "Rep Goal Achieved";
+"rep_range.goal_achieved_detail" = "All %d sets reached %d reps";
+"rep_range.routine_updated" = "Routine updated: %@kg × %d reps next time";
+"rep_range.sets_with_range" = "%d sets | %d-%d reps";
+
 // MARK: - Accessibility
 "accessibility.set.label" = "Set %d: %d reps, %.2f kilograms";
 "accessibility.set.hint.collapsed" = "Tap to expand and edit";

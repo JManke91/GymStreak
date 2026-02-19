@@ -51,14 +51,19 @@ class ExerciseProgressService {
                     let completedSets = exercise.setsList.filter(\.isCompleted)
                     guard !completedSets.isEmpty else { continue }
 
-                    let maxWeight = completedSets.map(\.actualWeight).max() ?? 0
-                    let totalVolume = completedSets.reduce(0) { $0 + ($1.actualWeight * Double($1.actualReps)) }
-                    let totalReps = completedSets.reduce(0) { $0 + $1.actualReps }
+                    let usePlanned = exercise.progressiveOverloadApplied
+                    let maxWeight = completedSets.map { usePlanned ? $0.plannedWeight : $0.actualWeight }.max() ?? 0
+                    let totalVolume = completedSets.reduce(0) {
+                        let w = usePlanned ? $1.plannedWeight : $1.actualWeight
+                        let r = usePlanned ? $1.plannedReps : $1.actualReps
+                        return $0 + (w * Double(r))
+                    }
+                    let totalReps = completedSets.reduce(0) { $0 + (usePlanned ? $1.plannedReps : $1.actualReps) }
                     let totalSets = completedSets.count
 
                     // Calculate estimated 1RM using Epley formula: weight * (1 + reps/30)
                     // Use the best set (highest weight with reps completed)
-                    let estimated1RM = calculateEstimated1RM(from: completedSets)
+                    let estimated1RM = calculateEstimated1RM(from: completedSets, usePlannedValues: usePlanned)
 
                     let dataPoint = ExerciseProgressDataPoint(
                         date: session.startTime,
@@ -116,10 +121,11 @@ class ExerciseProgressService {
 
                 guard let exercise = matchingExercise else { continue }
 
+                let usePlanned = exercise.progressiveOverloadApplied
                 let sets = exercise.setsList.sorted(by: { $0.order < $1.order }).map { set in
                     PreviousExercisePerformance.SetPerformance(
-                        reps: set.actualReps,
-                        weight: set.actualWeight,
+                        reps: usePlanned ? set.plannedReps : set.actualReps,
+                        weight: usePlanned ? set.plannedWeight : set.actualWeight,
                         isCompleted: set.isCompleted
                     )
                 }
@@ -151,6 +157,7 @@ class ExerciseProgressService {
 
             let completedSets = exercise.setsList.filter(\.isCompleted)
             let sortedSets = exercise.setsList.sorted(by: { $0.order < $1.order })
+            let usePlanned = exercise.progressiveOverloadApplied
 
             // Build set comparisons
             var setComparisons: [ExerciseComparisonResult.CurrentExercisePerformance.SetComparison] = []
@@ -159,10 +166,13 @@ class ExerciseProgressService {
                 // Get corresponding previous set if available
                 let previousSet = previous?.sets.indices.contains(index) == true ? previous?.sets[index] : nil
 
+                let reps = usePlanned ? set.plannedReps : set.actualReps
+                let weight = usePlanned ? set.plannedWeight : set.actualWeight
+
                 let comparison = ExerciseComparisonResult.CurrentExercisePerformance.SetComparison(
                     setNumber: index + 1,
-                    currentReps: set.actualReps,
-                    currentWeight: set.actualWeight,
+                    currentReps: reps,
+                    currentWeight: weight,
                     previousReps: previousSet?.reps,
                     previousWeight: previousSet?.weight,
                     isCompleted: set.isCompleted
@@ -170,11 +180,18 @@ class ExerciseProgressService {
                 setComparisons.append(comparison)
             }
 
+            let totalVolume = completedSets.reduce(0.0) { subtotal, set in
+                let w = usePlanned ? set.plannedWeight : set.actualWeight
+                let r = usePlanned ? set.plannedReps : set.actualReps
+                return subtotal + (w * Double(r))
+            }
+            let totalReps = completedSets.reduce(0) { $0 + (usePlanned ? $1.plannedReps : $1.actualReps) }
+
             let currentPerformance = ExerciseComparisonResult.CurrentExercisePerformance(
                 sets: setComparisons,
-                totalVolume: completedSets.reduce(0) { $0 + ($1.actualWeight * Double($1.actualReps)) },
+                totalVolume: totalVolume,
                 completedSetsCount: completedSets.count,
-                totalReps: completedSets.reduce(0) { $0 + $1.actualReps }
+                totalReps: totalReps
             )
 
             let result = ExerciseComparisonResult(
@@ -193,16 +210,18 @@ class ExerciseProgressService {
 
     /// Calculates estimated 1RM using Epley formula
     /// Uses the best set (highest estimated 1RM) from the given sets
-    private func calculateEstimated1RM(from sets: [WorkoutSet]) -> Double {
+    private func calculateEstimated1RM(from sets: [WorkoutSet], usePlannedValues: Bool = false) -> Double {
         guard !sets.isEmpty else { return 0 }
 
         var best1RM: Double = 0
 
         for set in sets {
-            guard set.isCompleted, set.actualWeight > 0 else { continue }
+            let weight = usePlannedValues ? set.plannedWeight : set.actualWeight
+            let reps = usePlannedValues ? set.plannedReps : set.actualReps
+            guard set.isCompleted, weight > 0 else { continue }
 
             // Epley formula: weight * (1 + reps/30)
-            let estimated = set.actualWeight * (1 + Double(set.actualReps) / 30.0)
+            let estimated = weight * (1 + Double(reps) / 30.0)
             best1RM = max(best1RM, estimated)
         }
 

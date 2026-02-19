@@ -186,6 +186,21 @@ struct WorkoutExerciseComparisonCard: View {
 
                     Spacer()
 
+                    // Rep goal achieved badge
+                    if let exercise = workoutExercise, exercise.allCompletedSetsAtUpperLimit {
+                        HStack(spacing: 4) {
+                            Image(systemName: "trophy.fill")
+                                .font(.caption)
+                                .foregroundStyle(.orange)
+                            Text("rep_range.goal_achieved".localized)
+                                .font(.caption2.weight(.medium))
+                                .foregroundStyle(.orange)
+                        }
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(Color.orange.opacity(0.1), in: Capsule())
+                    }
+
                     // Chart icon
                     Image(systemName: "chart.line.uptrend.xyaxis")
                         .foregroundStyle(.secondary)
@@ -226,7 +241,9 @@ struct WorkoutExerciseComparisonCard: View {
                 ForEach(comparison.currentPerformance.sets, id: \.setNumber) { setComparison in
                     SetComparisonRow(
                         setComparison: setComparison,
-                        isFirstTime: comparison.isFirstTime
+                        isFirstTime: comparison.isFirstTime,
+                        targetRepMin: workoutExercise?.targetRepMin,
+                        targetRepMax: workoutExercise?.targetRepMax
                     )
                 }
             }
@@ -243,6 +260,15 @@ struct WorkoutExerciseComparisonCard: View {
 struct SetComparisonRow: View {
     let setComparison: ExerciseComparisonResult.CurrentExercisePerformance.SetComparison
     let isFirstTime: Bool
+    var targetRepMin: Int? = nil
+    var targetRepMax: Int? = nil
+
+    private func repRangeColor(for reps: Int) -> Color? {
+        guard let min = targetRepMin, let max = targetRepMax else { return nil }
+        if reps >= max { return .orange }
+        if reps >= min { return DesignSystem.Colors.tint }
+        return .secondary
+    }
 
     var body: some View {
         HStack {
@@ -278,6 +304,7 @@ struct SetComparisonRow: View {
                     HStack(spacing: 4) {
                         Text("\(setComparison.currentReps) reps")
                             .font(.caption)
+                            .foregroundStyle(repRangeColor(for: setComparison.currentReps) ?? .primary)
                         if let delta = setComparison.repsDelta, delta != 0 {
                             DeltaBadge(value: delta, unit: "")
                         }

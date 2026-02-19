@@ -100,17 +100,34 @@ struct ExerciseSetView: View {
             .accessibilityElement(children: .combine)
             .accessibilityLabel("\(Int(set.plannedWeight)) pounds")
 
-            VStack {
+            VStack(spacing: 2) {
                 Text("\(set.plannedReps)")
                     .font(.title2.monospacedDigit())
                     .fontWeight(.semibold)
+                    .foregroundStyle(repColor(for: set.plannedReps))
                 Text("reps")
                     .font(.caption2)
                     .foregroundStyle(.secondary)
+
+                // Rep range goal indicator
+                if let min = exercise?.targetRepMin, let max = exercise?.targetRepMax {
+                    Text("\(min)-\(max)")
+                        .font(.system(size: 10).monospacedDigit())
+                        .foregroundStyle(repColor(for: set.plannedReps).opacity(0.8))
+                }
             }
             .accessibilityElement(children: .combine)
             .accessibilityLabel("\(set.plannedReps) reps")
         }
+    }
+
+    private func repColor(for reps: Int) -> Color {
+        guard let min = exercise?.targetRepMin, let max = exercise?.targetRepMax else {
+            return .primary
+        }
+        if reps >= max { return .orange }
+        if reps >= min { return .green }
+        return .primary
     }
 
     private var completeButton: some View {

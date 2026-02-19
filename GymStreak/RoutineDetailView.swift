@@ -32,6 +32,9 @@ struct RoutineDetailView: View {
     @AppStorage("hasSeenReorderHint") private var hasSeenReorderHint = false
     @State private var showReorderHint = false
     @State private var setEditExerciseId: UUID? = nil
+    @State private var repRangeExpandedForExercise: [UUID: Bool] = [:]
+    @State private var overloadBannerDismissedForExercise: [UUID: Bool] = [:]
+    @State private var selectedExerciseForOverload: RoutineExercise?
 
     // Helper function to get rest time for an exercise
     private func restTime(for exercise: RoutineExercise) -> TimeInterval {
@@ -306,6 +309,45 @@ struct RoutineDetailView: View {
             )
         }
 
+        // Rep Range Configuration
+        RepRangeConfigView(
+            targetRepMin: Binding(
+                get: { routineExercise.targetRepMin },
+                set: { routineExercise.targetRepMin = $0 }
+            ),
+            targetRepMax: Binding(
+                get: { routineExercise.targetRepMax },
+                set: { routineExercise.targetRepMax = $0 }
+            ),
+            isExpanded: Binding(
+                get: { repRangeExpandedForExercise[routineExercise.id] ?? false },
+                set: { repRangeExpandedForExercise[routineExercise.id] = $0 }
+            ),
+            onRepRangeChange: { min, max in
+                viewModel.updateRepRange(for: routineExercise, min: min, max: max)
+            }
+        )
+
+        // Progressive Overload Banner
+        if routineExercise.allSetsAtUpperLimit,
+           !(overloadBannerDismissedForExercise[routineExercise.id] ?? false) {
+            ProgressiveOverloadBanner(
+                targetRepMax: routineExercise.targetRepMax ?? 0,
+                onIncrease: {
+                    selectedExerciseForOverload = routineExercise
+                },
+                onDismiss: {
+                    withAnimation(DesignSystem.Animation.spring) {
+                        overloadBannerDismissedForExercise[routineExercise.id] = true
+                    }
+                }
+            )
+            .transition(.asymmetric(
+                insertion: .move(edge: .top).combined(with: .opacity),
+                removal: .move(edge: .top).combined(with: .opacity)
+            ))
+        }
+
         ForEach(Array(routineExercise.setsList.sorted(by: { $0.order < $1.order }).enumerated()), id: \.element.id) { index, set in
             RoutineSetRowView(
                 set: set,
@@ -319,6 +361,8 @@ struct RoutineDetailView: View {
                 repsBannerDismissed: repsBannerDismissedForExercise[routineExercise.id] ?? false,
                 weightBannerDismissed: weightBannerDismissedForExercise[routineExercise.id] ?? false,
                 totalSets: routineExercise.setsList.count,
+                targetRepMin: routineExercise.targetRepMin,
+                targetRepMax: routineExercise.targetRepMax,
                 onTap: {
                     withAnimation(DesignSystem.Animation.spring) {
                         if expandedSetId == set.id {
@@ -1024,6 +1068,19 @@ struct RoutineDetailView: View {
         .sheet(isPresented: $showingAddExercise) {
             AddExerciseToRoutineView(routine: routine, viewModel: viewModel, exercisesViewModel: exercisesViewModel)
         }
+        .sheet(item: $selectedExerciseForOverload) { exercise in
+            WeightIncreaseSheet(
+                routineExercise: exercise,
+                onApply: { increment in
+                    viewModel.applyProgressiveOverload(for: exercise, weightIncrement: increment)
+                    selectedExerciseForOverload = nil
+                    overloadBannerDismissedForExercise[exercise.id] = true
+                },
+                onCancel: {
+                    selectedExerciseForOverload = nil
+                }
+            )
+        }
         .alert("routine.delete".localized, isPresented: $showingDeleteAlert) {
             Button("action.delete".localized, role: .destructive) {
                 viewModel.deleteRoutine(routine)
@@ -1242,9 +1299,17 @@ struct ExerciseHeaderView: View {
                         }
                     }
 
-                    Text("routine.sets_count".localized(routineExercise.setsList.count))
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                    if routineExercise.hasRepRangeGoal,
+                       let min = routineExercise.targetRepMin,
+                       let max = routineExercise.targetRepMax {
+                        Text("rep_range.sets_with_range".localized(routineExercise.setsList.count, min, max))
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    } else {
+                        Text("routine.sets_count".localized(routineExercise.setsList.count))
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    }
                 }
 
                 Spacer()
@@ -1314,6 +1379,8 @@ struct RoutineSetRowView: View {
     let repsBannerDismissed: Bool
     let weightBannerDismissed: Bool
     let totalSets: Int
+    var targetRepMin: Int? = nil
+    var targetRepMax: Int? = nil
     let onTap: () -> Void
     let onUpdate: (Int, Double) -> Void
     let onApplyRepsToAll: () -> Void
@@ -1332,6 +1399,17 @@ struct RoutineSetRowView: View {
     // Computed property to check if weight has changed
     private var weightChanged: Bool {
         editingWeight != initialWeight
+    }
+
+    private var repRangeColor: Color {
+        guard let min = targetRepMin, let max = targetRepMax else { return .primary }
+        if set.reps >= max {
+            return .orange
+        } else if set.reps >= min {
+            return DesignSystem.Colors.tint
+        } else {
+            return .secondary
+        }
     }
 
     private var backgroundColor: Color {
@@ -1361,12 +1439,23 @@ struct RoutineSetRowView: View {
 
                     HStack(spacing: 8) {
                         Text("set.reps".localized(set.reps))
+                            .foregroundStyle(repRangeColor)
                         Text("×")
                             .foregroundStyle(.secondary)
                         Text("set.weight".localized(set.weight))
                     }
                     .font(.subheadline.weight(.medium))
-                    .foregroundStyle(.primary)
+
+                    // Rep range progress badge
+                    if let max = targetRepMax {
+                        Text("\(set.reps)/\(max)")
+                            .font(.caption2.weight(.medium))
+                            .monospacedDigit()
+                            .foregroundStyle(repRangeColor)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(repRangeColor.opacity(0.1), in: Capsule())
+                    }
 
                     Spacer()
 

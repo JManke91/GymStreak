@@ -163,6 +163,27 @@ class RoutinesViewModel: ObservableObject {
         }
     }
 
+    // MARK: - Rep Range Management
+
+    func updateRepRange(for routineExercise: RoutineExercise, min: Int?, max: Int?) {
+        routineExercise.targetRepMin = min
+        routineExercise.targetRepMax = max
+        if let routine = routineExercise.routine {
+            updateRoutine(routine)
+        }
+    }
+
+    func applyProgressiveOverload(for routineExercise: RoutineExercise, weightIncrement: Double) {
+        guard let min = routineExercise.targetRepMin else { return }
+        for set in routineExercise.setsList {
+            set.weight += weightIncrement
+            set.reps = min
+        }
+        if let routine = routineExercise.routine {
+            updateRoutine(routine)
+        }
+    }
+
     // MARK: - Superset Management
 
     /// Creates a superset from 2+ selected exercises
@@ -283,6 +304,9 @@ class RoutinesViewModel: ObservableObject {
                 // Copy superset fields from completed exercise
                 workoutExercise.supersetId = completedExercise.supersetId
                 workoutExercise.supersetOrder = completedExercise.supersetOrder
+                // Copy rep range fields from completed exercise
+                workoutExercise.targetRepMin = completedExercise.targetRepMin
+                workoutExercise.targetRepMax = completedExercise.targetRepMax
 
                 // Create workout sets
                 for completedSet in completedExercise.sets {

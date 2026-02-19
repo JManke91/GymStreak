@@ -25,6 +25,8 @@ struct WatchExercise: Codable, Identifiable, Hashable {
     let order: Int
     let supersetId: UUID?
     let supersetOrder: Int
+    var targetRepMin: Int? = nil
+    var targetRepMax: Int? = nil
 }
 
 struct WatchSet: Codable, Identifiable, Hashable {
@@ -44,6 +46,8 @@ struct ActiveWorkoutExercise: Identifiable {
     let order: Int
     let supersetId: UUID?
     let supersetOrder: Int
+    var targetRepMin: Int? = nil
+    var targetRepMax: Int? = nil
 
     var completedSetsCount: Int {
         sets.filter(\.isCompleted).count
@@ -55,6 +59,16 @@ struct ActiveWorkoutExercise: Identifiable {
 
     var isInSuperset: Bool {
         supersetId != nil
+    }
+
+    var hasRepRangeGoal: Bool {
+        targetRepMin != nil && targetRepMax != nil
+    }
+
+    var allCompletedSetsAtUpperLimit: Bool {
+        guard let max = targetRepMax else { return false }
+        guard !sets.isEmpty else { return false }
+        return sets.allSatisfy { $0.isCompleted && $0.actualReps >= max }
     }
 }
 
@@ -94,6 +108,7 @@ struct WatchWorkoutSummary {
         let completedSets: Int
         let totalSets: Int
         let isComplete: Bool
+        var repGoalAchieved: Bool = false
     }
 
     var formattedDuration: String {
@@ -150,6 +165,8 @@ struct CompletedWatchExercise: Codable {
     let order: Int
     let supersetId: UUID?
     let supersetOrder: Int
+    var targetRepMin: Int? = nil
+    var targetRepMax: Int? = nil
 }
 
 struct CompletedWatchSet: Codable {
@@ -190,7 +207,9 @@ extension WatchExercise {
             },
             order: order,
             supersetId: supersetId,
-            supersetOrder: supersetOrder
+            supersetOrder: supersetOrder,
+            targetRepMin: targetRepMin,
+            targetRepMax: targetRepMax
         )
     }
 }
@@ -216,7 +235,9 @@ extension ActiveWorkoutExercise {
             },
             order: order,
             supersetId: supersetId,
-            supersetOrder: supersetOrder
+            supersetOrder: supersetOrder,
+            targetRepMin: targetRepMin,
+            targetRepMax: targetRepMax
         )
     }
 }

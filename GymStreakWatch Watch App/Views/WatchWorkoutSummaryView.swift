@@ -161,6 +161,13 @@ struct WatchWorkoutSummaryView: View {
                 .foregroundStyle(OnyxWatch.Colors.textPrimary)
                 .lineLimit(1)
 
+            // Rep goal achieved trophy
+            if exercise.repGoalAchieved {
+                Image(systemName: "trophy.fill")
+                    .font(.system(size: 10))
+                    .foregroundStyle(.orange)
+            }
+
             Spacer()
 
             Text("\(exercise.completedSets)/\(exercise.totalSets)")
@@ -193,9 +200,9 @@ struct WatchWorkoutSummaryView: View {
             completionPercentage: 89,
             activeCalories: 234,
             exercises: [
-                .init(id: UUID(), name: "Bench Press", muscleGroup: "Chest", completedSets: 3, totalSets: 3, isComplete: true),
-                .init(id: UUID(), name: "Shoulder Press", muscleGroup: "Shoulders", completedSets: 3, totalSets: 3, isComplete: true),
-                .init(id: UUID(), name: "Tricep Pushdown", muscleGroup: "Triceps", completedSets: 2, totalSets: 3, isComplete: false)
+                .init(id: UUID(), name: "Bench Press", muscleGroup: "Chest", completedSets: 3, totalSets: 3, isComplete: true, repGoalAchieved: true),
+                .init(id: UUID(), name: "Shoulder Press", muscleGroup: "Shoulders", completedSets: 3, totalSets: 3, isComplete: true, repGoalAchieved: false),
+                .init(id: UUID(), name: "Tricep Pushdown", muscleGroup: "Triceps", completedSets: 2, totalSets: 3, isComplete: false, repGoalAchieved: false)
             ]
         ),
         onDismiss: {}
