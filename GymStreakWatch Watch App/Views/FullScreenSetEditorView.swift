@@ -137,6 +137,7 @@ struct FullScreenSetEditorView: View {
                             : false,
                         currentSetIndex: displayedSetIndex,
                         totalSets: totalSets,
+                        completedSets: displayedExercise.sets.map { $0.isCompleted },
                         onComplete: { toggleSetCompletion() },
                         onPrevious: { goToPreviousSet() },
                         onNext: { goToNextSet() },
