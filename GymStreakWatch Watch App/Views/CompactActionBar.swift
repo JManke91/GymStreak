@@ -29,83 +29,100 @@ struct CompactActionBar: View {
     }
 
     var body: some View {
-        VStack(spacing: 0) {
+        VStack(spacing: 4) {
             if totalSets > 1 {
-                // Multi-set layout: Prev + Complete + Next
-                HStack(spacing: 4) {
-                    // Previous button
-                    Button {
-                        onPrevious()
-                    } label: {
-                        Image(systemName: "chevron.left")
-                    }
-                    .buttonStyle(.bordered)
-                    .controlSize(.mini)
-                    .disabled(!hasPrevious)
-                    .opacity(hasPrevious ? 1.0 : 0.3)
-
-                    Spacer()
-
-                    // Complete button
-                    Button {
-                        handleComplete()
-                    } label: {
-                        HStack(spacing: 4) {
-                            Image(systemName: isCompleted ? "checkmark.circle.fill" : "checkmark.circle")
-                                .font(.system(size: 16, weight: .semibold))
-                                .symbolRenderingMode(.hierarchical)
-
-                            HStack(alignment: .firstTextBaseline, spacing: 0) {
-                                Text("\(currentSetIndex + 1)")
-                                    .font(.system(size: 13, weight: .semibold))
-                                Text("/\(totalSets)")
-                                    .font(.system(size: 10, weight: .medium))
-                            }
-                            .monospacedDigit()
+                // Multi-set layout: Dots on top, arrows beside button
+                VStack(spacing: 4) {
+                    // Progress dots (centered)
+                    HStack(spacing: 4) {
+                        ForEach(0..<totalSets, id: \.self) { index in
+                            Circle()
+                                .fill(index == currentSetIndex ? Color.blue : Color.gray.opacity(0.4))
+                                .frame(width: 6, height: 6)
                         }
                     }
-                    .buttonStyle(.borderedProminent)
-                    .tint(isCompleted ? .green : .blue)
-                    .buttonBorderShape(.capsule)
-                    .accessibilityLabel(isCompleted ? "Set completed. Tap to mark incomplete" : "Complete set")
+                    .padding(.vertical, 2)
 
-                    Spacer()
+                    // Navigation arrows + Complete button row
+                    HStack(spacing: 8) {
+                        // Previous button
+                        Button {
+                            onPrevious()
+                        } label: {
+                            Image(systemName: "chevron.left")
+                                .font(.system(size: 14, weight: .bold))
+                        }
+                        .buttonStyle(.plain)
+                        .foregroundStyle(hasPrevious ? .primary : .tertiary)
+                        .disabled(!hasPrevious)
 
-                    // Next button
-                    Button {
-                        onNext()
-                    } label: {
-                        Image(systemName: "chevron.right")
+                        // Complete button with exercise name inside
+                        Button {
+                            handleComplete()
+                        } label: {
+                            HStack(spacing: 6) {
+                                Image(systemName: isCompleted ? "checkmark.circle.fill" : "checkmark.circle")
+                                    .font(.system(size: 16, weight: .semibold))
+                                    .symbolRenderingMode(.hierarchical)
+
+                                VStack(alignment: .leading, spacing: 0) {
+                                    Text(isCompleted ? "Done" : "Set")
+                                        .font(.system(size: 13, weight: .semibold))
+                                    if let name = exerciseName, !name.isEmpty {
+                                        Text(name)
+                                            .font(.system(size: 10, weight: .regular))
+                                            .opacity(0.8)
+                                            .lineLimit(1)
+                                    }
+                                }
+                            }
+                            .frame(height: 36)
+                            .padding(.horizontal, 12)
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .tint(isCompleted ? .green : .blue)
+                        .buttonBorderShape(.capsule)
+                        .accessibilityLabel(isCompleted ? "Set \(currentSetIndex + 1) of \(totalSets) completed" : "Complete set \(currentSetIndex + 1) of \(totalSets)")
+
+                        // Next button
+                        Button {
+                            onNext()
+                        } label: {
+                            Image(systemName: "chevron.right")
+                                .font(.system(size: 14, weight: .bold))
+                        }
+                        .buttonStyle(.plain)
+                        .foregroundStyle(hasNext ? .primary : .tertiary)
+                        .disabled(!hasNext)
                     }
-                    .buttonStyle(.bordered)
-                    .controlSize(.mini)
-                    .disabled(!hasNext)
-                    .opacity(hasNext ? 1.0 : 0.3)
                 }
-                .padding(.horizontal, 12)
+                .padding(.horizontal, 8)
             } else {
-                // Single set layout: Full-width Complete button
+                // Single set layout: Full-width Complete button with exercise name inside
                 Button {
                     handleComplete()
                 } label: {
                     HStack(spacing: 6) {
                         Image(systemName: isCompleted ? "checkmark.circle.fill" : "checkmark.circle")
-                            .font(.system(size: 18, weight: .semibold))
+                            .font(.system(size: 16, weight: .semibold))
                             .symbolRenderingMode(.hierarchical)
-                        Text(isCompleted ? "Done" : "Complete")
-                            .font(.system(size: 13, weight: .semibold))
+                        VStack(alignment: .leading, spacing: 0) {
+                            Text(isCompleted ? "Done" : "Set")
+                                .font(.system(size: 13, weight: .semibold))
+                            if let name = exerciseName, !name.isEmpty {
+                                Text(name)
+                                    .font(.system(size: 10, weight: .regular))
+                                    .opacity(0.8)
+                                    .lineLimit(1)
+                            }
+                        }
                     }
+                    .frame(height: 36)
                 }
                 .buttonStyle(.borderedProminent)
                 .tint(isCompleted ? .green : .blue)
                 .buttonBorderShape(.capsule)
             }
-
-            // show current exercise name
-            Text(exerciseName ?? "")
-                .font(.system(size: 12, weight: .light))
-                .lineLimit(1)
-                .truncationMode(.tail)
         }
 
 

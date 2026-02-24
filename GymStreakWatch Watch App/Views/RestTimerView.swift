@@ -86,11 +86,12 @@ struct NewRestTimerView: View {
 
     // MARK: ─── Running UI
     private var runningContent: some View {
-        VStack(spacing: 10) {
+        VStack(spacing: 6) {
+            // MARK: - Top Row: Secondary Metrics
             HStack {
-                Text("Rest")
-                    .font(.headline)
-                    .foregroundStyle(.secondary)
+                if let heartRate = viewModel.heartRate, let calories = viewModel.activeCalories {
+                    WorkoutMetricsView(heartRate: heartRate, calories: calories, size: .small)
+                }
 
                 Spacer()
 
@@ -113,20 +114,29 @@ struct NewRestTimerView: View {
             }
             .padding(.horizontal, 6)
 
-            HStack(spacing: 8) {
-                if let heartRate = viewModel.heartRate, let calories = viewModel.activeCalories {
-                    WorkoutMetricsView(heartRate: heartRate, calories: calories, size: .medium)
-                }
+            Spacer()
+
+            // MARK: - Center: Primary Timer (Label + Countdown)
+            VStack(spacing: 2) {
+                Text("Rest")
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(.secondary)
+                    .textCase(.uppercase)
+                    .tracking(1)
 
                 Text(formattedTime)
-                    .font(.system(.title, design: .rounded, weight: .bold).monospacedDigit())
+                    .font(.system(size: 44, weight: .bold, design: .rounded).monospacedDigit())
                     .foregroundStyle(shouldPulse ? .red : .white)
                     .shadow(color: (shouldPulse ? Color.red : Color.white).opacity(0.5), radius: shouldPulse ? 8 : 4)
                     .scaleEffect(shouldPulse ? (pulse ? 1.15 : 1.0) : 1.0)
                     .animation(.easeInOut(duration: 0.3), value: shouldPulse)
             }
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel("Rest timer, \(formattedTime) remaining")
 
+            Spacer()
 
+            // MARK: - Bottom Row: Actions
             HStack(spacing: 10) {
                 Button(action: onMinimize) {
                     Image(systemName: "rectangle.compress.vertical")
