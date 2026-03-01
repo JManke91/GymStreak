@@ -37,6 +37,7 @@
 "exercises.name" = "Exercise Name";
 "exercises.description" = "Description";
 "exercises.muscle_group" = "Muscle Group";
+"exercises.search" = "Search exercises or muscle groups";
 
 // MARK: - Exercise Detail View
 "exercise.delete" = "Delete Exercise";
