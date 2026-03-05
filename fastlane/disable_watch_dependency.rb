@@ -2,12 +2,11 @@
 
 # Script to temporarily disable Watch app dependency for simulator builds
 # This allows UI tests to build without requiring the Watch app
+# Uses pattern matching instead of hardcoded IDs for robustness
 
 require 'fileutils'
 
 PROJECT_FILE = '../GymStreak.xcodeproj/project.pbxproj'
-WATCH_DEPENDENCY_ID = 'A6FBC5D52ECCED100095483C /* PBXTargetDependency */'
-WATCH_EMBED_PHASE_ID = 'A6FBC5D72ECCED100095483C /* Embed Watch Content */'
 BACKUP_FILE = './project.pbxproj.backup'
 
 def disable_watch_dependency
@@ -19,20 +18,31 @@ def disable_watch_dependency
   # Read project file
   content = File.read(PROJECT_FILE)
 
-  # Remove the Watch app target dependency line
-  modified_content = content.gsub(
-    /^\s+#{Regexp.escape(WATCH_DEPENDENCY_ID)},\n/,
-    ''
-  )
+  # Remove the Watch app target dependency reference (in dependencies array)
+  # Matches: <whitespace><ID> /* PBXTargetDependency */,<newline>
+  # But only the one that references the Watch target
+  # First find the Watch dependency ID
+  watch_dep_id = nil
+  content.scan(/(\w+) \/\* PBXTargetDependency \*\/ = \{\s*isa = PBXTargetDependency;\s*target = \w+ \/\* GymStreakWatch Watch App \*\//) do |match|
+    watch_dep_id = match[0]
+  end
 
-  # Remove the Embed Watch Content build phase line
-  modified_content = modified_content.gsub(
-    /^\s+#{Regexp.escape(WATCH_EMBED_PHASE_ID)},\n/,
-    ''
-  )
+  if watch_dep_id
+    # Remove from dependencies arrays
+    content = content.gsub(/^\s+#{watch_dep_id} \/\* PBXTargetDependency \*\/,\n/, '')
+  end
+
+  # Remove the Embed Watch Content build phase reference from buildPhases arrays
+  content = content.gsub(/^\s+\w+ \/\* Embed Watch Content \*\/,\n/, '')
+
+  # Remove the Watch app build file in Embed Watch Content
+  content = content.gsub(/^\s+\w+ \/\* GymStreakWatch Watch App\.app in Embed Watch Content \*\/,\n/, '')
+
+  # Remove the Watch target from the project targets list
+  content = content.gsub(/^\s+\w+ \/\* GymStreakWatch Watch App \*\/,\n/, '')
 
   # Write modified content
-  File.write(PROJECT_FILE, modified_content)
+  File.write(PROJECT_FILE, content)
 
   puts "✓ Watch app dependency and embed phase disabled"
 end
