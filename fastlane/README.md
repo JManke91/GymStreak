@@ -21,15 +21,7 @@ For _fastlane_ installation instructions, see [Installing _fastlane_](https://do
 [bundle exec] fastlane ios screenshots
 ```
 
-Generate screenshots for App Store (light and dark mode)
-
-### ios screenshots_light
-
-```sh
-[bundle exec] fastlane ios screenshots_light
-```
-
-Generate only light mode screenshots
+Generate screenshots for App Store (dark mode only)
 
 ### ios screenshots_dark
 
@@ -37,7 +29,7 @@ Generate only light mode screenshots
 [bundle exec] fastlane ios screenshots_dark
 ```
 
-Generate only dark mode screenshots
+Generate only dark mode screenshots (alias for screenshots lane)
 
 ### ios test_ui
 
