@@ -41,6 +41,7 @@
 "exercises.name" = "Übungsname";
 "exercises.description" = "Beschreibung";
 "exercises.muscle_group" = "Muskelgruppe";
+"exercises.search" = "Übungen oder Muskelgruppen suchen";
 
 // MARK: - Exercise Detail View
 "exercise.delete" = "Übung löschen";
