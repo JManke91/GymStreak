@@ -52,7 +52,11 @@ final class AppState: ObservableObject {
     }
 
     func connectServices() {
-        WatchConnectivityManager.shared.setRoutineStore(routineStore)
+        if ProcessInfo.processInfo.arguments.contains("-UI_TESTING") {
+            routineStore.updateRoutines(WatchTestDataSeeder.sampleRoutines())
+        } else {
+            WatchConnectivityManager.shared.setRoutineStore(routineStore)
+        }
         // Register workout view model for Action Button intents
         AppStateProvider.shared.setWorkoutViewModel(workoutViewModel)
     }

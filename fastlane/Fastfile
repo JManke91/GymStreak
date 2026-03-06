@@ -87,6 +87,40 @@ platform :ios do
     )
   end
 
+  desc "Generate Apple Watch screenshots for App Store"
+  lane :watch_screenshots do
+    snapshot(
+      scheme: "GymStreakWatchUITests",
+      devices: [
+        "Apple Watch Ultra 3 (49mm)",
+        "Apple Watch Series 11 (46mm)"
+      ],
+      languages: ["en-US", "de-DE"],
+      ios_version: "26.2",
+      sdk: "watchsimulator",
+      clean: true,
+      reinstall_app: true,
+      erase_simulator: true,
+      skip_open_summary: true,
+      buildlog_path: "./fastlane/logs",
+      dark_mode: true,
+      only_testing: ["GymStreakWatchUITests/GymStreakWatchUITests/testGenerateWatchScreenshotsDarkMode"],
+      clear_previous_screenshots: false,
+      output_directory: "./fastlane/screenshots",
+      configuration: "Debug",
+      launch_arguments: ["-UI_TESTING", "1"],
+      number_of_retries: 3,
+      concurrent_simulators: false,
+      xcargs: "-skipPackagePluginValidation -skipMacroValidation"
+    )
+  end
+
+  desc "Generate all screenshots (iOS + Watch)"
+  lane :all_screenshots do
+    screenshots
+    watch_screenshots
+  end
+
   desc "Upload screenshots to App Store Connect"
   lane :upload_screenshots do
     deliver(

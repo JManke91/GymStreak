@@ -39,6 +39,22 @@ Generate only dark mode screenshots (alias for screenshots lane)
 
 Run UI tests without capturing screenshots
 
+### ios watch_screenshots
+
+```sh
+[bundle exec] fastlane ios watch_screenshots
+```
+
+Generate Apple Watch screenshots for App Store
+
+### ios all_screenshots
+
+```sh
+[bundle exec] fastlane ios all_screenshots
+```
+
+Generate all screenshots (iOS + Watch)
+
 ### ios upload_screenshots
 
 ```sh
