@@ -115,9 +115,14 @@ final class WatchWorkoutViewModel: ObservableObject {
             .store(in: &cancellabes)
     }
 
+    private var isUITesting: Bool {
+        ProcessInfo.processInfo.arguments.contains("-UI_TESTING")
+    }
+
     // MARK: - Notification Permission
 
     private func requestNotificationPermission() {
+        guard !isUITesting else { return }
         UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge]) { granted, error in
             if let error = error {
                 print("Watch notification permission error: \(error)")
@@ -232,6 +237,16 @@ final class WatchWorkoutViewModel: ObservableObject {
         currentExerciseIndex = 0
         currentSetIndex = 0
         workoutStartTime = Date()
+
+        // Skip HealthKit for UI testing - immediately set running state with mock data
+        if isUITesting {
+            isWorkoutActive = true
+            workoutState = .running
+            heartRate = 142
+            activeCalories = 87
+            elapsedTimeString = "12:34"
+            return
+        }
 
         // Request HealthKit authorization and start session
         let authorized = await healthKitManager.requestAuthorization()
