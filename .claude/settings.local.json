@@ -77,7 +77,8 @@
       "WebFetch(domain:www.cocoaswitch.com)",
       "Bash(git revert:*)",
       "Bash(git stash:*)",
-      "Bash(git merge:*)"
+      "Bash(git merge:*)",
+      "Bash(git push:*)"
     ],
     "defaultMode": "acceptEdits"
   }
