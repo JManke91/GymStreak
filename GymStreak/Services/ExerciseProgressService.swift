@@ -47,36 +47,48 @@ class ExerciseProgressService {
                     exercise.exerciseName.lowercased() == normalizedName
                 }
 
+                // Aggregate all matching exercises into a single data point per session
+                var sessionMaxWeight: Double = 0
+                var sessionTotalVolume: Double = 0
+                var sessionTotalReps: Int = 0
+                var sessionTotalSets: Int = 0
+                var sessionBest1RM: Double = 0
+                var hasCompletedSets = false
+
                 for exercise in matchingExercises {
                     let completedSets = exercise.setsList.filter(\.isCompleted)
                     guard !completedSets.isEmpty else { continue }
+                    hasCompletedSets = true
 
                     let usePlanned = exercise.progressiveOverloadApplied
                     let maxWeight = completedSets.map { usePlanned ? $0.plannedWeight : $0.actualWeight }.max() ?? 0
-                    let totalVolume = completedSets.reduce(0) {
+                    sessionMaxWeight = max(sessionMaxWeight, maxWeight)
+
+                    sessionTotalVolume += completedSets.reduce(0) {
                         let w = usePlanned ? $1.plannedWeight : $1.actualWeight
                         let r = usePlanned ? $1.plannedReps : $1.actualReps
                         return $0 + (w * Double(r))
                     }
-                    let totalReps = completedSets.reduce(0) { $0 + (usePlanned ? $1.plannedReps : $1.actualReps) }
-                    let totalSets = completedSets.count
+                    sessionTotalReps += completedSets.reduce(0) { $0 + (usePlanned ? $1.plannedReps : $1.actualReps) }
+                    sessionTotalSets += completedSets.count
 
-                    // Calculate estimated 1RM using Epley formula: weight * (1 + reps/30)
-                    // Use the best set (highest weight with reps completed)
                     let estimated1RM = calculateEstimated1RM(from: completedSets, usePlannedValues: usePlanned)
-
-                    let dataPoint = ExerciseProgressDataPoint(
-                        date: session.startTime,
-                        maxWeight: maxWeight,
-                        estimated1RM: estimated1RM,
-                        totalVolume: totalVolume,
-                        totalSets: totalSets,
-                        totalReps: totalReps,
-                        workoutSessionId: session.id
-                    )
-
-                    dataPoints.append(dataPoint)
+                    sessionBest1RM = max(sessionBest1RM, estimated1RM)
                 }
+
+                guard hasCompletedSets else { continue }
+
+                let dataPoint = ExerciseProgressDataPoint(
+                    date: session.startTime,
+                    maxWeight: sessionMaxWeight,
+                    estimated1RM: sessionBest1RM,
+                    totalVolume: sessionTotalVolume,
+                    totalSets: sessionTotalSets,
+                    totalReps: sessionTotalReps,
+                    workoutSessionId: session.id
+                )
+
+                dataPoints.append(dataPoint)
             }
 
             return ExerciseProgressData(

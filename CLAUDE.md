@@ -204,3 +204,11 @@ Use Mappers to translate DTO <-> Domain Model
 - **HealthKitCyclingStatsRepository**: Manages all HealthKit interactions
 - **Workout deduplication**: Prevents double-counting workouts from multiple sources
 - **Authorization handling**: Manages HealthKit permissions
+
+## Active Technologies
+- Swift 6 with strict concurrency + SwiftUI, SwiftUI Charts framework (001-improve-progress-charts)
+- SwiftData (unchanged — no persistence changes) (001-improve-progress-charts)
+- N/A (display-only fix, no persistence changes) (002-fix-chart-display)
+
+## Recent Changes
+- 001-improve-progress-charts: Added Swift 6 with strict concurrency + SwiftUI, SwiftUI Charts framework

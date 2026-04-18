@@ -78,7 +78,14 @@
       "Bash(git revert:*)",
       "Bash(git stash:*)",
       "Bash(git merge:*)",
-      "Bash(git push:*)"
+      "Bash(git push:*)",
+      "Bash(.specify/scripts/bash/create-new-feature.sh \"Improve progress chart clarity: rename unclear metric labels \\(gesch. 1RM, Volume\\), add units to chart axes, and enable tapping data points to see exact values\" --json --short-name \"improve-progress-charts\" \"Improve Progress Charts UX\")",
+      "Bash(.specify/scripts/bash/check-prerequisites.sh --json --paths-only)",
+      "Bash(.specify/scripts/bash/setup-plan.sh --json)",
+      "Bash(.specify/scripts/bash/update-agent-context.sh claude:*)",
+      "Bash(.specify/scripts/bash/check-prerequisites.sh --json)",
+      "Bash(.specify/scripts/bash/check-prerequisites.sh --json --require-tasks --include-tasks)",
+      "Bash(.specify/scripts/bash/create-new-feature.sh \"Fix progress chart display issues: Y-axis units incorrect for total volume tab, and remove area fills from all chart tabs\" --json --short-name \"fix-chart-display\")"
     ],
     "defaultMode": "acceptEdits"
   }

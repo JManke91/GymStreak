@@ -471,7 +471,12 @@
 "chart.metric" = "Metric";
 "chart.metric.max_weight" = "Max Weight";
 "chart.metric.estimated_1rm" = "Est. 1RM";
-"chart.metric.volume" = "Volume";
+"chart.metric.volume" = "Total Volume";
+"chart.metric.max_weight.description" = "The heaviest weight lifted in a single set during the session.";
+"chart.metric.estimated_1rm.description" = "Estimated one-rep max — the maximum weight you could lift once, calculated using the Epley formula (weight × (1 + reps ÷ 30)).";
+"chart.metric.volume.description" = "Total work performed — the sum of weight × reps across all sets in the session.";
+"chart.metric.info" = "Metric info";
+"chart.tooltip.date_label" = "Date";
 "chart.empty.title" = "No Data Yet";
 "chart.empty.message" = "Complete workouts with this exercise to see your progress";
 "chart.personal_record" = "Personal Record";

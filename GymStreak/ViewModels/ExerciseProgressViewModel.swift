@@ -12,6 +12,7 @@ class ExerciseProgressViewModel: ObservableObject {
     @Published var selectedTimeframe: ChartTimeframe = .month
     @Published var selectedMetric: ProgressMetric = .maxWeight
     @Published var progressData: ExerciseProgressData?
+    @Published var selectedDataPoint: SelectedDataPoint?
     @Published var isLoading = true
 
     private var exerciseName: String
@@ -29,6 +30,7 @@ class ExerciseProgressViewModel: ObservableObject {
     func updateExercise(_ newExerciseName: String, context: ModelContext) {
         self.exerciseName = newExerciseName
         self.modelContext = context
+        selectedDataPoint = nil
         loadData()
     }
 
@@ -43,11 +45,30 @@ class ExerciseProgressViewModel: ObservableObject {
 
     func updateTimeframe(_ timeframe: ChartTimeframe) {
         selectedTimeframe = timeframe
+        selectedDataPoint = nil
         loadData()
     }
 
     func updateMetric(_ metric: ProgressMetric) {
         selectedMetric = metric
+        selectedDataPoint = nil
+    }
+
+    // MARK: - Data Point Selection
+
+    func selectDataPoint(_ dataPoint: ExerciseProgressDataPoint, for metric: ProgressMetric) {
+        let value = dataPoint.value(for: metric)
+        let displayValue = formatCompactValue(value, unit: metric.unit)
+        let displayDate = dataPoint.date.formatted(date: .abbreviated, time: .omitted)
+        selectedDataPoint = SelectedDataPoint(
+            dataPoint: dataPoint,
+            displayValue: displayValue,
+            displayDate: displayDate
+        )
+    }
+
+    func clearSelection() {
+        selectedDataPoint = nil
     }
 
     // MARK: - Computed Properties for Display

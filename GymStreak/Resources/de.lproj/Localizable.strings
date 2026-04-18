@@ -471,7 +471,12 @@
 "chart.metric" = "Metrik";
 "chart.metric.max_weight" = "Max. Gewicht";
 "chart.metric.estimated_1rm" = "Gesch. 1RM";
-"chart.metric.volume" = "Volumen";
+"chart.metric.volume" = "Gesamtvolumen";
+"chart.metric.max_weight.description" = "Das schwerste Gewicht, das in einem einzelnen Satz während der Einheit gehoben wurde.";
+"chart.metric.estimated_1rm.description" = "Geschätztes Einer-Maximum — das maximale Gewicht, das du einmal heben könntest, berechnet mit der Epley-Formel (Gewicht × (1 + Wdh. ÷ 30)).";
+"chart.metric.volume.description" = "Gesamte geleistete Arbeit — die Summe aus Gewicht × Wiederholungen über alle Sätze der Einheit.";
+"chart.metric.info" = "Metrik-Info";
+"chart.tooltip.date_label" = "Datum";
 "chart.empty.title" = "Noch keine Daten";
 "chart.empty.message" = "Absolviere Workouts mit dieser Übung, um deinen Fortschritt zu sehen";
 "chart.personal_record" = "Persönlicher Rekord";

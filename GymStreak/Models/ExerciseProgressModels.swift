@@ -28,6 +28,26 @@ enum ChartTimeframe: String, CaseIterable, Identifiable {
         }
     }
 
+    var axisStrideComponent: Calendar.Component {
+        switch self {
+        case .week: return .day
+        case .month: return .weekOfYear
+        case .threeMonths: return .month
+        case .year: return .month
+        case .all: return .month
+        }
+    }
+
+    var axisStrideValue: Int {
+        switch self {
+        case .week: return 1
+        case .month: return 1
+        case .threeMonths: return 1
+        case .year: return 2
+        case .all: return 3
+        }
+    }
+
     var startDate: Date {
         let calendar = Calendar.current
         let now = Date()
@@ -70,6 +90,41 @@ enum ProgressMetric: String, CaseIterable, Identifiable {
         case .volume: return "kg"
         }
     }
+
+    var localizedDescription: String {
+        switch self {
+        case .maxWeight: return "chart.metric.max_weight.description".localized
+        case .estimated1RM: return "chart.metric.estimated_1rm.description".localized
+        case .volume: return "chart.metric.volume.description".localized
+        }
+    }
+}
+
+// MARK: - Compact Number Formatting
+
+/// Formats a number using compact notation (e.g., 1.2k, 3.5M) with optional unit suffix
+func formatCompactValue(_ value: Double, unit: String? = nil) -> String {
+    let formatted: String
+    switch abs(value) {
+    case 0..<1:
+        formatted = String(format: "%.1f", value)
+    case 1..<1_000:
+        formatted = String(format: "%.0f", value)
+    case 1_000..<1_000_000:
+        let k = value / 1_000
+        formatted = k.truncatingRemainder(dividingBy: 1) == 0
+            ? String(format: "%.0fk", k)
+            : String(format: "%.1fk", k)
+    default:
+        let m = value / 1_000_000
+        formatted = m.truncatingRemainder(dividingBy: 1) == 0
+            ? String(format: "%.0fM", m)
+            : String(format: "%.1fM", m)
+    }
+    if let unit {
+        return "\(formatted) \(unit)"
+    }
+    return formatted
 }
 
 // MARK: - Exercise Progress Data Point
@@ -140,6 +195,14 @@ struct ExerciseProgressData {
     var hasEnoughDataForTrend: Bool {
         dataPoints.count >= 2
     }
+}
+
+// MARK: - Selected Data Point
+
+struct SelectedDataPoint {
+    let dataPoint: ExerciseProgressDataPoint
+    let displayValue: String
+    let displayDate: String
 }
 
 // MARK: - Previous Exercise Performance

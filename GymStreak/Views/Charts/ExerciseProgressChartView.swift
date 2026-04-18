@@ -8,6 +8,7 @@ import Charts
 
 struct ExerciseProgressChartView: View {
     @State private var currentExerciseName: String
+    @State private var showingMetricInfo = false
     let availableExercises: [ExerciseWithHistory]
 
     @StateObject private var viewModel: ExerciseProgressViewModel
@@ -30,23 +31,36 @@ struct ExerciseProgressChartView: View {
     var body: some View {
         ScrollView {
             VStack(spacing: 20) {
-                // Timeframe Picker
                 ChartTimeframePicker(selection: $viewModel.selectedTimeframe) { timeframe in
                     viewModel.updateTimeframe(timeframe)
                 }
                 .padding(.horizontal)
 
-                // Metric Picker
-                Picker("chart.metric".localized, selection: $viewModel.selectedMetric) {
-                    ForEach(ProgressMetric.allCases) { metric in
-                        Text(metric.localizedTitle).tag(metric)
+                // Metric Picker with Info Button
+                HStack {
+                    Picker("chart.metric".localized, selection: $viewModel.selectedMetric) {
+                        ForEach(ProgressMetric.allCases) { metric in
+                            Text(metric.localizedTitle).tag(metric)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                    .onChange(of: viewModel.selectedMetric) { _, newValue in
+                        viewModel.updateMetric(newValue)
+                    }
+
+                    Button {
+                        showingMetricInfo = true
+                    } label: {
+                        Image(systemName: "info.circle")
+                            .font(.body)
+                            .foregroundStyle(DesignSystem.Colors.textSecondary)
+                    }
+                    .accessibilityLabel("chart.metric.info".localized)
+                    .popover(isPresented: $showingMetricInfo) {
+                        MetricInfoPopover(metric: viewModel.selectedMetric)
                     }
                 }
-                .pickerStyle(.segmented)
                 .padding(.horizontal)
-                .onChange(of: viewModel.selectedMetric) { _, newValue in
-                    viewModel.updateMetric(newValue)
-                }
 
                 // Chart Content
                 if viewModel.isLoading {
@@ -55,12 +69,15 @@ struct ExerciseProgressChartView: View {
                 } else if let data = viewModel.progressData, data.hasEnoughData {
                     ProgressChartContent(
                         data: data,
-                        metric: viewModel.selectedMetric
+                        metric: viewModel.selectedMetric,
+                        timeframe: viewModel.selectedTimeframe,
+                        selectedDataPoint: viewModel.selectedDataPoint,
+                        onSelectPoint: { viewModel.selectDataPoint($0, for: viewModel.selectedMetric) },
+                        onClearSelection: { viewModel.clearSelection() }
                     )
                     .frame(height: 250)
                     .padding(.horizontal)
 
-                    // Summary Stats
                     SummaryStatsView(viewModel: viewModel)
                         .padding(.horizontal)
                 } else {
@@ -107,7 +124,6 @@ struct ExerciseSwitcherMenu: View {
     let exercises: [ExerciseWithHistory]
     let onSelect: (String) -> Void
 
-    // Group exercises by muscle group for the menu
     private var groupedExercises: [String: [ExerciseWithHistory]] {
         Dictionary(grouping: exercises) { $0.primaryMuscleGroup }
     }
@@ -154,6 +170,30 @@ struct ExerciseSwitcherMenu: View {
 struct ProgressChartContent: View {
     let data: ExerciseProgressData
     let metric: ProgressMetric
+    let timeframe: ChartTimeframe
+    let selectedDataPoint: SelectedDataPoint?
+    let onSelectPoint: (ExerciseProgressDataPoint) -> Void
+    let onClearSelection: () -> Void
+
+    /// Stable Y-axis domain to prevent axis recalculation on selection changes
+    private var yDomain: ClosedRange<Double> {
+        let values = data.dataPoints.map { $0.value(for: metric) }
+        let minValue = values.min() ?? 0
+        let maxValue = values.max() ?? 0
+
+        // Add 10% padding; ensure minimum is 0 for weight-based metrics
+        let padding = max((maxValue - minValue) * 0.1, maxValue * 0.05)
+        let lower = max(0, minValue - padding)
+        let upper = maxValue + padding
+
+        // Avoid zero-range domain (all values identical or single point)
+        guard lower < upper else {
+            let fallback = max(maxValue * 0.1, 1)
+            return max(0, maxValue - fallback)...(maxValue + fallback)
+        }
+
+        return lower...upper
+    }
 
     var body: some View {
         Chart {
@@ -173,30 +213,21 @@ struct ProgressChartContent: View {
                 .symbolSize(30)
             }
 
-            // Area under the line
-            ForEach(data.dataPoints) { point in
-                AreaMark(
-                    x: .value("Date", point.date),
-                    y: .value(metric.localizedTitle, point.value(for: metric))
-                )
-                .foregroundStyle(
-                    LinearGradient(
-                        colors: [
-                            DesignSystem.Colors.tint.opacity(0.3),
-                            DesignSystem.Colors.tint.opacity(0.0)
-                        ],
-                        startPoint: .top,
-                        endPoint: .bottom
-                    )
-                )
-                .interpolationMethod(.catmullRom)
+            if let selected = selectedDataPoint {
+                RuleMark(x: .value("Selected", selected.dataPoint.date))
+                    .foregroundStyle(DesignSystem.Colors.textSecondary.opacity(0.5))
+                    .lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 4]))
+                    .annotation(position: .top, spacing: 8) {
+                        ChartDataPointAnnotation(selectedPoint: selected)
+                    }
             }
         }
+        .chartYScale(domain: yDomain)
         .chartXAxis {
-            AxisMarks(values: .automatic) { _ in
+            AxisMarks(values: .stride(by: timeframe.axisStrideComponent, count: timeframe.axisStrideValue)) { _ in
                 AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5))
                     .foregroundStyle(DesignSystem.Colors.divider)
-                AxisValueLabel()
+                AxisValueLabel(format: axisDateFormat)
                     .foregroundStyle(DesignSystem.Colors.textSecondary)
             }
         }
@@ -206,100 +237,53 @@ struct ProgressChartContent: View {
                     .foregroundStyle(DesignSystem.Colors.divider)
                 AxisValueLabel {
                     if let doubleValue = value.as(Double.self) {
-                        Text(String(format: "%.0f", doubleValue))
+                        Text(formatCompactValue(doubleValue, unit: metric.unit))
                             .foregroundStyle(DesignSystem.Colors.textSecondary)
                     }
                 }
             }
         }
-    }
-}
-
-// MARK: - Summary Stats View
-
-struct SummaryStatsView: View {
-    @ObservedObject var viewModel: ExerciseProgressViewModel
-
-    var body: some View {
-        HStack(spacing: 16) {
-            // Personal Record
-            StatCard(
-                title: "chart.personal_record".localized,
-                value: viewModel.personalRecordString ?? "-",
-                icon: "trophy.fill",
-                iconColor: .yellow
-            )
-
-            // Trend
-            StatCard(
-                title: "chart.trend".localized,
-                value: viewModel.trendPercentageString ?? "-",
-                icon: viewModel.trendIsPositive ? "arrow.up.right" : "arrow.down.right",
-                iconColor: viewModel.trendIsPositive ? DesignSystem.Colors.success : DesignSystem.Colors.warning
-            )
-
-            // Sessions
-            StatCard(
-                title: "chart.sessions".localized,
-                value: viewModel.sessionCountString ?? "-",
-                icon: "figure.strengthtraining.traditional",
-                iconColor: DesignSystem.Colors.tint
-            )
-        }
-    }
-}
-
-// MARK: - Stat Card
-
-struct StatCard: View {
-    let title: String
-    let value: String
-    let icon: String
-    let iconColor: Color
-
-    var body: some View {
-        VStack(spacing: 8) {
-            Image(systemName: icon)
-                .font(.title3)
-                .foregroundStyle(iconColor)
-
-            Text(value)
-                .font(.headline)
-                .foregroundStyle(DesignSystem.Colors.textPrimary)
-
-            Text(title)
-                .font(.caption)
-                .foregroundStyle(DesignSystem.Colors.textSecondary)
-        }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 12)
-        .background(DesignSystem.Colors.card)
-        .clipShape(RoundedRectangle(cornerRadius: 12))
-    }
-}
-
-// MARK: - Empty Chart View
-
-struct EmptyChartView: View {
-    var body: some View {
-        VStack(spacing: 16) {
-            Image(systemName: "chart.line.uptrend.xyaxis")
-                .font(.system(size: 48))
-                .foregroundStyle(DesignSystem.Colors.textTertiary)
-
-            VStack(spacing: 4) {
-                Text("chart.empty.title".localized)
-                    .font(.headline)
-                    .foregroundStyle(DesignSystem.Colors.textPrimary)
-
-                Text("chart.empty.message".localized)
-                    .font(.subheadline)
-                    .foregroundStyle(DesignSystem.Colors.textSecondary)
-                    .multilineTextAlignment(.center)
+        .chartOverlay { proxy in
+            GeometryReader { geo in
+                Rectangle().fill(.clear).contentShape(Rectangle())
+                    .onTapGesture { location in
+                        handleChartTap(at: location, proxy: proxy, geo: geo)
+                    }
             }
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .padding()
+    }
+
+    private var axisDateFormat: Date.FormatStyle {
+        switch timeframe {
+        case .week:
+            return .dateTime.weekday(.abbreviated)
+        case .month:
+            return .dateTime.month(.abbreviated).day()
+        case .threeMonths, .year:
+            return .dateTime.month(.abbreviated)
+        case .all:
+            return .dateTime.month(.abbreviated).year(.twoDigits)
+        }
+    }
+
+    private func handleChartTap(at location: CGPoint, proxy: ChartProxy, geo: GeometryProxy) {
+        let origin = geo[proxy.plotAreaFrame].origin
+        let adjustedX = location.x - origin.x
+
+        guard let tappedDate: Date = proxy.value(atX: adjustedX) else {
+            onClearSelection()
+            return
+        }
+
+        let nearest = data.dataPoints.min(by: {
+            abs($0.date.timeIntervalSince(tappedDate)) < abs($1.date.timeIntervalSince(tappedDate))
+        })
+
+        if let nearest {
+            onSelectPoint(nearest)
+        } else {
+            onClearSelection()
+        }
     }
 }
 
