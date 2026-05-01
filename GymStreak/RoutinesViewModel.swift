@@ -61,10 +61,17 @@ class RoutinesViewModel: ObservableObject {
     }
 
     private func processPendingWatchWorkouts() {
-        // Check for any workouts that arrived before we started observing
-        if let pendingWorkout = watchConnectivity.processPendingWorkout() {
-            print("Processing pending watch workout: \(pendingWorkout.routineName)")
-            handleCompletedWatchWorkout(pendingWorkout)
+        // Drain ALL workouts that arrived before we started observing or that
+        // were buffered to disk because a prior process crashed before saving.
+        // The persistent buffer is App-Group-backed so it survives app crashes;
+        // entries are removed individually by `markPendingProcessed` inside
+        // handleCompletedWatchWorkout once the SwiftData save succeeds (or a
+        // duplicate is detected).
+        let pending = watchConnectivity.pendingWorkouts()
+        guard !pending.isEmpty else { return }
+        print("Processing \(pending.count) pending watch workout(s)")
+        for workout in pending {
+            handleCompletedWatchWorkout(workout)
         }
     }
 
@@ -276,6 +283,24 @@ class RoutinesViewModel: ObservableObject {
 
         // Step 1: Create WorkoutSession to appear in history
         do {
+            // Idempotency: if this workout has already been ingested (e.g. from a
+            // watch-side retry after a previously dropped transferUserInfo), skip
+            // re-inserting. We match on the workout's UUID first, then on the
+            // healthKitWorkoutId as a secondary key (covers cross-device cases
+            // where the iOS-stored id might differ but HK metadata aligns).
+            let workoutId = workout.id
+            let hkId = workout.healthKitWorkoutId
+            let existingDescriptor = FetchDescriptor<WorkoutSession>(
+                predicate: #Predicate { session in
+                    session.id == workoutId || (hkId != nil && session.healthKitWorkoutId == hkId)
+                }
+            )
+            if let existing = try modelContext.fetch(existingDescriptor).first {
+                print("Skipping duplicate watch workout: \(workout.routineName) (existing session id=\(existing.id))")
+                watchConnectivity.markPendingProcessed(id: workout.id)
+                return
+            }
+
             // Find the routine by ID
             let descriptor = FetchDescriptor<Routine>(
                 predicate: #Predicate { routine in
@@ -285,8 +310,10 @@ class RoutinesViewModel: ObservableObject {
 
             let routine = try modelContext.fetch(descriptor).first
 
-            // Create workout session
+            // Create workout session — preserve the watch-generated id so retries
+            // are detectable above and to keep iOS/watch in agreement on identity.
             let workoutSession = WorkoutSession(routine: routine ?? createPlaceholderRoutine(from: workout))
+            workoutSession.id = workout.id
             workoutSession.startTime = workout.startTime
             workoutSession.endTime = workout.endTime
             workoutSession.didUpdateTemplate = workout.shouldUpdateTemplate
@@ -332,8 +359,14 @@ class RoutinesViewModel: ObservableObject {
             modelContext.insert(workoutSession)
             try modelContext.save()
             print("Created workout session from watch workout: \(workout.routineName)")
+            watchConnectivity.markPendingProcessed(id: workout.id)
+            // Notify any view models cached on the History tab to refresh.
+            NotificationCenter.default.post(name: .workoutHistoryDidChange, object: nil)
 
         } catch {
+            // Leave the workout in the persistent pending buffer so we retry on
+            // next app launch / observer registration. Do NOT call
+            // markPendingProcessed here.
             print("Error creating workout session from watch workout: \(error)")
         }
 

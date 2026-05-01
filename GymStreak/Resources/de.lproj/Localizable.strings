@@ -141,6 +141,9 @@
 "history.title" = "Verlauf";
 "history.empty.title" = "Noch keine Workouts";
 "history.empty.description" = "Starte eine Routine um deine Workouts zu verfolgen";
+"history.pendingSync.title" = "Workouts warten auf Sync (%d)";
+"history.pendingSync.earliest" = "Ältestes nicht synchronisiert: %@";
+"history.pendingSync.help" = "Öffne GymStreak auf deiner Apple Watch, um es erneut zu senden. Das Workout ist in Apple Health gespeichert, aber die Satzdetails wurden noch nicht an dieses iPhone übertragen.";
 "history.date" = "%@";
 "history.duration" = "%@ • %d Sätze";
 "workout.history.delete.title" = "Workout löschen?";

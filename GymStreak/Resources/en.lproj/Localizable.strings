@@ -141,6 +141,9 @@
 "history.title" = "History";
 "history.empty.title" = "No Workouts Yet";
 "history.empty.description" = "Start a routine to begin tracking your workouts";
+"history.pendingSync.title" = "Workouts pending sync (%d)";
+"history.pendingSync.earliest" = "Oldest unsynced: %@";
+"history.pendingSync.help" = "Open GymStreak on your Apple Watch to retry. The workout exists in Apple Health but its set details haven't been delivered to this iPhone yet.";
 "history.date" = "%@";
 "history.duration" = "%@ • %d sets";
 "workout.history.delete.title" = "Delete Workout?";

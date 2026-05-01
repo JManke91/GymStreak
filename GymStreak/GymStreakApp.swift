@@ -13,6 +13,12 @@ struct GymStreakApp: App {
     // Initialize CloudSyncObserver early to catch all sync events
     @StateObject private var cloudSyncObserver = CloudSyncObserver.shared
 
+    // Initialize WatchConnectivityManager early so the WCSession delegate is
+    // registered before any queued userInfo (e.g. completed watch workouts)
+    // can be delivered during launch. Activating from a lazily-initialized
+    // view-scoped object is too late and can drop deliveries.
+    @StateObject private var watchConnectivity = WatchConnectivityManager.shared
+
     private var isUITesting: Bool {
         ProcessInfo.processInfo.arguments.contains("-UI_TESTING")
     }

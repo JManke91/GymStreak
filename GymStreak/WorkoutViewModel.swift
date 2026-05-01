@@ -35,6 +35,10 @@ class WorkoutViewModel: ObservableObject {
     @Published var restDuration: TimeInterval = 0
     @Published var workoutHistory: [WorkoutSession] = []
     @Published var showingWorkoutCompletePrompt = false
+    /// HealthKit-saved workouts (from this device's GymStreak iOS or watch app)
+    /// that have no matching `WorkoutSession` in SwiftData. Populated by the
+    /// reconciler safety-net layer of the watch sync pipeline.
+    @Published var orphanedWatchWorkouts: [HealthKitWorkoutReconciler.OrphanedWorkout] = []
 
     // HealthKit integration
     @Published var healthKitSyncEnabled = true
@@ -45,6 +49,7 @@ class WorkoutViewModel: ObservableObject {
     private var timer: Timer?
     private var restTimer: Timer?
     private var cloudSyncObserver: NSObjectProtocol?
+    private var workoutHistoryObserver: NSObjectProtocol?
 
     // Date-based timer tracking for background persistence
     private var workoutStartTime: Date?
@@ -55,6 +60,10 @@ class WorkoutViewModel: ObservableObject {
 
     // HealthKit workout manager
     let healthKitManager = HealthKitWorkoutManager()
+
+    /// Detects HKWorkout records authored by GymStreak that have no matching
+    /// SwiftData WorkoutSession. Last line of defense in the watch sync pipeline.
+    private let reconciler = HealthKitWorkoutReconciler()
 
     private var isUITesting: Bool {
         ProcessInfo.processInfo.arguments.contains("-UI_TESTING")
@@ -71,6 +80,7 @@ class WorkoutViewModel: ObservableObject {
         loadHealthKitPreferences()
         healthKitManager.checkAuthorizationStatus()
         observeCloudKitChanges()
+        observeWorkoutHistoryChanges()
     }
 
     private func observeCloudKitChanges() {
@@ -83,6 +93,34 @@ class WorkoutViewModel: ObservableObject {
                 self?.fetchWorkoutHistory()
             }
         }
+    }
+
+    /// Refreshes the cached workout history when an external producer (e.g.
+    /// the watch-sync path in RoutinesViewModel) commits a new WorkoutSession
+    /// to SwiftData. Without this, HistoryView would display stale data until
+    /// the user leaves and re-enters the tab.
+    private func observeWorkoutHistoryChanges() {
+        workoutHistoryObserver = NotificationCenter.default.addObserver(
+            forName: .workoutHistoryDidChange,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in
+                self?.fetchWorkoutHistory()
+                await self?.reconcileWatchWorkouts()
+            }
+        }
+    }
+
+    // MARK: - Watch Workout Reconciliation
+
+    /// Cross-references HealthKit workouts against `workoutHistory` and updates
+    /// `orphanedWatchWorkouts`. Called on init, on `.workoutHistoryDidChange`,
+    /// and from HistoryView's scenePhase observer when the app becomes active.
+    func reconcileWatchWorkouts() async {
+        let knownIds = Set(workoutHistory.compactMap(\.healthKitWorkoutId))
+        let orphans = await reconciler.findOrphanedWorkouts(knownIds: knownIds)
+        self.orphanedWatchWorkouts = orphans
     }
 
     // MARK: - HealthKit Preferences
@@ -107,6 +145,7 @@ class WorkoutViewModel: ObservableObject {
     func updateModelContext(_ newContext: ModelContext) {
         self.modelContext = newContext
         fetchWorkoutHistory()
+        Task { await reconcileWatchWorkouts() }
     }
 
     // MARK: - Notification Permission

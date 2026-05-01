@@ -10,7 +10,11 @@ final class WatchConnectivityManager: NSObject, ObservableObject {
     @Published var isWatchAppInstalled = false
 
     private var session: WCSession?
-    private var pendingWorkout: CompletedWatchWorkout?
+
+    /// Persistent multi-slot buffer for completed workouts that arrived before any
+    /// observer (RoutinesViewModel) was ready to consume them. App-Group-backed so
+    /// it survives crashes between WC delivery and SwiftData save.
+    private let pendingQueue = PendingReceivedWorkoutQueue()
 
     private override init() {
         super.init()
@@ -23,9 +27,19 @@ final class WatchConnectivityManager: NSObject, ObservableObject {
 
     // MARK: - Pending Workout Handling
 
-    func processPendingWorkout() -> CompletedWatchWorkout? {
-        defer { pendingWorkout = nil }
-        return pendingWorkout
+    /// Returns all workouts currently buffered but not yet committed to SwiftData.
+    /// Does NOT remove them — the consumer is responsible for calling
+    /// `markPendingProcessed(id:)` after a successful save (or after detecting
+    /// the workout is a duplicate of an already-saved one).
+    func pendingWorkouts() -> [CompletedWatchWorkout] {
+        pendingQueue.all()
+    }
+
+    /// Removes a workout from the persistent pending buffer. Call after the
+    /// consumer (RoutinesViewModel) has successfully written the WorkoutSession
+    /// to SwiftData, or after dedup detected an existing record.
+    func markPendingProcessed(id: UUID) {
+        pendingQueue.remove(id: id)
     }
 
     // MARK: - Public Methods
@@ -94,6 +108,11 @@ extension WatchConnectivityManager: WCSessionDelegate {
             self.isReachable = session.isReachable
 
             print("WatchConnectivity: Activated - paired: \(session.isPaired), installed: \(session.isWatchAppInstalled)")
+
+            // If we already have buffered workouts (e.g. from a previous launch
+            // that crashed before SwiftData save), notify any current observers
+            // so they get processed.
+            self.republishPendingWorkouts()
         }
     }
 
@@ -128,31 +147,60 @@ extension WatchConnectivityManager: WCSessionDelegate {
     }
 
     nonisolated func session(_ session: WCSession, didReceiveUserInfo userInfo: [String: Any] = [:]) {
-        // Handle completed workouts sent back from Watch
-        if let workoutData = userInfo["completedWorkout"] as? Data {
-            do {
-                let workout = try JSONDecoder().decode(CompletedWatchWorkout.self, from: workoutData)
-                Task { @MainActor in
-                    self.handleCompletedWorkout(workout)
-                }
-            } catch {
-                print("WatchConnectivity: Failed to decode workout - \(error.localizedDescription)")
-            }
+        Task { @MainActor in
+            self.handleIncomingPayload(userInfo, source: "userInfo")
+        }
+    }
+
+    /// Watch sends completed workouts via sendMessage as a fast-path when iOS is
+    /// reachable, so we must accept them on this delegate too. transferUserInfo
+    /// always also fires for the same workout — iOS-side dedupe handles duplicates.
+    nonisolated func session(_ session: WCSession, didReceiveMessage message: [String: Any]) {
+        Task { @MainActor in
+            self.handleIncomingPayload(message, source: "message")
         }
     }
 
     @MainActor
-    private func handleCompletedWorkout(_ workout: CompletedWatchWorkout) {
-        // Store for later processing in case no one is observing yet
-        pendingWorkout = workout
+    private func handleIncomingPayload(_ payload: [String: Any], source: String) {
+        guard let workoutData = payload["completedWorkout"] as? Data else {
+            return
+        }
+        do {
+            let workout = try JSONDecoder().decode(CompletedWatchWorkout.self, from: workoutData)
+            handleCompletedWorkout(workout, source: source)
+        } catch {
+            print("WatchConnectivity: Failed to decode workout (\(source)) - \(error.localizedDescription)")
+        }
+    }
 
-        // Post notification for the app to handle
+    @MainActor
+    private func handleCompletedWorkout(_ workout: CompletedWatchWorkout, source: String) {
+        // Buffer to disk first. RoutinesViewModel may not yet exist (cold start)
+        // or may be re-initializing. Idempotency on the consumer + a persistent
+        // buffer ensures no workout is dropped between receipt and save.
+        pendingQueue.add(workout)
+
         NotificationCenter.default.post(
             name: .watchWorkoutCompleted,
             object: nil,
             userInfo: ["workout": workout]
         )
-        print("WatchConnectivity: Received completed workout from Watch - \(workout.routineName)")
+        print("WatchConnectivity: Received completed workout from Watch (\(source)) - \(workout.routineName)")
+    }
+
+    @MainActor
+    private func republishPendingWorkouts() {
+        let pending = pendingQueue.all()
+        guard !pending.isEmpty else { return }
+        print("WatchConnectivity: Re-publishing \(pending.count) buffered workout(s) on activation")
+        for workout in pending {
+            NotificationCenter.default.post(
+                name: .watchWorkoutCompleted,
+                object: nil,
+                userInfo: ["workout": workout]
+            )
+        }
     }
 }
 
@@ -161,4 +209,58 @@ extension WatchConnectivityManager: WCSessionDelegate {
 extension Notification.Name {
     static let watchWorkoutCompleted = Notification.Name("watchWorkoutCompleted")
     static let watchAppBecameAvailable = Notification.Name("watchAppBecameAvailable")
+    /// Posted after a watch-originated WorkoutSession has been committed to
+    /// SwiftData. Lets the History tab refresh without a tab switch.
+    static let workoutHistoryDidChange = Notification.Name("workoutHistoryDidChange")
+}
+
+// MARK: - Persistent buffer for incoming watch workouts
+
+/// App-Group-backed buffer for completed workouts received from the watch but
+/// not yet committed to SwiftData. Persists across iOS app crashes that occur
+/// between WatchConnectivity delivery and the RoutinesViewModel save. Reuses
+/// `group.com.gymstreak.shared`.
+@MainActor
+private final class PendingReceivedWorkoutQueue {
+    private let userDefaults = UserDefaults(suiteName: "group.com.gymstreak.shared")
+    private let key = "pendingReceivedWorkouts"
+
+    func add(_ workout: CompletedWatchWorkout) {
+        var current = all()
+        current.removeAll { $0.id == workout.id }
+        current.append(workout)
+        save(current)
+    }
+
+    func remove(id: UUID) {
+        var current = all()
+        current.removeAll { $0.id == id }
+        save(current)
+    }
+
+    func all() -> [CompletedWatchWorkout] {
+        guard let userDefaults, let data = userDefaults.data(forKey: key) else {
+            return []
+        }
+        do {
+            return try JSONDecoder().decode([CompletedWatchWorkout].self, from: data)
+        } catch {
+            print("PendingReceivedWorkoutQueue: failed to decode — \(error.localizedDescription)")
+            return []
+        }
+    }
+
+    private func save(_ workouts: [CompletedWatchWorkout]) {
+        guard let userDefaults else { return }
+        if workouts.isEmpty {
+            userDefaults.removeObject(forKey: key)
+            return
+        }
+        do {
+            let data = try JSONEncoder().encode(workouts)
+            userDefaults.set(data, forKey: key)
+        } catch {
+            print("PendingReceivedWorkoutQueue: failed to encode — \(error.localizedDescription)")
+        }
+    }
 }
