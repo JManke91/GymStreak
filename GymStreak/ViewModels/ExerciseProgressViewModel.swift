@@ -16,10 +16,12 @@ class ExerciseProgressViewModel: ObservableObject {
     @Published var isLoading = true
 
     private var exerciseName: String
+    private var exerciseId: UUID?
     private var modelContext: ModelContext?
 
-    init(exerciseName: String) {
+    init(exerciseName: String, exerciseId: UUID? = nil) {
         self.exerciseName = exerciseName
+        self.exerciseId = exerciseId
     }
 
     func updateModelContext(_ context: ModelContext) {
@@ -27,8 +29,9 @@ class ExerciseProgressViewModel: ObservableObject {
         loadData()
     }
 
-    func updateExercise(_ newExerciseName: String, context: ModelContext) {
+    func updateExercise(_ newExerciseName: String, exerciseId: UUID?, context: ModelContext) {
         self.exerciseName = newExerciseName
+        self.exerciseId = exerciseId
         self.modelContext = context
         selectedDataPoint = nil
         loadData()
@@ -39,7 +42,7 @@ class ExerciseProgressViewModel: ObservableObject {
 
         isLoading = true
         let service = ExerciseProgressService(modelContext: context)
-        progressData = service.fetchProgressData(for: exerciseName, timeframe: selectedTimeframe)
+        progressData = service.fetchProgressData(for: exerciseName, exerciseId: exerciseId, timeframe: selectedTimeframe)
         isLoading = false
     }
 

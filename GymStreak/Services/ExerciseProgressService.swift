@@ -24,10 +24,11 @@ class ExerciseProgressService {
     /// - Returns: ExerciseProgressData containing all data points for charting
     func fetchProgressData(
         for exerciseName: String,
+        exerciseId: UUID? = nil,
         timeframe: ChartTimeframe
     ) -> ExerciseProgressData {
         let startDate = timeframe.startDate
-        let normalizedName = exerciseName.lowercased()
+        let stableKey = exerciseId?.uuidString ?? exerciseName.lowercased()
 
         // Fetch all completed workout sessions within the timeframe
         let descriptor = FetchDescriptor<WorkoutSession>(
@@ -42,9 +43,9 @@ class ExerciseProgressService {
             var dataPoints: [ExerciseProgressDataPoint] = []
 
             for session in sessions {
-                // Find exercises matching the name (case-insensitive)
+                // Find exercises matching by stable key (exerciseId or lowercased name)
                 let matchingExercises = session.workoutExercisesList.filter { exercise in
-                    exercise.exerciseName.lowercased() == normalizedName
+                    exercise.stableKey == stableKey
                 }
 
                 // Aggregate all matching exercises into a single data point per session
@@ -110,9 +111,10 @@ class ExerciseProgressService {
     /// - Returns: PreviousExercisePerformance if found, nil otherwise
     func previousPerformance(
         for exerciseName: String,
+        exerciseId: UUID? = nil,
         before date: Date
     ) -> PreviousExercisePerformance? {
-        let normalizedName = exerciseName.lowercased()
+        let stableKey = exerciseId?.uuidString ?? exerciseName.lowercased()
 
         // Fetch completed sessions before the given date, most recent first
         let descriptor = FetchDescriptor<WorkoutSession>(
@@ -128,7 +130,7 @@ class ExerciseProgressService {
             // Find the most recent session that contains this exercise
             for session in sessions {
                 let matchingExercise = session.workoutExercisesList.first { exercise in
-                    exercise.exerciseName.lowercased() == normalizedName
+                    exercise.stableKey == stableKey
                 }
 
                 guard let exercise = matchingExercise else { continue }
@@ -165,7 +167,7 @@ class ExerciseProgressService {
         var results: [ExerciseComparisonResult] = []
 
         for exercise in workout.workoutExercisesList.sorted(by: { $0.order < $1.order }) {
-            let previous = previousPerformance(for: exercise.exerciseName, before: workout.startTime)
+            let previous = previousPerformance(for: exercise.exerciseName, exerciseId: exercise.exerciseId, before: workout.startTime)
 
             let completedSets = exercise.setsList.filter(\.isCompleted)
             let sortedSets = exercise.setsList.sorted(by: { $0.order < $1.order })

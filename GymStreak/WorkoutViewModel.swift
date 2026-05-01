@@ -658,7 +658,8 @@ class WorkoutViewModel: ObservableObject {
         let workoutExercise = WorkoutExercise(
             exerciseName: exercise.name,
             muscleGroups: exercise.muscleGroups,
-            order: nextOrder
+            order: nextOrder,
+            exerciseId: exercise.id
         )
         workoutExercise.workoutSession = session
 

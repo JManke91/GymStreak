@@ -486,3 +486,60 @@
 "chart.trend" = "Trend";
 "chart.sessions" = "Workouts";
 "chart.switch_exercise" = "Übung wechseln, aktuell: %@";
+
+// MARK: - History Redesign
+"history.week.this_week" = "Diese Woche";
+"history.week.trainings_of" = "von %d Trainings";
+"history.all_trainings" = "Alle Trainings";
+"history.stat.streak" = "Streak";
+"history.stat.streak.unit" = "Wochen";
+"history.stat.volume" = "Volumen";
+"history.stat.prs" = "PRs";
+"history.stat.prs.new" = "neu";
+"history.pr.count" = "%d PR";
+"history.card.sets" = "%d Sätze";
+"history.month.summary" = "%d Trainings · %@ Volumen";
+"history.calendar.month_stats" = "%d Trainings · %@";
+"history.calendar.no_workout" = "Kein Training";
+"history.calendar.no_workout.detail" = "An diesem Tag hast du nicht trainiert.";
+"history.rpe" = "RPE";
+"history.empty.title" = "Noch keine Trainings";
+"history.empty.description" = "Schließe dein erstes Training ab, um hier deinen Verlauf zu sehen.";
+"history.group.all" = "Alle";
+"history.group.count" = "%d Übungen";
+
+// MARK: - Workout Types
+"history.type.push" = "Push";
+"history.type.pull" = "Pull";
+"history.type.legs" = "Legs";
+"history.type.core" = "Core";
+"history.type.full_body" = "Full Body";
+"history.type.upper" = "Upper";
+"history.type.lower" = "Lower";
+"history.type.cardio" = "Cardio";
+"history.type.other" = "Training";
+
+// MARK: - Workout Detail (redesigned)
+"history.detail.duration" = "Dauer";
+"history.detail.sets" = "Sätze";
+"history.detail.volume" = "Volumen";
+"history.detail.intensity" = "Intensität";
+"history.detail.exercises" = "Übungen";
+"history.detail.set_n" = "SATZ %d";
+"history.detail.bw" = "KG";
+"history.detail.reps" = "Wdh.";
+"history.detail.pr" = "PR";
+"history.detail.healthkit.title" = "In Apple Health gespeichert";
+"history.detail.healthkit.subtitle" = "%@ Krafttraining";
+"history.detail.healthkit.subtitle_with_kcal" = "%@ Krafttraining · %@ kcal";
+"history.detail.notes" = "Notizen";
+
+// MARK: - Exercise Detail (redesigned)
+"history.exercise.pr" = "Rekord";
+"history.exercise.trend" = "Trend";
+"history.exercise.workouts" = "Workouts";
+"history.exercise.recent" = "Letzte Sätze";
+"history.exercise.entries" = "%d Einträge";
+"history.exercise.best_set" = "Bester: %@";
+
+"switch" = "Wechseln";

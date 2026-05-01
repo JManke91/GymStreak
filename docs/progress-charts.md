@@ -4,14 +4,16 @@
 
 The progress charts feature allows users to track their exercise performance over time in the History tab. Users can view three metrics for any exercise they've completed in workouts: Max Weight, Estimated 1RM, and Total Volume.
 
+See also: [history-redesign.md](./history-redesign.md) — the History tab UI that hosts these charts.
+
 ## Architecture
 
 ### Data Flow
 
 ```
-WorkoutHistoryView (History tab, "Progress" mode)
-  → ExerciseProgressListView (lists exercises with history)
-    → ExerciseProgressChartView (chart + controls)
+HistoryView (History tab)
+  → FortschrittTabView ("Fortschritt" sub-tab, replaces old ExerciseProgressListView)
+    → ExerciseProgressChartView (chart + controls — redesigned with stat triple, metric tabs, range pills, recent-sessions list)
       → ExerciseProgressViewModel (state management)
         → ExerciseProgressService (data fetching from SwiftData)
 ```

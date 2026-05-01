@@ -258,6 +258,7 @@ final class WorkoutExercise {
     var workoutSession: WorkoutSession?
     var exerciseName: String = "" // Denormalized for history display
     var muscleGroups: [String] = []
+    var exerciseId: UUID? = nil // Links back to Exercise library for reliable filtering
     @Relationship(deleteRule: .cascade, inverse: \WorkoutSet.workoutExercise)
     var sets: [WorkoutSet]? = []
     var order: Int = 0
@@ -276,6 +277,7 @@ final class WorkoutExercise {
 
     init(from routineExercise: RoutineExercise, order: Int) {
         self.id = UUID()
+        self.exerciseId = routineExercise.exercise?.id
         self.exerciseName = routineExercise.exercise?.name ?? "Unknown"
         self.muscleGroups = routineExercise.exercise?.muscleGroups ?? ["General"]
         self.order = order
@@ -291,8 +293,9 @@ final class WorkoutExercise {
         }
     }
 
-    init(exerciseName: String, muscleGroups: [String], order: Int) {
+    init(exerciseName: String, muscleGroups: [String], order: Int, exerciseId: UUID? = nil) {
         self.id = UUID()
+        self.exerciseId = exerciseId
         self.exerciseName = exerciseName
         self.muscleGroups = muscleGroups
         self.order = order
@@ -302,6 +305,12 @@ final class WorkoutExercise {
     // Convenience accessor for non-optional usage
     var setsList: [WorkoutSet] {
         sets ?? []
+    }
+
+    /// Stable key for grouping/filtering this exercise across sessions.
+    /// Prefers exerciseId (links to Exercise library) with fallback to lowercased name for legacy data.
+    var stableKey: String {
+        exerciseId?.uuidString ?? exerciseName.lowercased()
     }
 
     /// Convenience computed property for backwards compatibility

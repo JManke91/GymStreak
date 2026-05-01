@@ -325,7 +325,8 @@ class RoutinesViewModel: ObservableObject {
                 let workoutExercise = WorkoutExercise(
                     exerciseName: completedExercise.name,
                     muscleGroups: [completedExercise.muscleGroup],
-                    order: completedExercise.order
+                    order: completedExercise.order,
+                    exerciseId: completedExercise.exerciseId
                 )
                 workoutExercise.workoutSession = workoutSession
                 // Copy superset fields from completed exercise

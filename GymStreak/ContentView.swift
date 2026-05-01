@@ -35,7 +35,7 @@ private struct ContentViewInternal: View {
                     Label("tab.exercises".localized, systemImage: "dumbbell.fill")
                 }
 
-            WorkoutHistoryView(viewModel: workoutViewModel)
+            HistoryView(viewModel: workoutViewModel)
                 .tabItem {
                     Label("tab.history".localized, systemImage: "clock.fill")
                 }

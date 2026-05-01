@@ -28,6 +28,7 @@ struct WatchExercise: Codable, Identifiable, Hashable {
     let supersetOrder: Int
     var targetRepMin: Int? = nil
     var targetRepMax: Int? = nil
+    var exerciseId: UUID? = nil
 }
 
 struct WatchSet: Codable, Identifiable, Hashable {
@@ -82,6 +83,7 @@ struct CompletedWatchExercise: Codable {
     let supersetOrder: Int
     var targetRepMin: Int? = nil
     var targetRepMax: Int? = nil
+    var exerciseId: UUID? = nil
 }
 
 struct CompletedWatchSet: Codable {
@@ -121,7 +123,8 @@ extension Routine {
                     supersetId: routineExercise.supersetId,
                     supersetOrder: routineExercise.supersetOrder,
                     targetRepMin: routineExercise.targetRepMin,
-                    targetRepMax: routineExercise.targetRepMax
+                    targetRepMax: routineExercise.targetRepMax,
+                    exerciseId: routineExercise.exercise?.id
                 )
             }
         )
