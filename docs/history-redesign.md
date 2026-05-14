@@ -77,7 +77,8 @@ docs/history-redesign.md
 ### Files modified
 ```
 GymStreak/ContentView.swift              — WorkoutHistoryView → HistoryView
-GymStreak/WorkoutDetailView.swift        — Rewritten with new layout
+GymStreak/WorkoutDetailView.swift        — Rewritten with new layout; now loads per-exercise comparison data
+GymStreak/Views/History/Components/WorkoutDetailExerciseBlock.swift — Exercise block + ExerciseComparisonStrip + SetDeltaChip + FirstSessionBadge
 GymStreak/Views/Charts/ExerciseProgressChartView.swift — Rewritten with new layout
 GymStreak/Views/ExerciseProgressListView.swift         — Trimmed to the ExerciseWithHistory struct only
 GymStreak/Resources/de.lproj/Localizable.strings       — New history.* keys
@@ -109,7 +110,11 @@ GymStreak/WorkoutHistoryView.swift   — Replaced by HistoryView
 - `FortschrittTabView` — Search bar + pills + grouped exercise rows.
 
 **Detail views (redesigned):**
-- `WorkoutDetailView` — Back button, type chip + date, routine name title, 4-metric stat grid, optional Apple Health banner (reads kcal async from HealthKit via `HKMetadataKeyExternalUUID`), notes section, per-exercise blocks with highlighted best set and optional PR badge.
+- `WorkoutDetailView` — Back button, type chip + date, routine name title, 4-metric stat grid, optional Apple Health banner (reads kcal async from HealthKit via `HKMetadataKeyExternalUUID`), notes section, per-exercise blocks via `WorkoutDetailExerciseBlock`. On appear, loads PRs + HealthKit kcal + a `[UUID: ExerciseComparisonResult]` dictionary via `ExerciseProgressService.compareWithPrevious(workout:)`, keyed by `WorkoutExercise.id`.
+- `WorkoutDetailExerciseBlock` (`Views/History/Components/`) — Per-exercise card. Renders: title row (exercise name + optional PR/trophy badge + set count). Then either a comparison strip (when previous session exists) or a "First session" / "Erste Session" badge (when this is the user's first time performing the exercise). Then the sets grid: each set cell shows set number + weight (kg or "BW"/"KG") + reps, plus a `SetDeltaChip` below showing the change vs. the same set position last time. **No top-set highlight** — chat2 feedback called the previous tinted "best set" decoration cryptic; the comparison strip + per-set deltas are more actionable.
+- `ExerciseComparisonStrip` — Inline strip rendered between exercise title and sets grid. Shows `vs. <prev date>` + `Top` delta chip (top-weight kg delta vs `previousPerformance.bestSet.weight`) + `Volume` delta chip (percentage delta vs `previousPerformance.totalVolume`).
+- `SetDeltaChip` — Capsule chip with SF Symbol arrow + value. Four states: `.gain("+2.5 kg")` (success green), `.loss("−5 kg")` (destructive red), `.neutral` (= symbol, no label), `.new` (sparkles + "New"/"Neu" for set positions with no previous counterpart). Weight delta wins over reps delta; reps delta only shown if weight matched exactly. Values use `.contentTransition(.numericText())` for animated number changes. Each set cell exposes VoiceOver via `accessibilityLabel` ("Set 2") + `accessibilityValue` ("85 kg, 8 reps, up 2.5 kilograms from last time") so the chip itself stays decorative.
+- `FirstSessionBadge` — Small indigo capsule with sparkles icon + localized "First session" / "Erste Session" label, shown when `ExerciseComparisonResult.isFirstTime` is true.
 - `ExerciseProgressChartView` — Back + switch-exercise menu, muscle-group label + exercise name, 3-stat triple (PR/Trend/Workouts), chart card (metric tabs + headline + line chart + range selector pills), "Letzte Sätze" session list.
 
 ### User decisions baked in

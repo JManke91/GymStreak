@@ -6,10 +6,12 @@
 //  - Editorial header with type chip + date
 //  - 4-metric stat grid (Duration / Sets / Volume / Intensity)
 //  - Apple Health banner when session was written to HealthKit
-//  - Per-exercise block with highlighted best set and PR badge
+//  - Per-exercise block with vs-previous-session comparison strip, per-set
+//    delta chips, and "First session" badge for new exercises
 //
 
 import SwiftUI
+import SwiftData
 import HealthKit
 
 struct WorkoutDetailView: View {
@@ -20,6 +22,7 @@ struct WorkoutDetailView: View {
 
     @State private var prExerciseNames: Set<String> = []
     @State private var healthKitKcal: Double?
+    @State private var comparisons: [UUID: ExerciseComparisonResult] = [:]
 
     private var workoutType: WorkoutType {
         WorkoutType.classify(routineName: workout.routineName)
@@ -48,6 +51,7 @@ struct WorkoutDetailView: View {
         .task {
             await loadPRs()
             await loadHealthKitKcal()
+            await loadComparisons()
         }
     }
 
@@ -255,7 +259,8 @@ struct WorkoutDetailView: View {
                 ForEach(exercises, id: \.id) { exercise in
                     WorkoutDetailExerciseBlock(
                         exercise: exercise,
-                        isPR: prExerciseNames.contains(exercise.exerciseName.lowercased())
+                        isPR: prExerciseNames.contains(exercise.exerciseName.lowercased()),
+                        comparison: comparisons[exercise.id]
                     )
                 }
             }
@@ -267,8 +272,6 @@ struct WorkoutDetailView: View {
 
     @MainActor
     private func loadPRs() async {
-        let service = ExerciseProgressService(modelContext: modelContext)
-        _ = service // silence if unused
         // Compute PRs by scanning all finished sessions up to and including this one.
         let descriptor = FetchDescriptor<WorkoutSession>(
             predicate: #Predicate { $0.endTime != nil }
@@ -280,6 +283,18 @@ struct WorkoutDetailView: View {
         } catch {
             prExerciseNames = []
         }
+    }
+
+    @MainActor
+    private func loadComparisons() async {
+        let service = ExerciseProgressService(modelContext: modelContext)
+        let results = service.compareWithPrevious(workout: workout)
+        let sortedExercises = workout.workoutExercisesList.sorted(by: { $0.order < $1.order })
+        var dict: [UUID: ExerciseComparisonResult] = [:]
+        for (exercise, result) in zip(sortedExercises, results) {
+            dict[exercise.id] = result
+        }
+        comparisons = dict
     }
 
     @MainActor
@@ -310,114 +325,3 @@ struct WorkoutDetailView: View {
     }
 }
 
-// MARK: - Exercise block
-
-import SwiftData
-
-struct WorkoutDetailExerciseBlock: View {
-    let exercise: WorkoutExercise
-    let isPR: Bool
-
-    private var sortedSets: [WorkoutSet] {
-        exercise.setsList.sorted(by: { $0.order < $1.order })
-    }
-
-    private var topSet: WorkoutSet? {
-        let usePlanned = exercise.progressiveOverloadApplied
-        return sortedSets
-            .filter(\.isCompleted)
-            .max(by: { a, b in
-                let aWeight = usePlanned ? a.plannedWeight : a.actualWeight
-                let bWeight = usePlanned ? b.plannedWeight : b.actualWeight
-                return aWeight < bWeight
-            })
-    }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            titleRow
-            setsGrid
-        }
-        .padding(14)
-        .background(Color.white.opacity(0.035))
-        .overlay(
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .stroke(Color.white.opacity(0.06), lineWidth: 1)
-        )
-        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
-    }
-
-    private var titleRow: some View {
-        HStack(spacing: 8) {
-            Text(exercise.exerciseName)
-                .font(.system(size: 15, weight: .bold, design: .rounded))
-                .kerning(-0.2)
-                .foregroundStyle(Color.white)
-                .lineLimit(1)
-            if isPR {
-                prBadge
-            }
-            Spacer()
-            Text("history.card.sets".localized(exercise.setsList.count))
-                .font(.system(size: 11))
-                .foregroundStyle(Color.white.opacity(0.5))
-        }
-    }
-
-    private var prBadge: some View {
-        HStack(spacing: 3) {
-            Image(systemName: "trophy.fill")
-                .font(.system(size: 9, weight: .bold))
-            Text("history.detail.pr".localized)
-                .font(.system(size: 10, weight: .bold))
-        }
-        .foregroundStyle(Color(red: 1, green: 0.8, blue: 0))
-        .padding(.horizontal, 7)
-        .padding(.vertical, 2)
-        .background(Color(red: 1, green: 0.8, blue: 0).opacity(0.12))
-        .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
-    }
-
-    private var setsGrid: some View {
-        let sets = sortedSets
-        let columns = Array(repeating: GridItem(.flexible(), spacing: 6), count: max(1, min(sets.count, 6)))
-        return LazyVGrid(columns: columns, spacing: 6) {
-            ForEach(Array(sets.enumerated()), id: \.offset) { index, set in
-                setCell(index: index, set: set, isTop: topSet.map { $0.id == set.id } ?? false)
-            }
-        }
-    }
-
-    private func setCell(index: Int, set: WorkoutSet, isTop: Bool) -> some View {
-        let usePlanned = exercise.progressiveOverloadApplied
-        let weight = usePlanned ? set.plannedWeight : set.actualWeight
-        let reps = usePlanned ? set.plannedReps : set.actualReps
-        let weightText = weight > 0 ? String(format: "%gkg", weight) : "history.detail.bw".localized
-        let isCompleted = set.isCompleted
-
-        return VStack(spacing: 2) {
-            Text(String(format: "history.detail.set_n".localized, index + 1))
-                .font(.system(size: 9, weight: .semibold))
-                .tracking(0.4)
-                .foregroundStyle(Color.white.opacity(0.4))
-            Text(weightText)
-                .font(.system(size: 14, weight: .bold, design: .rounded))
-                .kerning(-0.3)
-                .monospacedDigit()
-                .foregroundStyle(isCompleted ? Color.white : Color.white.opacity(0.4))
-            Text("\(reps) \("history.detail.reps".localized)")
-                .font(.system(size: 10))
-                .foregroundStyle(Color.white.opacity(0.55))
-        }
-        .padding(.vertical, 8)
-        .padding(.horizontal, 4)
-        .frame(maxWidth: .infinity)
-        .background(isTop ? DesignSystem.Colors.tint.opacity(0.1) : Color.white.opacity(0.04))
-        .overlay(
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .stroke(isTop ? DesignSystem.Colors.tint.opacity(0.3) : Color.clear, lineWidth: 1)
-        )
-        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-        .opacity(isCompleted ? 1 : 0.5)
-    }
-}

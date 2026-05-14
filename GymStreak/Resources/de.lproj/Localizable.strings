@@ -533,6 +533,18 @@
 "history.detail.healthkit.subtitle" = "%@ Krafttraining";
 "history.detail.healthkit.subtitle_with_kcal" = "%@ Krafttraining · %@ kcal";
 "history.detail.notes" = "Notizen";
+"history.detail.vs_date" = "vs. %@";
+"history.detail.top_weight" = "Top";
+"history.detail.volume_short" = "Volumen";
+"history.detail.first_session" = "Erste Session";
+"history.detail.set_new" = "Neu";
+"history.detail.a11y.set_value_with_delta" = "%@, %d Wiederholungen, %@";
+"history.detail.a11y.delta_up_weight" = "plus %@ Kilogramm im Vergleich zur letzten Sitzung";
+"history.detail.a11y.delta_down_weight" = "minus %@ Kilogramm im Vergleich zur letzten Sitzung";
+"history.detail.a11y.delta_up_reps" = "plus %d Wiederholungen im Vergleich zur letzten Sitzung";
+"history.detail.a11y.delta_down_reps" = "minus %d Wiederholungen im Vergleich zur letzten Sitzung";
+"history.detail.a11y.delta_equal" = "gleich wie letztes Mal";
+"history.detail.a11y.delta_new" = "neuer Satz, keine Vergleichsdaten";
 
 // MARK: - Exercise Detail (redesigned)
 "history.exercise.pr" = "Rekord";
