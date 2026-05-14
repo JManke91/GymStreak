@@ -35,7 +35,7 @@ HistoryView (History tab)
 | EmptyChartView | `Views/Charts/ChartSupportViews.swift` | Placeholder shown when no workout data exists |
 | ExerciseProgressViewModel | `ViewModels/ExerciseProgressViewModel.swift` | Manages timeframe, metric, data point selection state; computed display properties |
 | ExerciseProgressModels | `Models/ExerciseProgressModels.swift` | Domain models: ChartTimeframe, ProgressMetric, ExerciseProgressDataPoint, ExerciseProgressData, SelectedDataPoint |
-| ExerciseProgressService | `Services/ExerciseProgressService.swift` | Fetches and aggregates workout data from SwiftData by exercise and timeframe |
+| ExerciseProgressService | `Services/ExerciseProgressService.swift` | Fetches and aggregates workout data from SwiftData by exercise and timeframe. Uses `ExerciseProgressService.matches(_:exerciseId:exerciseName:)` to resolve workout exercises to the requested chart target — accepts an exact `exerciseId` match OR a legacy row with `exerciseId == nil` whose name matches case-insensitively. Without that fallback, workouts logged before `WorkoutExercise.exerciseId` was introduced would be invisible to the chart and per-exercise progress would appear frozen. |
 
 #### watchOS Target
 

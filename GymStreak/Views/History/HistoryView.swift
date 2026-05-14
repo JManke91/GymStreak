@@ -12,6 +12,7 @@ struct HistoryView: View {
     @ObservedObject var viewModel: WorkoutViewModel
     @Environment(\.modelContext) private var modelContext
     @Environment(\.scenePhase) private var scenePhase
+    @Query(sort: \Exercise.name) private var allExercises: [Exercise]
 
     enum Section: String, CaseIterable {
         case trainings, fortschritt
@@ -32,6 +33,13 @@ struct HistoryView: View {
 
     private var sessions: [WorkoutSession] {
         viewModel.workoutHistory.filter { $0.endTime != nil }
+    }
+
+    /// Stable signature of the live Exercise library — flips whenever a user adds, removes,
+    /// or renames an exercise. Used to retrigger the Fortschritt aggregator so the list never
+    /// shows entries for exercises the user has since deleted.
+    private var exerciseLibrarySignature: [String] {
+        allExercises.map { "\($0.id.uuidString):\($0.name)" }
     }
 
     var body: some View {
@@ -91,6 +99,9 @@ struct HistoryView: View {
                 refresh()
             }
             .onChange(of: viewModel.workoutHistory.count) {
+                refresh()
+            }
+            .onChange(of: exerciseLibrarySignature) {
                 refresh()
             }
             .onChange(of: scenePhase) { _, newPhase in
@@ -173,8 +184,12 @@ struct HistoryView: View {
 
     private func refresh() {
         let capturedSessions = sessions
+        let liveExercises = allExercises
         let prs = PersonalRecordService.computePRs(sessions: capturedSessions)
         prExerciseCountBySession = prs.prCountBySession
-        fortschrittExercises = FortschrittAggregator.build(sessions: capturedSessions)
+        fortschrittExercises = FortschrittAggregator.build(
+            sessions: capturedSessions,
+            liveExercises: liveExercises
+        )
     }
 }

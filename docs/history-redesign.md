@@ -27,16 +27,19 @@ Four new concepts were introduced to make the new UI meaningful on top of existi
 ### New services
 - `HistoryStatsService` — WeekHero aggregation (completed count, volume, volume trend, streak weeks, PR count), month grouping, week-day strip, monthly totals. All pure functions on `[WorkoutSession]`.
 - `PersonalRecordService` — Walks the session history chronologically and records a PR whenever a new per-exercise estimated-1RM maximum is reached. Returns `session.id → {prCount, prExerciseNames}`.
-- `FortschrittAggregator` — Builds the Fortschritt list row models (`FortschrittExerciseModel`) from completed sessions: per-exercise workout count, last performed date, trend % (first-to-last est-1RM), and a sparkline of session max-est-1RM values.
+- `FortschrittAggregator` — Builds the Fortschritt list row models (`FortschrittExerciseModel`) by joining completed sessions with the **live `Exercise` library**. Inputs: `(sessions, liveExercises)`. Each `WorkoutExercise` is resolved to a live exercise by `exerciseId` (preferred) or by case-insensitive name (fallback for legacy data without an `exerciseId`). The name fallback is **only** used when the name is unique in the live library — if two live exercises share a name (e.g. "Biceps Curls" with dumbbell and barbell variants), an untagged legacy row is ambiguous and is dropped from both rows rather than misattributed. WorkoutExercises that don't resolve to any live entry are dropped — this is what keeps deleted exercises from leaking into the Progress tab. Per-exercise output: workout count, last performed date, trend % (first-to-last est-1RM), and a sparkline of session max-est-1RM values.
+- `ExerciseProgressService.matches(_:exerciseId:exerciseName:nameIsUnique:)` — Shared static matcher used by `fetchProgressData`, `previousPerformance`, and `ExerciseProgressChartView.loadRecentSessions`. When an `exerciseId` is provided it accepts either an exact id match or, only if `nameIsUnique` is true, a legacy row whose `exerciseId` is `nil` and whose name matches case-insensitively. The companion instance method `isLiveNameUnique(_:)` queries the live `Exercise` table to compute the flag, ensuring same-named variants (different equipment) keep their progress separate.
 
 ### Data flow
 ```
 ContentView
- └─ HistoryView (@ObservedObject viewModel: WorkoutViewModel)
+ └─ HistoryView (@ObservedObject viewModel: WorkoutViewModel,
+                 @Query allExercises: [Exercise])
      ├─ loads viewModel.workoutHistory (already populated on app launch)
-     ├─ refresh()
+     ├─ refresh()  ← retriggered when sessions count OR exercise library changes
      │   ├─ PersonalRecordService.computePRs(sessions:) → [UUID: Int]
-     │   └─ FortschrittAggregator.build(sessions:) → [FortschrittExerciseModel]
+     │   └─ FortschrittAggregator.build(sessions:liveExercises:) → [FortschrittExerciseModel]
+     │       (drops workout exercises that don't resolve to any live Exercise)
      ├─ TrainingsTabView
      │    ├─ WeekHeroView (HistoryStatsService.weekStats, weekDayStatuses)
      │    ├─ HistoryCalendarView (uses same session set)

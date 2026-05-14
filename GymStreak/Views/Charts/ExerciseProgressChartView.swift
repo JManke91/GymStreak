@@ -393,12 +393,18 @@ struct ExerciseProgressChartView: View {
         )
         do {
             let sessions = try modelContext.fetch(descriptor)
-            let key = currentExerciseId?.uuidString ?? currentExerciseName.lowercased()
             let limit = 8
+            let nameIsUnique = ExerciseProgressService(modelContext: modelContext)
+                .isLiveNameUnique(currentExerciseName)
             var collected: [RecentSession] = []
             for session in sessions {
                 guard let exercise = session.workoutExercisesList.first(where: {
-                    $0.stableKey == key
+                    ExerciseProgressService.matches(
+                        $0,
+                        exerciseId: currentExerciseId,
+                        exerciseName: currentExerciseName,
+                        nameIsUnique: nameIsUnique
+                    )
                 }) else { continue }
                 let sortedSets = exercise.setsList.sorted { $0.order < $1.order }
                 let usePlanned = exercise.progressiveOverloadApplied

@@ -28,7 +28,7 @@ class ExerciseProgressService {
         timeframe: ChartTimeframe
     ) -> ExerciseProgressData {
         let startDate = timeframe.startDate
-        let stableKey = exerciseId?.uuidString ?? exerciseName.lowercased()
+        let nameIsUnique = isLiveNameUnique(exerciseName)
 
         // Fetch all completed workout sessions within the timeframe
         let descriptor = FetchDescriptor<WorkoutSession>(
@@ -43,9 +43,8 @@ class ExerciseProgressService {
             var dataPoints: [ExerciseProgressDataPoint] = []
 
             for session in sessions {
-                // Find exercises matching by stable key (exerciseId or lowercased name)
-                let matchingExercises = session.workoutExercisesList.filter { exercise in
-                    exercise.stableKey == stableKey
+                let matchingExercises = session.workoutExercisesList.filter {
+                    Self.matches($0, exerciseId: exerciseId, exerciseName: exerciseName, nameIsUnique: nameIsUnique)
                 }
 
                 // Aggregate all matching exercises into a single data point per session
@@ -114,7 +113,7 @@ class ExerciseProgressService {
         exerciseId: UUID? = nil,
         before date: Date
     ) -> PreviousExercisePerformance? {
-        let stableKey = exerciseId?.uuidString ?? exerciseName.lowercased()
+        let nameIsUnique = isLiveNameUnique(exerciseName)
 
         // Fetch completed sessions before the given date, most recent first
         let descriptor = FetchDescriptor<WorkoutSession>(
@@ -129,8 +128,8 @@ class ExerciseProgressService {
 
             // Find the most recent session that contains this exercise
             for session in sessions {
-                let matchingExercise = session.workoutExercisesList.first { exercise in
-                    exercise.stableKey == stableKey
+                let matchingExercise = session.workoutExercisesList.first {
+                    Self.matches($0, exerciseId: exerciseId, exerciseName: exerciseName, nameIsUnique: nameIsUnique)
                 }
 
                 guard let exercise = matchingExercise else { continue }
@@ -218,6 +217,49 @@ class ExerciseProgressService {
         }
 
         return results
+    }
+
+    // MARK: - Matching
+
+    /// Decides whether a `WorkoutExercise` belongs to the exercise the caller is asking about.
+    ///
+    /// When an `exerciseId` is provided, an exact id match always wins. The case-insensitive
+    /// name fallback (for legacy rows where `WorkoutExercise.exerciseId` is `nil`) is **only**
+    /// used when `nameIsUnique` is true — i.e. there is exactly one live `Exercise` with that
+    /// name. When two live exercises share a name (e.g. "Biceps Curls" with dumbbell and
+    /// barbell variants), legacy untagged rows are ambiguous, so we drop them from both
+    /// charts rather than double-count them under each variant.
+    static func matches(
+        _ exercise: WorkoutExercise,
+        exerciseId: UUID?,
+        exerciseName: String,
+        nameIsUnique: Bool
+    ) -> Bool {
+        if let exerciseId {
+            if exercise.exerciseId == exerciseId { return true }
+            if nameIsUnique,
+               exercise.exerciseId == nil,
+               exercise.exerciseName.lowercased() == exerciseName.lowercased() {
+                return true
+            }
+            return false
+        }
+        if nameIsUnique {
+            return exercise.exerciseName.lowercased() == exerciseName.lowercased()
+        }
+        return false
+    }
+
+    /// Whether `name` is unique (case-insensitive) among the user's live `Exercise` library.
+    /// Drives the legacy-row name-fallback in `matches(_:exerciseId:exerciseName:nameIsUnique:)`.
+    func isLiveNameUnique(_ name: String) -> Bool {
+        let target = name.lowercased()
+        do {
+            let exercises = try modelContext.fetch(FetchDescriptor<Exercise>())
+            return exercises.filter { $0.name.lowercased() == target }.count <= 1
+        } catch {
+            return true
+        }
     }
 
     // MARK: - Private Helpers
