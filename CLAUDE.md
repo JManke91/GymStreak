@@ -5,6 +5,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Development Commands
 
 ## Buildind new features/updating exisitng features
+
 - After building a new feature, make sure the app still compiles
 - When building a new feature make sure to create a .md file in the /docs folder that summarizes all the important details inlcuding what the feature does, how it works, how it's architecutlly structured, what components are involved etc. make sure to include the ios and watch target for documentation. the goal is to be able to reference this file later for quick context
 - For every code change check if an existing feature is modified and if there already is a corresponsing .md file in the /docs folder make sure to update according to the criteria stated for building new .md files.
@@ -19,11 +20,13 @@ This is an iOS app built with Xcode:
 ## Project Architecture
 
 ### Core Technologies
+
 - **SwiftUI**: Declarative UI framework
 - **SwiftData**: Local persistence layer (replacing Core Data)
 - **MVVM Pattern**: ViewModels handle business logic, Views handle UI
 
 ### Data Model Relationships
+
 ```
 Routine (1) ←→ (Many) RoutineExercise (Many) ←→ (1) Exercise
                     ↓
@@ -31,28 +34,34 @@ Routine (1) ←→ (Many) RoutineExercise (Many) ←→ (1) Exercise
 ```
 
 ### Key Models (Models.swift)
+
 - `Routine`: Workout routines containing multiple exercises
 - `Exercise`: Reusable exercise definitions with muscle group categorization
 - `RoutineExercise`: Links exercises to routines with routine-specific configurations
 - `ExerciseSet`: Individual set data (reps, weight, rest time)
 
 ### ViewModels
+
 - `RoutinesViewModel`: Manages routines, routine exercises, and sets
 - `ExercisesViewModel`: Manages standalone exercise library
 
 ### Main Views Structure
+
 - `ContentView.swift`: Tab-based navigation (3 tabs)
 - **Tab 1**: Routines management (`RoutinesView.swift`, `RoutineDetailView.swift`)
-- **Tab 2**: Exercise library (`ExercisesView.swift`, `ExerciseDetailView.swift`)  
+- **Tab 2**: Exercise library (`ExercisesView.swift`, `ExerciseDetailView.swift`)
 - **Tab 3**: Workout recording (`WorkoutView.swift` - placeholder)
 
 ### Key User Flow
+
 1. **Exercise Addition Flow**: Uses navigation push (not sheets) to `ExercisePickerView.swift`
 2. **Set Management**: Immediate set addition with inline editing via `EditSetView.swift`
 3. **Streamlined UX**: "Add Set" button creates sets instantly with default values
 
 ### Muscle Group Categories
+
 Defined in `MuscleGroups.swift`:
+
 - **General**: General, Full Body
 - **Arms**: Biceps, Triceps, Forearms
 - **Chest & Back**: Chest, Upper Back, Lats, Lower Back
@@ -63,14 +72,17 @@ Defined in `MuscleGroups.swift`:
 ## Development Notes
 
 ### SwiftData Configuration
+
 - Models are registered in `GymStreakApp.swift`: `[Routine.self, Exercise.self, RoutineExercise.self, ExerciseSet.self]`
 - All models use UUID primary keys and include created/updated timestamps
 
 ### Current Status
+
 - **Completed**: Tabs 1 & 2 (Routines and Exercise Library)
 - **In Progress**: Tab 3 (Workout Recording with HealthKit integration)
 
 ### Code Patterns
+
 - ViewModels handle all data operations and business logic
 - Views focus purely on UI and user interaction
 - Inline editing pattern used for set configuration
@@ -79,6 +91,7 @@ Defined in `MuscleGroups.swift`:
 ## Architecture
 
 ### Clean Architecture Pattern
+
 The app follows Clean Architecture principles with clear separation of concerns:
 
 - **Domain Layer**: Contains business logic, entities, and use cases
@@ -127,30 +140,33 @@ The app follows Clean Architecture principles with clear separation of concerns:
 ---
 
 ## Allowed Dependencies
+
 Presentation can depend on Domain
 Domain has no dependencies
 Data depends on Domain
 
 ## Architectural Conventions
+
 - ViewModels
-Only include UI state and logic
-Use async UseCase calls to fetch or mutate data
-Must not depend on the Data layer
-Use @MainActor or `@Published` to manage state updates
+  Only include UI state and logic
+  Use async UseCase calls to fetch or mutate data
+  Must not depend on the Data layer
+  Use @MainActor or `@Published` to manage state updates
 - UseCases
-Encapsulate single business actions (e.g., FetchUserProfile, SubmitOrder)
-Are injected into ViewModels
-Are implemented in the Domain layer using pure Swift
+  Encapsulate single business actions (e.g., FetchUserProfile, SubmitOrder)
+  Are injected into ViewModels
+  Are implemented in the Domain layer using pure Swift
 - Repositories
-Are protocols in the Domain layer
-Are implemented in the Data layer
-Must return domain models (never DTOs)
+  Are protocols in the Domain layer
+  Are implemented in the Data layer
+  Must return domain models (never DTOs)
 - Models
-Domain Models: Core app entities, framework-independent
-DTOs: External representations for APIs or databases
-Use Mappers to translate DTO <-> Domain Model
+  Domain Models: Core app entities, framework-independent
+  DTOs: External representations for APIs or databases
+  Use Mappers to translate DTO <-> Domain Model
 
 ## General Coding
+
 - Always prefer simple solutions
 - Avoid code duplication whenever possible, whhich means checking for other areas of the codebase that might already have similar code and reuse it if possible
 - write code that takes into account the different environments (development, staging, production)
@@ -162,16 +178,19 @@ Use Mappers to translate DTO <-> Domain Model
 - Mocking data is only needed for tests, never mock data for dev or prod
 
 ## Performance and Optimization
+
 - Implement lazy loading for large lists or grid using `LazyVStack` or `LazyHStack`, or `LazyVGrid` or `LazyHGrid`
 - Optimize ForEach loops by using stable identifiers
 
 ## Naming
+
 - camelCase for vars/funcs, PascalCase for types
 - Verbs for methods (fetchData)
 - Boolean: use is/has/should prefixes
 - Clear, descriptive names following Apple style
 
 ## Swift Best Practices
+
 - Strong type system, proper optionals
 - async/await for concurrency
 - Result type for errors
@@ -180,11 +199,13 @@ Use Mappers to translate DTO <-> Domain Model
 - Protocol extensions for shared code
 
 ## Data Flow
+
 - Use Observation Framework (`@Observable`, `@State`, `@Binding`) to build reactive UIs
 - if necessary, implement loading states and views
 - implement proper error handling and propagation
 
 ## UI Development
+
 - SwiftUI first, UIKit when needed
 - SF Symbols for icons
 - Support dark mode, dynamic type
@@ -193,6 +214,7 @@ Use Mappers to translate DTO <-> Domain Model
 - Implement proper keyboard handling
 
 ### Color Contrast Guidelines
+
 - **IMPORTANT**: Never use white text on the app's green tint color (`DesignSystem.Colors.tint`) - it lacks sufficient contrast
 - Always use `DesignSystem.Colors.textOnTint` (black) for text/icons displayed on tint-colored backgrounds
 - This applies to: badges, buttons with tint backgrounds, hint banners, and any UI element with a green background
@@ -201,14 +223,60 @@ Use Mappers to translate DTO <-> Domain Model
 ### Key Components
 
 #### HealthKit Integration
+
 - **HealthKitCyclingStatsRepository**: Manages all HealthKit interactions
 - **Workout deduplication**: Prevents double-counting workouts from multiple sources
 - **Authorization handling**: Manages HealthKit permissions
 
 ## Active Technologies
+
 - Swift 6 with strict concurrency + SwiftUI, SwiftUI Charts framework (001-improve-progress-charts)
 - SwiftData (unchanged — no persistence changes) (001-improve-progress-charts)
 - N/A (display-only fix, no persistence changes) (002-fix-chart-display)
 
 ## Recent Changes
+
 - 001-improve-progress-charts: Added Swift 6 with strict concurrency + SwiftUI, SwiftUI Charts framework
+
+## Development Notes
+
+- Always use the established architecture patterns when adding new features
+- Follow the existing repository pattern for data access
+- Use SwiftData for local persistence of user-created data
+- Implement proper error handling for HealthKit operations
+- Maintain localization for all user-facing strings
+- Follow the existing theme system for consistent UI styling
+- Widget functionality should remain independent of the main app
+
+## Feature Documentation
+
+Always document new features as well as updates on existing features in the appropriate markdown file
+
+- Every time you create a new feature, create a markdown file <feature-name>.md in the "docs" folder and document the essential parts of this feature for later reference. this should include feature requirements, difficulties, edge cases, technical specifications, architecture decisions etc.
+- Every time you extend/update an existing feature search in the "docs" folder, if there already is an .md file documenting this feature and if so update the file according to the changes being made while providing one fluid document
+
+## Get Context
+
+Context for features is documented in .md files within the "docs" folder
+
+- when looking for context, before scanning the entire codebase look for a suitable file in the "docs" folder for feature documentation
+
+## TestFlight Release Notes
+
+The project uses static TestFlight release notes files that Xcode Cloud automatically picks up for TestFlight builds.
+
+### Files
+
+- `TestFlight/WhatToTest.en-US.txt` - English release notes (read by Xcode Cloud)
+- `TestFlight/WhatToTest.de-DE.txt` - German release notes (read by Xcode Cloud)
+- `CHANGELOG.md` - Historical archive of all release changes
+
+### Workflow Rules
+
+1. **After completing any user-facing change** (feature, fix, or improvement), append a bullet point to BOTH `TestFlight/WhatToTest.en-US.txt` (English) and `TestFlight/WhatToTest.de-DE.txt` (German translation)
+2. **Format**: Each line is `- <description>` in plain text. Keep descriptions concise and user-facing (not developer jargon). Maximum 4,000 characters total per file.
+3. **Do NOT update these files** for internal refactors, code cleanup, CI changes, or non-user-facing work
+4. **When a version is bumped** (e.g., bumping MARKETING_VERSION):
+   - Archive the current WhatToTest content into `CHANGELOG.md` under a new version heading
+   - Clear both WhatToTest files and start fresh for the next release cycle
+5. **CHANGELOG.md format**: Use Keep a Changelog style with `## [version] - date` headings and `### Added/Improved/Fixed` subsections
