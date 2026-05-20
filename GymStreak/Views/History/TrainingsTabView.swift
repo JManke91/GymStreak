@@ -17,8 +17,80 @@ struct TrainingsTabView: View {
 
     @State private var mode: DisplayMode = .list
 
+    // MARK: - AI Coach entry card state
+
+    private let coordinator = ProactivePromptCoordinator.shared
+    private let preferences = AICoachPreferences.shared
+    private let availability = AICoachAvailability.shared
+
+    /// Whether conditions are met to show any AI Coach card.
+    private var shouldShowCoachCards: Bool {
+        availability.isAvailable
+            && preferences.isPeriodRecapEffectivelyEnabled
+            && sessions.count >= 3
+    }
+
+    /// Default range: lastMonth if we're early in the month (day <= 5), else thisMonth.
+    private var defaultEntryRange: PeriodRange {
+        Calendar.current.component(.day, from: Date()) <= 5 ? .lastMonth : .thisMonth
+    }
+
+    /// Lightweight last-month stats for the entry card subline.
+    private var lastMonthStats: (count: Int, volumeTons: Double, prs: Int) {
+        let calendar = Calendar.current
+        let now = Date()
+        guard let prevDate = calendar.date(byAdding: .month, value: -1, to: now),
+              let interval = calendar.dateInterval(of: .month, for: prevDate) else {
+            return (0, 0, 0)
+        }
+        let prev = sessions.filter {
+            $0.endTime != nil && $0.startTime >= interval.start && $0.startTime < interval.end
+        }
+        let vol = prev.reduce(0.0) { $0 + $1.totalVolume } / 1000.0
+        let prs = prev.reduce(0) { $0 + (prExerciseCountBySession[$1.id] ?? 0) }
+        return (prev.count, vol, prs)
+    }
+
+    /// Label for the last completed month.
+    private var lastMonthLabel: String {
+        let calendar = Calendar.current
+        let now = Date()
+        guard let prevDate = calendar.date(byAdding: .month, value: -1, to: now),
+              let interval = calendar.dateInterval(of: .month, for: prevDate) else { return "" }
+        let fmt = DateFormatter()
+        fmt.locale = Locale.current
+        fmt.setLocalizedDateFormatFromTemplate("MMMM yyyy")
+        return fmt.string(from: interval.start)
+    }
+
     var body: some View {
         VStack(spacing: 14) {
+            // Proactive monthly prompt (above everything else)
+            if coordinator.shouldShow {
+                ProactivePeriodPromptCard(
+                    monthLabel: coordinator.monthLabel,
+                    sessionCount: coordinator.sessionCount,
+                    totalVolumeTons: coordinator.totalVolumeTons,
+                    newPRCount: coordinator.newPRCount,
+                    destination: PeriodRecapDestination(range: .lastMonth),
+                    onDismiss: { coordinator.dismiss() }
+                )
+                .padding(.horizontal, 16)
+            }
+
+            // Coach entry card
+            if shouldShowCoachCards && !coordinator.shouldShow {
+                let stats = lastMonthStats
+                CoachEntryCard(
+                    periodLabel: lastMonthLabel,
+                    sessionCount: stats.count,
+                    totalVolumeTons: stats.volumeTons,
+                    newPRCount: stats.prs,
+                    destination: PeriodRecapDestination(range: defaultEntryRange)
+                )
+                .padding(.horizontal, 16)
+            }
+
             WeekHeroView(
                 weekStats: HistoryStatsService.weekStats(
                     sessions: sessions,
@@ -38,6 +110,12 @@ struct TrainingsTabView: View {
             } else {
                 listContent
             }
+        }
+        .onAppear {
+            coordinator.evaluate(sessions: sessions, prCountBySession: prExerciseCountBySession)
+        }
+        .onChange(of: sessions.count) {
+            coordinator.evaluate(sessions: sessions, prCountBySession: prExerciseCountBySession)
         }
     }
 

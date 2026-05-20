@@ -1,0 +1,5 @@
+- KI-Coach Perioden-Rückblick: Tippe auf die neue „COACH · RÜCKBLICK"-Karte im Trainings-Tab, um einen KI-generierten Monats- (oder Wochen-/Jahres-)rückblick mit Echtzeit-Streaming, Trend-Analyse, Korrelations-Hinweis und Statistik-Leiste zu öffnen.
+- Zeitraum wechseln: Tippe auf einen Chip oben im Rückblick-Screen, um zwischen Diese Woche, Letzte Woche, Diesen Monat, Letzten Monat, 3 Monate und Dieses Jahr zu wechseln.
+- Proaktiver Monatshinweis: Beim ersten Öffnen nach einem Monatswechsel erscheint eine große Karte, die zum Anzeigen des Vormonats-Rückblicks einlädt – schließen mit „Später" oder öffnen mit „Jetzt ansehen".
+- Cache-Indikator: Wurde ein Rückblick bereits generiert, lädt er sofort mit dem Hinweis „Aus Cache" und einem Link „Neu generieren".
+- KI-Coach (iOS 26+ / Apple Intelligence): kurzer Rückblick nach jedem Workout, Monats-Rückblick im Verlauf, und "Coach fragen"-Analyse in den Übungsdetails. Alles on-device — deine Daten verlassen das Gerät nicht.

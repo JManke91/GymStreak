@@ -19,6 +19,10 @@ struct ContentView: View {
 private struct ContentViewInternal: View {
     @StateObject private var workoutViewModel: WorkoutViewModel
 
+    /// Observable singletons — @State so SwiftUI tracks their changes.
+    @State private var preferences = AICoachPreferences.shared
+    @State private var availability = AICoachAvailability.shared
+
     init(modelContext: ModelContext) {
         self._workoutViewModel = StateObject(wrappedValue: WorkoutViewModel(modelContext: modelContext))
     }
@@ -42,6 +46,21 @@ private struct ContentViewInternal: View {
         }
         .tint(DesignSystem.Colors.tint)
         .preferredColorScheme(.dark)
+        // AI Coach opt-in: shown once when Apple Intelligence is available
+        // and the user has not yet completed or permanently dismissed opt-in.
+        .fullScreenCover(isPresented: .constant(shouldShowOptIn)) {
+            AICoachOptInView()
+        }
+        .task {
+            // Resolve availability on first foreground; the fullScreenCover
+            // binding re-evaluates once state changes from .unknown → .available.
+            await availability.refresh()
+        }
+    }
+
+    /// `true` when all conditions for showing the opt-in screen are met.
+    private var shouldShowOptIn: Bool {
+        availability.isAvailable && preferences.shouldShowOptIn
     }
 }
 

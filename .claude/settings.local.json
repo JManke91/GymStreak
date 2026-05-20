@@ -116,7 +116,11 @@
       "Bash(/usr/bin/grep -B1 -A4 \"PBXFileSystemSynchronized\" /Users/jmanke/Documents/Code/iOS/AI/GymStreak/GymStreak.xcodeproj/project.pbxproj)",
       "Bash(/usr/bin/grep -E \"\\(error:|warning:\\)\")",
       "Bash(/usr/bin/grep -E \"\\(error:|BUILD FAILED|BUILD SUCCEEDED\\)\")",
-      "Bash(/usr/bin/grep -in \"workout.detail\\\\|WorkoutDetailView\\\\|detail.view\\\\|workout detail\" /Users/jmanke/Documents/Code/iOS/AI/GymStreak/docs/history-redesign.md)"
+      "Bash(/usr/bin/grep -in \"workout.detail\\\\|WorkoutDetailView\\\\|detail.view\\\\|workout detail\" /Users/jmanke/Documents/Code/iOS/AI/GymStreak/docs/history-redesign.md)",
+      "Bash(mkdir -p /tmp/ai-coach-design)",
+      "Bash(curl -sL \"https://api.anthropic.com/v1/design/h/blaVrVwLd5RsgGtUVmy3Nw?open_file=AI+Coach.html\" -o /tmp/ai-coach-design/bundle.tar.gz)",
+      "Read(//private/tmp/ai-coach-design/**)",
+      "Bash(tar -xzf bundle.tar.gz)"
     ],
     "defaultMode": "acceptEdits"
   }

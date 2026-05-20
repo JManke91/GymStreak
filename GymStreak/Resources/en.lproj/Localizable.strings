@@ -555,3 +555,113 @@
 "history.exercise.best_set" = "Best: %@";
 
 "switch" = "Switch";
+
+// MARK: - AI Coach
+// Privacy
+"ai_coach.privacy_footer" = "Generated on your iPhone · Data never leaves the device";
+
+// Surface chrome
+"ai_coach.regenerate_button" = "Regenerate";
+"ai_coach.streaming_label" = "writing";
+
+// Fallback lines
+"ai_coach.fallback_unavailable" = "Coach recap is available on Apple Intelligence devices.";
+"ai_coach.fallback_action_settings" = "Settings";
+"ai_coach.fallback_insufficient" = "Recap appears once you have a few sessions to compare.";
+
+// Opt-in screen
+"ai_coach.optin.eyebrow" = "New in Gym Streak";
+"ai_coach.optin.headline" = "A coach\nthat listens.";
+"ai_coach.optin.body" = "Short, fact-based recaps of your workouts — written from your numbers, not generic tips.";
+"ai_coach.optin.feature1.title" = "Runs on your iPhone";
+"ai_coach.optin.feature1.description" = "Apple's Foundation Models analyse your workouts on-device. No cloud, no account.";
+"ai_coach.optin.feature2.title" = "Observation only";
+"ai_coach.optin.feature2.description" = "No plans, no nutrition advice. The Coach counts, compares, and explains — nothing more.";
+"ai_coach.optin.feature3.title" = "Three places it appears";
+"ai_coach.optin.feature3.description" = "After each workout, in the monthly recap, and on individual exercises — on demand.";
+"ai_coach.optin.cta_primary" = "Enable Coach";
+"ai_coach.optin.cta_primary.accessibility" = "Enable Coach";
+"ai_coach.optin.cta_secondary" = "Maybe later";
+"ai_coach.optin.cta_secondary.accessibility" = "Maybe later";
+"ai_coach.optin.footer" = "Disable at any time in Settings";
+
+// Settings screen
+"ai_coach.settings.section.coach" = "Coach";
+"ai_coach.settings.section.surfaces" = "When the Coach appears";
+"ai_coach.settings.section.info" = "Info";
+"ai_coach.settings.hero.title" = "AI Coach";
+"ai_coach.settings.hero.subtitle.active" = "Active · Apple Intelligence";
+"ai_coach.settings.hero.subtitle.unavailable" = "Not available on this device";
+"ai_coach.settings.unavailable_banner.body" = "The Coach requires Apple Intelligence — available on iPhone 15 Pro or later with Apple Intelligence enabled.";
+"ai_coach.settings.unavailable_banner.cta" = "Learn more →";
+"ai_coach.settings.master_toggle.title" = "Enable Coach";
+"ai_coach.settings.master_toggle.detail.active" = "On-device analysis of your workouts";
+"ai_coach.settings.master_toggle.detail.unavailable" = "No supported device";
+"ai_coach.settings.surface.post_workout.title" = "After each workout";
+"ai_coach.settings.surface.post_workout.detail" = "Short recap after saving";
+"ai_coach.settings.surface.monthly.title" = "Monthly recap";
+"ai_coach.settings.surface.monthly.detail" = "Prompt at the start of each month";
+"ai_coach.settings.surface.exercise.title" = "Exercise detail";
+"ai_coach.settings.surface.exercise.detail" = "\"Ask the Coach\" button";
+"ai_coach.settings.info.how_it_works.title" = "How the Coach works";
+"ai_coach.settings.info.apple_intelligence.title" = "About Apple Intelligence";
+"ai_coach.settings.footer" = "All text is generated on your iPhone. Workouts, sets, and notes are never sent to Apple or third parties.";
+"ai_coach.how_it_works.title" = "How the Coach works";
+
+// Post-workout recap
+"ai_coach.post_workout.unavailable" = "Coach recap is available on Apple Intelligence devices.";
+"ai_coach.post_workout.unavailable_action" = "Settings";
+"ai_coach.post_workout.insufficient_data" = "Recap appears once you have a few sessions to compare.";
+"ai_coach.post_workout.error" = "Recap could not be created.";
+"ai_coach.post_workout.error_action" = "Try again";
+
+// Period recap — entry card
+"ai_coach.period_recap.entry_card.eyebrow" = "COACH · RECAP";
+"ai_coach.period_recap.entry_card.title" = "%@ recap";
+"ai_coach.period_recap.entry_card.subline" = "%d sessions · %@ · %d PRs. Tap for the full analysis.";
+
+// Period recap — proactive card
+"ai_coach.period_recap.proactive.eyebrow" = "COACH · RECAP";
+"ai_coach.period_recap.proactive.dismiss_button" = "Dismiss";
+"ai_coach.period_recap.proactive.title" = "%@ is over –";
+"ai_coach.period_recap.proactive.subtitle" = "your monthly recap is ready.";
+"ai_coach.period_recap.proactive.stat_sessions" = "Sessions";
+"ai_coach.period_recap.proactive.stat_volume" = "Volume";
+"ai_coach.period_recap.proactive.stat_prs" = "Personal bests";
+"ai_coach.period_recap.proactive.cta_primary" = "View now";
+"ai_coach.period_recap.proactive.cta_later" = "Later";
+
+// Period recap — main view
+"ai_coach.period_recap.nav.back" = "Back";
+"ai_coach.period_recap.eyebrow.streaming" = "COACH WRITING";
+"ai_coach.period_recap.eyebrow.static" = "COACH · RECAP";
+"ai_coach.period_recap.cache.from_cache" = "Cached";
+"ai_coach.period_recap.cache.regenerate" = "Regenerate";
+"ai_coach.period_recap.chip.this_week" = "This Week";
+"ai_coach.period_recap.chip.last_week" = "Last Week";
+"ai_coach.period_recap.chip.this_month" = "This Month";
+"ai_coach.period_recap.chip.last_month" = "Last Month";
+"ai_coach.period_recap.chip.last_3_months" = "3 Months";
+"ai_coach.period_recap.chip.this_year" = "This Year";
+"ai_coach.period_recap.section.trends" = "01 · What changed";
+"ai_coach.period_recap.section.correlation" = "02 · Notable pattern";
+"ai_coach.period_recap.section.closing" = "03 · Looking ahead";
+"ai_coach.period_recap.correlation.label" = "PATTERN";
+"ai_coach.period_recap.stat.sessions" = "Sessions";
+"ai_coach.period_recap.stat.volume" = "Volume";
+"ai_coach.period_recap.stat.prs" = "New PRs";
+"ai_coach.period_recap.streaming.remaining" = "~15 s remaining";
+"ai_coach.period_recap.fallback.unavailable" = "Coach recap is available on Apple Intelligence devices.";
+"ai_coach.period_recap.fallback.insufficient" = "Not enough sessions yet for a meaningful analysis.";
+"ai_coach.period_recap.error.banner" = "Analysis could not be loaded.";
+"ai_coach.period_recap.error.retry" = "Try again";
+"ai_coach.period_recap.error.empty_output" = "No result received.";
+
+// Exercise deep-dive
+"ai_coach.deep_dive.button_title" = "Ask the Coach";
+"ai_coach.deep_dive.button_subtitle" = "Brief analysis of your %@ progression";
+"ai_coach.deep_dive.button_accessibility" = "Ask the Coach: analyse %@ progression";
+"ai_coach.deep_dive.unavailable" = "Coach analysis is available on Apple Intelligence devices.";
+"ai_coach.deep_dive.insufficient_data" = "At least 4 sets needed for an analysis.";
+"ai_coach.deep_dive.error" = "Analysis could not be loaded.";
+"ai_coach.deep_dive.error_retry" = "Try again";

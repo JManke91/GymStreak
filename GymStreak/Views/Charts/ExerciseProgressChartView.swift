@@ -25,6 +25,12 @@ struct ExerciseProgressChartView: View {
 
     @State private var recentSessions: [RecentSession] = []
 
+    // MARK: - AI Coach Deep-Dive
+
+    @State private var deepDiveVM = ExerciseDeepDiveViewModel()
+    @State private var hasTappedAskCoach = false
+    @Query private var allExercises: [Exercise]
+
     init(exerciseName: String, exerciseId: UUID?, availableExercises: [ExerciseWithHistory]) {
         self._currentExerciseName = State(initialValue: exerciseName)
         self._currentExerciseId = State(initialValue: exerciseId)
@@ -52,6 +58,7 @@ struct ExerciseProgressChartView: View {
                     titleBlock
                     statTriple
                     chartCard
+                    coachSection
                     recentSessionsSection
                     Color.clear.frame(height: 40)
                 }
@@ -61,11 +68,20 @@ struct ExerciseProgressChartView: View {
         .onAppear {
             viewModel.updateModelContext(modelContext)
         }
+        .onDisappear {
+            deepDiveVM.cancel()
+        }
         .onChange(of: viewModel.progressData?.exerciseName) { _, _ in
             Task { await loadRecentSessions() }
         }
         .task {
             await loadRecentSessions()
+        }
+        .task(id: currentExerciseId) {
+            // Auto-load cached deep-dive on appear or when exercise switches
+            if let exercise = resolvedExercise {
+                await deepDiveVM.checkCache(exercise: exercise, locale: .current, modelContext: modelContext)
+            }
         }
     }
 
@@ -376,12 +392,59 @@ struct ExerciseProgressChartView: View {
         }
     }
 
+    // MARK: - AI Coach Coach Section
+
+    @ViewBuilder
+    private var coachSection: some View {
+        let prefs = AICoachPreferences.shared
+        let avail = AICoachAvailability.shared
+        if prefs.isExerciseDeepDiveEffectivelyEnabled, avail.isAvailable, let exercise = resolvedExercise {
+            Group {
+                if case .idle = deepDiveVM.state, !hasTappedAskCoach {
+                    CoachDeepDiveButton(exerciseName: currentExerciseName) {
+                        hasTappedAskCoach = true
+                        deepDiveVM.generate(
+                            exercise: exercise,
+                            locale: .current,
+                            modelContext: modelContext
+                        )
+                    }
+                } else {
+                    CoachDeepDiveSurface(
+                        state: deepDiveVM.state,
+                        exerciseName: currentExerciseName,
+                        onRegenerate: {
+                            deepDiveVM.regenerate(
+                                exercise: exercise,
+                                locale: .current,
+                                modelContext: modelContext
+                            )
+                        }
+                    )
+                }
+            }
+            .padding(.horizontal, 16)
+        }
+    }
+
+    /// Resolves the live `Exercise` from SwiftData using `currentExerciseId` (preferred)
+    /// or by name match when the chart was opened without an explicit id.
+    private var resolvedExercise: Exercise? {
+        if let id = currentExerciseId {
+            return allExercises.first(where: { $0.id == id })
+        }
+        return allExercises.first(where: { $0.name == currentExerciseName })
+    }
+
     // MARK: - Data
 
     private func switchToExercise(_ exercise: ExerciseWithHistory) {
         currentExerciseName = exercise.name
         currentExerciseId = exercise.exerciseId
         viewModel.updateExercise(exercise.name, exerciseId: exercise.exerciseId, context: modelContext)
+        // Reset deep-dive state when the user switches exercises
+        deepDiveVM = ExerciseDeepDiveViewModel()
+        hasTappedAskCoach = false
         Task { await loadRecentSessions() }
     }
 

@@ -11,6 +11,7 @@ struct SaveWorkoutView: View {
     @State private var syncToHealthKit = true
     @State private var exerciseComparisons: [ExerciseComparisonResult] = []
     @State private var isLoadingComparisons = true
+    @State private var recapVM = PostWorkoutRecapViewModel()
 
     let onSave: () -> Void
 
@@ -18,6 +19,7 @@ struct SaveWorkoutView: View {
         NavigationView {
             Form {
                 summarySection
+                aiRecapSection
                 exerciseProgressSection
                 repGoalAchievedSection
                 healthKitSection
@@ -29,6 +31,11 @@ struct SaveWorkoutView: View {
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("action.cancel".localized) {
+                        // Clean up any orphaned cache entry produced during generation
+                        // before the session was persisted via completeWorkout().
+                        if let session = viewModel.currentSession {
+                            AICoachCache.shared.invalidatePostWorkout(workoutId: session.id)
+                        }
                         dismiss()
                     }
                 }
@@ -46,6 +53,13 @@ struct SaveWorkoutView: View {
             }
             .task {
                 await loadComparisons()
+                if let session = viewModel.currentSession {
+                    await recapVM.generate(
+                        session: session,
+                        locale: Locale.current,
+                        modelContext: modelContext
+                    )
+                }
             }
         }
     }
@@ -79,6 +93,32 @@ struct SaveWorkoutView: View {
         } header: {
             Text("save_workout.summary".localized)
         }
+    }
+
+    // MARK: - AI Recap Section
+
+    @ViewBuilder
+    private var aiRecapSection: some View {
+        // Only render when the state has content to show.
+        // .idle produces a zero-height placeholder so no empty section appears.
+        Section {
+            AIRecapInline(state: recapVM.state) {
+                HapticManager.shared.light()
+                if let session = viewModel.currentSession {
+                    Task {
+                        await recapVM.regenerate(
+                            session: session,
+                            locale: Locale.current,
+                            modelContext: modelContext
+                        )
+                    }
+                }
+            }
+        } header: {
+            EmptyView()
+        }
+        .listRowBackground(Color.clear)
+        .listRowInsets(EdgeInsets(top: 0, leading: 0, bottom: 0, trailing: 0))
     }
 
     // MARK: - Exercise Progress Section

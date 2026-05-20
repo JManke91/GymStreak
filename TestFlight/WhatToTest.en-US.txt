@@ -1,0 +1,5 @@
+- AI Coach Period Recap: tap the new "COACH · RÜCKBLICK" card in the Trainings tab to open a full-screen AI-generated monthly (or weekly/yearly) recap with streaming narrative, trend analysis, correlation callout, and stat strip.
+- Period range switching: tap the chip strip at the top of the recap screen to switch between This Week, Last Week, This Month, Last Month, Last 3 Months, and This Year.
+- Proactive monthly prompt: on the first open after a month boundary, a large card prompts you to view the previous month's recap — dismiss with "Später" or open with "Jetzt ansehen".
+- Cache indicator: when a recap was previously generated it loads instantly with an "Aus Cache" label and a "Neu generieren" link to refresh.
+- AI Coach (iOS 26+ / Apple Intelligence): post-workout recap on the save screen, monthly recap from the History tab, and Ask-the-Coach analysis on exercise charts. Generated on-device — data never leaves the device.

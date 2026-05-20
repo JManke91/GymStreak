@@ -30,6 +30,7 @@ struct HistoryView: View {
     @State private var prExerciseCountBySession: [UUID: Int] = [:]
     @State private var workoutToDelete: WorkoutSession?
     @State private var showingDeleteAlert = false
+    @State private var showingAICoachSettings = false
 
     private var sessions: [WorkoutSession] {
         viewModel.workoutHistory.filter { $0.endTime != nil }
@@ -94,6 +95,12 @@ struct HistoryView: View {
                     availableExercises: exercise.allExercises
                 )
             }
+            .navigationDestination(for: PeriodRecapDestination.self) { dest in
+                PeriodRecapView(initialRange: dest.range)
+            }
+            .navigationDestination(isPresented: $showingAICoachSettings) {
+                AICoachSettingsView()
+            }
             .onAppear {
                 viewModel.updateModelContext(modelContext)
                 refresh()
@@ -136,7 +143,18 @@ struct HistoryView: View {
                 .font(.system(size: 32, weight: .bold, design: .rounded))
                 .kerning(-0.7)
                 .foregroundStyle(Color.white)
+
             Spacer()
+
+            Button {
+                showingAICoachSettings = true
+            } label: {
+                Image(systemName: "gearshape.fill")
+                    .font(.system(size: 20, weight: .medium))
+                    .foregroundStyle(Color.white.opacity(0.6))
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("AI Coach Einstellungen")
         }
         .padding(.horizontal, 20)
         .padding(.top, 8)
