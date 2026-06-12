@@ -1042,33 +1042,143 @@ class WorkoutViewModel: ObservableObject {
         }
     }
 
+    // MARK: - Editing Past Workouts
+
+    /// Persists user edits to a completed (past) workout. The edit screen passes value-type
+    /// drafts so that cancelling never mutates the `@Model` objects. Mirrors the active-workout
+    /// completion flow: optionally pushes the corrected values back to the routine template and
+    /// triggers a watch routine sync so the next workout (iOS + watch) starts from them.
+    func saveEditedWorkout(
+        _ session: WorkoutSession,
+        exerciseDrafts: [WorkoutExerciseDraft],
+        updateTemplate: Bool
+    ) {
+        objectWillChange.send()
+
+        for draft in exerciseDrafts {
+            guard let workoutExercise = session.workoutExercisesList.first(where: { $0.id == draft.id }) else {
+                continue
+            }
+
+            // 1. Delete sets the user removed in the editor
+            let keptIds = Set(draft.sets.compactMap(\.existingSetId))
+            for set in workoutExercise.setsList where !keptIds.contains(set.id) {
+                workoutExercise.sets?.removeAll { $0.id == set.id }
+                modelContext.delete(set)
+            }
+
+            // 2. Update kept sets and insert newly added ones, in draft order
+            let completedAt = session.endTime ?? Date()
+            for (index, setDraft) in draft.sets.enumerated() {
+                if let existingId = setDraft.existingSetId,
+                   let set = workoutExercise.setsList.first(where: { $0.id == existingId }) {
+                    // Write back to whichever field is displayed (planned values are shown
+                    // when progressive overload was applied — see WorkoutDetailExerciseBlock).
+                    if draft.usePlanned {
+                        set.plannedReps = setDraft.reps
+                        set.plannedWeight = setDraft.weight
+                    } else {
+                        set.actualReps = setDraft.reps
+                        set.actualWeight = setDraft.weight
+                    }
+                    set.restTime = setDraft.restTime
+                    set.isCompleted = setDraft.isCompleted
+                    set.completedAt = setDraft.isCompleted ? (set.completedAt ?? completedAt) : nil
+                    set.order = index
+                } else {
+                    let newSet = WorkoutSet(
+                        plannedReps: setDraft.reps,
+                        actualReps: setDraft.reps,
+                        plannedWeight: setDraft.weight,
+                        actualWeight: setDraft.weight,
+                        restTime: setDraft.restTime,
+                        order: index
+                    )
+                    newSet.isCompleted = setDraft.isCompleted
+                    newSet.completedAt = setDraft.isCompleted ? completedAt : nil
+                    newSet.workoutExercise = workoutExercise
+                    workoutExercise.sets?.append(newSet)
+                    modelContext.insert(newSet)
+                }
+            }
+        }
+
+        session.didUpdateTemplate = updateTemplate
+
+        if updateTemplate {
+            updateRoutineTemplate(session: session) // also calls save()
+        } else {
+            save()
+        }
+
+        fetchWorkoutHistory()
+
+        // The cached AI recap/analysis for this session reflect the old values — drop them.
+        AICoachCache.shared.invalidatePostWorkout(workoutId: session.id)
+        AICoachCache.shared.invalidateWorkoutAnalysis(workoutId: session.id)
+
+        // Propagate template changes to the watch (RoutinesViewModel re-fetches and syncs).
+        if updateTemplate {
+            NotificationCenter.default.post(name: .routineTemplateDidChange, object: nil)
+        }
+    }
+
     // MARK: - Template Update
 
+    /// Pushes a session's performed values back onto its routine template. Reps/weight are taken
+    /// from completed sets only; rest time from the exercise; and the template's set count is
+    /// reconciled to match the session (extra sets appended, surplus removed) so edits that add
+    /// or delete sets are reflected for future workouts. Shared by `completeWorkout` and
+    /// `saveEditedWorkout`.
     private func updateRoutineTemplate(session: WorkoutSession) {
         guard let routine = session.routine else { return }
 
         for workoutExercise in session.workoutExercisesList {
             // Find corresponding routine exercise
-            if let routineExercise = routine.routineExercisesList.first(where: {
+            guard let routineExercise = routine.routineExercisesList.first(where: {
                 $0.exercise?.name == workoutExercise.exerciseName
-            }) {
-                // Get the rest time from the first set (all sets should have same rest time)
-                let exerciseRestTime = workoutExercise.setsList.first?.restTime ?? 60.0
+            }) else { continue }
 
-                // Update all routine sets with the exercise rest time and completed set data
-                let workoutSets = workoutExercise.setsList
-                for (index, routineSet) in routineExercise.setsList.enumerated() {
-                    // Always update rest time for all sets
-                    routineSet.restTime = exerciseRestTime
+            // Get the rest time from the first set (all sets should have same rest time)
+            let exerciseRestTime = workoutExercise.setsList.first?.restTime ?? 60.0
+            let workoutSets = workoutExercise.setsList.sorted(by: { $0.order < $1.order })
+            var routineSets = routineExercise.setsList.sorted(by: { $0.order < $1.order })
 
-                    // Update reps and weight only for completed sets
-                    if index < workoutSets.count {
-                        let workoutSet = workoutSets[index]
-                        if workoutSet.isCompleted {
-                            routineSet.reps = workoutSet.actualReps
-                            routineSet.weight = workoutSet.actualWeight
-                        }
-                    }
+            // Remove surplus template sets beyond the session's set count
+            if routineSets.count > workoutSets.count {
+                for routineSet in routineSets[workoutSets.count...] {
+                    routineExercise.sets?.removeAll { $0.id == routineSet.id }
+                    modelContext.delete(routineSet)
+                }
+                routineSets = Array(routineSets[..<workoutSets.count])
+            }
+
+            // Update existing template sets in order
+            for (index, routineSet) in routineSets.enumerated() {
+                routineSet.order = index
+                // Always update rest time for all sets
+                routineSet.restTime = exerciseRestTime
+                // Update reps and weight only for completed sets
+                let workoutSet = workoutSets[index]
+                if workoutSet.isCompleted {
+                    routineSet.reps = workoutSet.actualReps
+                    routineSet.weight = workoutSet.actualWeight
+                }
+            }
+
+            // Append new template sets for extra session sets
+            if workoutSets.count > routineSets.count {
+                for index in routineSets.count..<workoutSets.count {
+                    let workoutSet = workoutSets[index]
+                    let newRoutineSet = ExerciseSet(
+                        reps: workoutSet.actualReps,
+                        weight: workoutSet.actualWeight,
+                        restTime: exerciseRestTime,
+                        order: index
+                    )
+                    newRoutineSet.routineExercise = routineExercise
+                    routineExercise.sets?.append(newRoutineSet)
+                    modelContext.insert(newRoutineSet)
                 }
             }
         }

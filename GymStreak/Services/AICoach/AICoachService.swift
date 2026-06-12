@@ -129,6 +129,22 @@ final class AICoachService {
         )
     }
 
+    /// Streams a `WorkoutAnalysisOutput`.
+    ///
+    /// Returns `nil` when the workout detail surface is disabled or the model is unavailable.
+    func streamWorkoutAnalysis(
+        input: WorkoutAnalysisInput
+    ) async throws -> LanguageModelSession.ResponseStream<WorkoutAnalysisOutput>? {
+        guard preferences.isWorkoutDetailEffectivelyEnabled, availability.isAvailable else { return nil }
+        return try await stream(
+            instructions: WorkoutAnalysisInstructions.systemPrompt,
+            promptText: input.toPromptText(),
+            outputType: WorkoutAnalysisOutput.self,
+            useCase: "workout_analysis",
+            maximumResponseTokens: 300
+        )
+    }
+
     // MARK: - Prewarm
 
     /// Warms the on-device model weights so the first real generation starts faster.

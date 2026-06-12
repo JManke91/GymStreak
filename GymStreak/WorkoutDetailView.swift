@@ -23,6 +23,9 @@ struct WorkoutDetailView: View {
     @State private var prExerciseNames: Set<String> = []
     @State private var healthKitKcal: Double?
     @State private var comparisons: [UUID: ExerciseComparisonResult] = [:]
+    @State private var analysisVM = WorkoutAnalysisViewModel()
+    @State private var hasPreviousSession: Bool = false
+    @State private var showingEdit = false
 
     private var workoutType: WorkoutType {
         WorkoutType.classify(routineName: workout.routineName)
@@ -42,6 +45,7 @@ struct WorkoutDetailView: View {
                     if !workout.notes.isEmpty {
                         notesSection
                     }
+                    coachSection
                     exercisesSection
                     Color.clear.frame(height: 40)
                 }
@@ -52,6 +56,20 @@ struct WorkoutDetailView: View {
             await loadPRs()
             await loadHealthKitKcal()
             await loadComparisons()
+            loadCoachState()
+        }
+        .sheet(isPresented: $showingEdit, onDismiss: reloadAfterEdit) {
+            EditWorkoutSessionView(workout: workout, viewModel: viewModel)
+        }
+    }
+
+    /// Re-derives PR badges, vs-previous comparisons and coach state after the user
+    /// edits the session. The set grid itself is @Model-observed and updates on its own.
+    private func reloadAfterEdit() {
+        Task {
+            await loadPRs()
+            await loadComparisons()
+            loadCoachState()
         }
     }
 
@@ -72,6 +90,19 @@ struct WorkoutDetailView: View {
             }
             .buttonStyle(.plain)
             Spacer()
+            Button {
+                HapticManager.shared.light()
+                showingEdit = true
+            } label: {
+                Image(systemName: "square.and.pencil")
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(Color.white)
+                    .frame(width: 38, height: 38)
+                    .background(Color.white.opacity(0.08))
+                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("edit_workout.title".localized)
         }
         .padding(.horizontal, 16)
         .padding(.top, 12)
@@ -241,6 +272,60 @@ struct WorkoutDetailView: View {
                 .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
         }
         .padding(.horizontal, 20)
+    }
+
+    // MARK: - Coach
+
+    @ViewBuilder
+    private var coachSection: some View {
+        if isCoachVisible {
+            Group {
+                switch analysisVM.state {
+                case .idle:
+                    CoachWorkoutAnalysisButton(routineName: workout.routineName) {
+                        analysisVM.generate(
+                            workout: workout,
+                            locale: Locale.current,
+                            modelContext: modelContext
+                        )
+                    }
+
+                case .streaming, .success, .unavailable, .insufficientData, .error:
+                    CoachWorkoutAnalysisSurface(
+                        state: analysisVM.state,
+                        routineName: workout.routineName,
+                        onRegenerate: {
+                            analysisVM.regenerate(
+                                workout: workout,
+                                locale: Locale.current,
+                                modelContext: modelContext
+                            )
+                        }
+                    )
+                }
+            }
+            .padding(.horizontal, 16)
+        }
+    }
+
+    /// Whether the AI Coach button/surface should be visible.
+    private var isCoachVisible: Bool {
+        AICoachPreferences.shared.isWorkoutDetailEffectivelyEnabled
+        && AICoachAvailability.shared.isAvailable
+        && hasPreviousSession
+    }
+
+    @MainActor
+    private func loadCoachState() {
+        let aggregator = WorkoutAnalysisAggregator()
+        hasPreviousSession = aggregator.hasPreviousSession(
+            session: workout,
+            modelContext: modelContext
+        )
+
+        if hasPreviousSession {
+            analysisVM.checkCache(workout: workout)
+        }
     }
 
     // MARK: - Exercises

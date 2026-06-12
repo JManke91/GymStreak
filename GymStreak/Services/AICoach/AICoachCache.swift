@@ -85,6 +85,20 @@ final class AICoachCache {
         remove(at: exerciseDeepDiveURL(key))
     }
 
+    // MARK: - Workout Analysis
+
+    func loadWorkoutAnalysis(workoutId: UUID) -> WorkoutAnalysisOutput? {
+        load(WorkoutAnalysisOutput.self, from: workoutAnalysisURL(workoutId))
+    }
+
+    func saveWorkoutAnalysis(workoutId: UUID, output: WorkoutAnalysisOutput) {
+        save(output, to: workoutAnalysisURL(workoutId))
+    }
+
+    func invalidateWorkoutAnalysis(workoutId: UUID) {
+        remove(at: workoutAnalysisURL(workoutId))
+    }
+
     // MARK: - URL Helpers
 
     private func postWorkoutURL(_ id: UUID) -> URL {
@@ -99,6 +113,10 @@ final class AICoachCache {
     private func exerciseDeepDiveURL(_ key: String) -> URL {
         let safe = key.components(separatedBy: CharacterSet.alphanumerics.union(.init(charactersIn: "-_")).inverted).joined(separator: "_")
         return root.appending(path: "exercise_deep_dive_\(safe).json", directoryHint: .notDirectory)
+    }
+
+    private func workoutAnalysisURL(_ id: UUID) -> URL {
+        root.appending(path: "workout_analysis_\(id.uuidString).json", directoryHint: .notDirectory)
     }
 
     // MARK: - Generic IO

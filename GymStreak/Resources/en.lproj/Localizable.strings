@@ -359,6 +359,14 @@
 "edit_set.rest_time" = "Rest Time";
 "edit_set.title" = "Edit Set";
 
+"edit_workout.title" = "Edit Workout";
+"edit_workout.add_set" = "Add Set";
+"edit_workout.completed" = "Completed";
+"edit_workout.template_prompt.title" = "Update Routine Template?";
+"edit_workout.template_prompt.message" = "Apply these corrected values back to the routine template for future workouts?";
+"edit_workout.template_prompt.update" = "Update Template";
+"edit_workout.template_prompt.skip" = "Just Save Workout";
+
 // MARK: - Add Routine View
 "add_routine.title" = "New Routine";
 "add_routine.section.details" = "Routine Details";
@@ -665,3 +673,14 @@
 "ai_coach.deep_dive.insufficient_data" = "At least 4 sets needed for an analysis.";
 "ai_coach.deep_dive.error" = "Analysis could not be loaded.";
 "ai_coach.deep_dive.error_retry" = "Try again";
+
+// Workout analysis (workout detail)
+"ai_coach.workout_analysis.button_title" = "Ask the Coach";
+"ai_coach.workout_analysis.button_subtitle" = "Analysis vs. previous %@";
+"ai_coach.workout_analysis.button_accessibility" = "Ask the Coach: analyse workout vs. previous %@";
+"ai_coach.workout_analysis.unavailable" = "Coach analysis is available on Apple Intelligence devices.";
+"ai_coach.workout_analysis.insufficient_data" = "No previous session of this routine to compare against.";
+"ai_coach.workout_analysis.error" = "Analysis could not be loaded.";
+"ai_coach.workout_analysis.error_retry" = "Try again";
+"ai_coach.settings.surface.workout_detail.title" = "Workout detail";
+"ai_coach.settings.surface.workout_detail.detail" = "Analysis when viewing past workouts";

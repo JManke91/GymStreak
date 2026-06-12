@@ -83,8 +83,20 @@ struct AICoachSettingsView: View {
                             title: "ai_coach.settings.surface.exercise.title".localized,
                             detail: "ai_coach.settings.surface.exercise.detail".localized,
                             isEnabled: masterActive,
-                            isLast: true,
                             binding: bindable.exerciseDeepDiveEnabled
+                        )
+
+                        Divider()
+                            .background(Color.white.opacity(0.06))
+                            .padding(.horizontal, 16)
+
+                        surfaceToggleRow(
+                            icon: "list.bullet.rectangle",
+                            title: "ai_coach.settings.surface.workout_detail.title".localized,
+                            detail: "ai_coach.settings.surface.workout_detail.detail".localized,
+                            isEnabled: masterActive,
+                            isLast: true,
+                            binding: bindable.workoutDetailEnabled
                         )
                     }
 

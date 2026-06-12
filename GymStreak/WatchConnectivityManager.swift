@@ -212,6 +212,10 @@ extension Notification.Name {
     /// Posted after a watch-originated WorkoutSession has been committed to
     /// SwiftData. Lets the History tab refresh without a tab switch.
     static let workoutHistoryDidChange = Notification.Name("workoutHistoryDidChange")
+    /// Posted after a routine template is mutated outside of RoutinesViewModel
+    /// (e.g. editing a past workout in History). Triggers a routine re-fetch +
+    /// watch sync so the corrected values reach iOS and the watch.
+    static let routineTemplateDidChange = Notification.Name("routineTemplateDidChange")
 }
 
 // MARK: - Persistent buffer for incoming watch workouts

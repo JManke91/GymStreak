@@ -359,6 +359,14 @@
 "edit_set.rest_time" = "Pausenzeit";
 "edit_set.title" = "Satz bearbeiten";
 
+"edit_workout.title" = "Workout bearbeiten";
+"edit_workout.add_set" = "Satz hinzufügen";
+"edit_workout.completed" = "Erledigt";
+"edit_workout.template_prompt.title" = "Routinen-Vorlage aktualisieren?";
+"edit_workout.template_prompt.message" = "Diese korrigierten Werte für zukünftige Workouts in die Routinen-Vorlage übernehmen?";
+"edit_workout.template_prompt.update" = "Vorlage aktualisieren";
+"edit_workout.template_prompt.skip" = "Nur Workout speichern";
+
 // MARK: - Add Routine View
 "add_routine.title" = "Neue Routine";
 "add_routine.section.details" = "Routinendetails";
@@ -665,3 +673,14 @@
 "ai_coach.deep_dive.insufficient_data" = "Mindestens 4 Sätze nötig für eine Analyse.";
 "ai_coach.deep_dive.error" = "Analyse konnte nicht geladen werden.";
 "ai_coach.deep_dive.error_retry" = "Erneut versuchen";
+
+// Workout analysis (workout detail)
+"ai_coach.workout_analysis.button_title" = "Coach fragen";
+"ai_coach.workout_analysis.button_subtitle" = "Analyse vs. vorheriges %@";
+"ai_coach.workout_analysis.button_accessibility" = "Coach fragen: Workout analysieren vs. vorheriges %@";
+"ai_coach.workout_analysis.unavailable" = "Coach-Analyse ist auf Apple-Intelligence-Geräten verfügbar.";
+"ai_coach.workout_analysis.insufficient_data" = "Keine vorherige Session dieser Routine zum Vergleich vorhanden.";
+"ai_coach.workout_analysis.error" = "Analyse konnte nicht geladen werden.";
+"ai_coach.workout_analysis.error_retry" = "Erneut versuchen";
+"ai_coach.settings.surface.workout_detail.title" = "Workout-Detail";
+"ai_coach.settings.surface.workout_detail.detail" = "Analyse beim Ansehen vergangener Workouts";

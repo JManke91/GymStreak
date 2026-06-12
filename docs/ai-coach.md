@@ -4,10 +4,11 @@
 
 AI Coach is an on-device AI feature that generates short, fact-based workout narratives from the user's own SwiftData training history. It uses Apple's Foundation Models framework (iOS 26+, Apple Intelligence required) and never sends any data off the device.
 
-Three surfaces:
+Four surfaces:
 1. **Post-Workout Recap** — a 2–3 sentence recap auto-generated on the save-workout screen after finishing a workout.
 2. **Period Recap** — a multi-section editorial analysis accessible from the History tab, supporting any of six time ranges (this week through this year).
 3. **Exercise Deep-Dive** — a 3–4 paragraph analysis of a single exercise's progression, surfaced on the exercise progress chart screen.
+4. **Workout Analysis** — a 3–5 sentence comparison of a past workout against the previous session of the same routine, surfaced in the workout detail view (Verlauf tab).
 
 Voice and tone constraints (enforced via system prompt):
 - Factual, analytical, grounded — never hyped.
@@ -55,35 +56,39 @@ Final snapshot → full *Output → AICoachCache.save*()
 | **Aggregators** | Query SwiftData, compute metrics, build Input structs with `toPromptText()` |
 | **Output @Generable structs** | Typed response shapes; also `Codable` for cache serialisation |
 | **AICoachService façade** | Creates `LanguageModelSession`, streams response, handles token budget |
-| **ViewModels** | State machines per surface; integrate cache; publish to SwiftUI |
+| **ViewModels** | State machines per surface (4 total); integrate cache; publish to SwiftUI |
 
 ### File map
 
 ```
 GymStreak/
   Models/AICoach/
-    AICoachOutputs.swift              — @Generable + Codable output structs
+    AICoachOutputs.swift              — @Generable + Codable output structs (4 surfaces)
     PostWorkoutRecapInput.swift       — input struct + toPromptText()
     PeriodRecapInput.swift            — input struct + toPromptText()
     ExerciseDeepDiveInput.swift       — input struct + toPromptText()
+    WorkoutAnalysisInput.swift        — input struct + toPromptText()
   Services/AICoach/
     AICoachAvailability.swift         — SystemLanguageModel availability mapping
     AICoachPreferences.swift          — UserDefaults-backed preferences (@Observable)
-    AICoachService.swift              — central façade, streamPostWorkoutRecap / streamPeriodRecap / streamExerciseDeepDive
+    AICoachService.swift              — central façade, streamPostWorkoutRecap / streamPeriodRecap / streamExerciseDeepDive / streamWorkoutAnalysis
     AICoachCache.swift                — disk-backed JSON cache (Application Support/AICoachCache/)
     AICoachTelemetry.swift            — os.Logger wrapper (no prompt or narrative text logged)
     PostWorkoutRecapAggregator.swift  — builds PostWorkoutRecapInput from a WorkoutSession
     PeriodRecapAggregator.swift       — builds PeriodRecapInput from a date range
     ExerciseDeepDiveAggregator.swift  — builds ExerciseDeepDiveInput from historical sets
+    WorkoutAnalysisAggregator.swift   — builds WorkoutAnalysisInput from a workout vs. previous same-routine
     ProactivePromptCoordinator.swift  — decides when to show the proactive period recap card
     SystemPrompts/
       PostWorkoutRecapInstructions.swift
       PeriodRecapInstructions.swift
       ExerciseDeepDiveInstructions.swift
+      WorkoutAnalysisInstructions.swift
   ViewModels/AICoach/
     PostWorkoutRecapViewModel.swift
     PeriodRecapViewModel.swift
     ExerciseDeepDiveViewModel.swift
+    WorkoutAnalysisViewModel.swift
   Views/AICoach/
     Components/
       AISurface.swift                 — gradient-bordered card chrome for all surfaces
@@ -101,6 +106,9 @@ GymStreak/
     ExerciseDeepDive/
       CoachDeepDiveButton.swift       — "Ask the Coach" button entry point
       CoachDeepDiveSurface.swift      — expanded surface in ExerciseProgressChartView
+    WorkoutAnalysis/
+      CoachWorkoutAnalysisButton.swift  — "Ask the Coach" button in WorkoutDetailView
+      CoachWorkoutAnalysisSurface.swift — expanded surface in WorkoutDetailView
     Settings/
       AICoachOptInView.swift          — first-run opt-in fullscreen cover
       AICoachSettingsView.swift       — gear-icon settings screen from History toolbar
@@ -144,12 +152,24 @@ GymStreak/
 - **Output struct**: `ExerciseDeepDiveOutput` — single `narrative: String` field.
 - **`findPeak` PR definition**: `ExerciseDeepDiveAggregator.findPeak` selects the session with the highest **raw weight** (ties broken by reps), matching the chart's PR marker. Previously it used max est-1RM, which could surface a lower raw weight than the chart's PR stat.
 
+### 4. Workout Analysis
+
+- **Entry**: `WorkoutDetailView` (tapping a past workout in the Verlauf/History tab). A `.task` silently checks cache on appear and whether a previous same-routine session exists. If yes, `CoachWorkoutAnalysisButton` ("Ask the Coach") is shown below the stats grid.
+- **Comparison logic**: `WorkoutAnalysisAggregator.buildInput` finds the most recent previous `WorkoutSession` with the same `routineName` (case-insensitive). Uses `ExerciseProgressService.compareWithPrevious()` for per-exercise comparison data. Also detects new PRs via the Epley formula.
+- **Data gates**: button hidden when (a) fewer than 2 completed sets, (b) no previous same-routine session, (c) AI Coach unavailable or workout detail preference off.
+- **Layout**: `CoachWorkoutAnalysisSurface` replaces the button after tap. Uses `AISurface` + `StreamingTextView` with `minHeight: 200`. Header label: `"COACH · ANALYSE"`.
+- **Cache key**: `workoutId.uuidString` — workout content is immutable once saved, so the key never changes.
+- **System prompt file**: `WorkoutAnalysisInstructions.swift`.
+- **Output struct**: `WorkoutAnalysisOutput` — single `narrative: String` field.
+- **Token cap**: 300 tokens.
+- **Preference**: `workoutDetailEnabled` (UserDefaults key: `aiCoachWorkoutDetailEnabled`, default: `true`). Toggle in AI Coach Settings under "Workout detail".
+
 ---
 
 ## Availability and Opt-in
 
 - `AICoachAvailability` (@Observable singleton): maps `SystemLanguageModel.default.availability` to `isAvailable: Bool`. Re-checked on `.active` scene phase change via `.task`.
-- `AICoachPreferences` (@Observable, UserDefaults-backed): `hasCompletedOptIn`, `isMasterEnabled`, `postWorkoutRecapEnabled`, `periodRecapEnabled`, `exerciseDeepDiveEnabled`. Also stores `lastOptInDeclinedAt` for the 7-day re-prompt cooldown.
+- `AICoachPreferences` (@Observable, UserDefaults-backed): `hasCompletedOptIn`, `isMasterEnabled`, `postWorkoutRecapEnabled`, `periodRecapEnabled`, `exerciseDeepDiveEnabled`, `workoutDetailEnabled`. Also stores `lastOptInDeclinedAt` for the 7-day re-prompt cooldown.
 - **First-run opt-in**: `AICoachOptInView` is presented as `.fullScreenCover` when `AICoachAvailability.isAvailable && !preferences.hasCompletedOptIn`. "Enable Coach" → sets `hasCompletedOptIn = true` + `isMasterEnabled = true`. "Maybe later" → records decline timestamp.
 - **Decline cooldown**: re-shown after 7 days if user still has not opted in.
 
@@ -164,6 +184,7 @@ GymStreak/
 - Post-workout entries are permanent (invalidation only via explicit regenerate).
 - Period recap entries are invalidated when any workout in that period changes.
 - Deep-dive entries auto-invalidate via timestamp in the key.
+- Workout analysis entries are permanent (keyed by immutable `workoutId`).
 
 ---
 
@@ -219,6 +240,7 @@ The stat strip is rendered **first** (before the headline card) in both states. 
 | Period recap (full) | 600 tokens |
 | Period recap (compact fallback) | 400 tokens |
 | Exercise deep-dive | 400 tokens |
+| Workout analysis | 300 tokens |
 
 The caps are applied in `AICoachService.stream(instructions:promptText:outputType:useCase:maximumResponseTokens:)` via an optional parameter, keeping each call site responsible only for its own budget.
 
@@ -260,7 +282,7 @@ Accessed via gear icon in the History tab toolbar → pushes `AICoachSettingsVie
 
 Sections:
 - **Coach**: master toggle (enable/disable all AI features).
-- **When the Coach appears**: per-surface toggles for post-workout, monthly recap, exercise detail.
+- **When the Coach appears**: per-surface toggles for post-workout, monthly recap, exercise detail, workout detail.
 - **Info**: "How the Coach works" (placeholder sheet) and "About Apple Intelligence" (opens Apple Support URL).
 - Footer disclaimer (monospaced, on-device privacy statement).
 

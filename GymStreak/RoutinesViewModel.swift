@@ -19,6 +19,7 @@ class RoutinesViewModel: ObservableObject {
         fetchRoutines()
         observeCloudKitChanges()
         observeWatchAvailability()
+        observeRoutineTemplateChanges()
     }
 
     private func observeCloudKitChanges() {
@@ -41,6 +42,19 @@ class RoutinesViewModel: ObservableObject {
         ) { [weak self] _ in
             Task { @MainActor in
                 self?.syncRoutinesToWatch()
+            }
+        }
+    }
+
+    private func observeRoutineTemplateChanges() {
+        NotificationCenter.default.addObserver(
+            forName: .routineTemplateDidChange,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in
+                // Re-fetch so the in-memory list reflects the edited template, then sync to watch.
+                self?.fetchRoutines()
             }
         }
     }

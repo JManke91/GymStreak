@@ -42,6 +42,9 @@ final class AICoachPreferences {
         exerciseDeepDiveEnabled = UserDefaults.standard.object(forKey: Keys.exerciseDeepDive) == nil
             ? true
             : UserDefaults.standard.bool(forKey: Keys.exerciseDeepDive)
+        workoutDetailEnabled = UserDefaults.standard.object(forKey: Keys.workoutDetail) == nil
+            ? true
+            : UserDefaults.standard.bool(forKey: Keys.workoutDetail)
         lastProactivePromptShownForPeriodId = UserDefaults.standard.string(forKey: Keys.lastProactivePeriodId)
         optInDeclinedAt = UserDefaults.standard.object(forKey: Keys.optInDeclinedAt) as? Date
     }
@@ -55,6 +58,7 @@ final class AICoachPreferences {
         static let periodRecap          = "aiCoachPeriodRecapEnabled"
         static let proactiveMonthly     = "aiCoachProactiveMonthlyEnabled"
         static let exerciseDeepDive     = "aiCoachExerciseDeepDiveEnabled"
+        static let workoutDetail        = "aiCoachWorkoutDetailEnabled"
         static let lastProactivePeriodId = "aiCoachLastProactivePromptPeriodId"
         static let optInDeclinedAt      = "aiCoachOptInDeclinedAt"
     }
@@ -101,6 +105,12 @@ final class AICoachPreferences {
         didSet { UserDefaults.standard.set(exerciseDeepDiveEnabled, forKey: Keys.exerciseDeepDive) }
     }
 
+    /// Whether the workout detail analysis surface is enabled.
+    /// Key: `aiCoachWorkoutDetailEnabled`. Default: `true`.
+    var workoutDetailEnabled: Bool = true {
+        didSet { UserDefaults.standard.set(workoutDetailEnabled, forKey: Keys.workoutDetail) }
+    }
+
     /// Tracks the last calendar period for which the proactive monthly prompt was shown,
     /// so Wave 3 can suppress repeated prompts within the same month boundary.
     /// Key: `aiCoachLastProactivePromptPeriodId`. Default: `nil`.
@@ -140,6 +150,11 @@ final class AICoachPreferences {
     /// Exercise deep-dive surface is active.
     var isExerciseDeepDiveEffectivelyEnabled: Bool {
         isEffectivelyEnabled && exerciseDeepDiveEnabled
+    }
+
+    /// Workout detail analysis surface is active.
+    var isWorkoutDetailEffectivelyEnabled: Bool {
+        isEffectivelyEnabled && workoutDetailEnabled
     }
 
     // MARK: - Opt-in Re-prompt Logic

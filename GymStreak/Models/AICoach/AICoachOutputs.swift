@@ -40,3 +40,11 @@ struct ExerciseDeepDiveOutput: Codable {
     @Guide(description: "Three to four short paragraphs in the user's locale, covering: (1) overall progression, (2) strongest period, (3) current state, (4) one observation correlating frequency with progression. Each paragraph 2-3 sentences. Use only data from the input.")
     let narrative: String
 }
+
+// MARK: - Workout Analysis
+
+@Generable
+struct WorkoutAnalysisOutput: Codable {
+    @Guide(description: "Three to five sentence narrative in the user's locale comparing this workout against the previous session of the same routine. Cover: overall volume/set changes, per-exercise highlights (weight or rep gains, stagnation, regression), any new PRs, and one notable observation about balance or patterns. Use only the exact values provided in the input. No emoji, no exclamation marks, no prescriptive advice.")
+    let narrative: String
+}
