@@ -31,6 +31,7 @@ struct HistoryView: View {
     @State private var workoutToDelete: WorkoutSession?
     @State private var showingDeleteAlert = false
     @State private var showingAICoachSettings = false
+    @State private var isRecovering = false
 
     private var sessions: [WorkoutSession] {
         viewModel.workoutHistory.filter { $0.endTime != nil }
@@ -54,9 +55,17 @@ struct HistoryView: View {
                         segmented
                             .padding(.horizontal, 20)
                         if !viewModel.orphanedWatchWorkouts.isEmpty {
-                            PendingSyncBannerView(orphans: viewModel.orphanedWatchWorkouts)
-                                .padding(.horizontal, 20)
-                                .padding(.top, 4)
+                            PendingSyncBannerView(orphans: viewModel.orphanedWatchWorkouts) {
+                                isRecovering = true
+                                Task {
+                                    await viewModel.recoverOrphanedWorkouts()
+                                    isRecovering = false
+                                    refresh()
+                                }
+                            }
+                            .padding(.horizontal, 20)
+                            .padding(.top, 4)
+                            .disabled(isRecovering)
                         }
                         Group {
                             switch section {

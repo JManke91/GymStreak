@@ -42,6 +42,28 @@ final class WatchConnectivityManager: NSObject, ObservableObject {
         pendingQueue.remove(id: id)
     }
 
+    /// Sends an app-level acknowledgment to the watch confirming a completed workout
+    /// has been committed to SwiftData (or recognized as already present). The watch
+    /// keeps the workout in its durable retry queue until it receives this ack —
+    /// WatchConnectivity's own transfer-completion callback only confirms transport
+    /// delivery, not that iOS persisted the workout, so without this ack a workout can
+    /// be silently lost (present in HealthKit but never in iOS history). Sent over both
+    /// the sendMessage fast-path (when reachable) and transferUserInfo (guaranteed),
+    /// and re-sent whenever a duplicate arrives, so delivery is self-healing.
+    func acknowledgeWorkoutSaved(id: UUID) {
+        guard let session = session, session.activationState == .activated else {
+            return
+        }
+        let payload: [String: Any] = ["workoutAck": id.uuidString]
+        if session.isReachable {
+            session.sendMessage(payload, replyHandler: nil) { error in
+                print("WatchConnectivity: ack sendMessage failed — \(error.localizedDescription) (transferUserInfo will still deliver)")
+            }
+        }
+        session.transferUserInfo(payload)
+        print("WatchConnectivity: sent save-ack for workout \(id)")
+    }
+
     // MARK: - Public Methods
 
     func syncRoutines(_ routines: [Routine]) {

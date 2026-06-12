@@ -26,6 +26,11 @@ final class HealthKitWorkoutReconciler {
         let duration: TimeInterval
         let activeEnergyBurnedKilocalories: Double?
         let sourceBundleIdentifier: String
+        /// Routine name read from HK metadata (RoutineName / WorkoutBrandName).
+        let routineName: String
+        /// Routine id read from HK metadata, if the workout was recorded by a build
+        /// that embeds it. Lets recovery match the exact routine template.
+        let routineId: UUID?
 
         var fromWatch: Bool {
             sourceBundleIdentifier.hasSuffix(".watchkitapp")
@@ -59,14 +64,11 @@ final class HealthKitWorkoutReconciler {
             return []
         }
 
-        let workoutType = HKObjectType.workoutType()
-        let authStatus = healthStore.authorizationStatus(for: workoutType)
-        // .sharingDenied / .notDetermined => silently skip; the user may not
-        // have granted read access yet. We don't request auth from here —
-        // that's the iOS HKManager's job.
-        guard authStatus == .sharingAuthorized else {
-            return []
-        }
+        // NOTE: we intentionally do NOT gate on `authorizationStatus(for:)`. That API
+        // reports *sharing (write)* status only — it says nothing about read access,
+        // and HealthKit always returns samples an app wrote itself regardless of read
+        // authorization. Gating on `.sharingAuthorized` here previously suppressed the
+        // query (and any recovery) for users who hadn't granted write access on iOS.
 
         let endDate = Date()
         let startDate = Calendar.current.date(byAdding: .day, value: -lookbackDays, to: endDate) ?? endDate
@@ -103,13 +105,20 @@ final class HealthKitWorkoutReconciler {
             let energy = workout.statistics(for: HKQuantityType(.activeEnergyBurned))?
                 .sumQuantity()?.doubleValue(for: .kilocalorie())
 
+            let routineName = (metadata["RoutineName"] as? String)
+                ?? (metadata[HKMetadataKeyWorkoutBrandName] as? String)
+                ?? "Workout"
+            let routineId = (metadata["RoutineId"] as? String).flatMap(UUID.init)
+
             return OrphanedWorkout(
                 id: externalId,
                 startDate: workout.startDate,
                 endDate: workout.endDate,
                 duration: workout.duration,
                 activeEnergyBurnedKilocalories: energy,
-                sourceBundleIdentifier: bundleId
+                sourceBundleIdentifier: bundleId,
+                routineName: routineName,
+                routineId: routineId
             )
         }
         .sorted { $0.startDate > $1.startDate }

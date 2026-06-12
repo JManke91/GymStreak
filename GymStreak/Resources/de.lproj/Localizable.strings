@@ -143,7 +143,12 @@
 "history.empty.description" = "Starte eine Routine um deine Workouts zu verfolgen";
 "history.pendingSync.title" = "Workouts warten auf Sync (%d)";
 "history.pendingSync.earliest" = "Ältestes nicht synchronisiert: %@";
-"history.pendingSync.help" = "Öffne GymStreak auf deiner Apple Watch, um es erneut zu senden. Das Workout ist in Apple Health gespeichert, aber die Satzdetails wurden noch nicht an dieses iPhone übertragen.";
+"history.pendingSync.help" = "Diese Workouts sind in Apple Health gespeichert, haben dieses iPhone aber nie erreicht. Füge sie deinem Verlauf hinzu – wir rekonstruieren sie aus deiner Routine.";
+"history.pendingSync.recover" = "Zum Verlauf hinzufügen";
+"history.pendingSync.recoveredNote" = "Aus Apple Health wiederhergestellt";
+"history.pendingSync.recover.title" = "Workouts zum Verlauf hinzufügen?";
+"history.pendingSync.recover.confirm" = "Hinzufügen";
+"history.pendingSync.recover.message" = "Die genauen Wiederholungen und Gewichte wurden nicht an dieses iPhone übertragen. Wir rekonstruieren daher jedes Workout aus seiner Routine und verwenden Datum und Dauer aus Apple Health. Du kannst die Details anschließend bearbeiten.";
 "history.date" = "%@";
 "history.duration" = "%@ • %d Sätze";
 "workout.history.delete.title" = "Workout löschen?";

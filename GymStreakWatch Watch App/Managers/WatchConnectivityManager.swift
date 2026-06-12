@@ -145,32 +145,48 @@ extension WatchConnectivityManager: WCSessionDelegate {
 
     nonisolated func session(_ session: WCSession, didReceiveMessage message: [String: Any]) {
         Task { @MainActor in
-            self.processApplicationContext(message)
+            self.handleIncoming(message)
+        }
+    }
+
+    /// iOS sends the save-acknowledgment via transferUserInfo (guaranteed delivery)
+    /// in addition to the sendMessage fast-path, so acks can arrive here too.
+    nonisolated func session(_ session: WCSession, didReceiveUserInfo userInfo: [String: Any] = [:]) {
+        Task { @MainActor in
+            self.handleIncoming(userInfo)
         }
     }
 
     /// Called when a transferUserInfo we initiated finishes — successfully or with
-    /// an error. On success, we remove the workout from the local pending queue.
-    /// On error, we leave it in the queue so it'll be retried on next activation
-    /// or reachability change.
+    /// an error. We deliberately do NOT remove the workout from the pending queue on
+    /// success here: WatchConnectivity confirming a transfer only means the system
+    /// delivered it to the paired device's WC daemon, NOT that the iOS *app* received
+    /// or persisted it (the app may be force-quit, mid-launch after a reboot, or the
+    /// transfer may be superseded). Removing on this callback is exactly what allowed
+    /// workouts to be saved to HealthKit yet never reach iOS history. The workout is
+    /// removed only when iOS sends an explicit app-level ack confirming the
+    /// WorkoutSession was committed to SwiftData (see `handleIncoming`). On error we
+    /// also keep it queued so it's retried on the next activation/reachability change.
     nonisolated func session(_ session: WCSession, didFinish userInfoTransfer: WCSessionUserInfoTransfer, error: Error?) {
-        let userInfo = userInfoTransfer.userInfo
-        let workoutIdString = userInfo["workoutId"] as? String
-
         Task { @MainActor in
             if let error = error {
                 print("WatchConnectivity: transferUserInfo failed (will retry) — \(error.localizedDescription)")
                 return
             }
-
-            guard let idString = workoutIdString, let id = UUID(uuidString: idString) else {
-                // Transfer wasn't a workout — nothing to clean up.
-                return
-            }
-
-            self.pendingQueue.remove(id: id)
-            print("WatchConnectivity: transferUserInfo confirmed for workout \(id) — removed from pending queue")
+            print("WatchConnectivity: transferUserInfo delivered to system — awaiting iPhone save ack before clearing")
         }
+    }
+
+    /// Routes an incoming payload. An app-level workout ack removes the confirmed
+    /// workout from the durable retry queue; anything else is treated as a routine sync.
+    @MainActor
+    private func handleIncoming(_ payload: [String: Any]) {
+        if let ackString = payload["workoutAck"] as? String, let id = UUID(uuidString: ackString) {
+            pendingQueue.remove(id: id)
+            print("WatchConnectivity: workout \(id) acknowledged saved by iPhone — removed from pending queue")
+            return
+        }
+        processApplicationContext(payload)
     }
 
     private func processApplicationContext(_ context: [String: Any]) {

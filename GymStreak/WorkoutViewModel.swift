@@ -123,6 +123,103 @@ class WorkoutViewModel: ObservableObject {
         self.orphanedWatchWorkouts = orphans
     }
 
+    /// Reconstructs SwiftData `WorkoutSession`s from HealthKit workouts the watch
+    /// recorded but never delivered to iOS. The rich per-set payload is gone by this
+    /// point, so we rebuild from the matched routine template as a best-effort and tag
+    /// the session as recovered. Called when the user confirms recovery from the
+    /// History banner. After recovery the workout carries the HKWorkout's external
+    /// UUID, so the reconciler no longer flags it.
+    func recoverOrphanedWorkouts() async {
+        let orphans = orphanedWatchWorkouts
+        guard !orphans.isEmpty else { return }
+
+        let existingHKIds = Set(workoutHistory.compactMap(\.healthKitWorkoutId))
+        var didInsert = false
+
+        for orphan in orphans where !existingHKIds.contains(orphan.id) {
+            let routine = matchRoutine(for: orphan)
+
+            // WorkoutSession.init requires a Routine. For an unmatched workout we pass a
+            // transient one purely to satisfy the initializer, then detach it so no
+            // phantom routine is persisted — the denormalized routineName drives display.
+            let session = WorkoutSession(routine: routine ?? Routine(name: orphan.routineName))
+            if routine == nil {
+                session.routine = nil
+            }
+            session.id = UUID()
+            session.healthKitWorkoutId = orphan.id
+            session.startTime = orphan.startDate
+            session.endTime = orphan.endDate
+            session.routineName = orphan.routineName
+            session.notes = "history.pendingSync.recoveredNote".localized
+
+            // Reconstruct exercises/sets from the matched routine template (planned
+            // values used as actuals — we don't have the real per-set data).
+            if let routine {
+                for routineExercise in routine.routineExercisesList.sorted(by: { $0.order < $1.order }) {
+                    let workoutExercise = WorkoutExercise(
+                        exerciseName: routineExercise.exercise?.name ?? orphan.routineName,
+                        muscleGroups: [routineExercise.exercise?.primaryMuscleGroup ?? "General"],
+                        order: routineExercise.order,
+                        exerciseId: routineExercise.exercise?.id
+                    )
+                    workoutExercise.workoutSession = session
+                    workoutExercise.supersetId = routineExercise.supersetId
+                    workoutExercise.supersetOrder = routineExercise.supersetOrder
+
+                    for exerciseSet in routineExercise.setsList.sorted(by: { $0.order < $1.order }) {
+                        let workoutSet = WorkoutSet(
+                            plannedReps: exerciseSet.reps,
+                            actualReps: exerciseSet.reps,
+                            plannedWeight: exerciseSet.weight,
+                            actualWeight: exerciseSet.weight,
+                            restTime: exerciseSet.restTime,
+                            order: exerciseSet.order
+                        )
+                        workoutSet.isCompleted = true
+                        workoutSet.completedAt = orphan.endDate
+                        workoutSet.workoutExercise = workoutExercise
+                        workoutExercise.sets?.append(workoutSet)
+                        modelContext.insert(workoutSet)
+                    }
+
+                    session.workoutExercises?.append(workoutExercise)
+                    modelContext.insert(workoutExercise)
+                }
+            }
+
+            modelContext.insert(session)
+            didInsert = true
+        }
+
+        guard didInsert else { return }
+
+        do {
+            try modelContext.save()
+        } catch {
+            print("Error saving recovered workouts: \(error)")
+            return
+        }
+
+        fetchWorkoutHistory()
+        await reconcileWatchWorkouts()
+        NotificationCenter.default.post(name: .workoutHistoryDidChange, object: nil)
+    }
+
+    /// Finds the routine a recovered HealthKit workout belongs to: an exact id match
+    /// when the workout embedded `RoutineId` metadata, otherwise a name match.
+    private func matchRoutine(for orphan: HealthKitWorkoutReconciler.OrphanedWorkout) -> Routine? {
+        if let routineId = orphan.routineId {
+            let descriptor = FetchDescriptor<Routine>(predicate: #Predicate { $0.id == routineId })
+            if let match = try? modelContext.fetch(descriptor).first {
+                return match
+            }
+        }
+        let name = orphan.routineName
+        let descriptor = FetchDescriptor<Routine>(predicate: #Predicate { $0.name == name })
+        return try? modelContext.fetch(descriptor).first
+    }
+
     // MARK: - HealthKit Preferences
 
     private func loadHealthKitPreferences() {

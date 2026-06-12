@@ -143,7 +143,12 @@
 "history.empty.description" = "Start a routine to begin tracking your workouts";
 "history.pendingSync.title" = "Workouts pending sync (%d)";
 "history.pendingSync.earliest" = "Oldest unsynced: %@";
-"history.pendingSync.help" = "Open GymStreak on your Apple Watch to retry. The workout exists in Apple Health but its set details haven't been delivered to this iPhone yet.";
+"history.pendingSync.help" = "These workouts are saved in Apple Health but never reached this iPhone. Add them to your history and we'll rebuild them from your routine.";
+"history.pendingSync.recover" = "Add to history";
+"history.pendingSync.recoveredNote" = "Recovered from Apple Health";
+"history.pendingSync.recover.title" = "Add workouts to history?";
+"history.pendingSync.recover.confirm" = "Add to history";
+"history.pendingSync.recover.message" = "Exact reps and weights weren't delivered to this iPhone, so we'll rebuild each workout from its routine using the date and duration from Apple Health. You can edit the details afterwards.";
 "history.date" = "%@";
 "history.duration" = "%@ • %d sets";
 "workout.history.delete.title" = "Delete Workout?";

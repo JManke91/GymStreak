@@ -25,8 +25,9 @@ final class WatchHealthKitManager: NSObject, ObservableObject {
     private var heartRateQuery: HKAnchoredObjectQuery?
     private var caloriesQuery: HKAnchoredObjectQuery?
 
-    // Optional routine name to attach as metadata when saving the workout
+    // Optional routine name/id to attach as metadata when saving the workout
     private var currentRoutineName: String?
+    private var currentRoutineId: UUID?
 
     // MARK: - Initialization
 
@@ -68,10 +69,11 @@ final class WatchHealthKitManager: NSObject, ObservableObject {
 
     // MARK: - Workout Session Management
 
-    // Accept an optional routine name so we can save it as metadata later
-    func startWorkout(routineName: String? = nil) async throws {
-        // store the routine name for use when finishing the workout
+    // Accept an optional routine name/id so we can save them as metadata later
+    func startWorkout(routineName: String? = nil, routineId: UUID? = nil) async throws {
+        // store the routine name/id for use when finishing the workout
         self.currentRoutineName = routineName
+        self.currentRoutineId = routineId
 
         let configuration = HKWorkoutConfiguration()
         configuration.activityType = .traditionalStrengthTraining
@@ -136,6 +138,13 @@ final class WatchHealthKitManager: NSObject, ObservableObject {
             // Add external UUID for deduplication across devices
             metadata[HKMetadataKeyExternalUUID] = healthKitWorkoutId.uuidString
 
+            // Embed the routine id so iOS can match this workout to the exact routine
+            // template if it ever has to reconstruct the session from HealthKit alone
+            // (i.e. the rich WatchConnectivity payload was lost).
+            if let routineId = currentRoutineId {
+                metadata["RoutineId"] = routineId.uuidString
+            }
+
             if let name = currentRoutineName, !name.isEmpty {
                 metadata[HKMetadataKeyWorkoutBrandName] = name
                 metadata["RoutineName"] = name
@@ -154,6 +163,7 @@ final class WatchHealthKitManager: NSObject, ObservableObject {
             self.workoutSession = nil
             self.workoutBuilder = nil
             self.currentRoutineName = nil
+            self.currentRoutineId = nil
 
             print("HealthKit: Workout ended and saved with ID: \(healthKitWorkoutId)")
             return (workout, healthKitWorkoutId)

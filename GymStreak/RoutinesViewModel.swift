@@ -312,6 +312,8 @@ class RoutinesViewModel: ObservableObject {
             if let existing = try modelContext.fetch(existingDescriptor).first {
                 print("Skipping duplicate watch workout: \(workout.routineName) (existing session id=\(existing.id))")
                 watchConnectivity.markPendingProcessed(id: workout.id)
+                // Re-ack so the watch clears it even if our first ack was lost.
+                watchConnectivity.acknowledgeWorkoutSaved(id: workout.id)
                 return
             }
 
@@ -375,6 +377,9 @@ class RoutinesViewModel: ObservableObject {
             try modelContext.save()
             print("Created workout session from watch workout: \(workout.routineName)")
             watchConnectivity.markPendingProcessed(id: workout.id)
+            // Confirm the save back to the watch so it can drop the rich payload from
+            // its durable retry queue. Until this ack arrives the watch keeps retrying.
+            watchConnectivity.acknowledgeWorkoutSaved(id: workout.id)
             // Notify any view models cached on the History tab to refresh.
             NotificationCenter.default.post(name: .workoutHistoryDidChange, object: nil)
 

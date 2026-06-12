@@ -256,8 +256,10 @@ final class WatchWorkoutViewModel: ObservableObject {
         }
 
         do {
-            // Provide the routine name so HealthKit workout metadata includes it
-            try await healthKitManager.startWorkout(routineName: routine.name)
+            // Provide the routine name + id so HealthKit workout metadata includes them
+            // (the id lets iOS reconstruct the session from HealthKit if the rich
+            // WatchConnectivity payload is ever lost).
+            try await healthKitManager.startWorkout(routineName: routine.name, routineId: routine.id)
             isWorkoutActive = true
             workoutState = .started
             WKInterfaceDevice.current().play(.start)
