@@ -232,6 +232,14 @@ struct ExercisePreviewRow: View {
                 .font(.caption2)
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
+
+                let summary = exercise.setsSummary
+                if !summary.isEmpty {
+                    Text(summary)
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                        .lineLimit(1)
+                }
             }
 
             Spacer()

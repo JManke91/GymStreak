@@ -28,6 +28,42 @@ struct WatchExercise: Codable, Identifiable, Hashable {
     var targetRepMin: Int? = nil
     var targetRepMax: Int? = nil
     var exerciseId: UUID? = nil
+
+    /// Compact, consistent summary of planned sets.
+    ///
+    /// Always uses the format `<sets> × <reps> @ <weight>` with ascending ranges,
+    /// e.g. "3 × 10 @ 80 kg", "3 × 8–12 @ 80 kg", "3 × 10 @ 60–80 kg".
+    /// Bodyweight sets omit the weight part ("3 × 10"). Empty when no sets.
+    var setsSummary: String {
+        guard !sets.isEmpty else { return "" }
+
+        let reps = sets.map(\.reps)
+        let weights = sets.map(\.weight)
+        let minReps = reps.min() ?? 0
+        let maxReps = reps.max() ?? 0
+        let minWeight = weights.min() ?? 0
+        let maxWeight = weights.max() ?? 0
+        let isBodyweight = maxWeight == 0
+
+        func formatted(_ kg: Double) -> String {
+            Measurement(value: kg, unit: UnitMass.kilograms)
+                .formatted(.measurement(width: .abbreviated, usage: .general))
+        }
+
+        // Reps: single value when uniform, otherwise an ascending min–max range.
+        let repsPart = minReps == maxReps ? "\(minReps)" : "\(minReps)–\(maxReps)"
+        let setsAndReps = "\(sets.count) × \(repsPart)"
+
+        // Bodyweight exercises omit the weight portion entirely.
+        guard !isBodyweight else { return setsAndReps }
+
+        // Weight: single value when uniform, otherwise an ascending min–max range.
+        let weightPart = minWeight == maxWeight
+            ? formatted(minWeight)
+            : "\(formatted(minWeight))–\(formatted(maxWeight))"
+
+        return "\(setsAndReps) @ \(weightPart)"
+    }
 }
 
 struct WatchSet: Codable, Identifiable, Hashable {
