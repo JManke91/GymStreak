@@ -311,6 +311,10 @@ extension WatchHealthKitManager: HKWorkoutSessionDelegate {
             switch toState {
             case .running:
                 self.isWorkoutActive = true
+                // Session is now actually running — safe point to (re)donate the
+                // Action Button next action. Also fires on resume, which simply
+                // re-registers the complete-set intent.
+                AppStateProvider.shared.workoutViewModel?.donateActionButtonIntent()
             case .paused:
                 self.isWorkoutActive = true // Still active, just paused
             case .ended:

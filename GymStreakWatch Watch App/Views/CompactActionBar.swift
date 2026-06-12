@@ -90,6 +90,7 @@ struct CompactActionBar: View {
                         .buttonStyle(.borderedProminent)
                         .tint(isCompleted ? .green : .blue)
                         .buttonBorderShape(.capsule)
+                        .handGestureShortcut(.primaryAction)
                         .accessibilityLabel(isCompleted ? "Set \(currentSetIndex + 1) of \(totalSets) completed" : "Complete set \(currentSetIndex + 1) of \(totalSets)")
 
                         // Next button - larger hit area
@@ -132,6 +133,7 @@ struct CompactActionBar: View {
                 .buttonStyle(.borderedProminent)
                 .tint(isCompleted ? .green : .blue)
                 .buttonBorderShape(.capsule)
+                .handGestureShortcut(.primaryAction)
             }
         }
 

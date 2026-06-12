@@ -28,6 +28,7 @@ The set completion button in the watch workout screen (`CompactActionBar`) was r
 - Multi-set exercises show a 3-button layout: `[< Prev]  [Checkmark 1/3]  [Next >]`
 - Single-set exercises show a single centered button: `[Checkmark Complete]`
 - Haptic feedback fires on tap via `WKInterfaceDevice.current().play()` (`.success` for completion, `.directionDown` for undo)
+- The complete button carries `.handGestureShortcut(.primaryAction)`, so the Double Tap gesture (Series 9/10, Ultra 2/3) triggers it; on Ultra models the Action Button completes the current set via App Intents — see [action-button.md](./action-button.md)
 
 ### Targets
 - **watchOS**: `GymStreakWatch Watch App` -- this is watch-only UI

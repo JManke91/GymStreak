@@ -2,6 +2,7 @@ import Foundation
 import Combine
 import WatchKit
 import UserNotifications
+import AppIntents
 
 @MainActor
 final class WatchWorkoutViewModel: ObservableObject {
@@ -454,6 +455,44 @@ final class WatchWorkoutViewModel: ObservableObject {
         stopRestTimer()
         isResting = false
         WKInterfaceDevice.current().play(.click)
+    }
+
+    // MARK: - Action Button (Apple Watch Ultra)
+
+    /// Donates the complete-set intent as the active session's next Action Button
+    /// action. Called from WatchHealthKitManager once the HKWorkoutSession reaches
+    /// .running — donating earlier (while the session is still starting) can fail
+    /// silently. Only takes effect when the user has the Action Button assigned to
+    /// GymStreak under Settings → Action Button → Workout.
+    func donateActionButtonIntent() {
+        guard !isUITesting else { return }
+        Task {
+            do {
+                try await GymStreakStartWorkoutIntent()
+                    .donate(result: .result(actionButtonIntent: GymStreakCompleteSetIntent()))
+                print("Action Button: complete-set intent donated")
+            } catch {
+                print("Action Button intent donation failed: \(error)")
+            }
+        }
+    }
+
+    /// Entry point for hardware shortcuts (Action Button press, Double Tap).
+    /// Skips an active rest period, otherwise completes the current set via the
+    /// same superset-aware path the on-screen complete button uses.
+    func handleActionButtonPress() {
+        guard isWorkoutActive else { return }
+
+        if isResting {
+            skipRest()
+            return
+        }
+
+        guard let exercise = currentExercise,
+              let set = currentSet,
+              !set.isCompleted else { return }
+
+        toggleSetCompletion(set.id, in: exercise.id)
     }
 
     // MARK: - Exercise Navigation

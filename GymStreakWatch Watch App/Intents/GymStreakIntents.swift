@@ -1,5 +1,56 @@
 import AppIntents
 
+// MARK: - Workout Style (required by StartWorkoutIntent)
+
+enum GymStreakWorkoutStyle: String, AppEnum {
+    case strengthTraining
+
+    static let typeDisplayRepresentation: TypeDisplayRepresentation = "Workout"
+
+    // Must be literal key-value pairs — dynamic construction (e.g. allCases.map)
+    // breaks App Intents metadata extraction and the app silently disappears
+    // from the Action Button settings picker.
+    static let caseDisplayRepresentations: [GymStreakWorkoutStyle: DisplayRepresentation] = [
+        .strengthTraining: "Strength Training"
+    ]
+}
+
+// MARK: - Start Workout Intent (Action Button anchor)
+
+/// Makes GymStreak selectable under Settings → Action Button → Workout on
+/// Apple Watch Ultra and serves as the donation anchor for in-session actions.
+/// Requires `workout-processing` in WKBackgroundModes and `workoutStyle`
+/// declared as @Parameter — otherwise Settings only offers "Open App".
+struct GymStreakStartWorkoutIntent: StartWorkoutIntent {
+    static var title: LocalizedStringResource = "Start Workout"
+
+    static var openAppWhenRun: Bool { true }
+
+    @Parameter(title: "Workout")
+    var workoutStyle: GymStreakWorkoutStyle
+
+    static var suggestedWorkouts: [GymStreakStartWorkoutIntent] {
+        [GymStreakStartWorkoutIntent(style: .strengthTraining)]
+    }
+
+    var displayRepresentation: DisplayRepresentation {
+        DisplayRepresentation(title: "Start Workout")
+    }
+
+    init() {
+        workoutStyle = .strengthTraining
+    }
+
+    @MainActor
+    func perform() async throws -> some IntentResult {
+        // GymStreak workouts are routine-based, so a press with no active session
+        // just opens the app at the routine list. The complete-set intent is
+        // donated from WatchWorkoutViewModel.startWorkout once a session begins,
+        // which also covers workouts started from within the app.
+        return .result()
+    }
+}
+
 // MARK: - Complete Set Intent (Primary Action Button function during workout)
 
 struct GymStreakCompleteSetIntent: AppIntent {
@@ -13,64 +64,10 @@ struct GymStreakCompleteSetIntent: AppIntent {
 
     @MainActor
     func perform() async throws -> some IntentResult {
-        // Get the shared app state and complete the set
-        if let appDelegate = await AppStateProvider.shared.workoutViewModel {
-            appDelegate.completeCurrentSet()
-        }
+        AppStateProvider.shared.workoutViewModel?.handleActionButtonPress()
 
-        // Return the same intent so the Action Button continues to complete sets
+        // Re-donate so the next press completes the following set.
         return .result(actionButtonIntent: GymStreakCompleteSetIntent())
-    }
-}
-
-// MARK: - Pause Workout Intent
-
-struct GymStreakPauseWorkoutIntent: PauseWorkoutIntent {
-    static var title: LocalizedStringResource = "Pause Workout"
-
-    @MainActor
-    func perform() async throws -> some IntentResult {
-        if let viewModel = await AppStateProvider.shared.workoutViewModel {
-            viewModel.pauseWorkout()
-        }
-        return .result(actionButtonIntent: GymStreakResumeWorkoutIntent())
-    }
-}
-
-// MARK: - Resume Workout Intent
-
-struct GymStreakResumeWorkoutIntent: ResumeWorkoutIntent {
-    static var title: LocalizedStringResource = "Resume Workout"
-
-    @MainActor
-    func perform() async throws -> some IntentResult {
-        if let viewModel = await AppStateProvider.shared.workoutViewModel {
-            viewModel.resumeWorkout()
-        }
-        return .result(actionButtonIntent: GymStreakCompleteSetIntent())
-    }
-}
-
-// MARK: - App Shortcuts Provider
-
-struct GymStreakAppShortcuts: AppShortcutsProvider {
-    static var shortcutTileColor: ShortcutTileColor { .blue }
-
-    @AppShortcutsBuilder
-    static var appShortcuts: [AppShortcut] {
-        AppShortcut(
-            intent: GymStreakPauseWorkoutIntent(),
-            phrases: ["Pause \(.applicationName)"],
-            shortTitle: "Pause",
-            systemImageName: "pause.fill"
-        )
-
-        AppShortcut(
-            intent: GymStreakResumeWorkoutIntent(),
-            phrases: ["Resume \(.applicationName)"],
-            shortTitle: "Resume",
-            systemImageName: "play.fill"
-        )
     }
 }
 

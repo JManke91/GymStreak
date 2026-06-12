@@ -96,6 +96,13 @@
 			);
 			target = A6FBC4E92EC91C1C0095483C /* GymStreakWidgetsExtension */;
 		};
+		A6D6C7152F38AF980071D28A /* Exceptions for "GymStreakWatch Watch App" folder in "GymStreakWatch Watch App" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = A6FBC5CB2ECCED0F0095483C /* GymStreakWatch Watch App */;
+		};
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -122,6 +129,9 @@
 		};
 		A6FBC5CD2ECCED0F0095483C /* GymStreakWatch Watch App */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				A6D6C7152F38AF980071D28A /* Exceptions for "GymStreakWatch Watch App" folder in "GymStreakWatch Watch App" target */,
+			);
 			path = "GymStreakWatch Watch App";
 			sourceTree = "<group>";
 		};
@@ -852,11 +862,11 @@
 				DEVELOPMENT_TEAM = 45VTMQ88RW;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "GymStreakWatch Watch App/Info.plist";
 				INFOPLIST_KEY_CFBundleDisplayName = GymStreakWatch;
 				INFOPLIST_KEY_NSHealthShareUsageDescription = "GymStreak needs access to read your heart rate during workouts";
 				INFOPLIST_KEY_NSHealthUpdateUsageDescription = "GymStreak needs access to save your workouts";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown";
-				INFOPLIST_KEY_WKBackgroundModes = "workout-processing";
 				INFOPLIST_KEY_WKCompanionAppBundleIdentifier = com.shotat24fps.GymStreak;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -889,11 +899,11 @@
 				DEVELOPMENT_TEAM = 45VTMQ88RW;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "GymStreakWatch Watch App/Info.plist";
 				INFOPLIST_KEY_CFBundleDisplayName = GymStreakWatch;
 				INFOPLIST_KEY_NSHealthShareUsageDescription = "GymStreak needs access to read your heart rate during workouts";
 				INFOPLIST_KEY_NSHealthUpdateUsageDescription = "GymStreak needs access to save your workouts";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown";
-				INFOPLIST_KEY_WKBackgroundModes = "workout-processing";
 				INFOPLIST_KEY_WKCompanionAppBundleIdentifier = com.shotat24fps.GymStreak;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
