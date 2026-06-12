@@ -254,6 +254,10 @@ Always document new features as well as updates on existing features in the appr
 
 - Every time you create a new feature, create a markdown file <feature-name>.md in the "docs" folder and document the essential parts of this feature for later reference. this should include feature requirements, difficulties, edge cases, technical specifications, architecture decisions etc.
 - Every time you extend/update an existing feature search in the "docs" folder, if there already is an .md file documenting this feature and if so update the file according to the changes being made while providing one fluid document
+- **Capture research findings**: when a feature required external research (Apple APIs, OS mechanisms, framework behavior), document the findings in the feature's .md file — the exact API/mechanism used, minimum OS/hardware requirements, known OS bugs or version-specific regressions, and links to the sources (Apple docs, forum threads, reference implementations). Future work must be able to skip re-doing the research.
+- **Capture root causes and dead ends**: when debugging a feature surfaced a non-obvious root cause (e.g. a silently ignored build setting) or an approach that turned out to be wrong, document both the root cause/fix and the discarded approaches with the reason — so they are not re-tried later.
+- **Capture deliberate omissions**: if part of a capability was intentionally NOT implemented or was removed (product decision), record what, why, and how to restore it (e.g. pointer to git history).
+- Keep the doc consistent as understanding evolves: when later findings contradict earlier statements in the doc, correct the earlier statements instead of appending — the doc must read as one coherent, current truth.
 
 ## Get Context
 
