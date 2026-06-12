@@ -184,9 +184,15 @@ struct FullScreenSetEditorView: View {
                         //                            .listRowIns/*ets(EdgeInsets(top: 4, leading: 8, bottom: 4, trailing: 8))*/
                         .transition(.move(edge: .top).combined(with: .opacity))
                     } else if let elapsedTime = viewModel.elapsedTimeString {
-                        Text(elapsedTime)
-                            .font(.system(size: 12, weight: .semibold))
-                            .frame(maxWidth: 100, maxHeight: 30)
+                        HStack(spacing: 3) {
+                            Image(systemName: "timer")
+                                .font(.system(size: 10, weight: .medium))
+                                .foregroundStyle(.tertiary)
+                            Text(elapsedTime)
+                                .font(.system(.caption, design: .rounded).weight(.semibold).monospacedDigit())
+                                .foregroundStyle(.secondary)
+                        }
+                        .frame(maxWidth: 100, maxHeight: 20)
                     }
                 }
 

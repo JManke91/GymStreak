@@ -238,9 +238,10 @@ struct WorkoutMetricsView: View {
                         .symbolEffect(.breathe)
                 }
                 Text("\(heartRate)")
-                    .font(.system(size: size == .medium ? 18 : 14, weight: .bold))
+                    .font(.system(size: size == .medium ? 18 : 14, weight: .bold, design: .rounded).monospacedDigit())
                 Text("BPM")
-                    .font(.system(size: size == .medium ? 12 : 10, weight: .light))
+                    .font(.system(size: size == .medium ? 12 : 11, weight: size == .medium ? .light : .medium))
+                    .foregroundStyle(.secondary)
             }
 
             if size == .medium {
@@ -260,9 +261,10 @@ struct WorkoutMetricsView: View {
                         .symbolEffect(.breathe)
                 }
                 Text("\(calories)")
-                    .font(.system(size: size == .medium ? 18 : 14, weight: .bold))
+                    .font(.system(size: size == .medium ? 18 : 14, weight: .bold, design: .rounded).monospacedDigit())
                 Text("kCal")
-                    .font(.system(size: size == .medium ? 12 : 10, weight: .light))
+                    .font(.system(size: size == .medium ? 12 : 11, weight: size == .medium ? .light : .medium))
+                    .foregroundStyle(.secondary)
             }
         }
     }

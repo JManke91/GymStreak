@@ -96,18 +96,13 @@ struct NewRestTimerView: View {
                 Spacer()
 
                 if let elapsedTime = viewModel.elapsedTimeString {
-                    VStack(alignment: .trailing, spacing: 1) {
-                        Text("Total")
-                            .font(.system(size: 9, weight: .regular))
+                    HStack(spacing: 4) {
+                        Image(systemName: "timer")
+                            .font(.system(size: 11, weight: .medium))
                             .foregroundStyle(.tertiary)
-                        HStack(spacing: 3) {
-                            Image(systemName: "clock")
-                                .font(.system(size: 10))
-                                .foregroundStyle(.secondary)
-                            Text(elapsedTime)
-                                .font(.system(.caption2, design: .rounded).monospacedDigit())
-                                .foregroundStyle(.secondary)
-                        }
+                        Text(elapsedTime)
+                            .font(.system(.caption, design: .rounded).weight(.medium).monospacedDigit())
+                            .foregroundStyle(.secondary)
                     }
                     .accessibilityLabel("Total workout time \(elapsedTime)")
                 }
@@ -117,12 +112,12 @@ struct NewRestTimerView: View {
             Spacer()
 
             // MARK: - Center: Primary Timer (Label + Countdown)
-            VStack(spacing: 2) {
+            VStack(spacing: 6) {
                 Text("Rest")
-                    .font(.system(size: 12, weight: .medium))
+                    .font(.system(.footnote, design: .rounded).weight(.semibold))
                     .foregroundStyle(.secondary)
                     .textCase(.uppercase)
-                    .tracking(1)
+                    .tracking(1.5)
 
                 Text(formattedTime)
                     .font(.system(size: 44, weight: .bold, design: .rounded).monospacedDigit())
