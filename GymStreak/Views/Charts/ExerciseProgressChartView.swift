@@ -81,6 +81,13 @@ struct ExerciseProgressChartView: View {
             // Auto-load cached deep-dive on appear or when exercise switches
             if let exercise = resolvedExercise {
                 await deepDiveVM.checkCache(exercise: exercise, locale: .current, modelContext: modelContext)
+                // No cached narrative → the "Ask the Coach" button is showing.
+                // Warm the model now so a tap streams tokens with minimal delay.
+                if case .idle = deepDiveVM.state,
+                   AICoachPreferences.shared.isExerciseDeepDiveEffectivelyEnabled,
+                   AICoachAvailability.shared.isAvailable {
+                    AICoachService.shared.prewarm()
+                }
             }
         }
     }
@@ -409,6 +416,7 @@ struct ExerciseProgressChartView: View {
                             modelContext: modelContext
                         )
                     }
+                    .transition(.opacity)
                 } else {
                     CoachDeepDiveSurface(
                         state: deepDiveVM.state,
@@ -421,8 +429,10 @@ struct ExerciseProgressChartView: View {
                             )
                         }
                     )
+                    .transition(.opacity)
                 }
             }
+            .animation(.easeInOut(duration: 0.3), value: deepDiveVM.state)
             .padding(.horizontal, 16)
         }
     }

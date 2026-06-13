@@ -29,6 +29,9 @@ struct CoachDeepDiveSurface: View {
         case .idle:
             EmptyView()
 
+        case .preparing:
+            streamingSurface(text: "")
+
         case .streaming(let text):
             streamingSurface(text: text)
 
@@ -64,9 +67,24 @@ struct CoachDeepDiveSurface: View {
             showFooter: false,
             headerLabel: "COACH · \(exerciseName.uppercased())"
         ) {
-            narrativeBody(text: text, isStreaming: true)
+            if text.isEmpty {
+                skeletonBody
+            } else {
+                narrativeBody(text: text, isStreaming: true)
+            }
         }
         .frame(minHeight: 260, alignment: .topLeading)
+    }
+
+    /// Placeholder shown between tapping "Ask the Coach" and the first token,
+    /// so the surface never sits visually empty.
+    private var skeletonBody: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            AISkeletonBar(height: 12)
+            AISkeletonBar(height: 12)
+            AISkeletonBar(width: 200, height: 12)
+            Spacer(minLength: 0)
+        }
     }
 
     // MARK: - Success variant

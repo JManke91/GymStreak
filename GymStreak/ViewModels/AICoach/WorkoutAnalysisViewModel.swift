@@ -13,13 +13,83 @@ import SwiftData
 import FoundationModels
 import os
 
+// MARK: - Display content
+
+/// UI-ready representation of a (partially) generated workout analysis.
+/// Mapped from `WorkoutAnalysisOutput` / its `PartiallyGenerated` snapshots
+/// so the view never touches FoundationModels types.
+struct WorkoutAnalysisContent: Equatable {
+    struct Highlight: Equatable, Identifiable {
+        let id: Int
+        var exerciseName: String
+        var trend: WorkoutAnalysisTrend?
+        var detail: String
+    }
+
+    var headline: String = ""
+    var highlights: [Highlight] = []
+    var closingObservation: String = ""
+
+    var isEmpty: Bool {
+        headline.isEmpty && highlights.isEmpty && closingObservation.isEmpty
+    }
+
+    init(headline: String = "", highlights: [Highlight] = [], closingObservation: String = "") {
+        self.headline = headline
+        self.highlights = highlights
+        self.closingObservation = closingObservation
+    }
+
+    init(output: WorkoutAnalysisOutput) {
+        headline = output.headline
+        highlights = output.exerciseHighlights.enumerated().map { index, item in
+            Highlight(
+                id: index,
+                exerciseName: item.exerciseName,
+                trend: item.trend,
+                detail: item.detail
+            )
+        }
+        closingObservation = output.closingObservation
+    }
+
+    init(partial: WorkoutAnalysisOutput.PartiallyGenerated) {
+        headline = partial.headline ?? ""
+        highlights = (partial.exerciseHighlights ?? []).enumerated().map { index, item in
+            Highlight(
+                id: index,
+                exerciseName: item.exerciseName ?? "",
+                trend: item.trend,
+                detail: item.detail ?? ""
+            )
+        }
+        closingObservation = partial.closingObservation ?? ""
+    }
+
+    /// Converts back to the cacheable output struct.
+    func toOutput() -> WorkoutAnalysisOutput {
+        WorkoutAnalysisOutput(
+            headline: headline,
+            exerciseHighlights: highlights.map {
+                WorkoutAnalysisHighlight(
+                    exerciseName: $0.exerciseName,
+                    trend: $0.trend ?? .unchanged,
+                    detail: $0.detail
+                )
+            },
+            closingObservation: closingObservation
+        )
+    }
+}
+
 /// Orchestrates workout analysis generation for `WorkoutDetailView`.
 ///
 /// Lifecycle:
 /// 1. `checkCache(workout:)` is called on `.task` in `WorkoutDetailView`.
 ///    If a cached result exists, the state transitions directly to `.success`.
 /// 2. If no cache hit, the view renders `CoachWorkoutAnalysisButton`. Tapping it
-///    calls `generate(workout:locale:modelContext:)`.
+///    calls `generate(workout:locale:modelContext:)`, which immediately moves to
+///    `.preparing` so the surface (with skeleton) replaces the button without a gap.
 /// 3. `regenerate(...)` bypasses the cache and forces a fresh generation.
 @Observable
 @MainActor
@@ -30,10 +100,12 @@ final class WorkoutAnalysisViewModel {
     enum AnalysisState: Equatable {
         /// Initial — nothing shown yet.
         case idle
-        /// Model is streaming; associated text grows incrementally.
-        case streaming(text: String)
-        /// Generation complete; text contains the full narrative.
-        case success(text: String, isCached: Bool)
+        /// Generation kicked off but no tokens received yet — surface shows a skeleton.
+        case preparing
+        /// Model is streaming; associated content grows incrementally.
+        case streaming(content: WorkoutAnalysisContent)
+        /// Generation complete; content contains the full analysis.
+        case success(content: WorkoutAnalysisContent, isCached: Bool)
         /// Device ineligible or Apple Intelligence disabled, or preference off.
         case unavailable
         /// No previous same-routine session exists, or too few completed sets.
@@ -60,14 +132,16 @@ final class WorkoutAnalysisViewModel {
 
         if let cached = AICoachCache.shared.loadWorkoutAnalysis(workoutId: workout.id) {
             logger.debug("Cache hit for workout analysis \(workout.id, privacy: .private)")
-            state = .success(text: cached.narrative, isCached: true)
+            state = .success(content: WorkoutAnalysisContent(output: cached), isCached: true)
         }
     }
 
     /// Generates a workout analysis, using cache if available.
     /// Fire-and-forget: cancels any in-flight stream before starting a new one.
+    /// Transitions to `.preparing` synchronously so the UI responds to the tap immediately.
     func generate(workout: WorkoutSession, locale: Locale, modelContext: ModelContext) {
         streamTask?.cancel()
+        state = .preparing
         streamTask = Task { [weak self] in
             await self?.run(workout: workout, locale: locale, modelContext: modelContext, bypassCache: false)
         }
@@ -77,6 +151,7 @@ final class WorkoutAnalysisViewModel {
     /// Fire-and-forget: cancels any in-flight stream before starting a new one.
     func regenerate(workout: WorkoutSession, locale: Locale, modelContext: ModelContext) {
         streamTask?.cancel()
+        state = .preparing
         AICoachCache.shared.invalidateWorkoutAnalysis(workoutId: workout.id)
         streamTask = Task { [weak self] in
             await self?.run(workout: workout, locale: locale, modelContext: modelContext, bypassCache: true)
@@ -113,7 +188,7 @@ final class WorkoutAnalysisViewModel {
         if !bypassCache {
             if let cached = AICoachCache.shared.loadWorkoutAnalysis(workoutId: workout.id) {
                 logger.debug("Cache hit for workout analysis \(workout.id, privacy: .private)")
-                state = .success(text: cached.narrative, isCached: true)
+                state = .success(content: WorkoutAnalysisContent(output: cached), isCached: true)
                 return
             }
         }
@@ -178,23 +253,23 @@ final class WorkoutAnalysisViewModel {
                 return
             }
 
-            var finalText = ""
+            var finalContent = WorkoutAnalysisContent()
             for try await snapshot in responseStream {
                 guard !Task.isCancelled else { break }
-                let partial = snapshot.content.narrative ?? ""
-                finalText = partial
-                state = .streaming(text: partial)
+                let content = WorkoutAnalysisContent(partial: snapshot.content)
+                finalContent = content
+                state = .streaming(content: content)
             }
 
             // If cancelled mid-stream, do not surface partial output.
             guard !Task.isCancelled else { return }
 
             // Stream complete
-            state = .success(text: finalText, isCached: false)
+            state = .success(content: finalContent, isCached: false)
 
             AICoachCache.shared.saveWorkoutAnalysis(
                 workoutId: workoutId,
-                output: WorkoutAnalysisOutput(narrative: finalText)
+                output: finalContent.toOutput()
             )
 
             let elapsed = ContinuousClock.now - start

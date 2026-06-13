@@ -289,8 +289,9 @@ struct WorkoutDetailView: View {
                             modelContext: modelContext
                         )
                     }
+                    .transition(.opacity)
 
-                case .streaming, .success, .unavailable, .insufficientData, .error:
+                case .preparing, .streaming, .success, .unavailable, .insufficientData, .error:
                     CoachWorkoutAnalysisSurface(
                         state: analysisVM.state,
                         routineName: workout.routineName,
@@ -302,8 +303,10 @@ struct WorkoutDetailView: View {
                             )
                         }
                     )
+                    .transition(.opacity)
                 }
             }
+            .animation(.easeInOut(duration: 0.3), value: analysisVM.state)
             .padding(.horizontal, 16)
         }
     }
@@ -325,6 +328,11 @@ struct WorkoutDetailView: View {
 
         if hasPreviousSession {
             analysisVM.checkCache(workout: workout)
+            // No cached analysis → the "Ask the Coach" button is showing.
+            // Warm the model now so a tap streams tokens with minimal delay.
+            if case .idle = analysisVM.state, isCoachVisible {
+                AICoachService.shared.prewarm()
+            }
         }
     }
 

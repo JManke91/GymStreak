@@ -64,9 +64,13 @@ struct WorkoutAnalysisAggregator {
         // Detect PRs
         let newPRs = detectNewPRs(session: session, modelContext: modelContext)
 
-        // Format dates
-        let dateFmt = ISO8601DateFormatter()
-        dateFmt.formatOptions = [.withFullDate]
+        // Days between sessions — fed to the model instead of raw dates,
+        // which it tends to echo verbatim into the narrative.
+        let daysSincePrevious = Calendar.current.dateComponents(
+            [.day],
+            from: Calendar.current.startOfDay(for: previousSession.startTime),
+            to: Calendar.current.startOfDay(for: session.startTime)
+        ).day ?? 0
 
         // Compute previous session stats
         let previousVolume = computeVolume(session: previousSession)
@@ -78,12 +82,11 @@ struct WorkoutAnalysisAggregator {
         return WorkoutAnalysisInput(
             locale: locale.identifier,
             routineName: session.routineName,
-            currentWorkoutDate: dateFmt.string(from: session.startTime),
+            daysSincePrevious: daysSincePrevious,
             currentDurationMinutes: Int(session.duration / 60),
             currentTotalVolumeKg: session.totalVolume,
             currentTotalSets: completedSets.count,
             currentCompletionPercentage: session.completionPercentage,
-            previousWorkoutDate: dateFmt.string(from: previousSession.startTime),
             previousTotalVolumeKg: previousVolume,
             previousTotalSets: previousSetsCount,
             exercises: exerciseInputs,

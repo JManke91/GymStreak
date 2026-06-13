@@ -31,6 +31,8 @@ final class ExerciseDeepDiveViewModel {
     enum DeepDiveState: Equatable {
         /// Initial — nothing shown yet.
         case idle
+        /// Generation kicked off but no tokens received yet — surface shows a skeleton.
+        case preparing
         /// Model is streaming; associated text grows incrementally.
         case streaming(text: String)
         /// Generation complete; text contains the full narrative.
@@ -69,8 +71,10 @@ final class ExerciseDeepDiveViewModel {
 
     /// Generates a deep-dive narrative for `exercise`, using cache if available.
     /// Fire-and-forget: cancels any in-flight stream before starting a new one.
+    /// Transitions to `.preparing` synchronously so the UI responds to the tap immediately.
     func generate(exercise: Exercise, locale: Locale, modelContext: ModelContext) {
         streamTask?.cancel()
+        state = .preparing
         streamTask = Task { [weak self] in
             await self?.run(exercise: exercise, locale: locale, modelContext: modelContext, bypassCache: false)
         }
@@ -80,6 +84,7 @@ final class ExerciseDeepDiveViewModel {
     /// Fire-and-forget: cancels any in-flight stream before starting a new one.
     func regenerate(exercise: Exercise, locale: Locale, modelContext: ModelContext) {
         streamTask?.cancel()
+        state = .preparing
         if let key = cacheKey(exerciseId: exercise.id, modelContext: modelContext) {
             AICoachCache.shared.invalidateExerciseDeepDive(key: key)
         }

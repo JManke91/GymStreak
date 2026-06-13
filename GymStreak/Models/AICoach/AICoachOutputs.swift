@@ -45,6 +45,39 @@ struct ExerciseDeepDiveOutput: Codable {
 
 @Generable
 struct WorkoutAnalysisOutput: Codable {
-    @Guide(description: "Three to five sentence narrative in the user's locale comparing this workout against the previous session of the same routine. Cover: overall volume/set changes, per-exercise highlights (weight or rep gains, stagnation, regression), any new PRs, and one notable observation about balance or patterns. Use only the exact values provided in the input. No emoji, no exclamation marks, no prescriptive advice.")
-    let narrative: String
+    @Guide(description: "One short sentence (max 14 words) in the user's locale summarizing the session vs. the previous one, based on total volume and set count. No dates.")
+    let headline: String
+
+    @Guide(description: "The 2 to 4 most notable exercises from the input, ordered: PRs first, then biggest improvements, then declines.", .minimumCount(2), .maximumCount(4))
+    let exerciseHighlights: [WorkoutAnalysisHighlight]
+
+    @Guide(description: "One short closing sentence in the user's locale with an observation about the session as a whole. Observational, not prescriptive. No dates.")
+    let closingObservation: String
+}
+
+@Generable
+struct WorkoutAnalysisHighlight: Codable {
+    @Guide(description: "Exercise name copied exactly as written in the input.")
+    let exerciseName: String
+
+    @Guide(description: "Direction of change, derived from the verdict tag in the input: IMPROVED to improved, DECREASED to declined, UNCHANGED to unchanged, MIXED to mixed, NEW EXERCISE or NEW SETS to new.")
+    let trend: WorkoutAnalysisTrend
+
+    @Guide(description: "One short sentence (max 12 words) in the user's locale stating the concrete change with exact values from the input. Weight changes always in kg, rep changes always as reps — never mix the two units in one figure.")
+    let detail: String
+}
+
+/// Direction of an exercise's change vs. the previous session.
+///
+/// Modeled as a `@Generable` enum so the on-device model is constrained at the
+/// decoding level to exactly one of these cases — the same guarantee as a
+/// `.anyOf` string guide, but type-safe with no string-to-enum mapping or
+/// invalid-value fallback. `String`-backed for clean JSON in the disk cache.
+@Generable
+enum WorkoutAnalysisTrend: String, Codable {
+    case improved
+    case declined
+    case unchanged
+    case mixed
+    case new
 }

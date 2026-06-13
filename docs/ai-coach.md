@@ -143,7 +143,8 @@ GymStreak/
 
 ### 3. Exercise Deep-Dive
 
-- **Entry**: `ExerciseProgressChartView`. A `.task(id: currentExerciseId)` silently checks cache on appear. If no cache hit, `CoachDeepDiveButton` ("Ask the Coach") is shown below the chart card.
+- **Entry**: `ExerciseProgressChartView`. A `.task(id: currentExerciseId)` silently checks cache on appear. If no cache hit, `CoachDeepDiveButton` ("Ask the Coach") is shown below the chart card and `AICoachService.prewarm()` is called so the model is warm before the tap.
+- **Tap responsiveness**: `DeepDiveState` includes `.preparing`, set synchronously in `generate()`/`regenerate()`. `CoachDeepDiveSurface` renders the streaming chrome with three `AISkeletonBar` rows while in `.preparing` or while the streamed text is still empty, and the button→surface swap cross-fades (`.animation(.easeInOut(0.3), value: state)`).
 - **Paragraph break handling**: `CoachDeepDiveSurface` renders the full narrative as a single `StreamingTextView`. SwiftUI's `Text` renders `\n\n` as a native paragraph break. The previous multi-`StreamingTextView` split-on-`\n\n` approach caused visible layout growth during streaming as each double-newline introduced a new view.
 - **Layout reservation**: both `streamingSurface` and `successSurface` apply `.frame(minHeight: 260, alignment: .topLeading)` so the chrome reserves space immediately and does not snap from a sliver to full height on the first token.
 - **Stream cancellation**: `ExerciseDeepDiveViewModel` stores the active stream in a `streamTask: Task<Void, Never>?`. `generate` and `regenerate` are now synchronous fire-and-forget (not `async`). `cancel()` is called from `ExerciseProgressChartView.onDisappear`.
@@ -154,13 +155,15 @@ GymStreak/
 
 ### 4. Workout Analysis
 
-- **Entry**: `WorkoutDetailView` (tapping a past workout in the Verlauf/History tab). A `.task` silently checks cache on appear and whether a previous same-routine session exists. If yes, `CoachWorkoutAnalysisButton` ("Ask the Coach") is shown below the stats grid.
+- **Entry**: `WorkoutDetailView` (tapping a past workout in the Verlauf/History tab). A `.task` silently checks cache on appear and whether a previous same-routine session exists. If yes, `CoachWorkoutAnalysisButton` ("Ask the Coach") is shown below the stats grid. When the button is showing (no cache hit), `AICoachService.prewarm()` is called so the model weights are warm before the user taps.
 - **Comparison logic**: `WorkoutAnalysisAggregator.buildInput` finds the most recent previous `WorkoutSession` with the same `routineName` (case-insensitive). Uses `ExerciseProgressService.compareWithPrevious()` for per-exercise comparison data. Also detects new PRs via the Epley formula.
 - **Data gates**: button hidden when (a) fewer than 2 completed sets, (b) no previous same-routine session, (c) AI Coach unavailable or workout detail preference off.
-- **Layout**: `CoachWorkoutAnalysisSurface` replaces the button after tap. Uses `AISurface` + `StreamingTextView` with `minHeight: 200`. Header label: `"COACH · ANALYSE"`.
-- **Cache key**: `workoutId.uuidString` — workout content is immutable once saved, so the key never changes.
+- **Layout**: `CoachWorkoutAnalysisSurface` replaces the button after tap (cross-fade, `.animation(.easeInOut(0.3), value: state)` on the section). Renders the structured output: headline (15 pt semibold) → 2–4 highlight rows (trend icon in a tinted circle + exercise name + one-line detail) → dimmed closing sentence. `minHeight: 200`, header label `"COACH · ANALYSE"`. Trend icon mapping: improved `arrow.up.right` (accent green), declined `arrow.down.right` (warning orange), unchanged `equal`, mixed `arrow.up.arrow.down`, new `plus`, still-streaming `ellipsis`.
+- **States**: `WorkoutAnalysisViewModel.AnalysisState` includes `.preparing` — set **synchronously** in `generate()`/`regenerate()` before the async pipeline starts, so the surface (with skeleton bars in every content slot) appears on the same frame as the tap. Without it the button sat frozen through availability check (up to 2 s sleep when model not ready), aggregation, and time-to-first-token. Missing fields during streaming render as `AISkeletonBar` placeholders inside the same layout, so the card fills in progressively instead of jumping.
+- **Cache key**: `workoutId.uuidString` — workout content is immutable once saved, so the key never changes. **Format migration**: old caches stored `{narrative}`; decode failure in `AICoachCache` returns `nil` (treated as a cache miss), so pre-migration entries silently regenerate — no migration code needed.
 - **System prompt file**: `WorkoutAnalysisInstructions.swift`.
-- **Output struct**: `WorkoutAnalysisOutput` — single `narrative: String` field.
+- **Output struct**: `WorkoutAnalysisOutput` — `headline`, `exerciseHighlights: [WorkoutAnalysisHighlight]` (2–4 via `.minimumCount/.maximumCount` guides), `closingObservation`. Each highlight: `exerciseName`, `trend: WorkoutAnalysisTrend` (a native `@Generable enum: String, Codable`, copied from the input verdict tags), `detail` (one short sentence). The view consumes `WorkoutAnalysisContent` (plain Equatable struct mapped from the output / its `PartiallyGenerated` snapshots in the ViewModel) so FoundationModels types never reach the view layer.
+- **Why structured output (research finding)**: the ~3B on-device model produced garbled free-text narratives — mixed units ("Wiederholungen um 30 kg"), echoed raw ISO dates, invented words ("Gesamtwertung"), unscannable walls of text. The free-form `narrative: String` approach was discarded. The `@Generable` schema constrains each field to one short sentence and forces the trend classification through `.anyOf`, leaving the model only the phrasing. Supporting input changes: raw ISO dates replaced by `daysSincePrevious: Int` (the model echoed dates verbatim, prompt now forbids mentioning dates at all), total volume + per-session delta added to the prompt header, and verdict detail lines unit-labelled (`weight +5 kg (summed across sets)`, `reps +3 (summed across sets)`) so weight/rep deltas cannot be conflated.
 - **Token cap**: 300 tokens.
 - **Preference**: `workoutDetailEnabled` (UserDefaults key: `aiCoachWorkoutDetailEnabled`, default: `true`). Toggle in AI Coach Settings under "Workout detail".
 
@@ -185,6 +188,25 @@ GymStreak/
 - Period recap entries are invalidated when any workout in that period changes.
 - Deep-dive entries auto-invalidate via timestamp in the key.
 - Workout analysis entries are permanent (keyed by immutable `workoutId`).
+
+---
+
+## Guided Generation reference (WWDC25)
+
+The framework's structured-output mechanism is **Guided Generation** (`@Generable` + `@Guide`). Constraints below are enforced at the **decoding level** — the model literally cannot emit a value outside them, so they are far stronger than asking for a format in the prompt. Use these instead of free-text + prompt instructions wherever the shape is known.
+
+| Mechanism | Signature / usage | When to use |
+|---|---|---|
+| `@Generable enum` | `@Generable enum Trend: String, Codable { case … }` used as a property type | Closed set of options. Type-safe; preferred over `.anyOf`. Raw-value + `Codable` confirmed to compile, giving clean JSON for the cache. |
+| `.anyOf([String])` | `@Guide(description:, .anyOf(["a","b"]))` on a `String` | Same decoding guarantee as an enum but stays a `String`. Use only when the option set is dynamic/data-derived. |
+| `.count(n)` | `@Guide(description:, .count(3))` on an `Array` | Exact array length. |
+| `.minimumCount(n)` / `.maximumCount(n)` | on an `Array` | Bounded array length (we use 2…4 for `exerciseHighlights`). |
+| `.range(a...b)` | on `Int`/`Double`/`Decimal` | Clamp a numeric field to a range. |
+| `.pattern(Regex)` | on a `String` | Force a string to match a regex (e.g. an ID format). |
+
+Supported field types out of the box: `Bool`, `Int`, `Float`, `Double`, `Decimal`, `String`, `Array`, nested `@Generable` structs, and `@Generable` enums (including enums with associated values). The model generates fields in declaration order.
+
+**Applied in Workout Analysis**: `@Generable` struct output (headline / `[WorkoutAnalysisHighlight]` / closing), `.minimumCount`/`.maximumCount` on the highlights array, and a native `@Generable enum WorkoutAnalysisTrend` for the per-exercise direction. The earlier `.anyOf` string for `trend` was replaced by the enum (same model-level guarantee, no string→enum mapping or invalid-value fallback in the ViewModel). Sources: Apple docs `foundationmodels/generationguide`, `foundationmodels/generable`, and `generating-swift-data-structures-with-guided-generation`.
 
 ---
 

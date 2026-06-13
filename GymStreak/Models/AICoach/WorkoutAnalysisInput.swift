@@ -17,8 +17,8 @@ struct WorkoutAnalysisInput {
     @Guide(description: "Name of the routine, e.g. 'Push Day' or 'Upper Body'")
     let routineName: String
 
-    @Guide(description: "Date of the current workout in ISO 8601 format")
-    let currentWorkoutDate: String
+    @Guide(description: "Days elapsed between the previous and the current session")
+    let daysSincePrevious: Int
 
     @Guide(description: "Duration of the current workout in minutes")
     let currentDurationMinutes: Int
@@ -31,9 +31,6 @@ struct WorkoutAnalysisInput {
 
     @Guide(description: "Completion percentage of the current workout (0-100)")
     let currentCompletionPercentage: Int
-
-    @Guide(description: "Date of the previous session of the same routine in ISO 8601 format")
-    let previousWorkoutDate: String
 
     @Guide(description: "Total volume of the previous session in kilograms")
     let previousTotalVolumeKg: Double
@@ -104,8 +101,14 @@ extension WorkoutAnalysisInput {
         var lines: [String] = []
         lines.append("Locale: \(locale)")
         lines.append("Routine: \(routineName)")
-        lines.append("Current session: \(currentWorkoutDate), \(currentTotalSets) sets, \(currentDurationMinutes) min")
-        lines.append("Previous session: \(previousWorkoutDate), \(previousTotalSets) sets")
+        lines.append("Current session: \(currentTotalSets) sets, \(currentDurationMinutes) min, total volume \(String(format: "%g", currentTotalVolumeKg)) kg")
+
+        let volumeDelta = currentTotalVolumeKg - previousTotalVolumeKg
+        let volumeSign = volumeDelta >= 0 ? "+" : ""
+        let setsDelta = currentTotalSets - previousTotalSets
+        let setsSign = setsDelta >= 0 ? "+" : ""
+        lines.append("Previous session (\(daysSincePrevious) days earlier): \(previousTotalSets) sets, total volume \(String(format: "%g", previousTotalVolumeKg)) kg")
+        lines.append("Change vs. previous: \(volumeSign)\(String(format: "%g", volumeDelta)) kg volume, \(setsSign)\(setsDelta) sets")
         lines.append("")
 
         for exercise in exercises {
@@ -203,12 +206,12 @@ extension WorkoutAnalysisInput {
 
         if hasWeightChange {
             let sign = totalWeightDelta > 0 ? "+" : ""
-            details.append("\(sign)\(String(format: "%g", totalWeightDelta)) kg total weight change")
+            details.append("weight \(sign)\(String(format: "%g", totalWeightDelta)) kg (summed across sets)")
         }
 
         if hasRepsChange {
             let sign = totalRepsDelta > 0 ? "+" : ""
-            details.append("\(sign)\(totalRepsDelta) total reps change")
+            details.append("reps \(sign)\(totalRepsDelta) (summed across sets)")
         }
 
         if totalWeightDelta > 0 || (abs(totalWeightDelta) < 0.01 && totalRepsDelta > 0) {

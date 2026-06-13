@@ -11,3 +11,5 @@
 - Watch readability: larger, clearer labels for the rest timer and workout metrics — the "Rest" and total-time labels, heart rate (BPM) and calories (kCal) are now easier to read at a glance during a workout.
 - Apple Watch Ultra Action Button: during a running workout, press the Action Button to complete the current set and jump to the next one — no screen tap needed. During a rest period the press skips the rest. Setup: watch Settings → Action Button → Workout → select GymStreak.
 - Double Tap to complete sets: on Apple Watch Series 9/10 and Ultra 2/3, the Double Tap gesture (tap thumb and index finger twice) now completes the current set during a workout.
+- Clearer workout comparison: the "Ask the Coach" analysis on a past workout now shows a scannable breakdown — a one-line summary plus per-exercise rows with up/down indicators for progress, decline, or stagnation — instead of a long text block.
+- Smoother Coach loading: tapping "Ask the Coach" now responds instantly with a loading card that fills in as the analysis is generated, instead of nothing happening for a few seconds.
