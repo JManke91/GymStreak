@@ -420,6 +420,25 @@
 "exercise.menu.edit_superset" = "Supersatz bearbeiten";
 "exercise.menu.edit_sets" = "Sätze bearbeiten";
 
+// MARK: - Alternative Exercises
+"alternatives.menu.add" = "Alternativen hinzufügen";
+"alternatives.menu.edit" = "Alternativen bearbeiten (%d)";
+"alternatives.add" = "Alternative hinzufügen";
+"alternatives.add_accessibility" = "%@ als Alternative hinzufügen";
+"alternatives.count" = "%d Alternativen";
+"alternatives.edit.explanation" = "Wähle eine davon, wenn die geplante Übung nicht verfügbar ist. Tippe auf eine Alternative, um eigene Wiederholungen und Gewicht festzulegen.";
+"alternatives.picker.title" = "Alternative hinzufügen";
+"alternatives.picker.empty.title" = "Keine Übungen";
+"alternatives.picker.empty.message" = "Alle anderen Übungen werden hier bereits verwendet.";
+"workout.swap.title" = "Übung tauschen";
+"workout.swap.message" = "%@ gegen eine Alternative tauschen.";
+"workout.swap.revert" = "Zurück zu %@";
+"workout.swap.swapped_from" = "Getauscht von %@";
+"workout.swap.accessibility" = "%@ gegen eine Alternative tauschen";
+"workout.swap.permanent.title" = "Routine aktualisieren?";
+"workout.swap.permanent.message" = "Du hast während des Workouts Übungen getauscht. Diese Änderungen dauerhaft in die Routine übernehmen?";
+"workout.swap.permanent.confirm" = "Routine aktualisieren";
+
 // MARK: - Test Data (for UI Testing Screenshots)
 "testdata.routine.push_day" = "Drücken-Tag";
 "testdata.routine.pull_day" = "Ziehen-Tag";

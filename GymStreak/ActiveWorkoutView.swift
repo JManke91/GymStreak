@@ -321,6 +321,7 @@ struct ExerciseCard: View {
     var isPartOfSuperset: Bool = false
     var onDelete: (() -> Void)?
     @State private var showingRestTimeConfig = false
+    @State private var showingSwapDialog = false
     @State private var overloadBannerDismissed = false
     @State private var selectedRoutineExerciseForOverload: RoutineExercise?
     @State private var overloadAppliedInfo: (weight: Double, reps: Int)?
@@ -354,6 +355,17 @@ struct ExerciseCard: View {
                     Text("exercise.sets_completed".localized(workoutExercise.completedSetsCount, workoutExercise.setsList.count))
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
+
+                    // Swapped-from indicator (persists for the rest of the workout)
+                    if workoutExercise.wasSwapped, let planned = workoutExercise.plannedExerciseName {
+                        HStack(spacing: 4) {
+                            Image(systemName: "arrow.triangle.2.circlepath")
+                                .font(.caption2)
+                            Text("workout.swap.swapped_from".localized(planned))
+                                .font(.caption2)
+                        }
+                        .foregroundStyle(.secondary)
+                    }
                 }
 
                 Spacer()
@@ -374,6 +386,19 @@ struct ExerciseCard: View {
                         .symbolEffect(.bounce, value: workoutExercise.completedSetsCount)
                 }
 
+                // Swap-to-alternative button (only before any set is completed)
+                if viewModel.canSwap(workoutExercise) {
+                    Button {
+                        showingSwapDialog = true
+                    } label: {
+                        Image(systemName: "arrow.triangle.2.circlepath")
+                            .foregroundStyle(DesignSystem.Colors.tint)
+                            .font(.body)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("workout.swap.accessibility".localized(workoutExercise.exerciseName))
+                }
+
                 // Delete button
                 if let onDelete = onDelete {
                     Button {
@@ -385,6 +410,23 @@ struct ExerciseCard: View {
                     }
                     .buttonStyle(.plain)
                 }
+            }
+            .confirmationDialog(
+                "workout.swap.title".localized,
+                isPresented: $showingSwapDialog,
+                titleVisibility: .visible
+            ) {
+                ForEach(viewModel.swapTargets(for: workoutExercise)) { target in
+                    Button(target.isOriginal
+                           ? "workout.swap.revert".localized(target.exercise.name)
+                           : target.exercise.name) {
+                        viewModel.swapExercise(workoutExercise, to: target)
+                        UINotificationFeedbackGenerator().notificationOccurred(.success)
+                    }
+                }
+                Button("action.cancel".localized, role: .cancel) {}
+            } message: {
+                Text("workout.swap.message".localized(workoutExercise.exerciseName))
             }
 
             // Rest Timer Configuration - Only show for standalone exercises (supersets have their own config)

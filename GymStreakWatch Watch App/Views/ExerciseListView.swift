@@ -7,6 +7,7 @@ struct ExerciseListView: View {
     let onEnd: () -> Void
 
     @EnvironmentObject var viewModel: WatchWorkoutViewModel
+    @State private var swapTargetExercise: ActiveWorkoutExercise?
 
     var body: some View {
         List {
@@ -40,6 +41,25 @@ struct ExerciseListView: View {
                         isCurrent: index == currentIndex,
                         onTap: { onSelectExercise(index) }
                     )
+                    .swipeActions(edge: .trailing) {
+                        if exercise.canSwap {
+                            Button {
+                                swapTargetExercise = exercise
+                            } label: {
+                                Label("Swap", systemImage: "arrow.triangle.2.circlepath")
+                            }
+                            .tint(OnyxWatch.Colors.tint)
+                        }
+                    }
+                    .contextMenu {
+                        if exercise.canSwap {
+                            Button {
+                                swapTargetExercise = exercise
+                            } label: {
+                                Label("Swap Exercise", systemImage: "arrow.triangle.2.circlepath")
+                            }
+                        }
+                    }
                 }
             }
 
@@ -63,6 +83,61 @@ struct ExerciseListView: View {
         .listStyle(.carousel)
         .animation(.easeInOut(duration: 0.25), value: viewModel.isResting)
         .animation(.easeInOut(duration: 0.25), value: viewModel.isRestTimerMinimized)
+        .sheet(item: $swapTargetExercise) { exercise in
+            WatchSwapPickerView(exercise: exercise)
+                .environmentObject(viewModel)
+        }
+    }
+}
+
+// MARK: - Swap Picker
+
+struct WatchSwapPickerView: View {
+    let exercise: ActiveWorkoutExercise
+    @EnvironmentObject var viewModel: WatchWorkoutViewModel
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            List {
+                // Current exercise (for orientation, not selectable)
+                Section {
+                    HStack {
+                        Text(exercise.name)
+                            .fontWeight(.medium)
+                        Spacer()
+                        Text("Current")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+                    .foregroundStyle(.secondary)
+                }
+
+                Section {
+                    ForEach(viewModel.swapTargets(for: exercise)) { target in
+                        Button {
+                            viewModel.swapExercise(exercise.id, to: target)
+                            dismiss()
+                        } label: {
+                            HStack(spacing: 8) {
+                                Image(systemName: "arrow.triangle.2.circlepath")
+                                    .font(.caption)
+                                    .foregroundStyle(OnyxWatch.Colors.tint)
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(target.name)
+                                        .fontWeight(.medium)
+                                    Text(target.muscleGroup)
+                                        .font(.caption2)
+                                        .foregroundStyle(.secondary)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            .navigationTitle("Swap Exercise")
+            .navigationBarTitleDisplayMode(.inline)
+        }
     }
 }
 

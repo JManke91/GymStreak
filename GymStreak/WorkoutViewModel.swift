@@ -65,6 +65,17 @@ class WorkoutViewModel: ObservableObject {
     /// SwiftData WorkoutSession. Last line of defense in the watch sync pipeline.
     private let reconciler = HealthKitWorkoutReconciler()
 
+    /// First time each orphan candidate was seen by the reconciler. An orphan is
+    /// only surfaced to the user once it has stayed unresolved for
+    /// `orphanGracePeriod` — see `reconcileWatchWorkouts` for why.
+    private var orphanFirstSeen: [UUID: Date] = [:]
+    private var reconcileRetryTask: Task<Void, Never>?
+    /// How long an HKWorkout must remain unmatched before the recovery banner
+    /// appears. transferUserInfo has no delivery deadline, but with both devices
+    /// nearby and the app foregrounded, delivery normally completes well within
+    /// this window after activation.
+    private let orphanGracePeriod: TimeInterval = 60
+
     private var isUITesting: Bool {
         ProcessInfo.processInfo.arguments.contains("-UI_TESTING")
     }
@@ -119,8 +130,56 @@ class WorkoutViewModel: ObservableObject {
     /// and from HistoryView's scenePhase observer when the app becomes active.
     func reconcileWatchWorkouts() async {
         let knownIds = Set(workoutHistory.compactMap(\.healthKitWorkoutId))
-        let orphans = await reconciler.findOrphanedWorkouts(knownIds: knownIds)
-        self.orphanedWatchWorkouts = orphans
+        var orphans = await reconciler.findOrphanedWorkouts(knownIds: knownIds)
+
+        // HKWorkouts replicate from the watch via background device sync, while
+        // the rich WatchConnectivity payload is only delivered after this app
+        // launches and WCSession activates — with no timing guarantee. Flagging
+        // an orphan the moment HealthKit knows about it therefore races the
+        // payload; if the user recovers before it lands, the reconstruction
+        // shadows the real per-set data. Defenses, in order:
+        //
+        // 1. A payload already buffered on this iPhone (received, awaiting
+        //    SwiftData save) is in-flight, not orphaned.
+        let bufferedIds = Set(
+            WatchConnectivityManager.shared.pendingWorkouts().compactMap(\.healthKitWorkoutId)
+        )
+        orphans.removeAll { bufferedIds.contains($0.id) }
+
+        // 2. Never surface orphans while WatchConnectivity still holds
+        //    undelivered content from the watch.
+        // 3. Each orphan must stay unresolved for a grace period from first
+        //    sighting — hasContentPending can't see payloads still crossing
+        //    the radio.
+        let now = Date()
+        orphanFirstSeen = orphanFirstSeen.filter { id, _ in orphans.contains { $0.id == id } }
+        for orphan in orphans where orphanFirstSeen[orphan.id] == nil {
+            orphanFirstSeen[orphan.id] = now
+        }
+
+        let wcMayDeliver = WatchConnectivityManager.shared.mayHaveUndeliveredContent
+        let settled = orphans.filter { orphan in
+            !wcMayDeliver
+                && now.timeIntervalSince(orphanFirstSeen[orphan.id] ?? now) >= orphanGracePeriod
+        }
+        self.orphanedWatchWorkouts = settled
+
+        // Candidates still settling: re-check once the grace period has passed.
+        // A payload arriving earlier re-runs reconciliation anyway via
+        // .workoutHistoryDidChange after its save.
+        if settled.count < orphans.count {
+            scheduleReconcileRetry()
+        }
+    }
+
+    private func scheduleReconcileRetry() {
+        guard reconcileRetryTask == nil else { return }
+        reconcileRetryTask = Task { [weak self, orphanGracePeriod] in
+            try? await Task.sleep(for: .seconds(orphanGracePeriod + 5))
+            guard let self, !Task.isCancelled else { return }
+            self.reconcileRetryTask = nil
+            await self.reconcileWatchWorkouts()
+        }
     }
 
     /// Reconstructs SwiftData `WorkoutSession`s from HealthKit workouts the watch
@@ -790,6 +849,107 @@ class WorkoutViewModel: ObservableObject {
         }
     }
 
+    // MARK: - Alternative Exercise Swapping
+
+    /// A candidate the user can switch the current exercise to during a workout.
+    struct SwapTarget: Identifiable {
+        let id: UUID            // the target Exercise's id
+        let exercise: Exercise
+        let isOriginal: Bool    // true if this is the originally-planned exercise (revert option)
+    }
+
+    /// Finds the routine exercise a workout exercise originated from, using the
+    /// originally-planned exercise id (falls back to current id when not swapped).
+    private func originRoutineExercise(for workoutExercise: WorkoutExercise) -> RoutineExercise? {
+        guard let routine = currentSession?.routine else { return nil }
+        let originId = workoutExercise.plannedExerciseId ?? workoutExercise.exerciseId
+        return routine.routineExercisesList.first { $0.exercise?.id == originId }
+    }
+
+    /// Swap targets available for a workout exercise: its alternatives plus the
+    /// originally-planned exercise (when currently swapped), excluding the active one.
+    /// Returns an empty array if the exercise has no alternatives configured.
+    func swapTargets(for workoutExercise: WorkoutExercise) -> [SwapTarget] {
+        guard let origin = originRoutineExercise(for: workoutExercise), origin.hasAlternatives else {
+            return []
+        }
+        var targets: [SwapTarget] = []
+        // The originally-planned exercise (acts as the revert option once swapped)
+        if let primary = origin.exercise {
+            targets.append(SwapTarget(id: primary.id, exercise: primary, isOriginal: true))
+        }
+        // Each configured alternative
+        for alternative in origin.alternativesList {
+            if let exercise = alternative.exercise {
+                targets.append(SwapTarget(id: exercise.id, exercise: exercise, isOriginal: false))
+            }
+        }
+        // Exclude whatever is currently active
+        return targets.filter { $0.id != workoutExercise.exerciseId }
+    }
+
+    /// True if the exercise can still be swapped (no set completed yet and targets exist).
+    func canSwap(_ workoutExercise: WorkoutExercise) -> Bool {
+        workoutExercise.completedSetsCount == 0 && !swapTargets(for: workoutExercise).isEmpty
+    }
+
+    /// Swaps a workout exercise for one of its alternatives (or back to the original).
+    /// Only allowed before any set is completed; rebuilds the sets from the target's own scheme.
+    func swapExercise(_ workoutExercise: WorkoutExercise, to target: SwapTarget) {
+        guard workoutExercise.completedSetsCount == 0 else { return }
+        guard let origin = originRoutineExercise(for: workoutExercise) else { return }
+
+        objectWillChange.send()
+
+        // Record the originally-planned exercise on the first swap only.
+        if workoutExercise.plannedExerciseId == nil {
+            workoutExercise.plannedExerciseId = workoutExercise.exerciseId
+            workoutExercise.plannedExerciseName = workoutExercise.exerciseName
+        }
+
+        // Update identity to the actually-performed exercise.
+        workoutExercise.exerciseId = target.exercise.id
+        workoutExercise.exerciseName = target.exercise.name
+        workoutExercise.muscleGroups = target.exercise.muscleGroups
+
+        // Reverting to the originally-planned exercise clears the swap metadata.
+        if target.isOriginal {
+            workoutExercise.plannedExerciseId = nil
+            workoutExercise.plannedExerciseName = nil
+        }
+
+        // Rebuild the sets from the chosen target's own set scheme.
+        let templateSets: [(reps: Int, weight: Double, rest: TimeInterval)]
+        if target.isOriginal {
+            templateSets = origin.setsList.sorted(by: { $0.order < $1.order })
+                .map { ($0.reps, $0.weight, $0.restTime) }
+        } else if let alternative = origin.alternativesList.first(where: { $0.exercise?.id == target.exercise.id }) {
+            templateSets = alternative.setsList.map { ($0.reps, $0.weight, $0.restTime) }
+        } else {
+            templateSets = []
+        }
+
+        // Replace existing sets (none completed, safe to discard).
+        for set in workoutExercise.setsList {
+            modelContext.delete(set)
+        }
+        let newSets: [WorkoutSet] = templateSets.enumerated().map { index, template in
+            let set = WorkoutSet(
+                plannedReps: template.reps,
+                actualReps: template.reps,
+                plannedWeight: template.weight,
+                actualWeight: template.weight,
+                restTime: template.rest,
+                order: index
+            )
+            set.workoutExercise = workoutExercise
+            return set
+        }
+        workoutExercise.sets = newSets
+
+        save()
+    }
+
     func removeExerciseFromWorkout(_ workoutExercise: WorkoutExercise) {
         guard let session = currentSession else { return }
 
@@ -1334,5 +1494,6 @@ class WorkoutViewModel: ObservableObject {
     deinit {
         timer?.invalidate()
         restTimer?.invalidate()
+        reconcileRetryTask?.cancel()
     }
 }

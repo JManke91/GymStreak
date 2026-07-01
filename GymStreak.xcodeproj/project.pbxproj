@@ -89,19 +89,19 @@
 			);
 			target = A6A3406A2E4E6F360017A4F7 /* GymStreak */;
 		};
-		A6FBC4FF2EC91C1E0095483C /* Exceptions for "GymStreakWidgets" folder in "GymStreakWidgetsExtension" target */ = {
-			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
-			membershipExceptions = (
-				Info.plist,
-			);
-			target = A6FBC4E92EC91C1C0095483C /* GymStreakWidgetsExtension */;
-		};
 		A6D6C7152F38AF980071D28A /* Exceptions for "GymStreakWatch Watch App" folder in "GymStreakWatch Watch App" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
 				Info.plist,
 			);
 			target = A6FBC5CB2ECCED0F0095483C /* GymStreakWatch Watch App */;
+		};
+		A6FBC4FF2EC91C1E0095483C /* Exceptions for "GymStreakWidgets" folder in "GymStreakWidgetsExtension" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = A6FBC4E92EC91C1C0095483C /* GymStreakWidgetsExtension */;
 		};
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 

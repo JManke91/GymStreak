@@ -64,6 +64,19 @@ final class WatchConnectivityManager: NSObject, ObservableObject {
         print("WatchConnectivity: sent save-ack for workout \(id)")
     }
 
+    /// True while WatchConnectivity may still be holding watch content it has
+    /// received but not yet delivered to our delegate (or the session hasn't
+    /// finished activating). `hasContentPending` is only meaningful after
+    /// activation and is a *positive* signal only: it cannot see payloads the
+    /// watch has queued but that haven't crossed the radio yet — callers must
+    /// combine it with a grace period (see `WorkoutViewModel.reconcileWatchWorkouts`).
+    var mayHaveUndeliveredContent: Bool {
+        guard let session, session.activationState == .activated else {
+            return true
+        }
+        return session.hasContentPending
+    }
+
     // MARK: - Public Methods
 
     func syncRoutines(_ routines: [Routine]) {

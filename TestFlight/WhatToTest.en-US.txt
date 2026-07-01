@@ -13,3 +13,4 @@
 - Double Tap to complete sets: on Apple Watch Series 9/10 and Ultra 2/3, the Double Tap gesture (tap thumb and index finger twice) now completes the current set during a workout.
 - Clearer workout comparison: the "Ask the Coach" analysis on a past workout now shows a scannable breakdown — a one-line summary plus per-exercise rows with up/down indicators for progress, decline, or stagnation — instead of a long text block.
 - Smoother Coach loading: tapping "Ask the Coach" now responds instantly with a loading card that fills in as the analysis is generated, instead of nothing happening for a few seconds.
+- Watch sync accuracy: fixed a false "workouts pending sync" warning that could appear right after a Watch-only workout while the data was still on its way to the iPhone — and if you recovered such a workout too early, the exact reps and weights from the Watch now replace the rebuilt estimate once they arrive instead of being lost.

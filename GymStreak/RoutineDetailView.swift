@@ -32,6 +32,9 @@ struct RoutineDetailView: View {
     @AppStorage("hasSeenReorderHint") private var hasSeenReorderHint = false
     @State private var showReorderHint = false
     @State private var setEditExerciseId: UUID? = nil
+    @State private var alternativesEditExerciseId: UUID? = nil
+    @State private var addAlternativeTarget: RoutineExercise? = nil
+    @State private var editingAlternative: RoutineExerciseAlternative? = nil
     @State private var repRangeExpandedForExercise: [UUID: Bool] = [:]
     @State private var overloadBannerDismissedForExercise: [UUID: Bool] = [:]
     @State private var selectedExerciseForOverload: RoutineExercise?
@@ -258,6 +261,25 @@ struct RoutineDetailView: View {
     private func exitSetEditMode() {
         withAnimation(DesignSystem.Animation.spring) {
             setEditExerciseId = nil
+        }
+    }
+
+    // MARK: - Alternatives Edit Mode
+
+    private func enterAlternativesEditMode(for routineExercise: RoutineExercise) {
+        guard !isEditMode, supersetEditMode == nil else { return }
+        withAnimation(DesignSystem.Animation.spring) {
+            expandedExerciseId = routineExercise.id
+            expandedSetId = nil
+            setEditExerciseId = nil
+            alternativesEditExerciseId = routineExercise.id
+        }
+        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+    }
+
+    private func exitAlternativesEditMode() {
+        withAnimation(DesignSystem.Animation.spring) {
+            alternativesEditExerciseId = nil
         }
     }
 
@@ -548,6 +570,107 @@ struct RoutineDetailView: View {
         .buttonStyle(.plain)
     }
 
+    // MARK: - Alternatives Edit Content
+
+    @ViewBuilder
+    private func alternativesEditContent(for routineExercise: RoutineExercise) -> some View {
+        // Explanation
+        Text("alternatives.edit.explanation".localized)
+            .font(.caption)
+            .foregroundStyle(.secondary)
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+        ForEach(routineExercise.alternativesList) { alternative in
+            Button {
+                editingAlternative = alternative
+            } label: {
+                HStack(spacing: 10) {
+                    // Delete button
+                    Button {
+                        withAnimation(DesignSystem.Animation.spring) {
+                            viewModel.removeAlternative(alternative, from: routineExercise)
+                        }
+                    } label: {
+                        Image(systemName: "minus.circle.fill")
+                            .font(.title3)
+                            .foregroundStyle(.white, .red)
+                            .symbolRenderingMode(.palette)
+                    }
+                    .buttonStyle(.plain)
+
+                    if let exercise = alternative.exercise {
+                        Image(systemName: exercise.equipmentType.icon)
+                            .font(.subheadline)
+                            .foregroundStyle(.tertiary)
+                            .frame(width: 22)
+                    }
+
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(alternative.exercise?.name ?? "Unknown")
+                            .font(.subheadline.weight(.medium))
+                            .foregroundStyle(.primary)
+                        Text("routine.sets_count".localized(alternative.setsList.count))
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+
+                    Spacer()
+
+                    Image(systemName: "chevron.right")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.tertiary)
+                }
+                .padding(.vertical, 6)
+                .padding(.horizontal, 12)
+                .background(
+                    RoundedRectangle(cornerRadius: 8)
+                        .fill(DesignSystem.Colors.cardElevated)
+                )
+            }
+            .buttonStyle(.plain)
+        }
+
+        // Add Alternative button
+        Button {
+            addAlternativeTarget = routineExercise
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: "plus.circle.fill")
+                    .font(.subheadline)
+                    .fontWeight(.medium)
+                Text("alternatives.add".localized)
+                    .font(.subheadline)
+                    .fontWeight(.semibold)
+            }
+            .foregroundStyle(DesignSystem.Colors.tint)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 12)
+            .background(DesignSystem.Colors.input)
+            .clipShape(RoundedRectangle(cornerRadius: 10))
+        }
+        .buttonStyle(.plain)
+
+        // Done button
+        Button {
+            exitAlternativesEditMode()
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: "checkmark.circle.fill")
+                    .font(.subheadline)
+                    .fontWeight(.medium)
+                Text("action.done".localized)
+                    .font(.subheadline)
+                    .fontWeight(.semibold)
+            }
+            .foregroundStyle(DesignSystem.Colors.tint)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 12)
+            .background(DesignSystem.Colors.input)
+            .clipShape(RoundedRectangle(cornerRadius: 10))
+        }
+        .buttonStyle(.plain)
+    }
+
     // MARK: - Superset Edit Mode Row
     @ViewBuilder
     private func supersetEditRow(for routineExercise: RoutineExercise) -> some View {
@@ -659,6 +782,18 @@ struct RoutineDetailView: View {
             Label("exercise.menu.edit_sets".localized, systemImage: "slider.horizontal.3")
         }
 
+        // Manage alternative exercises
+        Button {
+            enterAlternativesEditMode(for: routineExercise)
+        } label: {
+            Label(
+                routineExercise.hasAlternatives
+                    ? "alternatives.menu.edit".localized(routineExercise.alternativesList.count)
+                    : "alternatives.menu.add".localized,
+                systemImage: "arrow.triangle.2.circlepath"
+            )
+        }
+
         Divider()
 
         // Delete exercise
@@ -742,8 +877,9 @@ struct RoutineDetailView: View {
                                 // Normal mode: Header row with leading chevron
                                 let isExerciseExpanded = expandedExerciseId == routineExercise.id
                                 Button {
-                                    // Prevent collapse during set reorder mode
-                                    guard setEditExerciseId != routineExercise.id else { return }
+                                    // Prevent collapse during set reorder / alternatives edit mode
+                                    guard setEditExerciseId != routineExercise.id,
+                                          alternativesEditExerciseId != routineExercise.id else { return }
                                     withAnimation(DesignSystem.Animation.spring) {
                                         if isExerciseExpanded {
                                             expandedExerciseId = nil
@@ -782,6 +918,9 @@ struct RoutineDetailView: View {
                                             } : nil,
                                             onEditSets: {
                                                 enterSetEditMode(for: routineExercise)
+                                            },
+                                            onEditAlternatives: {
+                                                enterAlternativesEditMode(for: routineExercise)
                                             }
                                         )
                                     }
@@ -804,6 +943,8 @@ struct RoutineDetailView: View {
                                     VStack(spacing: 12) {
                                         if setEditExerciseId == routineExercise.id {
                                             setEditContent(for: routineExercise)
+                                        } else if alternativesEditExerciseId == routineExercise.id {
+                                            alternativesEditContent(for: routineExercise)
                                         } else {
                                             normalSetContent(for: routineExercise)
                                         }
@@ -1068,6 +1209,12 @@ struct RoutineDetailView: View {
         .sheet(isPresented: $showingAddExercise) {
             AddExerciseToRoutineView(routine: routine, viewModel: viewModel, exercisesViewModel: exercisesViewModel)
         }
+        .sheet(item: $addAlternativeTarget) { target in
+            AddAlternativeView(routineExercise: target, viewModel: viewModel)
+        }
+        .sheet(item: $editingAlternative) { alternative in
+            AlternativeSetEditView(alternative: alternative, viewModel: viewModel)
+        }
         .sheet(item: $selectedExerciseForOverload) { exercise in
             WeightIncreaseSheet(
                 routineExercise: exercise,
@@ -1259,6 +1406,7 @@ struct ExerciseHeaderView: View {
     var supersetLinePosition: SupersetPosition? = nil
     var onSupersetAction: (() -> Void)? = nil
     var onEditSets: (() -> Void)? = nil
+    var onEditAlternatives: (() -> Void)? = nil
 
     // Fixed width for the superset indicator area - ensures consistent alignment for all exercises
     private let indicatorAreaWidth: CGFloat = 16
@@ -1310,6 +1458,17 @@ struct ExerciseHeaderView: View {
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
                     }
+
+                    // Alternatives indicator - monochrome, no color (reserved for supersets)
+                    if routineExercise.hasAlternatives {
+                        HStack(spacing: 4) {
+                            Image(systemName: "arrow.triangle.2.circlepath")
+                                .font(.caption2)
+                            Text("alternatives.count".localized(routineExercise.alternativesList.count))
+                                .font(.caption)
+                        }
+                        .foregroundStyle(.secondary)
+                    }
                 }
 
                 Spacer()
@@ -1343,6 +1502,18 @@ struct ExerciseHeaderView: View {
                                 editSetsAction()
                             } label: {
                                 Label("exercise.menu.edit_sets".localized, systemImage: "slider.horizontal.3")
+                            }
+                        }
+                        if let editAlternativesAction = onEditAlternatives {
+                            Button {
+                                editAlternativesAction()
+                            } label: {
+                                Label(
+                                    routineExercise.hasAlternatives
+                                        ? "alternatives.menu.edit".localized(routineExercise.alternativesList.count)
+                                        : "alternatives.menu.add".localized,
+                                    systemImage: "arrow.triangle.2.circlepath"
+                                )
                             }
                         }
                     } label: {

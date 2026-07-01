@@ -29,6 +29,8 @@ struct GymStreakApp: App {
             Exercise.self,
             RoutineExercise.self,
             ExerciseSet.self,
+            RoutineExerciseAlternative.self,
+            AlternativeExerciseSet.self,
             WorkoutSession.self,
             WorkoutExercise.self,
             WorkoutSet.self

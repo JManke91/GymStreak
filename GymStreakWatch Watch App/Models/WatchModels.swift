@@ -28,6 +28,8 @@ struct WatchExercise: Codable, Identifiable, Hashable {
     var targetRepMin: Int? = nil
     var targetRepMax: Int? = nil
     var exerciseId: UUID? = nil
+    // Optional (nil default) keeps old cached payloads decodable.
+    var alternatives: [WatchExerciseAlternative]? = nil
 
     /// Compact, consistent summary of planned sets.
     ///
@@ -73,12 +75,23 @@ struct WatchSet: Codable, Identifiable, Hashable {
     let restTime: TimeInterval
 }
 
+/// An alternative exercise a user can swap to during a workout (with its own set scheme).
+struct WatchExerciseAlternative: Codable, Identifiable, Hashable {
+    let id: UUID          // RoutineExerciseAlternative.id
+    let exerciseId: UUID  // the alternative Exercise's id
+    let name: String
+    let muscleGroup: String
+    let sets: [WatchSet]
+    let order: Int
+}
+
 // MARK: - Active Workout State Models
 
 struct ActiveWorkoutExercise: Identifiable {
     let id: UUID
-    let name: String
-    let muscleGroup: String
+    // Mutable so swapping to an alternative updates the displayed identity in place.
+    var name: String
+    var muscleGroup: String
     var sets: [ActiveWorkoutSet]
     let order: Int
     let supersetId: UUID?
@@ -86,6 +99,14 @@ struct ActiveWorkoutExercise: Identifiable {
     var targetRepMin: Int? = nil
     var targetRepMax: Int? = nil
     var exerciseId: UUID? = nil
+    // Alternative exercises available for swapping (with their own set schemes).
+    var alternatives: [WatchExerciseAlternative] = []
+    // Swap tracking: set on the first swap, cleared when reverting to the original.
+    var plannedExerciseId: UUID? = nil
+    var plannedExerciseName: String? = nil
+    // Captured on first swap so the original exercise can be restored (revert).
+    var originalMuscleGroup: String? = nil
+    var originalSets: [WatchSet]? = nil
 
     var completedSetsCount: Int {
         sets.filter(\.isCompleted).count
@@ -97,6 +118,15 @@ struct ActiveWorkoutExercise: Identifiable {
 
     var isInSuperset: Bool {
         supersetId != nil
+    }
+
+    var wasSwapped: Bool {
+        plannedExerciseId != nil
+    }
+
+    /// True if the exercise can still be swapped (no completed set, alternatives exist).
+    var canSwap: Bool {
+        completedSetsCount == 0 && !alternatives.isEmpty
     }
 
     var hasRepRangeGoal: Bool {
@@ -206,6 +236,10 @@ struct CompletedWatchExercise: Codable {
     var targetRepMin: Int? = nil
     var targetRepMax: Int? = nil
     var exerciseId: UUID? = nil
+    // Set only when the exercise was swapped for an alternative during the workout.
+    // name/muscleGroup/exerciseId describe what was actually performed.
+    var plannedExerciseId: UUID? = nil
+    var plannedExerciseName: String? = nil
 }
 
 struct CompletedWatchSet: Codable {
@@ -249,7 +283,8 @@ extension WatchExercise {
             supersetOrder: supersetOrder,
             targetRepMin: targetRepMin,
             targetRepMax: targetRepMax,
-            exerciseId: exerciseId
+            exerciseId: exerciseId,
+            alternatives: alternatives ?? []
         )
     }
 }
@@ -278,7 +313,9 @@ extension ActiveWorkoutExercise {
             supersetOrder: supersetOrder,
             targetRepMin: targetRepMin,
             targetRepMax: targetRepMax,
-            exerciseId: exerciseId
+            exerciseId: exerciseId,
+            plannedExerciseId: plannedExerciseId,
+            plannedExerciseName: plannedExerciseName
         )
     }
 }

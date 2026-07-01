@@ -29,6 +29,8 @@ struct WatchExercise: Codable, Identifiable, Hashable {
     var targetRepMin: Int? = nil
     var targetRepMax: Int? = nil
     var exerciseId: UUID? = nil
+    // Optional (nil default) keeps old cached payloads decodable.
+    var alternatives: [WatchExerciseAlternative]? = nil
 }
 
 struct WatchSet: Codable, Identifiable, Hashable {
@@ -36,6 +38,16 @@ struct WatchSet: Codable, Identifiable, Hashable {
     let reps: Int
     let weight: Double
     let restTime: TimeInterval
+}
+
+/// An alternative exercise a user can swap to during a workout (with its own set scheme).
+struct WatchExerciseAlternative: Codable, Identifiable, Hashable {
+    let id: UUID          // RoutineExerciseAlternative.id
+    let exerciseId: UUID  // the alternative Exercise's id
+    let name: String
+    let muscleGroup: String
+    let sets: [WatchSet]
+    let order: Int
 }
 
 // MARK: - Completed Workout for syncing back to iOS
@@ -84,6 +96,10 @@ struct CompletedWatchExercise: Codable {
     var targetRepMin: Int? = nil
     var targetRepMax: Int? = nil
     var exerciseId: UUID? = nil
+    // Set only when the exercise was swapped for an alternative during the workout.
+    // name/muscleGroup/exerciseId describe what was actually performed.
+    var plannedExerciseId: UUID? = nil
+    var plannedExerciseName: String? = nil
 }
 
 struct CompletedWatchSet: Codable {
@@ -124,7 +140,25 @@ extension Routine {
                     supersetOrder: routineExercise.supersetOrder,
                     targetRepMin: routineExercise.targetRepMin,
                     targetRepMax: routineExercise.targetRepMax,
-                    exerciseId: routineExercise.exercise?.id
+                    exerciseId: routineExercise.exercise?.id,
+                    alternatives: routineExercise.alternativesList.compactMap { alternative in
+                        guard let exercise = alternative.exercise else { return nil }
+                        return WatchExerciseAlternative(
+                            id: alternative.id,
+                            exerciseId: exercise.id,
+                            name: exercise.name,
+                            muscleGroup: exercise.primaryMuscleGroup,
+                            sets: alternative.setsList.map { set in
+                                WatchSet(
+                                    id: set.id,
+                                    reps: set.reps,
+                                    weight: set.weight,
+                                    restTime: set.restTime
+                                )
+                            },
+                            order: alternative.order
+                        )
+                    }
                 )
             }
         )

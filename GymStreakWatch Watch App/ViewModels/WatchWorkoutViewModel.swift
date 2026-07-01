@@ -59,6 +59,12 @@ final class WatchWorkoutViewModel: ObservableObject {
     private let connectivityManager: WatchConnectivityManager
     private let routineStore: RoutineStore
     private var workoutStartTime: Date?
+    /// Identity of the current workout's outgoing payload / HealthKit save,
+    /// generated once per workout so a retried end (e.g. after a HealthKit
+    /// failure) reuses the same ids — the durable send queue replaces entries
+    /// by id and iOS dedupes on them, so stable ids prevent duplicate sessions.
+    private var pendingCompletedWorkoutId: UUID?
+    private var pendingHealthKitWorkoutId: UUID?
     private var restTimer: Timer?
     private var cancellabes = Set<AnyCancellable>()
 
@@ -238,6 +244,8 @@ final class WatchWorkoutViewModel: ObservableObject {
         currentExerciseIndex = 0
         currentSetIndex = 0
         workoutStartTime = Date()
+        pendingCompletedWorkoutId = nil
+        pendingHealthKitWorkoutId = nil
 
         // Skip HealthKit for UI testing - immediately set running state with mock data
         if isUITesting {
@@ -290,9 +298,19 @@ final class WatchWorkoutViewModel: ObservableObject {
             templateWasUpdated = routineStore.applyWorkoutChanges(routineId: routineId, exercises: exercises)
         }
 
+        let healthKitWorkoutId = pendingHealthKitWorkoutId ?? UUID()
+        pendingHealthKitWorkoutId = healthKitWorkoutId
+
+        // Hand the payload to the durable send queue BEFORE finishing the
+        // HealthKit workout. The reverse order had a loss window: once HealthKit
+        // had saved, a crash or termination before the payload was persisted
+        // left a workout in Apple Health that iOS could only reconstruct from
+        // the routine template. Sending first also preserves the actual values
+        // if the HealthKit save fails outright.
+        sendCompletedWorkoutToiPhone(updateTemplate: updateTemplate, healthKitWorkoutId: healthKitWorkoutId)
+
         do {
-            let (_, healthKitWorkoutId) = try await healthKitManager.endWorkout()
-            await sendCompletedWorkoutToiPhone(updateTemplate: updateTemplate, healthKitWorkoutId: healthKitWorkoutId)
+            _ = try await healthKitManager.endWorkout(externalId: healthKitWorkoutId)
             isWorkoutActive = false
             workoutState = .stopped
             WKInterfaceDevice.current().play(.success)
@@ -427,6 +445,78 @@ final class WatchWorkoutViewModel: ObservableObject {
 
         WKInterfaceDevice.current().play(.success)
         print("Updated rest time for exercise \(exercises[exerciseIndex].name) to \(newRestTime)s")
+    }
+
+    // MARK: - Alternative Exercise Swapping
+
+    /// Swap candidates for an exercise: its alternatives plus the originally-planned
+    /// exercise (as a revert option once swapped), excluding whatever is active.
+    func swapTargets(for exercise: ActiveWorkoutExercise) -> [WatchExerciseAlternative] {
+        var targets: [WatchExerciseAlternative] = []
+        if exercise.wasSwapped,
+           let plannedId = exercise.plannedExerciseId,
+           let plannedName = exercise.plannedExerciseName {
+            targets.append(
+                WatchExerciseAlternative(
+                    id: plannedId,
+                    exerciseId: plannedId,
+                    name: plannedName,
+                    muscleGroup: exercise.originalMuscleGroup ?? exercise.muscleGroup,
+                    sets: exercise.originalSets ?? [],
+                    order: -1
+                )
+            )
+        }
+        targets.append(contentsOf: exercise.alternatives.sorted { $0.order < $1.order })
+        return targets.filter { $0.exerciseId != exercise.exerciseId }
+    }
+
+    /// Swaps an exercise for one of its alternatives (or back to the original).
+    /// Only allowed before any set is completed; rebuilds the sets from the target scheme.
+    func swapExercise(_ exerciseId: UUID, to alternative: WatchExerciseAlternative) {
+        guard let index = exercises.firstIndex(where: { $0.id == exerciseId }) else { return }
+        var exercise = exercises[index]
+        guard exercise.completedSetsCount == 0 else { return }
+
+        let isRevert = exercise.plannedExerciseId == alternative.exerciseId
+
+        // Capture the original identity/sets on the first swap so revert is possible.
+        if exercise.plannedExerciseId == nil {
+            exercise.plannedExerciseId = exercise.exerciseId
+            exercise.plannedExerciseName = exercise.name
+            exercise.originalMuscleGroup = exercise.muscleGroup
+            exercise.originalSets = exercise.sets.map { set in
+                WatchSet(id: set.id, reps: set.plannedReps, weight: set.plannedWeight, restTime: set.restTime)
+            }
+        }
+
+        // Apply the chosen target's identity and set scheme.
+        exercise.name = alternative.name
+        exercise.muscleGroup = alternative.muscleGroup
+        exercise.exerciseId = alternative.exerciseId
+        exercise.sets = alternative.sets.enumerated().map { setIndex, set in
+            ActiveWorkoutSet(
+                id: set.id,
+                plannedReps: set.reps,
+                actualReps: set.reps,
+                plannedWeight: set.weight,
+                actualWeight: set.weight,
+                restTime: set.restTime,
+                completedAt: nil,
+                order: setIndex
+            )
+        }
+
+        // Reverting to the original clears the swap metadata.
+        if isRevert {
+            exercise.plannedExerciseId = nil
+            exercise.plannedExerciseName = nil
+            exercise.originalMuscleGroup = nil
+            exercise.originalSets = nil
+        }
+
+        exercises[index] = exercise
+        WKInterfaceDevice.current().play(.success)
     }
 
     func completeCurrentSet() {
@@ -894,12 +984,15 @@ final class WatchWorkoutViewModel: ObservableObject {
 
     // MARK: - Sync to iPhone
 
-    private func sendCompletedWorkoutToiPhone(updateTemplate: Bool, healthKitWorkoutId: UUID) async {
+    private func sendCompletedWorkoutToiPhone(updateTemplate: Bool, healthKitWorkoutId: UUID) {
         guard let routine = currentRoutine,
               let startTime = workoutStartTime else { return }
 
+        let workoutId = pendingCompletedWorkoutId ?? UUID()
+        pendingCompletedWorkoutId = workoutId
+
         let completedWorkout = CompletedWatchWorkout(
-            id: UUID(),
+            id: workoutId,
             routineId: routine.id,
             routineName: routine.name,
             startTime: startTime,
@@ -953,6 +1046,8 @@ final class WatchWorkoutViewModel: ObservableObject {
         currentExerciseIndex = 0
         currentSetIndex = 0
         workoutStartTime = nil
+        pendingCompletedWorkoutId = nil
+        pendingHealthKitWorkoutId = nil
         isResting = false
         restTimeRemaining = 0
         isPaused = false

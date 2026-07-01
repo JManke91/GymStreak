@@ -110,6 +110,11 @@ final class RoutineExercise {
     var targetRepMin: Int? = nil   // e.g., 8
     var targetRepMax: Int? = nil   // e.g., 12
 
+    // Alternative exercises - iCloud compatible (nil default, new relationship)
+    // The user performs only ONE of: this exercise or one of its alternatives.
+    @Relationship(deleteRule: .cascade, inverse: \RoutineExerciseAlternative.routineExercise)
+    var alternatives: [RoutineExerciseAlternative]? = nil
+
     init(exercise: Exercise, order: Int) {
         self.id = UUID()
         self.exercise = exercise
@@ -120,6 +125,14 @@ final class RoutineExercise {
     // Convenience accessor for non-optional usage
     var setsList: [ExerciseSet] {
         sets ?? []
+    }
+
+    var alternativesList: [RoutineExerciseAlternative] {
+        (alternatives ?? []).sorted { $0.order < $1.order }
+    }
+
+    var hasAlternatives: Bool {
+        !(alternatives ?? []).isEmpty
     }
 
     var isInSuperset: Bool {
@@ -154,6 +167,46 @@ final class ExerciseSet {
         self.weight = weight
         self.restTime = restTime
         self.isCompleted = false
+        self.order = order
+    }
+}
+
+@Model
+final class RoutineExerciseAlternative {
+    var id: UUID = UUID()
+    var routineExercise: RoutineExercise?   // the "primary" slot this is an alternative for
+    var exercise: Exercise?                  // the alternative exercise
+    var order: Int = 0                        // display order among alternatives
+    @Relationship(deleteRule: .cascade, inverse: \AlternativeExerciseSet.alternative)
+    var sets: [AlternativeExerciseSet]? = []  // this alternative's own set scheme
+
+    init(exercise: Exercise, order: Int) {
+        self.id = UUID()
+        self.exercise = exercise
+        self.order = order
+        self.sets = []
+    }
+
+    // Convenience accessor for non-optional usage
+    var setsList: [AlternativeExerciseSet] {
+        (sets ?? []).sorted { $0.order < $1.order }
+    }
+}
+
+@Model
+final class AlternativeExerciseSet {
+    var id: UUID = UUID()
+    var reps: Int = 0
+    var weight: Double = 0.0
+    var restTime: TimeInterval = 60
+    var order: Int = 0
+    var alternative: RoutineExerciseAlternative?
+
+    init(reps: Int, weight: Double, restTime: TimeInterval, order: Int = 0) {
+        self.id = UUID()
+        self.reps = reps
+        self.weight = weight
+        self.restTime = restTime
         self.order = order
     }
 }
@@ -271,6 +324,12 @@ final class WorkoutExercise {
     var targetRepMin: Int? = nil
     var targetRepMax: Int? = nil
 
+    // Alternative-exercise swap tracking - iCloud compatible (nil = no swap occurred).
+    // exerciseId/exerciseName/muscleGroups always describe what was ACTUALLY performed;
+    // these two fields preserve what was originally planned for display/history only.
+    var plannedExerciseId: UUID? = nil
+    var plannedExerciseName: String? = nil
+
     // Progressive overload tracking - when true, plannedWeight/plannedReps on sets
     // represent the actual performance (before overload was applied to actual values)
     var progressiveOverloadApplied: Bool = false
@@ -324,6 +383,11 @@ final class WorkoutExercise {
 
     var isInSuperset: Bool {
         supersetId != nil
+    }
+
+    /// True if this exercise was swapped for an alternative during the workout.
+    var wasSwapped: Bool {
+        plannedExerciseId != nil
     }
 
     var hasRepRangeGoal: Bool {

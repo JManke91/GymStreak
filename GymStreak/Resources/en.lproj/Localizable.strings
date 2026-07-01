@@ -420,6 +420,25 @@
 "exercise.menu.edit_superset" = "Edit Superset";
 "exercise.menu.edit_sets" = "Edit Sets";
 
+// MARK: - Alternative Exercises
+"alternatives.menu.add" = "Add Alternatives";
+"alternatives.menu.edit" = "Edit Alternatives (%d)";
+"alternatives.add" = "Add Alternative";
+"alternatives.add_accessibility" = "Add %@ as alternative";
+"alternatives.count" = "%d alternatives";
+"alternatives.edit.explanation" = "Pick one of these if the planned exercise isn't available. Tap an alternative to set its own reps and weight.";
+"alternatives.picker.title" = "Add Alternative";
+"alternatives.picker.empty.title" = "No Exercises";
+"alternatives.picker.empty.message" = "All other exercises are already used here.";
+"workout.swap.title" = "Swap Exercise";
+"workout.swap.message" = "Switch %@ for an alternative.";
+"workout.swap.revert" = "Revert to %@";
+"workout.swap.swapped_from" = "Swapped from %@";
+"workout.swap.accessibility" = "Swap %@ for an alternative";
+"workout.swap.permanent.title" = "Update Routine?";
+"workout.swap.permanent.message" = "You swapped exercises during this workout. Make these changes permanent in the routine?";
+"workout.swap.permanent.confirm" = "Update Routine";
+
 // MARK: - Test Data (for UI Testing Screenshots)
 "testdata.routine.push_day" = "Push Day";
 "testdata.routine.pull_day" = "Pull Day";

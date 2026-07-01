@@ -282,6 +282,78 @@ class RoutinesViewModel: ObservableObject {
         updateRoutine(routine)
     }
 
+    // MARK: - Alternative Exercise Management
+
+    /// Adds an alternative exercise to a routine exercise, seeding its set scheme
+    /// from the primary exercise's current sets.
+    func addAlternative(_ exercise: Exercise, to routineExercise: RoutineExercise) {
+        let order = (routineExercise.alternativesList.last?.order ?? -1) + 1
+        let alternative = RoutineExerciseAlternative(exercise: exercise, order: order)
+        alternative.routineExercise = routineExercise
+        // Seed the alternative's sets from the primary exercise's sets
+        let seededSets = routineExercise.setsList.sorted(by: { $0.order < $1.order }).enumerated().map { index, set in
+            let copy = AlternativeExerciseSet(reps: set.reps, weight: set.weight, restTime: set.restTime, order: index)
+            copy.alternative = alternative
+            return copy
+        }
+        alternative.sets = seededSets
+        if routineExercise.alternatives == nil { routineExercise.alternatives = [] }
+        routineExercise.alternatives?.append(alternative)
+        if let routine = routineExercise.routine {
+            updateRoutine(routine)
+        }
+    }
+
+    /// Removes an alternative from a routine exercise.
+    func removeAlternative(_ alternative: RoutineExerciseAlternative, from routineExercise: RoutineExercise) {
+        if let index = routineExercise.alternativesList.firstIndex(where: { $0.id == alternative.id }) {
+            let actualIndex = routineExercise.alternatives?.firstIndex(where: { $0.id == alternative.id }) ?? index
+            routineExercise.alternatives?.remove(at: actualIndex)
+            modelContext.delete(alternative)
+            // Reorder remaining alternatives
+            for (newOrder, remaining) in routineExercise.alternativesList.enumerated() {
+                remaining.order = newOrder
+            }
+            if let routine = routineExercise.routine {
+                updateRoutine(routine)
+            }
+        }
+    }
+
+    /// Adds a set to an alternative, copying the rest time of its last set.
+    func addSet(to alternative: RoutineExerciseAlternative) {
+        let restTime = alternative.setsList.first?.restTime ?? 0
+        let order = (alternative.setsList.last?.order ?? -1) + 1
+        let set = AlternativeExerciseSet(reps: 10, weight: 0.0, restTime: restTime, order: order)
+        set.alternative = alternative
+        if alternative.sets == nil { alternative.sets = [] }
+        alternative.sets?.append(set)
+        if let routine = alternative.routineExercise?.routine {
+            updateRoutine(routine)
+        }
+    }
+
+    /// Removes a set from an alternative and reorders the remaining sets.
+    func removeSet(_ set: AlternativeExerciseSet, from alternative: RoutineExerciseAlternative) {
+        if let index = alternative.sets?.firstIndex(where: { $0.id == set.id }) {
+            alternative.sets?.remove(at: index)
+            modelContext.delete(set)
+            for (newOrder, remaining) in alternative.setsList.enumerated() {
+                remaining.order = newOrder
+            }
+            if let routine = alternative.routineExercise?.routine {
+                updateRoutine(routine)
+            }
+        }
+    }
+
+    /// Persists an in-place edit to an alternative's set.
+    func updateSet(_ set: AlternativeExerciseSet) {
+        if let routine = set.alternative?.routineExercise?.routine {
+            updateRoutine(routine)
+        }
+    }
+
     private func save() {
         do {
             try modelContext.save()
@@ -310,11 +382,23 @@ class RoutinesViewModel: ObservableObject {
                 }
             )
             if let existing = try modelContext.fetch(existingDescriptor).first {
-                print("Skipping duplicate watch workout: \(workout.routineName) (existing session id=\(existing.id))")
-                watchConnectivity.markPendingProcessed(id: workout.id)
-                // Re-ack so the watch clears it even if our first ack was lost.
-                watchConnectivity.acknowledgeWorkoutSaved(id: workout.id)
-                return
+                if existing.id != workoutId {
+                    // Matched by healthKitWorkoutId under a *different* session id:
+                    // this session was reconstructed from HealthKit by the recovery
+                    // banner (template values guessed as actuals) before the real
+                    // payload arrived. Real ingests always preserve the watch id, so
+                    // an id mismatch uniquely identifies a placeholder. Replace it
+                    // with the actual per-set data instead of dropping the payload —
+                    // skipping here is what permanently lost the recorded values.
+                    print("Replacing reconstructed placeholder session \(existing.id) with real watch payload \(workoutId)")
+                    modelContext.delete(existing)
+                } else {
+                    print("Skipping duplicate watch workout: \(workout.routineName) (existing session id=\(existing.id))")
+                    watchConnectivity.markPendingProcessed(id: workout.id)
+                    // Re-ack so the watch clears it even if our first ack was lost.
+                    watchConnectivity.acknowledgeWorkoutSaved(id: workout.id)
+                    return
+                }
             }
 
             // Find the routine by ID
@@ -351,6 +435,9 @@ class RoutinesViewModel: ObservableObject {
                 // Copy rep range fields from completed exercise
                 workoutExercise.targetRepMin = completedExercise.targetRepMin
                 workoutExercise.targetRepMax = completedExercise.targetRepMax
+                // Copy alternative-swap metadata (name/exerciseId already reflect what was performed)
+                workoutExercise.plannedExerciseId = completedExercise.plannedExerciseId
+                workoutExercise.plannedExerciseName = completedExercise.plannedExerciseName
 
                 // Create workout sets
                 for completedSet in completedExercise.sets {
