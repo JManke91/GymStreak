@@ -1,10 +1,11 @@
 # Full Release Pipeline
 
-Orchestrate a full release by merging the current feature branch all the way to `store-build` in three sequential steps:
+Orchestrate a full release by merging the current feature branch all the way to `store-build` in three sequential steps, then cleaning up the source branch:
 
 1. Current branch → `main`
 2. `main` → `testflight-beta`
 3. `testflight-beta` → `store-build`
+4. Delete `<source-branch>` (local + remote)
 
 Each phase must complete successfully before the next begins. If any phase fails, stop immediately and report the failure — do not proceed to the next phase.
 
@@ -17,7 +18,7 @@ Before doing anything else:
 1. Run `git status` — if there are uncommitted changes, **stop and inform the user**. Do not stash or discard anything automatically.
 2. Run `git rev-parse --abbrev-ref HEAD` to capture `<source-branch>`. If it is `main`, **stop and inform the user** that they are already on `main`.
 3. Inform the user of the plan:
-   > "Starting release pipeline: `<source-branch>` → `main` → `testflight-beta` → `store-build`"
+   > "Starting release pipeline: `<source-branch>` → `main` → `testflight-beta` → `store-build`. `<source-branch>` will be deleted (locally and on origin) once the pipeline completes."
 
 ---
 
@@ -74,6 +75,19 @@ Announce: **"Phase 3 complete — `testflight-beta` merged into `store-build`, v
 
 ---
 
+## Phase 4 — Delete the source branch
+
+Only runs after Phases 1–3 have **all** completed successfully (merged and pushed). If any earlier phase failed, skip this phase entirely — the branch must survive for retry.
+
+1. Safety check: `<source-branch>` must not be `main`, `testflight-beta`, or `store-build`. If it is one of these, skip deletion and note it in the final report.
+2. Verify the branch is fully merged: `git branch --merged main` (while on `main`) must list `<source-branch>`. If it does not, **do not delete** — report this instead.
+3. Delete the local branch: `git branch -d <source-branch>` (use `-d`, not `-D` — if git refuses, that's a signal something isn't merged; stop and report rather than forcing).
+4. Delete the remote branch, if it exists on origin: check with `git ls-remote --heads origin <source-branch>`. If it exists, run `git push origin --delete <source-branch>`. If it doesn't exist remotely (branch was never pushed), skip and note it.
+
+Announce: **"Phase 4 complete — `<source-branch>` deleted locally and on origin."** (adjust wording if the remote half was skipped).
+
+---
+
 ## App Store release notes
 
 The App Store "What's New" text is generated from the version being shipped to the store — i.e. `<old-version>`, whose full notes live in `TestFlight/WhatToTest.en-US.txt` and `TestFlight/WhatToTest.de-DE.txt`. **Generate this in Phase 3 Part B, step 7, before those files are cleared.**
@@ -118,4 +132,5 @@ Summarize the entire pipeline:
 - Old version → new version
 - Confirmation that WhatToTest files were archived and cleared
 - Confirmation that `AppStore/ReleaseNotes.<old-version>.md` was written (or that it was skipped because WhatToTest was empty)
+- Confirmation that `<source-branch>` was deleted locally and on origin (or why deletion was skipped)
 - **Print the full generated App Store notes (English and German) inline in the chat**, clearly labeled per language, so they can be copy/pasted straight into App Store Connect.
