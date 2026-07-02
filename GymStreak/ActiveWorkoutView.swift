@@ -321,7 +321,8 @@ struct ExerciseCard: View {
     var isPartOfSuperset: Bool = false
     var onDelete: (() -> Void)?
     @State private var showingRestTimeConfig = false
-    @State private var showingSwapDialog = false
+    @State private var showingSwapPicker = false
+    @State private var showingSwapLockedInfo = false
     @State private var overloadBannerDismissed = false
     @State private var selectedRoutineExerciseForOverload: RoutineExercise?
     @State private var overloadAppliedInfo: (weight: Double, reps: Int)?
@@ -337,6 +338,21 @@ struct ExerciseCard: View {
     // Computed property to get current rest time from the exercise's sets
     private var exerciseRestTime: TimeInterval {
         workoutExercise.setsList.first?.restTime ?? 0.0
+    }
+
+    /// Labeled capsule for the swap affordance — active (tint) or locked (gray).
+    private func swapPillLabel(icon: String, locked: Bool) -> some View {
+        HStack(spacing: 4) {
+            Image(systemName: icon)
+                .font(.caption.weight(.semibold))
+            Text("workout.swap.button".localized)
+                .font(.caption.weight(.semibold))
+        }
+        .foregroundStyle(locked ? AnyShapeStyle(.secondary) : AnyShapeStyle(DesignSystem.Colors.textOnTint))
+        .padding(.horizontal, 10)
+        .padding(.vertical, 5)
+        .background(Capsule().fill(locked ? Color.secondary.opacity(0.15) : DesignSystem.Colors.tint))
+        .contentShape(Capsule())
     }
 
     var body: some View {
@@ -356,15 +372,25 @@ struct ExerciseCard: View {
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
 
-                    // Swapped-from indicator (persists for the rest of the workout)
+                    // Swapped-from indicator (persists for the rest of the workout).
+                    // Tappable: reopens the picker (revert row first) or explains the lock.
                     if workoutExercise.wasSwapped, let planned = workoutExercise.plannedExerciseName {
-                        HStack(spacing: 4) {
-                            Image(systemName: "arrow.triangle.2.circlepath")
-                                .font(.caption2)
-                            Text("workout.swap.swapped_from".localized(planned))
-                                .font(.caption2)
+                        Button {
+                            if viewModel.canSwap(workoutExercise) {
+                                showingSwapPicker = true
+                            } else {
+                                showingSwapLockedInfo = true
+                            }
+                        } label: {
+                            HStack(spacing: 4) {
+                                Image(systemName: "arrow.triangle.2.circlepath")
+                                    .font(.caption2)
+                                Text("workout.swap.swapped_from".localized(planned))
+                                    .font(.caption2)
+                            }
+                            .foregroundStyle(.secondary)
                         }
-                        .foregroundStyle(.secondary)
+                        .buttonStyle(.plain)
                     }
                 }
 
@@ -386,17 +412,27 @@ struct ExerciseCard: View {
                         .symbolEffect(.bounce, value: workoutExercise.completedSetsCount)
                 }
 
-                // Swap-to-alternative button (only before any set is completed)
+                // Swap-to-alternative pill. Active while no set is completed;
+                // afterwards it stays visible on the current exercise in a locked
+                // state that explains the rule (un-completing the set re-enables it).
                 if viewModel.canSwap(workoutExercise) {
                     Button {
-                        showingSwapDialog = true
+                        showingSwapPicker = true
                     } label: {
-                        Image(systemName: "arrow.triangle.2.circlepath")
-                            .foregroundStyle(DesignSystem.Colors.tint)
-                            .font(.body)
+                        swapPillLabel(icon: "arrow.triangle.2.circlepath", locked: false)
                     }
                     .buttonStyle(.plain)
                     .accessibilityLabel("workout.swap.accessibility".localized(workoutExercise.exerciseName))
+                } else if isCurrentExercise,
+                          workoutExercise.completedSetsCount > 0,
+                          !viewModel.swapTargets(for: workoutExercise).isEmpty {
+                    Button {
+                        showingSwapLockedInfo = true
+                    } label: {
+                        swapPillLabel(icon: "lock.fill", locked: true)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("workout.swap.locked.title".localized)
                 }
 
                 // Delete button
@@ -411,22 +447,13 @@ struct ExerciseCard: View {
                     .buttonStyle(.plain)
                 }
             }
-            .confirmationDialog(
-                "workout.swap.title".localized,
-                isPresented: $showingSwapDialog,
-                titleVisibility: .visible
-            ) {
-                ForEach(viewModel.swapTargets(for: workoutExercise)) { target in
-                    Button(target.isOriginal
-                           ? "workout.swap.revert".localized(target.exercise.name)
-                           : target.exercise.name) {
-                        viewModel.swapExercise(workoutExercise, to: target)
-                        UINotificationFeedbackGenerator().notificationOccurred(.success)
-                    }
-                }
-                Button("action.cancel".localized, role: .cancel) {}
+            .sheet(isPresented: $showingSwapPicker) {
+                SwapExercisePickerView(workoutExercise: workoutExercise, viewModel: viewModel)
+            }
+            .alert("workout.swap.locked.title".localized, isPresented: $showingSwapLockedInfo) {
+                Button("action.done".localized, role: .cancel) {}
             } message: {
-                Text("workout.swap.message".localized(workoutExercise.exerciseName))
+                Text("workout.swap.locked.message".localized)
             }
 
             // Rest Timer Configuration - Only show for standalone exercises (supersets have their own config)

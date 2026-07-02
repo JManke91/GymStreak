@@ -115,18 +115,19 @@ struct WatchSwapPickerView: View {
 
                 Section {
                     ForEach(viewModel.swapTargets(for: exercise)) { target in
+                        let isRevert = target.exerciseId == exercise.plannedExerciseId
                         Button {
                             viewModel.swapExercise(exercise.id, to: target)
                             dismiss()
                         } label: {
                             HStack(spacing: 8) {
-                                Image(systemName: "arrow.triangle.2.circlepath")
+                                Image(systemName: isRevert ? "arrow.uturn.backward" : "arrow.triangle.2.circlepath")
                                     .font(.caption)
                                     .foregroundStyle(OnyxWatch.Colors.tint)
                                 VStack(alignment: .leading, spacing: 2) {
                                     Text(target.name)
                                         .fontWeight(.medium)
-                                    Text(target.muscleGroup)
+                                    Text(subtitle(for: target))
                                         .font(.caption2)
                                         .foregroundStyle(.secondary)
                                 }
@@ -138,6 +139,30 @@ struct WatchSwapPickerView: View {
             .navigationTitle("Swap Exercise")
             .navigationBarTitleDisplayMode(.inline)
         }
+    }
+
+    /// Muscle group plus the target's own set scheme, e.g. "Chest · 3×10".
+    private func subtitle(for target: WatchExerciseAlternative) -> String {
+        var parts = [target.muscleGroup]
+        if let scheme = setScheme(for: target.sets) {
+            parts.append(scheme)
+        }
+        return parts.joined(separator: " · ")
+    }
+
+    /// Compact scheme summary, e.g. "3×10", "4×8–12 · 20kg".
+    private func setScheme(for sets: [WatchSet]) -> String? {
+        guard !sets.isEmpty else { return nil }
+        let reps = sets.map(\.reps)
+        let repsPart = reps.min() == reps.max()
+            ? "\(reps[0])"
+            : "\(reps.min() ?? 0)–\(reps.max() ?? 0)"
+        var summary = "\(sets.count)×\(repsPart)"
+        if let weight = sets.first?.weight, weight > 0,
+           sets.allSatisfy({ $0.weight == weight }) {
+            summary += " · \(String(format: "%gkg", weight))"
+        }
+        return summary
     }
 }
 
@@ -384,6 +409,13 @@ struct ExerciseRow: View {
                                 total: nil // We don't have total easily accessible here
                             )
                         }
+
+                        // Alternatives available — swap via swipe or long-press
+                        if exercise.canSwap {
+                            Image(systemName: "arrow.triangle.2.circlepath")
+                                .font(.system(size: 10, weight: .semibold))
+                                .foregroundStyle(.secondary)
+                        }
                     }
 
                     Text("\(exercise.completedSetsCount)/\(exercise.sets.count) sets")
@@ -406,7 +438,7 @@ struct ExerciseRow: View {
                 : (isCurrent ? Color.accentColor.opacity(0.15) : Color.clear)
         )
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(exercise.name), \(status.accessibilityLabel), \(exercise.completedSetsCount) of \(exercise.sets.count) sets completed\(exercise.isInSuperset ? ", part of superset" : "")")
+        .accessibilityLabel("\(exercise.name), \(status.accessibilityLabel), \(exercise.completedSetsCount) of \(exercise.sets.count) sets completed\(exercise.isInSuperset ? ", part of superset" : "")\(exercise.canSwap ? ", alternatives available" : "")")
         .accessibilityHint("Double tap to view sets")
     }
 }

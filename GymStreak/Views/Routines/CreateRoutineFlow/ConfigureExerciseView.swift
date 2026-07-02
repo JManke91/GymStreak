@@ -12,15 +12,27 @@ struct ConfigureExerciseView: View {
 
     let exercise: Exercise
     let existingSets: [ExerciseSet]?
-    let onComplete: (Exercise, [ExerciseSet]) -> Void
+    let existingAlternatives: [PendingAlternative]?
+    let onComplete: (Exercise, [ExerciseSet], [PendingAlternative]) -> Void
 
     @State private var sets: [ExerciseSet] = []
     @State private var globalRestTime: TimeInterval = 0.0
     @State private var editingSetIndex: Int?
+    // Alternative exercises picked before save; materialized when the routine is saved
+    @State private var alternatives: [PendingAlternative] = []
+    @State private var showingAlternativePicker = false
+    @State private var expandedAlternativeId: UUID?
+    @State private var hasLoadedInitialState = false
 
-    init(exercise: Exercise, existingSets: [ExerciseSet]? = nil, onComplete: @escaping (Exercise, [ExerciseSet]) -> Void) {
+    init(
+        exercise: Exercise,
+        existingSets: [ExerciseSet]? = nil,
+        existingAlternatives: [PendingAlternative]? = nil,
+        onComplete: @escaping (Exercise, [ExerciseSet], [PendingAlternative]) -> Void
+    ) {
         self.exercise = exercise
         self.existingSets = existingSets
+        self.existingAlternatives = existingAlternatives
         self.onComplete = onComplete
     }
 
@@ -172,6 +184,27 @@ struct ConfigureExerciseView: View {
                         }
                     }
             }
+
+            PendingAlternativesSection(
+                primaryExercise: exercise,
+                alternatives: $alternatives,
+                showingPicker: $showingAlternativePicker,
+                expandedAlternativeId: $expandedAlternativeId
+            )
+        }
+        .navigationDestination(isPresented: $showingAlternativePicker) {
+            AlternativeExercisePicker(
+                primaryExercise: exercise,
+                excludedExerciseIds: Set(alternatives.map { $0.exercise.id }).union([exercise.id]),
+                onSelect: { picked in
+                    let alternative = PendingAlternative(exercise: picked, seededFrom: sets, restTime: globalRestTime)
+                    alternatives.append(alternative)
+                    // Expand the new alternative's inline editor so its reps and
+                    // weight can be defined right away
+                    expandedAlternativeId = alternative.id
+                    showingAlternativePicker = false
+                }
+            )
         }
         .navigationTitle(exercise.name)
         .navigationBarTitleDisplayMode(.inline)
@@ -194,10 +227,14 @@ struct ConfigureExerciseView: View {
                     sets[i].restTime = globalRestTime
                 }
                 // Call completion handler
-                onComplete(exercise, sets)
+                onComplete(exercise, sets, alternatives)
             }
         }
         .onAppear {
+            // Only load once — onAppear fires again when popping back from the
+            // alternative picker and must not reset in-progress edits.
+            guard !hasLoadedInitialState else { return }
+            hasLoadedInitialState = true
             // Load existing sets if in edit mode, otherwise create default set
             if let existingSets = existingSets, !existingSets.isEmpty {
                 // Edit mode: copy existing sets (create new instances to avoid modifying originals)
@@ -209,6 +246,9 @@ struct ConfigureExerciseView: View {
             } else if sets.isEmpty {
                 // New mode: auto-create first set with defaults
                 addNewSet()
+            }
+            if alternatives.isEmpty, let existingAlternatives, !existingAlternatives.isEmpty {
+                alternatives = existingAlternatives
             }
         }
     }
@@ -258,7 +298,7 @@ struct ConfigureExerciseView: View {
         }
 
         // Call completion handler
-        onComplete(exercise, sets)
+        onComplete(exercise, sets, alternatives)
 
         // Pop back to CreateRoutineView
         dismiss()

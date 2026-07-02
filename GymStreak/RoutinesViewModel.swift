@@ -285,14 +285,28 @@ class RoutinesViewModel: ObservableObject {
     // MARK: - Alternative Exercise Management
 
     /// Adds an alternative exercise to a routine exercise, seeding its set scheme
-    /// from the primary exercise's current sets.
-    func addAlternative(_ exercise: Exercise, to routineExercise: RoutineExercise) {
+    /// from the given sets (defaults to the primary exercise's current sets).
+    /// When seeding from the primary, set count/reps/rest carry over but the
+    /// weight starts at 0 — a different exercise almost always needs a different
+    /// weight, so copying it would just be a wrong prefill.
+    @discardableResult
+    func addAlternative(
+        _ exercise: Exercise,
+        to routineExercise: RoutineExercise,
+        copying sourceSets: [ExerciseSet]? = nil
+    ) -> RoutineExerciseAlternative {
         let order = (routineExercise.alternativesList.last?.order ?? -1) + 1
         let alternative = RoutineExerciseAlternative(exercise: exercise, order: order)
         alternative.routineExercise = routineExercise
-        // Seed the alternative's sets from the primary exercise's sets
-        let seededSets = routineExercise.setsList.sorted(by: { $0.order < $1.order }).enumerated().map { index, set in
-            let copy = AlternativeExerciseSet(reps: set.reps, weight: set.weight, restTime: set.restTime, order: index)
+        let isSeededFromPrimary = sourceSets == nil
+        let source = sourceSets ?? routineExercise.setsList
+        let seededSets = source.sorted(by: { $0.order < $1.order }).enumerated().map { index, set in
+            let copy = AlternativeExerciseSet(
+                reps: set.reps,
+                weight: isSeededFromPrimary ? 0.0 : set.weight,
+                restTime: set.restTime,
+                order: index
+            )
             copy.alternative = alternative
             return copy
         }
@@ -302,6 +316,7 @@ class RoutinesViewModel: ObservableObject {
         if let routine = routineExercise.routine {
             updateRoutine(routine)
         }
+        return alternative
     }
 
     /// Removes an alternative from a routine exercise.
@@ -321,7 +336,8 @@ class RoutinesViewModel: ObservableObject {
     }
 
     /// Adds a set to an alternative, copying the rest time of its last set.
-    func addSet(to alternative: RoutineExerciseAlternative) {
+    @discardableResult
+    func addSet(to alternative: RoutineExerciseAlternative) -> AlternativeExerciseSet {
         let restTime = alternative.setsList.first?.restTime ?? 0
         let order = (alternative.setsList.last?.order ?? -1) + 1
         let set = AlternativeExerciseSet(reps: 10, weight: 0.0, restTime: restTime, order: order)
@@ -331,6 +347,7 @@ class RoutinesViewModel: ObservableObject {
         if let routine = alternative.routineExercise?.routine {
             updateRoutine(routine)
         }
+        return set
     }
 
     /// Removes a set from an alternative and reorders the remaining sets.

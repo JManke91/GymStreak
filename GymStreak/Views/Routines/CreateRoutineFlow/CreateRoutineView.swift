@@ -55,8 +55,9 @@ struct CreateRoutineView: View {
                         NavigationLink(destination: ConfigureExerciseView(
                             exercise: pending.exercise,
                             existingSets: pending.sets,
-                            onComplete: { exercise, sets in
-                                updateExercise(pendingExercise: pending, withSets: sets)
+                            existingAlternatives: pending.alternatives,
+                            onComplete: { exercise, sets, alternatives in
+                                updateExercise(pendingExercise: pending, withSets: sets, alternatives: alternatives)
                             }
                         )) {
                             VStack(alignment: .leading, spacing: 4) {
@@ -87,8 +88,8 @@ struct CreateRoutineView: View {
                     routinesViewModel: routinesViewModel,
                     exercisesViewModel: exercisesViewModel,
                     alreadyAddedExercises: pendingExercises.map { $0.exercise },
-                    onExerciseConfigured: { exercise, sets in
-                        addExercise(exercise: exercise, sets: sets)
+                    onExerciseConfigured: { exercise, sets, alternatives in
+                        addExercise(exercise: exercise, sets: sets, alternatives: alternatives)
                     }
                 )) {
                     Text("routine.add_exercise".localized)
@@ -139,15 +140,16 @@ struct CreateRoutineView: View {
 
     // MARK: - Helper Methods
 
-    private func addExercise(exercise: Exercise, sets: [ExerciseSet]) {
+    private func addExercise(exercise: Exercise, sets: [ExerciseSet], alternatives: [PendingAlternative]) {
         let order = pendingExercises.count
-        let pending = PendingRoutineExercise(exercise: exercise, sets: sets, order: order)
+        let pending = PendingRoutineExercise(exercise: exercise, sets: sets, order: order, alternatives: alternatives)
         pendingExercises.append(pending)
     }
 
-    private func updateExercise(pendingExercise: PendingRoutineExercise, withSets sets: [ExerciseSet]) {
+    private func updateExercise(pendingExercise: PendingRoutineExercise, withSets sets: [ExerciseSet], alternatives: [PendingAlternative]) {
         if let index = pendingExercises.firstIndex(where: { $0.id == pendingExercise.id }) {
             pendingExercises[index].sets = sets
+            pendingExercises[index].alternatives = alternatives
         }
     }
 
@@ -193,6 +195,25 @@ struct CreateRoutineView: View {
 
             routine.routineExercises?.append(routineExercise)
             modelContext.insert(routineExercise)
+
+            // Materialize picked alternatives with their own set schemes
+            // (insert models before wiring relationships)
+            for (altOrder, pendingAlt) in pending.alternatives.enumerated() {
+                let alternative = RoutineExerciseAlternative(exercise: pendingAlt.exercise, order: altOrder)
+                modelContext.insert(alternative)
+                alternative.routineExercise = routineExercise
+
+                for (setIndex, set) in pendingAlt.sets.enumerated() {
+                    let altSet = AlternativeExerciseSet(
+                        reps: set.reps,
+                        weight: set.weight,
+                        restTime: set.restTime,
+                        order: setIndex
+                    )
+                    modelContext.insert(altSet)
+                    altSet.alternative = alternative
+                }
+            }
         }
 
         // Save context

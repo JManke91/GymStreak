@@ -34,7 +34,7 @@ struct RoutineDetailView: View {
     @State private var setEditExerciseId: UUID? = nil
     @State private var alternativesEditExerciseId: UUID? = nil
     @State private var addAlternativeTarget: RoutineExercise? = nil
-    @State private var editingAlternative: RoutineExerciseAlternative? = nil
+    @State private var expandedAlternativeEditId: UUID? = nil
     @State private var repRangeExpandedForExercise: [UUID: Bool] = [:]
     @State private var overloadBannerDismissedForExercise: [UUID: Bool] = [:]
     @State private var selectedExerciseForOverload: RoutineExercise?
@@ -455,6 +455,62 @@ struct RoutineDetailView: View {
             )
             .transition(.opacity.combined(with: .move(edge: .top)))
         }
+
+        // Alternatives summary — visible without entering edit mode; tapping an
+        // alternative jumps into alternatives edit mode with it expanded
+        if routineExercise.hasAlternatives {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(spacing: 4) {
+                    Image(systemName: "arrow.triangle.2.circlepath")
+                        .font(.caption2)
+                    Text("alternatives.section_title".localized)
+                        .font(.caption.weight(.semibold))
+                        .textCase(.uppercase)
+                }
+                .foregroundStyle(.secondary)
+
+                ForEach(routineExercise.alternativesList) { alternative in
+                    Button {
+                        expandedAlternativeEditId = alternative.id
+                        enterAlternativesEditMode(for: routineExercise)
+                    } label: {
+                        HStack(spacing: 10) {
+                            if let exercise = alternative.exercise {
+                                Image(systemName: exercise.equipmentType.icon)
+                                    .font(.subheadline)
+                                    .foregroundStyle(.tertiary)
+                                    .frame(width: 22)
+                            }
+
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(alternative.exercise?.name ?? "Unknown")
+                                    .font(.subheadline.weight(.medium))
+                                    .foregroundStyle(.primary)
+                                Text("routine.sets_count".localized(alternative.setsList.count))
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+
+                            Spacer()
+
+                            Image(systemName: "chevron.right")
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(.tertiary)
+                        }
+                        .padding(.vertical, 6)
+                        .padding(.horizontal, 12)
+                        .background(
+                            RoundedRectangle(cornerRadius: 8)
+                                .fill(DesignSystem.Colors.cardElevated)
+                        )
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("alternatives.view_accessibility".localized(alternative.exercise?.name ?? ""))
+                }
+            }
+            .padding(.top, 4)
+        }
     }
 
     @ViewBuilder
@@ -581,53 +637,73 @@ struct RoutineDetailView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
 
         ForEach(routineExercise.alternativesList) { alternative in
-            Button {
-                editingAlternative = alternative
-            } label: {
-                HStack(spacing: 10) {
-                    // Delete button
-                    Button {
-                        withAnimation(DesignSystem.Animation.spring) {
-                            viewModel.removeAlternative(alternative, from: routineExercise)
+            let isAlternativeExpanded = expandedAlternativeEditId == alternative.id
+            VStack(alignment: .leading, spacing: 0) {
+                Button {
+                    withAnimation(DesignSystem.Animation.spring) {
+                        expandedAlternativeEditId = isAlternativeExpanded ? nil : alternative.id
+                    }
+                } label: {
+                    HStack(spacing: 10) {
+                        // Delete button
+                        Button {
+                            if isAlternativeExpanded { expandedAlternativeEditId = nil }
+                            withAnimation(DesignSystem.Animation.spring) {
+                                viewModel.removeAlternative(alternative, from: routineExercise)
+                            }
+                        } label: {
+                            Image(systemName: "minus.circle.fill")
+                                .font(.title3)
+                                .foregroundStyle(.white, .red)
+                                .symbolRenderingMode(.palette)
                         }
-                    } label: {
-                        Image(systemName: "minus.circle.fill")
-                            .font(.title3)
-                            .foregroundStyle(.white, .red)
-                            .symbolRenderingMode(.palette)
-                    }
-                    .buttonStyle(.plain)
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("alternatives.remove_accessibility".localized(alternative.exercise?.name ?? ""))
 
-                    if let exercise = alternative.exercise {
-                        Image(systemName: exercise.equipmentType.icon)
-                            .font(.subheadline)
+                        if let exercise = alternative.exercise {
+                            Image(systemName: exercise.equipmentType.icon)
+                                .font(.subheadline)
+                                .foregroundStyle(.tertiary)
+                                .frame(width: 22)
+                        }
+
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(alternative.exercise?.name ?? "Unknown")
+                                .font(.subheadline.weight(.medium))
+                                .foregroundStyle(.primary)
+                            Text("routine.sets_count".localized(alternative.setsList.count))
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+
+                        Spacer()
+
+                        Image(systemName: "chevron.right")
+                            .font(.caption.weight(.semibold))
                             .foregroundStyle(.tertiary)
-                            .frame(width: 22)
+                            .rotationEffect(.degrees(isAlternativeExpanded ? 90 : 0))
                     }
-
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(alternative.exercise?.name ?? "Unknown")
-                            .font(.subheadline.weight(.medium))
-                            .foregroundStyle(.primary)
-                        Text("routine.sets_count".localized(alternative.setsList.count))
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-
-                    Spacer()
-
-                    Image(systemName: "chevron.right")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(.tertiary)
+                    .padding(.vertical, 6)
+                    .padding(.horizontal, 12)
+                    .contentShape(Rectangle())
                 }
-                .padding(.vertical, 6)
-                .padding(.horizontal, 12)
-                .background(
-                    RoundedRectangle(cornerRadius: 8)
-                        .fill(DesignSystem.Colors.cardElevated)
-                )
+                .buttonStyle(.plain)
+
+                if isAlternativeExpanded {
+                    AlternativeSetsInlineEditor(
+                        sets: alternative.setsList,
+                        onAddSet: { viewModel.addSet(to: alternative) },
+                        onRemoveSet: { viewModel.removeSet($0, from: alternative) },
+                        onSetChanged: { viewModel.updateSet($0) }
+                    )
+                    .padding(.horizontal, 12)
+                    .padding(.bottom, 10)
+                }
             }
-            .buttonStyle(.plain)
+            .background(
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(DesignSystem.Colors.cardElevated)
+            )
         }
 
         // Add Alternative button
@@ -1210,10 +1286,13 @@ struct RoutineDetailView: View {
             AddExerciseToRoutineView(routine: routine, viewModel: viewModel, exercisesViewModel: exercisesViewModel)
         }
         .sheet(item: $addAlternativeTarget) { target in
-            AddAlternativeView(routineExercise: target, viewModel: viewModel)
-        }
-        .sheet(item: $editingAlternative) { alternative in
-            AlternativeSetEditView(alternative: alternative, viewModel: viewModel)
+            AddAlternativeView(
+                routineExercise: target,
+                viewModel: viewModel,
+                // Expand the new alternative's inline set editor so its reps and
+                // weight can be defined right away
+                onAdded: { expandedAlternativeEditId = $0.id }
+            )
         }
         .sheet(item: $selectedExerciseForOverload) { exercise in
             WeightIncreaseSheet(
@@ -1468,6 +1547,21 @@ struct ExerciseHeaderView: View {
                                 .font(.caption)
                         }
                         .foregroundStyle(.secondary)
+                    } else if !isEditMode, let editAlternativesAction = onEditAlternatives {
+                        // Ambient affordance so the feature is discoverable before
+                        // any alternative exists (otherwise it only lives in the menu)
+                        Button(action: editAlternativesAction) {
+                            HStack(spacing: 4) {
+                                Image(systemName: "arrow.triangle.2.circlepath")
+                                    .font(.caption2)
+                                Text("alternatives.add".localized)
+                                    .font(.caption)
+                            }
+                            .foregroundStyle(.tertiary)
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("alternatives.menu.add".localized)
                     }
                 }
 

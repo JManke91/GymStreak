@@ -856,6 +856,22 @@ class WorkoutViewModel: ObservableObject {
         let id: UUID            // the target Exercise's id
         let exercise: Exercise
         let isOriginal: Bool    // true if this is the originally-planned exercise (revert option)
+        let setScheme: String?  // compact scheme summary, e.g. "3×10 · 20kg"
+    }
+
+    /// Compact scheme summary for swap-picker rows, e.g. "3×10", "4×8–12 · 20kg".
+    private func setScheme(from sets: [(reps: Int, weight: Double)]) -> String? {
+        guard !sets.isEmpty else { return nil }
+        let reps = sets.map(\.reps)
+        let repsPart = reps.min() == reps.max()
+            ? "\(reps[0])"
+            : "\(reps.min() ?? 0)–\(reps.max() ?? 0)"
+        var summary = "\(sets.count)×\(repsPart)"
+        if let weight = sets.first?.weight, weight > 0,
+           sets.allSatisfy({ $0.weight == weight }) {
+            summary += " · \(String(format: "%gkg", weight))"
+        }
+        return summary
     }
 
     /// Finds the routine exercise a workout exercise originated from, using the
@@ -876,12 +892,15 @@ class WorkoutViewModel: ObservableObject {
         var targets: [SwapTarget] = []
         // The originally-planned exercise (acts as the revert option once swapped)
         if let primary = origin.exercise {
-            targets.append(SwapTarget(id: primary.id, exercise: primary, isOriginal: true))
+            let scheme = setScheme(from: origin.setsList.sorted { $0.order < $1.order }
+                .map { ($0.reps, $0.weight) })
+            targets.append(SwapTarget(id: primary.id, exercise: primary, isOriginal: true, setScheme: scheme))
         }
         // Each configured alternative
         for alternative in origin.alternativesList {
             if let exercise = alternative.exercise {
-                targets.append(SwapTarget(id: exercise.id, exercise: exercise, isOriginal: false))
+                let scheme = setScheme(from: alternative.setsList.map { ($0.reps, $0.weight) })
+                targets.append(SwapTarget(id: exercise.id, exercise: exercise, isOriginal: false, setScheme: scheme))
             }
         }
         // Exclude whatever is currently active

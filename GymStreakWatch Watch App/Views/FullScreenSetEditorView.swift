@@ -18,6 +18,7 @@ struct FullScreenSetEditorView: View {
     @EnvironmentObject var viewModel: WatchWorkoutViewModel
 
     @State private var focusedField: FocusedField = .weight
+    @State private var showingSwapPicker = false
 
     enum FocusedField {
         case weight, reps
@@ -147,10 +148,37 @@ struct FullScreenSetEditorView: View {
 //                    .frame(height: 30)
 //                    .background(Color.red)
 
+                    // Swap-to-alternative pill — only while swapping is allowed
+                    // (alternatives configured and no set completed yet)
+                    if displayedExercise.canSwap {
+                        Button {
+                            WKInterfaceDevice.current().play(.click)
+                            showingSwapPicker = true
+                        } label: {
+                            HStack(spacing: 4) {
+                                Image(systemName: "arrow.triangle.2.circlepath")
+                                    .font(.system(size: 11, weight: .semibold))
+                                Text("Swap")
+                                    .font(.system(size: 11, weight: .semibold))
+                            }
+                            .foregroundStyle(OnyxWatch.Colors.tint)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 4)
+                            .background(Capsule().fill(OnyxWatch.Colors.tint.opacity(0.15)))
+                        }
+                        .buttonStyle(.plain)
+                        .padding(.top, 4)
+                        .accessibilityLabel("Swap \(displayedExercise.name) for an alternative")
+                    }
+
 //                    Spacer()
 //                        .frame(height: 4)
                 }
 //                .padding(.bottom, 8)
+            }
+            .sheet(isPresented: $showingSwapPicker) {
+                WatchSwapPickerView(exercise: displayedExercise)
+                    .environmentObject(viewModel)
             }
 //            .navigationTitle(exercise.name)
 //            .navigationBarTitleDisplayMode(.inline)

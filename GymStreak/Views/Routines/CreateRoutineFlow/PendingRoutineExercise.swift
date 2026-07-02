@@ -13,11 +13,15 @@ struct PendingRoutineExercise: Identifiable {
     let exercise: Exercise
     var sets: [ExerciseSet]
     var order: Int
+    /// Alternative exercises picked during configuration (each with its own set
+    /// scheme); materialized into RoutineExerciseAlternative models at routine save.
+    var alternatives: [PendingAlternative]
 
-    init(exercise: Exercise, sets: [ExerciseSet], order: Int) {
+    init(exercise: Exercise, sets: [ExerciseSet], order: Int, alternatives: [PendingAlternative] = []) {
         self.exercise = exercise
         self.sets = sets
         self.order = order
+        self.alternatives = alternatives
     }
 
     /// Summary of sets for display (e.g., "3 sets • 8-12 reps • 45kg")

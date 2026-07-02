@@ -20,7 +20,7 @@ struct ExerciseSelectionView: View {
     let routinesViewModel: RoutinesViewModel
     let exercisesViewModel: ExercisesViewModel
     let alreadyAddedExercises: [Exercise]
-    let onExerciseConfigured: (Exercise, [ExerciseSet]) -> Void
+    let onExerciseConfigured: (Exercise, [ExerciseSet], [PendingAlternative]) -> Void
 
     var body: some View {
         List {
@@ -43,8 +43,8 @@ struct ExerciseSelectionView: View {
                 ForEach(filteredExercises) { exercise in
                     NavigationLink(destination: ConfigureExerciseView(
                         exercise: exercise,
-                        onComplete: { exercise, sets in
-                            onExerciseConfigured(exercise, sets)
+                        onComplete: { exercise, sets, alternatives in
+                            onExerciseConfigured(exercise, sets, alternatives)
                         }
                     )) {
                         HStack(spacing: 12) {
@@ -105,8 +105,8 @@ struct ExerciseSelectionView: View {
             if let exercise = selectedExercise {
                 ConfigureExerciseView(
                     exercise: exercise,
-                    onComplete: { exercise, sets in
-                        onExerciseConfigured(exercise, sets)
+                    onComplete: { exercise, sets, alternatives in
+                        onExerciseConfigured(exercise, sets, alternatives)
                     }
                 )
             }

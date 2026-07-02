@@ -516,6 +516,13 @@ final class WatchWorkoutViewModel: ObservableObject {
         }
 
         exercises[index] = exercise
+
+        // The set scheme was rebuilt — restart the current exercise at its first
+        // set so the set index can't point past the new scheme's bounds.
+        if index == currentExerciseIndex {
+            currentSetIndex = 0
+        }
+
         WKInterfaceDevice.current().play(.success)
     }
 

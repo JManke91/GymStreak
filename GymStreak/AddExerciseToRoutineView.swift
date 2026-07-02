@@ -187,6 +187,10 @@ struct ConfigureExerciseSetsView: View {
     @State private var initialReps = 10
     @State private var initialWeight = 0.0
     @State private var bannerDismissed = false
+    // Alternative exercises picked before save; materialized on Save
+    @State private var pendingAlternatives: [PendingAlternative] = []
+    @State private var showingAlternativePicker = false
+    @State private var expandedAlternativeId: UUID?
 
     // Computed property to check if values have changed
     private var hasChanges: Bool {
@@ -365,6 +369,28 @@ struct ConfigureExerciseSetsView: View {
                         }
                     }
             }
+
+            PendingAlternativesSection(
+                primaryExercise: exercise,
+                alternatives: $pendingAlternatives,
+                showingPicker: $showingAlternativePicker,
+                expandedAlternativeId: $expandedAlternativeId
+            )
+        }
+        .navigationDestination(isPresented: $showingAlternativePicker) {
+            AlternativeExercisePicker(
+                primaryExercise: exercise,
+                excludedExerciseIds: Set(pendingAlternatives.map { $0.exercise.id }).union([exercise.id]),
+                onSelect: { picked in
+                    saveCurrentEditingSet()
+                    let alternative = PendingAlternative(exercise: picked, seededFrom: sets, restTime: globalRestTime)
+                    pendingAlternatives.append(alternative)
+                    // Expand the new alternative's inline editor so its reps and
+                    // weight can be defined right away
+                    expandedAlternativeId = alternative.id
+                    showingAlternativePicker = false
+                }
+            )
         }
         .navigationTitle("add_to_routine.add_title".localized)
         .navigationBarTitleDisplayMode(.inline)
@@ -458,6 +484,13 @@ struct ConfigureExerciseSetsView: View {
         }
 
         routine.routineExercises?.append(routineExercise)
+
+        // Materialize picked alternatives now that the routine exercise is attached
+        // to the persisted routine, keeping each alternative's own set scheme.
+        for pending in pendingAlternatives {
+            viewModel.addAlternative(pending.exercise, to: routineExercise, copying: pending.sets)
+        }
+
         viewModel.updateRoutine(routine)
 
         onSave()
