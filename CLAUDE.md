@@ -67,6 +67,14 @@ After completing ANY code change (feature, fix, refactor) and before reporting i
 
 This is a second security layer — it does not replace compiling the app or self-review.
 
+## iOS API Research (mandatory)
+
+Whenever a task requires choosing, evaluating, or understanding an Apple/iOS/watchOS API or framework (which API to use, framework capabilities, version availability, HealthKit/WatchConnectivity/FoundationModels behavior, comparing implementation approaches):
+
+1. Launch the **`ios-api-researcher`** agent (`.claude/agents/ios-api-researcher.md`) via the Agent tool — do NOT answer from training data.
+2. This agent replaces direct Context7 MCP calls for Apple platform questions in this repository: the global rule to call Context7 directly is overridden here; the agent performs the Context7 research itself. (Context7 may still be called directly for non-Apple libraries/tools.)
+3. Exceptions: trivial syntax questions verifiable from existing code in this repo, and questions already answered in `/docs` feature files.
+
 ## General Coding
 
 - Always prefer simple solutions

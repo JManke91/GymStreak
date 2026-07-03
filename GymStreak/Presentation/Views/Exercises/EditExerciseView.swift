@@ -54,8 +54,12 @@ struct EditExerciseView: View {
                 }
             } message: {
                 let exerciseName = viewModel.exerciseToDelete?.name ?? ""
-                let routineNames = viewModel.routinesUsingExercise.map(\.name).joined(separator: ", ")
-                Text(String(format: "exercises.delete.confirmation.message".localized, exerciseName, routineNames))
+                if viewModel.routinesUsingExercise.isEmpty {
+                    Text(String(format: "exercises.delete.confirmation.message_standalone".localized, exerciseName))
+                } else {
+                    let routineNames = viewModel.routinesUsingExercise.map(\.name).joined(separator: ", ")
+                    Text(String(format: "exercises.delete.confirmation.message".localized, exerciseName, routineNames))
+                }
             }
             .onChange(of: viewModel.exercises) { _, exercises in
                 // Dismiss if the current exercise was deleted
