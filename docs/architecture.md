@@ -57,10 +57,10 @@ GymStreak/
 | Layer | Folder | Contains |
 |---|---|---|
 | App | `App/` | `GymStreakApp` (@main, ModelContainer), `AppDependencies` (composition root), `ContentView` (tab root), `TestDataSeeder` |
-| Domain | `Domain/Models/` | SwiftData `@Model` classes (`Models.swift`), `MuscleGroups`, `EquipmentType`, `WorkoutType`, chart models, AI-coach input/output models |
+| Domain | `Domain/Models/` | SwiftData `@Model` classes (`Models.swift`), `MuscleGroups`, `EquipmentType`, `WorkoutType`, chart models, AI-coach input/output models, `IncomingWatchWorkout` (Domain input for watch-workout ingestion) |
 | Domain | `Domain/Repositories/` | `RoutineRepository`, `ExerciseRepository`, `WorkoutSessionRepository` — `@MainActor` protocols |
 | Domain | `Domain/Interfaces/` | System-gateway protocols: `WatchSyncServicing`, `HealthKitWorkoutServicing`, `AICoach/` (`AICoachServicing`, `AICoachCaching`, `AICoachPreferencesProviding`) |
-| Domain | `Domain/Services/` | Pure business logic on model arrays: `HistoryStatsService`, `PersonalRecordService`, `FortschrittAggregator`, `SupersetLabelProvider`, `SupersetEditor` (superset-editor set-algebra), `WatchWorkoutIngestionService` (`@MainActor`, completed-watch-workout materialization) |
+| Domain | `Domain/Services/` | Pure business logic on model arrays: `HistoryStatsService`, `PersonalRecordService`, `FortschrittAggregator`, `SupersetLabelProvider`, `SupersetEditor` (superset-editor set-algebra), `WatchWorkoutIngestionService` (`@MainActor`, materializes an `IncomingWatchWorkout` into a `WorkoutSession`) |
 | Data | `Data/Repositories/` | `SwiftData*Repository` — `@MainActor final class`, `init(modelContext:)` |
 | Data | `Data/HealthKit/` | `HealthKitWorkoutManager`, `HealthKitWorkoutReconciler` |
 | Data | `Data/Sync/` | `WatchConnectivityManager`, `CloudSyncObserver`, `WatchModels` (sync DTOs + mappers) |
@@ -130,6 +130,8 @@ Child models normally cascade-insert via relationship attachment; explicit `dele
 ### Watch sync
 
 iOS → Watch: `updateApplicationContext`/`sendMessage` with JSON `[WatchRoutine]`. Watch → iOS: `transferUserInfo` with `CompletedWatchWorkout`; iOS creates `WorkoutSession` history. Sync DTOs + `Routine.toWatchRoutine()` mapper: `Data/Sync/WatchModels.swift`.
+
+The wire DTO `CompletedWatchWorkout` never crosses into Domain/Presentation. `WatchConnectivityManager` maps it (via `CompletedWatchWorkout.toIncomingWatchWorkout()` in `WatchModels.swift`) into the Domain-owned `IncomingWatchWorkout` (`Domain/Models/`) at the boundary — both the `.watchWorkoutCompleted` notification payload and `WatchSyncServicing.pendingWorkouts()` carry `IncomingWatchWorkout`, so `WatchWorkoutIngestionService` (Domain) and `RoutinesViewModel` (Presentation) depend only on Domain types (hard rule 4). The two structs mirror each other deliberately: the on-the-wire Codable format can evolve independently of the domain ingestion contract.
 
 ### Cross-component events (NotificationCenter)
 

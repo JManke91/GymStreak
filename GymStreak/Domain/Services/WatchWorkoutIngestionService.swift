@@ -5,8 +5,10 @@
 //  Materializes a completed watch workout (`.watchWorkoutCompleted` payload)
 //  into a `WorkoutSession`, including dedup against already-ingested
 //  sessions and the optional routine-template update. Constructor-injected
-//  with the Domain repository protocols it needs — no dependency on any
-//  concrete Data type. `RoutinesViewModel` owns the NotificationCenter
+//  with the Domain repository protocols it needs, and consumes the Domain
+//  `IncomingWatchWorkout` model — no dependency on any concrete Data type
+//  (the Data layer maps its wire DTO into that model at the sync boundary).
+//  `RoutinesViewModel` owns the NotificationCenter
 //  subscription and the watch-ack side effects (it already owns `watchSync`);
 //  this service reports back what it did via `Result` so the ViewModel knows
 //  whether to ack and whether to refresh its `routines` list.
@@ -37,7 +39,7 @@ final class WatchWorkoutIngestionService {
     }
 
     /// Mirrors the original `RoutinesViewModel.handleCompletedWatchWorkout` logic 1:1.
-    func ingest(_ workout: CompletedWatchWorkout) -> Result {
+    func ingest(_ workout: IncomingWatchWorkout) -> Result {
         print("Received completed watch workout: \(workout.routineName)")
 
         // Step 1: Create WorkoutSession to appear in history
@@ -184,7 +186,7 @@ final class WatchWorkoutIngestionService {
     }
 
     // Helper method to create a placeholder routine if the original was deleted
-    private func createPlaceholderRoutine(from workout: CompletedWatchWorkout) -> Routine {
+    private func createPlaceholderRoutine(from workout: IncomingWatchWorkout) -> Routine {
         let routine = Routine(name: workout.routineName)
         routine.id = workout.routineId
         return routine

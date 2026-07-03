@@ -108,11 +108,13 @@ observeWatchWorkoutCompletions() → processPendingWatchWorkouts() → fetchRout
 |------|------|
 | `GymStreak/GymStreakApp.swift` | Bootstraps `WatchConnectivityManager.shared` at App init via `@StateObject` |
 | `GymStreak/WatchConnectivityManager.swift` | WCSession management, dual-path receive (userInfo + message), persistent receive buffer |
-| `GymStreak/RoutinesViewModel.swift` | Idempotent ingest, drains pending buffer on init, posts `.workoutHistoryDidChange` |
-| `GymStreak/WorkoutViewModel.swift` | Observes `.workoutHistoryDidChange`, refreshes cached history, runs HK reconciler |
-| `GymStreak/Services/HealthKitWorkoutReconciler.swift` | Queries HKWorkout for orphans (no matching SwiftData record) — safety-net layer |
-| `GymStreak/Views/History/Components/PendingSyncBannerView.swift` | Banner shown on History tab when orphans exist |
-| `GymStreak/WatchModels.swift` | Shared Codable structs + `Routine.toWatchRoutine()` conversion |
+| `GymStreak/Presentation/ViewModels/RoutinesViewModel.swift` | Drains pending buffer on init, delegates ingest to `WatchWorkoutIngestionService`, owns watch-ack + list-refresh side effects |
+| `GymStreak/Domain/Services/WatchWorkoutIngestionService.swift` | Idempotent ingest of an `IncomingWatchWorkout` into a `WorkoutSession` (dedup, materialize, optional template update); posts `.workoutHistoryDidChange` |
+| `GymStreak/Domain/Models/IncomingWatchWorkout.swift` | Domain-owned input model for ingestion; mirrors the wire DTO so Domain never touches `CompletedWatchWorkout` |
+| `GymStreak/Presentation/ViewModels/WorkoutViewModel.swift` | Observes `.workoutHistoryDidChange`, refreshes cached history, runs HK reconciler |
+| `GymStreak/Data/HealthKit/HealthKitWorkoutReconciler.swift` | Queries HKWorkout for orphans (no matching SwiftData record) — safety-net layer |
+| `GymStreak/Presentation/Views/History/Components/PendingSyncBannerView.swift` | Banner shown on History tab when orphans exist |
+| `GymStreak/Data/Sync/WatchModels.swift` | Shared Codable wire DTOs + `Routine.toWatchRoutine()` and `CompletedWatchWorkout.toIncomingWatchWorkout()` mappers |
 | `GymStreak/CloudSyncObserver.swift` | Observes CloudKit remote changes, triggers refetch |
 
 ### watchOS Target
@@ -128,7 +130,8 @@ observeWatchWorkoutCompletions() → processPendingWatchWorkouts() → fetchRout
 
 - `WatchRoutine` / `WatchExercise` / `WatchSet`: Template data (Codable, Hashable)
 - `ActiveWorkoutExercise` / `ActiveWorkoutSet`: In-memory workout state with planned vs actual values
-- `CompletedWatchWorkout` / `CompletedWatchExercise` / `CompletedWatchSet`: Completed workout data sent to iOS
+- `CompletedWatchWorkout` / `CompletedWatchExercise` / `CompletedWatchSet`: Completed workout data sent to iOS (Codable wire DTOs; live in `Data/Sync/` on iOS)
+- `IncomingWatchWorkout` / `IncomingWatchExercise` / `IncomingWatchSet` (iOS Domain only): the Domain mirror of the completed-workout DTOs. `WatchConnectivityManager` maps the wire DTO into these at the boundary so the Domain ingestion service and `RoutinesViewModel` never reference a Data type
 
 All models preserve UUIDs from the iOS SwiftData originals for ID-based matching when updating templates.
 

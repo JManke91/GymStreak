@@ -76,7 +76,7 @@ class RoutinesViewModel: ObservableObject {
             object: nil,
             queue: .main
         ) { [weak self] notification in
-            guard let workout = notification.userInfo?["workout"] as? CompletedWatchWorkout else {
+            guard let workout = notification.userInfo?["workout"] as? IncomingWatchWorkout else {
                 return
             }
             Task { @MainActor in
@@ -467,7 +467,7 @@ class RoutinesViewModel: ObservableObject {
     /// `WatchWorkoutIngestionService`, then applies the two side effects that
     /// stay ViewModel-owned: acking with the watch and refreshing the
     /// published `routines` list if the template changed.
-    private func handleCompletedWatchWorkout(_ workout: CompletedWatchWorkout) {
+    private func handleCompletedWatchWorkout(_ workout: IncomingWatchWorkout) {
         let result = watchWorkoutIngestionService.ingest(workout)
 
         if result.shouldAcknowledge {

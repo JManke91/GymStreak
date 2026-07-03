@@ -31,8 +31,8 @@ final class WatchConnectivityManager: NSObject, ObservableObject, WatchSyncServi
     /// Does NOT remove them — the consumer is responsible for calling
     /// `markPendingProcessed(id:)` after a successful save (or after detecting
     /// the workout is a duplicate of an already-saved one).
-    func pendingWorkouts() -> [CompletedWatchWorkout] {
-        pendingQueue.all()
+    func pendingWorkouts() -> [IncomingWatchWorkout] {
+        pendingQueue.all().map { $0.toIncomingWatchWorkout() }
     }
 
     /// Removes a workout from the persistent pending buffer. Call after the
@@ -219,7 +219,7 @@ extension WatchConnectivityManager: WCSessionDelegate {
         NotificationCenter.default.post(
             name: .watchWorkoutCompleted,
             object: nil,
-            userInfo: ["workout": workout]
+            userInfo: ["workout": workout.toIncomingWatchWorkout()]
         )
         print("WatchConnectivity: Received completed workout from Watch (\(source)) - \(workout.routineName)")
     }
@@ -233,7 +233,7 @@ extension WatchConnectivityManager: WCSessionDelegate {
             NotificationCenter.default.post(
                 name: .watchWorkoutCompleted,
                 object: nil,
-                userInfo: ["workout": workout]
+                userInfo: ["workout": workout.toIncomingWatchWorkout()]
             )
         }
     }

@@ -114,6 +114,63 @@ struct CompletedWatchSet: Codable {
     let order: Int
 }
 
+// MARK: - Wire DTO to Domain ingestion input
+
+// Maps the decoded WatchConnectivity wire DTOs into the Domain-owned
+// `IncomingWatchWorkout` model, keeping `CompletedWatchWorkout` (and its nested
+// types) out of the Domain layer. Called at the WatchConnectivity boundary in
+// `WatchConnectivityManager` before the payload reaches Domain/Presentation.
+
+extension CompletedWatchWorkout {
+    func toIncomingWatchWorkout() -> IncomingWatchWorkout {
+        IncomingWatchWorkout(
+            id: id,
+            routineId: routineId,
+            routineName: routineName,
+            startTime: startTime,
+            endTime: endTime,
+            exercises: exercises.map { $0.toIncomingWatchExercise() },
+            shouldUpdateTemplate: shouldUpdateTemplate,
+            healthKitWorkoutId: healthKitWorkoutId
+        )
+    }
+}
+
+extension CompletedWatchExercise {
+    func toIncomingWatchExercise() -> IncomingWatchExercise {
+        IncomingWatchExercise(
+            id: id,
+            name: name,
+            muscleGroup: muscleGroup,
+            sets: sets.map { $0.toIncomingWatchSet() },
+            order: order,
+            supersetId: supersetId,
+            supersetOrder: supersetOrder,
+            targetRepMin: targetRepMin,
+            targetRepMax: targetRepMax,
+            exerciseId: exerciseId,
+            plannedExerciseId: plannedExerciseId,
+            plannedExerciseName: plannedExerciseName
+        )
+    }
+}
+
+extension CompletedWatchSet {
+    func toIncomingWatchSet() -> IncomingWatchSet {
+        IncomingWatchSet(
+            id: id,
+            plannedReps: plannedReps,
+            actualReps: actualReps,
+            plannedWeight: plannedWeight,
+            actualWeight: actualWeight,
+            restTime: restTime,
+            isCompleted: isCompleted,
+            completedAt: completedAt,
+            order: order
+        )
+    }
+}
+
 // MARK: - SwiftData to Watch Model Conversion
 
 extension Routine {
