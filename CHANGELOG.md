@@ -1,0 +1,40 @@
+# Changelog
+
+All notable changes to GymStreak are documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
+
+## [1.1.2] - 2026-07-03
+
+### Added
+
+- AI Coach Period Recap: tap the new "COACH · RÜCKBLICK" card in the Trainings tab to open a full-screen AI-generated monthly (or weekly/yearly) recap with streaming narrative, trend analysis, correlation callout, and stat strip.
+- Period range switching: tap the chip strip at the top of the recap screen to switch between This Week, Last Week, This Month, Last Month, Last 3 Months, and This Year.
+- Proactive monthly prompt: on the first open after a month boundary, a large card prompts you to view the previous month's recap — dismiss with "Später" or open with "Jetzt ansehen".
+- Cache indicator: when a recap was previously generated it loads instantly with an "Aus Cache" label and a "Neu generieren" link to refresh.
+- AI Coach (iOS 26+ / Apple Intelligence): post-workout recap on the save screen, monthly recap from the History tab, Ask-the-Coach analysis on exercise charts, and new workout detail analysis. Generated on-device — data never leaves the device.
+- Workout detail AI Coach: tap "Ask the Coach" on any past workout to get an AI analysis comparing it against your previous session of the same routine — highlights progress, stagnation, and PRs.
+- Apple Watch routine overview: the exercise list now shows planned sets inline (e.g. "3 × 10 @ 80 kg"), so you can review your plan before starting without entering the workout.
+- Recover missing Watch workouts: if a workout is still missing, the History tab shows an "Add to history" button that rebuilds it from Apple Health and your routine.
+- Edit past workouts: open any workout in History and tap the edit (pencil) button to correct reps, weight, completion or rest time, and add or delete sets. On save you can optionally push the corrected values back to the routine template — which then updates on both iPhone and Apple Watch for your next workout.
+- Apple Watch Ultra Action Button: during a running workout, press the Action Button to complete the current set and jump to the next one — no screen tap needed. During a rest period the press skips the rest. Setup: watch Settings → Action Button → Workout → select GymStreak.
+- Double Tap to complete sets: on Apple Watch Series 9/10 and Ultra 2/3, the Double Tap gesture (tap thumb and index finger twice) now completes the current set during a workout.
+- Alternative exercises: define backup exercises for any routine exercise (e.g. Dumbbell Press for Bench Press) and swap to one mid-workout on iPhone or Apple Watch when the equipment is busy — the swap is only offered before the first completed set.
+- Alternatives everywhere you add exercises: you can now pick alternatives directly while adding an exercise to a routine or creating a new routine (new "Alternative Exercises" section below the sets), not just afterwards from the routine — and exercises without alternatives now show a subtle "Add Alternative" hint on their routine row.
+- Set reps and weight per alternative: right after picking an alternative, its sets expand inline on the same page so you can define its own reps, weight and rest time — no extra screen. Alternatives take over the main exercise's sets and reps, the weight starts empty. Changing a value shows an "apply to all sets" banner, and you can tap any alternative later to adjust it.
+- Alternatives visible in the routine: expanding an exercise now lists its alternatives below the sets — tap one to edit it directly, without going through the ⋯ menu.
+- Swap on Apple Watch made visible: during a workout the set screen now shows a "Swap" button whenever an exercise has alternatives and no set is completed yet — and exercises with alternatives are marked in the workout's exercise list (swipe or long-press still works too).
+
+### Improved
+
+- Watch readability: larger, clearer labels for the rest timer and workout metrics — the "Rest" and total-time labels, heart rate (BPM) and calories (kCal) are now easier to read at a glance during a workout.
+- Clearer workout comparison: the "Ask the Coach" analysis on a past workout now shows a scannable breakdown — a one-line summary plus per-exercise rows with up/down indicators for progress, decline, or stagnation — instead of a long text block.
+- Smoother Coach loading: tapping "Ask the Coach" now responds instantly with a loading card that fills in as the analysis is generated, instead of nothing happening for a few seconds.
+- Clearer exercise swapping during a workout: the circle-arrows icon on iPhone is now a labeled "Swap" button, and choosing an alternative opens a compact list showing each option's muscle group and its own sets and reps (e.g. "Chest · 3×10"). Once a set is completed, the button turns into a lock that explains swapping becomes available again if you un-complete the set — and after a swap, tapping the "Swapped from" note takes you straight back to revert.
+
+### Fixed
+
+- Watch workout sync reliability: fixed a bug where a workout recorded on the Watch could be saved to Apple Health but never appear in the app, leaving a "waiting for sync" message that re-opening the Watch couldn't clear. The Watch now keeps each workout until the iPhone confirms it saved.
+- Watch sync accuracy: fixed a false "workouts pending sync" warning that could appear right after a Watch-only workout while the data was still on its way to the iPhone — and if you recovered such a workout too early, the exact reps and weights from the Watch now replace the rebuilt estimate once they arrive instead of being lost.
+- iCloud sync repaired: a bug introduced with the alternative-exercises feature silently disabled iCloud sync at app start (all data stayed local-only). Routines and workout history now sync across devices again.
+- Clearer delete confirmation: deleting an exercise that isn't used in any routine no longer shows an empty "used in the following routines:" message — it now shows a simple confirmation instead.
