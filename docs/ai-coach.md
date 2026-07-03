@@ -58,25 +58,65 @@ Final snapshot → full *Output → AICoachCache.save*()
 | **AICoachService façade** | Creates `LanguageModelSession`, streams response, handles token budget |
 | **ViewModels** | State machines per surface (4 total); integrate cache; publish to SwiftUI |
 
+This maps onto the app's Clean Architecture layers as: Aggregators + `AICoachService`/`AICoachCache`/`AICoachPreferences` in **Data**, the `Xxx*Input`/`Xxx*Output` structs in **Domain/Models**, the `AICoachXxxing`/`AICoachPreferencesProviding` protocols in **Domain/Interfaces**, and the ViewModels in **Presentation**.
+
+### Testability / Dependency injection
+
+The three AI Coach singletons (`AICoachService`, `AICoachCache`, `AICoachPreferences`) are exposed to the ViewModels through protocols so the VMs are unit-testable without touching the real Foundation Models runtime, disk cache, or `UserDefaults`:
+
+- `AICoachServicing` — the `streamXxx(...)` generation surface (`Domain/Interfaces/AICoach/AICoachServicing.swift`).
+- `AICoachCaching` — the `loadXxx`/`saveXxx`/`invalidateXxx` surface (`Domain/Interfaces/AICoach/AICoachCaching.swift`).
+- `AICoachPreferencesProviding` — the four `isXxxEffectivelyEnabled` flags the VMs read (`Domain/Interfaces/AICoach/AICoachPreferencesProviding.swift`).
+
+`AICoachService`, `AICoachCache`, and `AICoachPreferences` each conform to their respective protocol. All four AI Coach ViewModels take these as constructor-injected dependencies, defaulting to the shared singletons:
+
+```swift
+init(
+    service: AICoachServicing = AICoachService.shared,
+    cache: AICoachCaching = AICoachCache.shared,
+    preferences: AICoachPreferencesProviding = AICoachPreferences.shared
+) { ... }
+```
+
+Because the defaults resolve to the production singletons, **no view call-site changed** — views still construct e.g. `ExerciseDeepDiveViewModel()` with no arguments. Tests can inject fakes conforming to the three protocols instead.
+
+`AICoachAvailability` is intentionally **not** protocol-ized or injected — it's a thin, side-effect-free wrapper around `SystemLanguageModel.default.availability` and stays a direct `.shared` reference in the VMs (and in view files, which also still reference `AICoachPreferences.shared` / `AICoachService.shared` / `AICoachCache.shared` directly for one-off reads — e.g. opt-in checks, prewarming — outside the injected VM pipeline).
+
+**SwiftData queries live in the Data layer only.** Each AI Coach ViewModel used to build `FetchDescriptor`s and call `modelContext.fetch(...)` directly for cache-key/quick-lookup queries that fell outside the main `buildInput(...)` aggregation path. These were moved into the corresponding aggregator so the Presentation layer never constructs a query:
+
+| Query (formerly inline in the ViewModel) | Now lives in |
+|---|---|
+| Period-recap cache key's "most recent session in range" lookup | `PeriodRecapAggregator.mostRecentSessionStart(in:modelContext:)` |
+| Period-recap quick headline metrics (before/without full aggregation) | `PeriodRecapAggregator.headlineMetrics(in:modelContext:)` |
+| Period-recap "known subjects" (apologetic-correlation heuristic) | `PeriodRecapAggregator.knownSubjects(in:modelContext:)` |
+| Exercise deep-dive cache key's "last completed set timestamp" lookup | `ExerciseDeepDiveAggregator.lastCompletedSetTimestamp(exerciseId:modelContext:)` |
+| Post-workout recap's "prior session count" data-threshold gate | `PostWorkoutRecapAggregator.countPriorSessions(excludingSession:modelContext:)` |
+
+The ViewModels still accept `ModelContext` as a pass-through parameter (views hand it in from `@Environment(\.modelContext)`) — they just no longer construct `FetchDescriptor`s or call `.fetch(...)` themselves.
+
 ### File map
 
 ```
 GymStreak/
-  Models/AICoach/
+  Domain/Models/AICoach/
     AICoachOutputs.swift              — @Generable + Codable output structs (4 surfaces)
     PostWorkoutRecapInput.swift       — input struct + toPromptText()
     PeriodRecapInput.swift            — input struct + toPromptText()
     ExerciseDeepDiveInput.swift       — input struct + toPromptText()
     WorkoutAnalysisInput.swift        — input struct + toPromptText()
-  Services/AICoach/
+  Domain/Interfaces/AICoach/
+    AICoachServicing.swift            — protocol for AICoachService's streamXxx surface
+    AICoachCaching.swift              — protocol for AICoachCache's loadXxx/saveXxx/invalidateXxx surface
+    AICoachPreferencesProviding.swift — protocol for the 4 isXxxEffectivelyEnabled flags
+  Data/AICoach/
     AICoachAvailability.swift         — SystemLanguageModel availability mapping
-    AICoachPreferences.swift          — UserDefaults-backed preferences (@Observable)
-    AICoachService.swift              — central façade, streamPostWorkoutRecap / streamPeriodRecap / streamExerciseDeepDive / streamWorkoutAnalysis
-    AICoachCache.swift                — disk-backed JSON cache (Application Support/AICoachCache/)
+    AICoachPreferences.swift          — UserDefaults-backed preferences (@Observable), conforms to AICoachPreferencesProviding
+    AICoachService.swift              — central façade, streamPostWorkoutRecap / streamPeriodRecap / streamExerciseDeepDive / streamWorkoutAnalysis, conforms to AICoachServicing
+    AICoachCache.swift                — disk-backed JSON cache (Application Support/AICoachCache/), conforms to AICoachCaching
     AICoachTelemetry.swift            — os.Logger wrapper (no prompt or narrative text logged)
-    PostWorkoutRecapAggregator.swift  — builds PostWorkoutRecapInput from a WorkoutSession
-    PeriodRecapAggregator.swift       — builds PeriodRecapInput from a date range
-    ExerciseDeepDiveAggregator.swift  — builds ExerciseDeepDiveInput from historical sets
+    PostWorkoutRecapAggregator.swift  — builds PostWorkoutRecapInput from a WorkoutSession; also owns the prior-session-count query
+    PeriodRecapAggregator.swift       — builds PeriodRecapInput from a date range; also owns the cache-key/headline/known-subjects lookup queries
+    ExerciseDeepDiveAggregator.swift  — builds ExerciseDeepDiveInput from historical sets; also owns the cache-key timestamp lookup query
     WorkoutAnalysisAggregator.swift   — builds WorkoutAnalysisInput from a workout vs. previous same-routine
     ProactivePromptCoordinator.swift  — decides when to show the proactive period recap card
     SystemPrompts/
@@ -84,12 +124,12 @@ GymStreak/
       PeriodRecapInstructions.swift
       ExerciseDeepDiveInstructions.swift
       WorkoutAnalysisInstructions.swift
-  ViewModels/AICoach/
+  Presentation/ViewModels/AICoach/
     PostWorkoutRecapViewModel.swift
     PeriodRecapViewModel.swift
     ExerciseDeepDiveViewModel.swift
     WorkoutAnalysisViewModel.swift
-  Views/AICoach/
+  Presentation/Views/AICoach/
     Components/
       AISurface.swift                 — gradient-bordered card chrome for all surfaces
       AIPrivacyFooter.swift           — on-device lock-icon footer (inline / full variants)

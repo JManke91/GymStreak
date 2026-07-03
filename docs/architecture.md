@@ -1,532 +1,213 @@
 # GymStreak Architecture
 
+> **This document is the single source of truth for the project's architecture.**
+> CLAUDE.md references it; the `architecture-reviewer` agent enforces it.
+> When the architecture evolves, update this file in the same change.
+
 ## 1. Project Overview
 
-GymStreak is a multi-platform fitness tracking app for iOS and Apple Watch that lets users create workout routines, execute workouts with set-by-set navigation (including superset support), track exercise progress over time, and sync data across devices. The app integrates with HealthKit for workout recording and uses CloudKit for cloud persistence.
+GymStreak is a multi-platform fitness tracking app for iOS and Apple Watch: workout routines, set-by-set workout execution (with supersets, alternatives, rep ranges, progressive overload), history & progress charts, and an on-device AI coach. HealthKit records workouts; CloudKit syncs iOS data; WatchConnectivity syncs with the watch.
 
 ### Tech Stack
 
 | Technology | Purpose |
 |---|---|
-| **Swift** | Primary language |
+| **Swift** | Primary language (Swift 6 strict concurrency in newer code) |
 | **SwiftUI** | 100% declarative UI on both iOS and watchOS |
-| **SwiftData** | Persistence layer with CloudKit sync (iOS only) |
-| **HealthKit** | Workout recording and health data integration |
+| **SwiftData** | Persistence with CloudKit sync (iOS only) |
+| **HealthKit** | Workout recording and health data |
 | **WatchConnectivity** | Bidirectional iOS ↔ Watch communication |
-| **ActivityKit** | Live Activities for rest timer display |
-| **Fastlane** (~2.220) | Screenshot generation and App Store tooling |
+| **ActivityKit** | Rest-timer Live Activity |
+| **FoundationModels** | On-device AI coach generation |
+| **Fastlane** | Screenshots and App Store tooling |
 
-**No external Swift package dependencies.** The project relies entirely on Apple frameworks.
+**No external Swift package dependencies.** Apple frameworks only.
 
 ### Targets
 
-| Target | Platform | Files |
+| Target | Platform | Notes |
 |---|---|---|
-| GymStreak | iOS 18.5+ | 65 Swift files |
-| GymStreakWatch Watch App | watchOS | 28 Swift files |
-| GymStreakWidgets | iOS (widget extension) | 5 Swift files |
-| GymStreakUITests | iOS UI tests | 4 Swift files |
-| GymStreakWatchUITests | watchOS UI tests | 2 Swift files |
-| **Total** | | **104 Swift files** |
+| GymStreak | iOS 18.5+ | Main app — Clean Architecture layout below |
+| GymStreakWatch Watch App | watchOS | Own lightweight architecture (no SwiftData) |
+| GymStreakWidgets | iOS widget ext. | Rest-timer Live Activity UI |
+| GymStreakUITests / GymStreakWatchUITests | UI tests | Screenshot generation |
+
+File sharing between targets is by directory (`PBXFileSystemSynchronizedRootGroup`) — every file inside a target's folder is compiled into that target automatically. There is no per-file target membership (only Info.plist exceptions). Types needed by two targets exist as copies in each target's folder (e.g. `WatchModels`, `RestTimerAttributes`).
 
 ---
 
-## 2. Architecture Pattern
+## 2. Architecture Pattern (iOS target)
 
-**Pragmatic MVVM** — ViewModels interact directly with SwiftData and system frameworks. The CLAUDE.md references Clean Architecture layers (Domain/Data/Presentation) as aspirational direction, but the current codebase uses a simplified two-layer approach:
-
-```
-┌──────────────────────────────────────────┐
-│  PRESENTATION LAYER                      │
-│  ├─ Views (SwiftUI)                      │
-│  ├─ ViewModels (@MainActor ObservableObj)│
-│  └─ Design System (Onyx components)      │
-├──────────────────────────────────────────┤
-│  DATA + DOMAIN LAYER (combined)          │
-│  ├─ SwiftData @Model entities            │
-│  ├─ Services (ExerciseProgressService)   │
-│  ├─ Managers (HealthKit, WatchConn)      │
-│  └─ Utilities (TimeFormatting, etc.)     │
-└──────────────────────────────────────────┘
-```
-
-### Layer Boundaries
-
-- **Views** own no business logic; they read from ViewModels and call ViewModel methods
-- **ViewModels** own all state management, SwiftData queries, and orchestrate manager calls
-- **Models** are SwiftData `@Model` classes with computed properties for domain logic (e.g., `exercisesGroupedBySupersets`)
-- **Managers** are singletons for system integrations (HealthKit, WatchConnectivity)
-- **Services** encapsulate query-heavy logic (exercise progress aggregation)
-
-### What's NOT Present
-
-- No repository protocol/implementation pattern — ViewModels query SwiftData directly
-- No UseCase layer — business logic lives in ViewModels and Services
-- No formal DI container — manual initialization and singletons
-
-### Dependency Injection
-
-Manual initialization, three patterns:
-
-1. **ModelContext injection**: `@Environment(\.modelContext)` in Views → passed to ViewModel `init(modelContext:)`
-2. **Singletons**: `WatchConnectivityManager.shared`, `CloudSyncObserver.shared`, `HapticManager.shared`
-3. **EnvironmentObject (watchOS)**: `AppState` creates dependencies and injects via `.environmentObject()`
-
-### Data Flow
+**Pragmatic Clean Architecture** — three layers plus a composition root, chosen deliberately over textbook Clean Architecture (see "Deliberate decisions" below):
 
 ```
-User Action → View → ViewModel method
-  → SwiftData mutation (insert/update/delete)
-  → @Published property update → View re-render
-  → Side effects (Watch sync, HealthKit save, notifications)
+GymStreak/
+├── App/            Composition root — may see everything
+├── Domain/         Protocols + domain models + pure business logic
+│                   (no SwiftUI, no concrete Data types)
+├── Data/           Implements Domain protocols; owns ModelContext,
+│                   HealthKit, WatchConnectivity, AI coach services
+└── Presentation/   Views + ViewModels — depend on Domain protocols only
 ```
 
-Cross-component communication uses `NotificationCenter`:
-- `.cloudKitDataDidChange` — CloudKit remote changes trigger ViewModel refresh
-- `.watchWorkoutCompleted` — Watch workout received, ViewModel creates WorkoutSession
-- `.watchAppBecameAvailable` — Triggers routine sync to Watch
+**Dependency direction: `Presentation → Domain ← Data`.** Domain depends on nothing. `App/` wires the two sides together.
 
----
+### Layer contents
 
-## 3. Module & Directory Structure
-
-```
-GymStreak/                              # iOS app target
-├── GymStreakApp.swift                  # @main entry, ModelContainer setup, test seeding
-├── ContentView.swift                  # TabView root (3 tabs: Routines, Exercises, History)
-├── Models.swift                       # All SwiftData @Model definitions (7 models)
-├── Models/
-│   └── ExerciseProgressModels.swift   # Chart data types (not @Model, plain structs)
-├── DesignSystem.swift                 # Onyx theme: colors, spacing, typography, haptics
-├── ViewModels/
-│   └── ExerciseProgressViewModel.swift
-├── Services/
-│   └── ExerciseProgressService.swift  # Progress data aggregation from workout history
-├── Views/
-│   ├── DesignSystem/                  # Reusable Onyx UI components (8 files)
-│   │   ├── OnyxButton.swift
-│   │   ├── OnyxCard.swift
-│   │   ├── OnyxBadge.swift
-│   │   ├── OnyxStepper.swift
-│   │   ├── OnyxTextField.swift
-│   │   ├── OnyxListRow.swift
-│   │   ├── OnyxProgressRing.swift
-│   │   └── OnyxEmptyState.swift
-│   ├── Components/                    # Feature-specific reusable components
-│   │   ├── Superset*.swift            # Superset UI components (5 files)
-│   │   ├── MuscleGroup*.swift         # Muscle group badge + picker
-│   │   ├── EquipmentTypePicker.swift
-│   │   └── RestTimerConfigView.swift
-│   ├── Charts/                        # Progress charting views
-│   │   ├── ExerciseProgressChartView.swift
-│   │   └── ChartTimeframePicker.swift
-│   ├── Routines/
-│   │   └── CreateRoutineFlow/         # Multi-step routine creation wizard
-│   │       ├── CreateRoutineView.swift
-│   │       ├── ExerciseSelectionView.swift
-│   │       ├── ConfigureExerciseView.swift
-│   │       └── PendingRoutineExercise.swift
-│   └── ExerciseProgressListView.swift
-├── Extensions/
-│   ├── Color+AccentColor.swift
-│   └── String+Localization.swift      # .localized computed property on String
-├── Helpers/
-│   └── SupersetLabelProvider.swift    # Superset letter labels (A, B, C...)
-├── Resources/
-│   ├── en.lproj/Localizable.strings   # English
-│   └── de.lproj/Localizable.strings   # German
-├── [Root-level view files]            # Legacy flat structure (see note below)
-│   ├── RoutinesView.swift             # Routines tab list
-│   ├── RoutineDetailView.swift        # Routine editing (primary set editing)
-│   ├── RoutineExerciseDetailView.swift
-│   ├── ExercisesView.swift            # Exercise library tab
-│   ├── ExerciseDetailView.swift       # Exercise detail + progress
-│   ├── ActiveWorkoutView.swift        # Live workout execution
-│   ├── WorkoutHistoryView.swift       # History tab
-│   ├── WorkoutDetailView.swift        # Completed workout detail
-│   ├── SaveWorkoutView.swift          # Post-workout template update
-│   ├── AddRoutineView.swift           # Routine creation sheet
-│   ├── AddExerciseToRoutineView.swift # Exercise picker for routines
-│   ├── AddExerciseView.swift          # New exercise creation
-│   ├── AddExerciseToWorkoutView.swift # Add exercise during workout
-│   ├── EditExerciseView.swift
-│   ├── EditSetView.swift
-│   ├── ExercisePickerView.swift
-│   ├── SetInputComponents.swift       # HorizontalStepper, WeightInput
-│   ├── RestTimerView.swift
-│   └── ApplyToAllBanner.swift
-├── [Root-level ViewModel files]       # Legacy flat structure
-│   ├── RoutinesViewModel.swift        # Routine CRUD, superset ops, watch sync
-│   ├── ExercisesViewModel.swift       # Exercise library CRUD
-│   └── WorkoutViewModel.swift         # Workout execution, HealthKit
-├── [Managers]
-│   ├── WatchConnectivityManager.swift # iOS-side WatchConnectivity
-│   ├── HealthKitWorkoutManager.swift  # HealthKit workout operations
-│   └── CloudSyncObserver.swift        # CloudKit change notifications
-├── [Support files]
-│   ├── MuscleGroups.swift             # Muscle group definitions + localization
-│   ├── EquipmentType.swift            # Equipment enum with SF Symbols
-│   ├── WatchModels.swift              # Codable models for watch sync
-│   ├── RestTimerAttributes.swift      # Live Activity attributes
-│   ├── TimeFormatting.swift           # Time display utilities
-│   └── TestDataSeeder.swift           # UI test data generation
-└── Assets.xcassets/                   # App icons, colors
-
-GymStreakWatch Watch App/               # watchOS target
-├── GymStreakWatchApp.swift            # @main entry, AppState DI container
-├── OnyxWatchDesignSystem.swift        # Watch-specific Onyx theme
-├── Managers/
-│   ├── RoutineStore.swift             # UserDefaults persistence (App Groups)
-│   ├── WatchConnectivityManager.swift # Watch-side WatchConnectivity
-│   └── WatchHealthKitManager.swift    # Watch HealthKit integration
-├── ViewModels/
-│   ├── WatchRoutinesViewModel.swift   # Routine display + sync handling
-│   └── WatchWorkoutViewModel.swift    # Watch workout execution
-├── Models/
-│   └── WatchModels.swift              # Lightweight Codable sync models
-├── Views/                             # All watch UI views (17 files)
-│   ├── RoutineListView.swift          # Root navigation
-│   ├── RoutineDetailView.swift
-│   ├── ActiveWorkoutView.swift
-│   ├── ExerciseListView.swift
-│   ├── ExerciseSetView.swift
-│   ├── SetListView.swift
-│   ├── InlineSetEditorView.swift
-│   ├── FullScreenSetEditorView.swift
-│   ├── RestTimerView.swift
-│   ├── RestTimerEditorSheet.swift
-│   ├── MetricsView.swift
-│   ├── ControlsView.swift
-│   ├── CompleteSetButton.swift
-│   ├── CompactSetNavigationBar.swift
-│   ├── SetNavigationBar.swift
-│   ├── CompactActionBar.swift
-│   ├── CompactValueEditor.swift
-│   └── ValueStepperView.swift
-├── Intents/
-│   └── GymStreakIntents.swift         # Siri / Action Button support
-└── TestData/
-    └── WatchTestDataSeeder.swift
-
-GymStreakWidgets/                        # Widget extension
-├── GymStreakWidgetsBundle.swift        # Widget bundle registration
-├── GymStreakWidgets.swift              # Widget definitions
-├── GymStreakWidgetsControl.swift       # Control widget
-├── GymStreakWidgetsLiveActivity.swift  # Rest timer Live Activity UI
-└── RestTimerAttributes.swift          # Activity attributes model
-
-GymStreakUITests/                        # iOS UI tests
-├── GymStreakUITests.swift             # Screenshot generation tests
-├── GymStreakUITestsLaunchTests.swift
-├── SnapshotHelper.swift               # Fastlane snapshot helper
-└── UITestHelpers.swift
-
-GymStreakWatchUITests/                   # Watch UI tests
-├── GymStreakWatchUITests.swift
-└── SnapshotHelper.swift
-
-docs/                                   # Feature documentation
-├── architecture.md                    # This file
-├── superset-feature.md
-└── watch-screenshots.md
-
-fastlane/                               # CI/CD automation
-├── Fastfile                           # Lane definitions (screenshots, upload)
-├── Snapfile                           # Snapshot configuration
-├── Appfile                            # App metadata
-├── disable_watch_dependency.rb        # Build script for simulator
-├── create_watch_ui_test_target.rb
-├── screenshots/                       # Generated App Store screenshots
-│   ├── en-US/
-│   └── de-DE/
-└── logs/
-```
-
-> **Note on root-level files**: Many views and ViewModels live at the GymStreak/ root level rather than in organized subdirectories. Newer files (Charts/, Components/, CreateRoutineFlow/) follow a directory-based organization. This is organizational debt, not a deliberate pattern.
-
----
-
-## 4. Key Patterns & Conventions
-
-### Naming Conventions
-
-| Element | Convention | Examples |
+| Layer | Folder | Contains |
 |---|---|---|
-| Types | PascalCase | `Routine`, `RoutinesViewModel`, `ExerciseProgressService` |
-| Variables/Properties | camelCase | `routineExercises`, `currentSession` |
-| Booleans | is/has/should prefix | `isCompleted`, `hasModifiedSets`, `isReachable` |
-| Methods | camelCase verbs | `fetchRoutines()`, `updateSet()`, `syncRoutines()` |
-| View files | PascalCase + View suffix | `RoutineDetailView.swift`, `ActiveWorkoutView.swift` |
-| ViewModel files | PascalCase + ViewModel suffix | `RoutinesViewModel.swift`, `WorkoutViewModel.swift` |
-| Design components | Onyx prefix | `OnyxButton`, `OnyxCard`, `OnyxBadge` |
-| Watch design components | OnyxWatch prefix | `OnyxWatch.Colors`, `OnyxWatch.Spacing` |
+| App | `App/` | `GymStreakApp` (@main, ModelContainer), `AppDependencies` (composition root), `ContentView` (tab root), `TestDataSeeder` |
+| Domain | `Domain/Models/` | SwiftData `@Model` classes (`Models.swift`), `MuscleGroups`, `EquipmentType`, `WorkoutType`, chart models, AI-coach input/output models |
+| Domain | `Domain/Repositories/` | `RoutineRepository`, `ExerciseRepository`, `WorkoutSessionRepository` — `@MainActor` protocols |
+| Domain | `Domain/Interfaces/` | System-gateway protocols: `WatchSyncServicing`, `HealthKitWorkoutServicing`, `AICoach/` (`AICoachServicing`, `AICoachCaching`, `AICoachPreferencesProviding`) |
+| Domain | `Domain/Services/` | Pure business logic on model arrays: `HistoryStatsService`, `PersonalRecordService`, `FortschrittAggregator`, `SupersetLabelProvider`, `SupersetEditor` (superset-editor set-algebra), `WatchWorkoutIngestionService` (`@MainActor`, completed-watch-workout materialization) |
+| Data | `Data/Repositories/` | `SwiftData*Repository` — `@MainActor final class`, `init(modelContext:)` |
+| Data | `Data/HealthKit/` | `HealthKitWorkoutManager`, `HealthKitWorkoutReconciler` |
+| Data | `Data/Sync/` | `WatchConnectivityManager`, `CloudSyncObserver`, `WatchModels` (sync DTOs + mappers) |
+| Data | `Data/Progress/` | `ExerciseProgressService` (chart aggregation queries) |
+| Data | `Data/AICoach/` | `AICoachService` (FoundationModels), cache, preferences, telemetry, availability, aggregators, system prompts |
+| Presentation | `Presentation/ViewModels/` | `RoutinesViewModel`, `ExercisesViewModel`, `WorkoutViewModel`, `ExerciseProgressViewModel`, `AICoach/` VMs |
+| Presentation | `Presentation/Views/<FeatureArea>/` | `Routines/`, `Exercises/`, `Workout/`, `History/`, `Charts/`, `AICoach/`, `Components/`, `DesignSystem/` |
+| Presentation | `Presentation/DesignSystem.swift` | Onyx theme tokens + `HapticManager` |
+| — | `Extensions/` | Cross-layer utilities (`String+Localization`, `Color+AccentColor`) |
 
-### Error Handling
+### Dependency injection
 
-- **print-based logging** throughout — no unified logging framework (os.log)
-- **Silent failures** with `try?` for non-critical operations (HealthKit queries)
-- **do/catch with fallback** for critical paths (ModelContainer creation falls back to local-only)
-- **No Result<T, E> types** — errors are typically logged and silently handled
-- **@Published error state** in some ViewModels for user-facing errors
+- `AppDependencies` (`App/AppDependencies.swift`) is a `@MainActor final class … ObservableObject` built once in `GymStreakApp.init()` from `sharedModelContainer.mainContext`, injected via `.environmentObject(dependencies)`.
+- It owns shared repository instances, `exerciseProgressService`, and `watchSync` (the `WatchConnectivityManager.shared` singleton — WCSession delegate identity must be the launch-time instance), and exposes `makeHealthKitWorkoutService()` as a **factory** (the two independent `WorkoutViewModel` instances each get their own HealthKit session — pre-existing behavior, kept deliberately).
+- ViewModels receive dependencies via initializer injection, typed as protocols.
+- Views that own a `@StateObject` ViewModel use the **outer/inner view split** (outer reads `@EnvironmentObject dependencies`, inner constructs the ViewModel in `init` — the environment isn't readable inside a plain `init`). See `RoutinesView.swift` for the canonical example.
+- AI-coach ViewModels (`@Observable @MainActor`) default their protocol dependencies to the shared instances inside the `@MainActor` init body (`service ?? AICoachService.shared`) — NOT as `= Foo.shared` default arguments, which Swift 6 rejects (default args evaluate nonisolated).
 
-### State Management
+Full design rationale, method-surface decisions, and edge cases: **`docs/repository-refactor.md`** and **`docs/ai-coach.md`**.
 
-| Pattern | Usage |
+### Hard rules (enforced by the architecture-reviewer agent)
+
+1. **No `ModelContext` / `FetchDescriptor` in `Presentation/`.** Repositories are the only persistence surface for queries and all mutations. *Documented exceptions:* (a) four views (`ExerciseProgressChartView`, `WorkoutDetailView`, `SaveWorkoutView`, `PeriodRecapView`) hold `@Environment(\.modelContext)` solely to pass through to AI-coach APIs, and AI-coach ViewModels pass it through to `Data/AICoach` aggregators without querying it themselves; (b) **read-only `@Query`** in Views is allowed — it is SwiftData's native live SwiftUI binding (e.g. the live `Exercise` library join that progress views require) and replacing it with repository + notification plumbing would re-implement observation the framework provides. Mutations via `@Query` results must still go through repositories/ViewModels.
+2. **No singleton access inside ViewModels** — inject protocols via init (defaulted inits are fine). `HapticManager.shared` in Views is tolerated.
+3. **No business logic in Views** — no persistence, no domain set-algebra/grouping, no service construction. Display-only formatting is fine.
+4. **`Domain/` never imports SwiftUI** and never references concrete Data types. Styling for domain types (colors etc.) lives in `Presentation/Views/Components/DomainColorStyling.swift`.
+5. **New dependencies are wired in `AppDependencies`**, never constructed ad hoc in views/ViewModels.
+6. **New files go into their layer folder** — nothing new at the `GymStreak/` root.
+
+### Deliberate decisions (do not "fix" these)
+
+- **`@Model` classes ARE the domain models.** Repository protocols return them directly. No DTO/mapper layer over the local store — mapping to structs would forfeit SwiftData identity, observation tracking, relationship faulting, and CloudKit merge semantics. DTOs exist only at true external boundaries (`WatchModels` for WatchConnectivity, chart models for display).
+- **No UseCase-per-action layer.** Coarse domain services (`Domain/Services/`) hold multi-entity business rules; simple CRUD is a ViewModel → repository call. A `CreateRoutineUseCase` wrapping one repository call is ceremony, not architecture.
+- **Legacy ViewModels stay `ObservableObject`** (`@Observable` migration is a separate, deliberate ripple — `@StateObject`/`@EnvironmentObject` call sites everywhere). **New ViewModels use `@Observable` + `@MainActor`** (the AI-coach VMs are the pattern).
+- **Denormalized workout history**: `WorkoutSession`/`WorkoutExercise`/`WorkoutSet` copy routine data so history survives routine deletion/edits.
+- **No SwiftData on watchOS** — attempted and reverted (`dc4a7d2`). Watch persists `WatchRoutine` Codable models via `RoutineStore` (App Group UserDefaults).
+- **Domain logic as computed properties on `@Model` classes** (e.g. `totalVolume`, `exercisesGroupedBySupersets`) is acceptable — they are the domain models.
+- **`Domain/` may import `FoundationModels`** (AI-coach input/output models use `@Generable`; `AICoachServicing` exposes streaming response types). The SwiftUI ban stays absolute; FoundationModels coupling is accepted because the generable models ARE the coach's domain contract.
+
+---
+
+## 3. Data Layer
+
+### SwiftData models (`Domain/Models/Models.swift`)
+
+| Model | Purpose |
 |---|---|
-| `@Published` in `ObservableObject` | All ViewModels — primary state mechanism |
-| `@State` | Local view-only UI state (expanded items, selection) |
-| `@Binding` | Parent-to-child value passing (set editing) |
-| `@Environment(\.modelContext)` | SwiftData access from views |
-| `@EnvironmentObject` | watchOS DI (RoutineStore, WorkoutViewModel) |
-| `@StateObject` | ViewModel lifecycle ownership |
-| `NotificationCenter` | Cross-component communication |
+| `Routine` | Workout template → many `RoutineExercise` |
+| `Exercise` | Exercise library item |
+| `RoutineExercise` | Junction w/ superset, rep-range, alternatives config → many `ExerciseSet` |
+| `ExerciseSet` | Template set (reps/weight/rest) |
+| `RoutineExerciseAlternative` / `AlternativeExerciseSet` | Alternative exercise slots + their set schemes |
+| `WorkoutSession` | Completed workout → many `WorkoutExercise` → many `WorkoutSet` (denormalized) |
 
-### Navigation
+All models: UUID ids, CloudKit-compatible defaults (every property has a default, relationships optional). **Any schema change requires manual CloudKit Console schema deploy before release** — otherwise sync silently fails in TestFlight/prod.
 
-**iOS**: Tab-based root with `NavigationStack` inside each tab.
-- Navigation pushes for drill-down flows (routine → detail → exercise)
-- Modal sheets for creation flows (`AddRoutineView`, `SaveWorkoutView`)
-- `NavigationLink(value: UUID)` pattern — SwiftData models aren't Hashable, so `.navigationDestination(for: UUID.self)` is used
+CloudKit: `.private("iCloud.com.jmanke.gymstreak")` with silent fallback to local-only. `CloudSyncObserver` posts `.cloudKitDataDidChange` on remote changes.
 
-**watchOS**: Single `NavigationStack` from `RoutineListView`.
-- Linear drill-down navigation
-- Sheets for editors (rest timer, set editing)
+### Repositories
 
-### Async Patterns
+- `RoutineRepository`: `fetchAll/fetch(id:)/fetch(name:)/insert/delete` + child deletes (`RoutineExercise`, `ExerciseSet`, alternatives) + `save()`
+- `ExerciseRepository`: `fetchAll/insert/delete/save`
+- `WorkoutSessionRepository`: `fetchAll/fetchCompleted/findSession(id:healthKitWorkoutId:)` (watch-workout dedup) + inserts/deletes + `save()`
 
-- **async/await** exclusively — no Combine Publishers for async work
-- **@MainActor** on all ViewModels and Managers
-- **`Task { @MainActor in ... }`** for dispatching to main from nonisolated delegates (WCSessionDelegate)
-- **`nonisolated func`** for delegate callbacks that can't be @MainActor
+Child models normally cascade-insert via relationship attachment; explicit `delete` is always required (removing from a relationship array does not delete the record).
 
-### Localization
+### Watch sync
 
-- `String+Localization.swift` provides `.localized` computed property
-- Keys use dot-notation: `"tab.routines"`, `"routine.detail.sets"`
-- Two languages: English (`en.lproj`) and German (`de.lproj`)
+iOS → Watch: `updateApplicationContext`/`sendMessage` with JSON `[WatchRoutine]`. Watch → iOS: `transferUserInfo` with `CompletedWatchWorkout`; iOS creates `WorkoutSession` history. Sync DTOs + `Routine.toWatchRoutine()` mapper: `Data/Sync/WatchModels.swift`.
 
-### Haptics
+### Cross-component events (NotificationCenter)
 
-- `HapticManager.shared` singleton in `DesignSystem.swift`
-- Four levels: `.success()`, `.selection()`, `.light()`, `.medium()`
-- Used at interaction points (completing sets, adding items)
-
----
-
-## 5. Data Layer
-
-### Persistence: SwiftData (iOS)
-
-**Seven @Model entities** defined in `Models.swift`:
-
-| Model | Purpose | Key Relationships |
+| Notification | Posted by | Handled by |
 |---|---|---|
-| `Routine` | Workout template | → many `RoutineExercise`, → many `WorkoutSession` |
-| `Exercise` | Exercise library item | → many `RoutineExercise` |
-| `RoutineExercise` | Exercise-in-routine junction | → one Routine, → one Exercise, → many ExerciseSet |
-| `ExerciseSet` | Set configuration (reps, weight, rest) | → one RoutineExercise |
-| `WorkoutSession` | Completed workout record | → many WorkoutExercise, → one Routine |
-| `WorkoutExercise` | Exercise in completed workout | → one WorkoutSession, → many WorkoutSet |
-| `WorkoutSet` | Completed set data | → one WorkoutExercise |
-
-**CloudKit sync**: Configured as `.private("iCloud.com.jmanke.gymstreak")` with fallback to `.none` if iCloud is unavailable.
-
-**Change detection**: `CloudSyncObserver` watches `NSPersistentStoreRemoteChange` and posts `.cloudKitDataDidChange`.
-
-### Persistence: UserDefaults (watchOS)
-
-Watch does NOT use SwiftData. `RoutineStore` persists lightweight `WatchRoutine` Codable models to App Group UserDefaults. This is intentional — a CloudKit + SwiftData attempt on watchOS was reverted (commit `dc4a7d2`).
-
-### Sync: WatchConnectivity
-
-| Direction | Mechanism | Data |
-|---|---|---|
-| iOS → Watch | `updateApplicationContext` / `sendMessage` | JSON-encoded `[WatchRoutine]` |
-| Watch → iOS | `transferUserInfo` | JSON-encoded `CompletedWatchWorkout` |
-
-Sync models (`WatchModels.swift`) are lightweight Codable structs that mirror SwiftData entities without the framework overhead:
-- `WatchRoutine`, `WatchExercise`, `WatchSet` — template sync
-- `CompletedWatchWorkout`, `CompletedExercise`, `CompletedSet` — workout results
-
-`Routine.toWatchRoutine()` and similar conversion methods live on the SwiftData models.
-
-### HealthKit Integration
-
-`HealthKitWorkoutManager` handles:
-- Authorization requests
-- Workout session creation and saving
-- Deduplication via `externalUUID` metadata matching `WorkoutSession.id`
-
-`WatchHealthKitManager` handles the watch side with `HKWorkoutSession` and `HKLiveWorkoutBuilder`.
-
-### Services
-
-`ExerciseProgressService` — encapsulates complex SwiftData queries for exercise progress charting. Aggregates data across `WorkoutSession` history to produce chart-ready data points. Uses Epley formula for estimated 1RM calculations.
-
----
-
-## 6. Testing Strategy
-
-### What's Tested
-
-- **UI tests only** — no unit tests or integration tests detected
-- **Screenshot generation** is the primary test purpose, using Fastlane `snapshot`
-
-### Test Infrastructure
-
-| Component | Purpose |
-|---|---|
-| `GymStreakUITests.swift` | iOS App Store screenshot generation |
-| `GymStreakWatchUITests.swift` | watchOS App Store screenshot generation |
-| `SnapshotHelper.swift` | Fastlane integration helper (copied into both test targets) |
-| `UITestHelpers.swift` | iOS test utilities |
-| `TestDataSeeder.swift` | Creates realistic test data (Push Day, Pull Day, Leg Day routines) |
-| `WatchTestDataSeeder.swift` | Creates lightweight watch test data |
-
-### Test Data Activation
-
-Launch argument `-UI_TESTING` triggers test data seeding in both `GymStreakApp.onAppear` and `AppState.connectServices()`.
-
-### Fastlane Lanes
-
-| Lane | Description |
-|---|---|
-| `screenshots` | iOS dark mode screenshots (iPhone 17 Pro Max) |
-| `watch_screenshots` | watchOS screenshots (Ultra 3 49mm, Series 11 46mm) |
-| `all_screenshots` | Both iOS + Watch |
-| `upload_screenshots` | Upload to App Store Connect via `deliver` |
-| `test_ui` | Run UI tests without screenshots |
-
-### Mocking Strategy
-
-- No mocking framework
-- In-memory `ModelContainer` for SwiftUI Previews
-- Test data seeders for UI tests with realistic fixture data
-
----
-
-## 7. Key Components & Entry Points
-
-### Must-Know Files
-
-| File | Why It Matters |
-|---|---|
-| `GymStreakApp.swift` | App entry, ModelContainer + CloudKit setup, test data seeding |
-| `ContentView.swift` | Tab navigation root, WorkoutViewModel initialization |
-| `Models.swift` | All 7 SwiftData entities, relationship definitions, conversion methods |
-| `DesignSystem.swift` | Onyx theme definition — colors, spacing, typography, haptics |
-| `RoutinesViewModel.swift` | Core business logic: routine CRUD, superset operations, watch sync |
-| `WorkoutViewModel.swift` | Workout execution pipeline, HealthKit integration |
-| `WatchConnectivityManager.swift` (iOS) | iOS → Watch sync, workout reception |
-| `RoutineDetailView.swift` | Primary routine editing UI (inline set editing) |
-| `ActiveWorkoutView.swift` | Live workout execution UI |
-| `GymStreakWatchApp.swift` | Watch entry, AppState DI container |
-| `WatchWorkoutViewModel.swift` | Watch workout execution |
-| `RoutineStore.swift` | Watch persistence layer (UserDefaults) |
-| `WatchModels.swift` (watch target) | Lightweight Codable sync models |
-
-### Design System Components
-
-All prefixed with `Onyx` in `Views/DesignSystem/`:
-- `OnyxButton` — Primary/secondary/destructive button styles
-- `OnyxCard` — Container with elevation states
-- `OnyxBadge` — Pill badges with icons
-- `OnyxStepper` — Integer stepper with ± buttons
-- `OnyxTextField` — Styled text input with icons
-- `OnyxListRow` — Consistent list item layout
-- `OnyxProgressRing` — Circular progress indicator
-- `OnyxEmptyState` — Empty list placeholder
-
-Watch has its own `OnyxWatchDesignSystem.swift` with compact variants.
-
-### Notification-Based Events
-
-| Notification | Posted By | Handled By |
-|---|---|---|
-| `.cloudKitDataDidChange` | CloudSyncObserver | RoutinesViewModel (refetch) |
+| `.cloudKitDataDidChange` | CloudSyncObserver | RoutinesViewModel, ExercisesViewModel (refetch) |
 | `.watchWorkoutCompleted` | WatchConnectivityManager | RoutinesViewModel (create WorkoutSession) |
-| `.watchAppBecameAvailable` | WatchConnectivityManager | RoutinesViewModel (trigger sync) |
+| `.watchAppBecameAvailable` | WatchConnectivityManager | RoutinesViewModel (sync routines) |
+| `.workoutHistoryDidChange` / `.routineTemplateDidChange` | ViewModels | History/Routine screens (refresh) |
+
+Accepted as the inter-ViewModel event mechanism; don't add new notification names when a direct repository/service call works.
 
 ---
 
-## 8. Anti-Patterns & Constraints
+## 4. watchOS target
 
-### Organizational Debt
+Cleaner, smaller architecture — keep it that way:
 
-- **Mixed file placement**: Root-level views and ViewModels coexist with organized `Views/`, `ViewModels/` subdirectories. Newer files follow subdirectory organization; older files remain at root.
-- **No shared code between targets**: iOS and Watch have separate implementations of similar logic (WatchConnectivityManager, WatchModels, DesignSystem). Code sharing uses symlinks due to PBXFileSystemSynchronizedRootGroup.
-
-### Architecture Gaps vs. CLAUDE.md
-
-The CLAUDE.md describes a Clean Architecture with Domain/Data/Presentation layers, Repository protocols, UseCases, and DTOs. The actual codebase:
-- Has **no Repository protocol/implementation pattern**
-- Has **no UseCase layer**
-- Has **no DTOs or Mappers** (SwiftData models serve as both domain and persistence entities)
-- Has **one Service** (`ExerciseProgressService`) that partially follows the service pattern
-
-This isn't necessarily wrong — the simplified approach is appropriate for the app's scale — but the documented architecture doesn't match the implementation.
-
-### Known Technical Debt
-
-- **print() logging** throughout instead of `os.Logger` or a structured logging system
-- **Large view files**: Some views exceed the project's own 200-300 line guideline significantly
-- **Force-dark mode**: `preferredColorScheme(.dark)` is hardcoded — no light mode support
-- **Full refetch pattern**: ViewModels call `fetchRoutines()` after every mutation rather than incremental updates
-
-### Intentional Decisions That Look Like Issues
-
-- **No SwiftData on Watch**: Intentionally uses UserDefaults — CloudKit + SwiftData on watchOS was attempted and reverted
-- **Denormalized workout history**: `WorkoutSession`/`WorkoutExercise`/`WorkoutSet` copy routine data. This is intentional so history survives routine deletion
-- **Singletons for managers**: WatchConnectivityManager and CloudSyncObserver use singletons. This is acceptable for system-level services that need app-wide lifecycle
+- `Managers/RoutineStore.swift` — persistence isolation (App Group UserDefaults, JSON `WatchRoutine`)
+- `Managers/WatchConnectivityManager.swift`, `WatchHealthKitManager.swift` — system gateways
+- `ViewModels/` — constructor-injected (`WatchRoutinesViewModel(routineStore:)`), `AppState` in `GymStreakWatchApp` is the DI container via `.environmentObject`
+- `Views/` — UI only
+- **Never** SwiftData/CloudKit on the watch.
 
 ---
 
-## 9. LLM Working Instructions
+## 5. Conventions
 
-### Adding a New Feature
+### Naming & style
 
-1. Check `docs/` for existing documentation that might be affected
-2. Follow the MVVM pattern: create a ViewModel if the feature needs state management, keep Views logic-free
-3. Use the Onyx design system components (`OnyxButton`, `OnyxCard`, etc.) — never create one-off styled components
-4. Use `DesignSystem.Colors.textOnTint` (black) for any text on green/tint backgrounds — never white
-5. Add localization keys to both `en.lproj/Localizable.strings` and `de.lproj/Localizable.strings`
-6. If the feature touches routines, ensure watch sync still works (`RoutinesViewModel.syncRoutinesToWatch()`)
-7. After completion, create or update a `docs/[feature-name].md` file
+- PascalCase types, camelCase members, `is/has/should` booleans, verb methods
+- Design system components: `Onyx` prefix (iOS), `OnyxWatch` (watch)
+- New Swift files ≤ 300 lines — extract instead of growing
+- async/await only; `@MainActor` ViewModels; `nonisolated` delegate callbacks hop via `Task { @MainActor in }`; prefer `@preconcurrency` conformance over `@unchecked Sendable` for pre-concurrency Apple delegate protocols
 
-### Where to Put Things
+### UI
 
-- **New views**: `Views/[FeatureArea]/` subdirectory (NOT root level)
-- **New ViewModels**: `ViewModels/` directory
-- **New Services**: `Services/` directory
-- **New reusable components**: `Views/Components/` or `Views/DesignSystem/` (if truly generic)
-- **New models**: Add to `Models.swift` if SwiftData @Model, or create `Models/[Name].swift` for plain structs
-- **Watch features**: Mirror the iOS pattern in `GymStreakWatch Watch App/`
+- Onyx design system components — no one-off styled components
+- **Never white text/icons on the green tint** — use `DesignSystem.Colors.textOnTint` / `OnyxWatch.Colors.textOnTint`
+- Localization: every user-facing string in BOTH `en.lproj` and `de.lproj` via `.localized` dot-notation keys
+- Navigation: `NavigationLink(value: model.id)` + `navigationDestination(for: UUID.self)` — `@Model` classes are never made `Hashable`
 
-### Things to Never Do
+### Known gotchas (hard-won — keep respecting them)
 
-- Never put business logic in Views — it belongs in ViewModels or Services
-- Never use white text on the green tint color — use `DesignSystem.Colors.textOnTint`
-- Never use SwiftData on watchOS — use `RoutineStore` (UserDefaults) instead
-- Never make `@Model` classes `Hashable` — use `NavigationLink(value: model.id)` with UUID
-- Never wrap `ObservableObject` classes with `@MainActor` at the class level if using `@StateObject` — it can break `objectWillChange` synthesis in Swift 6
-- Never skip the `guard expandedItemId == item.id` check in `onChange` handlers for expandable set editors
+- **Expandable set editors**: `onChange` handlers of a collapsing item fire with the *new* item's values during animated removal — always `guard expandedItemId == item.id`.
+- **Every `@Model` relationship MUST declare an inverse** (on one side). CloudKit validation rejects the schema otherwise — `ModelContainer` creation fails at launch and the app silently falls back to local-only storage. This does not fail the build; check the launch log for "Failed to create CloudKit container".
+- **Retroactive conformances on `@Model`**: never re-state `Identifiable` (or anything `PersistentModel` already provides) via a protocol that inherits it in an `extension SomeModel: SomeProtocol` — duplicate conformance descriptor → linker error.
+- **`@MainActor` + `ObservableObject`** can fail to synthesize `objectWillChange` in Swift 6 — one more reason new ViewModels use `@Observable`.
+- **`= Foo.shared` default arguments** on `@MainActor` singletons are evaluated nonisolated (Swift 6 error) — use `nil` defaults resolved in the init body.
+- **watchOS simulators** may ignore `-AppleLanguages` for `Locale.current` — read `UserDefaults` `AppleLanguages` instead.
 
-### Canonical Reference Files
+---
 
-| Pattern | Reference File |
+## 6. Testing
+
+- **UI tests** (`GymStreakUITests`, `GymStreakWatchUITests`): fastlane screenshot generation; `-UI_TESTING` launch arg triggers `TestDataSeeder`.
+- **Unit testing strategy**: repositories and ViewModels are protocol-injected so they can be tested against an **in-memory `ModelContainer`** (`ModelConfiguration(isStoredInMemoryOnly: true)`) — real `@Model` fetch/predicate semantics, no mocking framework. Gateway protocols (`WatchSyncServicing`, `HealthKitWorkoutServicing`, AI-coach protocols) get hand-written test doubles.
+- Mock data only ever exists in tests/seeders — never in dev/prod code paths.
+
+---
+
+## 7. Mandatory architecture review
+
+Every code change in this repo gets a second review layer: the **`architecture-reviewer` agent** (`.claude/agents/architecture-reviewer.md`). It diffs the working tree, checks the hard rules in §2 and conventions in §5, and returns PASS/FAIL with file:line findings. CRITICAL findings must be fixed before a change is reported as done. The workflow is defined in CLAUDE.md → "Architecture Review (mandatory)".
+
+---
+
+## 8. Canonical reference files
+
+| Pattern | File |
 |---|---|
-| ViewModel structure | `RoutinesViewModel.swift` |
-| View with inline editing | `RoutineDetailView.swift` |
-| Design system usage | `RoutinesView.swift` |
-| Watch ViewModel | `WatchWorkoutViewModel.swift` |
-| Service pattern | `ExerciseProgressService.swift` |
-| Design system component | `Views/DesignSystem/OnyxButton.swift` |
-| Watch sync model | `WatchModels.swift` |
-| Test data | `TestDataSeeder.swift` |
-
-### Common Gotchas
-
-- **SwiftUI Animation + onChange**: When switching between expandable items with `withAnimation`, old views' `onChange` handlers fire with new values during animated removal. Always guard with `expandedItemId == item.id`.
-- **Watch locale detection**: On watchOS simulators, `-AppleLanguages` launch arg may NOT change `Locale.current`. Read from UserDefaults instead.
-- **PBXFileSystemSynchronizedRootGroup**: Files are auto-included by directory. To share between targets, use symlinks.
-- **CloudKit fallback**: The app silently falls back to local-only storage. When debugging persistence, check which mode is active.
+| Composition root / DI | `App/AppDependencies.swift` |
+| Repository protocol | `Domain/Repositories/RoutineRepository.swift` |
+| Repository implementation | `Data/Repositories/SwiftDataRoutineRepository.swift` |
+| Legacy ViewModel (ObservableObject + repos) | `Presentation/ViewModels/RoutinesViewModel.swift` |
+| Modern ViewModel (@Observable + injected protocols) | `Presentation/ViewModels/AICoach/PeriodRecapViewModel.swift` |
+| Outer/inner view DI split | `Presentation/Views/Routines/RoutinesView.swift` |
+| Domain service | `Domain/Services/HistoryStatsService.swift` |
+| Gateway protocol + conformance | `Domain/Interfaces/WatchSyncServicing.swift` + `Data/Sync/WatchConnectivityManager.swift` |
+| Domain-type styling in Presentation | `Presentation/Views/Components/DomainColorStyling.swift` |
+| Watch ViewModel + DI | `GymStreakWatch Watch App/ViewModels/WatchRoutinesViewModel.swift` |

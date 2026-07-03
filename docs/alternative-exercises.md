@@ -15,7 +15,7 @@ RoutineExercise (1) ←→ (many) RoutineExerciseAlternative (1) ←→ (many) A
 - `AlternativeExerciseSet`: reps/weight/restTime/order — intentionally a separate model from `ExerciseSet` so an alternative's scheme is independent of the primary's sets.
 - Swap tracking on history: `WorkoutExercise` stores swap metadata (`swappedFrom…` fields, `wasSwapped`) — the recorded name/exerciseId always reflect what was actually performed.
 
-**CloudKit constraints honored**: all relationships optional, all attributes defaulted, no `.unique`, no `.deny` delete rules. Remember the standing rule: deploy the CloudKit schema in the Console before releasing model changes (see memory/`cloudkit-schema-production-deploy`).
+**CloudKit constraints honored**: all relationships optional, all attributes defaulted, no `.unique`, no `.deny` delete rules. **Root cause fixed 2026-07**: the original implementation shipped `RoutineExerciseAlternative.exercise` WITHOUT a declared inverse — CloudKit requires every relationship to have one, so `ModelContainer` creation failed at every launch and the app silently fell back to local-only storage (no iCloud sync at all, for all data, not just alternatives). Fixed by adding `Exercise.alternativeUses` with `@Relationship(inverse: \RoutineExerciseAlternative.exercise)`. Lesson: a missing inverse does not fail the build or local testing — it only surfaces as the quiet "Failed to create CloudKit container … falling back" launch log line. Remember the standing rule: deploy the CloudKit schema in the Console before releasing model changes (see memory/`cloudkit-schema-production-deploy`).
 
 ## Where users manage alternatives (UI surfaces)
 

@@ -1,0 +1,41 @@
+//
+//  RoutineRepository.swift
+//  GymStreak
+//
+//  Domain-layer contract for Routine persistence. Returns SwiftData `@Model`
+//  types directly (deliberate — see docs/architecture.md): this app treats the
+//  `@Model` classes themselves as the domain models rather than mapping to
+//  separate DTOs.
+//
+
+import Foundation
+
+@MainActor
+protocol RoutineRepository: AnyObject {
+    /// All routines, most recently updated first.
+    func fetchAll() -> [Routine]
+    func fetch(id: UUID) -> Routine?
+    func fetch(name: String) -> Routine?
+
+    func insert(_ routine: Routine)
+    func delete(_ routine: Routine)
+
+    /// `RoutineExercise` is not managed purely through the `Routine.routineExercises`
+    /// relationship — callers explicitly remove it (e.g. when the user deletes an
+    /// exercise from a routine, or deletes an `Exercise` that is referenced by one).
+    func delete(_ routineExercise: RoutineExercise)
+
+    /// `ExerciseSet`, `RoutineExerciseAlternative` and `AlternativeExerciseSet` are
+    /// normally attached via their parent's relationship array and cascade-insert
+    /// automatically once the parent is persisted. Explicit insert is only needed
+    /// where a set is synthesized independently of that relationship append (see
+    /// `WorkoutViewModel.updateRoutineTemplate`); explicit delete is always needed
+    /// since removing an object from a relationship array does not delete the
+    /// underlying record.
+    func insert(_ set: ExerciseSet)
+    func delete(_ set: ExerciseSet)
+    func delete(_ alternative: RoutineExerciseAlternative)
+    func delete(_ set: AlternativeExerciseSet)
+
+    func save() throws
+}

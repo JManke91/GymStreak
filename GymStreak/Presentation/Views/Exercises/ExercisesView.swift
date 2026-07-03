@@ -1,0 +1,152 @@
+import SwiftUI
+import SwiftData
+
+struct ExercisesView: View {
+    @EnvironmentObject private var dependencies: AppDependencies
+
+    var body: some View {
+        ExercisesViewInternal(dependencies: dependencies)
+    }
+}
+
+private struct ExercisesViewInternal: View {
+    @StateObject private var viewModel: ExercisesViewModel
+    @State private var searchText = ""
+
+    init(dependencies: AppDependencies) {
+        self._viewModel = StateObject(wrappedValue: ExercisesViewModel(
+            exerciseRepository: dependencies.exerciseRepository,
+            routineRepository: dependencies.routineRepository
+        ))
+    }
+
+    var filteredExercises: [Exercise] {
+        if searchText.isEmpty {
+            return viewModel.exercises
+        }
+        return viewModel.exercises.filter { exercise in
+            exercise.name.localizedCaseInsensitiveContains(searchText) ||
+            exercise.muscleGroups.contains { muscleGroup in
+                MuscleGroups.displayName(for: muscleGroup)
+                    .localizedCaseInsensitiveContains(searchText)
+            }
+        }
+    }
+
+    var body: some View {
+        NavigationView {
+            Group {
+                if viewModel.exercises.isEmpty {
+                    ContentUnavailableView {
+                        Label("exercises.empty.title".localized, systemImage: "dumbbell")
+                    } description: {
+                        Text("exercises.empty.description".localized)
+                    } actions: {
+                        Button("exercises.add".localized) {
+                            viewModel.showingAddExercise = true
+                        }
+                        .buttonStyle(.onyxProminent)
+                    }
+                } else {
+                    List {
+                        ForEach(filteredExercises) { exercise in
+                            NavigationLink(destination: ExerciseDetailView(exercise: exercise, viewModel: viewModel)) {
+                                ExerciseRowView(exercise: exercise)
+                            }
+                        }
+                    }
+                    .searchable(text: $searchText, prompt: "exercises.search".localized)
+                    .overlay {
+                        if filteredExercises.isEmpty {
+                            ContentUnavailableView.search(text: searchText)
+                        }
+                    }
+                }
+            }
+            .navigationTitle("exercises.title".localized)
+            .toolbar {
+                #if DEBUG
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button("Delete All", role: .destructive) {
+                        viewModel.requestDeleteAllExercises()
+                    }
+                    .foregroundColor(.red)
+                }
+                #endif
+                if !viewModel.exercises.isEmpty {
+                    ToolbarItem(placement: .navigationBarTrailing) {
+                        Button {
+                            viewModel.showingAddExercise = true
+                        } label: {
+                            Image(systemName: "plus")
+                        }
+                        .accessibilityLabel("exercises.add".localized)
+                    }
+                }
+            }
+            .sheet(isPresented: $viewModel.showingAddExercise) {
+                AddExerciseView(viewModel: viewModel)
+            }
+            .alert("exercises.delete.confirmation.title".localized, isPresented: $viewModel.showingDeleteConfirmation) {
+                Button("common.cancel".localized, role: .cancel) {
+                    viewModel.cancelDeleteExercise()
+                }
+                Button("exercises.delete.confirm".localized, role: .destructive) {
+                    viewModel.confirmDeleteExercise()
+                }
+            } message: {
+                let exerciseName = viewModel.exerciseToDelete?.name ?? ""
+                if viewModel.routinesUsingExercise.isEmpty {
+                    Text(String(format: "exercises.delete.confirmation.message_standalone".localized, exerciseName))
+                } else {
+                    let routineNames = viewModel.routinesUsingExercise.map(\.name).joined(separator: ", ")
+                    Text(String(format: "exercises.delete.confirmation.message".localized, exerciseName, routineNames))
+                }
+            }
+            .alert("exercises.deleteAll.confirmation.title".localized, isPresented: $viewModel.showingDeleteAllConfirmation) {
+                Button("common.cancel".localized, role: .cancel) {
+                    viewModel.cancelDeleteAllExercises()
+                }
+                Button("exercises.deleteAll.confirm".localized, role: .destructive) {
+                    viewModel.confirmDeleteAllExercises()
+                }
+            } message: {
+                Text("exercises.deleteAll.confirmation.message".localized)
+            }
+        }
+        .onAppear {
+            viewModel.fetchExercises()
+        }
+    }
+
+    private func deleteExercises(offsets: IndexSet) {
+        let exercises = filteredExercises
+        for index in offsets {
+            viewModel.requestDeleteExercise(exercises[index])
+        }
+    }
+}
+
+struct ExerciseRowView: View {
+    let exercise: Exercise
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(exercise.name)
+                .font(.headline)
+            HStack(spacing: 6) {
+                Text(MuscleGroups.displayString(for: exercise.muscleGroups))
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                Image(systemName: exercise.equipmentType.icon)
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+            }
+        }
+        .padding(.vertical, 4)
+    }
+}
+
+#Preview {
+    Text("ExercisesView Preview")
+}

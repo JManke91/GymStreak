@@ -4,11 +4,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Development Commands
 
-## Buildind new features/updating exisitng features
+## Building new features/updating existing features
 
 - After building a new feature, make sure the app still compiles
 - When building a new feature make sure to create a .md file in the /docs folder that summarizes all the important details inlcuding what the feature does, how it works, how it's architecutlly structured, what components are involved etc. make sure to include the ios and watch target for documentation. the goal is to be able to reference this file later for quick context
 - For every code change check if an existing feature is modified and if there already is a corresponsing .md file in the /docs folder make sure to update according to the criteria stated for building new .md files.
+- **After ANY code change, run the mandatory architecture review** (see "Architecture Review (mandatory)" below) before reporting the work as done.
 
 This is an iOS app built with Xcode:
 
@@ -17,153 +18,54 @@ This is an iOS app built with Xcode:
 - **iOS Target**: iOS 18.5+ required
 - **Xcode Version**: 15.0+ required
 
-## Project Architecture
-
-### Core Technologies
-
-- **SwiftUI**: Declarative UI framework
-- **SwiftData**: Local persistence layer (replacing Core Data)
-- **MVVM Pattern**: ViewModels handle business logic, Views handle UI
-
-### Data Model Relationships
-
-```
-Routine (1) ←→ (Many) RoutineExercise (Many) ←→ (1) Exercise
-                    ↓
-                (Many) ExerciseSet
-```
-
-### Key Models (Models.swift)
-
-- `Routine`: Workout routines containing multiple exercises
-- `Exercise`: Reusable exercise definitions with muscle group categorization
-- `RoutineExercise`: Links exercises to routines with routine-specific configurations
-- `ExerciseSet`: Individual set data (reps, weight, rest time)
-
-### ViewModels
-
-- `RoutinesViewModel`: Manages routines, routine exercises, and sets
-- `ExercisesViewModel`: Manages standalone exercise library
-
-### Main Views Structure
-
-- `ContentView.swift`: Tab-based navigation (3 tabs)
-- **Tab 1**: Routines management (`RoutinesView.swift`, `RoutineDetailView.swift`)
-- **Tab 2**: Exercise library (`ExercisesView.swift`, `ExerciseDetailView.swift`)
-- **Tab 3**: Workout recording (`WorkoutView.swift` - placeholder)
-
-### Key User Flow
-
-1. **Exercise Addition Flow**: Uses navigation push (not sheets) to `ExercisePickerView.swift`
-2. **Set Management**: Immediate set addition with inline editing via `EditSetView.swift`
-3. **Streamlined UX**: "Add Set" button creates sets instantly with default values
-
-### Muscle Group Categories
-
-Defined in `MuscleGroups.swift`:
-
-- **General**: General, Full Body
-- **Arms**: Biceps, Triceps, Forearms
-- **Chest & Back**: Chest, Upper Back, Lats, Lower Back
-- **Shoulders**: Front Delts, Side Delts, Rear Delts
-- **Core**: Abs, Obliques
-- **Lower Body**: Quadriceps, Hamstrings, Glutes, Calves, Hip Flexors
-
-## Development Notes
-
-### SwiftData Configuration
-
-- Models are registered in `GymStreakApp.swift`: `[Routine.self, Exercise.self, RoutineExercise.self, ExerciseSet.self]`
-- All models use UUID primary keys and include created/updated timestamps
-
-### Current Status
-
-- **Completed**: Tabs 1 & 2 (Routines and Exercise Library)
-- **In Progress**: Tab 3 (Workout Recording with HealthKit integration)
-
-### Code Patterns
-
-- ViewModels handle all data operations and business logic
-- Views focus purely on UI and user interaction
-- Inline editing pattern used for set configuration
-- Navigation-based flows preferred over modal sheets for main user paths
-
 ## Architecture
 
-### Clean Architecture Pattern
+**`docs/architecture.md` is the single source of truth for the architecture.** Read it before structural work. Summary of what is binding:
 
-The app follows Clean Architecture principles with clear separation of concerns:
+### Layers (iOS target `GymStreak/`)
 
-- **Domain Layer**: Contains business logic, entities, and use cases
-  - `Domain/Models/`: Core data models (Challenge, CyclingStats, Workout)
-  - `Domain/Repositories/`: Protocol definitions for data access
-  - `Domain/UseCases/`: Business logic encapsulation
+Pragmatic Clean Architecture. Dependency direction: **`Presentation → Domain ← Data`**, wired by the composition root in `App/`.
 
-- **Data Layer**: Handles data persistence and external APIs
-  - `Data/Repositories/`: Concrete implementations of repository protocols
-  - `Data/Mappers/`: Convert between external and domain models
+```
+GymStreak/
+├── App/            GymStreakApp, AppDependencies (composition root), ContentView, TestDataSeeder
+├── Domain/
+│   ├── Models/       SwiftData @Model classes + domain enums (these ARE the domain models)
+│   ├── Repositories/ Repository protocols (RoutineRepository, ExerciseRepository, WorkoutSessionRepository)
+│   ├── Interfaces/   System-gateway protocols (WatchSyncServicing, HealthKitWorkoutServicing, AICoach/*)
+│   └── Services/     Pure business logic on model arrays
+├── Data/           Implements Domain protocols; the ONLY layer that touches
+│                   ModelContext/FetchDescriptor, HealthKit, WCSession, FoundationModels
+├── Presentation/   ViewModels/ + Views/<FeatureArea>/ + DesignSystem
+└── Extensions/     Cross-layer utilities
+```
 
-- **Presentation Layer**: UI components and view models
-  - `Presentation/Views/`: SwiftUI views
-  - `Presentation/ViewModels/`: ObservableObject classes managing UI state
+### Hard rules
 
-## Layer Responsibilities
+1. No `ModelContext`/`FetchDescriptor` in `Presentation/` — go through repositories (documented AI-coach pass-through exception in docs/architecture.md §2).
+2. No `.shared` singleton access inside ViewModels — inject protocols via init (`HapticManager.shared` in Views is tolerated).
+3. No business logic in Views — persistence, domain computations, and service construction belong in ViewModels/Services.
+4. `Domain/` never imports SwiftUI and never references concrete Data types.
+5. New dependencies are wired in `App/AppDependencies.swift`, never constructed ad hoc.
+6. New files go in their layer folder (`Presentation/Views/<FeatureArea>/`, `Presentation/ViewModels/`, `Domain/Services/`, `Data/Repositories/`, …) — never at the `GymStreak/` root.
 
-### 1. Presentation Layer (`Presentation/`)
+### Deliberate decisions — do not "fix"
 
-- Implements **MVVM** using `View`, `ViewModel`, and `State/Intent`
-- Uses `ObservableObject` and `@Published` to bind data to the UI
-- Depends only on the `Domain` layer
-- Contains **no business logic** or `Data`-specific code
+- Repository protocols return `@Model` types directly. **No DTO/mapper layer over the local store** (DTOs only at real external boundaries: watch sync, chart display models).
+- **No UseCase-per-action layer** — coarse domain services + direct ViewModel→repository calls.
+- Legacy ViewModels stay `ObservableObject`; **new ViewModels use `@Observable` + `@MainActor`**.
+- watchOS: **never SwiftData** — `RoutineStore` (App Group UserDefaults) is the watch persistence layer.
+- Workout history models are denormalized copies (history must survive routine edits/deletion).
 
-### 2. Domain Layer (`Domain/`)
+## Architecture Review (mandatory)
 
-- Defines core **business rules**, logic, and **use cases**
-- Contains:
-  - `UseCase` protocols and implementations
-  - `Entity/Model` structs (framework-agnostic)
-  - `Repository` protocols
-- Has **no dependency** on other layers
-- Fully **unit testable** and pure Swift
+After completing ANY code change (feature, fix, refactor) and before reporting it as done:
 
-### 3. Data Layer (`Data/`)
+1. Launch the **`architecture-reviewer`** agent (`.claude/agents/architecture-reviewer.md`) via the Agent tool on the current diff.
+2. **CRITICAL findings must be fixed** and the reviewer re-run until it returns PASS (or PASS WITH WARNINGS with the warnings explicitly acknowledged in your summary).
+3. Include the reviewer's verdict in your final report to the user.
 
-- Handles data operations from:
-  - Remote APIs (e.g., REST, GraphQL)
-  - Local storage (e.g., CoreData, SwiftData)
-- Implements the `Repository` interfaces defined in the `Domain` layer
-- Contains:
-  - `DataSource` (Remote & Local)
-  - `DTOs` (Data Transfer Objects)
-  - `Mappers` (for translating between DTOs and Domain Models)
-
----
-
-## Allowed Dependencies
-
-Presentation can depend on Domain
-Domain has no dependencies
-Data depends on Domain
-
-## Architectural Conventions
-
-- ViewModels
-  Only include UI state and logic
-  Use async UseCase calls to fetch or mutate data
-  Must not depend on the Data layer
-  Use @MainActor or `@Published` to manage state updates
-- UseCases
-  Encapsulate single business actions (e.g., FetchUserProfile, SubmitOrder)
-  Are injected into ViewModels
-  Are implemented in the Domain layer using pure Swift
-- Repositories
-  Are protocols in the Domain layer
-  Are implemented in the Data layer
-  Must return domain models (never DTOs)
-- Models
-  Domain Models: Core app entities, framework-independent
-  DTOs: External representations for APIs or databases
-  Use Mappers to translate DTO <-> Domain Model
+This is a second security layer — it does not replace compiling the app or self-review.
 
 ## General Coding
 
@@ -224,9 +126,8 @@ Data depends on Domain
 
 #### HealthKit Integration
 
-- **HealthKitCyclingStatsRepository**: Manages all HealthKit interactions
-- **Workout deduplication**: Prevents double-counting workouts from multiple sources
-- **Authorization handling**: Manages HealthKit permissions
+- **HealthKitWorkoutManager** (`Data/HealthKit/`, conforms to `HealthKitWorkoutServicing`): authorization, workout save, deduplication via `externalUUID` metadata matching `WorkoutSession.id`
+- **WatchHealthKitManager** (watch target): `HKWorkoutSession` + `HKLiveWorkoutBuilder` live workout recording
 
 ## Active Technologies
 
