@@ -14,9 +14,24 @@
 "routines.empty.description" = "Create your first routine to get started";
 "routines.add" = "Add Routine";
 "routines.exercise_count" = "%d exercises";
+// Redesign (Routinen & Übungen)
+"routines.up_next" = "Up Next";
+"routines.all" = "All Routines";
+"routines.new" = "New Routine";
+"routines.card_meta" = "%d exercises · %d sets · ~%d min";
+"routines.header_meta" = "%d routines · last %@";
+"routines.last_done.never" = "Never trained";
+"date.today" = "Today";
+"date.yesterday" = "Yesterday";
 
 // MARK: - Routine Detail View
 "routine.exercises" = "Exercises";
+"routine.duplicate" = "Duplicate";
+"routine.duplicate.name_format" = "%@ Copy";
+"routine.rename" = "Rename";
+"routine.section.sets" = "Sets";
+"routine.chip.pause" = "Pause %@";
+"routine.chip.goal" = "Goal %d–%d reps";
 "routine.drag_to_reorder" = "Drag exercises to reorder";
 "routine.edit_mode_announcement" = "Edit mode. Drag exercises to reorder them.";
 "routine.add_exercise" = "Add Exercise";
@@ -42,12 +57,26 @@
 "exercises.description" = "Description";
 "exercises.muscle_group" = "Muscle Group";
 "exercises.search" = "Search exercises or muscle groups";
+// Redesign (Routinen & Übungen)
+"exercises.header_meta" = "%d exercises · %d muscle groups";
+"exercises.used_in.one" = "in 1 routine";
+"exercises.used_in.many" = "in %d routines";
+"exercises.no_results" = "No exercises found.";
+"filter.all" = "All";
+"filter.all_equipment" = "All Equipment";
+"add_exercise.name_placeholder" = "Exercise name";
+"add_exercise.preview" = "Preview";
 
 // MARK: - Exercise Detail View
 "exercise.delete" = "Delete Exercise";
 "exercise.edit" = "Edit Exercise";
 "exercise.save" = "Save";
 "exercise.cancel" = "Cancel";
+"exercise.detail.used_in" = "Used In";
+"exercise.detail.not_used" = "This exercise isn't in any routine yet.";
+"exercise.detail.alternative" = "Alternative";
+"exercise.detail.as_alternative" = "As alternative";
+"exercise.detail.set_scheme" = "%d × %d reps · %.1f kg";
 
 // MARK: - Exercise Deletion Confirmation
 "exercises.delete.confirmation.title" = "Delete Exercise?";
@@ -188,6 +217,7 @@
 "action.add" = "Add";
 "action.remove" = "Remove";
 "action.continue" = "Continue";
+"action.back" = "Back";
 
 // MARK: - Time Formatting
 "time.seconds" = "%ds";
@@ -531,6 +561,33 @@
 // MARK: - History Redesign
 "history.week.this_week" = "This Week";
 "history.week.trainings_of" = "of %d workouts";
+"history.week.trainings_done" = "workouts this week";
+"history.week.no_plan" = "Plan your week →";
+
+// MARK: - Workout Planning
+"schedule.title" = "Schedule";
+"schedule.card.title" = "Schedule";
+"schedule.not_planned" = "Not planned";
+"schedule.not_planned.cta" = "Tap to plan";
+"schedule.card.plan_workout" = "Plan workout";
+"schedule.mode.interval" = "Interval";
+"schedule.mode.weekdays" = "Weekdays";
+"schedule.daily" = "Daily";
+"schedule.every_n_days" = "Every %d days";
+"schedule.interval.label" = "Train every";
+"schedule.interval.unit" = "days";
+"schedule.interval.unit_one" = "day";
+"schedule.interval.hint" = "Counts toward your weekly goal whenever it lands in the week — so the goal shifts with your training.";
+"schedule.reference.label" = "Start from";
+"schedule.reference.hint" = "The cadence counts from this date. After your next completed workout it rolls off that instead — set it to start fresh.";
+"schedule.reference.is_last_workout" = "Your last workout";
+"schedule.weekdays.label" = "Training days";
+"schedule.weekdays.none" = "No days selected";
+"schedule.preview.title" = "Upcoming";
+"schedule.remove" = "Remove plan";
+"schedule.due.today" = "Due today";
+"schedule.due.tomorrow" = "Tomorrow";
+"schedule.due.overdue" = "Overdue";
 "history.all_trainings" = "All Workouts";
 "history.stat.streak" = "Streak";
 "history.stat.streak.unit" = "Weeks";

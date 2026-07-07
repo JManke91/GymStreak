@@ -8,8 +8,14 @@ import SwiftUI
 /// The Trainings sub-tab: WeekHero + List/Calendar toggle + month-grouped workout list or calendar view.
 struct TrainingsTabView: View {
     let sessions: [WorkoutSession]
+    let routines: [Routine]
     let prExerciseCountBySession: [UUID: Int]
     let onDeleteRequested: (WorkoutSession) -> Void
+
+    /// Dynamic weekly plan derived from the user's scheduled routines.
+    private var plannedWeek: WorkoutPlanningService.PlannedWeek {
+        WorkoutPlanningService.plannedWeek(routines: routines, completedSessions: sessions)
+    }
 
     enum DisplayMode: String, CaseIterable {
         case list, calendar
@@ -94,9 +100,13 @@ struct TrainingsTabView: View {
             WeekHeroView(
                 weekStats: HistoryStatsService.weekStats(
                     sessions: sessions,
-                    prExerciseCountBySession: prExerciseCountBySession
+                    prExerciseCountBySession: prExerciseCountBySession,
+                    goal: plannedWeek.goal
                 ),
-                weekDays: HistoryStatsService.weekDayStatuses(sessions: sessions)
+                weekDays: HistoryStatsService.weekDayStatuses(
+                    sessions: sessions,
+                    plannedDates: plannedWeek.plannedDates
+                )
             )
             .padding(.horizontal, 16)
 

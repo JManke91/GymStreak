@@ -1,0 +1,9 @@
+- Redesigned the Routines tab: a new "Up Next" hero card highlights the routine you haven't trained in the longest, and routine cards now show muscle groups, set totals and an estimated duration.
+- You can now duplicate a routine from its menu (or by long-pressing a routine in the list).
+- Redesigned the Exercises tab: search, muscle-group and equipment filters, exercises grouped by muscle group, and a per-exercise "used in N routines" count.
+- Redesigned the exercise detail screen with a clearer info card and a "Used In" list showing where each exercise appears.
+- Redesigned the new/edit exercise sheet with a live preview of the exercise as it will appear in your library.
+- You can now plan each routine on a schedule — either a rolling cadence (every N days) or fixed weekdays — from a new "Schedule" section on the routine screen.
+- Your weekly workout goal in the Trainings tab is now calculated from your planned routines instead of a fixed number, so it adapts to how many sessions actually fall in the current week. The week strip now marks planned days too.
+- Routine cards and the "Up Next" card now show when a routine is next due (and highlight overdue ones).
+- When planning a routine on an interval, you can now pick the date the cadence starts from — handy to "start fresh" if your last workout was a while ago. After your next workout it rolls off that automatically.

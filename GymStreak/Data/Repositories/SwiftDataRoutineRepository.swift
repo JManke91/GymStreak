@@ -62,6 +62,14 @@ final class SwiftDataRoutineRepository: RoutineRepository {
         modelContext.delete(set)
     }
 
+    func insert(_ schedule: RoutineSchedule) {
+        modelContext.insert(schedule)
+    }
+
+    func delete(_ schedule: RoutineSchedule) {
+        modelContext.delete(schedule)
+    }
+
     func save() throws {
         try modelContext.save()
     }

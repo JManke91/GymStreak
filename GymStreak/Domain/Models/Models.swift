@@ -9,6 +9,10 @@ final class Routine {
     var routineExercises: [RoutineExercise]? = []
     @Relationship(inverse: \WorkoutSession.routine)
     var workoutSessions: [WorkoutSession]? = []
+    /// Optional training plan driving the dynamic weekly goal (see
+    /// docs/workout-planning.md). Nil ⇒ the routine is unplanned.
+    @Relationship(deleteRule: .cascade, inverse: \RoutineSchedule.routine)
+    var schedule: RoutineSchedule? = nil
     var createdAt: Date = Date()
     var updatedAt: Date = Date()
 

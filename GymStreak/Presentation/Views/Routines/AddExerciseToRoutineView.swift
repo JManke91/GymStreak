@@ -28,101 +28,73 @@ struct AddExerciseToRoutineView: View {
 
     var body: some View {
         NavigationStack(path: $navigationPath) {
-            List {
-                // Section 1: Already in Routine
-                let alreadyAddedExercises = filteredExercises.filter { isExerciseAlreadyInRoutine($0) }
-                if !alreadyAddedExercises.isEmpty {
-                    Section {
-                        ForEach(alreadyAddedExercises) { exercise in
-                            HStack(spacing: 12) {
-                                // Muscle group badge (subdued)
-                                MuscleGroupAbbreviationBadge(
-                                    muscleGroups: exercise.muscleGroups,
-                                    isActive: false
-                                )
+            ZStack {
+                DesignSystem.Colors.background.ignoresSafeArea()
 
-                                VStack(alignment: .leading, spacing: 4) {
-                                    Text(exercise.name)
-                                        .font(.headline)
-                                        .foregroundStyle(.secondary)
-                                    HStack(spacing: 6) {
-                                        Text(MuscleGroups.displayString(for: exercise.muscleGroups))
-                                            .font(.caption)
-                                            .foregroundStyle(.tertiary)
-                                        Image(systemName: exercise.equipmentType.icon)
-                                            .font(.caption2)
-                                            .foregroundStyle(.quaternary)
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 0) {
+                        RedesignSearchBar(text: $searchText, placeholder: "add_to_routine.search".localized)
+                            .padding(.horizontal, 18)
+                            .padding(.top, 8)
+
+                        // Section 1: Available Exercises
+                        let availableExercises = filteredExercises.filter { !isExerciseAlreadyInRoutine($0) }
+                        if !availableExercises.isEmpty {
+                            pickerSectionLabel("add_to_routine.available".localized)
+                            VStack(spacing: 7) {
+                                ForEach(availableExercises) { exercise in
+                                    NavigationLink(value: exercise) {
+                                        pickerRow(exercise, disabled: false)
                                     }
+                                    .buttonStyle(.plain)
+                                    .accessibilityLabel("\(exercise.name), \(MuscleGroups.displayString(for: exercise.muscleGroups))")
+                                    .accessibilityHint("Opens configuration screen to add sets")
                                 }
-
-                                Spacer()
-
-                                Image(systemName: "checkmark.circle.fill")
-                                    .foregroundStyle(.secondary)
-                                    .font(.title3)
                             }
-                            .padding(.vertical, 4)
-                            .listRowBackground(Color(.secondarySystemGroupedBackground))
-                            .accessibilityLabel("\(exercise.name), \(MuscleGroups.displayString(for: exercise.muscleGroups)), already in routine")
-                            .accessibilityHint("This exercise is already in your routine")
+                            .padding(.horizontal, 18)
                         }
-                    } header: {
-                        Label("add_to_routine.already_added".localized, systemImage: "checkmark.circle.fill")
-                    }
-                }
 
-                // Section 2: Available Exercises
-                let availableExercises = filteredExercises.filter { !isExerciseAlreadyInRoutine($0) }
-                if !availableExercises.isEmpty {
-                    Section("add_to_routine.available".localized) {
-                        ForEach(availableExercises) { exercise in
-                            NavigationLink(value: exercise) {
-                                HStack(spacing: 12) {
-                                    // Muscle group badge (active)
-                                    MuscleGroupAbbreviationBadge(
-                                        muscleGroups: exercise.muscleGroups,
-                                        isActive: true
-                                    )
-
-                                    VStack(alignment: .leading, spacing: 4) {
-                                        Text(exercise.name)
-                                            .font(.headline)
-                                            .foregroundStyle(.primary)
-                                        HStack(spacing: 6) {
-                                            Text(MuscleGroups.displayString(for: exercise.muscleGroups))
-                                                .font(.caption)
-                                                .foregroundStyle(.secondary)
-                                            Image(systemName: exercise.equipmentType.icon)
-                                                .font(.caption2)
-                                                .foregroundStyle(.tertiary)
-                                        }
-                                    }
-
-                                    Spacer()
+                        // Section 2: Already in Routine
+                        let alreadyAddedExercises = filteredExercises.filter { isExerciseAlreadyInRoutine($0) }
+                        if !alreadyAddedExercises.isEmpty {
+                            pickerSectionLabel("add_to_routine.already_added".localized)
+                            VStack(spacing: 7) {
+                                ForEach(alreadyAddedExercises) { exercise in
+                                    pickerRow(exercise, disabled: true)
+                                        .accessibilityLabel("\(exercise.name), \(MuscleGroups.displayString(for: exercise.muscleGroups)), already in routine")
+                                        .accessibilityHint("This exercise is already in your routine")
                                 }
-                                .padding(.vertical, 4)
                             }
-                            .accessibilityLabel("Add \(exercise.name), \(MuscleGroups.displayString(for: exercise.muscleGroups)) to routine")
-                            .accessibilityHint("Opens configuration screen to add sets")
+                            .padding(.horizontal, 18)
                         }
-                    }
-                }
 
-                Section {
-                    NavigationLink(value: "createNewExercise") {
-                        HStack {
-                            Image(systemName: "plus.circle.fill")
-                                .foregroundColor(.accentColor)
-                            Text("add_to_routine.create_new".localized)
-                                .foregroundColor(.accentColor)
+                        NavigationLink(value: "createNewExercise") {
+                            HStack(spacing: 8) {
+                                Image(systemName: "plus")
+                                    .font(.system(size: 13, weight: .bold))
+                                Text("add_to_routine.create_new".localized)
+                                    .font(.system(size: 13.5, weight: .bold))
+                            }
+                            .foregroundStyle(DesignSystem.Colors.tint)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 14)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                    .stroke(style: StrokeStyle(lineWidth: 1.5, dash: [6, 5]))
+                                    .foregroundStyle(DesignSystem.Colors.tint.opacity(0.5))
+                            )
+                            .contentShape(Rectangle())
                         }
+                        .buttonStyle(.plain)
+                        .padding(.horizontal, 18)
+                        .padding(.top, 18)
+
+                        Color.clear.frame(height: 40)
                     }
                 }
             }
-            .listStyle(.insetGrouped)
             .navigationTitle("add_to_routine.title".localized)
             .navigationBarTitleDisplayMode(.inline)
-            .searchable(text: $searchText, prompt: "add_to_routine.search".localized)
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
                     Button("action.cancel".localized) {
@@ -162,6 +134,55 @@ struct AddExerciseToRoutineView: View {
 
     private func fetchExercises() {
         exercises = dependencies.exerciseRepository.fetchAll()
+    }
+
+    private func pickerSectionLabel(_ text: String) -> some View {
+        Text(text.uppercased())
+            .font(.system(size: 11, weight: .bold))
+            .kerning(0.7)
+            .foregroundStyle(Color.white.opacity(0.45))
+            .padding(.horizontal, 20)
+            .padding(.top, 18)
+            .padding(.bottom, 10)
+            .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func pickerRow(_ exercise: Exercise, disabled: Bool) -> some View {
+        HStack(spacing: 12) {
+            ExerciseAvatarView(
+                muscleGroups: exercise.muscleGroups,
+                equipmentType: exercise.equipmentType,
+                size: 38
+            )
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(exercise.name)
+                    .font(.system(size: 14.5, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .lineLimit(1)
+                HStack(spacing: 8) {
+                    Text(MuscleGroups.displayName(for: exercise.primaryMuscleGroup))
+                        .font(.system(size: 11))
+                        .foregroundStyle(Color.white.opacity(0.5))
+                    EquipmentTagView(equipmentType: exercise.equipmentType)
+                }
+            }
+
+            Spacer(minLength: 8)
+
+            Image(systemName: disabled ? "checkmark" : "plus")
+                .font(.system(size: 15, weight: .bold))
+                .foregroundStyle(disabled ? Color.white.opacity(0.4) : DesignSystem.Colors.tint)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 11)
+        .background(Color.white.opacity(0.035))
+        .overlay(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .stroke(Color.white.opacity(0.06), lineWidth: 1)
+        )
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .opacity(disabled ? 0.45 : 1)
     }
 }
 

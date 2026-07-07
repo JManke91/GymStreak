@@ -88,7 +88,8 @@
       "Bash(.specify/scripts/bash/create-new-feature.sh \"Fix progress chart display issues: Y-axis units incorrect for total volume tab, and remove area fills from all chart tabs\" --json --short-name \"fix-chart-display\")",
       "Bash(git pull *)",
       "Bash(git fetch *)",
-      "mcp__context7__query-docs"
+      "mcp__context7__query-docs",
+      "Bash(git branch *)"
     ],
     "defaultMode": "acceptEdits"
   }

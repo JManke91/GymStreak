@@ -54,21 +54,48 @@ struct WeekHeroView: View {
                     .font(.system(size: 11, weight: .semibold))
                     .tracking(0.6)
                     .foregroundStyle(Color.white.opacity(0.5))
-                HStack(alignment: .firstTextBaseline, spacing: 4) {
-                    Text("\(weekStats.completedCount)")
-                        .foregroundStyle(headlineColor)
-                    Text("history.week.trainings_of".localized(weekStats.goal))
-                        .foregroundStyle(Color.white.opacity(0.75))
+                if weekStats.goal > 0 {
+                    HStack(alignment: .firstTextBaseline, spacing: 4) {
+                        Text("\(weekStats.completedCount)")
+                            .foregroundStyle(headlineColor)
+                        Text("history.week.trainings_of".localized(weekStats.goal))
+                            .foregroundStyle(Color.white.opacity(0.75))
+                    }
+                    .font(.system(size: 22, weight: .bold, design: .rounded))
+                    .kerning(-0.5)
+                } else {
+                    // No plan yet: show what was done + invite planning.
+                    HStack(alignment: .firstTextBaseline, spacing: 4) {
+                        Text("\(weekStats.completedCount)")
+                            .foregroundStyle(headlineColor)
+                        Text("history.week.trainings_done".localized)
+                            .foregroundStyle(Color.white.opacity(0.75))
+                    }
+                    .font(.system(size: 22, weight: .bold, design: .rounded))
+                    .kerning(-0.5)
+                    Text("history.week.no_plan".localized)
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(DesignSystem.Colors.tint.opacity(0.9))
+                        .padding(.top, 1)
                 }
-                .font(.system(size: 22, weight: .bold, design: .rounded))
-                .kerning(-0.5)
             }
             Spacer()
             ZStack {
-                MiniActivityRing(percent: progress)
-                Image(systemName: "flame.fill")
-                    .font(.system(size: 18))
-                    .foregroundStyle(DesignSystem.Colors.tint)
+                if weekStats.goal > 0 {
+                    MiniActivityRing(percent: progress)
+                    Image(systemName: "flame.fill")
+                        .font(.system(size: 18))
+                        .foregroundStyle(DesignSystem.Colors.tint)
+                } else {
+                    Circle()
+                        .stroke(
+                            style: StrokeStyle(lineWidth: 4, lineCap: .round, dash: [3, 5])
+                        )
+                        .foregroundStyle(Color.white.opacity(0.18))
+                    Image(systemName: "calendar.badge.plus")
+                        .font(.system(size: 17))
+                        .foregroundStyle(DesignSystem.Colors.tint)
+                }
             }
             .frame(width: 52, height: 52)
         }
@@ -97,12 +124,27 @@ struct WeekHeroView: View {
     private func dayCell(_ day: HistoryStatsService.WeekDayStatus) -> some View {
         ZStack {
             if day.hasWorkout {
+                // Completed
                 RoundedRectangle(cornerRadius: 10, style: .continuous)
                     .fill(DesignSystem.Colors.tint)
                 Image(systemName: "checkmark")
                     .font(.system(size: 12, weight: .heavy))
                     .foregroundStyle(DesignSystem.Colors.textOnTint)
+            } else if day.isPlanned {
+                // Planned but not done — dashed outline. Past+missed reads dimmer.
+                let missed = !day.isFuture && !day.isToday
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .fill(DesignSystem.Colors.tint.opacity(missed ? 0.04 : 0.10))
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .stroke(
+                        style: StrokeStyle(lineWidth: 1.5, dash: [3, 2.5])
+                    )
+                    .foregroundStyle(DesignSystem.Colors.tint.opacity(missed ? 0.3 : 0.6))
+                Circle()
+                    .fill(DesignSystem.Colors.tint.opacity(missed ? 0.35 : 0.9))
+                    .frame(width: 5, height: 5)
             } else {
+                // Rest day
                 RoundedRectangle(cornerRadius: 10, style: .continuous)
                     .fill(Color.white.opacity(0.04))
             }
@@ -203,7 +245,8 @@ struct WeekHeroView: View {
                     label: ["Mo","Di","Mi","Do","Fr","Sa","So"][i],
                     isToday: i == 2,
                     isFuture: i > 2,
-                    hasWorkout: i == 0 || i == 2
+                    hasWorkout: i == 0 || i == 2,
+                    isPlanned: i == 4 || i == 1
                 )
             }
         )

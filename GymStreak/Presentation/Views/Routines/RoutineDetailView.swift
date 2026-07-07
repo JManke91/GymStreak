@@ -5,12 +5,14 @@ struct RoutineDetailView: View {
     @ObservedObject var viewModel: RoutinesViewModel
     @ObservedObject var exercisesViewModel: ExercisesViewModel
     @ObservedObject var workoutViewModel: WorkoutViewModel
+    @Environment(\.dismiss) private var dismiss
     @State private var showingAddExercise = false
     @State private var showingDeleteAlert = false
     @State private var showingDeleteExerciseAlert = false
     @State private var exercisePendingDeletion: RoutineExercise?
     @State private var showingActiveWorkout = false
-    @State private var editingRoutineName: String = ""
+    @State private var showingRenameAlert = false
+    @State private var renameText: String = ""
     @State private var expandedExerciseId: UUID?
     @State private var expandedSetId: UUID?
     @State private var editingReps: Int = 10
@@ -33,6 +35,7 @@ struct RoutineDetailView: View {
     @State private var repRangeExpandedForExercise: [UUID: Bool] = [:]
     @State private var overloadBannerDismissedForExercise: [UUID: Bool] = [:]
     @State private var selectedExerciseForOverload: RoutineExercise?
+    @State private var showingSchedulePlanner = false
 
     // Helper function to get rest time for an exercise
     private func restTime(for exercise: RoutineExercise) -> TimeInterval {
@@ -332,6 +335,8 @@ struct RoutineDetailView: View {
             ))
         }
 
+        sectionLabel("routine.section.sets".localized)
+
         ForEach(Array(routineExercise.setsList.sorted(by: { $0.order < $1.order }).enumerated()), id: \.element.id) { index, set in
             RoutineSetRowView(
                 set: set,
@@ -422,14 +427,7 @@ struct RoutineDetailView: View {
         // alternative jumps into alternatives edit mode with it expanded
         if routineExercise.hasAlternatives {
             VStack(alignment: .leading, spacing: 8) {
-                HStack(spacing: 4) {
-                    Image(systemName: "arrow.triangle.2.circlepath")
-                        .font(.caption2)
-                    Text("alternatives.section_title".localized)
-                        .font(.caption.weight(.semibold))
-                        .textCase(.uppercase)
-                }
-                .foregroundStyle(.secondary)
+                sectionLabel("alternatives.section_title".localized, icon: "arrow.triangle.2.circlepath")
 
                 ForEach(routineExercise.alternativesList) { alternative in
                     Button {
@@ -438,32 +436,38 @@ struct RoutineDetailView: View {
                     } label: {
                         HStack(spacing: 10) {
                             if let exercise = alternative.exercise {
-                                Image(systemName: exercise.equipmentType.icon)
-                                    .font(.subheadline)
-                                    .foregroundStyle(.tertiary)
-                                    .frame(width: 22)
+                                ExerciseAvatarView(
+                                    muscleGroups: exercise.muscleGroups,
+                                    equipmentType: exercise.equipmentType,
+                                    size: 30,
+                                    radius: 9
+                                )
                             }
 
                             VStack(alignment: .leading, spacing: 2) {
                                 Text(alternative.exercise?.name ?? "Unknown")
-                                    .font(.subheadline.weight(.medium))
-                                    .foregroundStyle(.primary)
+                                    .font(.system(size: 13.5, weight: .semibold))
+                                    .foregroundStyle(.white)
                                 Text("routine.sets_count".localized(alternative.setsList.count))
                                     .font(.caption)
-                                    .foregroundStyle(.secondary)
+                                    .foregroundStyle(Color.white.opacity(0.45))
                             }
 
                             Spacer()
 
                             Image(systemName: "chevron.right")
                                 .font(.caption.weight(.semibold))
-                                .foregroundStyle(.tertiary)
+                                .foregroundStyle(Color.white.opacity(0.3))
                         }
-                        .padding(.vertical, 6)
+                        .padding(.vertical, 8)
                         .padding(.horizontal, 12)
                         .background(
-                            RoundedRectangle(cornerRadius: 8)
-                                .fill(DesignSystem.Colors.cardElevated)
+                            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                .fill(Color.white.opacity(0.03))
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                .stroke(Color.white.opacity(0.04), lineWidth: 1)
                         )
                         .contentShape(Rectangle())
                     }
@@ -473,6 +477,22 @@ struct RoutineDetailView: View {
             }
             .padding(.top, 4)
         }
+    }
+
+    @ViewBuilder
+    private func sectionLabel(_ text: String, icon: String? = nil) -> some View {
+        HStack(spacing: 5) {
+            if let icon {
+                Image(systemName: icon)
+                    .font(.system(size: 9, weight: .bold))
+            }
+            Text(text.uppercased())
+                .font(.system(size: 10.5, weight: .bold))
+                .kerning(0.7)
+        }
+        .foregroundStyle(Color.white.opacity(0.4))
+        .padding(.horizontal, 2)
+        .padding(.top, 4)
     }
 
     @ViewBuilder
@@ -495,12 +515,12 @@ struct RoutineDetailView: View {
                 .buttonStyle(.plain)
 
                 Text("\(index + 1)")
-                    .font(.caption.weight(.semibold))
+                    .font(.system(size: 11.5, weight: .heavy))
                     .monospacedDigit()
-                    .foregroundStyle(DesignSystem.Colors.textOnTint)
-                    .frame(width: 28, height: 28)
-                    .background(DesignSystem.Colors.tint)
-                    .clipShape(Circle())
+                    .foregroundStyle(DesignSystem.Colors.tint)
+                    .frame(width: 24, height: 24)
+                    .background(DesignSystem.Colors.tint.opacity(0.15))
+                    .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
 
                 HStack(spacing: 8) {
                     Text("set.reps".localized(set.reps))
@@ -540,8 +560,8 @@ struct RoutineDetailView: View {
             .padding(.vertical, 6)
             .padding(.horizontal, 12)
             .background(
-                RoundedRectangle(cornerRadius: 8)
-                    .fill(DesignSystem.Colors.cardElevated)
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .fill(Color.white.opacity(0.03))
             )
         }
 
@@ -552,18 +572,21 @@ struct RoutineDetailView: View {
             }
         } label: {
             HStack(spacing: 6) {
-                Image(systemName: "plus.circle.fill")
-                    .font(.subheadline)
-                    .fontWeight(.medium)
+                Image(systemName: "plus")
+                    .font(.system(size: 12, weight: .bold))
                 Text("exercise.add_set".localized)
-                    .font(.subheadline)
-                    .fontWeight(.semibold)
+                    .font(.system(size: 12.5, weight: .bold))
             }
             .foregroundStyle(DesignSystem.Colors.tint)
             .frame(maxWidth: .infinity)
-            .padding(.vertical, 12)
-            .background(DesignSystem.Colors.input)
-            .clipShape(RoundedRectangle(cornerRadius: 10))
+            .padding(.vertical, 10)
+            .background(DesignSystem.Colors.tint.opacity(0.08))
+            .overlay(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .stroke(style: StrokeStyle(lineWidth: 1, dash: [5, 4]))
+                    .foregroundStyle(DesignSystem.Colors.tint.opacity(0.3))
+            )
+            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
         }
         .buttonStyle(.plain)
 
@@ -579,11 +602,11 @@ struct RoutineDetailView: View {
                     .font(.subheadline)
                     .fontWeight(.semibold)
             }
-            .foregroundStyle(DesignSystem.Colors.tint)
+            .foregroundStyle(DesignSystem.Colors.textOnTint)
             .frame(maxWidth: .infinity)
             .padding(.vertical, 12)
-            .background(DesignSystem.Colors.input)
-            .clipShape(RoundedRectangle(cornerRadius: 10))
+            .background(DesignSystem.Colors.tint)
+            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
         }
         .buttonStyle(.plain)
     }
@@ -595,7 +618,7 @@ struct RoutineDetailView: View {
         // Explanation
         Text("alternatives.edit.explanation".localized)
             .font(.caption)
-            .foregroundStyle(.secondary)
+            .foregroundStyle(Color.white.opacity(0.5))
             .frame(maxWidth: .infinity, alignment: .leading)
 
         ForEach(routineExercise.alternativesList) { alternative in
@@ -623,29 +646,31 @@ struct RoutineDetailView: View {
                         .accessibilityLabel("alternatives.remove_accessibility".localized(alternative.exercise?.name ?? ""))
 
                         if let exercise = alternative.exercise {
-                            Image(systemName: exercise.equipmentType.icon)
-                                .font(.subheadline)
-                                .foregroundStyle(.tertiary)
-                                .frame(width: 22)
+                            ExerciseAvatarView(
+                                muscleGroups: exercise.muscleGroups,
+                                equipmentType: exercise.equipmentType,
+                                size: 30,
+                                radius: 9
+                            )
                         }
 
                         VStack(alignment: .leading, spacing: 2) {
                             Text(alternative.exercise?.name ?? "Unknown")
-                                .font(.subheadline.weight(.medium))
-                                .foregroundStyle(.primary)
+                                .font(.system(size: 13.5, weight: .semibold))
+                                .foregroundStyle(.white)
                             Text("routine.sets_count".localized(alternative.setsList.count))
                                 .font(.caption)
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(Color.white.opacity(0.45))
                         }
 
                         Spacer()
 
                         Image(systemName: "chevron.right")
                             .font(.caption.weight(.semibold))
-                            .foregroundStyle(.tertiary)
+                            .foregroundStyle(Color.white.opacity(0.3))
                             .rotationEffect(.degrees(isAlternativeExpanded ? 90 : 0))
                     }
-                    .padding(.vertical, 6)
+                    .padding(.vertical, 8)
                     .padding(.horizontal, 12)
                     .contentShape(Rectangle())
                 }
@@ -663,8 +688,12 @@ struct RoutineDetailView: View {
                 }
             }
             .background(
-                RoundedRectangle(cornerRadius: 8)
-                    .fill(DesignSystem.Colors.cardElevated)
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .fill(Color.white.opacity(0.03))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .stroke(Color.white.opacity(0.04), lineWidth: 1)
             )
         }
 
@@ -673,18 +702,21 @@ struct RoutineDetailView: View {
             addAlternativeTarget = routineExercise
         } label: {
             HStack(spacing: 6) {
-                Image(systemName: "plus.circle.fill")
-                    .font(.subheadline)
-                    .fontWeight(.medium)
+                Image(systemName: "plus")
+                    .font(.system(size: 12, weight: .bold))
                 Text("alternatives.add".localized)
-                    .font(.subheadline)
-                    .fontWeight(.semibold)
+                    .font(.system(size: 12.5, weight: .bold))
             }
             .foregroundStyle(DesignSystem.Colors.tint)
             .frame(maxWidth: .infinity)
-            .padding(.vertical, 12)
-            .background(DesignSystem.Colors.input)
-            .clipShape(RoundedRectangle(cornerRadius: 10))
+            .padding(.vertical, 10)
+            .background(DesignSystem.Colors.tint.opacity(0.08))
+            .overlay(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .stroke(style: StrokeStyle(lineWidth: 1, dash: [5, 4]))
+                    .foregroundStyle(DesignSystem.Colors.tint.opacity(0.3))
+            )
+            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
         }
         .buttonStyle(.plain)
 
@@ -700,11 +732,11 @@ struct RoutineDetailView: View {
                     .font(.subheadline)
                     .fontWeight(.semibold)
             }
-            .foregroundStyle(DesignSystem.Colors.tint)
+            .foregroundStyle(DesignSystem.Colors.textOnTint)
             .frame(maxWidth: .infinity)
             .padding(.vertical, 12)
-            .background(DesignSystem.Colors.input)
-            .clipShape(RoundedRectangle(cornerRadius: 10))
+            .background(DesignSystem.Colors.tint)
+            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
         }
         .buttonStyle(.plain)
     }
@@ -740,9 +772,9 @@ struct RoutineDetailView: View {
         .disabled(!canToggle)
     }
 
-    /// Row background for superset edit mode
+    /// Card background for superset edit mode
     private func supersetEditRowBackground(for exercise: RoutineExercise) -> Color {
-        supersetEditSelection.contains(exercise.id) ? DesignSystem.Colors.tint.opacity(0.08) : .clear
+        supersetEditSelection.contains(exercise.id) ? DesignSystem.Colors.tint.opacity(0.08) : Color.white.opacity(0.035)
     }
 
     // MARK: - Superset Context Menu
@@ -873,15 +905,50 @@ struct RoutineDetailView: View {
         }
     }
 
-    // Row background color using per-group superset color
-    private func rowBackgroundColor(for routineExercise: RoutineExercise) -> Color {
-        guard let color = supersetColor(for: routineExercise) else { return Color.clear }
+    // Card background color using per-group superset color
+    private func cardBackgroundColor(for routineExercise: RoutineExercise) -> Color {
+        guard let color = supersetColor(for: routineExercise) else { return Color.white.opacity(0.035) }
         return color.opacity(0.08)
     }
 
+    private func cardBorderColor(for routineExercise: RoutineExercise) -> Color {
+        guard let color = supersetColor(for: routineExercise) else { return Color.white.opacity(0.06) }
+        return color.opacity(0.3)
+    }
+
+    // MARK: - Body
+
+    private var sortedExercises: [RoutineExercise] {
+        routine.routineExercisesList.sorted(by: { $0.order < $1.order })
+    }
+
     var body: some View {
-        List {
-            Section {
+        ZStack {
+            DesignSystem.Colors.background.ignoresSafeArea()
+
+            List {
+                Group {
+                    topBar
+                    titleBlock
+                }
+                .listRowBackground(Color.clear)
+                .listRowSeparator(.hidden)
+                .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 0, trailing: 16))
+
+                if supersetEditMode == nil && !isEditMode {
+                    RoutineScheduleCard(
+                        schedule: routine.schedule,
+                        nextDue: viewModel.nextDueDate(for: routine),
+                        onTap: {
+                            HapticManager.shared.light()
+                            showingSchedulePlanner = true
+                        }
+                    )
+                    .listRowBackground(Color.clear)
+                    .listRowSeparator(.hidden)
+                    .listRowInsets(EdgeInsets(top: 2, leading: 16, bottom: 10, trailing: 16))
+                }
+
                 if routine.routineExercisesList.isEmpty {
                     ContentUnavailableView {
                         Label("routine.empty.title".localized, systemImage: "dumbbell")
@@ -893,239 +960,32 @@ struct RoutineDetailView: View {
                         }
                         .buttonStyle(.onyxProminent)
                     }
-                    .listRowInsets(EdgeInsets())
                     .listRowBackground(Color.clear)
+                    .listRowSeparator(.hidden)
                 } else {
-                    let sortedExercises = routine.routineExercisesList.sorted(by: { $0.order < $1.order })
-                    ForEach(Array(sortedExercises.enumerated()), id: \.element.id) { index, routineExercise in
-                        Group {
-                            if supersetEditMode != nil {
-                                // Superset edit mode: selection row
-                                supersetEditRow(for: routineExercise)
-                                    .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 0, trailing: 16))
-                                    .listRowBackground(supersetEditRowBackground(for: routineExercise))
-                                    .listRowSeparator(.automatic)
-                            } else if isEditMode {
-                                // Edit mode (indicator now in row content via ExerciseHeaderView)
-                                editModeRow(for: routineExercise)
-                                    .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 0, trailing: 16))
-                                    .listRowBackground(rowBackgroundColor(for: routineExercise))
-                                    .listRowSeparator(routineExercise.isInSuperset ? .hidden : .automatic)
-                            } else {
-                                // Normal mode: Header row with leading chevron
-                                let isExerciseExpanded = expandedExerciseId == routineExercise.id
-                                Button {
-                                    // Prevent collapse during set reorder / alternatives edit mode
-                                    guard setEditExerciseId != routineExercise.id,
-                                          alternativesEditExerciseId != routineExercise.id else { return }
-                                    withAnimation(DesignSystem.Animation.spring) {
-                                        if isExerciseExpanded {
-                                            expandedExerciseId = nil
-                                            expandedSetId = nil
-                                        } else {
-                                            expandedExerciseId = routineExercise.id
-                                            expandedSetId = nil
-                                        }
-                                    }
-                                } label: {
-                                    let info = supersetInfo(for: routineExercise)
-                                    let linePos = supersetLinePosition(for: routineExercise)
-                                    let color = supersetColor(for: routineExercise)
-                                    HStack(spacing: 0) {
-                                        Image(systemName: "chevron.right")
-                                            .font(.caption.weight(.semibold))
-                                            .foregroundStyle(.secondary)
-                                            .rotationEffect(.degrees(isExerciseExpanded ? 90 : 0))
-                                            .animation(DesignSystem.Animation.spring, value: isExerciseExpanded)
-                                            .frame(width: 28, height: 44)
-                                            .contentShape(Rectangle())
-
-                                        ExerciseHeaderView(
-                                            routineExercise: routineExercise,
-                                            isEditMode: false,
-                                            supersetPosition: info?.position,
-                                            supersetTotal: info?.total,
-                                            supersetColor: color,
-                                            supersetLinePosition: linePos,
-                                            onSupersetAction: routine.routineExercisesList.count >= 2 ? {
-                                                if let supersetId = routineExercise.supersetId {
-                                                    enterSupersetEdit(for: supersetId)
-                                                } else {
-                                                    enterSupersetCreate(initiatingExercise: routineExercise)
-                                                }
-                                            } : nil,
-                                            onEditSets: {
-                                                enterSetEditMode(for: routineExercise)
-                                            },
-                                            onEditAlternatives: {
-                                                enterAlternativesEditMode(for: routineExercise)
-                                            }
-                                        )
-                                    }
-                                    .contentShape(Rectangle())
-                                }
-                                .buttonStyle(.plain)
-                                .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 0, trailing: 16))
-                                .listRowBackground(rowBackgroundColor(for: routineExercise))
-                                .listRowSeparator((isExerciseExpanded || routineExercise.isInSuperset) ? .hidden : .automatic)
-                                .sensoryFeedback(.selection, trigger: expandedExerciseId)
-                                // Only allow deleting exercise when collapsed
-                                .deleteDisabled(isExerciseExpanded)
-                                // Context menu for superset management
-                                .contextMenu {
-                                    supersetContextMenu(for: routineExercise)
-                                }
-
-                                // Expanded sets content (separate list row for smooth animation)
-                                if isExerciseExpanded {
-                                    VStack(spacing: 12) {
-                                        if setEditExerciseId == routineExercise.id {
-                                            setEditContent(for: routineExercise)
-                                        } else if alternativesEditExerciseId == routineExercise.id {
-                                            alternativesEditContent(for: routineExercise)
-                                        } else {
-                                            normalSetContent(for: routineExercise)
-                                        }
-                                    }
-                                    .padding(.vertical, 8)
-                                    .padding(.leading, 28)
-                                    .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 0, trailing: 16))
-                                    .listRowBackground(rowBackgroundColor(for: routineExercise))
-                                    .listRowSeparator(routineExercise.isInSuperset ? .hidden : .automatic)
-                                }
-
-                                // Link button between this exercise and the next
-                                if index < sortedExercises.count - 1,
-                                   shouldShowLinkButton(between: routineExercise, and: sortedExercises[index + 1]) {
-                                    SupersetLinkButton {
-                                        linkExercises(routineExercise, sortedExercises[index + 1])
-                                    }
-                                    .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 0, trailing: 16))
-                                    .listRowBackground(Color.clear)
-                                    .listRowSeparator(.hidden)
-                                }
-                            }
-                        }
-                        // Edit mode visual effects
-                        .modifier(WiggleModifier(isWiggling: isEditMode))
-                        .scaleEffect(isEditMode ? 0.98 : 1.0)
-                        .animation(DesignSystem.Animation.spring, value: isEditMode)
-                    }
-                    .onMove(perform: isEditMode ? moveRoutineExercises : nil)
+                    exerciseRows
                 }
 
-            } header: {
-                HStack {
-                    if let editMode = supersetEditMode {
-                        switch editMode {
-                        case .editing:
-                            Text("superset.edit".localized)
-                        case .creating:
-                            Text("superset.create_new".localized)
-                        }
-                    } else {
-                        Text("routine.exercises".localized)
-                    }
-                    Spacer()
-                    if !routine.routineExercisesList.isEmpty && supersetEditMode == nil {
-                        Button(isEditMode ? "action.done".localized : "action.edit".localized) {
-                            withAnimation(DesignSystem.Animation.spring) {
-                                if isEditMode {
-                                    // Dismiss keyboard
-                                    UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
-
-                                    // Exiting edit mode - save routine name if changed
-                                    let trimmedName = editingRoutineName.trimmingCharacters(in: .whitespacesAndNewlines)
-                                    if !trimmedName.isEmpty && trimmedName != routine.name {
-                                        routine.name = trimmedName
-                                        routine.updatedAt = Date()
-                                        viewModel.updateRoutine(routine)
-                                    }
-
-                                    // Announce edit mode exit
-                                    UIAccessibility.post(
-                                        notification: .announcement,
-                                        argument: "Editing complete."
-                                    )
-                                } else {
-                                    // Entering edit mode
-                                    editingRoutineName = routine.name
-
-                                    // Collapse any expanded exercises when entering edit mode
-                                    expandedExerciseId = nil
-                                    expandedSetId = nil
-                                    setEditExerciseId = nil
-
-                                    // Announce to VoiceOver users
-                                    UIAccessibility.post(
-                                        notification: .announcement,
-                                        argument: "routine.edit_mode_announcement".localized
-                                    )
-
-                                    // Show hint for first-time users
-                                    if !hasSeenReorderHint && routine.routineExercisesList.count > 1 {
-                                        // Delay to let wiggle animation start first
-                                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                                            withAnimation(DesignSystem.Animation.spring) {
-                                                showReorderHint = true
-                                            }
-                                        }
-                                    }
-                                }
-                                isEditMode.toggle()
-                            }
-                        }
-                        .font(.body.weight(.semibold))
-                        .foregroundStyle(isEditMode ? .orange : DesignSystem.Colors.tint)
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 6)
-                        .background(
-                            RoundedRectangle(cornerRadius: 8)
-                                .fill(isEditMode ? Color.orange.opacity(0.1) : DesignSystem.Colors.tint.opacity(0.1))
-                        )
-                    }
-                }
-                .textCase(nil)
-            }
-
-            if !routine.routineExercisesList.isEmpty && supersetEditMode == nil {
-                Section {
-                    Button {
+                if !routine.routineExercisesList.isEmpty && supersetEditMode == nil {
+                    DashedCreateButton(title: "routine.add_exercise".localized) {
                         showingAddExercise = true
-                    } label: {
-                        HStack(spacing: 12) {
-                            Image(systemName: "dumbbell.fill")
-                                .font(.title3)
-                                .foregroundStyle(DesignSystem.Colors.textOnTint)
-                                .frame(width: 36, height: 36)
-                                .background(Circle().fill(DesignSystem.Colors.tint))
-
-                            Text("routine.add_exercise".localized)
-                                .font(.body.weight(.semibold))
-
-                            Spacer()
-
-                            Image(systemName: "chevron.right")
-                                .font(.caption.weight(.semibold))
-                                .foregroundStyle(.tertiary)
-                        }
-                        .frame(maxWidth: .infinity)
-                        .contentShape(Rectangle())
                     }
-                    .buttonStyle(.plain)
+                    .listRowBackground(Color.clear)
+                    .listRowSeparator(.hidden)
+                    .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 0, trailing: 16))
                 }
+
+                Color.clear
+                    .frame(height: 40)
+                    .listRowBackground(Color.clear)
+                    .listRowSeparator(.hidden)
             }
+            .listStyle(.plain)
+            .scrollContentBackground(.hidden)
+            .environment(\.defaultMinListRowHeight, 0)
         }
-        .listStyle(.insetGrouped)
-        .navigationTitle(isEditMode ? "" : routine.name)
-        .navigationBarTitleDisplayMode(isEditMode ? .inline : .large)
+        .toolbar(.hidden, for: .navigationBar)
         .toolbar {
-            ToolbarItem(placement: .principal) {
-                EditableRoutineTitleView(name: $editingRoutineName)
-                    .opacity(isEditMode ? 1 : 0)
-                    .allowsHitTesting(isEditMode)
-                    .animation(.none, value: isEditMode)
-            }
             ToolbarItemGroup(placement: .keyboard) {
                 Spacer()
                 Button {
@@ -1136,116 +996,16 @@ struct RoutineDetailView: View {
             }
         }
         .safeAreaInset(edge: .bottom) {
-            if supersetEditMode != nil {
-                // Superset edit toolbar
-                VStack(spacing: 0) {
-                    Divider()
-                    HStack {
-                        Button("action.cancel".localized) {
-                            cancelSupersetEdit()
-                        }
-                        .foregroundStyle(.secondary)
-
-                        Spacer()
-
-                        Text("superset.selected_count".localized(supersetEditSelection.count))
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-
-                        Spacer()
-
-                        Button("action.done".localized) {
-                            applySupersetEdit()
-                        }
-                        .fontWeight(.semibold)
-                        .foregroundStyle(canApplySupersetEdit ? DesignSystem.Colors.tint : .secondary)
-                        .disabled(!canApplySupersetEdit)
-                    }
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 12)
-                    .background(DesignSystem.Colors.card)
-                }
-            } else if !routine.routineExercisesList.isEmpty && !isEditMode {
-                // Start Workout button (only in normal mode)
-                VStack(spacing: 0) {
-                    Divider()
-                    Button {
-                        workoutViewModel.startWorkout(routine: routine)
-                        showingActiveWorkout = true
-                    } label: {
-                        Label("routine.start_workout".localized, systemImage: "play.circle.fill")
-                            .font(.headline)
-                            .frame(maxWidth: .infinity)
-                            .frame(height: 50)
-                    }
-                    .buttonStyle(.onyxProminent)
-                    .controlSize(.large)
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 12)
-                    .background(DesignSystem.Colors.card)
-                }
-            }
-        }
-        .toolbar {
-            // Trailing toolbar - delete button
-            ToolbarItem(placement: .navigationBarTrailing) {
-                if !isEditMode && supersetEditMode == nil {
-                    Button(role: .destructive) {
-                        showingDeleteAlert = true
-                    } label: {
-                        Image(systemName: "trash")
-                    }
-                }
-            }
+            bottomInset
         }
         .overlay(alignment: .top) {
-            if showReorderHint {
-                VStack(spacing: 8) {
-                    HStack(spacing: 10) {
-                        Image(systemName: "hand.draw")
-                            .font(.title3)
-                            .foregroundStyle(DesignSystem.Colors.textOnTint)
-
-                        Text("routine.drag_to_reorder".localized)
-                            .font(.subheadline.weight(.medium))
-                            .foregroundStyle(DesignSystem.Colors.textOnTint)
-
-                        Spacer()
-
-                        Button {
-                            withAnimation(DesignSystem.Animation.spring) {
-                                showReorderHint = false
-                                hasSeenReorderHint = true
-                            }
-                        } label: {
-                            Image(systemName: "xmark.circle.fill")
-                                .font(.title3)
-                                .foregroundStyle(DesignSystem.Colors.textOnTint.opacity(0.8))
-                        }
-                    }
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 12)
-                    .background(DesignSystem.Colors.tint)
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
-                    .shadow(color: .black.opacity(0.15), radius: 8, y: 4)
-                }
-                .padding(.horizontal, 16)
-                .padding(.top, 8)
-                .transition(.move(edge: .top).combined(with: .opacity))
-                .onAppear {
-                    // Auto-dismiss after 4 seconds
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 4) {
-                        withAnimation(DesignSystem.Animation.spring) {
-                            showReorderHint = false
-                            hasSeenReorderHint = true
-                        }
-                    }
-                }
-            }
-
+            reorderHintOverlay
         }
         .sheet(isPresented: $showingAddExercise) {
             AddExerciseToRoutineView(routine: routine, viewModel: viewModel, exercisesViewModel: exercisesViewModel)
+        }
+        .sheet(isPresented: $showingSchedulePlanner) {
+            SchedulePlanningSheet(routine: routine, viewModel: viewModel)
         }
         .sheet(item: $addAlternativeTarget) { target in
             AddAlternativeView(
@@ -1269,9 +1029,21 @@ struct RoutineDetailView: View {
                 }
             )
         }
+        .alert("routine.rename".localized, isPresented: $showingRenameAlert) {
+            TextField("add_routine.name_placeholder".localized, text: $renameText)
+            Button("action.save".localized) {
+                let trimmedName = renameText.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !trimmedName.isEmpty && trimmedName != routine.name {
+                    routine.name = trimmedName
+                    viewModel.updateRoutine(routine)
+                }
+            }
+            Button("action.cancel".localized, role: .cancel) {}
+        }
         .alert("routine.delete".localized, isPresented: $showingDeleteAlert) {
             Button("action.delete".localized, role: .destructive) {
                 viewModel.deleteRoutine(routine)
+                dismiss()
             }
             Button("action.cancel".localized, role: .cancel) {}
         } message: {
@@ -1299,10 +1071,444 @@ struct RoutineDetailView: View {
         }
     }
 
-    private func deleteRoutineExercises(offsets: IndexSet) {
-        for index in offsets {
-            let routineExercise = routine.routineExercisesList.sorted(by: { $0.order < $1.order })[index]
-            viewModel.removeRoutineExercise(routineExercise, from: routine)
+    // MARK: - Top bar & title
+
+    private var topBar: some View {
+        HStack(spacing: 8) {
+            Button {
+                HapticManager.shared.light()
+                dismiss()
+            } label: {
+                Image(systemName: "chevron.left")
+                    .font(.system(size: 17, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .frame(width: 38, height: 38)
+                    .background(Color.white.opacity(0.08))
+                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("action.back".localized)
+
+            Spacer()
+
+            if supersetEditMode == nil && !routine.routineExercisesList.isEmpty {
+                Button {
+                    toggleEditMode()
+                } label: {
+                    Text(isEditMode ? "action.done".localized : "action.edit".localized)
+                        .font(.system(size: 13.5, weight: .bold))
+                        .foregroundStyle(isEditMode ? DesignSystem.Colors.textOnTint : DesignSystem.Colors.tint)
+                        .padding(.horizontal, 16)
+                        .frame(height: 38)
+                        .background(isEditMode ? DesignSystem.Colors.tint : DesignSystem.Colors.tint.opacity(0.15))
+                        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                }
+                .buttonStyle(.plain)
+            }
+
+            if supersetEditMode == nil {
+                Menu {
+                    Button {
+                        renameText = routine.name
+                        showingRenameAlert = true
+                    } label: {
+                        Label("routine.rename".localized, systemImage: "pencil")
+                    }
+                    Button {
+                        HapticManager.shared.success()
+                        viewModel.duplicateRoutine(routine)
+                    } label: {
+                        Label("routine.duplicate".localized, systemImage: "plus.square.on.square")
+                    }
+                    Button(role: .destructive) {
+                        showingDeleteAlert = true
+                    } label: {
+                        Label("routine.delete".localized, systemImage: "trash")
+                    }
+                } label: {
+                    Image(systemName: "ellipsis")
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(.white)
+                        .frame(width: 38, height: 38)
+                        .background(Color.white.opacity(0.08))
+                        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                }
+            }
+        }
+        .padding(.top, 8)
+        .padding(.bottom, 4)
+    }
+
+    private var titleBlock: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(routine.name)
+                .font(.system(size: 28, weight: .bold, design: .rounded))
+                .kerning(-0.6)
+                .foregroundStyle(.white)
+
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 6) {
+                    ForEach(RoutineMetricsService.primaryMuscleGroups(for: routine), id: \.self) { muscle in
+                        MuscleChipView(muscleGroup: muscle)
+                    }
+                    Text(metaText)
+                        .font(.system(size: 12))
+                        .foregroundStyle(Color.white.opacity(0.45))
+                        .padding(.leading, 4)
+                }
+            }
+
+            if let editMode = supersetEditMode {
+                Text(editMode == .creating ? "superset.create_new".localized : "superset.edit".localized)
+                    .font(.system(size: 12, weight: .semibold))
+                    .kerning(0.5)
+                    .textCase(.uppercase)
+                    .foregroundStyle(DesignSystem.Colors.tint)
+                    .padding(.top, 4)
+            }
+        }
+        .padding(.bottom, 10)
+    }
+
+    private var metaText: String {
+        String(
+            format: "routines.card_meta".localized,
+            routine.routineExercisesList.count,
+            RoutineMetricsService.totalSets(for: routine),
+            RoutineMetricsService.estimatedDurationMinutes(for: routine)
+        )
+    }
+
+    // MARK: - Exercise rows
+
+    private var exerciseRows: some View {
+        ForEach(Array(sortedExercises.enumerated()), id: \.element.id) { index, routineExercise in
+            exerciseRow(index: index, routineExercise: routineExercise)
+        }
+        .onMove(perform: isEditMode ? moveRoutineExercises : nil)
+    }
+
+    @ViewBuilder
+    private func exerciseRow(index: Int, routineExercise: RoutineExercise) -> some View {
+        if supersetEditMode != nil {
+            supersetSelectionCard(routineExercise)
+                .modifier(ExerciseListRowChrome())
+        } else if isEditMode {
+            editExerciseCard(routineExercise)
+                .modifier(ExerciseListRowChrome())
+                .modifier(WiggleModifier(isWiggling: isEditMode))
+                .scaleEffect(isEditMode ? 0.98 : 1.0)
+                .animation(DesignSystem.Animation.spring, value: isEditMode)
+        } else {
+            normalExerciseCard(routineExercise)
+                .modifier(ExerciseListRowChrome())
+
+            // Link button between this exercise and the next
+            if index < sortedExercises.count - 1,
+               shouldShowLinkButton(between: routineExercise, and: sortedExercises[index + 1]) {
+                SupersetLinkButton {
+                    linkExercises(routineExercise, sortedExercises[index + 1])
+                }
+                .listRowBackground(Color.clear)
+                .listRowSeparator(.hidden)
+                .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 0, trailing: 16))
+            }
+        }
+    }
+
+    /// Superset edit mode: selection card.
+    private func supersetSelectionCard(_ routineExercise: RoutineExercise) -> some View {
+        let isSelected = supersetEditSelection.contains(routineExercise.id)
+        return supersetEditRow(for: routineExercise)
+            .padding(14)
+            .background(supersetEditRowBackground(for: routineExercise))
+            .overlay(
+                RoundedRectangle(cornerRadius: 20, style: .continuous)
+                    .stroke(isSelected ? DesignSystem.Colors.tint.opacity(0.35) : Color.white.opacity(0.06), lineWidth: 1)
+            )
+            .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+    }
+
+    /// Edit mode: delete + drag card.
+    private func editExerciseCard(_ routineExercise: RoutineExercise) -> some View {
+        editModeRow(for: routineExercise)
+            .padding(14)
+            .background(cardBackgroundColor(for: routineExercise))
+            .overlay(
+                RoundedRectangle(cornerRadius: 20, style: .continuous)
+                    .stroke(cardBorderColor(for: routineExercise), lineWidth: 1)
+            )
+            .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+    }
+
+    /// One exercise as a self-contained card: header, info chips, expandable body.
+    private func normalExerciseCard(_ routineExercise: RoutineExercise) -> some View {
+        let isExerciseExpanded = expandedExerciseId == routineExercise.id
+        return VStack(alignment: .leading, spacing: 0) {
+            Button {
+                // Prevent collapse during set reorder / alternatives edit mode
+                guard setEditExerciseId != routineExercise.id,
+                      alternativesEditExerciseId != routineExercise.id else { return }
+                withAnimation(DesignSystem.Animation.spring) {
+                    if isExerciseExpanded {
+                        expandedExerciseId = nil
+                        expandedSetId = nil
+                    } else {
+                        expandedExerciseId = routineExercise.id
+                        expandedSetId = nil
+                    }
+                }
+            } label: {
+                let info = supersetInfo(for: routineExercise)
+                let linePos = supersetLinePosition(for: routineExercise)
+                let color = supersetColor(for: routineExercise)
+                HStack(spacing: 10) {
+                    ExerciseHeaderView(
+                        routineExercise: routineExercise,
+                        isEditMode: false,
+                        supersetPosition: info?.position,
+                        supersetTotal: info?.total,
+                        supersetColor: color,
+                        supersetLinePosition: linePos,
+                        onSupersetAction: routine.routineExercisesList.count >= 2 ? {
+                            if let supersetId = routineExercise.supersetId {
+                                enterSupersetEdit(for: supersetId)
+                            } else {
+                                enterSupersetCreate(initiatingExercise: routineExercise)
+                            }
+                        } : nil,
+                        onEditSets: {
+                            enterSetEditMode(for: routineExercise)
+                        },
+                        onEditAlternatives: {
+                            enterAlternativesEditMode(for: routineExercise)
+                        }
+                    )
+
+                    Image(systemName: "chevron.down")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(Color.white.opacity(0.35))
+                        .rotationEffect(.degrees(isExerciseExpanded ? 180 : 0))
+                        .animation(DesignSystem.Animation.spring, value: isExerciseExpanded)
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .sensoryFeedback(.selection, trigger: expandedExerciseId)
+
+            // Info chips strip (always visible)
+            infoChips(for: routineExercise)
+                .padding(.top, 10)
+
+            if isExerciseExpanded {
+                VStack(alignment: .leading, spacing: 12) {
+                    Divider()
+                        .overlay(Color.white.opacity(0.05))
+                        .padding(.top, 12)
+
+                    if setEditExerciseId == routineExercise.id {
+                        setEditContent(for: routineExercise)
+                    } else if alternativesEditExerciseId == routineExercise.id {
+                        alternativesEditContent(for: routineExercise)
+                    } else {
+                        normalSetContent(for: routineExercise)
+                    }
+                }
+            }
+        }
+        .padding(14)
+        .background(cardBackgroundColor(for: routineExercise))
+        .overlay(
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .stroke(cardBorderColor(for: routineExercise), lineWidth: 1)
+        )
+        .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+        .contextMenu {
+            supersetContextMenu(for: routineExercise)
+        }
+    }
+
+    @ViewBuilder
+    private func infoChips(for routineExercise: RoutineExercise) -> some View {
+        let pause = routineExercise.isInSuperset
+            ? supersetRestTime(for: routineExercise)
+            : restTime(for: routineExercise)
+
+        HStack(spacing: 6) {
+            MetaChipView(
+                icon: "timer",
+                text: String(format: "routine.chip.pause".localized, TimeFormatting.formatRestTime(pause)),
+                color: DesignSystem.Colors.tint
+            )
+
+            if let min = routineExercise.targetRepMin, let max = routineExercise.targetRepMax {
+                MetaChipView(
+                    icon: "target",
+                    text: String(format: "routine.chip.goal".localized, min, max)
+                )
+            }
+
+            if routineExercise.hasAlternatives {
+                MetaChipView(
+                    icon: "arrow.triangle.2.circlepath",
+                    text: "alternatives.count".localized(routineExercise.alternativesList.count)
+                )
+            }
+
+            Spacer(minLength: 0)
+        }
+    }
+
+    // MARK: - Bottom inset (CTA / superset toolbar)
+
+    @ViewBuilder
+    private var bottomInset: some View {
+        if supersetEditMode != nil {
+            // Superset edit toolbar
+            HStack {
+                Button("action.cancel".localized) {
+                    cancelSupersetEdit()
+                }
+                .foregroundStyle(Color.white.opacity(0.6))
+
+                Spacer()
+
+                Text("superset.selected_count".localized(supersetEditSelection.count))
+                    .font(.subheadline)
+                    .foregroundStyle(Color.white.opacity(0.6))
+
+                Spacer()
+
+                Button("action.done".localized) {
+                    applySupersetEdit()
+                }
+                .fontWeight(.semibold)
+                .foregroundStyle(canApplySupersetEdit ? DesignSystem.Colors.tint : Color.white.opacity(0.4))
+                .disabled(!canApplySupersetEdit)
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 14)
+            .background(DesignSystem.Colors.card)
+            .overlay(alignment: .top) {
+                Divider().overlay(Color.white.opacity(0.08))
+            }
+        } else if !routine.routineExercisesList.isEmpty && !isEditMode {
+            // Start Workout CTA
+            Button {
+                HapticManager.shared.medium()
+                workoutViewModel.startWorkout(routine: routine)
+                showingActiveWorkout = true
+            } label: {
+                HStack(spacing: 8) {
+                    Image(systemName: "play.fill")
+                        .font(.system(size: 14, weight: .bold))
+                    Text("routine.start_workout".localized)
+                        .font(.system(size: 16, weight: .bold))
+                }
+                .foregroundStyle(DesignSystem.Colors.textOnTint)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 15)
+                .background(DesignSystem.Colors.tint)
+                .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                .shadow(color: DesignSystem.Colors.tint.opacity(0.35), radius: 15, y: 6)
+            }
+            .buttonStyle(.plain)
+            .padding(.horizontal, 16)
+            .padding(.top, 10)
+            .padding(.bottom, 6)
+            .background(
+                LinearGradient(
+                    colors: [Color.black.opacity(0), Color.black.opacity(0.85), Color.black],
+                    startPoint: .top, endPoint: .bottom
+                )
+                .ignoresSafeArea(edges: .bottom)
+            )
+        }
+    }
+
+    // MARK: - Reorder hint
+
+    @ViewBuilder
+    private var reorderHintOverlay: some View {
+        if showReorderHint {
+            HStack(spacing: 10) {
+                Image(systemName: "hand.draw")
+                    .font(.title3)
+                    .foregroundStyle(DesignSystem.Colors.textOnTint)
+
+                Text("routine.drag_to_reorder".localized)
+                    .font(.subheadline.weight(.medium))
+                    .foregroundStyle(DesignSystem.Colors.textOnTint)
+
+                Spacer()
+
+                Button {
+                    withAnimation(DesignSystem.Animation.spring) {
+                        showReorderHint = false
+                        hasSeenReorderHint = true
+                    }
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.title3)
+                        .foregroundStyle(DesignSystem.Colors.textOnTint.opacity(0.8))
+                }
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 12)
+            .background(DesignSystem.Colors.tint)
+            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .shadow(color: .black.opacity(0.15), radius: 8, y: 4)
+            .padding(.horizontal, 16)
+            .padding(.top, 8)
+            .transition(.move(edge: .top).combined(with: .opacity))
+            .onAppear {
+                // Auto-dismiss after 4 seconds
+                DispatchQueue.main.asyncAfter(deadline: .now() + 4) {
+                    withAnimation(DesignSystem.Animation.spring) {
+                        showReorderHint = false
+                        hasSeenReorderHint = true
+                    }
+                }
+            }
+        }
+    }
+
+    // MARK: - Actions
+
+    private func toggleEditMode() {
+        withAnimation(DesignSystem.Animation.spring) {
+            if isEditMode {
+                // Dismiss keyboard
+                UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+
+                // Announce edit mode exit
+                UIAccessibility.post(
+                    notification: .announcement,
+                    argument: "Editing complete."
+                )
+            } else {
+                // Collapse any expanded exercises when entering edit mode
+                expandedExerciseId = nil
+                expandedSetId = nil
+                setEditExerciseId = nil
+
+                // Announce to VoiceOver users
+                UIAccessibility.post(
+                    notification: .announcement,
+                    argument: "routine.edit_mode_announcement".localized
+                )
+
+                // Show hint for first-time users
+                if !hasSeenReorderHint && routine.routineExercisesList.count > 1 {
+                    // Delay to let wiggle animation start first
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                        withAnimation(DesignSystem.Animation.spring) {
+                            showReorderHint = true
+                        }
+                    }
+                }
+            }
+            isEditMode.toggle()
         }
     }
 
@@ -1311,13 +1517,13 @@ struct RoutineDetailView: View {
         UIImpactFeedbackGenerator(style: .medium).impactOccurred()
 
         // Get sorted exercises
-        var sortedExercises = routine.routineExercisesList.sorted(by: { $0.order < $1.order })
+        var sorted = routine.routineExercisesList.sorted(by: { $0.order < $1.order })
 
         // Move items
-        sortedExercises.move(fromOffsets: source, toOffset: destination)
+        sorted.move(fromOffsets: source, toOffset: destination)
 
         // Update order property for all exercises
-        for (index, exercise) in sortedExercises.enumerated() {
+        for (index, exercise) in sorted.enumerated() {
             exercise.order = index
         }
 
@@ -1392,451 +1598,17 @@ struct RoutineDetailView: View {
     }
 }
 
-// MARK: - Supporting Views
-
-struct EditableRoutineTitleView: View {
-    @Binding var name: String
-    @FocusState private var isFocused: Bool
-
-    var body: some View {
-        HStack(spacing: 6) {
-            TextField("add_routine.name_placeholder".localized, text: $name)
-                .font(.headline)
-                .multilineTextAlignment(.center)
-                .textFieldStyle(.plain)
-                .focused($isFocused)
-                .accessibilityLabel("routine.name_accessibility".localized)
-                .accessibilityHint("routine.name_edit_hint".localized)
-
-            // Make the pencil icon tappable
-            Image(systemName: "pencil")
-                .font(.caption)
-                .foregroundStyle(.orange)
-                .contentTransition(.identity)
-                .onTapGesture {
-                    isFocused = true
-                }
-        }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 6)
-        .background {
-            // Invisible tap catcher for padding areas
-            Rectangle()
-                .fill(Color.clear)
-                .contentShape(Rectangle())
-                .onTapGesture {
-                    isFocused = true
-                }
-        }
-        .background(alignment: .bottom) {
-            Rectangle()
-                .fill(Color.orange.opacity(0.6))
-                .frame(height: 2)
-        }
-        .frame(maxWidth: 200)
+/// Shared list-row chrome for exercise cards: clears the system row styling so
+/// the card provides its own background, spacing and rounded shape.
+private struct ExerciseListRowChrome: ViewModifier {
+    func body(content: Content) -> some View {
+        content
+            .listRowBackground(Color.clear)
+            .listRowSeparator(.hidden)
+            .listRowInsets(EdgeInsets(top: 4, leading: 16, bottom: 4, trailing: 16))
     }
 }
-
-struct ExerciseHeaderView: View {
-    let routineExercise: RoutineExercise
-    var isEditMode: Bool = false
-    var showDragHandle: Bool = true
-    var supersetPosition: Int? = nil
-    var supersetTotal: Int? = nil
-    var supersetColor: Color? = nil
-    var supersetLinePosition: SupersetPosition? = nil
-    var onSupersetAction: (() -> Void)? = nil
-    var onEditSets: (() -> Void)? = nil
-    var onEditAlternatives: (() -> Void)? = nil
-
-    // Fixed width for the superset indicator area - ensures consistent alignment for all exercises
-    private let indicatorAreaWidth: CGFloat = 16
-    private let indicatorTrailingSpacing: CGFloat = 8
-
-    var body: some View {
-        HStack(spacing: 0) {
-            // FIXED-WIDTH superset indicator area (always present for consistent alignment)
-            // For superset exercises: shows the line indicator
-            // For standalone exercises: empty but reserves the same space
-            ZStack {
-                if let linePosition = supersetLinePosition {
-                    SupersetLineIndicator(position: linePosition, color: supersetColor ?? DesignSystem.Colors.tint)
-                }
-            }
-            .frame(width: indicatorAreaWidth)
-            .padding(.trailing, indicatorTrailingSpacing)
-
-            HStack(spacing: 12) {
-                // Muscle group badge
-                if let exercise = routineExercise.exercise {
-                    MuscleGroupAbbreviationBadge(
-                        muscleGroups: exercise.muscleGroups,
-                        isActive: !isEditMode
-                    )
-                }
-
-                VStack(alignment: .leading, spacing: 3) {
-                    HStack(spacing: 6) {
-                        Text(routineExercise.exercise?.name ?? "Unknown")
-                            .font(.system(.body, design: .rounded, weight: .semibold))
-                            .foregroundStyle(.primary)
-
-                        if let exercise = routineExercise.exercise {
-                            Image(systemName: exercise.equipmentType.icon)
-                                .font(.caption)
-                                .foregroundStyle(.tertiary)
-                        }
-                    }
-
-                    if routineExercise.hasRepRangeGoal,
-                       let min = routineExercise.targetRepMin,
-                       let max = routineExercise.targetRepMax {
-                        Text("rep_range.sets_with_range".localized(routineExercise.setsList.count, min, max))
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                    } else {
-                        Text("routine.sets_count".localized(routineExercise.setsList.count))
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                    }
-
-                    // Alternatives indicator - monochrome, no color (reserved for supersets)
-                    if routineExercise.hasAlternatives {
-                        HStack(spacing: 4) {
-                            Image(systemName: "arrow.triangle.2.circlepath")
-                                .font(.caption2)
-                            Text("alternatives.count".localized(routineExercise.alternativesList.count))
-                                .font(.caption)
-                        }
-                        .foregroundStyle(.secondary)
-                    } else if !isEditMode, let editAlternativesAction = onEditAlternatives {
-                        // Ambient affordance so the feature is discoverable before
-                        // any alternative exists (otherwise it only lives in the menu)
-                        Button(action: editAlternativesAction) {
-                            HStack(spacing: 4) {
-                                Image(systemName: "arrow.triangle.2.circlepath")
-                                    .font(.caption2)
-                                Text("alternatives.add".localized)
-                                    .font(.caption)
-                            }
-                            .foregroundStyle(.tertiary)
-                            .contentShape(Rectangle())
-                        }
-                        .buttonStyle(.plain)
-                        .accessibilityLabel("alternatives.menu.add".localized)
-                    }
-                }
-
-                Spacer()
-
-                // Superset position badge
-                if let position = supersetPosition, let total = supersetTotal {
-                    SupersetBadge(
-                        position: position,
-                        total: total,
-                        color: supersetColor ?? DesignSystem.Colors.tint
-                    )
-                }
-
-                // Exercise actions menu (visible in normal mode)
-                if !isEditMode && (onSupersetAction != nil || onEditSets != nil) {
-                    Menu {
-                        if let supersetAction = onSupersetAction {
-                            Button {
-                                supersetAction()
-                            } label: {
-                                Label(
-                                    routineExercise.isInSuperset
-                                        ? "exercise.menu.edit_superset".localized
-                                        : "exercise.menu.superset".localized,
-                                    systemImage: routineExercise.isInSuperset ? "pencil.circle" : "link"
-                                )
-                            }
-                        }
-                        if let editSetsAction = onEditSets {
-                            Button {
-                                editSetsAction()
-                            } label: {
-                                Label("exercise.menu.edit_sets".localized, systemImage: "slider.horizontal.3")
-                            }
-                        }
-                        if let editAlternativesAction = onEditAlternatives {
-                            Button {
-                                editAlternativesAction()
-                            } label: {
-                                Label(
-                                    routineExercise.hasAlternatives
-                                        ? "alternatives.menu.edit".localized(routineExercise.alternativesList.count)
-                                        : "alternatives.menu.add".localized,
-                                    systemImage: "arrow.triangle.2.circlepath"
-                                )
-                            }
-                        }
-                    } label: {
-                        Image(systemName: "ellipsis")
-                            .font(.body.weight(.medium))
-                            .foregroundStyle(.secondary)
-                            .frame(width: 32, height: 32)
-                            .contentShape(Rectangle())
-                    }
-                }
-
-                // Drag indicator in edit mode (only if showDragHandle is true)
-                if isEditMode && showDragHandle {
-                    Image(systemName: "line.3.horizontal")
-                        .font(.body.weight(.medium))
-                        .foregroundStyle(.tertiary)
-                        .symbolEffect(.pulse.byLayer, options: .repeating)
-                }
-            }
-        }
-        .contentShape(Rectangle())
-    }
-}
-
-struct RoutineSetRowView: View {
-    let set: ExerciseSet
-    let index: Int
-    let isExpanded: Bool
-    @Binding var editingReps: Int
-    @Binding var editingWeight: Double
-    let initialReps: Int
-    let initialWeight: Double
-    let hasMultipleSets: Bool
-    let repsBannerDismissed: Bool
-    let weightBannerDismissed: Bool
-    let totalSets: Int
-    var targetRepMin: Int? = nil
-    var targetRepMax: Int? = nil
-    let onTap: () -> Void
-    let onUpdate: (Int, Double) -> Void
-    let onApplyRepsToAll: () -> Void
-    let onApplyWeightToAll: () -> Void
-    let onDismissRepsBanner: () -> Void
-    let onDismissWeightBanner: () -> Void
-    let onDelete: () -> Void
-
-    @State private var showingDeleteSetAlert = false
-
-    // Computed property to check if reps have changed
-    private var repsChanged: Bool {
-        editingReps != initialReps
-    }
-
-    // Computed property to check if weight has changed
-    private var weightChanged: Bool {
-        editingWeight != initialWeight
-    }
-
-    private var repRangeColor: Color {
-        guard let min = targetRepMin, let max = targetRepMax else { return .primary }
-        if set.reps >= max {
-            return .orange
-        } else if set.reps >= min {
-            return DesignSystem.Colors.tint
-        } else {
-            return .secondary
-        }
-    }
-
-    private var backgroundColor: Color {
-        if isExpanded {
-            return DesignSystem.Colors.cardElevated
-        } else {
-            return Color.clear
-        }
-    }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            // Set header
-            Button(action: {
-                UIImpactFeedbackGenerator(style: .light).impactOccurred()
-                onTap()
-            }) {
-                HStack(spacing: 12) {
-                    // Set number badge
-                    Text("\(index + 1)")
-                        .font(.caption.weight(.semibold))
-                        .monospacedDigit()
-                        .foregroundStyle(DesignSystem.Colors.textOnTint)
-                        .frame(width: 28, height: 28)
-                        .background(DesignSystem.Colors.tint)
-                        .clipShape(Circle())
-
-                    HStack(spacing: 8) {
-                        Text("set.reps".localized(set.reps))
-                            .foregroundStyle(repRangeColor)
-                        Text("×")
-                            .foregroundStyle(.secondary)
-                        Text("set.weight".localized(set.weight))
-                    }
-                    .font(.subheadline.weight(.medium))
-
-                    // Rep range progress badge
-                    if let max = targetRepMax {
-                        Text("\(set.reps)/\(max)")
-                            .font(.caption2.weight(.medium))
-                            .monospacedDigit()
-                            .foregroundStyle(repRangeColor)
-                            .padding(.horizontal, 6)
-                            .padding(.vertical, 2)
-                            .background(repRangeColor.opacity(0.1), in: Capsule())
-                    }
-
-                    Spacer()
-
-                    Image(systemName: "chevron.down")
-                        .font(isExpanded ? .subheadline.weight(.bold) : .caption.weight(.semibold))
-                        .foregroundStyle(isExpanded ? DesignSystem.Colors.tint : .secondary)
-                        .rotationEffect(.degrees(isExpanded ? 180 : 0))
-                        .animation(DesignSystem.Animation.spring, value: isExpanded)
-                }
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .padding(.vertical, 8)
-            .padding(.horizontal, 12)
-            .accessibilityElement(children: .combine)
-            .accessibilityLabel("accessibility.set.label".localized(index + 1, set.reps, set.weight))
-            .accessibilityHint(isExpanded ? "accessibility.set.hint.expanded".localized : "accessibility.set.hint.collapsed".localized)
-            .accessibilityAddTraits(.isButton)
-
-            // Expanded edit form
-            if isExpanded {
-                Divider()
-                    .padding(.horizontal, 12)
-
-                VStack(spacing: 16) {
-                    // Reps input with contextual banner
-                    VStack(spacing: 8) {
-                        HorizontalStepper(
-                            title: "set.reps_label".localized,
-                            value: $editingReps,
-                            range: 1...100,
-                            step: 1
-                        ) { newValue in
-                            onUpdate(newValue, editingWeight)
-                        }
-
-                        // Reps Apply to All Banner
-                        if hasMultipleSets && repsChanged && !repsBannerDismissed {
-                            ApplyToAllBanner(
-                                type: .reps,
-                                setCount: totalSets,
-                                onApply: onApplyRepsToAll,
-                                onDismiss: onDismissRepsBanner
-                            )
-                            .transition(.asymmetric(
-                                insertion: .move(edge: .top).combined(with: .opacity),
-                                removal: .move(edge: .top).combined(with: .opacity)
-                            ))
-                        }
-                    }
-
-                    // Weight input with contextual banner
-                    VStack(spacing: 8) {
-                        WeightInput(
-                            title: "set.weight_label".localized,
-                            weight: $editingWeight,
-                            increment: 0.25
-                        ) { newValue in
-                            onUpdate(editingReps, newValue)
-                        }
-
-                        // Weight Apply to All Banner
-                        if hasMultipleSets && weightChanged && !weightBannerDismissed {
-                            ApplyToAllBanner(
-                                type: .weight,
-                                setCount: totalSets,
-                                onApply: onApplyWeightToAll,
-                                onDismiss: onDismissWeightBanner
-                            )
-                            .transition(.asymmetric(
-                                insertion: .move(edge: .top).combined(with: .opacity),
-                                removal: .move(edge: .top).combined(with: .opacity)
-                            ))
-                        }
-                    }
-
-                    // Delete Set Button
-                    Button(role: .destructive) {
-                        showingDeleteSetAlert = true
-                    } label: {
-                        HStack(spacing: 6) {
-                            Image(systemName: "trash")
-                                .font(.subheadline)
-                            Text("set.delete".localized)
-                                .font(.subheadline.weight(.medium))
-                        }
-                        .foregroundStyle(.red)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 10)
-                    }
-                    .buttonStyle(.plain)
-                }
-                .padding(.horizontal, 12)
-                .padding(.top, 12)
-                .padding(.bottom, 12)
-                .transition(.opacity)
-            }
-        }
-        .background(
-            RoundedRectangle(cornerRadius: 8)
-                .fill(backgroundColor)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 8)
-                .strokeBorder(isExpanded ? DesignSystem.Colors.tint.opacity(0.3) : Color.clear, lineWidth: 1)
-        )
-        .alert("set.delete.title".localized, isPresented: $showingDeleteSetAlert) {
-            Button("set.delete.confirm".localized, role: .destructive) {
-                onDelete()
-            }
-            Button("action.cancel".localized, role: .cancel) {}
-        } message: {
-            Text("set.delete.message".localized)
-        }
-    }
-}
-
 
 #Preview {
     Text("RoutineDetailView Preview")
-}
-
-// MARK: - Wiggle Animation Modifier
-
-struct WiggleModifier: ViewModifier {
-    let isWiggling: Bool
-    @State private var wiggleCount: Int = 0
-
-    func body(content: Content) -> some View {
-        content
-            .rotationEffect(.degrees(wiggleCount > 0 ? (wiggleCount % 2 == 0 ? 2.0 : -2.0) : 0))
-            .onChange(of: isWiggling) { _, newValue in
-                if newValue {
-                    // Perform a single wiggle animation (3 shakes)
-                    wiggleCount = 0
-                    performWiggle()
-                }
-            }
-    }
-
-    private func performWiggle() {
-        // Wiggle 6 times (3 left-right cycles) then stop
-        for i in 1...6 {
-            DispatchQueue.main.asyncAfter(deadline: .now() + Double(i) * 0.1) {
-                withAnimation(.easeInOut(duration: 0.1)) {
-                    wiggleCount = i
-                }
-            }
-        }
-        // Return to center
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.7) {
-            withAnimation(DesignSystem.Animation.spring) {
-                wiggleCount = 0
-            }
-        }
-    }
 }

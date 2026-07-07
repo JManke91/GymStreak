@@ -21,4 +21,16 @@ struct TimeFormatting {
             return "\(minutes)m \(remainingSeconds)s"
         }
     }
+
+    /// Relative "last trained" label: "Today", "Yesterday", short relative
+    /// ("3 days ago"), or the localized never-trained placeholder for nil.
+    static func lastTrainedLabel(for date: Date?) -> String {
+        guard let date else { return "routines.last_done.never".localized }
+        if Calendar.current.isDateInToday(date) { return "date.today".localized }
+        if Calendar.current.isDateInYesterday(date) { return "date.yesterday".localized }
+        let formatter = RelativeDateTimeFormatter()
+        formatter.locale = Locale.current
+        formatter.unitsStyle = .short
+        return formatter.localizedString(for: date, relativeTo: Date())
+    }
 }

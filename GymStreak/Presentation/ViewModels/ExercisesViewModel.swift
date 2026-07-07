@@ -21,15 +21,54 @@ class ExercisesViewModel: ObservableObject {
     @Published var showingDeleteConfirmation = false
     @Published var showingDeleteAllConfirmation = false
 
-    /// Exercises grouped by muscle category, sorted anatomically top-to-bottom
-    var groupedExercises: [ExerciseSection] {
-        let grouped = Dictionary(grouping: exercises) { exercise -> String in
-            let primaryMuscle = exercise.muscleGroups.first ?? "General"
-            return MuscleGroups.categoryTitleKey(for: primaryMuscle)
+    // MARK: - Library filtering & grouping (redesigned Übungen tab)
+
+    /// Muscle categories present in the full library, in anatomical order.
+    /// Drives the muscle-group filter pill row.
+    var availableCategoryKeys: [String] {
+        let keys = Set(exercises.map { MuscleGroups.categoryTitleKey(for: $0.primaryMuscleGroup) })
+        return keys.sorted { MuscleGroups.categorySortOrder(for: $0) < MuscleGroups.categorySortOrder(for: $1) }
+    }
+
+    /// Equipment types present in the full library, in enum order.
+    var availableEquipment: [EquipmentType] {
+        EquipmentType.allCases.filter { type in exercises.contains { $0.equipmentType == type } }
+    }
+
+    /// Filters the library by free-text search, muscle category and equipment,
+    /// then groups the result by muscle category in anatomical order.
+    func sections(searchText: String, categoryKey: String?, equipment: EquipmentType?) -> [ExerciseSection] {
+        let filtered = exercises.filter { exercise in
+            let matchesSearch = searchText.isEmpty
+                || exercise.name.localizedCaseInsensitiveContains(searchText)
+                || exercise.muscleGroups.contains {
+                    MuscleGroups.displayName(for: $0).localizedCaseInsensitiveContains(searchText)
+                }
+            let matchesCategory = categoryKey == nil
+                || MuscleGroups.categoryTitleKey(for: exercise.primaryMuscleGroup) == categoryKey
+            let matchesEquipment = equipment == nil || exercise.equipmentType == equipment
+            return matchesSearch && matchesCategory && matchesEquipment
         }
-        return grouped
-            .map { ExerciseSection(categoryTitleKey: $0.key, exercises: $0.value) }
+
+        return Dictionary(grouping: filtered) { MuscleGroups.categoryTitleKey(for: $0.primaryMuscleGroup) }
+            .map { ExerciseSection(categoryTitleKey: $0.key, exercises: $0.value.sorted { $0.name < $1.name }) }
             .sorted { MuscleGroups.categorySortOrder(for: $0.categoryTitleKey) < MuscleGroups.categorySortOrder(for: $1.categoryTitleKey) }
+    }
+
+    /// Routines using an exercise, primary uses first, deduplicated by routine.
+    /// `routineExercise` is nil when the exercise appears only as an alternative.
+    func usages(for exercise: Exercise) -> [(routine: Routine, routineExercise: RoutineExercise?)] {
+        var seen = Set<UUID>()
+        var result: [(Routine, RoutineExercise?)] = []
+        for routineExercise in exercise.routineExercises ?? [] {
+            guard let routine = routineExercise.routine, seen.insert(routine.id).inserted else { continue }
+            result.append((routine, routineExercise))
+        }
+        for alternative in exercise.alternativeUses ?? [] {
+            guard let routine = alternative.routineExercise?.routine, seen.insert(routine.id).inserted else { continue }
+            result.append((routine, nil))
+        }
+        return result.sorted { $0.0.name < $1.0.name }
     }
 
     private let exerciseRepository: ExerciseRepository
@@ -80,6 +119,19 @@ class ExercisesViewModel: ObservableObject {
         // Remove duplicates and sort by name
         let uniqueRoutines = Array(Set(routines)).sorted { $0.name < $1.name }
         return uniqueRoutines
+    }
+
+    /// Number of distinct routines using the exercise, either as a primary
+    /// exercise or as an alternative. Shown on library rows and the detail view.
+    func routineUsageCount(for exercise: Exercise) -> Int {
+        var routineIds = Set<UUID>()
+        for routineExercise in exercise.routineExercises ?? [] {
+            if let routine = routineExercise.routine { routineIds.insert(routine.id) }
+        }
+        for alternative in exercise.alternativeUses ?? [] {
+            if let routine = alternative.routineExercise?.routine { routineIds.insert(routine.id) }
+        }
+        return routineIds.count
     }
 
     /// Initiates the delete flow - always shows confirmation for safety

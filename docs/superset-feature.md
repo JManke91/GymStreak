@@ -1,5 +1,7 @@
 # Superset Feature
 
+> **Note (2026-07):** The Routines tab was visually redesigned (see [routines-exercises-redesign.md](./routines-exercises-redesign.md)). Superset logic (link buttons, edit mode, context menu, group colors/badges) is unchanged; each exercise is now a rounded card and `ExerciseHeaderView` moved to `RoutineDetailComponents.swift`. The superset-edit toolbar renders via `safeAreaInset` on the redesigned detail screen.
+
 ## Overview
 
 Supersets allow users to group 2+ exercises together so they alternate sets during a workout. Instead of completing all sets of exercise A before moving to B, supersets interleave them: A1 → B1 → A2 → B2 → A3 → B3. Rest timers only trigger after completing a full round (all exercises at the same set level).

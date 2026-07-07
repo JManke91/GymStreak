@@ -1,0 +1,9 @@
+- Routinen-Tab neu gestaltet: Eine neue „Als Nächstes"-Karte hebt die Routine hervor, die du am längsten nicht trainiert hast. Routinenkarten zeigen jetzt Muskelgruppen, Satzanzahl und eine geschätzte Dauer.
+- Routinen lassen sich jetzt über das Menü (oder per langem Tippen in der Liste) duplizieren.
+- Übungen-Tab neu gestaltet: Suche, Filter nach Muskelgruppe und Ausrüstung, Übungen nach Muskelgruppe gruppiert und eine Anzeige „in N Routinen verwendet" pro Übung.
+- Übungsdetails neu gestaltet mit einer übersichtlicheren Info-Karte und einer „Verwendet in"-Liste, die zeigt, wo jede Übung vorkommt.
+- Blatt zum Erstellen/Bearbeiten von Übungen neu gestaltet – mit einer Live-Vorschau der Übung, wie sie in deiner Bibliothek erscheint.
+- Du kannst jetzt jede Routine mit einem Zeitplan planen – entweder als rollierendes Intervall (alle N Tage) oder an festen Wochentagen – über den neuen Bereich „Zeitplan" auf der Routinen-Ansicht.
+- Dein Wochenziel im Trainings-Tab wird jetzt aus deinen geplanten Routinen berechnet statt aus einer festen Zahl und passt sich so an, wie viele Einheiten tatsächlich in die aktuelle Woche fallen. Die Wochenleiste markiert jetzt auch geplante Tage.
+- Routinenkarten und die „Als Nächstes"-Karte zeigen jetzt, wann eine Routine als Nächstes fällig ist (überfällige werden hervorgehoben).
+- Beim Planen einer Routine im Intervall kannst du jetzt das Startdatum des Rhythmus wählen – praktisch zum „Neustarten", wenn dein letztes Training länger her ist. Nach dem nächsten Training zählt automatisch dieses.

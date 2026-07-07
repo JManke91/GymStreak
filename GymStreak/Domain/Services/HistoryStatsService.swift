@@ -23,19 +23,13 @@ struct HistoryStatsService {
         let streakWeeks: Int             // consecutive weeks ending with current or prior week
     }
 
-    /// Weekly training goal. Currently fixed; wired to a UserDefaults key so we can expose
-    /// a setting later without touching call sites.
-    static let defaultWeeklyGoal = 4
-
-    static var weeklyGoal: Int {
-        let stored = UserDefaults.standard.integer(forKey: "history.weeklyGoal")
-        return stored > 0 ? stored : defaultWeeklyGoal
-    }
-
     /// Computes the WeekHero stats for the week containing `referenceDate` (typically "now").
+    /// `goal` is the dynamic weekly training goal derived from the user's planned routines
+    /// (see `WorkoutPlanningService`); 0 means nothing is planned yet.
     static func weekStats(
         sessions: [WorkoutSession],
         prExerciseCountBySession: [UUID: Int],
+        goal: Int,
         referenceDate: Date = Date()
     ) -> WeekStats {
         let calendar = isoGermanCalendar()
@@ -64,7 +58,7 @@ struct HistoryStatsService {
 
         return WeekStats(
             completedCount: thisWeekSessions.count,
-            goal: weeklyGoal,
+            goal: goal,
             weekVolume: weekVolume,
             volumeTrendPct: trend,
             prCount: prCount,
@@ -82,11 +76,14 @@ struct HistoryStatsService {
         let isToday: Bool
         let isFuture: Bool
         let hasWorkout: Bool
+        let isPlanned: Bool   // a routine is scheduled for this day (see WorkoutPlanningService)
     }
 
     /// Monday-first weekday strip for the week containing `referenceDate`.
+    /// `plannedDates` are start-of-day dates that carry a scheduled session.
     static func weekDayStatuses(
         sessions: [WorkoutSession],
+        plannedDates: Set<Date> = [],
         referenceDate: Date = Date()
     ) -> [WeekDayStatus] {
         let calendar = isoGermanCalendar()
@@ -109,7 +106,8 @@ struct HistoryStatsService {
                 label: weekdayLabel(for: startOfDate, calendar: calendar),
                 isToday: startOfDate == today,
                 isFuture: startOfDate > today,
-                hasWorkout: workoutDays.contains(startOfDate)
+                hasWorkout: workoutDays.contains(startOfDate),
+                isPlanned: plannedDates.contains(startOfDate)
             )
         }
     }

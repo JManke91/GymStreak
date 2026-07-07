@@ -12,6 +12,8 @@ struct HistoryView: View {
     @ObservedObject var viewModel: WorkoutViewModel
     @Environment(\.scenePhase) private var scenePhase
     @Query(sort: \Exercise.name) private var allExercises: [Exercise]
+    /// Live routines (with their schedules) drive the dynamic weekly goal.
+    @Query private var routines: [Routine]
 
     enum Section: String, CaseIterable {
         case trainings, fortschritt
@@ -71,6 +73,7 @@ struct HistoryView: View {
                             case .trainings:
                                 TrainingsTabView(
                                     sessions: sessions,
+                                    routines: routines,
                                     prExerciseCountBySession: prExerciseCountBySession,
                                     onDeleteRequested: requestDelete
                                 )

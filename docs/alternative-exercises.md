@@ -1,5 +1,7 @@
 # Alternative Exercises
 
+> **Note (2026-07):** The Routines tab was visually redesigned (see [routines-exercises-redesign.md](./routines-exercises-redesign.md)). Alternatives logic is unchanged; the alternatives summary/editor now render inside the redesigned exercise cards, an "Alternativen" info chip shows the count, and `ExerciseHeaderView` moved to `RoutineDetailComponents.swift`.
+
 ## What the feature does
 
 A routine exercise (e.g. Bench Press) can have any number of **alternative exercises** (e.g. Dumbbell Press). Each alternative carries its **own set scheme** (reps/weight/rest), initially seeded as a copy of the primary exercise's sets. During a live workout the user can **swap** the planned exercise for one of its alternatives (or back) as long as no set has been completed — the classic "machine is busy" case. The performed exercise (not the planned one) is what lands in workout history.

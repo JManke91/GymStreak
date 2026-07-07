@@ -6,6 +6,8 @@ class RoutinesViewModel: ObservableObject {
     @Published var routines: [Routine] = []
     @Published var showingAddRoutine = false
     @Published var selectedRoutine: Routine?
+    /// Most recent completed-session start date per routine id (nil = never trained).
+    @Published var lastPerformedByRoutine: [UUID: Date] = [:]
 
     private let routineRepository: RoutineRepository
     private let workoutSessionRepository: WorkoutSessionRepository
@@ -102,7 +104,62 @@ class RoutinesViewModel: ObservableObject {
 
     func fetchRoutines() {
         routines = routineRepository.fetchAll()
+        refreshLastPerformedDates()
         syncRoutinesToWatch()
+    }
+
+    /// Rebuilds the routine → last-trained lookup from completed workout history.
+    /// Drives the "Als Nächstes" hero (least recently trained) and the relative
+    /// dates on routine cards.
+    private func refreshLastPerformedDates() {
+        var dates: [UUID: Date] = [:]
+        for session in workoutSessionRepository.fetchCompleted() {
+            guard let routineId = session.routine?.id else { continue }
+            if let existing = dates[routineId], existing >= session.startTime { continue }
+            dates[routineId] = session.startTime
+        }
+        lastPerformedByRoutine = dates
+    }
+
+    /// The routine surfaced as the "Als Nächstes" hero card. When any routine is
+    /// planned, this is the soonest-due one (overdue plans sort first). Otherwise
+    /// it falls back to the least-recently-trained routine.
+    var upNextRoutine: Routine? {
+        guard !routines.isEmpty else { return nil }
+
+        // Prefer the soonest-due planned routine.
+        var soonest: (routine: Routine, due: Date)?
+        for routine in routines {
+            guard let schedule = routine.schedule, schedule.isActive,
+                  let due = WorkoutPlanningService.nextDue(
+                    for: schedule,
+                    lastCompleted: lastPerformedByRoutine[routine.id]
+                  ) else { continue }
+            if let current = soonest {
+                if due < current.due { soonest = (routine, due) }
+            } else {
+                soonest = (routine, due)
+            }
+        }
+        if let soonest { return soonest.routine }
+
+        // No plans: least-recently-trained (never-trained wins).
+        guard routines.count > 1 else { return routines.first }
+        return routines.min { lhs, rhs in
+            let lhsDate = lastPerformedByRoutine[lhs.id] ?? .distantPast
+            let rhsDate = lastPerformedByRoutine[rhs.id] ?? .distantPast
+            return lhsDate < rhsDate
+        }
+    }
+
+    /// The next date a routine is due, or nil if unplanned. Uses the *live* last
+    /// completion so it updates as soon as a workout is finished.
+    func nextDueDate(for routine: Routine) -> Date? {
+        guard let schedule = routine.schedule, schedule.isActive else { return nil }
+        return WorkoutPlanningService.nextDue(
+            for: schedule,
+            lastCompleted: lastPerformedByRoutine[routine.id]
+        )
     }
 
     // MARK: - Watch Connectivity
@@ -176,6 +233,56 @@ class RoutinesViewModel: ObservableObject {
         fetchRoutines()
     }
 
+    /// Deep-copies a routine (exercises, sets, rep ranges, supersets and
+    /// alternatives with their set schemes) under a "(name Copy)" title.
+    @discardableResult
+    func duplicateRoutine(_ routine: Routine) -> Routine {
+        let copy = Routine(name: String(format: "routine.duplicate.name_format".localized, routine.name))
+        routineRepository.insert(copy)
+
+        // Superset ids must not be shared across routines — remap per duplicate.
+        var supersetIdMap: [UUID: UUID] = [:]
+
+        for source in routine.routineExercisesList.sorted(by: { $0.order < $1.order }) {
+            guard let exercise = source.exercise else { continue }
+            let target = RoutineExercise(exercise: exercise, order: source.order)
+            target.routine = copy
+            target.targetRepMin = source.targetRepMin
+            target.targetRepMax = source.targetRepMax
+            if let supersetId = source.supersetId {
+                let mapped = supersetIdMap[supersetId] ?? UUID()
+                supersetIdMap[supersetId] = mapped
+                target.supersetId = mapped
+                target.supersetOrder = source.supersetOrder
+            }
+
+            for (index, set) in source.setsList.sorted(by: { $0.order < $1.order }).enumerated() {
+                let newSet = ExerciseSet(reps: set.reps, weight: set.weight, restTime: set.restTime, order: index)
+                newSet.routineExercise = target
+                target.sets?.append(newSet)
+            }
+
+            for (altOrder, alternative) in source.alternativesList.enumerated() {
+                guard let altExercise = alternative.exercise else { continue }
+                let newAlternative = RoutineExerciseAlternative(exercise: altExercise, order: altOrder)
+                newAlternative.routineExercise = target
+                newAlternative.sets = alternative.setsList.enumerated().map { setIndex, set in
+                    let altSet = AlternativeExerciseSet(reps: set.reps, weight: set.weight, restTime: set.restTime, order: setIndex)
+                    altSet.alternative = newAlternative
+                    return altSet
+                }
+                if target.alternatives == nil { target.alternatives = [] }
+                target.alternatives?.append(newAlternative)
+            }
+
+            copy.routineExercises?.append(target)
+        }
+
+        save()
+        fetchRoutines()
+        return copy
+    }
+
     func deleteRoutine(_ routine: Routine) {
         routineRepository.delete(routine)
         save()
@@ -235,6 +342,45 @@ class RoutinesViewModel: ObservableObject {
         if let routine = routineExercise.routine {
             updateRoutine(routine)
         }
+    }
+
+    // MARK: - Schedule / Planning
+
+    /// Creates or updates a routine's training plan. Passing the mode + both
+    /// sets of parameters keeps the call site simple; only the fields relevant
+    /// to `type` are actually used by `WorkoutPlanningService`.
+    func setSchedule(
+        for routine: Routine,
+        type: RoutineScheduleType,
+        intervalDays: Int,
+        weekdays: Set<Int>,
+        referenceDate: Date
+    ) {
+        let schedule: RoutineSchedule
+        if let existing = routine.schedule {
+            schedule = existing
+        } else {
+            schedule = RoutineSchedule()
+            schedule.routine = routine
+            routine.schedule = schedule
+            routineRepository.insert(schedule)
+        }
+        schedule.type = type
+        schedule.intervalDays = max(1, intervalDays)
+        schedule.weekdays = weekdays
+        // Reference date is the "start fresh" anchor for the cadence; the last
+        // completed workout takes over once one lands on or after it.
+        schedule.startDate = referenceDate
+        schedule.isActive = true
+        updateRoutine(routine)
+    }
+
+    /// Clears a routine's plan entirely.
+    func removeSchedule(from routine: Routine) {
+        guard let schedule = routine.schedule else { return }
+        routine.schedule = nil
+        routineRepository.delete(schedule)
+        updateRoutine(routine)
     }
 
     // MARK: - Rep Range Management

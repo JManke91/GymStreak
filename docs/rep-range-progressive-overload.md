@@ -1,5 +1,7 @@
 # Rep Range Goal & Progressive Overload
 
+> **Note (2026-07):** The Routines tab was visually redesigned (see [routines-exercises-redesign.md](./routines-exercises-redesign.md)). Rep-range/overload logic is unchanged; `ExerciseHeaderView` and `RoutineSetRowView` now live in `RoutineDetailComponents.swift`. The rep-range goal is also surfaced as a "Ziel %d–%d Wdh." info chip on each exercise card.
+
 ## Feature Description
 
 Adds a **rep range goal** (e.g., 8-12 reps) to exercises within routines. When all sets reach the upper limit, the app celebrates and suggests a weight increase with options to auto-apply (new weight + reset reps to lower limit). This implements the "Double Progression" model - the industry-standard approach for progressive overload.
