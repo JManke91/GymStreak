@@ -7,3 +7,8 @@
 - Dein Wochenziel im Trainings-Tab wird jetzt aus deinen geplanten Routinen berechnet statt aus einer festen Zahl und passt sich so an, wie viele Einheiten tatsächlich in die aktuelle Woche fallen. Die Wochenleiste markiert jetzt auch geplante Tage.
 - Routinenkarten und die „Als Nächstes"-Karte zeigen jetzt, wann eine Routine als Nächstes fällig ist (überfällige werden hervorgehoben).
 - Beim Planen einer Routine im Intervall kannst du jetzt das Startdatum des Rhythmus wählen – praktisch zum „Neustarten", wenn dein letztes Training länger her ist. Nach dem nächsten Training zählt automatisch dieses.
+- Alternative Übungen lassen sich jetzt einfacher verwalten: Sie erscheinen als Bereich direkt in der aufgeklappten Übung, werden dort bearbeitet und übernehmen nicht mehr die ganze Karte oder halten dich in einem separaten Modus fest.
+- Flüssigere, natürlichere Auf-/Zuklapp-Animationen für Übungs- und Satzkarten auf der Routinen-Ansicht.
+- Du kannst jetzt auch für Alternativübungen ein Wiederholungsziel („Wdh.-Ziel") festlegen, nicht nur für die Hauptübung – inklusive Fortschrittsanzeige pro Satz, und es wird übernommen, wenn du im Training zu dieser Alternative wechselst.
+- Tippe auf den „Alternativen"-Chip einer Übung, um eine schnelle Liste ihrer Alternativen zu öffnen – wähle eine aus, um direkt dorthin zu springen, statt die Übung aufzuklappen und danach zu scrollen.
+- Eine Übung und ihre Alternativen erscheinen jetzt als Pillen oben in der aufgeklappten Karte, und die Karte zeigt nur die angetippte Variante – kein Scrollen mehr durch die Hauptübung und alle Alternativen zusammen.

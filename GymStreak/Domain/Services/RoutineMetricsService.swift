@@ -50,4 +50,20 @@ enum RoutineMetricsService {
         guard reps.allSatisfy({ $0 == firstReps }), weights.allSatisfy({ $0 == firstWeight }) else { return nil }
         return (firstReps, firstWeight)
     }
+
+    /// Compact scheme summary for picker rows, e.g. "3×10", "4×8–12 · 20kg".
+    /// Weight is appended only when uniform across all sets and non-zero
+    /// (alternatives commonly seed at weight 0). Shared by the in-workout Swap
+    /// picker and the routine alternatives browse sheet so both read identically.
+    static func setSchemeSummary(reps: [Int], weights: [Double]) -> String? {
+        guard !reps.isEmpty else { return nil }
+        let repsPart = reps.min() == reps.max()
+            ? "\(reps[0])"
+            : "\(reps.min() ?? 0)–\(reps.max() ?? 0)"
+        var summary = "\(reps.count)×\(repsPart)"
+        if let weight = weights.first, weight > 0, weights.allSatisfy({ $0 == weight }) {
+            summary += " · \(String(format: "%gkg", weight))"
+        }
+        return summary
+    }
 }

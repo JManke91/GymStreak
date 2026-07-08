@@ -27,6 +27,10 @@ struct AlternativeSetsInlineEditor<SetType: AlternativeEditableSet>: View {
     let onRemoveSet: (SetType) -> Void
     /// Persistence hook, called after a set's values changed (no-op for pending sets).
     let onSetChanged: (SetType) -> Void
+    /// Optional rep-range goal of the owning alternative — drives the per-set
+    /// progress badge + reps color, mirroring RoutineSetRowView. nil = no goal.
+    var targetRepMin: Int? = nil
+    var targetRepMax: Int? = nil
 
     @State private var expandedSetId: UUID?
     @State private var editingReps = 10
@@ -35,6 +39,7 @@ struct AlternativeSetsInlineEditor<SetType: AlternativeEditableSet>: View {
     @State private var initialWeight = 0.0
     @State private var bannerDismissed = false
     @State private var restTimerExpanded = false
+    @State private var pendingDeleteSetId: UUID?
 
     private var sortedSets: [SetType] {
         sets.sorted { $0.order < $1.order }
@@ -46,6 +51,17 @@ struct AlternativeSetsInlineEditor<SetType: AlternativeEditableSet>: View {
 
     private var restTime: TimeInterval {
         sortedSets.first?.restTime ?? 0
+    }
+
+    private func repRangeColor(for reps: Int) -> Color {
+        guard let min = targetRepMin, let max = targetRepMax else { return .white }
+        if reps >= max {
+            return .orange
+        } else if reps >= min {
+            return DesignSystem.Colors.tint
+        } else {
+            return Color.white.opacity(0.6)
+        }
     }
 
     var body: some View {
@@ -93,63 +109,100 @@ struct AlternativeSetsInlineEditor<SetType: AlternativeEditableSet>: View {
                 showToggle: true
             )
         }
+        .alert("set.delete.title".localized, isPresented: deleteAlertBinding) {
+            Button("set.delete.confirm".localized, role: .destructive) {
+                if let id = pendingDeleteSetId, let set = sets.first(where: { $0.id == id }) {
+                    if expandedSetId == id { expandedSetId = nil }
+                    withAnimation(DesignSystem.Animation.spring) {
+                        onRemoveSet(set)
+                    }
+                }
+                pendingDeleteSetId = nil
+            }
+            Button("action.cancel".localized, role: .cancel) { pendingDeleteSetId = nil }
+        } message: {
+            Text("set.delete.message".localized)
+        }
     }
 
+    private var deleteAlertBinding: Binding<Bool> {
+        Binding(
+            get: { pendingDeleteSetId != nil },
+            set: { if !$0 { pendingDeleteSetId = nil } }
+        )
+    }
+
+    // Mirrors RoutineSetRowView so an alternative's sets read and behave
+    // identically to the primary exercise's sets: numbered badge, "reps × weight",
+    // a chevron.down that expands the row in place, and a delete action that lives
+    // INSIDE the expanded cell (not an always-visible minus).
     @ViewBuilder
     private func setRow(set: SetType, index: Int) -> some View {
         let isExpanded = expandedSetId == set.id
         VStack(alignment: .leading, spacing: 0) {
-            HStack(spacing: 10) {
-                if sortedSets.count > 1 {
-                    Button {
-                        if expandedSetId == set.id {
-                            expandedSetId = nil
-                        }
-                        withAnimation(DesignSystem.Animation.spring) {
-                            onRemoveSet(set)
-                        }
-                    } label: {
-                        Image(systemName: "minus.circle.fill")
-                            .font(.title3)
-                            .foregroundStyle(.white, .red)
-                            .symbolRenderingMode(.palette)
+            Button {
+                withAnimation(DesignSystem.Animation.spring) {
+                    if isExpanded {
+                        saveCurrentEditingSet()
+                        expandedSetId = nil
+                    } else {
+                        saveCurrentEditingSet()
+                        expand(set)
                     }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel("set.delete_accessibility".localized(index + 1))
                 }
+            } label: {
+                HStack(spacing: 12) {
+                    Text("\(index + 1)")
+                        .font(.system(size: 11.5, weight: .heavy))
+                        .monospacedDigit()
+                        .foregroundStyle(DesignSystem.Colors.tint)
+                        .frame(width: 24, height: 24)
+                        .background(DesignSystem.Colors.tint.opacity(0.15))
+                        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
 
-                Button {
-                    withAnimation(DesignSystem.Animation.spring) {
-                        if isExpanded {
-                            saveCurrentEditingSet()
-                            expandedSetId = nil
-                        } else {
-                            saveCurrentEditingSet()
-                            expand(set)
-                        }
+                    HStack(alignment: .firstTextBaseline, spacing: 6) {
+                        Text("set.reps".localized(set.reps))
+                            .foregroundStyle(repRangeColor(for: set.reps))
+                        Text("×")
+                            .font(.system(size: 12))
+                            .foregroundStyle(Color.white.opacity(0.35))
+                        Text("set.weight".localized(set.weight))
+                            .foregroundStyle(.white)
                     }
-                } label: {
-                    HStack {
-                        Text("set.number".localized(index + 1))
-                            .font(.subheadline.weight(.semibold))
-                            .foregroundStyle(.primary)
-                        Spacer()
-                        Text("configure_exercise.set_detail".localized(set.reps, set.weight))
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                        Image(systemName: "chevron.right")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .rotationEffect(.degrees(isExpanded ? 90 : 0))
+                    .font(.system(size: 14.5, weight: .bold, design: .rounded))
+                    .monospacedDigit()
+
+                    // Rep-range progress badge (mirrors RoutineSetRowView)
+                    if let max = targetRepMax {
+                        Text("\(set.reps)/\(max)")
+                            .font(.caption2.weight(.medium))
+                            .monospacedDigit()
+                            .foregroundStyle(repRangeColor(for: set.reps))
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(repRangeColor(for: set.reps).opacity(0.1), in: Capsule())
                     }
-                    .contentShape(Rectangle())
+
+                    Spacer()
+
+                    Image(systemName: "chevron.down")
+                        .font(isExpanded ? .subheadline.weight(.bold) : .caption.weight(.semibold))
+                        .foregroundStyle(isExpanded ? DesignSystem.Colors.tint : Color.white.opacity(0.35))
+                        .rotationEffect(.degrees(isExpanded ? 180 : 0))
+                        .animation(DesignSystem.Animation.spring, value: isExpanded)
                 }
-                .buttonStyle(.plain)
+                .padding(.vertical, 9)
+                .padding(.horizontal, 12)
+                .contentShape(Rectangle())
             }
-            .padding(.vertical, 6)
+            .buttonStyle(.plain)
+            .accessibilityLabel("accessibility.set.label".localized(index + 1, set.reps, set.weight))
 
             if isExpanded {
-                VStack(spacing: 12) {
+                Divider()
+                    .padding(.horizontal, 12)
+
+                VStack(spacing: 16) {
                     if sortedSets.count > 1 && hasChanges && !bannerDismissed {
                         ApplyToAllBanner(
                             setCount: sortedSets.count,
@@ -195,14 +248,41 @@ struct AlternativeSetsInlineEditor<SetType: AlternativeEditableSet>: View {
                         set.weight = editingWeight
                         onSetChanged(set)
                     }
+
+                    // Delete lives inside the expanded cell (matches RoutineSetRowView).
+                    // Only offered when more than one set remains.
+                    if sortedSets.count > 1 {
+                        Button(role: .destructive) {
+                            pendingDeleteSetId = set.id
+                        } label: {
+                            HStack(spacing: 6) {
+                                Image(systemName: "trash")
+                                    .font(.subheadline)
+                                Text("set.delete".localized)
+                                    .font(.subheadline.weight(.medium))
+                            }
+                            .foregroundStyle(.red)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 10)
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("set.delete_accessibility".localized(index + 1))
+                    }
                 }
-                .padding(.bottom, 8)
-                .transition(.asymmetric(
-                    insertion: .opacity.combined(with: .scale(scale: 0.95, anchor: .top)),
-                    removal: .opacity.combined(with: .scale(scale: 0.95, anchor: .top))
-                ))
+                .padding(.horizontal, 12)
+                .padding(.top, 12)
+                .padding(.bottom, 12)
+                .transition(.opacity)
             }
         }
+        .background(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(isExpanded ? Color.white.opacity(0.06) : Color.white.opacity(0.03))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .strokeBorder(isExpanded ? DesignSystem.Colors.tint.opacity(0.3) : Color.clear, lineWidth: 1)
+        )
     }
 
     private func expand(_ set: SetType) {

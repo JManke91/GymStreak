@@ -7,3 +7,8 @@
 - Your weekly workout goal in the Trainings tab is now calculated from your planned routines instead of a fixed number, so it adapts to how many sessions actually fall in the current week. The week strip now marks planned days too.
 - Routine cards and the "Up Next" card now show when a routine is next due (and highlight overdue ones).
 - When planning a routine on an interval, you can now pick the date the cadence starts from — handy to "start fresh" if your last workout was a while ago. After your next workout it rolls off that automatically.
+- Alternative exercises are now easier to manage: they appear as a section right inside the expanded exercise, edit in place, and no longer take over the whole card or trap you in a separate mode.
+- Smoother, more natural expand/collapse animations for exercise and set cards on the routine screen.
+- You can now set a rep-range goal ("Rep goal") for alternative exercises too, not just the main exercise — including the per-set progress badge, and it carries over when you swap to that alternative during a workout.
+- Tap the "Alternatives" chip on an exercise to open a quick list of its alternatives — pick one to jump straight to it, instead of expanding the exercise and scrolling to find it.
+- An exercise and its alternatives now show as pills at the top of the expanded card, and the card shows only the one you tap — no more scrolling through the main exercise and every alternative stacked together.

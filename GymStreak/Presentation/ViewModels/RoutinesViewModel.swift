@@ -599,6 +599,16 @@ class RoutinesViewModel: ObservableObject {
         }
     }
 
+    /// Sets (or clears) an alternative's own rep-range goal, independent of the
+    /// primary exercise's goal. Mirrors `updateRepRange(for:min:max:)`.
+    func updateRepRange(for alternative: RoutineExerciseAlternative, min: Int?, max: Int?) {
+        alternative.targetRepMin = min
+        alternative.targetRepMax = max
+        if let routine = alternative.routineExercise?.routine {
+            updateRoutine(routine)
+        }
+    }
+
     private func save() {
         do {
             try routineRepository.save()

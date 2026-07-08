@@ -29,13 +29,23 @@ struct RoutineDetailView: View {
     @AppStorage("hasSeenReorderHint") private var hasSeenReorderHint = false
     @State private var showReorderHint = false
     @State private var setEditExerciseId: UUID? = nil
-    @State private var alternativesEditExerciseId: UUID? = nil
     @State private var addAlternativeTarget: RoutineExercise? = nil
-    @State private var expandedAlternativeEditId: UUID? = nil
+    /// Which variant the expanded exercise card is focused on: nil = the primary
+    /// exercise; otherwise the focused alternative's id. Drives the single-variant
+    /// card body (only that exercise's config is shown).
+    @State private var focusedAlternativeId: UUID? = nil
+    @State private var draggingId: UUID? = nil
     @State private var repRangeExpandedForExercise: [UUID: Bool] = [:]
     @State private var overloadBannerDismissedForExercise: [UUID: Bool] = [:]
     @State private var selectedExerciseForOverload: RoutineExercise?
     @State private var showingSchedulePlanner = false
+    // Alternatives browse sheet (one-tap entry from the info chip) + the jump it
+    // hands back: expand the card + that alternative's inline editor, scrolled in.
+    @State private var browseAlternativesTarget: RoutineExercise?
+    @State private var pendingExpandExerciseId: UUID?
+    @State private var pendingExpandAlternativeId: UUID?
+    @State private var pendingAddTarget: RoutineExercise?
+    @State private var scrollToExerciseId: UUID?
 
     // Helper function to get rest time for an exercise
     private func restTime(for exercise: RoutineExercise) -> TimeInterval {
@@ -148,6 +158,7 @@ struct RoutineDetailView: View {
         expandedExerciseId = nil
         expandedSetId = nil
         setEditExerciseId = nil
+        focusedAlternativeId = nil
         withAnimation(DesignSystem.Animation.spring) {
             supersetEditMode = .editing(supersetId)
         }
@@ -159,6 +170,7 @@ struct RoutineDetailView: View {
         expandedExerciseId = nil
         expandedSetId = nil
         setEditExerciseId = nil
+        focusedAlternativeId = nil
         withAnimation(DesignSystem.Animation.spring) {
             supersetEditMode = .creating
         }
@@ -219,6 +231,7 @@ struct RoutineDetailView: View {
             expandedExerciseId = routineExercise.id
             expandedSetId = nil
             setEditExerciseId = routineExercise.id
+            focusedAlternativeId = nil
         }
         UIImpactFeedbackGenerator(style: .medium).impactOccurred()
     }
@@ -229,23 +242,54 @@ struct RoutineDetailView: View {
         }
     }
 
-    // MARK: - Alternatives Edit Mode
+    // MARK: - Alternatives (add doorway)
 
-    private func enterAlternativesEditMode(for routineExercise: RoutineExercise) {
+    /// Expand the card focused on its first alternative (so the variant editor is
+    /// shown directly); for an exercise with no alternatives yet, jump straight
+    /// into the add-alternative picker.
+    private func openAlternatives(for routineExercise: RoutineExercise) {
         guard !isEditMode, supersetEditMode == nil else { return }
         withAnimation(DesignSystem.Animation.spring) {
             expandedExerciseId = routineExercise.id
             expandedSetId = nil
             setEditExerciseId = nil
-            alternativesEditExerciseId = routineExercise.id
+            focusedAlternativeId = routineExercise.alternativesList.first?.id
+        }
+        if !routineExercise.hasAlternatives {
+            addAlternativeTarget = routineExercise
         }
         UIImpactFeedbackGenerator(style: .medium).impactOccurred()
     }
 
-    private func exitAlternativesEditMode() {
-        withAnimation(DesignSystem.Animation.spring) {
-            alternativesEditExerciseId = nil
+    /// Runs after the alternatives-browse sheet dismisses. Either chains into the
+    /// add-alternative picker, or jumps to the chosen alternative's inline editor
+    /// (expand the card + that alternative, then scroll the card into view).
+    private func applyPendingBrowseAction() {
+        if let addTarget = pendingAddTarget {
+            pendingAddTarget = nil
+            // Expand the target card first so the picker's onAdded (which expands
+            // the freshly added alternative's inline editor) lands on a visible card.
+            withAnimation(DesignSystem.Animation.spring) {
+                expandedExerciseId = addTarget.id
+                expandedSetId = nil
+                setEditExerciseId = nil
+                focusedAlternativeId = nil
+            }
+            addAlternativeTarget = addTarget
+            scrollToExerciseId = addTarget.id
+            return
         }
+        guard let exerciseId = pendingExpandExerciseId,
+              let alternativeId = pendingExpandAlternativeId else { return }
+        pendingExpandExerciseId = nil
+        pendingExpandAlternativeId = nil
+        withAnimation(DesignSystem.Animation.spring) {
+            expandedExerciseId = exerciseId
+            expandedSetId = nil
+            setEditExerciseId = nil
+            focusedAlternativeId = alternativeId
+        }
+        scrollToExerciseId = exerciseId
     }
 
     private func moveSetUp(at index: Int, for routineExercise: RoutineExercise) {
@@ -264,6 +308,35 @@ struct RoutineDetailView: View {
 
     @ViewBuilder
     private func normalSetContent(for routineExercise: RoutineExercise) -> some View {
+        let focusedAlternative = routineExercise.alternativesList.first { $0.id == focusedAlternativeId }
+
+        // Variant switcher: the primary exercise + each alternative as peer pills.
+        // Selecting one focuses that variant so the body shows ONLY that exercise —
+        // a routine exercise is one "slot" you configure one variant at a time.
+        if routineExercise.hasAlternatives {
+            ExerciseVariantSwitcher(
+                routineExercise: routineExercise,
+                focusedAlternativeId: $focusedAlternativeId,
+                onAddAlternative: { addAlternativeTarget = routineExercise }
+            )
+            .padding(.bottom, 2)
+        }
+
+        if let focusedAlternative {
+            AlternativeFocusedEditor(
+                alternative: focusedAlternative,
+                viewModel: viewModel,
+                onRemoved: {
+                    withAnimation(DesignSystem.Animation.spring) { focusedAlternativeId = nil }
+                }
+            )
+        } else {
+            primarySetContent(for: routineExercise)
+        }
+    }
+
+    @ViewBuilder
+    private func primarySetContent(for routineExercise: RoutineExercise) -> some View {
         // Rest Timer Configuration
         if routineExercise.isInSuperset {
             if isFirstInSuperset(routineExercise) {
@@ -423,57 +496,11 @@ struct RoutineDetailView: View {
             .transition(.opacity.combined(with: .move(edge: .top)))
         }
 
-        // Alternatives summary — visible without entering edit mode; tapping an
-        // alternative jumps into alternatives edit mode with it expanded
-        if routineExercise.hasAlternatives {
-            VStack(alignment: .leading, spacing: 8) {
-                sectionLabel("alternatives.section_title".localized, icon: "arrow.triangle.2.circlepath")
-
-                ForEach(routineExercise.alternativesList) { alternative in
-                    Button {
-                        expandedAlternativeEditId = alternative.id
-                        enterAlternativesEditMode(for: routineExercise)
-                    } label: {
-                        HStack(spacing: 10) {
-                            if let exercise = alternative.exercise {
-                                ExerciseAvatarView(
-                                    muscleGroups: exercise.muscleGroups,
-                                    equipmentType: exercise.equipmentType,
-                                    size: 30,
-                                    radius: 9
-                                )
-                            }
-
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(alternative.exercise?.name ?? "Unknown")
-                                    .font(.system(size: 13.5, weight: .semibold))
-                                    .foregroundStyle(.white)
-                                Text("routine.sets_count".localized(alternative.setsList.count))
-                                    .font(.caption)
-                                    .foregroundStyle(Color.white.opacity(0.45))
-                            }
-
-                            Spacer()
-
-                            Image(systemName: "chevron.right")
-                                .font(.caption.weight(.semibold))
-                                .foregroundStyle(Color.white.opacity(0.3))
-                        }
-                        .padding(.vertical, 8)
-                        .padding(.horizontal, 12)
-                        .background(
-                            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                .fill(Color.white.opacity(0.03))
-                        )
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                .stroke(Color.white.opacity(0.04), lineWidth: 1)
-                        )
-                        .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel("alternatives.view_accessibility".localized(alternative.exercise?.name ?? ""))
-                }
+        // First alternative for this exercise is added here; once any exist, the
+        // add affordance moves into the variant switcher's "+" pill above.
+        if !routineExercise.hasAlternatives {
+            DashedCreateButton(title: "alternatives.add".localized, tinted: true) {
+                addAlternativeTarget = routineExercise
             }
             .padding(.top, 4)
         }
@@ -611,136 +638,6 @@ struct RoutineDetailView: View {
         .buttonStyle(.plain)
     }
 
-    // MARK: - Alternatives Edit Content
-
-    @ViewBuilder
-    private func alternativesEditContent(for routineExercise: RoutineExercise) -> some View {
-        // Explanation
-        Text("alternatives.edit.explanation".localized)
-            .font(.caption)
-            .foregroundStyle(Color.white.opacity(0.5))
-            .frame(maxWidth: .infinity, alignment: .leading)
-
-        ForEach(routineExercise.alternativesList) { alternative in
-            let isAlternativeExpanded = expandedAlternativeEditId == alternative.id
-            VStack(alignment: .leading, spacing: 0) {
-                Button {
-                    withAnimation(DesignSystem.Animation.spring) {
-                        expandedAlternativeEditId = isAlternativeExpanded ? nil : alternative.id
-                    }
-                } label: {
-                    HStack(spacing: 10) {
-                        // Delete button
-                        Button {
-                            if isAlternativeExpanded { expandedAlternativeEditId = nil }
-                            withAnimation(DesignSystem.Animation.spring) {
-                                viewModel.removeAlternative(alternative, from: routineExercise)
-                            }
-                        } label: {
-                            Image(systemName: "minus.circle.fill")
-                                .font(.title3)
-                                .foregroundStyle(.white, .red)
-                                .symbolRenderingMode(.palette)
-                        }
-                        .buttonStyle(.plain)
-                        .accessibilityLabel("alternatives.remove_accessibility".localized(alternative.exercise?.name ?? ""))
-
-                        if let exercise = alternative.exercise {
-                            ExerciseAvatarView(
-                                muscleGroups: exercise.muscleGroups,
-                                equipmentType: exercise.equipmentType,
-                                size: 30,
-                                radius: 9
-                            )
-                        }
-
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(alternative.exercise?.name ?? "Unknown")
-                                .font(.system(size: 13.5, weight: .semibold))
-                                .foregroundStyle(.white)
-                            Text("routine.sets_count".localized(alternative.setsList.count))
-                                .font(.caption)
-                                .foregroundStyle(Color.white.opacity(0.45))
-                        }
-
-                        Spacer()
-
-                        Image(systemName: "chevron.right")
-                            .font(.caption.weight(.semibold))
-                            .foregroundStyle(Color.white.opacity(0.3))
-                            .rotationEffect(.degrees(isAlternativeExpanded ? 90 : 0))
-                    }
-                    .padding(.vertical, 8)
-                    .padding(.horizontal, 12)
-                    .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-
-                if isAlternativeExpanded {
-                    AlternativeSetsInlineEditor(
-                        sets: alternative.setsList,
-                        onAddSet: { viewModel.addSet(to: alternative) },
-                        onRemoveSet: { viewModel.removeSet($0, from: alternative) },
-                        onSetChanged: { viewModel.updateSet($0) }
-                    )
-                    .padding(.horizontal, 12)
-                    .padding(.bottom, 10)
-                }
-            }
-            .background(
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .fill(Color.white.opacity(0.03))
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .stroke(Color.white.opacity(0.04), lineWidth: 1)
-            )
-        }
-
-        // Add Alternative button
-        Button {
-            addAlternativeTarget = routineExercise
-        } label: {
-            HStack(spacing: 6) {
-                Image(systemName: "plus")
-                    .font(.system(size: 12, weight: .bold))
-                Text("alternatives.add".localized)
-                    .font(.system(size: 12.5, weight: .bold))
-            }
-            .foregroundStyle(DesignSystem.Colors.tint)
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 10)
-            .background(DesignSystem.Colors.tint.opacity(0.08))
-            .overlay(
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .stroke(style: StrokeStyle(lineWidth: 1, dash: [5, 4]))
-                    .foregroundStyle(DesignSystem.Colors.tint.opacity(0.3))
-            )
-            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-        }
-        .buttonStyle(.plain)
-
-        // Done button
-        Button {
-            exitAlternativesEditMode()
-        } label: {
-            HStack(spacing: 6) {
-                Image(systemName: "checkmark.circle.fill")
-                    .font(.subheadline)
-                    .fontWeight(.medium)
-                Text("action.done".localized)
-                    .font(.subheadline)
-                    .fontWeight(.semibold)
-            }
-            .foregroundStyle(DesignSystem.Colors.textOnTint)
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 12)
-            .background(DesignSystem.Colors.tint)
-            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-        }
-        .buttonStyle(.plain)
-    }
-
     // MARK: - Superset Edit Mode Row
     @ViewBuilder
     private func supersetEditRow(for routineExercise: RoutineExercise) -> some View {
@@ -854,7 +751,7 @@ struct RoutineDetailView: View {
 
         // Manage alternative exercises
         Button {
-            enterAlternativesEditMode(for: routineExercise)
+            openAlternatives(for: routineExercise)
         } label: {
             Label(
                 routineExercise.hasAlternatives
@@ -926,63 +823,67 @@ struct RoutineDetailView: View {
         ZStack {
             DesignSystem.Colors.background.ignoresSafeArea()
 
-            List {
-                Group {
+            // ScrollView + LazyVStack (not List): List snaps intra-row height
+            // changes, making card/set expansion look like a re-render. A
+            // LazyVStack interpolates height, so expansion reads as growth.
+            // Drag-reorder (previously List.onMove) is reimplemented per-card
+            // via ExerciseReorder in edit mode.
+            ScrollViewReader { proxy in
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 0) {
                     topBar
                     titleBlock
-                }
-                .listRowBackground(Color.clear)
-                .listRowSeparator(.hidden)
-                .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 0, trailing: 16))
+                        .frame(maxWidth: .infinity, alignment: .leading)
 
-                if supersetEditMode == nil && !isEditMode {
-                    RoutineScheduleCard(
-                        schedule: routine.schedule,
-                        nextDue: viewModel.nextDueDate(for: routine),
-                        onTap: {
-                            HapticManager.shared.light()
-                            showingSchedulePlanner = true
+                    if supersetEditMode == nil && !isEditMode {
+                        RoutineScheduleCard(
+                            schedule: routine.schedule,
+                            nextDue: viewModel.nextDueDate(for: routine),
+                            onTap: {
+                                HapticManager.shared.light()
+                                showingSchedulePlanner = true
+                            }
+                        )
+                        .padding(.bottom, 10)
+                    }
+
+                    if routine.routineExercisesList.isEmpty {
+                        ContentUnavailableView {
+                            Label("routine.empty.title".localized, systemImage: "dumbbell")
+                        } description: {
+                            Text("routine.empty.description".localized)
+                        } actions: {
+                            Button("routine.add_exercise".localized) {
+                                showingAddExercise = true
+                            }
+                            .buttonStyle(.onyxProminent)
                         }
-                    )
-                    .listRowBackground(Color.clear)
-                    .listRowSeparator(.hidden)
-                    .listRowInsets(EdgeInsets(top: 2, leading: 16, bottom: 10, trailing: 16))
-                }
+                        .frame(maxWidth: .infinity)
+                        .padding(.top, 40)
+                    } else {
+                        exerciseRows
+                    }
 
-                if routine.routineExercisesList.isEmpty {
-                    ContentUnavailableView {
-                        Label("routine.empty.title".localized, systemImage: "dumbbell")
-                    } description: {
-                        Text("routine.empty.description".localized)
-                    } actions: {
-                        Button("routine.add_exercise".localized) {
+                    if !routine.routineExercisesList.isEmpty && supersetEditMode == nil {
+                        DashedCreateButton(title: "routine.add_exercise".localized) {
                             showingAddExercise = true
                         }
-                        .buttonStyle(.onyxProminent)
+                        .padding(.top, 6)
                     }
-                    .listRowBackground(Color.clear)
-                    .listRowSeparator(.hidden)
-                } else {
-                    exerciseRows
-                }
 
-                if !routine.routineExercisesList.isEmpty && supersetEditMode == nil {
-                    DashedCreateButton(title: "routine.add_exercise".localized) {
-                        showingAddExercise = true
-                    }
-                    .listRowBackground(Color.clear)
-                    .listRowSeparator(.hidden)
-                    .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 0, trailing: 16))
+                    Color.clear
+                        .frame(height: 40)
                 }
-
-                Color.clear
-                    .frame(height: 40)
-                    .listRowBackground(Color.clear)
-                    .listRowSeparator(.hidden)
+                .padding(.horizontal, 16)
             }
-            .listStyle(.plain)
-            .scrollContentBackground(.hidden)
-            .environment(\.defaultMinListRowHeight, 0)
+            .onChange(of: scrollToExerciseId) { _, newValue in
+                guard let id = newValue else { return }
+                withAnimation(DesignSystem.Animation.spring) {
+                    proxy.scrollTo(id, anchor: .top)
+                }
+                scrollToExerciseId = nil
+            }
+            }
         }
         .toolbar(.hidden, for: .navigationBar)
         .toolbar {
@@ -1013,7 +914,24 @@ struct RoutineDetailView: View {
                 viewModel: viewModel,
                 // Expand the new alternative's inline set editor so its reps and
                 // weight can be defined right away
-                onAdded: { expandedAlternativeEditId = $0.id }
+                onAdded: { focusedAlternativeId = $0.id }
+            )
+        }
+        .sheet(item: $browseAlternativesTarget, onDismiss: applyPendingBrowseAction) { target in
+            AlternativesBrowseView(
+                routineExercise: target,
+                onSelect: { alternative in
+                    // Defer the actual expand/scroll until this sheet has fully
+                    // dismissed (see applyPendingBrowseAction) to avoid the
+                    // dismiss/transition race documented in alternative-exercises.md.
+                    pendingExpandExerciseId = target.id
+                    pendingExpandAlternativeId = alternative.id
+                },
+                onAdd: {
+                    // A sheet cannot present while another dismisses — hand off via
+                    // onDismiss instead of presenting AddAlternativeView directly.
+                    pendingAddTarget = target
+                }
             )
         }
         .sheet(item: $selectedExerciseForOverload) { exercise in
@@ -1184,24 +1102,31 @@ struct RoutineDetailView: View {
     private var exerciseRows: some View {
         ForEach(Array(sortedExercises.enumerated()), id: \.element.id) { index, routineExercise in
             exerciseRow(index: index, routineExercise: routineExercise)
+                // Scroll anchor for the alternatives-browse jump (scrollTo(exerciseId)).
+                .id(routineExercise.id)
         }
-        .onMove(perform: isEditMode ? moveRoutineExercises : nil)
     }
 
     @ViewBuilder
     private func exerciseRow(index: Int, routineExercise: RoutineExercise) -> some View {
         if supersetEditMode != nil {
             supersetSelectionCard(routineExercise)
-                .modifier(ExerciseListRowChrome())
+                .padding(.vertical, 4)
         } else if isEditMode {
             editExerciseCard(routineExercise)
-                .modifier(ExerciseListRowChrome())
+                .padding(.vertical, 4)
                 .modifier(WiggleModifier(isWiggling: isEditMode))
                 .scaleEffect(isEditMode ? 0.98 : 1.0)
                 .animation(DesignSystem.Animation.spring, value: isEditMode)
+                .exerciseReorderable(
+                    routineExercise,
+                    exercises: sortedExercises,
+                    draggingId: $draggingId,
+                    onReorder: persistReorder
+                )
         } else {
             normalExerciseCard(routineExercise)
-                .modifier(ExerciseListRowChrome())
+                .padding(.vertical, 4)
 
             // Link button between this exercise and the next
             if index < sortedExercises.count - 1,
@@ -1209,9 +1134,6 @@ struct RoutineDetailView: View {
                 SupersetLinkButton {
                     linkExercises(routineExercise, sortedExercises[index + 1])
                 }
-                .listRowBackground(Color.clear)
-                .listRowSeparator(.hidden)
-                .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 0, trailing: 16))
             }
         }
     }
@@ -1220,6 +1142,7 @@ struct RoutineDetailView: View {
     private func supersetSelectionCard(_ routineExercise: RoutineExercise) -> some View {
         let isSelected = supersetEditSelection.contains(routineExercise.id)
         return supersetEditRow(for: routineExercise)
+            .frame(maxWidth: .infinity, alignment: .leading)
             .padding(14)
             .background(supersetEditRowBackground(for: routineExercise))
             .overlay(
@@ -1232,6 +1155,7 @@ struct RoutineDetailView: View {
     /// Edit mode: delete + drag card.
     private func editExerciseCard(_ routineExercise: RoutineExercise) -> some View {
         editModeRow(for: routineExercise)
+            .frame(maxWidth: .infinity, alignment: .leading)
             .padding(14)
             .background(cardBackgroundColor(for: routineExercise))
             .overlay(
@@ -1246,10 +1170,12 @@ struct RoutineDetailView: View {
         let isExerciseExpanded = expandedExerciseId == routineExercise.id
         return VStack(alignment: .leading, spacing: 0) {
             Button {
-                // Prevent collapse during set reorder / alternatives edit mode
-                guard setEditExerciseId != routineExercise.id,
-                      alternativesEditExerciseId != routineExercise.id else { return }
+                // Prevent collapse during set reorder mode
+                guard setEditExerciseId != routineExercise.id else { return }
                 withAnimation(DesignSystem.Animation.spring) {
+                    // Expanding/collapsing via the header always lands on the
+                    // primary variant (alternatives are opted into via the switcher).
+                    focusedAlternativeId = nil
                     if isExerciseExpanded {
                         expandedExerciseId = nil
                         expandedSetId = nil
@@ -1281,7 +1207,7 @@ struct RoutineDetailView: View {
                             enterSetEditMode(for: routineExercise)
                         },
                         onEditAlternatives: {
-                            enterAlternativesEditMode(for: routineExercise)
+                            openAlternatives(for: routineExercise)
                         }
                     )
 
@@ -1308,14 +1234,16 @@ struct RoutineDetailView: View {
 
                     if setEditExerciseId == routineExercise.id {
                         setEditContent(for: routineExercise)
-                    } else if alternativesEditExerciseId == routineExercise.id {
-                        alternativesEditContent(for: routineExercise)
                     } else {
                         normalSetContent(for: routineExercise)
                     }
                 }
+                // Reveal the body as the card grows in height (fluid in LazyVStack,
+                // unlike List's row-height snap). Clipped by the card's .clipShape.
+                .transition(.opacity.combined(with: .move(edge: .top)))
             }
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
         .padding(14)
         .background(cardBackgroundColor(for: routineExercise))
         .overlay(
@@ -1349,10 +1277,18 @@ struct RoutineDetailView: View {
             }
 
             if routineExercise.hasAlternatives {
-                MetaChipView(
-                    icon: "arrow.triangle.2.circlepath",
-                    text: "alternatives.count".localized(routineExercise.alternativesList.count)
-                )
+                Button {
+                    HapticManager.shared.light()
+                    browseAlternativesTarget = routineExercise
+                } label: {
+                    MetaChipView(
+                        icon: "arrow.triangle.2.circlepath",
+                        text: "alternatives.count".localized(routineExercise.alternativesList.count)
+                    )
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("alternatives.browse.title".localized)
+                .accessibilityHint("alternatives.browse.hint".localized)
             }
 
             Spacer(minLength: 0)
@@ -1476,6 +1412,9 @@ struct RoutineDetailView: View {
     // MARK: - Actions
 
     private func toggleEditMode() {
+        // Clear any dangling drag state (e.g. a drag dropped in the gutter never
+        // reaches a card's performDrop, which would otherwise leave it dimmed).
+        draggingId = nil
         withAnimation(DesignSystem.Animation.spring) {
             if isEditMode {
                 // Dismiss keyboard
@@ -1491,6 +1430,7 @@ struct RoutineDetailView: View {
                 expandedExerciseId = nil
                 expandedSetId = nil
                 setEditExerciseId = nil
+                focusedAlternativeId = nil
 
                 // Announce to VoiceOver users
                 UIAccessibility.post(
@@ -1512,22 +1452,12 @@ struct RoutineDetailView: View {
         }
     }
 
-    private func moveRoutineExercises(from source: IndexSet, to destination: Int) {
-        // Provide haptic feedback
-        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-
-        // Get sorted exercises
-        var sorted = routine.routineExercisesList.sorted(by: { $0.order < $1.order })
-
-        // Move items
-        sorted.move(fromOffsets: source, toOffset: destination)
-
-        // Update order property for all exercises
-        for (index, exercise) in sorted.enumerated() {
+    /// Persist a drag-reordered exercise list (from ExerciseReorder's drop
+    /// delegate): reassign `order` to match the new sequence and save.
+    private func persistReorder(_ ordered: [RoutineExercise]) {
+        for (index, exercise) in ordered.enumerated() {
             exercise.order = index
         }
-
-        // Save changes
         viewModel.updateRoutine(routine)
     }
 
@@ -1595,17 +1525,6 @@ struct RoutineDetailView: View {
             exerciseSet.weight = weight
             viewModel.updateSet(exerciseSet)
         }
-    }
-}
-
-/// Shared list-row chrome for exercise cards: clears the system row styling so
-/// the card provides its own background, spacing and rounded shape.
-private struct ExerciseListRowChrome: ViewModifier {
-    func body(content: Content) -> some View {
-        content
-            .listRowBackground(Color.clear)
-            .listRowSeparator(.hidden)
-            .listRowInsets(EdgeInsets(top: 4, leading: 16, bottom: 4, trailing: 16))
     }
 }
 

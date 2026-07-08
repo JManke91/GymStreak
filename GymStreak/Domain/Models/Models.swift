@@ -191,6 +191,11 @@ final class RoutineExerciseAlternative {
     @Relationship(deleteRule: .cascade, inverse: \AlternativeExerciseSet.alternative)
     var sets: [AlternativeExerciseSet]? = []  // this alternative's own set scheme
 
+    // Rep range goal - iCloud compatible with default values (mirrors RoutineExercise).
+    // Independent of the primary's goal: an alternative can target its own range.
+    var targetRepMin: Int? = nil
+    var targetRepMax: Int? = nil
+
     init(exercise: Exercise, order: Int) {
         self.id = UUID()
         self.exercise = exercise
@@ -201,6 +206,10 @@ final class RoutineExerciseAlternative {
     // Convenience accessor for non-optional usage
     var setsList: [AlternativeExerciseSet] {
         (sets ?? []).sorted { $0.order < $1.order }
+    }
+
+    var hasRepRangeGoal: Bool {
+        targetRepMin != nil && targetRepMax != nil
     }
 }
 

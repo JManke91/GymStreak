@@ -864,18 +864,10 @@ class WorkoutViewModel: ObservableObject {
     }
 
     /// Compact scheme summary for swap-picker rows, e.g. "3×10", "4×8–12 · 20kg".
+    /// Delegates to the shared `RoutineMetricsService.setSchemeSummary` so the
+    /// in-workout Swap picker and the routine browse sheet stay identical.
     private func setScheme(from sets: [(reps: Int, weight: Double)]) -> String? {
-        guard !sets.isEmpty else { return nil }
-        let reps = sets.map(\.reps)
-        let repsPart = reps.min() == reps.max()
-            ? "\(reps[0])"
-            : "\(reps.min() ?? 0)–\(reps.max() ?? 0)"
-        var summary = "\(sets.count)×\(repsPart)"
-        if let weight = sets.first?.weight, weight > 0,
-           sets.allSatisfy({ $0.weight == weight }) {
-            summary += " · \(String(format: "%gkg", weight))"
-        }
-        return summary
+        RoutineMetricsService.setSchemeSummary(reps: sets.map(\.reps), weights: sets.map(\.weight))
     }
 
     /// Finds the routine exercise a workout exercise originated from, using the
@@ -941,15 +933,23 @@ class WorkoutViewModel: ObservableObject {
             workoutExercise.plannedExerciseName = nil
         }
 
-        // Rebuild the sets from the chosen target's own set scheme.
+        // Rebuild the sets from the chosen target's own set scheme, and adopt the
+        // target's own rep-range goal (the original's on revert, else the
+        // alternative's own — each alternative can define its own range).
         let templateSets: [(reps: Int, weight: Double, rest: TimeInterval)]
         if target.isOriginal {
             templateSets = origin.setsList.sorted(by: { $0.order < $1.order })
                 .map { ($0.reps, $0.weight, $0.restTime) }
+            workoutExercise.targetRepMin = origin.targetRepMin
+            workoutExercise.targetRepMax = origin.targetRepMax
         } else if let alternative = origin.alternativesList.first(where: { $0.exercise?.id == target.exercise.id }) {
             templateSets = alternative.setsList.map { ($0.reps, $0.weight, $0.restTime) }
+            workoutExercise.targetRepMin = alternative.targetRepMin
+            workoutExercise.targetRepMax = alternative.targetRepMax
         } else {
             templateSets = []
+            workoutExercise.targetRepMin = nil
+            workoutExercise.targetRepMax = nil
         }
 
         // Replace existing sets (none completed, safe to discard).
