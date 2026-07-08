@@ -2,6 +2,7 @@
 name: commit
 description: Analyze staged and unstaged changes, stage them if needed, and create a conventional commit message
 disable-model-invocation: true
+model: claude-sonnet-5
 ---
 
 # Smart Commit Command
