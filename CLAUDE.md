@@ -2,6 +2,18 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Working Style
+
+Principles for how to work in this repo. They apply to every model; they matter most on the capable, long-running models (Fable 5 / Opus) that can otherwise over-plan or over-build.
+
+- **Act when you have enough to act.** Don't re-derive settled facts, re-litigate decided questions, or narrate options you won't pursue. Weighing a choice → give a recommendation, not a survey.
+- **Do the simplest thing that works; don't over-build.** No refactors, abstractions, helpers, error handling, or fallbacks beyond what the task needs. A bug fix doesn't need surrounding cleanup. Don't design for hypothetical future requirements. Validate at system boundaries (user input, HealthKit, watch sync); trust internal code.
+- **Steer with intent, not enumeration.** A brief instruction is enough — you don't need every case spelled out. When something is ambiguous, infer from the stated goal.
+- **Assessment vs. action.** When the user is describing a problem, asking a question, or thinking out loud, the deliverable is your assessment: report findings and stop. Don't apply a fix until they ask.
+- **Lead with the outcome.** The first sentence of a final summary answers "what happened / what did you find." Detail and reasoning come after. Terse shorthand is fine while working between tool calls; in the final message write complete sentences and spell out identifiers — readability beats compression.
+- **Ground claims in evidence.** Before reporting progress, check each claim against an actual tool result. If the build fails, say so with output; if a step was skipped, say that; when something is verified, state it plainly.
+- **Pause only when you truly need the user** — a destructive/irreversible action, a real scope change, or input only they can give. Otherwise proceed rather than ending on a promise.
+
 ## Development Commands
 
 ## Building new features/updating existing features
@@ -74,6 +86,28 @@ Whenever a task requires choosing, evaluating, or understanding an Apple/iOS/wat
 1. Launch the **`ios-api-researcher`** agent (`.claude/agents/ios-api-researcher.md`) via the Agent tool — do NOT answer from training data.
 2. This agent replaces direct Context7 MCP calls for Apple platform questions in this repository: the global rule to call Context7 directly is overridden here; the agent performs the Context7 research itself. (Context7 may still be called directly for non-Apple libraries/tools.)
 3. Exceptions: trivial syntax questions verifiable from existing code in this repo, and questions already answered in `/docs` feature files.
+
+## Multi-Agent Work: Teams and Model Selection
+
+**Agent teams** (parallel Claude Code instances coordinating via a shared task list) may be used when they genuinely help — parallel research/review from different angles, independent modules (e.g. iOS vs. watch target), competing debugging hypotheses, or separable cross-layer work. Propose one and let the user confirm before teammates spawn; don't use them for sequential work, same-file edits, or tightly-coupled work. Teammates and subagents inherit only project context + the spawn prompt (not your conversation), so always hand off full, self-contained context.
+
+**Model selection.** The currently selected model is the main brain: it holds context, makes decisions, lays out the plan. Default ranking (capability ↓, cost ↓): **Fable 5** (reserve for deep-context judgment, ambiguous tradeoffs, synthesizing many findings — most capable, most expensive) → **Opus 4.8** (strong default for substantial delegated work) → **Sonnet 5** (well-specified execution, mechanical refactors, straightforward lookups). **Reviews of plans/implementations use Fable 5 or Opus 4.8 — never Haiku.** The mandatory `architecture-reviewer` pass must run on a capable model.
+
+**How to "hand execution to a cheaper model" (the mechanism matters).** The main brain **cannot change its own model** — `/model` is user-only and I can't invoke it on myself. "Handing off" therefore means *delegating to* a cheaper sub-instance, not *becoming* cheaper. Two patterns, chosen by whether execution can run cold and unattended:
+
+- **Solution A — in-session delegation (I apply this automatically).** When the work splits into bounded chunks I can specify completely in a self-contained spawn prompt and I don't need the user mid-flight: I stay on the powerful model and spawn cheaper subagents via the Agent tool's `model` override (e.g. `model: "sonnet"`, which beats the agent's own frontmatter). The subagent's tokens bill at its own rate, so this genuinely saves money. Subagents start **cold** (project context + spawn prompt only, no conversation) and return only a summary — so the prompt must carry everything. *Trigger: bounded + self-contained + no user-in-the-loop.* Examples: writing tests from a spec, localizing new strings, a mechanical multi-file refactor spanning the iOS and watch targets.
+- **Solution B — plan-to-disk + user re-model (I recommend it; only the user can execute it).** The only way to make the **main thread itself** cheap. When execution is long, iterative, or needs the live conversation/user input, I do the deep planning on the powerful model, persist a **chunked, independently-executable plan to a file on disk** (`docs/` or scratchpad — not a transient task list), then stop and tell the user to run `/clear`, `/model sonnet`, and re-seed with "read `<plan file>`, do task 1." I never claim this happened — I can't run those commands. *Trigger: long + interactive + user-in-the-loop.* Example: a large multi-file UI feature the user eyeballs chunk by chunk.
+
+Escalate and redo work if a cheaper model's output misses the bar — escalating costs less than shipping mediocre work. For Apple/iOS/watchOS API questions, delegate to the `ios-api-researcher` agent (see "iOS API Research" above) rather than answering from training data.
+
+## Context / Token Hygiene
+
+Be deliberate about what occupies the main context window — wasted tokens are wasted budget, and a cluttered window degrades reasoning.
+
+- **Keep exploration out of the main window.** Route broad file-scanning, research, and plan-drafting through a subagent (Explore/Plan/general-purpose). Subagents run in their own context and return only a summary, so the raw exploration never clutters the main thread. Prefer this over reading many files directly when I only need the conclusion.
+- **Persist before you prune.** A plan or set of decisions is only safe to drop once it lives in a durable artifact (a file in `docs/`, the scratchpad, or a task list) — never only in chat history. Feature work is documented in `docs/` regardless (see "Feature Documentation").
+- **Ask the user to clear/compact when it makes sense — never assume it's done.** `/clear` and `/compact` are user-only commands; I cannot invoke them on myself. When the main window is heavy with now-redundant context (e.g. an approved plan whose exploration is finished, or a completed sub-task) AND everything still needed is persisted to a file, proactively tell the user it makes sense to reset and ask them to run it: `/clear` (hard reset — re-seed from the plan/artifact file) or `/compact focus on <topic>` (keep a summary). State plainly what's safely captured and where. If anything still needed lives only in chat, don't suggest it.
+- **Guide auto-compaction, don't fight it.** Auto-compact preserves this CLAUDE.md. Trust it for gradual context pressure; reserve an explicit clear/compact for clean task boundaries.
 
 ## General Coding
 
