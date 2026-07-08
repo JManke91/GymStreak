@@ -20,16 +20,16 @@ struct PostWorkoutRecapOutput: Codable {
 
 @Generable
 struct PeriodRecapOutput: Codable {
-    @Guide(description: "One-line headline opening, in the user's locale, stating the most important metric.")
+    @Guide(description: "One sentence in the user's locale rephrasing the input's 'Headline fact'. Never about total volume or session counts.")
     let headline: String
 
-    @Guide(description: "One to two paragraphs (3-6 sentences total) narrating the trends in the user's locale.")
+    @Guide(description: "Two to three short sentences in the user's locale: improved exercises with exact kg gains, then declined ones, then unchanged ones by name. Mention the consistency fact when marked irregular.")
     let trendsNarrative: String
 
-    @Guide(description: "Short paragraph (2-3 sentences) on the most interesting correlation, in the user's locale. Return nil when no correlations were provided in the input. Do NOT write explanatory or apologetic text. nil means the UI hides this section.")
+    @Guide(description: "The 'Detected patterns' statement reproduced as one sentence in the user's locale. Return nil when the input has no detected patterns. Do NOT write explanatory or apologetic text. nil means the UI hides this section.")
     let correlationHighlight: String?
 
-    @Guide(description: "One forward-looking sentence in the user's locale. Observational, not prescriptive.")
+    @Guide(description: "One sentence in the user's locale rephrasing the 'Closing fact'. When marked as a recommendation, one concrete suggestion; otherwise purely observational.")
     let closingSentence: String
 }
 
@@ -45,10 +45,10 @@ struct ExerciseDeepDiveOutput: Codable {
 
 @Generable
 struct WorkoutAnalysisOutput: Codable {
-    @Guide(description: "One short sentence (max 14 words) in the user's locale summarizing the session vs. the previous one, based on total volume and set count. No dates.")
+    @Guide(description: "One short sentence (max 14 words) in the user's locale rephrasing the input's 'Headline fact' line. Never about total volume. No dates.")
     let headline: String
 
-    @Guide(description: "The 2 to 4 most notable exercises from the input, ordered: PRs first, then biggest improvements, then declines.", .minimumCount(2), .maximumCount(4))
+    @Guide(description: "The 1 to 4 most notable exercises from the input, ordered: PRs first, then biggest improvements, then declines. Never include exercises done for the first time.", .minimumCount(1), .maximumCount(4))
     let exerciseHighlights: [WorkoutAnalysisHighlight]
 
     @Guide(description: "One short closing sentence in the user's locale with an observation about the session as a whole. Observational, not prescriptive. No dates.")
@@ -60,10 +60,10 @@ struct WorkoutAnalysisHighlight: Codable {
     @Guide(description: "Exercise name copied exactly as written in the input.")
     let exerciseName: String
 
-    @Guide(description: "Direction of change, derived from the verdict tag in the input: IMPROVED to improved, DECREASED to declined, UNCHANGED to unchanged, MIXED to mixed, NEW EXERCISE or NEW SETS to new.")
+    @Guide(description: "Direction of change, derived from the verdict tag in the input: IMPROVED to improved, DECREASED to declined, UNCHANGED to unchanged, MIXED to mixed, NEW SETS to new.")
     let trend: WorkoutAnalysisTrend
 
-    @Guide(description: "One short sentence (max 12 words) in the user's locale stating the concrete change with exact values from the input. Weight changes always in kg, rep changes always as reps — never mix the two units in one figure.")
+    @Guide(description: "One short sentence (max 12 words) in the user's locale rephrasing this exercise's 'Fact' line with its exact numbers. Weight changes always in kg, rep changes always as reps — never mix the two units in one figure.")
     let detail: String
 }
 

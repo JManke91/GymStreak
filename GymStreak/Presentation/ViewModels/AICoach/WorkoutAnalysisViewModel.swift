@@ -108,7 +108,8 @@ final class WorkoutAnalysisViewModel {
         case success(content: WorkoutAnalysisContent, isCached: Bool)
         /// Device ineligible or Apple Intelligence disabled, or preference off.
         case unavailable
-        /// No previous same-routine session exists, or too few completed sets.
+        /// No previous same-routine session exists, too few completed sets,
+        /// or the workout was aborted below the completion threshold.
         case insufficientData
         /// Generation threw a non-guardrail error.
         case error

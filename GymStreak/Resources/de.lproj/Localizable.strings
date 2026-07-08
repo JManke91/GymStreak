@@ -775,7 +775,8 @@
 "ai_coach.workout_analysis.button_subtitle" = "Analyse vs. vorheriges %@";
 "ai_coach.workout_analysis.button_accessibility" = "Coach fragen: Workout analysieren vs. vorheriges %@";
 "ai_coach.workout_analysis.unavailable" = "Coach-Analyse ist auf Apple-Intelligence-Geräten verfügbar.";
-"ai_coach.workout_analysis.insufficient_data" = "Keine vorherige Session dieser Routine zum Vergleich vorhanden.";
+"ai_coach.workout_analysis.insufficient_data" = "Nicht genug Daten in diesem Workout für einen aussagekräftigen Vergleich.";
+"ai_coach.workout_analysis.header_label" = "COACH · ANALYSE";
 "ai_coach.workout_analysis.error" = "Analyse konnte nicht geladen werden.";
 "ai_coach.workout_analysis.error_retry" = "Erneut versuchen";
 "ai_coach.settings.surface.workout_detail.title" = "Workout-Detail";

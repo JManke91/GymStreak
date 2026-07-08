@@ -23,20 +23,17 @@ struct WorkoutAnalysisInput {
     @Guide(description: "Duration of the current workout in minutes")
     let currentDurationMinutes: Int
 
-    @Guide(description: "Total volume of the current workout in kilograms")
-    let currentTotalVolumeKg: Double
-
     @Guide(description: "Total number of completed sets in the current workout")
     let currentTotalSets: Int
 
     @Guide(description: "Completion percentage of the current workout (0-100)")
     let currentCompletionPercentage: Int
 
-    @Guide(description: "Total volume of the previous session in kilograms")
-    let previousTotalVolumeKg: Double
-
     @Guide(description: "Total number of completed sets in the previous session")
     let previousTotalSets: Int
+
+    @Guide(description: "Number of exercises done in the previous session but skipped this time")
+    let droppedExerciseCount: Int
 
     @Guide(description: "Per-exercise comparison data for each exercise in this workout")
     let exercises: [WorkoutAnalysisExerciseInput]
@@ -50,20 +47,8 @@ struct WorkoutAnalysisExerciseInput {
     @Guide(description: "Name of the exercise")
     let exerciseName: String
 
-    @Guide(description: "Total volume for this exercise in kilograms in the current session")
-    let currentVolumeKg: Double
-
-    @Guide(description: "Number of completed sets for this exercise in the current session")
-    let currentSetsCount: Int
-
-    @Guide(description: "Total reps completed for this exercise in the current session")
-    let currentTotalReps: Int
-
     @Guide(description: "Whether this is the first time performing this exercise (no previous data)")
     let isFirstTime: Bool
-
-    @Guide(description: "Volume change vs. previous in kilograms, nil if first time")
-    let volumeDeltaKg: Double?
 
     @Guide(description: "Per-set comparison details")
     let sets: [WorkoutAnalysisSetInput]
@@ -93,134 +78,188 @@ struct WorkoutAnalysisSetInput {
 // MARK: - Prompt Serialisation
 
 extension WorkoutAnalysisInput {
+    /// Completion percentage below which the prompt flags the session as cut short.
+    static let cutShortThreshold = 70
+
     /// Produces a plain-text serialisation suitable for use as the user-turn prompt
-    /// in a `LanguageModelSession`. Pre-computes per-exercise verdicts
-    /// (IMPROVED / UNCHANGED / DECREASED) so the on-device model only
-    /// narrates — it does not need to reason about the numbers.
+    /// in a `LanguageModelSession`. Every fact the model may state — the headline
+    /// story and each exercise's concrete change — is resolved here in Swift.
+    /// The on-device model's only job is rephrasing the fact lines in the
+    /// user's language; it never sees raw per-set numbers to compose from.
     func toPromptText() -> String {
+        // First-time exercises have no baseline: they never become highlights,
+        // only a closing-observation note.
+        let comparableExercises = exercises.filter { !$0.isFirstTime }
+        let firstTimeNames = exercises.filter(\.isFirstTime).map(\.exerciseName)
+        let verdicts = comparableExercises.map(Self.exerciseVerdict)
+
         var lines: [String] = []
         lines.append("Locale: \(locale)")
         lines.append("Routine: \(routineName)")
-        lines.append("Current session: \(currentTotalSets) sets, \(currentDurationMinutes) min, total volume \(String(format: "%g", currentTotalVolumeKg)) kg")
+        lines.append("Current session: \(currentTotalSets) sets, \(currentDurationMinutes) min")
+        lines.append("Previous session (\(daysSincePrevious) days earlier): \(previousTotalSets) sets")
+        lines.append("Headline fact: \(headlineFact(verdicts: verdicts))")
 
-        let volumeDelta = currentTotalVolumeKg - previousTotalVolumeKg
-        let volumeSign = volumeDelta >= 0 ? "+" : ""
-        let setsDelta = currentTotalSets - previousTotalSets
-        let setsSign = setsDelta >= 0 ? "+" : ""
-        lines.append("Previous session (\(daysSincePrevious) days earlier): \(previousTotalSets) sets, total volume \(String(format: "%g", previousTotalVolumeKg)) kg")
-        lines.append("Change vs. previous: \(volumeSign)\(String(format: "%g", volumeDelta)) kg volume, \(setsSign)\(setsDelta) sets")
+        if currentCompletionPercentage < Self.cutShortThreshold {
+            lines.append("Note: the workout was cut short — only \(currentCompletionPercentage)% of the planned sets were completed. Missing sets are not lost strength.")
+        }
+        if droppedExerciseCount > 0 {
+            lines.append("Note: \(droppedExerciseCount) exercise(s) from the last session were skipped this time.")
+        }
+        if !firstTimeNames.isEmpty {
+            lines.append("Note: done for the first time, no comparison possible: \(firstTimeNames.joined(separator: ", ")).")
+        }
         lines.append("")
 
-        for exercise in exercises {
-            if exercise.isFirstTime {
-                lines.append("\(exercise.exerciseName) [NEW EXERCISE]:")
-                let completedSets = exercise.sets.filter(\.isCompleted)
-                for set in completedSets {
-                    let w = String(format: "%g", set.currentWeightKg)
-                    lines.append("  Set \(set.setNumber): \(w) kg x \(set.currentReps) reps")
-                }
-                continue
-            }
-
-            // Pre-compute the exercise-level verdict
-            let verdict = Self.exerciseVerdict(exercise)
-            lines.append("\(exercise.exerciseName) [\(verdict.label)]:")
-            if !verdict.detail.isEmpty {
-                lines.append("  Summary: \(verdict.detail)")
-            }
-
-            let completedSets = exercise.sets.filter(\.isCompleted)
-            for set in completedSets {
-                let w = String(format: "%g", set.currentWeightKg)
-                var setLine = "  Set \(set.setNumber): \(w) kg x \(set.currentReps) reps"
-
-                if let pw = set.previousWeightKg, let pr = set.previousReps {
-                    let prevW = String(format: "%g", pw)
-                    let wDiff = set.currentWeightKg - pw
-                    let rDiff = set.currentReps - pr
-
-                    if abs(wDiff) < 0.01 && rDiff == 0 {
-                        setLine += " → unchanged"
-                    } else {
-                        var changes: [String] = []
-                        if abs(wDiff) >= 0.01 {
-                            let sign = wDiff > 0 ? "+" : ""
-                            changes.append("\(sign)\(String(format: "%g", wDiff)) kg")
-                        }
-                        if rDiff != 0 {
-                            let sign = rDiff > 0 ? "+" : ""
-                            changes.append("\(sign)\(rDiff) reps")
-                        }
-                        setLine += " → \(changes.joined(separator: ", ")) (was \(prevW) kg x \(pr))"
-                    }
-                }
-                lines.append(setLine)
-            }
+        for (exercise, verdict) in zip(comparableExercises, verdicts) {
+            lines.append("\(exercise.exerciseName) [\(verdict.label)]")
+            lines.append("  Fact: \(verdict.fact)")
         }
 
         if !newPRs.isEmpty {
             lines.append("")
             lines.append("New PRs:")
             for pr in newPRs {
-                lines.append("- \(pr.exerciseName): \(String(format: "%.1f", pr.weightKg)) kg x \(pr.reps)")
+                lines.append("- \(pr.exerciseName): \(Self.fmt(pr.weightKg)) kg x \(pr.reps) reps")
             }
         }
 
         return lines.joined(separator: "\n")
     }
 
+    // MARK: - Headline Fact
+
+    /// Resolves the single most important story of the session, in priority order:
+    /// new PR > all/majority improved > all/majority declined > unchanged > mixed.
+    private func headlineFact(verdicts: [ExerciseVerdict]) -> String {
+        if let pr = newPRs.first {
+            var fact = "new personal record on \(pr.exerciseName): \(Self.fmt(pr.weightKg)) kg x \(pr.reps) reps"
+            if newPRs.count > 1 {
+                fact += " (and \(newPRs.count - 1) more PRs)"
+            }
+            return fact
+        }
+
+        let comparableLabels: Set<String> = ["IMPROVED", "DECREASED", "MIXED", "UNCHANGED"]
+        let comparable = verdicts.filter { comparableLabels.contains($0.label) }
+        let improved = comparable.filter { $0.label == "IMPROVED" }.count
+        let declined = comparable.filter { $0.label == "DECREASED" }.count
+        let mixed = comparable.filter { $0.label == "MIXED" }.count
+        let total = comparable.count
+
+        guard total > 0 else {
+            return "first comparable session — no previous exercise data"
+        }
+        if improved > 0 && declined == 0 && mixed == 0 {
+            return improved == total
+                ? "all \(total) exercises improved vs last session"
+                : "\(improved) of \(total) exercises improved, the rest unchanged"
+        }
+        if declined > 0 && improved == 0 && mixed == 0 {
+            return declined == total
+                ? "all \(total) exercises below last session"
+                : "\(declined) of \(total) exercises below last session, the rest unchanged"
+        }
+        if improved == 0 && declined == 0 && mixed == 0 {
+            return "same weights and reps as last session across all \(total) exercises"
+        }
+        var fact = "mixed session: \(improved) improved, \(declined) declined"
+        if mixed > 0 {
+            fact += ", \(mixed) up and down"
+        }
+        return fact
+    }
+
     // MARK: - Exercise Verdict
 
     private struct ExerciseVerdict {
         let label: String
-        let detail: String
+        let fact: String
     }
 
-    /// Pre-computes whether an exercise improved, stayed the same, or regressed
-    /// based on weight and rep changes across its completed sets.
+    /// Classifies an exercise vs. the previous session and resolves one concrete
+    /// change fact for it. Only called for exercises with previous data.
+    /// The verdict (summed weight/rep deltas) drives the trend icon; the fact
+    /// leads with the top set, the number a lifter actually cares about.
     private static func exerciseVerdict(_ exercise: WorkoutAnalysisExerciseInput) -> ExerciseVerdict {
         let completedSets = exercise.sets.filter(\.isCompleted)
+        let comparable = completedSets.filter { $0.previousWeightKg != nil && $0.previousReps != nil }
+        guard !comparable.isEmpty, let curTop = topSet(completedSets) else {
+            return ExerciseVerdict(label: "NEW SETS", fact: "no previous sets to compare")
+        }
+
         var totalWeightDelta: Double = 0
-        var totalRepsDelta: Int = 0
-        var comparableSets = 0
-
-        for set in completedSets {
-            guard let pw = set.previousWeightKg, let pr = set.previousReps else { continue }
-            comparableSets += 1
-            totalWeightDelta += set.currentWeightKg - pw
-            totalRepsDelta += set.currentReps - pr
+        var totalRepsDelta = 0
+        for set in comparable {
+            totalWeightDelta += set.currentWeightKg - (set.previousWeightKg ?? 0)
+            totalRepsDelta += set.currentReps - (set.previousReps ?? 0)
         }
 
-        guard comparableSets > 0 else {
-            return ExerciseVerdict(label: "NEW SETS", detail: "Added new sets with no previous data")
-        }
+        let prevTop = comparable.max { lhs, rhs in
+            (lhs.previousWeightKg ?? 0, lhs.previousReps ?? 0) < (rhs.previousWeightKg ?? 0, rhs.previousReps ?? 0)
+        } ?? curTop
+        let topWeightDelta = curTop.currentWeightKg - (prevTop.previousWeightKg ?? 0)
+        let topNow = "\(fmt(curTop.currentWeightKg)) kg x \(curTop.currentReps) reps"
+        let topPrevious = "\(fmt(prevTop.previousWeightKg ?? 0)) kg x \(prevTop.previousReps ?? 0) reps"
+        let extraSets = completedSets.count - comparable.count
 
-        let hasWeightChange = abs(totalWeightDelta) >= 0.01
-        let hasRepsChange = totalRepsDelta != 0
+        let weightUp = totalWeightDelta >= 0.01
+        let weightDown = totalWeightDelta <= -0.01
+        let repsUp = totalRepsDelta > 0
+        let repsDown = totalRepsDelta < 0
 
-        if !hasWeightChange && !hasRepsChange {
-            return ExerciseVerdict(label: "UNCHANGED", detail: "Same weight and reps as previous session")
-        }
+        let label: String
+        var fact: String
 
-        var details: [String] = []
-
-        if hasWeightChange {
-            let sign = totalWeightDelta > 0 ? "+" : ""
-            details.append("weight \(sign)\(String(format: "%g", totalWeightDelta)) kg (summed across sets)")
-        }
-
-        if hasRepsChange {
-            let sign = totalRepsDelta > 0 ? "+" : ""
-            details.append("reps \(sign)\(totalRepsDelta) (summed across sets)")
-        }
-
-        if totalWeightDelta > 0 || (abs(totalWeightDelta) < 0.01 && totalRepsDelta > 0) {
-            return ExerciseVerdict(label: "IMPROVED", detail: details.joined(separator: ", "))
-        } else if totalWeightDelta < 0 || (abs(totalWeightDelta) < 0.01 && totalRepsDelta < 0) {
-            return ExerciseVerdict(label: "DECREASED", detail: details.joined(separator: ", "))
+        if !weightUp && !weightDown && !repsUp && !repsDown {
+            label = "UNCHANGED"
+            fact = "same weight and reps as last session (top set \(topNow))"
+        } else if (weightUp && repsDown) || (weightDown && repsUp) {
+            label = "MIXED"
+            fact = "weight \(signed(totalWeightDelta)) kg but reps \(signedInt(totalRepsDelta)) vs last session (top set \(topNow))"
+        } else if weightUp || repsUp {
+            label = "IMPROVED"
+            if topWeightDelta >= 0.01 {
+                fact = "top set +\(fmt(topWeightDelta)) kg: now \(topNow), was \(topPrevious)"
+            } else if repsUp {
+                fact = "+\(totalRepsDelta) reps in total at the same weight (top set \(topNow))"
+            } else {
+                fact = "weight +\(fmt(totalWeightDelta)) kg summed across sets (top set \(topNow))"
+            }
         } else {
-            // Mixed: weight up but reps down, or vice versa
-            return ExerciseVerdict(label: "MIXED", detail: details.joined(separator: ", "))
+            label = "DECREASED"
+            if topWeightDelta <= -0.01 {
+                fact = "top set \(fmt(topWeightDelta)) kg: now \(topNow), was \(topPrevious)"
+            } else if repsDown {
+                fact = "\(totalRepsDelta) reps in total at the same weight (top set \(topNow))"
+            } else {
+                fact = "weight \(fmt(totalWeightDelta)) kg summed across sets (top set \(topNow))"
+            }
         }
+
+        if extraSets > 0 {
+            fact += ", plus \(extraSets) set(s) more than last time"
+        }
+
+        return ExerciseVerdict(label: label, fact: fact)
+    }
+
+    // MARK: - Helpers
+
+    /// Heaviest completed set (ties broken by reps).
+    private static func topSet(_ sets: [WorkoutAnalysisSetInput]) -> WorkoutAnalysisSetInput? {
+        sets.max { ($0.currentWeightKg, $0.currentReps) < ($1.currentWeightKg, $1.currentReps) }
+    }
+
+    private static func fmt(_ value: Double) -> String {
+        String(format: "%g", value)
+    }
+
+    private static func signed(_ value: Double) -> String {
+        value >= 0 ? "+\(fmt(value))" : fmt(value)
+    }
+
+    private static func signedInt(_ value: Int) -> String {
+        value >= 0 ? "+\(value)" : "\(value)"
     }
 }

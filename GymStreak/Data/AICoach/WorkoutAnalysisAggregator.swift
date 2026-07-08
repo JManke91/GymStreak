@@ -22,6 +22,10 @@ struct WorkoutAnalysisAggregator {
     /// Minimum completed sets in the current session before analysis is attempted.
     static let minimumSetsThreshold = 2
 
+    /// Minimum completion percentage — below this the workout was aborted so
+    /// early that a comparison against the previous session is meaningless.
+    static let minimumCompletionThreshold = 40
+
     // MARK: - Public API
 
     /// Builds the AI Coach input for a workout analysis.
@@ -40,6 +44,9 @@ struct WorkoutAnalysisAggregator {
             .flatMap(\.setsList)
             .filter(\.isCompleted)
         guard completedSets.count >= Self.minimumSetsThreshold else { return nil }
+
+        // Gate: heavily aborted workouts produce misleading comparisons
+        guard session.completionPercentage >= Self.minimumCompletionThreshold else { return nil }
 
         // Find the previous session with the same routine name
         guard let previousSession = findPreviousSession(
@@ -61,6 +68,10 @@ struct WorkoutAnalysisAggregator {
             exerciseInputs.append(input)
         }
 
+        // Gate: at least one exercise must have previous data to compare —
+        // an all-first-time session has nothing to analyse.
+        guard exerciseInputs.contains(where: { !$0.isFirstTime }) else { return nil }
+
         // Detect PRs
         let newPRs = detectNewPRs(session: session, modelContext: modelContext)
 
@@ -73,10 +84,15 @@ struct WorkoutAnalysisAggregator {
         ).day ?? 0
 
         // Compute previous session stats
-        let previousVolume = computeVolume(session: previousSession)
         let previousSetsCount = previousSession.workoutExercisesList
             .flatMap(\.setsList)
             .filter(\.isCompleted)
+            .count
+
+        // Exercises done last time but skipped in this session
+        let currentKeys = Set(session.workoutExercisesList.map(\.stableKey))
+        let droppedExerciseCount = previousSession.workoutExercisesList
+            .filter { !currentKeys.contains($0.stableKey) }
             .count
 
         return WorkoutAnalysisInput(
@@ -84,11 +100,10 @@ struct WorkoutAnalysisAggregator {
             routineName: session.routineName,
             daysSincePrevious: daysSincePrevious,
             currentDurationMinutes: Int(session.duration / 60),
-            currentTotalVolumeKg: session.totalVolume,
             currentTotalSets: completedSets.count,
             currentCompletionPercentage: session.completionPercentage,
-            previousTotalVolumeKg: previousVolume,
             previousTotalSets: previousSetsCount,
+            droppedExerciseCount: droppedExerciseCount,
             exercises: exerciseInputs,
             newPRs: newPRs
         )
@@ -136,19 +151,7 @@ struct WorkoutAnalysisAggregator {
         comparison: ExerciseComparisonResult?
     ) -> WorkoutAnalysisExerciseInput {
         let usePlanned = exercise.progressiveOverloadApplied
-        let completedSets = exercise.setsList.filter(\.isCompleted)
         let sortedSets = exercise.setsList.sorted(by: { $0.order < $1.order })
-
-        let currentVolume = completedSets.reduce(0.0) { total, set in
-            let w = usePlanned ? set.plannedWeight : set.actualWeight
-            let r = usePlanned ? set.plannedReps : set.actualReps
-            return total + (w * Double(r))
-        }
-
-        let currentTotalReps = completedSets.reduce(0) { total, set in
-            total + (usePlanned ? set.plannedReps : set.actualReps)
-        }
-
         let isFirstTime = comparison?.isFirstTime ?? true
 
         var setInputs: [WorkoutAnalysisSetInput] = []
@@ -171,24 +174,9 @@ struct WorkoutAnalysisAggregator {
 
         return WorkoutAnalysisExerciseInput(
             exerciseName: exercise.exerciseName,
-            currentVolumeKg: currentVolume,
-            currentSetsCount: completedSets.count,
-            currentTotalReps: currentTotalReps,
             isFirstTime: isFirstTime,
-            volumeDeltaKg: comparison?.volumeDelta,
             sets: setInputs
         )
-    }
-
-    private func computeVolume(session: WorkoutSession) -> Double {
-        session.workoutExercisesList.reduce(0.0) { total, exercise in
-            let usePlanned = exercise.progressiveOverloadApplied
-            return total + exercise.setsList.filter(\.isCompleted).reduce(0.0) { subtotal, set in
-                let w = usePlanned ? set.plannedWeight : set.actualWeight
-                let r = usePlanned ? set.plannedReps : set.actualReps
-                return subtotal + (w * Double(r))
-            }
-        }
     }
 
     /// Detects exercises in `session` that set a new all-time estimated-1RM PR.
@@ -228,7 +216,9 @@ struct WorkoutAnalysisAggregator {
         for exercise in session.workoutExercisesList {
             let key = exercise.stableKey
             let usePlanned = exercise.progressiveOverloadApplied
-            let priorBest = priorBestByKey[key] ?? 0
+            // No prior history means no baseline — a first-time exercise
+            // trivially "beats" nothing and must not count as a PR.
+            guard let priorBest = priorBestByKey[key] else { continue }
 
             var bestSetFor1RM: (w: Double, r: Int, est: Double)?
             for set in exercise.setsList where set.isCompleted {

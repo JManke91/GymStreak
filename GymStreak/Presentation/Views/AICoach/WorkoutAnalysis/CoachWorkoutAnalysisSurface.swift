@@ -66,7 +66,7 @@ struct CoachWorkoutAnalysisSurface: View {
         AISurface(
             isStreaming: true,
             showFooter: false,
-            headerLabel: "COACH · ANALYSE"
+            headerLabel: "ai_coach.workout_analysis.header_label".localized
         ) {
             analysisBody(content: content, isStreaming: true)
         }
@@ -79,7 +79,7 @@ struct CoachWorkoutAnalysisSurface: View {
         AISurface(
             isStreaming: false,
             showFooter: true,
-            headerLabel: "COACH · ANALYSE",
+            headerLabel: "ai_coach.workout_analysis.header_label".localized,
             onRegenerate: onRegenerate
         ) {
             analysisBody(content: content, isStreaming: false)

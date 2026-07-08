@@ -33,26 +33,37 @@ struct PeriodRecapAggregator {
         let sessions = fetchSessions(in: interval, modelContext: modelContext)
 
         let headline = buildHeadline(from: sessions)
+        let consistency = buildConsistency(sessions: sessions, interval: interval, now: now)
         let isInsufficient = sessions.count < 3
 
         let trends: [TrendFinding]
         let correlations: [CorrelationFinding]
+        var recommendationFact: String?
 
         if isInsufficient {
             trends = []
             correlations = []
+            recommendationFact = nil
         } else {
             let liveExercises = (try? modelContext.fetch(FetchDescriptor<Exercise>())) ?? []
             trends = buildTrends(sessions: sessions, liveExercises: liveExercises, maxCount: 5)
             correlations = buildCorrelations(sessions: sessions, locale: locale, now: now)
+            recommendationFact = buildRecommendation(
+                sessions: sessions,
+                trends: trends,
+                consistency: consistency,
+                now: now
+            )
         }
 
         return PeriodRecapInput(
             locale: locale.identifier,
             periodLabel: range.label(locale: locale, now: now),
             headline: headline,
+            consistency: consistency,
             trends: trends,
             correlations: correlations,
+            recommendationFact: recommendationFact,
             isInsufficient: isInsufficient
         )
     }
@@ -70,8 +81,10 @@ struct PeriodRecapAggregator {
             locale: full.locale,
             periodLabel: full.periodLabel,
             headline: full.headline,
+            consistency: full.consistency,
             trends: Array(full.trends.prefix(3)),
             correlations: Array(full.correlations.prefix(1)),
+            recommendationFact: full.recommendationFact,
             isInsufficient: full.isInsufficient
         )
     }
@@ -126,28 +139,6 @@ struct PeriodRecapAggregator {
         return buildHeadline(from: sessions)
     }
 
-    /// Builds the list of known subjects (exercise + muscle group names) from sessions
-    /// within `interval`. Used as the reference set for the apologetic-correlation
-    /// heuristic in `PeriodRecapViewModel`.
-    func knownSubjects(in interval: DateInterval, modelContext: ModelContext) -> [String] {
-        let start = interval.start
-        let end = interval.end
-        let descriptor = FetchDescriptor<WorkoutSession>(
-            predicate: #Predicate { session in
-                session.startTime >= start && session.startTime < end && session.endTime != nil
-            }
-        )
-        guard let sessions = try? modelContext.fetch(descriptor) else { return [] }
-        var subjects: Set<String> = []
-        for session in sessions {
-            for we in session.workoutExercisesList {
-                subjects.insert(we.exerciseName)
-                subjects.insert(we.primaryMuscleGroup)
-            }
-        }
-        return Array(subjects)
-    }
-
     // MARK: - Headline
 
     private func buildHeadline(from sessions: [WorkoutSession]) -> HeadlineMetrics {
@@ -163,6 +154,70 @@ struct PeriodRecapAggregator {
             averageSessionMinutes: avgDuration,
             distinctExercises: distinctExercises
         )
+    }
+
+    // MARK: - Consistency
+
+    /// Regularity metrics: weeks covered vs. weeks trained, average weekly
+    /// frequency, and the longest gap between two sessions. For running periods
+    /// ("this month") only the elapsed part counts, so mid-period recaps aren't
+    /// flagged irregular for weeks that haven't happened yet.
+    private func buildConsistency(
+        sessions: [WorkoutSession],
+        interval: DateInterval,
+        now: Date
+    ) -> ConsistencyMetrics {
+        let calendar = Calendar(identifier: .iso8601)
+        let effectiveEnd = min(interval.end, now)
+        let days = max(1, calendar.dateComponents([.day], from: interval.start, to: effectiveEnd).day ?? 7)
+        let totalWeeks = max(1, Int((Double(days) / 7.0).rounded(.up)))
+
+        let weekKeyFmt = DateFormatter()
+        weekKeyFmt.calendar = calendar
+        weekKeyFmt.dateFormat = "YYYY-ww"
+        let trainedWeeks = min(Set(sessions.map { weekKeyFmt.string(from: $0.startTime) }).count, totalWeeks)
+
+        let starts = sessions.map(\.startTime).sorted()
+        var longestGapDays = 0
+        for i in 1..<max(1, starts.count) {
+            let gap = calendar.dateComponents([.day], from: starts[i - 1], to: starts[i]).day ?? 0
+            longestGapDays = max(longestGapDays, gap)
+        }
+
+        let average = totalWeeks > 0 ? Double(sessions.count) / Double(totalWeeks) : 0
+        let isIrregular = trainedWeeks < totalWeeks || longestGapDays >= 9
+
+        return ConsistencyMetrics(
+            totalWeeks: totalWeeks,
+            trainedWeeks: trainedWeeks,
+            averageSessionsPerWeek: (average * 10).rounded() / 10,
+            longestGapDays: longestGapDays,
+            isIrregular: isIrregular
+        )
+    }
+
+    // MARK: - Recommendation
+
+    /// Resolves at most one actionable recommendation, only when stagnation
+    /// demonstrably coincides with irregular training. English fact string —
+    /// the model translates and phrases it.
+    private func buildRecommendation(
+        sessions: [WorkoutSession],
+        trends: [TrendFinding],
+        consistency: ConsistencyMetrics,
+        now: Date
+    ) -> String? {
+        let hasImprovement = trends.contains { $0.direction == "improved" }
+        let hasStagnation = trends.contains { $0.direction == "plateaued" || $0.direction == "regressed" }
+
+        if let adherence = adherenceDipsVsRegressionCorrelation(sessions: sessions, now: now),
+           adherence.lowAdherencePrecededRegression {
+            return "performance dips followed weeks with fewer sessions — keeping the frequency steady at about \(String(format: "%.1f", consistency.averageSessionsPerWeek)) sessions per week should help"
+        }
+        if consistency.isIrregular && hasStagnation && !hasImprovement {
+            return "progress stalled while training was irregular (longest gap \(consistency.longestGapDays) days) — more evenly spaced sessions would likely get progress moving again"
+        }
+        return nil
     }
 
     // MARK: - Trends
@@ -237,7 +292,7 @@ struct PeriodRecapAggregator {
 
             let deltaKg = (points.last?.est1RM ?? 0) - (points.first?.est1RM ?? 0)
             let sign = deltaKg >= 0 ? "+" : ""
-            let magnitude = "\(sign)\(String(format: "%.1f", deltaKg))kg estimated 1RM"
+            let magnitude = "\(sign)\(String(format: "%.1f", deltaKg)) kg"
 
             candidates.append(TrendCandidate(
                 name: data.name,
@@ -313,7 +368,7 @@ struct PeriodRecapAggregator {
         let calendar = Calendar(identifier: .iso8601)
         let weekKeyFmt = DateFormatter()
         weekKeyFmt.calendar = calendar
-        weekKeyFmt.dateFormat = "yyyy-ww"
+        weekKeyFmt.dateFormat = "YYYY-ww"
 
         var countByWeek: [String: Int] = [:]
         var allEst1RMByWeek: [String: [Double]] = [:]
@@ -358,7 +413,7 @@ struct PeriodRecapAggregator {
         let calendar = Calendar(identifier: .iso8601)
         let weekKeyFmt = DateFormatter()
         weekKeyFmt.calendar = calendar
-        weekKeyFmt.dateFormat = "yyyy-ww"
+        weekKeyFmt.dateFormat = "YYYY-ww"
 
         var countByWeek: [String: Int] = [:]
         var avgEst1RMByWeek: [String: Double] = [:]

@@ -226,7 +226,6 @@ final class PeriodRecapViewModel {
             }
 
             var finalOutput: PeriodRecapOutput?
-            let knownSubjects = buildKnownSubjects(headlineMetrics: headlineMetrics, modelContext: modelContext, range: capturedRange)
 
             for try await snapshot in responseStream {
                 guard !Task.isCancelled else { break }
@@ -248,7 +247,7 @@ final class PeriodRecapViewModel {
                    let trends = p.trendsNarrative,
                    let closing = p.closingSentence {
                     let rawCorr: String? = p.correlationHighlight ?? nil
-                    let corr = Self.isApologeticCorrelation(rawCorr, knownSubjects: knownSubjects) ? nil : rawCorr
+                    let corr = Self.isApologeticCorrelation(rawCorr) ? nil : rawCorr
                     finalOutput = PeriodRecapOutput(
                         headline: headline,
                         trendsNarrative: trends,
@@ -343,19 +342,19 @@ final class PeriodRecapViewModel {
     // MARK: - Apologetic correlation guard
 
     /// Returns `true` if `text` is most likely an "apologetic empty correlation" rather
-    /// than a real finding (e.g. "There are no notable correlations…").
-    /// Heuristic: short text that contains none of the known exercise/muscle subjects.
-    private static func isApologeticCorrelation(_ text: String?, knownSubjects: [String]) -> Bool {
+    /// than a real finding (e.g. "There are no notable correlations…"). The prompt's
+    /// pattern statements are pre-written findings the model reproduces verbatim, so
+    /// only explicit "nothing found" phrasing needs to be caught — a subject-matching
+    /// heuristic would misclassify the (short, exercise-name-free) real statements.
+    private static func isApologeticCorrelation(_ text: String?) -> Bool {
         guard let text, !text.isEmpty else { return true }
-        if text.count > 120 { return false } // long enough to be a real finding
         let lower = text.lowercased()
-        return !knownSubjects.contains(where: { lower.contains($0.lowercased()) })
-    }
-
-    /// Builds the list of known subjects (exercise + muscle group names) from session data.
-    /// Used as the reference set for the apologetic-correlation heuristic.
-    private func buildKnownSubjects(headlineMetrics: HeadlineMetrics, modelContext: ModelContext, range: PeriodRange) -> [String] {
-        aggregator.knownSubjects(in: range.dateInterval(), modelContext: modelContext)
+        let markers = [
+            "no correlation", "no notable", "no pattern", "not enough data",
+            "keine korrelation", "keine zusammenhänge", "keine muster",
+            "keine auffälligkeiten", "nicht genug daten"
+        ]
+        return markers.contains { lower.contains($0) }
     }
 
     // MARK: - Quick Headline (no full aggregation)

@@ -107,7 +107,9 @@ final class AICoachCache: AICoachCaching {
 
     private func periodRecapURL(_ key: String) -> URL {
         let safe = key.components(separatedBy: CharacterSet.alphanumerics.union(.init(charactersIn: "-_")).inverted).joined(separator: "_")
-        return root.appending(path: "period_recap_\(safe).json", directoryHint: .notDirectory)
+        // v2: fact-based content redesign (July 2026) — filename bump orphans
+        // pre-redesign entries so they regenerate.
+        return root.appending(path: "period_recap_v2_\(safe).json", directoryHint: .notDirectory)
     }
 
     private func exerciseDeepDiveURL(_ key: String) -> URL {
@@ -116,7 +118,11 @@ final class AICoachCache: AICoachCaching {
     }
 
     private func workoutAnalysisURL(_ id: UUID) -> URL {
-        root.appending(path: "workout_analysis_\(id.uuidString).json", directoryHint: .notDirectory)
+        // Version suffix: bumped whenever the content design changes so
+        // pre-redesign cache entries are orphaned and regenerate.
+        // v2: fact-based instead of volume-based. v3: first-time exercises
+        // excluded from PRs/highlights, German glossary.
+        root.appending(path: "workout_analysis_v3_\(id.uuidString).json", directoryHint: .notDirectory)
     }
 
     // MARK: - Generic IO
