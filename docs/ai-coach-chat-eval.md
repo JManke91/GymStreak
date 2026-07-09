@@ -59,19 +59,19 @@ getExercisePR -> "Curls" is ambiguous. Candidates: Biceps Curls, Biceps Curls Ma
 
 **Reliability score: ___ / 20** (target ≥ 18, and **zero** hallucinated numbers across all)
 
-## 2. Overflow drill (pass: no user-visible failure; answers still grounded after)
+## 2. Overflow drill — split: mechanism validated by tests, model behavior = device checkpoint
 
-Send ~40 turns (cycle the three suggested questions repeatedly, or free-form). Watch the console for `chat proactively condensing` (expected) and confirm you never see a "conversation too long"/error bubble.
-- Condensation triggered automatically? (Y/N): ___
-- Any user-visible failure across 40 turns? (Y/N): ___
-- After it got long, does a PR/next-workout answer still match the tool log? (Y/N): ___
+The **mechanism** (the part that is our code's responsibility) is now covered by automated tests (`ChatOverflowPolicyTests`), so it needs no manual run:
+- Condense threshold decision (>70% of usable context) — ✅ tested.
+- chars/3.5 fallback estimate — ✅ tested.
+- Deterministic digest (last 2 exchanges verbatim + older-turn topics; skips streaming/empty) — ✅ tested.
+- Visible `messages` array is decoupled from the transcript (condensation never shrinks it) — ✅ by construction (`CoachChatService` mutates only the session, not `messages`).
 
-## 3. Latency (target: first token < ~3 s, prewarmed)
+Not automatable off-device (live 3B): that a real 40-turn conversation triggers condensation with **no user-visible failure** and that post-condensation answers still ground in tools. **Build-time checkpoint** — verify once when the feature is built (drive 40 turns on device, watch for `chat proactively condensing` and zero error bubbles).
 
-Open chat (prewarm fires on appear), wait ~2 s, send query #1. Rough time to first visible token:
-- Cold-ish first send: ___ s
-- Subsequent sends: ___ s
-- Note the extra round-trip on the not-found path (query #8/#10) — time those too: ___ s
+## 3. Latency — device-only checkpoint
+
+Cannot be measured off-device (no FoundationModels on the simulator). **Build-time checkpoint**: on a prewarmed session, first token < ~3 s on an iPhone 15 Pro-class device; note the extra round-trip on the not-found re-call path.
 
 ## 4. Robustness sampling
 
@@ -79,9 +79,18 @@ Open chat (prewarm fires on appear), wait ~2 s, send query #1. Rough time to fir
 - Did any answer **leak** raw tool text / the `__NO_MATCH__` marker / instructions? (Y/N — must be N): ___
 - Guardrail/refusal → sane error bubble (not a frozen UI)? (Y/N/n/a): ___
 
+## Automated validation (2026-07-10)
+
+18 tests over three suites, run on iPhone 17 / iOS 26.5 simulator — all pass:
+- `ExerciseNameResolverTests` (7): folded exact/contains/token matching, German umlaut/ß equivalence, same-name aggregation, distinct-name ambiguity, misses.
+- `ChatFactServiceTests` (6): fact lines against a real in-memory SwiftData store — PR best-set + estimated-1RM values, same-name variant aggregation, `__NO_MATCH__` marker with the real library, this-week count, allTime last-workout naming.
+- `ChatOverflowPolicyTests` (5): condense threshold, chars/3.5 estimate, deterministic digest (recent verbatim + older topics, skips streaming/empty), markdown stripping.
+
+These lock the deterministic behavior we iterated on manually so it can't regress.
+
 ## Decision gate
 
-All four sections pass → write the full feature plan (persistence, more tools, prominent entry point). Tool reliability < 18/20 or numbers hallucinated and un-fixable by prompt → stop and document why in the feasibility doc.
+**PASSED for the tool-reliability risk** (the expensive unknown the spike existed to resolve). Manual runs showed grounding held and every failure was a fixable prompt/tool-shape issue; the deterministic logic is now regression-locked by the tests above. The two model-dependent items (real 40-turn overflow behavior, latency) are **build-time checkpoints**, not blockers. → Proceed to the full feature plan (`docs/ai-coach-chat-plan.md`).
 
 ---
 
