@@ -408,7 +408,7 @@ struct RoutineDetailView: View {
             ))
         }
 
-        sectionLabel("routine.section.sets".localized)
+        SetsSectionLabel(text: "routine.section.sets".localized)
 
         ForEach(Array(routineExercise.setsList.sorted(by: { $0.order < $1.order }).enumerated()), id: \.element.id) { index, set in
             RoutineSetRowView(
@@ -496,6 +496,23 @@ struct RoutineDetailView: View {
             .transition(.opacity.combined(with: .move(edge: .top)))
         }
 
+        // Inline add-set — same affordance as the alternative editor, expanding
+        // the new set's editor right away.
+        AddSetInlineButton {
+            withAnimation(DesignSystem.Animation.spring) {
+                saveCurrentExpandedSet()
+                let newSet = viewModel.addSet(to: routineExercise)
+                expandedSetId = newSet.id
+                editingReps = newSet.reps
+                editingWeight = newSet.weight
+                initialReps = newSet.reps
+                initialWeight = newSet.weight
+                currentRoutineExercise = routineExercise
+                repsBannerDismissedForExercise[routineExercise.id] = false
+                weightBannerDismissedForExercise[routineExercise.id] = false
+            }
+        }
+
         // First alternative for this exercise is added here; once any exist, the
         // add affordance moves into the variant switcher's "+" pill above.
         if !routineExercise.hasAlternatives {
@@ -504,22 +521,6 @@ struct RoutineDetailView: View {
             }
             .padding(.top, 4)
         }
-    }
-
-    @ViewBuilder
-    private func sectionLabel(_ text: String, icon: String? = nil) -> some View {
-        HStack(spacing: 5) {
-            if let icon {
-                Image(systemName: icon)
-                    .font(.system(size: 9, weight: .bold))
-            }
-            Text(text.uppercased())
-                .font(.system(size: 10.5, weight: .bold))
-                .kerning(0.7)
-        }
-        .foregroundStyle(Color.white.opacity(0.4))
-        .padding(.horizontal, 2)
-        .padding(.top, 4)
     }
 
     @ViewBuilder
@@ -595,7 +596,7 @@ struct RoutineDetailView: View {
         // Add Set button
         Button {
             withAnimation(DesignSystem.Animation.spring) {
-                viewModel.addSet(to: routineExercise)
+                _ = viewModel.addSet(to: routineExercise)
             }
         } label: {
             HStack(spacing: 6) {

@@ -9,6 +9,54 @@
 
 import SwiftUI
 
+// MARK: - Shared expanded-card pieces
+
+/// Uppercase micro-label heading a section inside an expanded exercise card
+/// (e.g. "SETS"). Shared by the primary variant body and the alternative
+/// editor so both variants read identically.
+struct SetsSectionLabel: View {
+    let text: String
+    var icon: String? = nil
+
+    var body: some View {
+        HStack(spacing: 5) {
+            if let icon {
+                Image(systemName: icon)
+                    .font(.system(size: 9, weight: .bold))
+            }
+            Text(text.uppercased())
+                .font(.system(size: 10.5, weight: .bold))
+                .kerning(0.7)
+        }
+        .foregroundStyle(Color.white.opacity(0.4))
+        .padding(.horizontal, 2)
+        .padding(.top, 4)
+    }
+}
+
+/// Inline "Add set" button appended below the set rows of an expanded exercise
+/// card. One shared look for the primary exercise and its alternatives.
+struct AddSetInlineButton: View {
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 6) {
+                Image(systemName: "plus.circle.fill")
+                Text("exercise.add_set".localized)
+                    .fontWeight(.semibold)
+            }
+            .font(.subheadline)
+            .foregroundStyle(DesignSystem.Colors.tint)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 10)
+            .background(DesignSystem.Colors.input)
+            .clipShape(RoundedRectangle(cornerRadius: 10))
+        }
+        .buttonStyle(.plain)
+    }
+}
+
 // MARK: - Exercise card header
 
 struct ExerciseHeaderView: View {

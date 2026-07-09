@@ -297,18 +297,24 @@ class RoutinesViewModel: ObservableObject {
         }
     }
 
-    func addSet(to routineExercise: RoutineExercise) {
-        // Get rest time from existing sets, or default to 0 (disabled)
-        let restTime = routineExercise.setsList.first?.restTime ?? 0
-        // Calculate order from last set
+    /// Appends a new set (seeded from the last set) and returns it so callers
+    /// can expand its inline editor immediately.
+    @discardableResult
+    func addSet(to routineExercise: RoutineExercise) -> ExerciseSet {
+        // Seed reps/weight/rest from the last set so a new set continues the scheme
         let lastSet = routineExercise.setsList.sorted(by: { $0.order < $1.order }).last
-        let order = (lastSet?.order ?? -1) + 1
-        let set = ExerciseSet(reps: 10, weight: 0.0, restTime: restTime, order: order)
+        let set = ExerciseSet(
+            reps: lastSet?.reps ?? 10,
+            weight: lastSet?.weight ?? 0.0,
+            restTime: lastSet?.restTime ?? 0,
+            order: (lastSet?.order ?? -1) + 1
+        )
         set.routineExercise = routineExercise
         routineExercise.sets?.append(set)
         if let routine = routineExercise.routine {
             updateRoutine(routine)
         }
+        return set
     }
 
     func removeSet(_ set: ExerciseSet, from routineExercise: RoutineExercise) {
@@ -563,12 +569,17 @@ class RoutinesViewModel: ObservableObject {
         }
     }
 
-    /// Adds a set to an alternative, copying the rest time of its last set.
+    /// Adds a set to an alternative, seeded from its last set (same behavior
+    /// as addSet(to: RoutineExercise) so both variants feel identical).
     @discardableResult
     func addSet(to alternative: RoutineExerciseAlternative) -> AlternativeExerciseSet {
-        let restTime = alternative.setsList.first?.restTime ?? 0
-        let order = (alternative.setsList.last?.order ?? -1) + 1
-        let set = AlternativeExerciseSet(reps: 10, weight: 0.0, restTime: restTime, order: order)
+        let lastSet = alternative.setsList.sorted(by: { $0.order < $1.order }).last
+        let set = AlternativeExerciseSet(
+            reps: lastSet?.reps ?? 10,
+            weight: lastSet?.weight ?? 0.0,
+            restTime: lastSet?.restTime ?? 0,
+            order: (lastSet?.order ?? -1) + 1
+        )
         set.alternative = alternative
         if alternative.sets == nil { alternative.sets = [] }
         alternative.sets?.append(set)

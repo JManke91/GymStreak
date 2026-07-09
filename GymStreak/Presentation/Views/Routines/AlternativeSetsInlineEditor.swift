@@ -31,6 +31,10 @@ struct AlternativeSetsInlineEditor<SetType: AlternativeEditableSet>: View {
     /// progress badge + reps color, mirroring RoutineSetRowView. nil = no goal.
     var targetRepMin: Int? = nil
     var targetRepMax: Int? = nil
+    /// Whether the shared rest timer is rendered below the sets. The expanded
+    /// routine card renders the rest timer at the top itself (matching the
+    /// primary variant's layout), so it opts out here.
+    var showsRestTimer: Bool = true
 
     @State private var expandedSetId: UUID?
     @State private var editingReps = 10
@@ -65,49 +69,40 @@ struct AlternativeSetsInlineEditor<SetType: AlternativeEditableSet>: View {
     }
 
     var body: some View {
-        VStack(spacing: 8) {
+        // 12pt matches the expanded card's stack spacing, so an alternative's
+        // set rows sit exactly like the primary's (RoutineSetRowView) rows.
+        VStack(spacing: 12) {
             ForEach(Array(sortedSets.enumerated()), id: \.element.id) { index, set in
                 setRow(set: set, index: index)
             }
 
             // Add Set
-            Button {
+            AddSetInlineButton {
                 saveCurrentEditingSet()
                 let newSet = onAddSet()
                 withAnimation(DesignSystem.Animation.spring) {
                     expand(newSet)
                 }
-            } label: {
-                HStack(spacing: 6) {
-                    Image(systemName: "plus.circle.fill")
-                    Text("exercise.add_set".localized)
-                        .fontWeight(.semibold)
-                }
-                .font(.subheadline)
-                .foregroundStyle(DesignSystem.Colors.tint)
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 10)
-                .background(DesignSystem.Colors.input)
-                .clipShape(RoundedRectangle(cornerRadius: 10))
             }
-            .buttonStyle(.plain)
 
             // Rest timer applies to all sets of this alternative
-            RestTimerConfigView(
-                restTime: Binding(
-                    get: { restTime },
-                    set: { newValue in
-                        for set in sets {
-                            set.restTime = newValue
+            if showsRestTimer {
+                RestTimerConfigView(
+                    restTime: Binding(
+                        get: { restTime },
+                        set: { newValue in
+                            for set in sets {
+                                set.restTime = newValue
+                            }
+                            if let first = sortedSets.first {
+                                onSetChanged(first)
+                            }
                         }
-                        if let first = sortedSets.first {
-                            onSetChanged(first)
-                        }
-                    }
-                ),
-                isExpanded: $restTimerExpanded,
-                showToggle: true
-            )
+                    ),
+                    isExpanded: $restTimerExpanded,
+                    showToggle: true
+                )
+            }
         }
         .alert("set.delete.title".localized, isPresented: deleteAlertBinding) {
             Button("set.delete.confirm".localized, role: .destructive) {

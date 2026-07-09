@@ -5,8 +5,9 @@
 //  The full editor for a single alternative variant, shown in an expanded
 //  exercise card IN PLACE OF the primary's configuration when that alternative is
 //  focused (via the ExerciseVariantSwitcher pill or the alternatives browse
-//  sheet). Contains the alternative's own rep-range goal, its independent set
-//  scheme (AlternativeSetsInlineEditor, which carries its own rest timer) and a
+//  sheet). Mirrors primarySetContent's layout exactly: rest timer, the
+//  alternative's own rep-range goal, SETS label, its independent set scheme
+//  (AlternativeSetsInlineEditor with showsRestTimer: false), and a
 //  confirm-gated removal.
 //
 //  Replaces the former AlternativeInlineSection, which stacked every alternative's
@@ -23,12 +24,30 @@ struct AlternativeFocusedEditor: View {
     let onRemoved: () -> Void
 
     @State private var repRangeExpanded = false
+    @State private var restTimerExpanded = false
     @State private var confirmingRemoval = false
 
     var body: some View {
-        VStack(spacing: 12) {
-            // Rep-range goal — same control as the primary, targeting this
-            // alternative's own independent goal.
+        VStack(alignment: .leading, spacing: 12) {
+            // Same layout order as the primary variant (primarySetContent in
+            // RoutineDetailView): rest timer, rep-range goal, SETS label, set
+            // rows, inline add-set — so switching variants never reshuffles UI.
+            RestTimerConfigView(
+                restTime: Binding(
+                    get: { alternative.setsList.first?.restTime ?? 0 },
+                    set: { newValue in
+                        for set in alternative.setsList {
+                            set.restTime = newValue
+                        }
+                        if let first = alternative.setsList.first {
+                            viewModel.updateSet(first)
+                        }
+                    }
+                ),
+                isExpanded: $restTimerExpanded,
+                showToggle: true
+            )
+
             RepRangeConfigView(
                 targetRepMin: Binding(
                     get: { alternative.targetRepMin },
@@ -44,13 +63,16 @@ struct AlternativeFocusedEditor: View {
                 }
             )
 
+            SetsSectionLabel(text: "routine.section.sets".localized)
+
             AlternativeSetsInlineEditor(
                 sets: alternative.setsList,
                 onAddSet: { viewModel.addSet(to: alternative) },
                 onRemoveSet: { viewModel.removeSet($0, from: alternative) },
                 onSetChanged: { viewModel.updateSet($0) },
                 targetRepMin: alternative.targetRepMin,
-                targetRepMax: alternative.targetRepMax
+                targetRepMax: alternative.targetRepMax,
+                showsRestTimer: false
             )
 
             Button(role: .destructive) {
