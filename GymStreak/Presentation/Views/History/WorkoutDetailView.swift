@@ -20,7 +20,6 @@ struct WorkoutDetailView: View {
     @EnvironmentObject private var dependencies: AppDependencies
     /// Kept only to pass through to the (out-of-scope) AI Coach analysis ViewModel API.
     @Environment(\.modelContext) private var modelContext
-    @Environment(\.dismiss) private var dismiss
 
     @State private var prDetails: [String: PersonalRecordService.PRDetail] = [:]
     @State private var healthKitKcal: Double?
@@ -38,7 +37,6 @@ struct WorkoutDetailView: View {
             DesignSystem.Colors.background.ignoresSafeArea()
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
-                    topBar
                     header
                     statsGrid
                     if workout.healthKitWorkoutId != nil {
@@ -53,7 +51,23 @@ struct WorkoutDetailView: View {
                 }
             }
         }
-        .toolbar(.hidden, for: .navigationBar)
+        .navigationTitle("")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar(.visible, for: .navigationBar)
+        .toolbarBackground(.hidden, for: .navigationBar)
+        .toolbarColorScheme(.dark, for: .navigationBar)
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button {
+                    HapticManager.shared.light()
+                    showingEdit = true
+                } label: {
+                    Image(systemName: "square.and.pencil")
+                        .font(.system(size: 16, weight: .semibold))
+                }
+                .accessibilityLabel("edit_workout.title".localized)
+            }
+        }
         .task {
             await loadPRs()
             await loadHealthKitKcal()
@@ -73,41 +87,6 @@ struct WorkoutDetailView: View {
             await loadComparisons()
             loadCoachState()
         }
-    }
-
-    // MARK: - Top bar
-
-    private var topBar: some View {
-        HStack {
-            Button {
-                HapticManager.shared.light()
-                dismiss()
-            } label: {
-                Image(systemName: "chevron.left")
-                    .font(.system(size: 17, weight: .semibold))
-                    .foregroundStyle(Color.white)
-                    .frame(width: 38, height: 38)
-                    .background(Color.white.opacity(0.08))
-                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-            }
-            .buttonStyle(.plain)
-            Spacer()
-            Button {
-                HapticManager.shared.light()
-                showingEdit = true
-            } label: {
-                Image(systemName: "square.and.pencil")
-                    .font(.system(size: 16, weight: .semibold))
-                    .foregroundStyle(Color.white)
-                    .frame(width: 38, height: 38)
-                    .background(Color.white.opacity(0.08))
-                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel("edit_workout.title".localized)
-        }
-        .padding(.horizontal, 16)
-        .padding(.top, 12)
     }
 
     // MARK: - Header
@@ -401,4 +380,3 @@ struct WorkoutDetailView: View {
         healthKitKcal = result
     }
 }
-

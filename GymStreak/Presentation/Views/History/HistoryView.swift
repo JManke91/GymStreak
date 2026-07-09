@@ -93,6 +93,8 @@ struct HistoryView: View {
                     refresh()
                 }
             }
+            // Keep the tab root free of navigation chrome without passing that
+            // preference to its pushed destinations.
             .toolbar(.hidden, for: .navigationBar)
             .navigationDestination(for: UUID.self) { sessionId in
                 if let session = sessions.first(where: { $0.id == sessionId }) {
