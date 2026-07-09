@@ -31,12 +31,7 @@ final class CoachChatService: CoachChatServicing {
 
     /// Output-token cap per turn (answer + tool round-trip).
     private static let maxResponseTokens = 500
-    /// Context reserved for the answer before condensation kicks in.
-    private static let reservedOutputTokens = 800
-    /// Fraction of usable context that triggers a proactive condense.
-    private static let condenseThresholdFraction = 0.7
-    /// Pre-26.4 estimate of the 3 tool schemas (no `tokenCount` available).
-    private static let estimatedToolSchemaTokens = 220
+    // Overflow budgeting + digest live in `ChatOverflowPolicy` (pure + unit-tested).
 
     // MARK: - Observable state
 
@@ -167,10 +162,8 @@ final class CoachChatService: CoachChatServicing {
     private func condenseIfNeeded() async {
         guard let session else { return }
         let contextSize = SystemLanguageModel.default.contextSize
-        let usable = max(1, contextSize - Self.reservedOutputTokens)
-        let threshold = Int(Double(usable) * Self.condenseThresholdFraction)
 
-        var used = estimatedTranscriptTokens()
+        var used = ChatOverflowPolicy.estimatedTokens(messages: messages)
         if #available(iOS 26.4, *) {
             let entries = Array(session.transcript)
             if let transcriptTokens = try? await SystemLanguageModel.default.tokenCount(for: entries) {
@@ -181,8 +174,8 @@ final class CoachChatService: CoachChatServicing {
             }
         }
 
-        if used > threshold {
-            logger.notice("chat proactively condensing (used=\(used), threshold=\(threshold))")
+        if ChatOverflowPolicy.shouldCondense(usedTokens: used, contextSize: contextSize) {
+            logger.notice("chat proactively condensing (used=\(used), contextSize=\(contextSize))")
             condense()
         }
     }
@@ -191,32 +184,8 @@ final class CoachChatService: CoachChatServicing {
     /// The visible `messages` array is untouched — only the model's working set
     /// shrinks. Prewarms the fresh session so the pending send starts fast.
     private func condense() {
-        rebuildSession(withDigest: buildDigest())
+        rebuildSession(withDigest: ChatOverflowPolicy.digest(messages: messages, turnTopics: turnTopics))
         session?.prewarm()
-    }
-
-    /// Last 2 exchanges verbatim (recency matters most in chat) + a one-line topic
-    /// list of older turns. Deterministic, no extra inference.
-    private func buildDigest() -> String {
-        let finalized = messages.filter { $0.phase == .final && !$0.text.isEmpty }
-        let recentLines = finalized.suffix(4).map { message in
-            (message.role == .user ? "User: " : "Coach: ") + message.text
-        }.joined(separator: "\n")
-
-        var parts: [String] = []
-        let olderTopics = turnTopics.dropLast(2)
-        if !olderTopics.isEmpty {
-            parts.append("The user earlier asked about: \(olderTopics.joined(separator: "; ")).")
-        }
-        if !recentLines.isEmpty {
-            parts.append("Most recent exchanges:\n\(recentLines)")
-        }
-        return parts.joined(separator: "\n")
-    }
-
-    private func estimatedTranscriptTokens() -> Int {
-        let chars = messages.reduce(0) { $0 + $1.text.count }
-        return Int(Double(chars) / 3.5) + Self.estimatedToolSchemaTokens
     }
 
     // MARK: - Helpers
