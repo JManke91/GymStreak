@@ -22,6 +22,7 @@ struct DesignSystem {
         static let destructive = Color(red: 255/255, green: 69/255, blue: 58/255) // Red
         static let warning = Color(red: 255/255, green: 159/255, blue: 10/255) // Orange
         static let info = Color(red: 94/255, green: 92/255, blue: 230/255) // Indigo
+        static let pr = Color(red: 1, green: 0.8, blue: 0) // Gold — personal record badges
 
         // Text
         static let textPrimary = Color.white

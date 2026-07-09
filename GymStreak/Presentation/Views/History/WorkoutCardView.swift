@@ -83,10 +83,10 @@ struct WorkoutCardView: View {
             Text("history.pr.count".localized(prLifts))
                 .font(.system(size: 10, weight: .bold))
         }
-        .foregroundStyle(Color(red: 1, green: 0.8, blue: 0))
+        .foregroundStyle(DesignSystem.Colors.pr)
         .padding(.horizontal, 6)
         .padding(.vertical, 2)
-        .background(Color(red: 1, green: 0.8, blue: 0).opacity(0.12))
+        .background(DesignSystem.Colors.pr.opacity(0.12))
         .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
     }
 

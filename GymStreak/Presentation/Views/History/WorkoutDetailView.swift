@@ -22,7 +22,7 @@ struct WorkoutDetailView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
 
-    @State private var prExerciseNames: Set<String> = []
+    @State private var prDetails: [String: PersonalRecordService.PRDetail] = [:]
     @State private var healthKitKcal: Double?
     @State private var comparisons: [UUID: ExerciseComparisonResult] = [:]
     @State private var analysisVM = WorkoutAnalysisViewModel()
@@ -343,7 +343,7 @@ struct WorkoutDetailView: View {
                 ForEach(exercises, id: \.id) { exercise in
                     WorkoutDetailExerciseBlock(
                         exercise: exercise,
-                        isPR: prExerciseNames.contains(exercise.exerciseName.lowercased()),
+                        prDetail: prDetails[exercise.stableKey],
                         comparison: comparisons[exercise.id]
                     )
                 }
@@ -359,7 +359,7 @@ struct WorkoutDetailView: View {
         // Compute PRs by scanning all finished sessions up to and including this one.
         let all = dependencies.workoutSessionRepository.fetchCompleted()
         let prs = PersonalRecordService.computePRs(sessions: all)
-        prExerciseNames = prs.prExerciseNamesBySession[workout.id] ?? []
+        prDetails = prs.prDetailsBySession[workout.id] ?? [:]
     }
 
     @MainActor

@@ -633,6 +633,9 @@
 "history.detail.bw" = "KG";
 "history.detail.reps" = "Wdh.";
 "history.detail.pr" = "PR";
+"history.detail.pr_record" = "Neuer Rekord: %@ × %d";
+"history.detail.pr_e1rm" = "gesch. 1RM %@";
+"history.detail.pr_e1rm_vs" = "gesch. 1RM %@ · zuvor %@";
 "history.detail.healthkit.title" = "In Apple Health gespeichert";
 "history.detail.healthkit.subtitle" = "%@ Krafttraining";
 "history.detail.healthkit.subtitle_with_kcal" = "%@ Krafttraining · %@ kcal";
@@ -649,6 +652,7 @@
 "history.detail.a11y.delta_down_reps" = "minus %d Wiederholungen im Vergleich zur letzten Sitzung";
 "history.detail.a11y.delta_equal" = "gleich wie letztes Mal";
 "history.detail.a11y.delta_new" = "neuer Satz, keine Vergleichsdaten";
+"history.detail.a11y.pr_set" = "neuer persönlicher Rekord";
 
 // MARK: - Exercise Detail (redesigned)
 "history.exercise.pr" = "Rekord";

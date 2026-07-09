@@ -633,6 +633,9 @@
 "history.detail.bw" = "BW";
 "history.detail.reps" = "reps";
 "history.detail.pr" = "PR";
+"history.detail.pr_record" = "New record: %@ × %d";
+"history.detail.pr_e1rm" = "est. 1RM %@";
+"history.detail.pr_e1rm_vs" = "est. 1RM %@ · previous best %@";
 "history.detail.healthkit.title" = "Saved to Apple Health";
 "history.detail.healthkit.subtitle" = "%@ Strength Training";
 "history.detail.healthkit.subtitle_with_kcal" = "%@ Strength Training · %@ kcal";
@@ -649,6 +652,7 @@
 "history.detail.a11y.delta_down_reps" = "down %d reps from last time";
 "history.detail.a11y.delta_equal" = "same as last time";
 "history.detail.a11y.delta_new" = "new set, no previous data";
+"history.detail.a11y.pr_set" = "new personal record";
 
 // MARK: - Exercise Detail (redesigned)
 "history.exercise.pr" = "Record";

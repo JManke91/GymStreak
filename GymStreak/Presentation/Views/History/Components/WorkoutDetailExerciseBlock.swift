@@ -12,7 +12,7 @@ import SwiftUI
 
 struct WorkoutDetailExerciseBlock: View {
     let exercise: WorkoutExercise
-    let isPR: Bool
+    let prDetail: PersonalRecordService.PRDetail?
     let comparison: ExerciseComparisonResult?
 
     private var sortedSets: [WorkoutSet] {
@@ -26,6 +26,9 @@ struct WorkoutDetailExerciseBlock: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             titleRow
+            if let prDetail {
+                PRRecordStrip(detail: prDetail)
+            }
             if let comparison, let previous = comparison.previousPerformance {
                 ExerciseComparisonStrip(comparison: comparison, previous: previous)
             } else if comparison?.isFirstTime == true {
@@ -49,7 +52,7 @@ struct WorkoutDetailExerciseBlock: View {
                 .kerning(-0.2)
                 .foregroundStyle(Color.white)
                 .lineLimit(1)
-            if isPR {
+            if prDetail != nil {
                 prBadge
             }
             Spacer()
@@ -66,10 +69,10 @@ struct WorkoutDetailExerciseBlock: View {
             Text("history.detail.pr".localized)
                 .font(.system(size: 10, weight: .bold))
         }
-        .foregroundStyle(Color(red: 1, green: 0.8, blue: 0))
+        .foregroundStyle(DesignSystem.Colors.pr)
         .padding(.horizontal, 7)
         .padding(.vertical, 2)
-        .background(Color(red: 1, green: 0.8, blue: 0).opacity(0.12))
+        .background(DesignSystem.Colors.pr.opacity(0.12))
         .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
     }
 
@@ -94,14 +97,22 @@ struct WorkoutDetailExerciseBlock: View {
             ? String(format: "%gkg", weight)
             : "history.detail.bw".localized
         let isCompleted = set.isCompleted
+        let isPRSet = set.id == prDetail?.setId
         let setComparison = setComparisons.indices.contains(index) ? setComparisons[index] : nil
         let delta = SetDeltaChip.Delta(comparison: setComparison, isCompleted: isCompleted, hasPreviousSession: comparison?.previousPerformance != nil)
 
         return VStack(spacing: 4) {
-            Text(String(format: "history.detail.set_n".localized, index + 1))
-                .font(.system(size: 9, weight: .semibold))
-                .tracking(0.4)
-                .foregroundStyle(Color.white.opacity(0.4))
+            HStack(spacing: 3) {
+                if isPRSet {
+                    Image(systemName: "trophy.fill")
+                        .font(.system(size: 8, weight: .bold))
+                        .foregroundStyle(DesignSystem.Colors.pr)
+                }
+                Text(String(format: "history.detail.set_n".localized, index + 1))
+                    .font(.system(size: 9, weight: .semibold))
+                    .tracking(0.4)
+                    .foregroundStyle(isPRSet ? DesignSystem.Colors.pr : Color.white.opacity(0.4))
+            }
             Text(weightText)
                 .font(.system(size: 14, weight: .bold, design: .rounded))
                 .kerning(-0.3)
@@ -118,19 +129,26 @@ struct WorkoutDetailExerciseBlock: View {
         .padding(.vertical, 8)
         .padding(.horizontal, 4)
         .frame(maxWidth: .infinity)
-        .background(Color.white.opacity(0.04))
+        .background(isPRSet ? DesignSystem.Colors.pr.opacity(0.08) : Color.white.opacity(0.04))
+        .overlay(
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .stroke(DesignSystem.Colors.pr.opacity(isPRSet ? 0.4 : 0), lineWidth: 1)
+        )
         .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
         .opacity(isCompleted ? 1 : 0.5)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(Text(String(format: "history.detail.set_n".localized, index + 1)))
-        .accessibilityValue(accessibilityValue(weight: weight, weightText: weightText, reps: reps, delta: delta))
+        .accessibilityValue(accessibilityValue(weight: weight, weightText: weightText, reps: reps, delta: delta, isPRSet: isPRSet))
     }
 
-    private func accessibilityValue(weight: Double, weightText: String, reps: Int, delta: SetDeltaChip.Delta?) -> Text {
+    private func accessibilityValue(weight: Double, weightText: String, reps: Int, delta: SetDeltaChip.Delta?, isPRSet: Bool) -> Text {
         let deltaPhrase = delta?.accessibilityPhrase ?? ""
         let valueString = weight > 0 ? weightText : "history.detail.bw".localized
-        let formatted = String(format: "history.detail.a11y.set_value_with_delta".localized,
+        var formatted = String(format: "history.detail.a11y.set_value_with_delta".localized,
                                valueString, reps, deltaPhrase)
+        if isPRSet {
+            formatted += ", " + "history.detail.a11y.pr_set".localized
+        }
         return Text(formatted)
     }
 }
