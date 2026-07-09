@@ -12,13 +12,13 @@ import Foundation
 @MainActor
 final class MockWatchSyncServicing: WatchSyncServicing {
     var mayHaveUndeliveredContent: Bool = false
-    var pendingWorkoutsQueue: [CompletedWatchWorkout] = []
+    var pendingWorkoutsQueue: [IncomingWatchWorkout] = []
 
     private(set) var markPendingProcessedCalls: [UUID] = []
     private(set) var acknowledgeWorkoutSavedCalls: [UUID] = []
     private(set) var syncRoutinesCalls: [[Routine]] = []
 
-    func pendingWorkouts() -> [CompletedWatchWorkout] {
+    func pendingWorkouts() -> [IncomingWatchWorkout] {
         pendingWorkoutsQueue
     }
 
