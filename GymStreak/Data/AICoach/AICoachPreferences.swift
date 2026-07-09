@@ -45,6 +45,9 @@ final class AICoachPreferences: AICoachPreferencesProviding {
         workoutDetailEnabled = UserDefaults.standard.object(forKey: Keys.workoutDetail) == nil
             ? true
             : UserDefaults.standard.bool(forKey: Keys.workoutDetail)
+        // Experimental chat is opt-in (default off) — it is a spike, not a
+        // finished surface (see docs/ai-coach-chat-feasibility.md).
+        chatExperimentalEnabled = UserDefaults.standard.bool(forKey: Keys.chatExperimental)
         lastProactivePromptShownForPeriodId = UserDefaults.standard.string(forKey: Keys.lastProactivePeriodId)
         optInDeclinedAt = UserDefaults.standard.object(forKey: Keys.optInDeclinedAt) as? Date
     }
@@ -59,6 +62,7 @@ final class AICoachPreferences: AICoachPreferencesProviding {
         static let proactiveMonthly     = "aiCoachProactiveMonthlyEnabled"
         static let exerciseDeepDive     = "aiCoachExerciseDeepDiveEnabled"
         static let workoutDetail        = "aiCoachWorkoutDetailEnabled"
+        static let chatExperimental     = "aiCoachChatExperimentalEnabled"
         static let lastProactivePeriodId = "aiCoachLastProactivePromptPeriodId"
         static let optInDeclinedAt      = "aiCoachOptInDeclinedAt"
     }
@@ -111,6 +115,12 @@ final class AICoachPreferences: AICoachPreferencesProviding {
         didSet { UserDefaults.standard.set(workoutDetailEnabled, forKey: Keys.workoutDetail) }
     }
 
+    /// Whether the experimental chat assistant surface is enabled (opt-in spike).
+    /// Key: `aiCoachChatExperimentalEnabled`. Default: `false`.
+    var chatExperimentalEnabled: Bool = false {
+        didSet { UserDefaults.standard.set(chatExperimentalEnabled, forKey: Keys.chatExperimental) }
+    }
+
     /// Tracks the last calendar period for which the proactive monthly prompt was shown,
     /// so Wave 3 can suppress repeated prompts within the same month boundary.
     /// Key: `aiCoachLastProactivePromptPeriodId`. Default: `nil`.
@@ -155,6 +165,11 @@ final class AICoachPreferences: AICoachPreferencesProviding {
     /// Workout detail analysis surface is active.
     var isWorkoutDetailEffectivelyEnabled: Bool {
         isEffectivelyEnabled && workoutDetailEnabled
+    }
+
+    /// Experimental chat assistant is active (opted-in, master on, sub-toggle on).
+    var isChatExperimentalEffectivelyEnabled: Bool {
+        isEffectivelyEnabled && chatExperimentalEnabled
     }
 
     // MARK: - Opt-in Re-prompt Logic

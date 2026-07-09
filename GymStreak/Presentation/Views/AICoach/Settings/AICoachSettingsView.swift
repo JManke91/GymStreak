@@ -100,6 +100,37 @@ struct AICoachSettingsView: View {
                         )
                     }
 
+                    // MARK: Experimental section
+                    sectionHeader("ai_coach.settings.section.experimental".localized)
+                        .padding(.top, 22)
+                    settingsGroup {
+                        surfaceToggleRow(
+                            icon: "bubble.left.and.text.bubble.right",
+                            title: "ai_coach.chat.experimental.title".localized,
+                            detail: "ai_coach.chat.experimental.detail".localized,
+                            isEnabled: masterActive,
+                            isLast: !preferences.isChatExperimentalEffectivelyEnabled,
+                            binding: bindable.chatExperimentalEnabled
+                        )
+
+                        if preferences.isChatExperimentalEffectivelyEnabled {
+                            Divider()
+                                .background(Color.white.opacity(0.06))
+                                .padding(.horizontal, 16)
+
+                            NavigationLink {
+                                CoachChatView()
+                            } label: {
+                                navRow(
+                                    title: "ai_coach.chat.entry.title".localized,
+                                    isLast: true
+                                )
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityLabel("ai_coach.chat.entry.title".localized)
+                        }
+                    }
+
                     // MARK: Info section
                     sectionHeader("ai_coach.settings.section.info".localized)
                         .padding(.top, 22)
