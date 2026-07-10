@@ -135,3 +135,4 @@ Desktop.ini
 ios/Pods/Flipper*
 ios/Pods/boost-for-react-native
 ios/Pods/Flipper-RSocket
+.codex/config.toml
