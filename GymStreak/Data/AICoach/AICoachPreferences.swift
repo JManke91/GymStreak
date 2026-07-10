@@ -45,9 +45,9 @@ final class AICoachPreferences: AICoachPreferencesProviding {
         workoutDetailEnabled = UserDefaults.standard.object(forKey: Keys.workoutDetail) == nil
             ? true
             : UserDefaults.standard.bool(forKey: Keys.workoutDetail)
-        // Experimental chat is opt-in (default off) — it is a spike, not a
-        // finished surface (see docs/ai-coach-chat-feasibility.md).
-        chatExperimentalEnabled = UserDefaults.standard.bool(forKey: Keys.chatExperimental)
+        chatEnabled = UserDefaults.standard.object(forKey: Keys.chat) == nil
+            ? true
+            : UserDefaults.standard.bool(forKey: Keys.chat)
         lastProactivePromptShownForPeriodId = UserDefaults.standard.string(forKey: Keys.lastProactivePeriodId)
         optInDeclinedAt = UserDefaults.standard.object(forKey: Keys.optInDeclinedAt) as? Date
     }
@@ -62,7 +62,7 @@ final class AICoachPreferences: AICoachPreferencesProviding {
         static let proactiveMonthly     = "aiCoachProactiveMonthlyEnabled"
         static let exerciseDeepDive     = "aiCoachExerciseDeepDiveEnabled"
         static let workoutDetail        = "aiCoachWorkoutDetailEnabled"
-        static let chatExperimental     = "aiCoachChatExperimentalEnabled"
+        static let chat                 = "aiCoachChatEnabled"
         static let lastProactivePeriodId = "aiCoachLastProactivePromptPeriodId"
         static let optInDeclinedAt      = "aiCoachOptInDeclinedAt"
     }
@@ -115,10 +115,10 @@ final class AICoachPreferences: AICoachPreferencesProviding {
         didSet { UserDefaults.standard.set(workoutDetailEnabled, forKey: Keys.workoutDetail) }
     }
 
-    /// Whether the experimental chat assistant surface is enabled (opt-in spike).
-    /// Key: `aiCoachChatExperimentalEnabled`. Default: `false`.
-    var chatExperimentalEnabled: Bool = false {
-        didSet { UserDefaults.standard.set(chatExperimentalEnabled, forKey: Keys.chatExperimental) }
+    /// Whether the chat assistant surface is enabled.
+    /// Key: `aiCoachChatEnabled`. Default: `true`.
+    var chatEnabled: Bool = true {
+        didSet { UserDefaults.standard.set(chatEnabled, forKey: Keys.chat) }
     }
 
     /// Tracks the last calendar period for which the proactive monthly prompt was shown,
@@ -167,9 +167,9 @@ final class AICoachPreferences: AICoachPreferencesProviding {
         isEffectivelyEnabled && workoutDetailEnabled
     }
 
-    /// Experimental chat assistant is active (opted-in, master on, sub-toggle on).
-    var isChatExperimentalEffectivelyEnabled: Bool {
-        isEffectivelyEnabled && chatExperimentalEnabled
+    /// Chat assistant surface is active.
+    var isChatEffectivelyEnabled: Bool {
+        isEffectivelyEnabled && chatEnabled
     }
 
     // MARK: - Opt-in Re-prompt Logic

@@ -23,6 +23,10 @@ private struct ContentViewInternal: View {
     @State private var preferences = AICoachPreferences.shared
     @State private var availability = AICoachAvailability.shared
 
+    /// Floating coach bar → full chat (zoom morph). See docs/ai-coach-entry-point-concepts.md.
+    @State private var showingCoachChat = false
+    @Namespace private var coachChatZoom
+
     init(dependencies: AppDependencies) {
         self._workoutViewModel = StateObject(wrappedValue: WorkoutViewModel(
             workoutSessionRepository: dependencies.workoutSessionRepository,
@@ -51,6 +55,30 @@ private struct ContentViewInternal: View {
         }
         .tint(DesignSystem.Colors.tint)
         .preferredColorScheme(.dark)
+        .tabBarMinimizeBehavior(.onScrollDown)
+        // Floating coach companion bar — visible whenever the chat surface is
+        // active; hidden for ineligible devices and when the user disabled it.
+        .tabViewBottomAccessory(isEnabled: isCoachBarVisible) {
+            CoachBarView {
+                // Freeze the screen anchor before presentation lifecycle runs
+                // (the cover fires the covered screen's onDisappear, which
+                // clears the live anchor).
+                CoachScreenContext.shared.freezeForPresentation()
+                showingCoachChat = true
+            }
+            .matchedTransitionSource(id: Self.coachBarTransitionId, in: coachChatZoom)
+        }
+        .fullScreenCover(isPresented: $showingCoachChat, onDismiss: {
+            // Single cancellation point for an in-flight stream (the chat view
+            // itself no longer cancels in onDisappear, so pushing settings
+            // within the chat stack doesn't kill a streaming answer).
+            CoachChatService.shared.cancel()
+        }) {
+            NavigationStack {
+                CoachChatView()
+            }
+            .navigationTransition(.zoom(sourceID: Self.coachBarTransitionId, in: coachChatZoom))
+        }
         // AI Coach opt-in: shown once when Apple Intelligence is available
         // and the user has not yet completed or permanently dismissed opt-in.
         .fullScreenCover(isPresented: .constant(shouldShowOptIn)) {
@@ -67,6 +95,14 @@ private struct ContentViewInternal: View {
     private var shouldShowOptIn: Bool {
         availability.isAvailable && preferences.shouldShowOptIn
     }
+
+    /// The coach bar rides on every screen — it must vanish entirely when the
+    /// device is ineligible or the user turned the feature off.
+    private var isCoachBarVisible: Bool {
+        availability.isAvailable && preferences.isChatEffectivelyEnabled
+    }
+
+    private static let coachBarTransitionId = "coach-bar"
 }
 
 #Preview {

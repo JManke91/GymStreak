@@ -13,6 +13,7 @@ import SwiftUI
 struct CoachChatView: View {
 
     @Environment(\.modelContext) private var modelContext
+    @Environment(\.dismiss) private var dismiss
     @State private var viewModel = CoachChatViewModel()
     @FocusState private var inputFocused: Bool
 
@@ -28,6 +29,24 @@ struct CoachChatView: View {
         .navigationTitle("ai_coach.chat.title".localized)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
+            ToolbarItem(placement: .topBarLeading) {
+                Button {
+                    dismiss()
+                } label: {
+                    Image(systemName: "xmark")
+                        .foregroundStyle(Color.white.opacity(0.6))
+                }
+                .accessibilityLabel("ai_coach.chat.close".localized)
+            }
+            ToolbarItem(placement: .topBarTrailing) {
+                NavigationLink {
+                    AICoachSettingsView()
+                } label: {
+                    Image(systemName: "gearshape.fill")
+                        .foregroundStyle(Color.white.opacity(0.6))
+                }
+                .accessibilityLabel("ai_coach.settings.open".localized)
+            }
 #if DEBUG
             // Phase 0 auto-drill trigger (docs/ai-coach-chat-plan.md) — never ships.
             ToolbarItem(placement: .topBarTrailing) {
@@ -53,7 +72,9 @@ struct CoachChatView: View {
             }
         }
         .onAppear { viewModel.onAppear(modelContext: modelContext) }
-        .onDisappear { viewModel.cancel() }
+        // In-flight streams are cancelled by the presenting fullScreenCover's
+        // onDismiss (ContentView) — not here, so pushing settings on top of the
+        // chat doesn't kill a streaming answer.
     }
 
     // MARK: - Message list

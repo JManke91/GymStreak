@@ -95,40 +95,21 @@ struct AICoachSettingsView: View {
                             title: "ai_coach.settings.surface.workout_detail.title".localized,
                             detail: "ai_coach.settings.surface.workout_detail.detail".localized,
                             isEnabled: masterActive,
-                            isLast: true,
                             binding: bindable.workoutDetailEnabled
                         )
-                    }
 
-                    // MARK: Experimental section
-                    sectionHeader("ai_coach.settings.section.experimental".localized)
-                        .padding(.top, 22)
-                    settingsGroup {
+                        Divider()
+                            .background(Color.white.opacity(0.06))
+                            .padding(.horizontal, 16)
+
                         surfaceToggleRow(
                             icon: "bubble.left.and.text.bubble.right",
-                            title: "ai_coach.chat.experimental.title".localized,
-                            detail: "ai_coach.chat.experimental.detail".localized,
+                            title: "ai_coach.settings.surface.chat.title".localized,
+                            detail: "ai_coach.settings.surface.chat.detail".localized,
                             isEnabled: masterActive,
-                            isLast: !preferences.isChatExperimentalEffectivelyEnabled,
-                            binding: bindable.chatExperimentalEnabled
+                            isLast: true,
+                            binding: bindable.chatEnabled
                         )
-
-                        if preferences.isChatExperimentalEffectivelyEnabled {
-                            Divider()
-                                .background(Color.white.opacity(0.06))
-                                .padding(.horizontal, 16)
-
-                            NavigationLink {
-                                CoachChatView()
-                            } label: {
-                                navRow(
-                                    title: "ai_coach.chat.entry.title".localized,
-                                    isLast: true
-                                )
-                            }
-                            .buttonStyle(.plain)
-                            .accessibilityLabel("ai_coach.chat.entry.title".localized)
-                        }
                     }
 
                     // MARK: Info section

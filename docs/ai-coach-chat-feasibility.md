@@ -187,7 +187,7 @@ GymStreak/
     └── CoachChatView.swift                # bubbles, input bar, empty-state suggestions, AIPrivacyFooter
 ```
 
-Entry point: an **Experimental** section in `AICoachSettingsView` — a `chatExperimentalEnabled` sub-toggle (opt-in, default off; `AICoachPreferences`) and, when it plus availability plus opt-in are all on, an "Open chat" `NavigationLink` to `CoachChatView`. Localized EN + DE (`ai_coach.chat.*`).
+Entry point (since 2026-07-10): a floating "Ask your coach" companion bar (`CoachBarView`, hosted via `tabViewBottomAccessory` on the root TabView, iOS 26.1+) — visible on every tab and pushed screen when availability + opt-in + the `chatEnabled` per-surface toggle (default on, `AICoachPreferences`, key `aiCoachChatEnabled`) are all active; it zoom-morphs into `CoachChatView` in a fullScreenCover. The toggle lives in the normal Surfaces section of `AICoachSettingsView` (the earlier Experimental section + `chatExperimentalEnabled` toggle are gone). See `docs/ai-coach-entry-point-concepts.md` for the design/decision history. Localized EN + DE (`ai_coach.chat.*`).
 
 ### Deltas from the plan
 

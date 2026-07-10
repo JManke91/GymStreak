@@ -168,7 +168,7 @@ struct HistoryView: View {
                     .foregroundStyle(Color.white.opacity(0.6))
             }
             .buttonStyle(.plain)
-            .accessibilityLabel("AI Coach Einstellungen")
+            .accessibilityLabel("ai_coach.settings.open".localized)
         }
         .padding(.horizontal, 20)
         .padding(.top, 8)

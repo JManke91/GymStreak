@@ -27,13 +27,16 @@ final class CoachChatViewModel {
 
     private let service: CoachChatService
     private let availability: AICoachAvailabilityProviding
+    private let screenContext: CoachScreenContext
 
     init(
         service: CoachChatService = .shared,
-        availability: AICoachAvailabilityProviding = AICoachAvailability.shared
+        availability: AICoachAvailabilityProviding = AICoachAvailability.shared,
+        screenContext: CoachScreenContext = .shared
     ) {
         self.service = service
         self.availability = availability
+        self.screenContext = screenContext
     }
 
     // MARK: - Forwarded state
@@ -49,11 +52,24 @@ final class CoachChatViewModel {
 
     /// Tappable starter questions — each is one the 3 tools can actually answer,
     /// which doubles as a guarantee that first-touch queries land.
-    let suggestedQuestions: [String] = [
-        "ai_coach.chat.suggestion.next_workout".localized,
-        "ai_coach.chat.suggestion.pr".localized,
-        "ai_coach.chat.suggestion.this_week".localized,
-    ]
+    ///
+    /// When the chat was opened from a screen with an anchor entity
+    /// (`CoachScreenContext`), the generic PR chip is replaced by an anchored
+    /// one ("What's my PR on Bench Press?") — still grounded by `getExercisePR`.
+    var suggestedQuestions: [String] {
+        var questions = [
+            "ai_coach.chat.suggestion.next_workout".localized,
+            "ai_coach.chat.suggestion.pr".localized,
+            "ai_coach.chat.suggestion.this_week".localized,
+        ]
+        if case .exercise(let name) = screenContext.presentedAnchor {
+            questions[1] = String(
+                format: "ai_coach.chat.suggestion.anchor_pr".localized,
+                name
+            )
+        }
+        return questions
+    }
 
     // MARK: - Lifecycle
 

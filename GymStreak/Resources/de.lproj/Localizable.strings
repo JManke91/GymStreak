@@ -786,11 +786,9 @@
 "ai_coach.settings.surface.workout_detail.title" = "Workout-Detail";
 "ai_coach.settings.surface.workout_detail.detail" = "Analyse beim Ansehen vergangener Workouts";
 
-// Chat assistant (experimental spike)
-"ai_coach.settings.section.experimental" = "Experimentell";
-"ai_coach.chat.experimental.title" = "Chat-Assistent";
-"ai_coach.chat.experimental.detail" = "Stelle Fragen zu deinem Training (frühe Vorschau)";
-"ai_coach.chat.entry.title" = "Chat öffnen";
+// Chat assistant
+"ai_coach.settings.surface.chat.title" = "Chat-Assistent";
+"ai_coach.settings.surface.chat.detail" = "Stelle Fragen zu deinem Training";
 "ai_coach.chat.title" = "Coach";
 "ai_coach.chat.empty.title" = "Frag den Coach";
 "ai_coach.chat.empty.subtitle" = "Fragen zu deinem Plan, deinen Bestwerten und deinem Verlauf — beantwortet auf deinem iPhone.";
@@ -803,3 +801,7 @@
 "ai_coach.chat.stop" = "Stopp";
 "ai_coach.chat.error.generic" = "Etwas ist schiefgelaufen. Bitte versuche es erneut.";
 "ai_coach.chat.unavailable" = "Der Chat-Assistent benötigt Apple Intelligence, das auf diesem Gerät nicht verfügbar ist.";
+"ai_coach.chat.bar.title" = "Frag deinen Coach";
+"ai_coach.settings.open" = "AI Coach Einstellungen";
+"ai_coach.chat.close" = "Schließen";
+"ai_coach.chat.suggestion.anchor_pr" = "Was ist mein Bestwert bei %@?";

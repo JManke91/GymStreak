@@ -27,8 +27,8 @@ This is an iOS app built with Xcode:
 
 - **Build & Run**: Open `GymStreak.xcodeproj` in Xcode and use Cmd+R to build and run
 - **Clean Build**: Product → Clean Build Folder (Cmd+Shift+K)
-- **iOS Target**: iOS 18.5+ required
-- **Xcode Version**: 15.0+ required
+- **iOS Target**: iOS 26.1+ (app target; bumped 2026-07-10 for `tabViewBottomAccessory(isEnabled:)` — widgets/tests targets are 26.0/26.2)
+- **Xcode Version**: 26+ required (iOS 26 SDK)
 
 ## Architecture
 

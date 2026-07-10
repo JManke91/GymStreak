@@ -786,11 +786,9 @@
 "ai_coach.settings.surface.workout_detail.title" = "Workout detail";
 "ai_coach.settings.surface.workout_detail.detail" = "Analysis when viewing past workouts";
 
-// Chat assistant (experimental spike)
-"ai_coach.settings.section.experimental" = "Experimental";
-"ai_coach.chat.experimental.title" = "Chat assistant";
-"ai_coach.chat.experimental.detail" = "Ask questions about your training (early preview)";
-"ai_coach.chat.entry.title" = "Open chat";
+// Chat assistant
+"ai_coach.settings.surface.chat.title" = "Chat assistant";
+"ai_coach.settings.surface.chat.detail" = "Ask questions about your training";
 "ai_coach.chat.title" = "Coach";
 "ai_coach.chat.empty.title" = "Ask the Coach";
 "ai_coach.chat.empty.subtitle" = "Questions about your schedule, records, and history — answered on your iPhone.";
@@ -803,3 +801,7 @@
 "ai_coach.chat.stop" = "Stop";
 "ai_coach.chat.error.generic" = "Something went wrong. Please try again.";
 "ai_coach.chat.unavailable" = "The chat assistant needs Apple Intelligence, which isn't available on this device.";
+"ai_coach.chat.bar.title" = "Ask your coach";
+"ai_coach.settings.open" = "AI Coach settings";
+"ai_coach.chat.close" = "Close";
+"ai_coach.chat.suggestion.anchor_pr" = "What's my PR on %@?";

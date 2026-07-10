@@ -1,6 +1,6 @@
 # AI Coach Chat — Full Feature Plan
 
-**Status: planned (2026-07-10). Spike validated — see `docs/ai-coach-chat-feasibility.md` (decision gate PASSED) and `docs/ai-coach-chat-eval.md`.** This is the productionization plan that turns the experimental chat spike into a shipped feature. It is written as chunked, independently-executable phases; each phase lists its goal, touched files, approach, and done-criteria so it can be executed incrementally (or handed to a cheaper model per CLAUDE.md Solution B).
+**Status: in progress (2026-07-10) — Phases 0, 1, 3 DONE; next: Phase 4 (expand tool set). Spike validated — see `docs/ai-coach-chat-feasibility.md` (decision gate PASSED) and `docs/ai-coach-chat-eval.md`.** This is the productionization plan that turns the experimental chat spike into a shipped feature. It is written as chunked, independently-executable phases; each phase lists its goal, touched files, approach, and done-criteria so it can be executed incrementally (or handed to a cheaper model per CLAUDE.md Solution B).
 
 ## What already exists (from the spike — do not rebuild)
 
@@ -108,14 +108,18 @@ Built as planned; implementation notes:
 - **Title:** derive from the first user message (truncated) — no model call.
 - **Done:** create/switch/delete conversations; each retains its own messages; a follow-up after switching still grounds.
 
-## Phase 3 — Prominent entry point
+## Phase 3 — Prominent entry point — DONE (July 2026); entry point SUPERSEDED same day
+
+**Superseded (2026-07-10, same day):** the History-header sparkle entry described below was replaced by the floating coach bar (`tabViewBottomAccessory`, iOS 26.1) — see `docs/ai-coach-entry-point-concepts.md`. Still current from this phase: the `chatEnabled` per-surface preference, the Surfaces settings row, and the removal of the Experimental section. The History header retains only the settings gear.
 
 **Goal:** promote from the experimental settings toggle to a first-class surface.
 
-- **Placement:** the app has no separate Progress tab — Fortschritt is a segmented sub-view inside the History tab, and `HistoryView` hides the navigation bar (`.toolbar(.hidden, for: .navigationBar)`), so a `ToolbarItem` is not an option. Put **one** chat entry (sparkle/chat icon, reuse `AISparkleView`) in `HistoryView`'s custom header — it covers both the Trainings and Fortschritt segments, which is where these questions arise.
-- **Gating:** `AICoachAvailability` + opt-in; replace `chatExperimentalEnabled` with a normal per-surface toggle following the existing pattern in `AICoachPreferences` (`chatEnabled` + computed `isChatEffectivelyEnabled`, like `workoutDetailEnabled`/`isWorkoutDetailEffectivelyEnabled`).
-- **Files:** `HistoryView.swift` header; `AICoachPreferences.swift` (rename toggle, keep the same UserDefaults default policy as the other surfaces); a per-surface toggle row in `AICoachSettingsView` replacing the experimental section; localization updates in `en/de.lproj/Localizable.strings` (`ai_coach.chat.*` keys exist — drop "experimental"/"early preview" copy).
-- **Done:** reachable from the History tab (both segments) for eligible+opted-in users; unavailable/opt-in states reuse existing branching UX.
+Built as planned; implementation notes:
+- **Entry point:** `AISparkleView` button (size 20) in `HistoryView`'s custom header next to the settings gear, covering both the Trainings and Fortschritt segments. Pushes `CoachChatView` via `.navigationDestination(isPresented:)` (the nav bar is hidden on the tab root, so no `ToolbarItem`). Shown only when `AICoachAvailability.shared.isAvailable && AICoachPreferences.shared.isChatEffectivelyEnabled`; `HistoryView` refreshes availability in `.task`. Accessibility label reuses `ai_coach.chat.entry.title`.
+- **Preference:** `chatExperimentalEnabled` (key `aiCoachChatExperimentalEnabled`, default off) replaced by `chatEnabled` (NEW key `aiCoachChatEnabled`, default **on** like every other surface — cross-cutting decision 2 resolved as default-on). No migration from the old key: the spike opt-in state is deliberately discarded; the old key is orphaned in UserDefaults. Computed `isChatEffectivelyEnabled` follows the `isWorkoutDetailEffectivelyEnabled` pattern.
+- **Settings:** the Experimental section (toggle + "Open chat" nav link) is gone; chat is now a fifth row in the Surfaces group of `AICoachSettingsView` (icon `bubble.left.and.text.bubble.right`). Settings no longer link to the chat — the header button is the single entry point.
+- **Localization:** `ai_coach.chat.experimental.*` and `ai_coach.settings.section.experimental` removed; `ai_coach.settings.surface.chat.title/.detail` added (EN/DE, no "early preview" copy). All other `ai_coach.chat.*` keys unchanged.
+- **Done-criteria met:** build succeeds; reachable from the History tab (both segments) for eligible+opted-in users; unavailable/not-opted-in users simply don't see the button (settings retain the existing unavailability branching).
 
 ## Phase 4 — Expand the tool set (budget-aware)
 

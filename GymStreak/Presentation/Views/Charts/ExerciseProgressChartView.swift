@@ -102,8 +102,16 @@ private struct ExerciseProgressChartViewInternal: View {
             }
         }
         .toolbar(.hidden, for: .navigationBar)
+        // Anchor for the floating coach bar's contextual suggestion chip.
+        .onAppear {
+            CoachScreenContext.shared.anchor = .exercise(name: currentExerciseName)
+        }
+        .onChange(of: currentExerciseName) { _, newName in
+            CoachScreenContext.shared.anchor = .exercise(name: newName)
+        }
         .onDisappear {
             deepDiveVM.cancel()
+            CoachScreenContext.shared.anchor = nil
         }
         .onChange(of: viewModel.progressData?.exerciseName) { _, _ in
             Task { await loadRecentSessions() }
