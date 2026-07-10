@@ -62,7 +62,7 @@ Validate the two risks research could not resolve — **tool-invocation reliabil
 
 **In:** one retained multi-turn session, 3 tools over existing domain services, streaming chat UI, fully automatic context-overflow handling (proactive + reactive), EN + DE, availability gating, scripted evaluation protocol.
 
-**Out (deliberately, for the spike):** transcript persistence across app launches, multiple conversations / chat history browsing, proactive suggestions, watch target (no FoundationModels on watchOS), writing/mutating tools (chat is read-only over user data), Siri/App Intents integration.
+**Out (deliberately, for the spike):** transcript persistence across app launches *(since built — Phase 1 of `docs/ai-coach-chat-plan.md`, July 2026: conversation persists as local-only JSON via `ChatConversationStore`; the transcript itself is still never persisted)*, multiple conversations / chat history browsing, proactive suggestions, watch target (no FoundationModels on watchOS), writing/mutating tools (chat is read-only over user data), Siri/App Intents integration.
 
 ## Step 0 — SDK verification checklist (DONE, July 2026)
 
@@ -144,7 +144,7 @@ Requirement: the user never sees a "conversation too long" failure; overflow is 
 - **Placement (spike):** an "Ask Coach" row/button inside the existing AI Coach surface area, gated by `AICoachAvailability` + the existing opt-in (`AICoachPreferences`) + a new "experimental" sub-toggle. Unavailable states reuse the existing branching UX (device not eligible / Apple Intelligence off / model downloading).
 - **Placement (post-spike, if validated):** promote to a persistent toolbar entry point on the History and Progress tabs — that is where the questions arise.
 - **Empty state sells the value:** show 3 tappable suggested questions ("When is my next workout?", "What's my bench press PR?", "How many workouts this week?") — doubles as a guarantee that first-touch queries are ones the tools can actually answer.
-- **Session lifetime:** the service is a `.shared` singleton holding the conversation in memory — surviving navigation away and back, resetting on app termination. A visible "New chat" action resets both message list and session.
+- **Session lifetime:** the service is a `.shared` singleton holding the conversation in memory — surviving navigation away and back. Since Phase 1 (`docs/ai-coach-chat-plan.md`) the conversation also survives app termination: `ChatConversationStore` persists the finalized message list + turn topics as local-only JSON (Application Support, never CloudKit), and on launch a fresh session is seeded with a `ChatOverflowPolicy.digest(...)` of the restored messages — the same mechanism condensation uses. A visible "New chat" action resets message list, session, and the persisted copy.
 - Answers are 1–3 sentences, in the user's language, numbers verbatim from tool output. `AIPrivacyFooter` on the chat screen, matching every other AI surface.
 
 ## Evaluation protocol (what makes this a spike, not a feature)

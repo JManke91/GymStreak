@@ -9,6 +9,7 @@
 //
 
 import FoundationModels
+import os
 
 struct NextWorkoutTool: Tool {
 
@@ -21,6 +22,13 @@ struct NextWorkoutTool: Tool {
     let facts: any ChatFactProviding
 
     func call(arguments: Arguments) async throws -> String {
-        await facts.nextWorkoutFacts()
+        let result = await facts.nextWorkoutFacts()
+        #if DEBUG
+        // Fact log for the Phase 0 device drill: lets an on-screen answer be
+        // checked against what the tool actually returned.
+        Logger(subsystem: "app.gymstreak.aicoach", category: "ChatTool")
+            .notice("getNextWorkout → \(result, privacy: .public)")
+        #endif
+        return result
     }
 }

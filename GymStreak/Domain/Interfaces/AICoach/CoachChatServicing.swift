@@ -22,7 +22,9 @@ protocol CoachChatServicing: AnyObject {
     /// `true` while an assistant turn is streaming.
     var isResponding: Bool { get }
 
-    /// Provides the tool-backing data layer and builds the tool-equipped session.
+    /// Provides the tool-backing data layer, restores the persisted conversation
+    /// (if any), and builds the tool-equipped session — seeded with a digest of
+    /// the restored messages so follow-ups keep grounding across launches.
     /// Idempotent — the first call wins; later calls are ignored (the underlying
     /// `ModelContext` is the app's stable main context).
     func configure(factProvider: ChatFactProviding)
@@ -36,6 +38,7 @@ protocol CoachChatServicing: AnyObject {
     /// Cancels the in-flight assistant turn, if any.
     func cancel()
 
-    /// Clears the conversation and starts a fresh session.
+    /// Clears the conversation (including its persisted copy) and starts a
+    /// fresh session.
     func reset()
 }

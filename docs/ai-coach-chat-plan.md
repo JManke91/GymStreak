@@ -23,42 +23,62 @@ A working, architecture-clean, tested foundation on `Data/AICoach/Chat/` + `Doma
 ## Phase 0 — Build-time validation checkpoints (do FIRST, on device)
 
 Close the two items the simulator can't (they gate heavy investment). One device session.
+- **Prep (agent-executable, no device needed): DONE (July 2026).** DEBUG-only auto-drill built: a `ladybug` toolbar button in `CoachChatView` fires `CoachChatService.runPhaseZeroDrill()` — 40 scripted EN/DE turns across all 3 tools (including a guaranteed no-match name and late repeats of PR/next-workout questions), run sequentially. Per turn it logs first-token latency (`chat first token after … ms`, always-on) and total duration; condensation already logs `chat proactively condensing`. Each tool logs its returned fact line (`ChatTool` category, DEBUG-only) so answers can be checked against ground truth. Everything drill-related is `#if DEBUG`-gated. Note: the drill aborts if the chat screen is left (onDisappear cancels the in-flight turn) — keep it open.
 - **Overflow drill:** drive ~40 turns; confirm `chat proactively condensing` fires and no error bubble ever appears; confirm a PR/next-workout answer after condensation still matches the tool's fact log.
 - **Latency:** prewarmed first token < ~3 s on iPhone 15 Pro-class hardware; time the not-found re-call path too.
 - **No-arg tool:** confirm `getNextWorkout` (empty `@Generable` Arguments) is invoked reliably. Fallback if not: add a single dummy enum argument.
 - **Done:** all three observed acceptable, or the failing one has a filed fix. If overflow/latency are unacceptable, revisit before Phase 1.
 
-## Phase 1 — Persistence across launches
+### Device-session script (run this, record results inline)
 
-**Goal:** the conversation survives app termination (today it's an in-memory singleton).
+**Setup:** DEBUG build on an iPhone 15 Pro-class device with real or seeded workout history (`TestDataSeeder`); chat enabled via AI Coach settings → Experimental. Stream logs with `log stream --predicate 'subsystem == "app.gymstreak.aicoach"'` (or Console.app filtered to that subsystem — categories `CoachChatService` and `ChatTool`). Open the chat and tap the **ladybug** toolbar button. **Keep the chat screen open for the whole drill** — leaving it cancels the in-flight turn and aborts the drill.
 
-- **Decision required (privacy):** chat history is on-device today. Persist **local-only** (no CloudKit) to preserve that guarantee and avoid a CloudKit schema deploy (see MEMORY: schema changes must be deployed before release). Recommend a JSON store mirroring `AICoachCache` (Application Support), NOT a new `@Model` in the CloudKit-synced container.
-- **Files:** new `Data/AICoach/Chat/ChatConversationStore.swift` (load/save `[CoachChatMessage]` + per-turn topics as JSON); `CoachChatService` loads on `configure`, saves after each finalized turn / reset.
-- **Session restore:** do NOT persist/restore the `Transcript`; on launch, rebuild a fresh session whose instructions carry a `ChatOverflowPolicy.digest(...)` of the restored messages (same mechanism as condensation). The visible list restores fully from JSON.
-- **Done:** kill + relaunch → prior conversation visible; a follow-up question still grounds; "New chat" clears store + session.
+Observe four things (~40 turns, passive):
+
+1. **Overflow** — `chat proactively condensing (used=…, contextSize=…)` fires at least once; **no error bubble ever appears** in the chat; `chat context window exceeded after condense+retry` never appears in the log.
+2. **Latency** — `chat first token after … ms` per turn: prewarmed first turn < ~3,000 ms. Turn 31 ("What's my PR on flurbelblatz?") times the `__NO_MATCH__` re-call path — expect it slower; note the number.
+3. **No-arg tool** — every next-workout question (turns 1, 4, 7, 14, 18, 28, 34, 38 of `CoachChatService.drillPrompts`) must produce a `getNextWorkout → …` fact line (`ChatTool` category). If it reliably fails to fire → the dummy-enum-argument fallback above.
+4. **Grounding after condensation** — turns 32–35 repeat the bench-PR / next-workout questions from the start; the on-screen numbers must match the `ChatTool` fact line logged immediately before each answer, verbatim.
+
+**Then verify Phase 1 in the same session:** kill the app (swipe away) → relaunch → reopen chat → the drill conversation is still there. Ask a follow-up ("und was war mein Bestwert beim Bankdrücken?") → a `getExercisePR` fact line must appear (grounding survives restore). Tap "New chat" → kill + relaunch → chat starts empty.
+
+**Results (fill in after the session):** _not yet run._
+
+## Phase 1 — Persistence across launches — DONE (July 2026)
+
+**Goal:** the conversation survives app termination (previously an in-memory singleton).
+
+Built as planned; implementation notes:
+- **Privacy decision taken: local-only.** `Data/AICoach/Chat/ChatConversationStore.swift` — JSON in `Application Support/AICoachChat/conversation.json`, mirroring `AICoachCache`; deliberately NOT a `@Model` in the CloudKit-synced container (no schema deploy, history never leaves the device). `CoachChatMessage` (+ `Role`/`Phase`) became `Codable` with String raw values.
+- **Save points:** after every finished turn (success or failure, via the new `endTurn()`), and on `cancel()` when it finalizes a partial bubble. `.streaming` messages are filtered out at save time. `reset()` ("New chat") clears the store.
+- **Session restore:** the `Transcript` is NOT persisted. `configure` loads the snapshot and rebuilds the session with `ChatOverflowPolicy.digest(...)` of the restored messages — exactly the condensation mechanism. Restored `.failed` bubbles are excluded from the digest automatically (it only digests `.final`).
+- **Refactor note:** `send(_:)` was split into `beginTurn`/`endTurn` so the DEBUG drill can await turns; the turn Task now skips `endTurn()` when cancelled (`cancel()` already cleaned up), which also removes a pre-existing race where a stale task could clobber `isResponding`/`streamTask` of a newer turn.
+- **Tests:** `GymStreakTests/ChatConversationStoreTests.swift` (round-trip, streaming filtered, failed kept, clear, overwrite) via the store's `directory:` test seam.
+- **Done-criteria** (kill + relaunch → conversation visible; follow-up still grounds; "New chat" clears store + session): verify on the Phase 0 device session — grounding-after-restore is a live-model behavior.
 
 ## Phase 2 — Multiple conversations / history browsing
 
-**Goal:** more than one conversation, browsable and deletable.
+**Goal:** more than one conversation, browsable and deletable. **Build only if single-conversation persistence (Phase 1) proves insufficient in use** — for short grounded Q&A over a 4K context, one persistent thread + "New chat" may be all users need; don't over-build ahead of demand.
 
-- **Files:** extend `ChatConversationStore` to a keyed collection (`conversationId → messages`), add a lightweight `ChatConversationSummary` (id, title, lastUpdated); new `Presentation/Views/AICoach/Chat/ChatHistoryListView.swift`; `CoachChatViewModel`/service gain conversation selection + new/delete.
+- **Files:** extend `ChatConversationStore` to a keyed collection (`conversationId → messages + topics`), add a lightweight `ChatConversationSummary` (id, title, lastUpdated); new `Presentation/Views/AICoach/Chat/ChatHistoryListView.swift`; `CoachChatViewModel`/service gain conversation selection + new/delete.
+- **Session policy:** exactly **one live `LanguageModelSession`** — the selected conversation's. Switching conversations rebuilds the session from that conversation's `ChatOverflowPolicy.digest(...)` (the same mechanism Phase 1 uses for launch restore); never hold N tool-equipped sessions in memory.
 - **Title:** derive from the first user message (truncated) — no model call.
-- **Done:** create/switch/delete conversations; each retains its own messages; the service holds one active session per selected conversation.
+- **Done:** create/switch/delete conversations; each retains its own messages; a follow-up after switching still grounds.
 
 ## Phase 3 — Prominent entry point
 
 **Goal:** promote from the experimental settings toggle to a first-class surface.
 
-- **Placement:** toolbar entry (sparkle/chat icon) on the History and Progress tabs — where these questions arise. Reuse `AISparkleView`.
-- **Gating:** `AICoachAvailability` + opt-in (`AICoachPreferences.isEffectivelyEnabled`); retire the `chatExperimentalEnabled` sub-toggle (or fold into a normal per-surface toggle like the other AI surfaces).
-- **Files:** toolbar items in the History/Progress tab roots; a per-surface toggle row in `AICoachSettingsView` replacing the experimental section; localization updates (drop "experimental"/"early preview" copy).
-- **Done:** reachable from History/Progress for eligible+opted-in users; unavailable/opt-in states reuse existing branching UX.
+- **Placement:** the app has no separate Progress tab — Fortschritt is a segmented sub-view inside the History tab, and `HistoryView` hides the navigation bar (`.toolbar(.hidden, for: .navigationBar)`), so a `ToolbarItem` is not an option. Put **one** chat entry (sparkle/chat icon, reuse `AISparkleView`) in `HistoryView`'s custom header — it covers both the Trainings and Fortschritt segments, which is where these questions arise.
+- **Gating:** `AICoachAvailability` + opt-in; replace `chatExperimentalEnabled` with a normal per-surface toggle following the existing pattern in `AICoachPreferences` (`chatEnabled` + computed `isChatEffectivelyEnabled`, like `workoutDetailEnabled`/`isWorkoutDetailEffectivelyEnabled`).
+- **Files:** `HistoryView.swift` header; `AICoachPreferences.swift` (rename toggle, keep the same UserDefaults default policy as the other surfaces); a per-surface toggle row in `AICoachSettingsView` replacing the experimental section; localization updates in `en/de.lproj/Localizable.strings` (`ai_coach.chat.*` keys exist — drop "experimental"/"early preview" copy).
+- **Done:** reachable from the History tab (both segments) for eligible+opted-in users; unavailable/opt-in states reuse existing branching UX.
 
 ## Phase 4 — Expand the tool set (budget-aware)
 
-**Goal:** answer more question classes. Spike expansion list: `getVolumeTrend`, `getRoutineDetails`, `getStreakStatus`.
+**Goal:** answer more question classes. Expansion list: `getVolumeTrend`, `getRoutineDetails`. (`getStreakStatus` from the spike list is **dropped** — `workoutHistoryFacts` already appends the current streak line via `HistoryStatsService.streakWeeks`, so a dedicated tool would pay schema tokens on every turn for an already-reachable fact.)
 
-- Each new tool: terse `Tool` conformance in `Data/AICoach/Chat/Tools/`, backed by an existing service (`FortschrittAggregator`/`ExerciseProgressService` for volume trend; `RoutineRepository` for routine details; `HistoryStatsService.streakWeeks` for streak) via a new `ChatFactProviding` method.
+- Each new tool: terse `Tool` conformance in `Data/AICoach/Chat/Tools/`, backed by an existing service (`FortschrittAggregator`/`ExerciseProgressService` for volume trend; `RoutineRepository` for routine details) via a new `ChatFactProviding` method.
 - **Budget guard:** measure `tokenCount(for: tools)` after each addition; if the tool set + instructions crowd the answer/transcript budget, curate (merge overlapping tools, trim descriptions). Add a test asserting each new fact method's output like `ChatFactServiceTests`.
 - **Done:** new question classes answered and grounded; tool-schema token cost measured and within budget.
 
@@ -87,4 +107,6 @@ watchOS chat (no FoundationModels), writing/mutating tools (chat stays read-only
 
 ## Suggested sequencing
 
-Phase 0 (validate) → Phase 3 (entry point, cheap, high user value) → Phase 1 (persistence) → Phase 2 (multi-conversation) → Phase 4 (more tools) → Phase 6 (polish) → Phase 5 (localization, if needed). Each phase is shippable behind the availability/opt-in gate.
+Phase 0 (validate) → **Phase 1 (persistence)** → **Phase 3 (entry point)**. Phase 1 and the Phase 0 auto-drill can be built *before* the device session runs — persistence doesn't depend on Phase 0's outcomes (an overflow/latency problem would be fixed in the overflow policy or prewarming, not in message storage). Work continues on the `ai-coach-chat-spike` branch; merging to `main` waits for Phase 0 to pass.
+
+Full order: Phase 0 → Phase 1 → Phase 3 → Phase 4 (more tools) → Phase 6 (polish) → Phase 5 (localization, if needed) → Phase 2 (multi-conversation, only if demanded). Persistence goes before promotion: a first-class surface that forgets everything on relaunch reads as broken, and Phase 1 is the cheaper of the two. Each phase is shippable behind the availability/opt-in gate.

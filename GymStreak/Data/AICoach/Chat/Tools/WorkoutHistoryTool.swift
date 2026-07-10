@@ -8,6 +8,7 @@
 //
 
 import FoundationModels
+import os
 
 struct WorkoutHistoryTool: Tool {
 
@@ -23,6 +24,13 @@ struct WorkoutHistoryTool: Tool {
     let facts: any ChatFactProviding
 
     func call(arguments: Arguments) async throws -> String {
-        await facts.workoutHistoryFacts(timeframe: arguments.timeframe)
+        let result = await facts.workoutHistoryFacts(timeframe: arguments.timeframe)
+        #if DEBUG
+        // Fact log for the Phase 0 device drill: lets an on-screen answer be
+        // checked against what the tool actually returned.
+        Logger(subsystem: "app.gymstreak.aicoach", category: "ChatTool")
+            .notice("getWorkoutHistory(\(arguments.timeframe.rawValue, privacy: .public)) → \(result, privacy: .public)")
+        #endif
+        return result
     }
 }

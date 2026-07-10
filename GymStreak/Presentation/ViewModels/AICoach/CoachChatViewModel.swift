@@ -84,4 +84,14 @@ final class CoachChatViewModel {
         inputText = ""
         service.reset()
     }
+
+#if DEBUG
+    // MARK: - Phase 0 auto-drill (DEBUG only)
+
+    var isDrillRunning: Bool { service.isDrillRunning }
+
+    func runPhaseZeroDrill() {
+        service.runPhaseZeroDrill()
+    }
+#endif
 }

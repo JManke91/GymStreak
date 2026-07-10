@@ -28,6 +28,19 @@ struct CoachChatView: View {
         .navigationTitle("ai_coach.chat.title".localized)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
+#if DEBUG
+            // Phase 0 auto-drill trigger (docs/ai-coach-chat-plan.md) — never ships.
+            ToolbarItem(placement: .topBarTrailing) {
+                Button {
+                    viewModel.runPhaseZeroDrill()
+                } label: {
+                    Image(systemName: "ladybug")
+                        .foregroundStyle(AICoachTheme.accent)
+                }
+                .accessibilityLabel("Run Phase 0 drill")
+                .disabled(viewModel.isDrillRunning || viewModel.isResponding)
+            }
+#endif
             ToolbarItem(placement: .topBarTrailing) {
                 Button {
                     viewModel.reset()

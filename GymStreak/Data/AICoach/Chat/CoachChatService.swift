@@ -2,11 +2,14 @@
 //  CoachChatService.swift
 //  GymStreak
 //
-//  Session-holding singleton for the chat assistant spike. Owns one retained
+//  Session-holding singleton for the chat assistant. Owns one retained
 //  `LanguageModelSession` (multi-turn), the 3 tools, the visible message list,
 //  and the automatic context-overflow handling (proactive digest condensation +
-//  reactive retry). Survives navigation; resets on app termination or an explicit
-//  "New chat". See docs/ai-coach-chat-feasibility.md.
+//  reactive retry). Survives navigation AND app termination: the finalized
+//  conversation persists via `ChatConversationStore` (local-only JSON) and is
+//  restored on `configure` — a fresh session then carries a digest of the
+//  restored messages, the same mechanism condensation uses. Resets on an
+//  explicit "New chat". See docs/ai-coach-chat-feasibility.md.
 //
 //  Verified against iPhoneOS26.5.sdk (Step 0): plain-text streaming via
 //  `streamResponse(to:options:) -> ResponseStream<String>` (cumulative
@@ -42,6 +45,7 @@ final class CoachChatService: CoachChatServicing {
 
     private let logger = Logger(subsystem: "app.gymstreak.aicoach", category: "CoachChatService")
     private let availability = AICoachAvailability.shared
+    private let store = ChatConversationStore()
 
     private var factProvider: ChatFactProviding?
     private var tools: [any Tool] = []
@@ -63,7 +67,17 @@ final class CoachChatService: CoachChatServicing {
             ExercisePRTool(facts: factProvider),
             WorkoutHistoryTool(facts: factProvider),
         ]
-        rebuildSession(withDigest: nil)
+
+        // Restore the persisted conversation. The transcript is NOT restored —
+        // the fresh session instead carries a digest of the restored messages
+        // (the same mechanism condensation uses), so follow-ups keep grounding.
+        if let snapshot = store.load(), !snapshot.messages.isEmpty {
+            messages = snapshot.messages
+            turnTopics = snapshot.turnTopics
+            rebuildSession(withDigest: ChatOverflowPolicy.digest(messages: messages, turnTopics: turnTopics))
+        } else {
+            rebuildSession(withDigest: nil)
+        }
     }
 
     func prewarm() {
@@ -73,25 +87,11 @@ final class CoachChatService: CoachChatServicing {
     // MARK: - Sending
 
     func send(_ text: String) {
-        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty, !isResponding else { return }
-        guard availability.isAvailable, factProvider != nil, session != nil else {
-            appendFailed(text: "ai_coach.chat.unavailable".localized)
-            return
-        }
-
-        messages.append(CoachChatMessage(role: .user, text: trimmed, phase: .final))
-        turnTopics.append(topic(for: trimmed))
-
-        let assistant = CoachChatMessage(role: .assistant, text: "", phase: .streaming)
-        messages.append(assistant)
-        isResponding = true
-
-        let assistantId = assistant.id
+        guard let turn = beginTurn(text) else { return }
         streamTask = Task {
-            await self.performTurn(prompt: trimmed, assistantId: assistantId)
-            self.isResponding = false
-            self.streamTask = nil
+            await self.performTurn(prompt: turn.prompt, assistantId: turn.assistantId)
+            guard !Task.isCancelled else { return } // cancel() already cleaned up
+            self.endTurn()
         }
     }
 
@@ -104,6 +104,7 @@ final class CoachChatService: CoachChatServicing {
             } else {
                 messages[idx].phase = .final
             }
+            store.save(messages: messages, turnTopics: turnTopics)
         }
         isResponding = false
     }
@@ -112,8 +113,37 @@ final class CoachChatService: CoachChatServicing {
         cancel()
         messages.removeAll()
         turnTopics.removeAll()
+        store.clear()
         rebuildSession(withDigest: nil)
         session?.prewarm()
+    }
+
+    // MARK: - Turn lifecycle
+
+    /// Validates the input and appends the user + streaming-assistant bubbles.
+    /// Returns nil (turn not started) when empty, busy, or unavailable.
+    private func beginTurn(_ text: String) -> (prompt: String, assistantId: UUID)? {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, !isResponding else { return nil }
+        guard availability.isAvailable, factProvider != nil, session != nil else {
+            appendFailed(text: "ai_coach.chat.unavailable".localized)
+            return nil
+        }
+
+        messages.append(CoachChatMessage(role: .user, text: trimmed, phase: .final))
+        turnTopics.append(topic(for: trimmed))
+
+        let assistant = CoachChatMessage(role: .assistant, text: "", phase: .streaming)
+        messages.append(assistant)
+        isResponding = true
+        return (trimmed, assistant.id)
+    }
+
+    /// Finishes a turn (success or failure) and persists the conversation.
+    private func endTurn() {
+        isResponding = false
+        streamTask = nil
+        store.save(messages: messages, turnTopics: turnTopics)
     }
 
     // MARK: - Turn execution
@@ -131,9 +161,16 @@ final class CoachChatService: CoachChatServicing {
 
             do {
                 let options = GenerationOptions(maximumResponseTokens: Self.maxResponseTokens)
+                let attemptStart = Date()
+                var sawFirstToken = false
                 let stream = session.streamResponse(to: prompt, options: options)
                 for try await snapshot in stream {
                     if Task.isCancelled { return }
+                    if !sawFirstToken, !snapshot.content.isEmpty {
+                        sawFirstToken = true
+                        let ms = Int(Date().timeIntervalSince(attemptStart) * 1000)
+                        logger.notice("chat first token after \(ms) ms")
+                    }
                     updateAssistant(assistantId) { $0.text = Self.stripMarkdown(snapshot.content) }
                 }
                 if Task.isCancelled { return }
@@ -187,6 +224,97 @@ final class CoachChatService: CoachChatServicing {
         rebuildSession(withDigest: ChatOverflowPolicy.digest(messages: messages, turnTopics: turnTopics))
         session?.prewarm()
     }
+
+#if DEBUG
+    // MARK: - Phase 0 auto-drill (DEBUG only)
+
+    /// True while the scripted Phase 0 drill is running (drives the debug button).
+    private(set) var isDrillRunning = false
+
+    /// Phase 0 prep (docs/ai-coach-chat-plan.md): fires the scripted turns
+    /// sequentially so the device session is passive observation. Watch the
+    /// `app.gymstreak.aicoach` log stream for `chat first token after … ms`,
+    /// `chat proactively condensing`, and the `ChatTool` fact lines to compare
+    /// against on-screen answers. Keep the chat screen open — leaving it
+    /// cancels the in-flight turn and aborts the drill.
+    func runPhaseZeroDrill() {
+        guard !isDrillRunning, !isResponding, session != nil else { return }
+        isDrillRunning = true
+        Task {
+            let prompts = Self.drillPrompts
+            logger.notice("drill starting: \(prompts.count) turns")
+            for (index, prompt) in prompts.enumerated() {
+                logger.notice("drill turn \(index + 1)/\(prompts.count): \(prompt, privacy: .public)")
+                guard let turn = beginTurn(prompt) else {
+                    logger.error("drill turn \(index + 1) could not start — aborting drill")
+                    break
+                }
+                let turnStart = Date()
+                let turnTask = Task {
+                    await self.performTurn(prompt: turn.prompt, assistantId: turn.assistantId)
+                }
+                streamTask = turnTask
+                await turnTask.value
+                if turnTask.isCancelled {
+                    logger.notice("drill cancelled at turn \(index + 1)")
+                    break
+                }
+                endTurn()
+                let ms = Int(Date().timeIntervalSince(turnStart) * 1000)
+                logger.notice("drill turn \(index + 1)/\(prompts.count) finished in \(ms) ms")
+            }
+            isDrillRunning = false
+            logger.notice("drill finished")
+        }
+    }
+
+    /// 40 scripted turns: EN/DE mix over all 3 tools, a guaranteed no-match name
+    /// (times the model-assisted re-call path), small talk, and late repeats of
+    /// PR/next-workout questions so post-condensation answers can be compared
+    /// against the fact log.
+    private static let drillPrompts: [String] = [
+        "When is my next workout?",
+        "What's my bench press PR?",
+        "How many workouts did I do this week?",
+        "Wann ist mein nächstes Workout?",
+        "Was ist mein Bestwert beim Bankdrücken?",
+        "Wie viele Workouts habe ich letzte Woche gemacht?",
+        "What's on my plan this week?",
+        "What is my squat PR?",
+        "How many workouts did I complete this month?",
+        "Was ist mein Rekord beim Kreuzheben?",
+        "When was my last workout?",
+        "How long is my current streak?",
+        "What's my PR on lat pulldown?",
+        "Wie sieht mein Plan für diese Woche aus?",
+        "What's my deadlift record?",
+        "How many workouts did I do last month?",
+        "Was ist mein Bestwert beim Schulterdrücken?",
+        "Which workout is due next?",
+        "What's my PR on barbell row?",
+        "Wie viele Trainings habe ich diesen Monat absolviert?",
+        "What is my overhead press PR?",
+        "Wann war mein letztes Training?",
+        "How many workouts have I done in total?",
+        "Was ist mein Bestwert beim Latziehen?",
+        "Do you think I should train more often?",
+        "What's my PR on cable fly?",
+        "How many workouts this week so far?",
+        "Wann ist mein nächstes Workout fällig?",
+        "What's my PR on leg press?",
+        "Wie ist meine aktuelle Serie?",
+        "What's my PR on flurbelblatz?",
+        "How many workouts did I do this week?",
+        "What's my bench press PR?",
+        "Wann ist mein nächstes Workout?",
+        "Was ist mein Bestwert beim Bankdrücken?",
+        "What was my most recent workout?",
+        "How long is my streak?",
+        "What's on my plan this week?",
+        "Wie viele Workouts habe ich insgesamt gemacht?",
+        "Was ist mein Rekord bei Kniebeugen?",
+    ]
+#endif
 
     // MARK: - Helpers
 

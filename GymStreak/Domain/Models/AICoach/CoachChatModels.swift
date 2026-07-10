@@ -14,16 +14,18 @@ import FoundationModels
 
 /// A single visible chat message. The UI renders this array directly; it is not
 /// the model's transcript (which the service may condense on overflow).
-struct CoachChatMessage: Identifiable, Equatable {
+/// `Codable` so the finalized conversation persists across launches via
+/// `ChatConversationStore` (local-only JSON, never the CloudKit container).
+struct CoachChatMessage: Identifiable, Equatable, Codable {
 
     /// Who authored the message.
-    enum Role {
+    enum Role: String, Codable {
         case user
         case assistant
     }
 
     /// Lifecycle of an assistant message (user messages are always `.final`).
-    enum Phase: Equatable {
+    enum Phase: String, Codable, Equatable {
         /// Streaming tokens in — render with the live cursor.
         case streaming
         /// Generation finished successfully.

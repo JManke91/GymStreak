@@ -18,3 +18,4 @@
 - The main exercise and its alternatives now use one identical layout in the expanded routine card (rest timer, rep goal, sets in the same order), and you can add sets inline for the main exercise too — the new set opens right away for editing.
 - Experimental: an on-device AI chat for questions about your training — next workout, PRs, weekly stats. Turn it on in AI Coach settings → Experimental.
 - You can now swipe back from a recorded workout to History using the standard iOS gesture.
+- The experimental AI coach chat now remembers your conversation across app restarts — "New chat" still starts fresh.

@@ -18,3 +18,4 @@
 - Hauptübung und Alternativen nutzen in der aufgeklappten Routinen-Karte jetzt ein identisches Layout (Pause, Ziel und Sätze in gleicher Reihenfolge), und auch bei der Hauptübung lassen sich Sätze direkt inline hinzufügen – der neue Satz öffnet sich sofort zum Bearbeiten.
 - Experimentell: On-Device-KI-Chat für Fragen zu deinem Training — nächstes Workout, Bestwerte, Wochenstatistik. In AI-Coach-Einstellungen → Experimentell.
 - Du kannst nun mit der Standard-iOS-Geste von einem aufgezeichneten Training zurück zum Verlauf wischen.
+- Der experimentelle KI-Coach-Chat merkt sich deine Unterhaltung jetzt über App-Neustarts hinweg — „Neuer Chat" beginnt weiterhin von vorn.
