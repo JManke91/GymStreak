@@ -150,6 +150,7 @@ final class CoachChatService: CoachChatServicing {
 
     private func performTurn(prompt: String, assistantId: UUID) async {
         var didCondenseRetry = false
+        var didTransientRetry = false
 
         while true {
             await condenseIfNeeded()
@@ -178,9 +179,22 @@ final class CoachChatService: CoachChatServicing {
                 return
             } catch {
                 if Task.isCancelled { return }
-                if isContextOverflow(error), !didCondenseRetry {
-                    didCondenseRetry = true
-                    logger.notice("chat context overflow — condensing and retrying once")
+                if isContextOverflow(error) {
+                    if !didCondenseRetry {
+                        didCondenseRetry = true
+                        logger.notice("chat context overflow — condensing and retrying once")
+                        condense()
+                        continue
+                    }
+                } else if !didTransientRetry {
+                    // Opaque daemon-side failures (raw NSError, no first token)
+                    // occurred on ~5% of Phase 0 drill turns and are transient —
+                    // the same question succeeds on retry. Rebuild via the digest
+                    // (a failed attempt may leave the session transcript wedged)
+                    // and retry once before surfacing an error bubble.
+                    didTransientRetry = true
+                    logError(error)
+                    logger.notice("chat transient generation failure — rebuilding session and retrying once")
                     condense()
                     continue
                 }
@@ -219,10 +233,11 @@ final class CoachChatService: CoachChatServicing {
 
     /// Rebuilds the session with a Swift-side digest of the conversation so far.
     /// The visible `messages` array is untouched — only the model's working set
-    /// shrinks. Prewarms the fresh session so the pending send starts fast.
+    /// shrinks. Deliberately does NOT prewarm: a `streamResponse` follows
+    /// immediately, and Apple documents `prewarm()` as safe only with ≥1 s before
+    /// the next respond call (see docs/ai-coach-chat-plan.md, Phase 0 fixes).
     private func condense() {
         rebuildSession(withDigest: ChatOverflowPolicy.digest(messages: messages, turnTopics: turnTopics))
-        session?.prewarm()
     }
 
 #if DEBUG
@@ -364,7 +379,10 @@ final class CoachChatService: CoachChatServicing {
 
     private func logError(_ error: Error) {
         guard let generation = error as? LanguageModelSession.GenerationError else {
-            logger.error("chat generation failed: \(String(describing: type(of: error)), privacy: .public)")
+            // Framework errors that aren't GenerationError reach us as opaque
+            // NSError (ObjC/daemon layer) — domain+code identify the culprit.
+            let ns = error as NSError
+            logger.error("chat generation failed: \(String(describing: type(of: error)), privacy: .public) domain=\(ns.domain, privacy: .public) code=\(ns.code) desc=\(ns.localizedDescription, privacy: .public)")
             return
         }
         switch generation {

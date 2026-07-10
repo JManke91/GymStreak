@@ -1,0 +1,1 @@
+- Der experimentelle KI-Coach-Chat ist zuverlässiger: Seltene „Etwas ist schiefgelaufen"-Meldungen werden jetzt automatisch erneut versucht, und der Coach antwortet strikter nur aus deinen echten Daten (keine erfundenen Uhrzeiten oder Serienlängen mehr).
