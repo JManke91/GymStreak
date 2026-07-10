@@ -4,6 +4,37 @@ All notable changes to GymStreak are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.1.3] - 2026-07-10
+
+### Added
+
+- Redesigned Routines tab: a new "Up Next" hero card highlights the routine you haven't trained in the longest, and routine cards now show muscle groups, set totals and an estimated duration.
+- Duplicate a routine from its menu (or by long-pressing a routine in the list).
+- Redesigned Exercises tab: search, muscle-group and equipment filters, exercises grouped by muscle group, and a per-exercise "used in N routines" count.
+- Redesigned exercise detail screen with a clearer info card and a "Used In" list showing where each exercise appears.
+- Redesigned new/edit exercise sheet with a live preview of the exercise as it will appear in your library.
+- Plan each routine on a schedule — either a rolling cadence (every N days) or fixed weekdays — from a new "Schedule" section on the routine screen. When planning on an interval you can pick the date the cadence starts from.
+- Routine cards and the "Up Next" card now show when a routine is next due (and highlight overdue ones).
+- Set a rep-range goal ("Rep goal") for alternative exercises too, not just the main exercise, including the per-set progress badge, carrying over when you swap to that alternative during a workout.
+- Tap the "Alternatives" chip on an exercise to open a quick list of its alternatives and jump straight to one.
+- Experimental: an on-device AI chat for questions about your training — next workout, PRs, weekly stats. Turn it on in AI Coach settings → Experimental.
+
+### Improved
+
+- Your weekly workout goal in the Trainings tab is now calculated from your planned routines instead of a fixed number, so it adapts to how many sessions actually fall in the current week. The week strip now marks planned days too.
+- Alternative exercises are now easier to manage: they appear as a section right inside the expanded exercise, edit in place, and no longer take over the whole card or trap you in a separate mode.
+- Smoother, more natural expand/collapse animations for exercise and set cards on the routine screen.
+- An exercise and its alternatives now show as pills at the top of the expanded card, and the card shows only the one you tap.
+- The Coach analysis on a past workout now leads with the real story (new personal record, or how many exercises improved), and each exercise line states the concrete change vs. last session. It also recognizes cut-short sessions and skipped exercises.
+- The Coach recap (Rückblick) has been reworked: the headline now leads with your strongest strength gain instead of total volume, trends are stated without contradictions, training consistency is part of the analysis, and stagnation gets one concrete recommendation.
+- The main exercise and its alternatives now use one identical layout in the expanded routine card, and you can add sets inline for the main exercise too.
+- The experimental AI coach chat now remembers your conversation across app restarts — "New chat" still starts fresh.
+
+### Fixed
+
+- Opening a workout with a PR badge from history now shows exactly which record you set, with the exact set that achieved it highlighted. This also fixes the per-exercise PR badge, which previously never appeared on the workout detail screen.
+- You can now swipe back from a recorded workout to History using the standard iOS gesture.
+
 ## [1.1.2] - 2026-07-03
 
 ### Added
