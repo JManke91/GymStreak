@@ -14,6 +14,7 @@ private struct ExercisesViewInternal: View {
     @State private var searchText = ""
     @State private var selectedCategoryKey: String? = nil
     @State private var selectedEquipment: EquipmentType? = nil
+    @FocusState private var isSearchFocused: Bool
 
     init(dependencies: AppDependencies) {
         self._viewModel = StateObject(wrappedValue: ExercisesViewModel(
@@ -28,13 +29,6 @@ private struct ExercisesViewInternal: View {
         viewModel.sections(searchText: searchText, categoryKey: selectedCategoryKey, equipment: selectedEquipment)
     }
 
-    private func categoryColor(for categoryKey: String) -> Color {
-        let representative = MuscleGroups.categories
-            .first(where: { $0.titleKey == categoryKey })?
-            .muscleGroupKeys.first ?? "General"
-        return MuscleGroups.color(for: representative)
-    }
-
     var body: some View {
         NavigationStack {
             ZStack {
@@ -46,6 +40,9 @@ private struct ExercisesViewInternal: View {
                     exerciseList
                 }
             }
+            // On the ZStack, not exerciseList's ScrollView — safeAreaInset misbehaves
+            // during interactive keyboard dismissal when on the same view (FB13296535).
+            .keyboardDoneBar(isFocused: $isSearchFocused)
             .toolbar(.hidden, for: .navigationBar)
             .navigationDestination(for: UUID.self) { exerciseId in
                 if let exercise = viewModel.exercises.first(where: { $0.id == exerciseId }) {
@@ -95,7 +92,7 @@ private struct ExercisesViewInternal: View {
                 header
                     .padding(.horizontal, 20)
 
-                RedesignSearchBar(text: $searchText, placeholder: "exercises.search".localized)
+                RedesignSearchBar(text: $searchText, placeholder: "exercises.search".localized, isFocused: $isSearchFocused)
                     .padding(.horizontal, 16)
                     .padding(.top, 12)
 
@@ -109,7 +106,7 @@ private struct ExercisesViewInternal: View {
                             FilterPillButton(
                                 label: categoryKey.localized,
                                 isActive: selectedCategoryKey == categoryKey,
-                                color: categoryColor(for: categoryKey)
+                                color: MuscleGroups.categoryColor(for: categoryKey)
                             ) {
                                 withAnimation(.easeOut(duration: 0.15)) {
                                     selectedCategoryKey = selectedCategoryKey == categoryKey ? nil : categoryKey
@@ -171,12 +168,13 @@ private struct ExercisesViewInternal: View {
                 Color.clear.frame(height: 60)
             }
         }
+        .scrollDismissesKeyboard(.interactively)
     }
 
     private func sectionHeader(_ section: ExerciseSection) -> some View {
         HStack(spacing: 8) {
             Circle()
-                .fill(categoryColor(for: section.categoryTitleKey))
+                .fill(MuscleGroups.categoryColor(for: section.categoryTitleKey))
                 .frame(width: 8, height: 8)
             Text(section.localizedTitle)
                 .font(.system(size: 14.5, weight: .bold, design: .rounded))

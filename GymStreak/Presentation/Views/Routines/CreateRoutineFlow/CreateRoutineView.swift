@@ -13,7 +13,7 @@ struct CreateRoutineView: View {
     @State private var routineName: String = ""
     @State private var pendingExercises: [PendingRoutineExercise] = []
     @State private var showingCancelAlert = false
-    @State private var navigateToExerciseSelection = false
+    @State private var showingExercisePicker = false
 
     let routinesViewModel: RoutinesViewModel
     let exercisesViewModel: ExercisesViewModel
@@ -82,14 +82,9 @@ struct CreateRoutineView: View {
                     }
                 }
 
-                NavigationLink(destination: ExerciseSelectionView(
-                    routinesViewModel: routinesViewModel,
-                    exercisesViewModel: exercisesViewModel,
-                    alreadyAddedExercises: pendingExercises.map { $0.exercise },
-                    onExerciseConfigured: { exercise, sets, alternatives in
-                        addExercise(exercise: exercise, sets: sets, alternatives: alternatives)
-                    }
-                )) {
+                Button {
+                    showingExercisePicker = true
+                } label: {
                     Text("routine.add_exercise".localized)
                 }
             } header: {
@@ -115,6 +110,15 @@ struct CreateRoutineView: View {
                 }
                 .disabled(!canSave)
             }
+        }
+        .sheet(isPresented: $showingExercisePicker) {
+            RoutineExercisePickerView(
+                alreadyAddedExercises: pendingExercises.map { $0.exercise },
+                exercisesViewModel: exercisesViewModel,
+                onExerciseConfigured: { exercise, sets, alternatives in
+                    addExercise(exercise: exercise, sets: sets, alternatives: alternatives)
+                }
+            )
         }
         .alert("create_routine.discard.title".localized, isPresented: $showingCancelAlert) {
             Button("create_routine.keep_editing".localized, role: .cancel) { }

@@ -195,10 +195,6 @@
 "create_routine.done" = "Fertig";
 
 // MARK: - Exercise Selection View
-"exercise_selection.title" = "Übungen auswählen";
-"exercise_selection.done" = "Fertig";
-"exercise_selection.selected" = "%d ausgewählt";
-"exercise_selection.search" = "Übungen suchen";
 
 // MARK: - Configure Exercise View
 "configure_exercise.title" = "Übung konfigurieren";
@@ -229,6 +225,20 @@
 "equipment.dumbbell" = "Kurzhantel";
 "equipment.barbell" = "Langhantel";
 "equipment.machine" = "Maschine";
+"equipment.cable" = "Kabelzug";
+"equipment.bodyweight" = "Körpergewicht";
+"exercise.load_behavior" = "Lastart";
+"exercise.load_behavior.resistance" = "Zusatzgewicht";
+"exercise.load_behavior.assistance" = "Unterstützung";
+"exercise.load_behavior.resistance.detail" = "Mehr Gewicht macht diese Übung schwerer.";
+"exercise.load_behavior.assistance.detail" = "Für Gegengewichtsmaschinen: Mehr Kilogramm unterstützen stärker.";
+"exercise.assistance" = "Unterstützung";
+"exercise.assistance.value" = "Unterstützung: %@ kg";
+"exercise.assistance.input" = "Unterstützung (kg)";
+"exercise.body_weight" = "Körpergewicht";
+"exercise.body_weight.input" = "Körpergewicht (kg)";
+"exercise.body_weight.detail" = "Wird verwendet, um die effektive Last bei unterstützten Übungen zu berechnen.";
+"exercise.reduce_assistance" = "Unterstützung reduzieren";
 
 // MARK: - Muscle Groups
 "muscle.general" = "Allgemein";
@@ -304,8 +314,6 @@
 "create_routine.discard.message" = "Du hast ungespeicherte Änderungen. Möchtest du diese Routine wirklich verwerfen?";
 
 // MARK: - Exercise Selection View
-"exercise_selection.already_added" = "%d Übung(en) bereits hinzugefügt";
-"exercise_selection.create_new" = "Neue Übung erstellen";
 
 // MARK: - Configure Exercise View
 "configure_exercise.info" = "Übungsinformationen";
@@ -805,3 +813,113 @@
 "ai_coach.settings.open" = "AI Coach Einstellungen";
 "ai_coach.chat.close" = "Schließen";
 "ai_coach.chat.suggestion.anchor_pr" = "Was ist mein Bestwert bei %@?";
+
+// MARK: - Seed Exercise Catalog (built-in starter library)
+
+// Chest
+"seed.exercise.barbell_bench_press" = "Bankdrücken (Langhantel)";
+"seed.exercise.incline_barbell_bench_press" = "Schrägbankdrücken (Langhantel)";
+"seed.exercise.decline_barbell_bench_press" = "Negativbankdrücken (Langhantel)";
+"seed.exercise.dumbbell_bench_press" = "Bankdrücken (Kurzhantel)";
+"seed.exercise.incline_dumbbell_bench_press" = "Schrägbankdrücken (Kurzhantel)";
+"seed.exercise.dumbbell_fly" = "Fliegende (Kurzhantel)";
+"seed.exercise.incline_dumbbell_fly" = "Schräge Fliegende (Kurzhantel)";
+"seed.exercise.cable_fly" = "Fliegende am Kabelzug";
+"seed.exercise.cable_crossover" = "Cable Crossover";
+"seed.exercise.machine_chest_press" = "Brustpresse (Maschine)";
+"seed.exercise.pec_deck" = "Butterfly";
+"seed.exercise.smith_machine_bench_press" = "Bankdrücken (Multipresse)";
+"seed.exercise.push_up" = "Liegestütze";
+"seed.exercise.chest_dip" = "Dips (Brust)";
+
+// Back
+"seed.exercise.deadlift" = "Kreuzheben";
+"seed.exercise.rack_pull" = "Rack Pulls";
+"seed.exercise.pull_up" = "Klimmzug";
+"seed.exercise.chin_up" = "Klimmzug (Untergriff)";
+"seed.exercise.inverted_row" = "Umgekehrtes Rudern";
+"seed.exercise.barbell_row" = "Langhantelrudern";
+"seed.exercise.pendlay_row" = "Pendlay Rudern";
+"seed.exercise.t_bar_row" = "T-Bar Rudern";
+"seed.exercise.dumbbell_row" = "Kurzhantelrudern";
+"seed.exercise.lat_pulldown" = "Latzug";
+"seed.exercise.close_grip_lat_pulldown" = "Enger Latzug";
+"seed.exercise.seated_cable_row" = "Rudern am Kabelzug";
+"seed.exercise.straight_arm_pulldown" = "Latzug mit gestreckten Armen";
+"seed.exercise.machine_row" = "Rudern (Maschine)";
+"seed.exercise.assisted_pull_up" = "Assistierter Klimmzug";
+"seed.exercise.back_extension" = "Rückenstrecker";
+
+// Shoulders
+"seed.exercise.overhead_press" = "Schulterdrücken (Langhantel)";
+"seed.exercise.seated_dumbbell_shoulder_press" = "Schulterdrücken sitzend (Kurzhantel)";
+"seed.exercise.arnold_press" = "Arnold Press";
+"seed.exercise.machine_shoulder_press" = "Schulterdrücken (Maschine)";
+"seed.exercise.dumbbell_lateral_raise" = "Seitheben (Kurzhantel)";
+"seed.exercise.cable_lateral_raise" = "Seitheben am Kabelzug";
+"seed.exercise.machine_lateral_raise" = "Seitheben (Maschine)";
+"seed.exercise.dumbbell_front_raise" = "Frontheben (Kurzhantel)";
+"seed.exercise.dumbbell_rear_delt_fly" = "Reverse Fliegende (Kurzhantel)";
+"seed.exercise.reverse_pec_deck" = "Reverse Butterfly";
+"seed.exercise.face_pull" = "Face Pull";
+"seed.exercise.upright_row" = "Aufrechtes Rudern";
+"seed.exercise.barbell_shrug" = "Schulterheben (Langhantel)";
+"seed.exercise.dumbbell_shrug" = "Schulterheben (Kurzhantel)";
+
+// Arms
+"seed.exercise.barbell_curl" = "Bizeps-Curls (Langhantel)";
+"seed.exercise.dumbbell_curl" = "Bizeps-Curls (Kurzhantel)";
+"seed.exercise.hammer_curl" = "Hammercurls";
+"seed.exercise.incline_dumbbell_curl" = "Schrägbank-Curls (Kurzhantel)";
+"seed.exercise.concentration_curl" = "Konzentrationscurls";
+"seed.exercise.preacher_curl" = "Scott-Curls";
+"seed.exercise.cable_curl" = "Bizeps-Curls am Kabelzug";
+"seed.exercise.machine_bicep_curl" = "Bizeps-Curls (Maschine)";
+"seed.exercise.reverse_curl" = "Reverse Curls";
+"seed.exercise.wrist_curl" = "Handgelenk-Curls";
+"seed.exercise.tricep_pushdown" = "Trizepsdrücken am Kabelzug";
+"seed.exercise.rope_pushdown" = "Trizepsdrücken mit Seil";
+"seed.exercise.overhead_tricep_extension" = "Trizepsdrücken über Kopf (Kurzhantel)";
+"seed.exercise.skull_crusher" = "French Press";
+"seed.exercise.close_grip_bench_press" = "Enges Bankdrücken";
+"seed.exercise.bench_dip" = "Bank-Dips";
+"seed.exercise.machine_tricep_extension" = "Trizepsdrücken (Maschine)";
+
+// Core
+"seed.exercise.plank" = "Plank";
+"seed.exercise.side_plank" = "Seitliche Plank";
+"seed.exercise.crunch" = "Crunches";
+"seed.exercise.sit_up" = "Sit-Ups";
+"seed.exercise.bicycle_crunch" = "Fahrrad-Crunches";
+"seed.exercise.cable_crunch" = "Crunches am Kabelzug";
+"seed.exercise.machine_crunch" = "Crunches (Maschine)";
+"seed.exercise.hanging_leg_raise" = "Hängendes Beinheben";
+"seed.exercise.lying_leg_raise" = "Liegendes Beinheben";
+"seed.exercise.russian_twist" = "Russian Twist";
+"seed.exercise.mountain_climber" = "Mountain Climber";
+"seed.exercise.ab_wheel_rollout" = "Ab-Wheel Rollout";
+
+// Legs
+"seed.exercise.barbell_back_squat" = "Kniebeuge (Langhantel)";
+"seed.exercise.front_squat" = "Frontkniebeuge";
+"seed.exercise.smith_machine_squat" = "Kniebeuge (Multipresse)";
+"seed.exercise.hack_squat" = "Hackenschmidt-Kniebeuge";
+"seed.exercise.leg_press" = "Beinpresse";
+"seed.exercise.goblet_squat" = "Goblet Squat";
+"seed.exercise.bulgarian_split_squat" = "Bulgarische Kniebeuge";
+"seed.exercise.walking_lunge" = "Ausfallschritte (gehend)";
+"seed.exercise.lunge" = "Ausfallschritte";
+"seed.exercise.step_up" = "Step-Ups";
+"seed.exercise.leg_extension" = "Beinstrecker";
+"seed.exercise.lying_leg_curl" = "Beinbeuger liegend";
+"seed.exercise.seated_leg_curl" = "Beinbeuger sitzend";
+"seed.exercise.romanian_deadlift" = "Rumänisches Kreuzheben";
+"seed.exercise.stiff_leg_deadlift" = "Kreuzheben mit gestreckten Beinen";
+"seed.exercise.sumo_deadlift" = "Sumo-Kreuzheben";
+"seed.exercise.hip_thrust" = "Hip Thrust";
+"seed.exercise.glute_bridge" = "Glute Bridge";
+"seed.exercise.cable_glute_kickback" = "Kickbacks am Kabelzug";
+"seed.exercise.hip_abduction_machine" = "Abduktoren-Maschine";
+"seed.exercise.standing_calf_raise" = "Wadenheben stehend";
+"seed.exercise.seated_calf_raise" = "Wadenheben sitzend";
+"seed.exercise.leg_press_calf_raise" = "Wadenheben an der Beinpresse";

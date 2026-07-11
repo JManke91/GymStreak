@@ -50,6 +50,14 @@ extension MuscleGroups {
     static func color(for muscleGroups: [String]) -> Color {
         color(for: muscleGroups.first ?? "General")
     }
+
+    /// Accent color for a category title key (drives the filter pill rows).
+    static func categoryColor(for categoryTitleKey: String) -> Color {
+        let representative = categories
+            .first(where: { $0.titleKey == categoryTitleKey })?
+            .muscleGroupKeys.first ?? "General"
+        return color(for: representative)
+    }
 }
 
 extension SupersetLabelProvider {

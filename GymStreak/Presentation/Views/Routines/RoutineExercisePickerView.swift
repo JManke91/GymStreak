@@ -1,29 +1,30 @@
 import SwiftUI
 
-struct AddExerciseToRoutineView: View {
-    let routine: Routine
-    @ObservedObject var viewModel: RoutinesViewModel
+struct RoutineExercisePickerView: View {
+    /// Exercises already part of the target routine/draft; shown dimmed and unselectable.
+    let alreadyAddedExercises: [Exercise]
     @ObservedObject var exercisesViewModel: ExercisesViewModel
+    /// Called with the fully configured selection (exercise, finalized sets,
+    /// pending alternatives); the caller owns persistence. Dismisses afterwards.
+    var onExerciseConfigured: (Exercise, [ExerciseSet], [PendingAlternative]) -> Void
     @Environment(\.dismiss) private var dismiss
-    @EnvironmentObject private var dependencies: AppDependencies
 
-    @State private var exercises: [Exercise] = []
     @State private var searchText = ""
+    @State private var selectedCategoryKey: String?
     @State private var navigationPath = NavigationPath()
+    @FocusState private var isSearchFocused: Bool
 
+    /// Search + muscle-category filtering reuses the ViewModel's library logic
+    /// (same behavior as the Exercises tab), flattened to a single list; the
+    /// picker applies its own Available / Already-in-Routine sectioning below.
     var filteredExercises: [Exercise] {
-        if searchText.isEmpty {
-            return exercises
-        } else {
-            return exercises.filter { exercise in
-                exercise.name.localizedCaseInsensitiveContains(searchText) ||
-                exercise.muscleGroups.contains { $0.localizedCaseInsensitiveContains(searchText) }
-            }
-        }
+        exercisesViewModel
+            .sections(searchText: searchText, categoryKey: selectedCategoryKey, equipment: nil)
+            .flatMap(\.exercises)
     }
 
     private func isExerciseAlreadyInRoutine(_ exercise: Exercise) -> Bool {
-        routine.routineExercisesList.contains(where: { $0.exercise?.id == exercise.id })
+        alreadyAddedExercises.contains(where: { $0.id == exercise.id })
     }
 
     var body: some View {
@@ -33,9 +34,31 @@ struct AddExerciseToRoutineView: View {
 
                 ScrollView {
                     VStack(alignment: .leading, spacing: 0) {
-                        RedesignSearchBar(text: $searchText, placeholder: "add_to_routine.search".localized)
+                        RedesignSearchBar(text: $searchText, placeholder: "add_to_routine.search".localized, isFocused: $isSearchFocused)
                             .padding(.horizontal, 18)
                             .padding(.top, 8)
+
+                        // Muscle category filter (mirrors the Exercises tab)
+                        ScrollView(.horizontal, showsIndicators: false) {
+                            HStack(spacing: 7) {
+                                FilterPillButton(label: "filter.all".localized, isActive: selectedCategoryKey == nil) {
+                                    withAnimation(.easeOut(duration: 0.15)) { selectedCategoryKey = nil }
+                                }
+                                ForEach(exercisesViewModel.availableCategoryKeys, id: \.self) { categoryKey in
+                                    FilterPillButton(
+                                        label: categoryKey.localized,
+                                        isActive: selectedCategoryKey == categoryKey,
+                                        color: MuscleGroups.categoryColor(for: categoryKey)
+                                    ) {
+                                        withAnimation(.easeOut(duration: 0.15)) {
+                                            selectedCategoryKey = selectedCategoryKey == categoryKey ? nil : categoryKey
+                                        }
+                                    }
+                                }
+                            }
+                            .padding(.horizontal, 18)
+                        }
+                        .padding(.top, 12)
 
                         // Section 1: Available Exercises
                         let availableExercises = filteredExercises.filter { !isExerciseAlreadyInRoutine($0) }
@@ -93,6 +116,7 @@ struct AddExerciseToRoutineView: View {
                     }
                 }
             }
+            .keyboardDoneBar(isFocused: $isSearchFocused)
             .navigationTitle("add_to_routine.title".localized)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -103,14 +127,13 @@ struct AddExerciseToRoutineView: View {
                 }
             }
             .onAppear {
-                fetchExercises()
+                exercisesViewModel.fetchExercises()
             }
             .navigationDestination(for: Exercise.self) { exercise in
                 ConfigureExerciseSetsView(
                     exercise: exercise,
-                    routine: routine,
-                    viewModel: viewModel,
-                    onSave: {
+                    onSave: { exercise, sets, alternatives in
+                        onExerciseConfigured(exercise, sets, alternatives)
                         dismiss()
                     }
                 )
@@ -122,18 +145,14 @@ struct AddExerciseToRoutineView: View {
                         presentationMode: .navigation,
                         onExerciseCreated: { newExercise in
                             // Pop back and push to configure view
+                            // (the ViewModel already refreshed its library on creation)
                             navigationPath.removeLast()
-                            fetchExercises()
                             navigationPath.append(newExercise)
                         }
                     )
                 }
             }
         }
-    }
-
-    private func fetchExercises() {
-        exercises = dependencies.exerciseRepository.fetchAll()
     }
 
     private func pickerSectionLabel(_ text: String) -> some View {
@@ -189,9 +208,9 @@ struct AddExerciseToRoutineView: View {
 // MARK: - Configure Exercise Sets View
 struct ConfigureExerciseSetsView: View {
     let exercise: Exercise
-    let routine: Routine
-    @ObservedObject var viewModel: RoutinesViewModel
-    var onSave: () -> Void
+    /// Called with the finalized sets (rest time and order applied) and any
+    /// pending alternatives; the caller owns persistence.
+    var onSave: (Exercise, [ExerciseSet], [PendingAlternative]) -> Void
 
     @State private var sets: [ExerciseSet] = []
     @State private var globalRestTime: TimeInterval = 0.0
@@ -412,7 +431,7 @@ struct ConfigureExerciseSetsView: View {
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
                 Button("action.save".localized) {
-                    saveExerciseToRoutine()
+                    finishConfiguration()
                 }
                 .disabled(sets.isEmpty)
             }
@@ -485,33 +504,19 @@ struct ConfigureExerciseSetsView: View {
         sets.remove(atOffsets: offsets)
     }
 
-    private func saveExerciseToRoutine() {
-        // Save any pending edits before saving
+    private func finishConfiguration() {
+        // Save any pending edits before handing off
         saveCurrentEditingSet()
-        let routineExercise = RoutineExercise(exercise: exercise, order: routine.routineExercisesList.count)
-        routineExercise.routine = routine
 
         for (index, set) in sets.enumerated() {
             set.restTime = globalRestTime
             set.order = index
-            set.routineExercise = routineExercise
-            routineExercise.sets?.append(set)
         }
 
-        routine.routineExercises?.append(routineExercise)
-
-        // Materialize picked alternatives now that the routine exercise is attached
-        // to the persisted routine, keeping each alternative's own set scheme.
-        for pending in pendingAlternatives {
-            viewModel.addAlternative(pending.exercise, to: routineExercise, copying: pending.sets)
-        }
-
-        viewModel.updateRoutine(routine)
-
-        onSave()
+        onSave(exercise, sets, pendingAlternatives)
     }
 }
 
 #Preview {
-    Text("AddExerciseToRoutineView Preview")
+    Text("RoutineExercisePickerView Preview")
 }

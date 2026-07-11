@@ -195,10 +195,6 @@
 "create_routine.done" = "Done";
 
 // MARK: - Exercise Selection View
-"exercise_selection.title" = "Select Exercises";
-"exercise_selection.done" = "Done";
-"exercise_selection.selected" = "%d selected";
-"exercise_selection.search" = "Search exercises";
 
 // MARK: - Configure Exercise View
 "configure_exercise.title" = "Configure Exercise";
@@ -229,6 +225,20 @@
 "equipment.dumbbell" = "Dumbbell";
 "equipment.barbell" = "Barbell";
 "equipment.machine" = "Machine";
+"equipment.cable" = "Cable";
+"equipment.bodyweight" = "Bodyweight";
+"exercise.load_behavior" = "Load behavior";
+"exercise.load_behavior.resistance" = "Added weight";
+"exercise.load_behavior.assistance" = "Assistance";
+"exercise.load_behavior.resistance.detail" = "More weight makes this exercise harder.";
+"exercise.load_behavior.assistance.detail" = "For counterweight machines: more kilograms provide more help.";
+"exercise.assistance" = "Assistance";
+"exercise.assistance.value" = "Assistance: %@ kg";
+"exercise.assistance.input" = "Assistance (kg)";
+"exercise.body_weight" = "Body weight";
+"exercise.body_weight.input" = "Body weight (kg)";
+"exercise.body_weight.detail" = "Used to calculate your effective load for assisted exercises.";
+"exercise.reduce_assistance" = "Reduce assistance";
 
 // MARK: - Muscle Groups
 "muscle.general" = "General";
@@ -304,8 +314,6 @@
 "create_routine.discard.message" = "You have unsaved changes. Are you sure you want to discard this routine?";
 
 // MARK: - Exercise Selection View
-"exercise_selection.already_added" = "%d exercise(s) already added";
-"exercise_selection.create_new" = "Create New Exercise";
 
 // MARK: - Configure Exercise View
 "configure_exercise.info" = "Exercise Info";
@@ -805,3 +813,113 @@
 "ai_coach.settings.open" = "AI Coach settings";
 "ai_coach.chat.close" = "Close";
 "ai_coach.chat.suggestion.anchor_pr" = "What's my PR on %@?";
+
+// MARK: - Seed Exercise Catalog (built-in starter library)
+
+// Chest
+"seed.exercise.barbell_bench_press" = "Barbell Bench Press";
+"seed.exercise.incline_barbell_bench_press" = "Incline Barbell Bench Press";
+"seed.exercise.decline_barbell_bench_press" = "Decline Barbell Bench Press";
+"seed.exercise.dumbbell_bench_press" = "Dumbbell Bench Press";
+"seed.exercise.incline_dumbbell_bench_press" = "Incline Dumbbell Bench Press";
+"seed.exercise.dumbbell_fly" = "Dumbbell Fly";
+"seed.exercise.incline_dumbbell_fly" = "Incline Dumbbell Fly";
+"seed.exercise.cable_fly" = "Cable Fly";
+"seed.exercise.cable_crossover" = "Cable Crossover";
+"seed.exercise.machine_chest_press" = "Machine Chest Press";
+"seed.exercise.pec_deck" = "Pec Deck";
+"seed.exercise.smith_machine_bench_press" = "Smith Machine Bench Press";
+"seed.exercise.push_up" = "Push-Up";
+"seed.exercise.chest_dip" = "Chest Dip";
+
+// Back
+"seed.exercise.deadlift" = "Deadlift";
+"seed.exercise.rack_pull" = "Rack Pull";
+"seed.exercise.pull_up" = "Pull-Up";
+"seed.exercise.chin_up" = "Chin-Up";
+"seed.exercise.inverted_row" = "Inverted Row";
+"seed.exercise.barbell_row" = "Barbell Row";
+"seed.exercise.pendlay_row" = "Pendlay Row";
+"seed.exercise.t_bar_row" = "T-Bar Row";
+"seed.exercise.dumbbell_row" = "Dumbbell Row";
+"seed.exercise.lat_pulldown" = "Lat Pulldown";
+"seed.exercise.close_grip_lat_pulldown" = "Close-Grip Lat Pulldown";
+"seed.exercise.seated_cable_row" = "Seated Cable Row";
+"seed.exercise.straight_arm_pulldown" = "Straight-Arm Pulldown";
+"seed.exercise.machine_row" = "Machine Row";
+"seed.exercise.assisted_pull_up" = "Assisted Pull-Up";
+"seed.exercise.back_extension" = "Back Extension";
+
+// Shoulders
+"seed.exercise.overhead_press" = "Overhead Press";
+"seed.exercise.seated_dumbbell_shoulder_press" = "Seated Dumbbell Shoulder Press";
+"seed.exercise.arnold_press" = "Arnold Press";
+"seed.exercise.machine_shoulder_press" = "Machine Shoulder Press";
+"seed.exercise.dumbbell_lateral_raise" = "Dumbbell Lateral Raise";
+"seed.exercise.cable_lateral_raise" = "Cable Lateral Raise";
+"seed.exercise.machine_lateral_raise" = "Machine Lateral Raise";
+"seed.exercise.dumbbell_front_raise" = "Dumbbell Front Raise";
+"seed.exercise.dumbbell_rear_delt_fly" = "Dumbbell Rear Delt Fly";
+"seed.exercise.reverse_pec_deck" = "Reverse Pec Deck";
+"seed.exercise.face_pull" = "Face Pull";
+"seed.exercise.upright_row" = "Upright Row";
+"seed.exercise.barbell_shrug" = "Barbell Shrug";
+"seed.exercise.dumbbell_shrug" = "Dumbbell Shrug";
+
+// Arms
+"seed.exercise.barbell_curl" = "Barbell Curl";
+"seed.exercise.dumbbell_curl" = "Dumbbell Curl";
+"seed.exercise.hammer_curl" = "Hammer Curl";
+"seed.exercise.incline_dumbbell_curl" = "Incline Dumbbell Curl";
+"seed.exercise.concentration_curl" = "Concentration Curl";
+"seed.exercise.preacher_curl" = "Preacher Curl";
+"seed.exercise.cable_curl" = "Cable Curl";
+"seed.exercise.machine_bicep_curl" = "Machine Bicep Curl";
+"seed.exercise.reverse_curl" = "Reverse Curl";
+"seed.exercise.wrist_curl" = "Wrist Curl";
+"seed.exercise.tricep_pushdown" = "Tricep Pushdown";
+"seed.exercise.rope_pushdown" = "Rope Pushdown";
+"seed.exercise.overhead_tricep_extension" = "Overhead Tricep Extension";
+"seed.exercise.skull_crusher" = "Skull Crusher";
+"seed.exercise.close_grip_bench_press" = "Close-Grip Bench Press";
+"seed.exercise.bench_dip" = "Bench Dip";
+"seed.exercise.machine_tricep_extension" = "Machine Tricep Extension";
+
+// Core
+"seed.exercise.plank" = "Plank";
+"seed.exercise.side_plank" = "Side Plank";
+"seed.exercise.crunch" = "Crunch";
+"seed.exercise.sit_up" = "Sit-Up";
+"seed.exercise.bicycle_crunch" = "Bicycle Crunch";
+"seed.exercise.cable_crunch" = "Cable Crunch";
+"seed.exercise.machine_crunch" = "Machine Crunch";
+"seed.exercise.hanging_leg_raise" = "Hanging Leg Raise";
+"seed.exercise.lying_leg_raise" = "Lying Leg Raise";
+"seed.exercise.russian_twist" = "Russian Twist";
+"seed.exercise.mountain_climber" = "Mountain Climber";
+"seed.exercise.ab_wheel_rollout" = "Ab Wheel Rollout";
+
+// Legs
+"seed.exercise.barbell_back_squat" = "Barbell Back Squat";
+"seed.exercise.front_squat" = "Front Squat";
+"seed.exercise.smith_machine_squat" = "Smith Machine Squat";
+"seed.exercise.hack_squat" = "Hack Squat";
+"seed.exercise.leg_press" = "Leg Press";
+"seed.exercise.goblet_squat" = "Goblet Squat";
+"seed.exercise.bulgarian_split_squat" = "Bulgarian Split Squat";
+"seed.exercise.walking_lunge" = "Walking Lunge";
+"seed.exercise.lunge" = "Lunge";
+"seed.exercise.step_up" = "Step-Up";
+"seed.exercise.leg_extension" = "Leg Extension";
+"seed.exercise.lying_leg_curl" = "Lying Leg Curl";
+"seed.exercise.seated_leg_curl" = "Seated Leg Curl";
+"seed.exercise.romanian_deadlift" = "Romanian Deadlift";
+"seed.exercise.stiff_leg_deadlift" = "Stiff-Leg Deadlift";
+"seed.exercise.sumo_deadlift" = "Sumo Deadlift";
+"seed.exercise.hip_thrust" = "Hip Thrust";
+"seed.exercise.glute_bridge" = "Glute Bridge";
+"seed.exercise.cable_glute_kickback" = "Cable Glute Kickback";
+"seed.exercise.hip_abduction_machine" = "Hip Abduction Machine";
+"seed.exercise.standing_calf_raise" = "Standing Calf Raise";
+"seed.exercise.seated_calf_raise" = "Seated Calf Raise";
+"seed.exercise.leg_press_calf_raise" = "Leg Press Calf Raise";

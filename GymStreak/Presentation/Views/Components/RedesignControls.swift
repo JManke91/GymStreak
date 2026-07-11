@@ -12,38 +12,84 @@ import SwiftUI
 struct RedesignSearchBar: View {
     @Binding var text: String
     let placeholder: String
+    var isFocused: FocusState<Bool>.Binding
 
     var body: some View {
-        HStack(spacing: 8) {
-            Image(systemName: "magnifyingglass")
-                .font(.system(size: 14, weight: .medium))
-                .foregroundStyle(Color.white.opacity(0.5))
+        HStack(spacing: 12) {
+            HStack(spacing: 8) {
+                Image(systemName: "magnifyingglass")
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundStyle(Color.white.opacity(0.5))
 
-            TextField(placeholder, text: $text)
-                .font(.system(size: 14))
-                .foregroundStyle(.white)
-                .autocorrectionDisabled()
+                TextField(placeholder, text: $text)
+                    .font(.system(size: 14))
+                    .foregroundStyle(.white)
+                    .autocorrectionDisabled()
+                    .focused(isFocused)
 
-            if !text.isEmpty {
-                Button {
-                    text = ""
-                } label: {
-                    Image(systemName: "xmark.circle.fill")
-                        .font(.system(size: 15))
-                        .foregroundStyle(Color.white.opacity(0.35))
+                if !text.isEmpty {
+                    Button {
+                        text = ""
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.system(size: 15))
+                            .foregroundStyle(Color.white.opacity(0.35))
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("action.cancel".localized)
                 }
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 11)
+            .background(Color.white.opacity(0.06))
+            .overlay(
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .stroke(Color.white.opacity(0.04), lineWidth: 1)
+            )
+            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+
+            // Fallback dismiss affordance; the primary one is the
+            // keyboardDoneBar pinned above the keyboard.
+            if isFocused.wrappedValue {
+                Button("action.done".localized) {
+                    isFocused.wrappedValue = false
+                }
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(.white)
                 .buttonStyle(.plain)
-                .accessibilityLabel("action.cancel".localized)
+                .transition(.move(edge: .trailing).combined(with: .opacity))
             }
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 11)
-        .background(Color.white.opacity(0.06))
-        .overlay(
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .stroke(Color.white.opacity(0.04), lineWidth: 1)
-        )
-        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .animation(.easeOut(duration: 0.18), value: isFocused.wrappedValue)
+    }
+}
+
+/// Floating Liquid Glass "Fertig" capsule pinned directly above the keyboard while
+/// `isFocused`. Uses `safeAreaInset` because `ToolbarItemGroup(placement: .keyboard)`
+/// doesn't reliably render on iOS 26 (FB13209435 family). Attach to a container that
+/// does NOT itself carry `.scrollDismissesKeyboard(.interactively)` (FB13296535).
+extension View {
+    func keyboardDoneBar(isFocused: FocusState<Bool>.Binding) -> some View {
+        safeAreaInset(edge: .bottom) {
+            if isFocused.wrappedValue {
+                HStack {
+                    Spacer()
+                    Button {
+                        isFocused.wrappedValue = false
+                    } label: {
+                        Label("action.done".localized, systemImage: "keyboard.chevron.compact.down")
+                            .font(.system(size: 15, weight: .semibold))
+                            .foregroundStyle(DesignSystem.Colors.textOnTint)
+                    }
+                    .buttonStyle(.glassProminent)
+                    .tint(DesignSystem.Colors.tint)
+                }
+                .padding(.trailing, 16)
+                .padding(.bottom, 8)
+                .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
+        }
+        .animation(.easeOut(duration: 0.2), value: isFocused.wrappedValue)
     }
 }
 
@@ -147,11 +193,12 @@ struct FlowLayout: Layout {
 #Preview {
     struct PreviewWrapper: View {
         @State var text = ""
+        @FocusState var isSearchFocused: Bool
         var body: some View {
             ZStack {
                 Color.black.ignoresSafeArea()
                 VStack(spacing: 16) {
-                    RedesignSearchBar(text: $text, placeholder: "Übungen suchen")
+                    RedesignSearchBar(text: $text, placeholder: "Übungen suchen", isFocused: $isSearchFocused)
                     HStack {
                         FilterPillButton(label: "Alle", isActive: true) {}
                         FilterPillButton(label: "Brust", isActive: false) {}

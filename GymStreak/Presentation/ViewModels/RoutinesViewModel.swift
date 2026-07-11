@@ -241,6 +241,33 @@ class RoutinesViewModel: ObservableObject {
         fetchRoutines()
     }
 
+    /// Appends a configured exercise (from the exercise picker) to an existing
+    /// routine, materializing any pending alternatives, and persists.
+    func addConfiguredExercise(
+        _ exercise: Exercise,
+        to routine: Routine,
+        sets: [ExerciseSet],
+        alternatives: [PendingAlternative]
+    ) {
+        let routineExercise = RoutineExercise(exercise: exercise, order: routine.routineExercisesList.count)
+        routineExercise.routine = routine
+
+        for set in sets {
+            set.routineExercise = routineExercise
+            routineExercise.sets?.append(set)
+        }
+
+        routine.routineExercises?.append(routineExercise)
+
+        // Materialize picked alternatives now that the routine exercise is attached
+        // to the persisted routine, keeping each alternative's own set scheme.
+        for pending in alternatives {
+            addAlternative(pending.exercise, to: routineExercise, copying: pending.sets)
+        }
+
+        updateRoutine(routine)
+    }
+
     /// Deep-copies a routine (exercises, sets, rep ranges, supersets and
     /// alternatives with their set schemes) under a "(name Copy)" title.
     @discardableResult

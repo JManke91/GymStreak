@@ -906,7 +906,13 @@ struct RoutineDetailView: View {
             reorderHintOverlay
         }
         .sheet(isPresented: $showingAddExercise) {
-            AddExerciseToRoutineView(routine: routine, viewModel: viewModel, exercisesViewModel: exercisesViewModel)
+            RoutineExercisePickerView(
+                alreadyAddedExercises: routine.routineExercisesList.compactMap(\.exercise),
+                exercisesViewModel: exercisesViewModel,
+                onExerciseConfigured: { exercise, sets, alternatives in
+                    viewModel.addConfiguredExercise(exercise, to: routine, sets: sets, alternatives: alternatives)
+                }
+            )
         }
         .sheet(isPresented: $showingSchedulePlanner) {
             SchedulePlanningSheet(routine: routine, viewModel: viewModel)
