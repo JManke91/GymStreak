@@ -45,18 +45,50 @@ final class RoutineStore: ObservableObject {
                 return watchExercise
             }
 
-            let updatedSets = watchExercise.sets.map { watchSet -> WatchSet in
-                guard let activeSet = activeExercise.sets.first(where: { $0.id == watchSet.id }),
-                      activeSet.wasModified else {
-                    return watchSet
-                }
+            // A swapped exercise's active sets carry the alternative's own set ids,
+            // so the modified values belong to that alternative's scheme — the
+            // primary's sets stay untouched.
+            var updatedSets = watchExercise.sets
+            var updatedAlternatives = watchExercise.alternatives
 
-                return WatchSet(
-                    id: watchSet.id,
-                    reps: activeSet.actualReps,
-                    weight: activeSet.actualWeight,
-                    restTime: watchSet.restTime
-                )
+            if activeExercise.wasSwapped {
+                updatedAlternatives = watchExercise.alternatives?.map { alternative -> WatchExerciseAlternative in
+                    guard alternative.exerciseId == activeExercise.exerciseId else { return alternative }
+                    return WatchExerciseAlternative(
+                        id: alternative.id,
+                        exerciseId: alternative.exerciseId,
+                        name: alternative.name,
+                        muscleGroup: alternative.muscleGroup,
+                        sets: alternative.sets.map { watchSet -> WatchSet in
+                            guard let activeSet = activeExercise.sets.first(where: { $0.id == watchSet.id }),
+                                  activeSet.wasModified else {
+                                return watchSet
+                            }
+                            return WatchSet(
+                                id: watchSet.id,
+                                reps: activeSet.actualReps,
+                                weight: activeSet.actualWeight,
+                                restTime: watchSet.restTime
+                            )
+                        },
+                        order: alternative.order,
+                        loadBehaviorRaw: alternative.loadBehaviorRaw
+                    )
+                }
+            } else {
+                updatedSets = watchExercise.sets.map { watchSet -> WatchSet in
+                    guard let activeSet = activeExercise.sets.first(where: { $0.id == watchSet.id }),
+                          activeSet.wasModified else {
+                        return watchSet
+                    }
+
+                    return WatchSet(
+                        id: watchSet.id,
+                        reps: activeSet.actualReps,
+                        weight: activeSet.actualWeight,
+                        restTime: watchSet.restTime
+                    )
+                }
             }
 
             return WatchExercise(
@@ -66,7 +98,12 @@ final class RoutineStore: ObservableObject {
                 sets: updatedSets,
                 order: watchExercise.order,
                 supersetId: watchExercise.supersetId,
-                supersetOrder: watchExercise.supersetOrder
+                supersetOrder: watchExercise.supersetOrder,
+                targetRepMin: watchExercise.targetRepMin,
+                targetRepMax: watchExercise.targetRepMax,
+                exerciseId: watchExercise.exerciseId,
+                loadBehaviorRaw: watchExercise.loadBehaviorRaw,
+                alternatives: updatedAlternatives
             )
         }
 

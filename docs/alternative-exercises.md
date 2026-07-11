@@ -75,6 +75,16 @@ Alternatives support the **same "rep-range goal" ("Wdh.-Ziel") feature as the pr
   - `Views/ExerciseSetView.swift` is **unused legacy** (nothing instantiates it; `FullScreenSetEditorView` is the live set screen) — don't add features there.
 - Watch has **no management UI** — alternatives are configured on iOS only and synced over (consistent with the WatchConnectivity-based routine sync, see `docs/watch-sync.md`).
 
+## "Update routine" after performing an alternative (bug fixed 2026-07-11)
+
+Choosing "update routine" at workout completion must write the actual reps/weights into the **performed variant's** set scheme. For a swapped exercise the live sets are rebuilt from the alternative's own scheme, so their set ids are `AlternativeExerciseSet` ids — matching them against the primary's `ExerciseSet`s silently fails. All three template-update sites originally did exactly that, so alternatives were never updated (user-reported: watch-only workout on a swapped "Flying Chest" left the routine unchanged). Fixed by branching on the swap (`plannedExerciseId != nil` / `wasSwapped`):
+
+1. **Watch→iOS ingestion** (`WatchWorkoutIngestionService.ingest`, step 2): finds the `RoutineExerciseAlternative` via `exercise?.id == completedExercise.exerciseId` and updates its sets by id (`AlternativeExerciseSet.id` survives the full round-trip: payload build → watch swap → completed payload).
+2. **Watch local store** (`RoutineStore.applyWorkoutChanges`): updates the matching entry in `WatchExercise.alternatives` (by `exerciseId`, sets by id); the primary's sets stay untouched.
+3. **iPhone in-app completion/edit** (`WorkoutViewModel.updateRoutineTemplate`): had the same latent bug — it matched the routine exercise by the *performed* exercise name, which never equals the primary's name after a swap. Now matches the origin slot via `plannedExerciseId ?? exerciseId` (name fallback for legacy sessions without `exerciseId`) and routes swapped exercises into `updateAlternativeTemplateSets`, which mirrors the primary path's reconciliation (reps/weight from completed sets only, rest time always, set count reconciled by appending/removing `AlternativeExerciseSet`s).
+
+The reverted-swap case needs no special handling anywhere: reverting clears `plannedExerciseId`, so the exercise takes the primary path.
+
 ## Design decisions
 
 - **An alternative's reps/weight are editable immediately at add time, in all flows.** An initial iteration (same day) deferred set editing in the configure flows to routine detail, reasoning the seeded copy had nothing to edit — user feedback overturned this: the whole point of an alternative (e.g. dumbbell instead of barbell press) is usually a *different* weight.

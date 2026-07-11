@@ -87,6 +87,8 @@ When a user modifies set values during a watch workout and chooses "Save & Updat
 
 The watch self-update (step 1) ensures the user sees updated template values immediately for the next workout, without waiting for the iOS round-trip.
 
+**Swapped alternatives (bug fixed 2026-07-11):** when the performed exercise was an alternative (`plannedExerciseId != nil` on the completed exercise), its set ids belong to the alternative's own scheme (`WatchExerciseAlternative.sets` / `AlternativeExerciseSet`), NOT the primary's sets. Both template-update sites therefore branch on the swap: `WatchWorkoutIngestionService` writes the actuals into the matching `RoutineExerciseAlternative`'s sets (alternative found via `exercise?.id == completedExercise.exerciseId`, sets matched by id — `AlternativeExerciseSet.id` survives the whole round-trip), and `RoutineStore.applyWorkoutChanges` writes them into the matching entry of `WatchExercise.alternatives`. Before the fix, the id lookup against the primary's sets silently failed ("Could not find set with ID") and choosing "update routine" after a swapped watch workout changed nothing.
+
 ### Trigger: editing a past workout (iOS)
 The template can also change when a user edits a completed workout in History and chooses "Update
 template" (see `docs/edit-past-workout.md`). In that case `WorkoutViewModel.saveEditedWorkout` updates

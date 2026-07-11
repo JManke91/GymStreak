@@ -1431,10 +1431,26 @@ class WorkoutViewModel: ObservableObject {
         guard let routine = session.routine else { return }
 
         for workoutExercise in session.workoutExercisesList {
-            // Find corresponding routine exercise
-            guard let routineExercise = routine.routineExercisesList.first(where: {
-                $0.exercise?.name == workoutExercise.exerciseName
+            // Find the routine exercise this workout exercise originated from. A
+            // swapped exercise carries the performed alternative's name/id, so the
+            // origin slot must be matched via the originally-planned exercise.
+            let originId = workoutExercise.plannedExerciseId ?? workoutExercise.exerciseId
+            let originName = workoutExercise.plannedExerciseName ?? workoutExercise.exerciseName
+            guard let routineExercise = routine.routineExercisesList.first(where: { candidate in
+                if let originId, let candidateId = candidate.exercise?.id {
+                    return candidateId == originId
+                }
+                return candidate.exercise?.name == originName
             }) else { continue }
+
+            // Swapped exercises write their values back into the performed
+            // alternative's own set scheme — the primary's sets stay untouched.
+            if workoutExercise.wasSwapped {
+                if let alternative = routineExercise.alternativesList.first(where: { $0.exercise?.id == workoutExercise.exerciseId }) {
+                    updateAlternativeTemplateSets(alternative, from: workoutExercise)
+                }
+                continue
+            }
 
             // Get the rest time from the first set (all sets should have same rest time)
             let exerciseRestTime = workoutExercise.setsList.first?.restTime ?? 60.0
@@ -1482,6 +1498,51 @@ class WorkoutViewModel: ObservableObject {
 
         routine.updatedAt = Date()
         save()
+    }
+
+    /// Mirrors the primary-set template update for a performed alternative:
+    /// reps/weight from completed sets, rest time from the exercise, and the
+    /// alternative's set count reconciled to the session's.
+    private func updateAlternativeTemplateSets(_ alternative: RoutineExerciseAlternative, from workoutExercise: WorkoutExercise) {
+        let exerciseRestTime = workoutExercise.setsList.first?.restTime ?? 60.0
+        let workoutSets = workoutExercise.setsList.sorted(by: { $0.order < $1.order })
+        var alternativeSets = alternative.setsList
+
+        // Remove surplus template sets beyond the session's set count
+        if alternativeSets.count > workoutSets.count {
+            for alternativeSet in alternativeSets[workoutSets.count...] {
+                alternative.sets?.removeAll { $0.id == alternativeSet.id }
+                routineRepository.delete(alternativeSet)
+            }
+            alternativeSets = Array(alternativeSets[..<workoutSets.count])
+        }
+
+        // Update existing template sets in order
+        for (index, alternativeSet) in alternativeSets.enumerated() {
+            alternativeSet.order = index
+            alternativeSet.restTime = exerciseRestTime
+            let workoutSet = workoutSets[index]
+            if workoutSet.isCompleted {
+                alternativeSet.reps = workoutSet.actualReps
+                alternativeSet.weight = workoutSet.actualWeight
+            }
+        }
+
+        // Append new template sets for extra session sets
+        if workoutSets.count > alternativeSets.count {
+            for index in alternativeSets.count..<workoutSets.count {
+                let workoutSet = workoutSets[index]
+                let newSet = AlternativeExerciseSet(
+                    reps: workoutSet.actualReps,
+                    weight: workoutSet.actualWeight,
+                    restTime: exerciseRestTime,
+                    order: index
+                )
+                newSet.alternative = alternative
+                if alternative.sets == nil { alternative.sets = [] }
+                alternative.sets?.append(newSet)
+            }
+        }
     }
 
     // MARK: - History

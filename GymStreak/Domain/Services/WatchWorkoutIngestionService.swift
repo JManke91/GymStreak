@@ -154,6 +154,34 @@ final class WatchWorkoutIngestionService {
                 continue
             }
 
+            // A swapped exercise's completed sets carry the alternative's own set
+            // ids (the watch rebuilds the scheme from `WatchExerciseAlternative.sets`
+            // on swap), so the actual values belong to that alternative's template —
+            // matching them against the primary's sets can never succeed.
+            if completedExercise.plannedExerciseId != nil {
+                guard let alternative = routineExercise.alternativesList.first(where: { $0.exercise?.id == completedExercise.exerciseId }) else {
+                    print("Could not find alternative \(completedExercise.name) on routine exercise \(completedExercise.id)")
+                    continue
+                }
+
+                for completedSet in completedExercise.sets {
+                    guard let set = alternative.setsList.first(where: { $0.id == completedSet.id }) else {
+                        print("Could not find alternative set with ID: \(completedSet.id)")
+                        continue
+                    }
+
+                    // Only update if the set was modified
+                    if completedSet.actualReps != completedSet.plannedReps ||
+                       completedSet.actualWeight != completedSet.plannedWeight {
+                        set.reps = completedSet.actualReps
+                        set.weight = completedSet.actualWeight
+                        updatedAny = true
+                        print("Updated alternative set: \(completedSet.actualWeight)kg × \(completedSet.actualReps) reps")
+                    }
+                }
+                continue
+            }
+
             for completedSet in completedExercise.sets {
                 guard let set = routineExercise.setsList.first(where: { $0.id == completedSet.id }) else {
                     print("Could not find set with ID: \(completedSet.id)")
