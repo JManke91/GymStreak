@@ -29,12 +29,19 @@ final class AppDependencies: ObservableObject {
     /// this composition root is the only place allowed to know the concrete type.
     let exerciseProgressService: ExerciseProgressProviding
 
+    /// Launch-time seeder for the built-in starter exercise catalog — seeds the
+    /// catalog for all users (skipping name collisions with user-created
+    /// exercises) and dedups CloudKit sync races (see
+    /// docs/starter-exercise-library.md). Invoked once from GymStreakApp at launch.
+    let defaultContentSeeder: DefaultContentSeeder
+
     init(modelContext: ModelContext) {
         self.routineRepository = SwiftDataRoutineRepository(modelContext: modelContext)
         self.exerciseRepository = SwiftDataExerciseRepository(modelContext: modelContext)
         self.workoutSessionRepository = SwiftDataWorkoutSessionRepository(modelContext: modelContext)
         self.watchSync = WatchConnectivityManager.shared
         self.exerciseProgressService = ExerciseProgressService(modelContext: modelContext)
+        self.defaultContentSeeder = DefaultContentSeeder(modelContext: modelContext)
     }
 
     /// Each `WorkoutViewModel` owns its own HealthKit workout session — unlike

@@ -76,6 +76,8 @@ struct GymStreakApp: App {
                 .onAppear {
                     if isUITesting {
                         seedTestData()
+                    } else {
+                        dependencies.defaultContentSeeder.run()
                     }
                 }
         }
