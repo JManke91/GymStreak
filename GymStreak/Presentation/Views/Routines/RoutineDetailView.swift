@@ -888,6 +888,7 @@ struct RoutineDetailView: View {
             }
         }
         .toolbar(.hidden, for: .navigationBar)
+        .swipeBackEnabled()
         .toolbar {
             ToolbarItemGroup(placement: .keyboard) {
                 Spacer()
