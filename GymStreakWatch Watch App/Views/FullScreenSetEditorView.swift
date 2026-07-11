@@ -78,7 +78,7 @@ struct FullScreenSetEditorView: View {
 //                                            .font(.system(size: 9, weight: .semibold))
                         // Weight editor (left)
                         CompactValueEditor(
-                            label: "WEIGHT",
+                            label: String(localized: "WEIGHT"),
                             value: currentSet.actualWeight,
                             unit: "kg",
                             icon: "scalemass.fill",
@@ -101,12 +101,12 @@ struct FullScreenSetEditorView: View {
 
                         // Reps editor (right)
                         CompactValueEditor(
-                            label: "REPS",
+                            label: String(localized: "REPS"),
                             value: Binding(
                                 get: { Double(currentSet.actualReps.wrappedValue) },
                                 set: { currentSet.actualReps.wrappedValue = Int($0) }
                             ),
-                            unit: "reps",
+                            unit: String(localized: "reps"),
                             icon: "repeat",
                             step: 1,
                             range: 0...20,

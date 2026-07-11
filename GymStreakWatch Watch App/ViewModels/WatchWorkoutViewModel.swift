@@ -144,8 +144,8 @@ final class WatchWorkoutViewModel: ObservableObject {
 
     private func scheduleRestTimerNotification(duration: TimeInterval) {
         let content = UNMutableNotificationContent()
-        content.title = "Rest Complete"
-        content.body = "Time to start your next set!"
+        content.title = String(localized: "Rest Complete")
+        content.body = String(localized: "Time to start your next set!")
         content.sound = .default
 
         let trigger = UNTimeIntervalNotificationTrigger(timeInterval: duration, repeats: false)
@@ -1035,7 +1035,7 @@ final class WatchWorkoutViewModel: ObservableObject {
         }
 
         return WatchWorkoutSummary(
-            routineName: currentRoutine?.name ?? "Workout",
+            routineName: currentRoutine?.name ?? String(localized: "Workout"),
             duration: duration,
             completedSets: completedSetsCount,
             totalSets: totalSetsCount,

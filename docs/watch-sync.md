@@ -20,6 +20,7 @@ iOS (buffers to App Group, dedupes, saves WorkoutSession, posts .workoutHistoryD
 ### iOS Target
 - **Persistence**: SwiftData `ModelContainer` with CloudKit (`iCloud.com.jmanke.gymstreak`)
 - **Sync trigger**: `RoutinesViewModel.fetchRoutines()` calls `syncRoutinesToWatch()` after every fetch
+- **Payload order is meaningful**: `syncRoutinesToWatch()` puts the `upNextRoutine` (next planned workout, else least-recently-trained — see `docs/workout-planning.md`) at index 0; the watch renders the first routine as its "Up Next" hero with a quick-start button (`RoutineListView`)
 - **WC bootstrap**: `WatchConnectivityManager.shared` is bound as a `@StateObject` on `GymStreakApp` so the WCSession delegate is registered before any view appears (avoids cold-start activation race)
 - **Receives workouts**: `WatchConnectivityManager.didReceiveUserInfo` AND `didReceiveMessage` (fast path) → buffer to App Group → notification → `RoutinesViewModel.handleCompletedWatchWorkout()`
 - **Pending buffer**: `group.com.gymstreak.shared` UserDefaults key `pendingReceivedWorkouts` — survives crashes between WC delivery and SwiftData save

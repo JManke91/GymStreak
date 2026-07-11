@@ -79,7 +79,9 @@ struct ActiveWorkoutView: View {
             Button("Continue", role: .cancel) { }
         } message: {
             if viewModel.hasModifiedSets {
-                Text("You modified \(viewModel.modifiedSetsCount) set\(viewModel.modifiedSetsCount == 1 ? "" : "s"). Update your routine template?")
+                // Key "You modified %lld sets. Update your routine template?" carries
+                // plural variations in Localizable.xcstrings (en + de).
+                Text("You modified \(viewModel.modifiedSetsCount) sets. Update your routine template?")
             } else {
                 Text("Save your workout progress?")
             }

@@ -76,7 +76,7 @@ struct WatchWorkoutSummaryView: View {
             statRow(
                 icon: "clock.fill",
                 iconColor: OnyxWatch.Colors.tint,
-                label: "Duration",
+                label: String(localized: "Duration"),
                 value: summary.formattedDuration
             )
 
@@ -86,7 +86,7 @@ struct WatchWorkoutSummaryView: View {
             statRow(
                 icon: "dumbbell.fill",
                 iconColor: OnyxWatch.Colors.tint,
-                label: "Sets",
+                label: String(localized: "Sets"),
                 value: "\(summary.completedSets)/\(summary.totalSets) (\(summary.completionPercentage)%)"
             )
 
@@ -97,8 +97,8 @@ struct WatchWorkoutSummaryView: View {
                 statRow(
                     icon: "flame.fill",
                     iconColor: OnyxWatch.Colors.warning,
-                    label: "Calories",
-                    value: "\(calories) cal"
+                    label: String(localized: "Calories"),
+                    value: String(localized: "\(calories) cal")
                 )
             }
         }

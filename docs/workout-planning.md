@@ -72,6 +72,12 @@ One-to-one, optional relationship off `Routine` (`schedule: RoutineSchedule?`, c
 ### Repository
 `RoutineRepository` gained `insert(_:RoutineSchedule)` / `delete(_:RoutineSchedule)` (implemented in `SwiftDataRoutineRepository`). Presentation never touches `ModelContext` — schedule CRUD goes through the ViewModel → repository.
 
+## Watch surface (Up Next on the watch routine list)
+The watch has **no plan/schedule data and no workout history** — it cannot compute `upNextRoutine` itself. Instead, the ordering is encoded in the sync payload:
+- `RoutinesViewModel.syncRoutinesToWatch()` (iOS) moves `upNextRoutine` to index 0 before calling `watchSync.syncRoutines(...)`; the rest keep their `updatedAt`-desc order. No `WatchRoutine` model change was needed — the contract is purely "first routine in the payload = up next".
+- `RoutineListView` (watch) renders the first stored routine in an "Up Next" section: the routine row (navigates to detail as before) plus a tinted quick-start button (`textOnTint` on tint-gradient `listRowBackground`) that presents `ActiveWorkoutView` directly, skipping the detail screen. Remaining routines render under "All Routines".
+- Freshness: the order is a snapshot from the last sync (`updateApplicationContext` — coalesced, latest wins). iOS re-syncs on every `fetchRoutines()` (incl. after a watch workout is ingested and on `.watchAppBecameAvailable`), so the hero updates whenever the iOS app runs. An old cached payload simply shows the previous hero — acceptable.
+
 ## Edge cases
 - **Never-trained cadence routine**: anchors on the reference date (default today); its `reference + k·N` grid is counted, `k = 0` included.
 - **Stale history + fresh reference date**: an old completion before the chosen reference date is ignored; the plan restarts from the reference date until the next workout.

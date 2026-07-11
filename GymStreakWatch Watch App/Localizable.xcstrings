@@ -1,0 +1,956 @@
+{
+  "sourceLanguage" : "en",
+  "strings" : {
+    "..." : {
+
+    },
+    "·" : {
+
+    },
+    "%@" : {
+
+    },
+    "%@, %@, %lld of %lld sets completed" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@, %2$@, %3$lld von %4$lld Sätzen abgeschlossen"
+          }
+        }
+      }
+    },
+    "%@, %lld exercises" : {
+      "localizations" : {
+        "de" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%1$@, %2$lld Übung"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%1$@, %2$lld Übungen"
+                }
+              }
+            }
+          }
+        },
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%1$@, %2$lld exercise"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%1$@, %2$lld exercises"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "%@. %@ %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@. %2$@ %3$@"
+          }
+        }
+      }
+    },
+    "%lld" : {
+
+    },
+    "%lld cal" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld kcal"
+          }
+        }
+      }
+    },
+    "%lld exercises" : {
+      "localizations" : {
+        "de" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld Übung"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld Übungen"
+                }
+              }
+            }
+          }
+        },
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld exercise"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld exercises"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "%lld pounds" : {
+
+    },
+    "%lld reps" : {
+
+    },
+    "%lld sets" : {
+      "localizations" : {
+        "de" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld Satz"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld Sätze"
+                }
+              }
+            }
+          }
+        },
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld set"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld sets"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "%lld-%lld" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$lld-%2$lld"
+          }
+        }
+      }
+    },
+    "%lld/%lld" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$lld/%2$lld"
+          }
+        }
+      }
+    },
+    "%lld/%lld sets" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$lld/%2$lld Sätze"
+          }
+        }
+      }
+    },
+    "%lld%%" : {
+
+    },
+    "Adjustable. Swipe up or down to change value." : {
+
+    },
+    "All Routines" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Alle Routinen"
+          }
+        }
+      }
+    },
+    "alternatives available" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Alternativen verfügbar"
+          }
+        }
+      }
+    },
+    "Back to exercise list" : {
+
+    },
+    "BPM" : {
+
+    },
+    "CAL" : {
+
+    },
+    "Calories" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kalorien"
+          }
+        }
+      }
+    },
+    "Complete" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Abschließen"
+          }
+        }
+      }
+    },
+    "Complete set" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Satz abschließen"
+          }
+        }
+      }
+    },
+    "Complete Set" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Satz abschließen"
+          }
+        }
+      }
+    },
+    "Complete set %lld of %lld" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Satz %1$lld von %2$lld abschließen"
+          }
+        }
+      }
+    },
+    "Completed" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Abgeschlossen"
+          }
+        }
+      }
+    },
+    "Continue" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Weiter"
+          }
+        }
+      }
+    },
+    "Create routines in GymStreak on your iPhone" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Erstelle Routinen in GymStreak auf deinem iPhone"
+          }
+        }
+      }
+    },
+    "Current" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Aktuell"
+          }
+        }
+      }
+    },
+    "Discard" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Verwerfen"
+          }
+        }
+      }
+    },
+    "Done" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Fertig"
+          }
+        }
+      }
+    },
+    "Double tap to adjust." : {
+
+    },
+    "Double tap to complete set and start rest timer" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Doppeltippen, um den Satz abzuschließen und die Pause zu starten"
+          }
+        }
+      }
+    },
+    "Double tap to end and save your workout" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Doppeltippen, um dein Workout zu beenden und zu speichern"
+          }
+        }
+      }
+    },
+    "Double tap to finish or discard your workout" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Doppeltippen, um dein Workout zu beenden oder zu verwerfen"
+          }
+        }
+      }
+    },
+    "Double tap to mark set %lld as complete" : {
+
+    },
+    "Double tap to mark this set as complete and start rest timer" : {
+
+    },
+    "Double tap to pause workout" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Doppeltippen, um das Workout zu pausieren"
+          }
+        }
+      }
+    },
+    "Double tap to resume workout" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Doppeltippen, um das Workout fortzusetzen"
+          }
+        }
+      }
+    },
+    "Double tap to undo completion" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Doppeltippen, um den Abschluss rückgängig zu machen"
+          }
+        }
+      }
+    },
+    "Double tap to view sets" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Doppeltippen, um die Sätze anzuzeigen"
+          }
+        }
+      }
+    },
+    "Duration" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dauer"
+          }
+        }
+      }
+    },
+    "Elapsed time %@" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Verstrichene Zeit %@"
+          }
+        }
+      }
+    },
+    "End workout" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Workout beenden"
+          }
+        }
+      }
+    },
+    "End Workout" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Workout beenden"
+          }
+        }
+      }
+    },
+    "End Workout?" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Workout beenden?"
+          }
+        }
+      }
+    },
+    "exercises" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Übungen"
+          }
+        }
+      }
+    },
+    "Exercises" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Übungen"
+          }
+        }
+      }
+    },
+    "In progress" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "In Bearbeitung"
+          }
+        }
+      }
+    },
+    "kCal" : {
+
+    },
+    "lbs" : {
+
+    },
+    "Loading Metrics" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Metriken werden geladen"
+          }
+        }
+      }
+    },
+    "Mark the current exercise set as complete" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Markiert den aktuellen Übungssatz als abgeschlossen"
+          }
+        }
+      }
+    },
+    "No Routines" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Keine Routinen"
+          }
+        }
+      }
+    },
+    "Not started" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nicht begonnen"
+          }
+        }
+      }
+    },
+    "part of superset" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Teil eines Supersatzes"
+          }
+        }
+      }
+    },
+    "Partially complete" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Teilweise abgeschlossen"
+          }
+        }
+      }
+    },
+    "Pause" : {
+
+    },
+    "reps" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Wdh."
+          }
+        }
+      }
+    },
+    "REPS" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "WDH."
+          }
+        }
+      }
+    },
+    "Rest" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pause"
+          }
+        }
+      }
+    },
+    "Rest Complete" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pause beendet"
+          }
+        }
+      }
+    },
+    "Rest timer, %@ remaining" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pausen-Timer, noch %@"
+          }
+        }
+      }
+    },
+    "Resume" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Fortsetzen"
+          }
+        }
+      }
+    },
+    "Routines" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Routinen"
+          }
+        }
+      }
+    },
+    "Save (Don't Update)" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Speichern (ohne Aktualisierung)"
+          }
+        }
+      }
+    },
+    "Save & Update Template" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Speichern & Vorlage aktualisieren"
+          }
+        }
+      }
+    },
+    "Save Workout" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Workout speichern"
+          }
+        }
+      }
+    },
+    "Save your workout progress?" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Trainingsfortschritt speichern?"
+          }
+        }
+      }
+    },
+    "scroll crown" : {
+
+    },
+    "Set" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Satz"
+          }
+        }
+      }
+    },
+    "Set %lld of %lld" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Set %1$lld of %2$lld"
+          }
+        }
+      }
+    },
+    "Set %lld of %lld completed" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Satz %1$lld von %2$lld abgeschlossen"
+          }
+        }
+      }
+    },
+    "Set completed. Tap to mark incomplete" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Satz abgeschlossen. Tippen, um als nicht abgeschlossen zu markieren"
+          }
+        }
+      }
+    },
+    "sets" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sätze"
+          }
+        }
+      }
+    },
+    "Sets" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sätze"
+          }
+        }
+      }
+    },
+    "Skip" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Überspringen"
+          }
+        }
+      }
+    },
+    "Start Workout" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Workout starten"
+          }
+        }
+      }
+    },
+    "Start workout %@" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Workout %@ starten"
+          }
+        }
+      }
+    },
+    "Strength Training" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Krafttraining"
+          }
+        }
+      }
+    },
+    "Superset (%lld)" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Supersatz (%lld)"
+          }
+        }
+      }
+    },
+    "Swap" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tauschen"
+          }
+        }
+      }
+    },
+    "Swap %@ for an alternative" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ gegen eine Alternative tauschen"
+          }
+        }
+      }
+    },
+    "Swap Exercise" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Übung tauschen"
+          }
+        }
+      }
+    },
+    "Syncing..." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Synchronisiere..."
+          }
+        }
+      }
+    },
+    "Tap to expand timer. Long press to skip rest." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tippen, um den Timer zu vergrößern. Lange drücken, um die Pause zu überspringen."
+          }
+        }
+      }
+    },
+    "Template updated" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Vorlage aktualisiert"
+          }
+        }
+      }
+    },
+    "Time to start your next set!" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Zeit für deinen nächsten Satz!"
+          }
+        }
+      }
+    },
+    "Total workout time %@" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gesamte Workout-Zeit %@"
+          }
+        }
+      }
+    },
+    "Up Next" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Als Nächstes"
+          }
+        }
+      }
+    },
+    "WEIGHT" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "GEWICHT"
+          }
+        }
+      }
+    },
+    "Workout" : {
+
+    },
+    "Workout Complete" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Workout abgeschlossen"
+          }
+        }
+      }
+    },
+    "Workout Complete!" : {
+
+    },
+    "You modified %lld sets. Update your routine template?" : {
+      "localizations" : {
+        "de" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "Du hast %lld Satz geändert. Trainingsvorlage aktualisieren?"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "Du hast %lld Sätze geändert. Trainingsvorlage aktualisieren?"
+                }
+              }
+            }
+          }
+        },
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "You modified %lld set. Update your routine template?"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "You modified %lld sets. Update your routine template?"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "version" : "1.0"
+}

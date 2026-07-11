@@ -438,8 +438,21 @@ struct ExerciseRow: View {
                 : (isCurrent ? Color.accentColor.opacity(0.15) : Color.clear)
         )
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(exercise.name), \(status.accessibilityLabel), \(exercise.completedSetsCount) of \(exercise.sets.count) sets completed\(exercise.isInSuperset ? ", part of superset" : "")\(exercise.canSwap ? ", alternatives available" : "")")
+        .accessibilityLabel(rowAccessibilityLabel)
         .accessibilityHint("Double tap to view sets")
+    }
+
+    private var rowAccessibilityLabel: String {
+        var label = String(
+            localized: "\(exercise.name), \(status.accessibilityLabel), \(exercise.completedSetsCount) of \(exercise.sets.count) sets completed"
+        )
+        if exercise.isInSuperset {
+            label += ", " + String(localized: "part of superset")
+        }
+        if exercise.canSwap {
+            label += ", " + String(localized: "alternatives available")
+        }
+        return label
     }
 }
 
@@ -479,10 +492,10 @@ enum ExerciseStatus {
 
     var accessibilityLabel: String {
         switch self {
-        case .completed: return "Completed"
-        case .inProgress: return "In progress"
-        case .partiallyComplete: return "Partially complete"
-        case .pending: return "Not started"
+        case .completed: return String(localized: "Completed")
+        case .inProgress: return String(localized: "In progress")
+        case .partiallyComplete: return String(localized: "Partially complete")
+        case .pending: return String(localized: "Not started")
         }
     }
 }

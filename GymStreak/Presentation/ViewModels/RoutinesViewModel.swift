@@ -164,8 +164,16 @@ class RoutinesViewModel: ObservableObject {
 
     // MARK: - Watch Connectivity
 
+    /// Syncs routines to the watch with the "Als Nächstes" routine first, so the
+    /// watch list surfaces the same up-next routine as the iOS Routinen tab.
     private func syncRoutinesToWatch() {
-        watchSync.syncRoutines(routines)
+        var ordered = routines
+        if let hero = upNextRoutine,
+           let index = ordered.firstIndex(where: { $0.id == hero.id }), index > 0 {
+            ordered.remove(at: index)
+            ordered.insert(hero, at: 0)
+        }
+        watchSync.syncRoutines(ordered)
     }
 
     func addRoutine(name: String) {
