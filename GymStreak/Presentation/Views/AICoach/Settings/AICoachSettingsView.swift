@@ -304,6 +304,7 @@ struct AICoachSettingsView: View {
                 .foregroundStyle(Color.white.opacity(0.3))
                 .padding(.trailing, 16)
         }
+        .contentShape(Rectangle())
     }
 
     // MARK: - Helpers
