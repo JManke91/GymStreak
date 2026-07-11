@@ -193,9 +193,9 @@ Cleaner, smaller architecture — keep it that way:
 
 ---
 
-## 7. Mandatory architecture review
+## 7. Risk-based architecture review
 
-Every code change in this repo gets a second review layer: the **`architecture-reviewer` agent** (`.claude/agents/architecture-reviewer.md`). It diffs the working tree, checks the hard rules in §2 and conventions in §5, and returns PASS/FAIL with file:line findings. CRITICAL findings must be fixed before a change is reported as done. The workflow is defined in CLAUDE.md → "Architecture Review (mandatory)".
+Changes with architectural surface (new/moved files, new types or imports, dependency wiring, changes in `Domain/`/`Data/`, multi-layer diffs, refactors, larger diffs) get a second review layer: the **`architecture-reviewer` agent** (`.claude/agents/architecture-reviewer.md`). It diffs the working tree, checks the hard rules in §2 and conventions in §5, and returns PASS/FAIL with file:line findings. CRITICAL findings must be fixed before a change is reported as done. Trivial edits (strings, comments, small in-place value tweaks) may skip the reviewer with a stated one-line justification. The exact trigger/skip criteria are defined in CLAUDE.md → "Architecture Review (risk-based)".
 
 ---
 

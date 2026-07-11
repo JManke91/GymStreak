@@ -2,6 +2,40 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Things MCP Preference
+
+When using the Things MCP for work in this repository, default to the Things project **"Gym Streak"** (UUID `7BZCT8CLX8v5iaLRqPBHXS`) unless the user explicitly specifies a different project.
+
+## Agent Skills
+
+### Issue tracker
+
+Things is the source of parent work items; implementation slices are local Markdown files. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Local implementation tickets use the standard engineering-skill status vocabulary. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+This is a single-context repository. See `docs/agents/domain.md`.
+
+### MCP servers
+
+Project MCP servers (context7, things) are declared in `.mcp.json` at the repo root and shared via git. See `docs/agents/mcp-servers.md` for setup and the secrets policy (env-var placeholders only — never commit keys).
+
+### Things-to-local-ticket pipeline
+
+When the user asks to implement or break down a Things task, first fetch the explicitly named or identified to-do from the **Gym Streak** Things project. Treat it as the parent work item: do not complete, edit, or duplicate it in Things unless the user explicitly asks.
+
+Before drafting tickets, check whether the fetched description is sufficient and consistent: if it's thin, ambiguous, or conflicts with `CONTEXT.md`/existing code, run `/grill-with-docs` first to sharpen it and resolve the conflict (escalate to `/wayfinder` instead if the effort turns out too large or foggy for a single session). Only once the idea is sharp, invoke `/to-tickets` using the parent task's title, notes, checklist, and relevant codebase context. Draft tracer-bullet vertical slices, show their blocking edges, and ask the user to approve the granularity before publishing. On approval, create one local ticket per slice under `.scratch/<feature-slug>/issues/` in dependency order. The parent Things task is not modified.
+
+For a clearly atomic task, `/to-tickets` should still create a single `01` local ticket so its acceptance criteria and source remain recorded.
+
+**Ticket creation and implementation are separate steps — never chain them implicitly.** Match the user's wording: a request to "create tickets" / "break down" ends the turn once the approved ticket files exist (offering to start ticket 01 is fine; starting it is not). Implementation begins only when the user explicitly asks for it ("implement", "start ticket 01", "work on it", …); then implement only the first unblocked local ticket unless directed otherwise. Never begin implementation while the breakdown is awaiting approval.
+
+**Closing the loop:** when the last local ticket of a feature's `.scratch/<feature-slug>/issues/` set is completed — i.e., every implementation ticket derived from the parent Things task is done — proactively ask the user (via AskUserQuestion) whether the feature is finished and tested. Only on an explicit yes, mark the parent Things to-do as completed via the Things MCP (`update_todo` with `completed: true`). On a no or an unclear answer, leave the Things task untouched. This confirmed prompt is the one sanctioned path for completing the parent task; it does not authorize any other edits to it.
+
 ## Working Style
 
 Principles for how to work in this repo. They apply to every model; they matter most on the capable, long-running models (Fable 5 / Opus) that can otherwise over-plan or over-build.
@@ -21,7 +55,7 @@ Principles for how to work in this repo. They apply to every model; they matter 
 - After building a new feature, make sure the app still compiles
 - When building a new feature make sure to create a .md file in the /docs folder that summarizes all the important details inlcuding what the feature does, how it works, how it's architecutlly structured, what components are involved etc. make sure to include the ios and watch target for documentation. the goal is to be able to reference this file later for quick context
 - For every code change check if an existing feature is modified and if there already is a corresponsing .md file in the /docs folder make sure to update according to the criteria stated for building new .md files.
-- **After ANY code change, run the mandatory architecture review** (see "Architecture Review (mandatory)" below) before reporting the work as done.
+- **Run the risk-based architecture review** (see "Architecture Review (risk-based)" below) before reporting work as done — mandatory when the change has architectural surface, skippable with a one-line justification for trivial edits.
 
 This is an iOS app built with Xcode:
 
@@ -69,15 +103,23 @@ GymStreak/
 - watchOS: **never SwiftData** — `RoutineStore` (App Group UserDefaults) is the watch persistence layer.
 - Workout history models are denormalized copies (history must survive routine edits/deletion).
 
-## Architecture Review (mandatory)
+## Architecture Review (risk-based)
 
-After completing ANY code change (feature, fix, refactor) and before reporting it as done:
+After completing a code change and before reporting it as done, decide whether the change has **architectural surface**.
 
-1. Launch the **`architecture-reviewer`** agent (`.claude/agents/architecture-reviewer.md`) via the Agent tool on the current diff.
-2. **CRITICAL findings must be fixed** and the reviewer re-run until it returns PASS (or PASS WITH WARNINGS with the warnings explicitly acknowledged in your summary).
-3. Include the reviewer's verdict in your final report to the user.
+**Run the `architecture-reviewer` agent** (`.claude/agents/architecture-reviewer.md`, via the Agent tool on the current diff) when ANY of these apply:
 
-This is a second security layer — it does not replace compiling the app or self-review.
+- New, moved, or deleted source files
+- New or changed `import` statements, new types (class/struct/enum/protocol/actor), or new dependency wiring (anything touching `App/AppDependencies.swift`)
+- Changes in `Domain/` or `Data/`, or a diff spanning more than one layer
+- Refactors, or diffs beyond ~50 changed Swift lines
+- Any doubt about whether a Hard rule or deliberate decision is affected — when in doubt, review
+
+When it runs: **CRITICAL findings must be fixed** and the reviewer re-run until it returns PASS (or PASS WITH WARNINGS with the warnings explicitly acknowledged), and include the verdict in your final report.
+
+**Skip the reviewer** for changes with no architectural surface: localization/strings, comments/docs, asset or config tweaks, TestFlight notes, and small in-place edits inside existing function or view bodies (copy/layout/value tweaks, guard fixes, threshold changes) that add no files, types, imports, or dependencies. When skipping, self-check the diff against the Hard rules above and state in your final report that the review was skipped and why (one line).
+
+This remains a second review layer — it does not replace compiling the app or self-review.
 
 ## iOS API Research (mandatory)
 

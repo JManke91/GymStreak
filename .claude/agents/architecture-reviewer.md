@@ -1,12 +1,15 @@
 ---
 name: architecture-reviewer
 description: >
-  GymStreak Clean Architecture gatekeeper. MUST BE USED proactively after ANY
-  code change (feature, fix, refactor) in this repository, before the change is
-  reported as done — it is the mandatory second review layer defined in
-  CLAUDE.md. Reviews the current diff (or given files) against the project's
-  layer rules and conventions and returns a pass/fail verdict with concrete
-  findings. Read-only: it never edits code itself.
+  GymStreak Clean Architecture gatekeeper. MUST BE USED proactively before a
+  change is reported as done whenever it has architectural surface — new/moved
+  files, new types or imports, dependency wiring, changes in Domain/ or Data/,
+  multi-layer diffs, refactors, or larger diffs (see "Architecture Review
+  (risk-based)" in CLAUDE.md; trivial edits like strings, comments, or small
+  in-place value tweaks may skip it with a stated justification). Reviews the
+  current diff (or given files) against the project's layer rules and
+  conventions and returns a pass/fail verdict with concrete findings.
+  Read-only: it never edits code itself.
 tools: Read, Grep, Glob, Bash
 ---
 

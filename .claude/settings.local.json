@@ -89,7 +89,11 @@
       "Bash(git pull *)",
       "Bash(git fetch *)",
       "mcp__context7__query-docs",
-      "Bash(git branch *)"
+      "Bash(git branch *)",
+      "mcp__things__get_projects",
+      "mcp__things__get_todos",
+      "Bash(gh api *)",
+      "Bash(git *)"
     ],
     "defaultMode": "acceptEdits"
   }
