@@ -28,22 +28,11 @@ struct GymStreakApp: App {
     }
 
     var sharedModelContainer: ModelContainer = {
-        let schema = Schema([
-            Routine.self,
-            Exercise.self,
-            RoutineExercise.self,
-            ExerciseSet.self,
-            RoutineExerciseAlternative.self,
-            AlternativeExerciseSet.self,
-            RoutineSchedule.self,
-            WorkoutSession.self,
-            WorkoutExercise.self,
-            WorkoutSet.self
-        ])
+        let schema = Schema(GymStreakSchema.modelTypes)
         let modelConfiguration = ModelConfiguration(
             schema: schema,
             isStoredInMemoryOnly: false,
-            cloudKitDatabase: .private("iCloud.com.jmanke.gymstreak")
+            cloudKitDatabase: .private(GymStreakSchema.cloudKitContainerIdentifier)
         )
 
         do {
@@ -67,6 +56,12 @@ struct GymStreakApp: App {
     init() {
         let mainContext = sharedModelContainer.mainContext
         _dependencies = StateObject(wrappedValue: AppDependencies(modelContext: mainContext))
+
+        #if DEBUG
+        if CloudKitSchemaInitializer.isRequested {
+            Task.detached { CloudKitSchemaInitializer.run() }
+        }
+        #endif
     }
 
     var body: some Scene {
