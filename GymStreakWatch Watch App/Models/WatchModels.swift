@@ -28,6 +28,7 @@ struct WatchExercise: Codable, Identifiable, Hashable {
     var targetRepMin: Int? = nil
     var targetRepMax: Int? = nil
     var exerciseId: UUID? = nil
+    var loadBehaviorRaw: String? = nil
     // Optional (nil default) keeps old cached payloads decodable.
     var alternatives: [WatchExerciseAlternative]? = nil
 
@@ -83,6 +84,7 @@ struct WatchExerciseAlternative: Codable, Identifiable, Hashable {
     let muscleGroup: String
     let sets: [WatchSet]
     let order: Int
+    var loadBehaviorRaw: String? = nil
 }
 
 // MARK: - Active Workout State Models
@@ -99,6 +101,7 @@ struct ActiveWorkoutExercise: Identifiable {
     var targetRepMin: Int? = nil
     var targetRepMax: Int? = nil
     var exerciseId: UUID? = nil
+    var loadBehaviorRaw: String = "resistance"
     // Alternative exercises available for swapping (with their own set schemes).
     var alternatives: [WatchExerciseAlternative] = []
     // Swap tracking: set on the first swap, cleared when reverting to the original.
@@ -106,6 +109,7 @@ struct ActiveWorkoutExercise: Identifiable {
     var plannedExerciseName: String? = nil
     // Captured on first swap so the original exercise can be restored (revert).
     var originalMuscleGroup: String? = nil
+    var originalLoadBehaviorRaw: String? = nil
     var originalSets: [WatchSet]? = nil
 
     var completedSetsCount: Int {
@@ -236,6 +240,7 @@ struct CompletedWatchExercise: Codable {
     var targetRepMin: Int? = nil
     var targetRepMax: Int? = nil
     var exerciseId: UUID? = nil
+    var loadBehaviorRaw: String = "resistance"
     // Set only when the exercise was swapped for an alternative during the workout.
     // name/muscleGroup/exerciseId describe what was actually performed.
     var plannedExerciseId: UUID? = nil
@@ -284,6 +289,7 @@ extension WatchExercise {
             targetRepMin: targetRepMin,
             targetRepMax: targetRepMax,
             exerciseId: exerciseId,
+            loadBehaviorRaw: loadBehaviorRaw ?? "resistance",
             alternatives: alternatives ?? []
         )
     }
@@ -314,6 +320,7 @@ extension ActiveWorkoutExercise {
             targetRepMin: targetRepMin,
             targetRepMax: targetRepMax,
             exerciseId: exerciseId,
+            loadBehaviorRaw: loadBehaviorRaw,
             plannedExerciseId: plannedExerciseId,
             plannedExerciseName: plannedExerciseName
         )

@@ -393,6 +393,7 @@ struct RoutineDetailView: View {
            !(overloadBannerDismissedForExercise[routineExercise.id] ?? false) {
             ProgressiveOverloadBanner(
                 targetRepMax: routineExercise.targetRepMax ?? 0,
+                isAssistance: routineExercise.exercise?.loadBehavior.isCounterweightAssistance == true,
                 onIncrease: {
                     selectedExerciseForOverload = routineExercise
                 },

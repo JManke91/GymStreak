@@ -65,6 +65,14 @@ final class Exercise {
     var name: String = ""
     var muscleGroups: [String] = ["General"]
     var equipmentTypeRaw: String = EquipmentType.dumbbell.rawValue
+    /// Defines whether set weights add resistance or are a counterweight that
+    /// assists the user. Defaults preserve existing exercise data.
+    var loadBehaviorRaw: String = ExerciseLoadBehavior.resistance.rawValue
+    /// Stable identity of a built-in (seeded) exercise — the catalog row's key,
+    /// e.g. "seed.exercise.bench_press". Empty for user-created exercises.
+    /// CloudKit can't enforce uniqueness, so multi-device seeding is instead kept
+    /// duplicate-free by deduplicating on this key (see DefaultContentSeeder).
+    var seedKey: String = ""
     @Relationship(inverse: \RoutineExercise.exercise)
     var routineExercises: [RoutineExercise]? = []
     // Inverse for RoutineExerciseAlternative.exercise — CloudKit integration
@@ -82,11 +90,22 @@ final class Exercise {
         set { equipmentTypeRaw = newValue.rawValue }
     }
 
-    init(name: String, muscleGroups: [String] = ["Chest"], equipmentType: EquipmentType = .dumbbell) {
+    var loadBehavior: ExerciseLoadBehavior {
+        get { ExerciseLoadBehavior(rawValue: loadBehaviorRaw) ?? .resistance }
+        set { loadBehaviorRaw = newValue.rawValue }
+    }
+
+    init(
+        name: String,
+        muscleGroups: [String] = ["Chest"],
+        equipmentType: EquipmentType = .dumbbell,
+        loadBehavior: ExerciseLoadBehavior = .resistance
+    ) {
         self.id = UUID()
         self.name = name
         self.muscleGroups = muscleGroups
         self.equipmentTypeRaw = equipmentType.rawValue
+        self.loadBehaviorRaw = loadBehavior.rawValue
         self.routineExercises = []
         self.alternativeUses = []
         self.createdAt = Date()
@@ -256,6 +275,9 @@ final class WorkoutSession {
     /// The UUID used as HKMetadataKeyExternalUUID when the workout was saved to HealthKit.
     /// Used to correlate this SwiftData record with its HealthKit counterpart.
     var healthKitWorkoutId: UUID?
+    /// Optional body mass recorded for this workout. It lets counterweight
+    /// exercises calculate the actual load moved (body mass - assistance).
+    var bodyWeightKg: Double? = nil
 
     init(routine: Routine) {
         self.id = UUID()
@@ -294,8 +316,13 @@ final class WorkoutSession {
         workoutExercisesList.reduce(0) { total, exercise in
             let completedSets = exercise.setsList.filter(\.isCompleted)
             return total + completedSets.reduce(0) { subtotal, set in
-                let weight = exercise.progressiveOverloadApplied ? set.plannedWeight : set.actualWeight
+                let enteredWeight = exercise.progressiveOverloadApplied ? set.plannedWeight : set.actualWeight
                 let reps = exercise.progressiveOverloadApplied ? set.plannedReps : set.actualReps
+                let weight = ExerciseLoadMetrics.effectiveWeight(
+                    enteredWeight: enteredWeight,
+                    behavior: exercise.loadBehavior,
+                    bodyWeightKg: bodyWeightKg
+                ) ?? 0
                 return subtotal + (weight * Double(reps))
             }
         }
@@ -332,6 +359,9 @@ final class WorkoutExercise {
     var exerciseName: String = "" // Denormalized for history display
     var muscleGroups: [String] = []
     var exerciseId: UUID? = nil // Links back to Exercise library for reliable filtering
+    /// Snapshot of the source exercise's load behavior. Historical workouts
+    /// must not change meaning when the library exercise is edited later.
+    var loadBehaviorRaw: String = ExerciseLoadBehavior.resistance.rawValue
     @Relationship(deleteRule: .cascade, inverse: \WorkoutSet.workoutExercise)
     var sets: [WorkoutSet]? = []
     var order: Int = 0
@@ -359,6 +389,7 @@ final class WorkoutExercise {
         self.exerciseId = routineExercise.exercise?.id
         self.exerciseName = routineExercise.exercise?.name ?? "Unknown"
         self.muscleGroups = routineExercise.exercise?.muscleGroups ?? ["General"]
+        self.loadBehaviorRaw = routineExercise.exercise?.loadBehavior.rawValue ?? ExerciseLoadBehavior.resistance.rawValue
         self.order = order
         // Copy superset fields from routine
         self.supersetId = routineExercise.supersetId
@@ -372,11 +403,18 @@ final class WorkoutExercise {
         }
     }
 
-    init(exerciseName: String, muscleGroups: [String], order: Int, exerciseId: UUID? = nil) {
+    init(
+        exerciseName: String,
+        muscleGroups: [String],
+        order: Int,
+        exerciseId: UUID? = nil,
+        loadBehavior: ExerciseLoadBehavior = .resistance
+    ) {
         self.id = UUID()
         self.exerciseId = exerciseId
         self.exerciseName = exerciseName
         self.muscleGroups = muscleGroups
+        self.loadBehaviorRaw = loadBehavior.rawValue
         self.order = order
         self.sets = []
     }
@@ -390,6 +428,11 @@ final class WorkoutExercise {
     /// Prefers exerciseId (links to Exercise library) with fallback to lowercased name for legacy data.
     var stableKey: String {
         exerciseId?.uuidString ?? exerciseName.lowercased()
+    }
+
+    var loadBehavior: ExerciseLoadBehavior {
+        get { ExerciseLoadBehavior(rawValue: loadBehaviorRaw) ?? .resistance }
+        set { loadBehaviorRaw = newValue.rawValue }
     }
 
     /// Convenience computed property for backwards compatibility

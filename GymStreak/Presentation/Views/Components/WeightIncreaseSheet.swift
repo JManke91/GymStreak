@@ -18,6 +18,14 @@ struct WeightIncreaseSheet: View {
         routineExercise.setsList.first?.weight ?? 0
     }
 
+    private var isAssistance: Bool {
+        routineExercise.exercise?.loadBehavior.isCounterweightAssistance == true
+    }
+
+    private var resultingWeight: Double {
+        isAssistance ? max(0, currentWeight - selectedIncrement) : currentWeight + selectedIncrement
+    }
+
     private var currentReps: Int {
         routineExercise.setsList.first?.reps ?? 0
     }
@@ -55,12 +63,12 @@ struct WeightIncreaseSheet: View {
                                 Image(systemName: selectedIncrement == increment ? "circle.inset.filled" : "circle")
                                     .foregroundStyle(selectedIncrement == increment ? .orange : .secondary)
 
-                                Text("+\(String(format: "%.2g", increment)) kg")
+                                Text("\(isAssistance ? "−" : "+")\(String(format: "%.2g", increment)) kg")
                                     .font(.body.weight(.medium))
 
                                 Spacer()
 
-                                Text("\(String(format: "%.1f", currentWeight + increment)) kg")
+                                Text("\(String(format: "%.1f", isAssistance ? max(0, currentWeight - increment) : currentWeight + increment)) kg")
                                     .font(.subheadline)
                                     .foregroundStyle(.secondary)
                             }
@@ -87,10 +95,11 @@ struct WeightIncreaseSheet: View {
                 HStack(spacing: 6) {
                     Image(systemName: "arrow.right.circle.fill")
                         .foregroundStyle(.orange)
-                    Text("rep_range.new_state".localized(
-                        String(format: "%.1f", currentWeight + selectedIncrement),
-                        targetMin
-                    ))
+                    Text(
+                        isAssistance
+                            ? String(format: "exercise.assistance.value".localized, String(format: "%.1f", resultingWeight))
+                            : "rep_range.new_state".localized(String(format: "%.1f", resultingWeight), targetMin)
+                    )
                     .font(.subheadline.weight(.medium))
                 }
                 .padding(.horizontal, 16)

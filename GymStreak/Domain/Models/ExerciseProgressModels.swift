@@ -154,10 +154,28 @@ struct ExerciseProgressDataPoint: Identifiable {
 struct ExerciseProgressData {
     let exerciseName: String
     let dataPoints: [ExerciseProgressDataPoint]
+    let loadBehavior: ExerciseLoadBehavior
+    /// Assistance workouts only expose effective-load strength metrics when
+    /// every point has a stored body-mass snapshot.
+    let usesEffectiveLoad: Bool
+
+    init(
+        exerciseName: String,
+        dataPoints: [ExerciseProgressDataPoint],
+        loadBehavior: ExerciseLoadBehavior = .resistance,
+        usesEffectiveLoad: Bool = false
+    ) {
+        self.exerciseName = exerciseName
+        self.dataPoints = dataPoints
+        self.loadBehavior = loadBehavior
+        self.usesEffectiveLoad = usesEffectiveLoad
+    }
 
     /// Personal record (highest max weight achieved)
     var personalRecord: Double? {
-        dataPoints.map(\.maxWeight).max()
+        loadBehavior.isCounterweightAssistance && !usesEffectiveLoad
+            ? dataPoints.map(\.maxWeight).min()
+            : dataPoints.map(\.maxWeight).max()
     }
 
     /// Personal record for estimated 1RM
@@ -178,7 +196,10 @@ struct ExerciseProgressData {
 
         guard firstValue > 0 else { return nil }
 
-        return ((lastValue - firstValue) / firstValue) * 100
+        let delta = loadBehavior.isCounterweightAssistance && !usesEffectiveLoad
+            ? firstValue - lastValue
+            : lastValue - firstValue
+        return (delta / firstValue) * 100
     }
 
     /// Total number of sessions/workouts
@@ -211,6 +232,7 @@ struct PreviousExercisePerformance {
     let date: Date
     let routineName: String
     let sets: [SetPerformance]
+    let effectiveTotalVolume: Double?
 
     struct SetPerformance {
         let reps: Int
@@ -243,12 +265,14 @@ struct PreviousExercisePerformance {
 
 struct ExerciseComparisonResult {
     let exerciseName: String
+    let loadBehavior: ExerciseLoadBehavior
     let currentPerformance: CurrentExercisePerformance
     let previousPerformance: PreviousExercisePerformance?
 
     struct CurrentExercisePerformance {
         let sets: [SetComparison]
         let totalVolume: Double
+        let effectiveTotalVolume: Double?
         let completedSetsCount: Int
         let totalReps: Int
 
@@ -277,15 +301,25 @@ struct ExerciseComparisonResult {
         previousPerformance == nil
     }
 
+    var hasComparableVolume: Bool {
+        guard let previousPerformance else { return false }
+        return currentPerformance.effectiveTotalVolume != nil && previousPerformance.effectiveTotalVolume != nil
+    }
+
     /// Volume change compared to previous
     var volumeDelta: Double? {
-        guard let previous = previousPerformance else { return nil }
-        return currentPerformance.totalVolume - previous.totalVolume
+        guard let previous = previousPerformance,
+              let currentVolume = currentPerformance.effectiveTotalVolume,
+              let previousVolume = previous.effectiveTotalVolume else { return nil }
+        return currentVolume - previousVolume
     }
 
     /// Volume change percentage
     var volumeDeltaPercentage: Double? {
-        guard let previous = previousPerformance, previous.totalVolume > 0 else { return nil }
-        return ((currentPerformance.totalVolume - previous.totalVolume) / previous.totalVolume) * 100
+        guard let previous = previousPerformance,
+              let currentVolume = currentPerformance.effectiveTotalVolume,
+              let previousVolume = previous.effectiveTotalVolume,
+              previousVolume > 0 else { return nil }
+        return ((currentVolume - previousVolume) / previousVolume) * 100
     }
 }

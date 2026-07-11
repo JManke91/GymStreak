@@ -29,6 +29,7 @@ class ExerciseProgressService: ExerciseProgressProviding {
     ) -> ExerciseProgressData {
         let startDate = timeframe.startDate
         let nameIsUnique = isLiveNameUnique(exerciseName)
+        let loadBehavior = loadBehavior(for: exerciseId, exerciseName: exerciseName)
 
         // Fetch all completed workout sessions within the timeframe
         let descriptor = FetchDescriptor<WorkoutSession>(
@@ -40,12 +41,19 @@ class ExerciseProgressService: ExerciseProgressProviding {
 
         do {
             let sessions = try modelContext.fetch(descriptor)
+            let matchedBySession = sessions.map { session in
+                (session, session.workoutExercisesList.filter {
+                    Self.matches($0, exerciseId: exerciseId, exerciseName: exerciseName, nameIsUnique: nameIsUnique)
+                        && $0.loadBehavior == loadBehavior
+                })
+            }
+            let relevant = matchedBySession.filter { !$0.1.isEmpty }
+            let usesEffectiveLoad = loadBehavior.isCounterweightAssistance
+                && !relevant.isEmpty
+                && relevant.allSatisfy { $0.0.bodyWeightKg != nil }
             var dataPoints: [ExerciseProgressDataPoint] = []
 
-            for session in sessions {
-                let matchingExercises = session.workoutExercisesList.filter {
-                    Self.matches($0, exerciseId: exerciseId, exerciseName: exerciseName, nameIsUnique: nameIsUnique)
-                }
+            for (session, matchingExercises) in matchedBySession {
 
                 // Aggregate all matching exercises into a single data point per session
                 var sessionMaxWeight: Double = 0
@@ -54,6 +62,7 @@ class ExerciseProgressService: ExerciseProgressProviding {
                 var sessionTotalSets: Int = 0
                 var sessionBest1RM: Double = 0
                 var hasCompletedSets = false
+                var hasAssistanceValue = false
 
                 for exercise in matchingExercises {
                     let completedSets = exercise.setsList.filter(\.isCompleted)
@@ -61,18 +70,47 @@ class ExerciseProgressService: ExerciseProgressProviding {
                     hasCompletedSets = true
 
                     let usePlanned = exercise.progressiveOverloadApplied
-                    let maxWeight = completedSets.map { usePlanned ? $0.plannedWeight : $0.actualWeight }.max() ?? 0
-                    sessionMaxWeight = max(sessionMaxWeight, maxWeight)
+                    let enteredWeights = completedSets.map { usePlanned ? $0.plannedWeight : $0.actualWeight }
+                    if loadBehavior.isCounterweightAssistance && !usesEffectiveLoad {
+                        let leastAssistance = enteredWeights.min() ?? 0
+                        sessionMaxWeight = hasAssistanceValue
+                            ? min(sessionMaxWeight, leastAssistance)
+                            : leastAssistance
+                        hasAssistanceValue = true
+                    } else {
+                        let effectiveWeights = enteredWeights.compactMap {
+                            ExerciseLoadMetrics.effectiveWeight(
+                                enteredWeight: $0,
+                                behavior: loadBehavior,
+                                bodyWeightKg: session.bodyWeightKg
+                            )
+                        }
+                        sessionMaxWeight = max(sessionMaxWeight, effectiveWeights.max() ?? 0)
+                    }
 
-                    sessionTotalVolume += completedSets.reduce(0) {
-                        let w = usePlanned ? $1.plannedWeight : $1.actualWeight
-                        let r = usePlanned ? $1.plannedReps : $1.actualReps
-                        return $0 + (w * Double(r))
+                    if usesEffectiveLoad || !loadBehavior.isCounterweightAssistance {
+                        sessionTotalVolume += completedSets.reduce(0) {
+                            let entered = usePlanned ? $1.plannedWeight : $1.actualWeight
+                            let reps = usePlanned ? $1.plannedReps : $1.actualReps
+                            let weight = ExerciseLoadMetrics.effectiveWeight(
+                                enteredWeight: entered,
+                                behavior: loadBehavior,
+                                bodyWeightKg: session.bodyWeightKg
+                            ) ?? 0
+                            return $0 + (weight * Double(reps))
+                        }
                     }
                     sessionTotalReps += completedSets.reduce(0) { $0 + (usePlanned ? $1.plannedReps : $1.actualReps) }
                     sessionTotalSets += completedSets.count
 
-                    let estimated1RM = calculateEstimated1RM(from: completedSets, usePlannedValues: usePlanned)
+                    let estimated1RM = usesEffectiveLoad || !loadBehavior.isCounterweightAssistance
+                        ? calculateEstimated1RM(
+                            from: completedSets,
+                            usePlannedValues: usePlanned,
+                            behavior: loadBehavior,
+                            bodyWeightKg: session.bodyWeightKg
+                        )
+                        : 0
                     sessionBest1RM = max(sessionBest1RM, estimated1RM)
                 }
 
@@ -93,11 +131,18 @@ class ExerciseProgressService: ExerciseProgressProviding {
 
             return ExerciseProgressData(
                 exerciseName: exerciseName,
-                dataPoints: dataPoints
+                dataPoints: dataPoints,
+                loadBehavior: loadBehavior,
+                usesEffectiveLoad: usesEffectiveLoad
             )
         } catch {
             print("Error fetching progress data: \(error)")
-            return ExerciseProgressData(exerciseName: exerciseName, dataPoints: [])
+            return ExerciseProgressData(
+                exerciseName: exerciseName,
+                dataPoints: [],
+                loadBehavior: loadBehavior,
+                usesEffectiveLoad: false
+            )
         }
     }
 
@@ -111,7 +156,8 @@ class ExerciseProgressService: ExerciseProgressProviding {
     func previousPerformance(
         for exerciseName: String,
         exerciseId: UUID? = nil,
-        before date: Date
+        before date: Date,
+        expectedLoadBehavior: ExerciseLoadBehavior? = nil
     ) -> PreviousExercisePerformance? {
         let nameIsUnique = isLiveNameUnique(exerciseName)
 
@@ -130,6 +176,7 @@ class ExerciseProgressService: ExerciseProgressProviding {
             for session in sessions {
                 let matchingExercise = session.workoutExercisesList.first {
                     Self.matches($0, exerciseId: exerciseId, exerciseName: exerciseName, nameIsUnique: nameIsUnique)
+                        && (expectedLoadBehavior == nil || $0.loadBehavior == expectedLoadBehavior)
                 }
 
                 guard let exercise = matchingExercise else { continue }
@@ -146,7 +193,13 @@ class ExerciseProgressService: ExerciseProgressProviding {
                 return PreviousExercisePerformance(
                     date: session.startTime,
                     routineName: session.routineName,
-                    sets: sets
+                    sets: sets,
+                    effectiveTotalVolume: effectiveVolume(
+                        from: exercise.setsList.filter(\.isCompleted),
+                        usePlannedValues: usePlanned,
+                        behavior: exercise.loadBehavior,
+                        bodyWeightKg: session.bodyWeightKg
+                    )
                 )
             }
 
@@ -166,7 +219,12 @@ class ExerciseProgressService: ExerciseProgressProviding {
         var results: [ExerciseComparisonResult] = []
 
         for exercise in workout.workoutExercisesList.sorted(by: { $0.order < $1.order }) {
-            let previous = previousPerformance(for: exercise.exerciseName, exerciseId: exercise.exerciseId, before: workout.startTime)
+            let previous = previousPerformance(
+                for: exercise.exerciseName,
+                exerciseId: exercise.exerciseId,
+                before: workout.startTime,
+                expectedLoadBehavior: exercise.loadBehavior
+            )
 
             let completedSets = exercise.setsList.filter(\.isCompleted)
             let sortedSets = exercise.setsList.sorted(by: { $0.order < $1.order })
@@ -199,16 +257,24 @@ class ExerciseProgressService: ExerciseProgressProviding {
                 return subtotal + (w * Double(r))
             }
             let totalReps = completedSets.reduce(0) { $0 + (usePlanned ? $1.plannedReps : $1.actualReps) }
+            let effectiveTotalVolume = effectiveVolume(
+                from: completedSets,
+                usePlannedValues: usePlanned,
+                behavior: exercise.loadBehavior,
+                bodyWeightKg: workout.bodyWeightKg
+            )
 
             let currentPerformance = ExerciseComparisonResult.CurrentExercisePerformance(
                 sets: setComparisons,
                 totalVolume: totalVolume,
+                effectiveTotalVolume: effectiveTotalVolume,
                 completedSetsCount: completedSets.count,
                 totalReps: totalReps
             )
 
             let result = ExerciseComparisonResult(
                 exerciseName: exercise.exerciseName,
+                loadBehavior: exercise.loadBehavior,
                 currentPerformance: currentPerformance,
                 previousPerformance: previous
             )
@@ -262,25 +328,69 @@ class ExerciseProgressService: ExerciseProgressProviding {
         }
     }
 
+    private func loadBehavior(for exerciseId: UUID?, exerciseName: String) -> ExerciseLoadBehavior {
+        do {
+            let exercises = try modelContext.fetch(FetchDescriptor<Exercise>())
+            if let exerciseId, let exercise = exercises.first(where: { $0.id == exerciseId }) {
+                return exercise.loadBehavior
+            }
+            return exercises.first { $0.name.caseInsensitiveCompare(exerciseName) == .orderedSame }?.loadBehavior ?? .resistance
+        } catch {
+            return .resistance
+        }
+    }
+
     // MARK: - Private Helpers
 
     /// Calculates estimated 1RM using Epley formula
     /// Uses the best set (highest estimated 1RM) from the given sets
-    private func calculateEstimated1RM(from sets: [WorkoutSet], usePlannedValues: Bool = false) -> Double {
+    private func calculateEstimated1RM(
+        from sets: [WorkoutSet],
+        usePlannedValues: Bool = false,
+        behavior: ExerciseLoadBehavior,
+        bodyWeightKg: Double?
+    ) -> Double {
         guard !sets.isEmpty else { return 0 }
 
         var best1RM: Double = 0
 
         for set in sets {
-            let weight = usePlannedValues ? set.plannedWeight : set.actualWeight
+            let enteredWeight = usePlannedValues ? set.plannedWeight : set.actualWeight
             let reps = usePlannedValues ? set.plannedReps : set.actualReps
-            guard set.isCompleted, weight > 0 else { continue }
+            guard set.isCompleted,
+                  let weight = ExerciseLoadMetrics.effectiveWeight(
+                    enteredWeight: enteredWeight,
+                    behavior: behavior,
+                    bodyWeightKg: bodyWeightKg
+                  ),
+                  weight > 0 else { continue }
 
             // Epley formula: weight * (1 + reps/30)
-            let estimated = weight * (1 + Double(reps) / 30.0)
+            let estimated = ExerciseLoadMetrics.estimatedOneRepMax(weight: weight, reps: reps)
             best1RM = max(best1RM, estimated)
         }
 
         return best1RM
+    }
+
+    private func effectiveVolume(
+        from sets: [WorkoutSet],
+        usePlannedValues: Bool,
+        behavior: ExerciseLoadBehavior,
+        bodyWeightKg: Double?
+    ) -> Double? {
+        if behavior.isCounterweightAssistance && bodyWeightKg == nil {
+            return nil
+        }
+        return sets.reduce(0) { total, set in
+            let enteredWeight = usePlannedValues ? set.plannedWeight : set.actualWeight
+            let reps = usePlannedValues ? set.plannedReps : set.actualReps
+            let effectiveWeight = ExerciseLoadMetrics.effectiveWeight(
+                enteredWeight: enteredWeight,
+                behavior: behavior,
+                bodyWeightKg: bodyWeightKg
+            ) ?? 0
+            return total + effectiveWeight * Double(reps)
+        }
     }
 }

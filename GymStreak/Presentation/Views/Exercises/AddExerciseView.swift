@@ -15,6 +15,7 @@ struct AddExerciseView: View {
     @State private var exerciseName = ""
     @State private var muscleGroups: [String] = ["Chest"]
     @State private var equipmentType: EquipmentType = .dumbbell
+    @State private var loadBehavior: ExerciseLoadBehavior = .resistance
 
     var presentationMode: ExerciseFormPresentationMode = .sheet
     var exerciseToEdit: Exercise? = nil
@@ -65,6 +66,7 @@ struct AddExerciseView: View {
                 exerciseName = exercise.name
                 muscleGroups = exercise.muscleGroups
                 equipmentType = exercise.equipmentType
+                loadBehavior = exercise.loadBehavior
             }
         }
     }
@@ -148,6 +150,22 @@ struct AddExerciseView: View {
                         }
                     }
                 }
+                .padding(.bottom, 22)
+
+                formLabel("exercise.load_behavior".localized)
+                Picker("exercise.load_behavior".localized, selection: $loadBehavior) {
+                    Text("exercise.load_behavior.resistance".localized).tag(ExerciseLoadBehavior.resistance)
+                    Text("exercise.load_behavior.assistance".localized).tag(ExerciseLoadBehavior.counterweightAssistance)
+                }
+                .pickerStyle(.segmented)
+                Text(
+                    loadBehavior.isCounterweightAssistance
+                        ? "exercise.load_behavior.assistance.detail".localized
+                        : "exercise.load_behavior.resistance.detail".localized
+                )
+                .font(.system(size: 12))
+                .foregroundStyle(Color.white.opacity(0.45))
+                .padding(.top, 8)
                 .padding(.bottom, 22)
 
                 // Equipment
@@ -259,12 +277,14 @@ struct AddExerciseView: View {
             exercise.name = trimmedName
             exercise.muscleGroups = muscleGroups
             exercise.equipmentType = equipmentType
+            exercise.loadBehavior = loadBehavior
             viewModel.updateExercise(exercise)
         } else {
             let newExercise = viewModel.addExercise(
                 name: trimmedName,
                 muscleGroups: muscleGroups,
-                equipmentType: equipmentType
+                equipmentType: equipmentType,
+                loadBehavior: loadBehavior
             )
             if let newExercise = newExercise {
                 onExerciseCreated?(newExercise)

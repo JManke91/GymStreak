@@ -84,7 +84,8 @@ final class WatchWorkoutIngestionService {
                 exerciseName: completedExercise.name,
                 muscleGroups: [completedExercise.muscleGroup],
                 order: completedExercise.order,
-                exerciseId: completedExercise.exerciseId
+                exerciseId: completedExercise.exerciseId,
+                loadBehavior: ExerciseLoadBehavior(rawValue: completedExercise.loadBehaviorRaw) ?? .resistance
             )
             workoutExercise.workoutSession = workoutSession
             // Copy superset fields from completed exercise

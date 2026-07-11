@@ -29,6 +29,7 @@ struct WatchExercise: Codable, Identifiable, Hashable {
     var targetRepMin: Int? = nil
     var targetRepMax: Int? = nil
     var exerciseId: UUID? = nil
+    var loadBehaviorRaw: String? = nil
     // Optional (nil default) keeps old cached payloads decodable.
     var alternatives: [WatchExerciseAlternative]? = nil
 }
@@ -48,6 +49,7 @@ struct WatchExerciseAlternative: Codable, Identifiable, Hashable {
     let muscleGroup: String
     let sets: [WatchSet]
     let order: Int
+    var loadBehaviorRaw: String? = nil
 }
 
 // MARK: - Completed Workout for syncing back to iOS
@@ -96,6 +98,7 @@ struct CompletedWatchExercise: Codable {
     var targetRepMin: Int? = nil
     var targetRepMax: Int? = nil
     var exerciseId: UUID? = nil
+    var loadBehaviorRaw: String? = nil
     // Set only when the exercise was swapped for an alternative during the workout.
     // name/muscleGroup/exerciseId describe what was actually performed.
     var plannedExerciseId: UUID? = nil
@@ -149,6 +152,7 @@ extension CompletedWatchExercise {
             targetRepMin: targetRepMin,
             targetRepMax: targetRepMax,
             exerciseId: exerciseId,
+            loadBehaviorRaw: loadBehaviorRaw ?? ExerciseLoadBehavior.resistance.rawValue,
             plannedExerciseId: plannedExerciseId,
             plannedExerciseName: plannedExerciseName
         )
@@ -198,6 +202,7 @@ extension Routine {
                     targetRepMin: routineExercise.targetRepMin,
                     targetRepMax: routineExercise.targetRepMax,
                     exerciseId: routineExercise.exercise?.id,
+                    loadBehaviorRaw: routineExercise.exercise?.loadBehavior.rawValue ?? ExerciseLoadBehavior.resistance.rawValue,
                     alternatives: routineExercise.alternativesList.compactMap { alternative in
                         guard let exercise = alternative.exercise else { return nil }
                         return WatchExerciseAlternative(
@@ -213,7 +218,8 @@ extension Routine {
                                     restTime: set.restTime
                                 )
                             },
-                            order: alternative.order
+                            order: alternative.order,
+                            loadBehaviorRaw: exercise.loadBehavior.rawValue
                         )
                     }
                 )

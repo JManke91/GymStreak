@@ -7,6 +7,7 @@ import SwiftUI
 
 struct ProgressiveOverloadBanner: View {
     let targetRepMax: Int
+    var isAssistance: Bool = false
     let onIncrease: () -> Void
     let onDismiss: () -> Void
 
@@ -31,7 +32,7 @@ struct ProgressiveOverloadBanner: View {
                 UIImpactFeedbackGenerator(style: .medium).impactOccurred()
                 onIncrease()
             } label: {
-                Text("rep_range.increase".localized)
+                Text((isAssistance ? "exercise.reduce_assistance" : "rep_range.increase").localized)
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(DesignSystem.Colors.textOnTint)
                     .padding(.horizontal, 12)

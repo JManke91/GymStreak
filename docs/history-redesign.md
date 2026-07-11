@@ -28,6 +28,7 @@ Four new concepts were introduced to make the new UI meaningful on top of existi
 | **Weekly goal** (X of Y) | `UserDefaults` key `history.weeklyGoal`, defaults to **4**. | `HistoryStatsService.weeklyGoal` |
 | **Personal Record** (per exercise, per session) | Computed on the fly from the full session history: a session earns a PR for exercise E if its max estimated 1RM (Epley) for E exceeds every earlier session's max for E. | `PersonalRecordService.computePRs(sessions:)` |
 | **Exercise identity** (`exerciseId: UUID?`) | `WorkoutExercise.exerciseId` — links each workout exercise back to its `Exercise` library entry by ID. Used as the primary grouping/filtering key across all progress services (`stableKey`). Falls back to `exerciseName.lowercased()` for legacy data without an `exerciseId`. | `WorkoutExercise.stableKey` computed property |
+| **Load behavior** | `Exercise.loadBehavior`, snapshotted on `WorkoutExercise`. `.resistance` means larger kg is harder; `.counterweightAssistance` means larger kg gives more help. | `ExerciseLoadMetrics` |
 
 ### New services
 - `HistoryStatsService` — WeekHero aggregation (completed count, volume, volume trend, streak weeks, PR count), month grouping, week-day strip, monthly totals. All pure functions on `[WorkoutSession]`.

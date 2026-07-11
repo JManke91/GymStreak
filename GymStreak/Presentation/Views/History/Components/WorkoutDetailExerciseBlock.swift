@@ -99,7 +99,12 @@ struct WorkoutDetailExerciseBlock: View {
         let isCompleted = set.isCompleted
         let isPRSet = set.id == prDetail?.setId
         let setComparison = setComparisons.indices.contains(index) ? setComparisons[index] : nil
-        let delta = SetDeltaChip.Delta(comparison: setComparison, isCompleted: isCompleted, hasPreviousSession: comparison?.previousPerformance != nil)
+        let delta = SetDeltaChip.Delta(
+            comparison: setComparison,
+            isCompleted: isCompleted,
+            hasPreviousSession: comparison?.previousPerformance != nil,
+            loadBehavior: exercise.loadBehavior
+        )
 
         return VStack(spacing: 4) {
             HStack(spacing: 3) {
@@ -165,13 +170,17 @@ struct ExerciseComparisonStrip: View {
             .map(\.currentWeight)
             .max() ?? 0
         let previousTop = previous.bestSet?.weight ?? 0
-        return SetDeltaChip.Delta.fromWeight(current: currentTop, previous: previousTop)
+        return SetDeltaChip.Delta.fromWeight(
+            current: currentTop,
+            previous: previousTop,
+            loadBehavior: comparison.loadBehavior
+        )
     }
 
     private var volumeDelta: SetDeltaChip.Delta {
         SetDeltaChip.Delta.fromVolume(
-            current: comparison.currentPerformance.totalVolume,
-            previous: previous.totalVolume
+            current: comparison.currentPerformance.effectiveTotalVolume ?? 0,
+            previous: previous.effectiveTotalVolume ?? 0
         )
     }
 
@@ -188,7 +197,9 @@ struct ExerciseComparisonStrip: View {
                 .font(.system(size: 10, weight: .medium, design: .rounded))
                 .foregroundStyle(Color.white.opacity(0.4))
             metricGroup(label: "history.detail.top_weight".localized, delta: topWeightDelta)
-            metricGroup(label: "history.detail.volume_short".localized, delta: volumeDelta)
+            if comparison.hasComparableVolume {
+                metricGroup(label: "history.detail.volume_short".localized, delta: volumeDelta)
+            }
             Spacer(minLength: 0)
         }
     }
@@ -231,8 +242,16 @@ struct SetDeltaChip: View {
         case neutral
         case new
 
-        static func fromWeight(current: Double, previous: Double) -> Delta {
-            let diff = current - previous
+        static func fromWeight(
+            current: Double,
+            previous: Double,
+            loadBehavior: ExerciseLoadBehavior = .resistance
+        ) -> Delta {
+            let diff = ExerciseLoadMetrics.signedEnteredWeightDelta(
+                current: current,
+                previous: previous,
+                behavior: loadBehavior
+            )
             if abs(diff) < 0.01 { return .neutral }
             let formatted = String(format: "%@%g kg", diff > 0 ? "+" : "−", abs(diff))
             return diff > 0 ? .gain(formatted) : .loss(formatted)
@@ -255,7 +274,12 @@ struct SetDeltaChip: View {
             return diff > 0 ? .gain(formatted) : .loss(formatted)
         }
 
-        init?(comparison: ExerciseComparisonResult.CurrentExercisePerformance.SetComparison?, isCompleted: Bool, hasPreviousSession: Bool) {
+        init?(
+            comparison: ExerciseComparisonResult.CurrentExercisePerformance.SetComparison?,
+            isCompleted: Bool,
+            hasPreviousSession: Bool,
+            loadBehavior: ExerciseLoadBehavior = .resistance
+        ) {
             guard isCompleted, hasPreviousSession else { return nil }
             guard let c = comparison else { return nil }
             if c.previousWeight == nil && c.previousReps == nil {
@@ -265,7 +289,11 @@ struct SetDeltaChip: View {
             if let prevWeight = c.previousWeight {
                 let weightDelta = c.currentWeight - prevWeight
                 if abs(weightDelta) >= 0.01 {
-                    self = Delta.fromWeight(current: c.currentWeight, previous: prevWeight)
+                    self = Delta.fromWeight(
+                        current: c.currentWeight,
+                        previous: prevWeight,
+                        loadBehavior: loadBehavior
+                    )
                     return
                 }
             }

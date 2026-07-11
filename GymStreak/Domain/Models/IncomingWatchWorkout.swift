@@ -45,6 +45,7 @@ struct IncomingWatchExercise {
     let targetRepMin: Int?
     let targetRepMax: Int?
     let exerciseId: UUID?
+    let loadBehaviorRaw: String
     /// Set only when the exercise was swapped for an alternative during the
     /// workout; `name`/`exerciseId` describe what was actually performed.
     let plannedExerciseId: UUID?

@@ -261,12 +261,12 @@ private struct ExerciseProgressChartViewInternal: View {
 
     private var metricTabs: some View {
         HStack(spacing: 16) {
-            ForEach(ProgressMetric.allCases) { metric in
+            ForEach(viewModel.availableMetrics) { metric in
                 Button {
                     HapticManager.shared.selection()
                     viewModel.updateMetric(metric)
                 } label: {
-                    Text(metric.localizedTitle)
+                    Text(metric == .maxWeight ? viewModel.selectedMetricTitle : metric.localizedTitle)
                         .font(.system(size: 13, weight: viewModel.selectedMetric == metric ? .bold : .medium, design: .rounded))
                         .foregroundStyle(viewModel.selectedMetric == metric ? Color.white : Color.white.opacity(0.45))
                         .padding(.bottom, 4)
@@ -298,7 +298,7 @@ private struct ExerciseProgressChartViewInternal: View {
 
     private var chartHeadline: some View {
         VStack(alignment: .leading, spacing: 2) {
-            Text(viewModel.selectedMetric.localizedTitle.uppercased())
+            Text(viewModel.selectedMetricTitle.uppercased())
                 .font(.system(size: 10, weight: .semibold))
                 .tracking(0.6)
                 .foregroundStyle(Color.white.opacity(0.4))

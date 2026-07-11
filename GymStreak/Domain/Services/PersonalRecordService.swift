@@ -57,10 +57,16 @@ struct PersonalRecordService {
                 let nameKey = exercise.stableKey
                 let usePlanned = exercise.progressiveOverloadApplied
                 for set in exercise.setsList where set.isCompleted {
-                    let weight = usePlanned ? set.plannedWeight : set.actualWeight
+                    let enteredWeight = usePlanned ? set.plannedWeight : set.actualWeight
                     let reps   = usePlanned ? set.plannedReps   : set.actualReps
-                    guard weight > 0, reps > 0 else { continue }
-                    let estimated = weight * (1 + Double(reps) / 30.0)
+                    guard reps > 0,
+                          enteredWeight > 0 || exercise.loadBehavior.isCounterweightAssistance,
+                          let weight = ExerciseLoadMetrics.effectiveWeight(
+                            enteredWeight: enteredWeight,
+                            behavior: exercise.loadBehavior,
+                            bodyWeightKg: session.bodyWeightKg
+                          ) else { continue }
+                    let estimated = ExerciseLoadMetrics.estimatedOneRepMax(weight: weight, reps: reps)
                     if estimated > (sessionBests[nameKey]?.estimated ?? 0) {
                         sessionBests[nameKey] = (set.id, weight, reps, estimated)
                     }

@@ -21,6 +21,9 @@ struct ActiveWorkoutView: View {
             ScrollView {
                 LazyVStack(spacing: 16) {
                     if let session = viewModel.currentSession {
+                        if session.workoutExercisesList.contains(where: { $0.loadBehavior.isCounterweightAssistance }) {
+                            WorkoutBodyWeightCard(session: session, viewModel: viewModel)
+                        }
                         let workoutLabels = SupersetLabelProvider.labels(for: session.workoutExercisesList)
                         ForEach(Array(session.exercisesGroupedBySupersets.enumerated()), id: \.offset) { groupIndex, exerciseGroup in
                             if exerciseGroup.count > 1 {
@@ -520,6 +523,7 @@ struct ExerciseCard: View {
             } else if workoutExercise.allCompletedSetsAtUpperLimit && !overloadBannerDismissed {
                 ProgressiveOverloadBanner(
                     targetRepMax: workoutExercise.targetRepMax ?? 0,
+                    isAssistance: workoutExercise.loadBehavior.isCounterweightAssistance,
                     onIncrease: {
                         selectedRoutineExerciseForOverload = matchingRoutineExercise
                     },
@@ -783,7 +787,11 @@ struct WorkoutSetRow: View {
                                 .foregroundStyle(repRangeColor ?? .secondary)
                             Text("×")
                                 .foregroundStyle(.secondary)
-                            Text("set.weight".localized(set.actualWeight))
+                            Text(
+                                workoutExercise.loadBehavior.isCounterweightAssistance
+                                    ? String(format: "exercise.assistance.value".localized, String(format: "%g", set.actualWeight))
+                                    : "set.weight".localized(set.actualWeight)
+                            )
                                 .foregroundStyle(.secondary)
 
                             // Rep range progress badge
@@ -872,7 +880,9 @@ struct WorkoutSetRow: View {
                         // Weight input with contextual banner
                         VStack(spacing: 8) {
                             WeightInput(
-                                title: "set.weight_label".localized,
+                                title: workoutExercise.loadBehavior.isCounterweightAssistance
+                                    ? "exercise.assistance.input".localized
+                                    : "set.weight_label".localized,
                                 weight: $editingWeight,
                                 increment: 0.25
                             ) { newValue in
@@ -966,6 +976,30 @@ struct WorkoutSetRow: View {
         } message: {
             Text("set.delete.message".localized)
         }
+    }
+}
+
+private struct WorkoutBodyWeightCard: View {
+    let session: WorkoutSession
+    @ObservedObject var viewModel: WorkoutViewModel
+    @State private var bodyWeight: Double = 0
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("exercise.body_weight".localized)
+                .font(.headline)
+                .foregroundStyle(DesignSystem.Colors.textPrimary)
+            Text("exercise.body_weight.detail".localized)
+                .font(.caption)
+                .foregroundStyle(DesignSystem.Colors.textSecondary)
+            WeightInput(title: "exercise.body_weight.input".localized, weight: $bodyWeight) { value in
+                viewModel.updateBodyWeight(value > 0 ? value : nil)
+            }
+        }
+        .padding(14)
+        .background(DesignSystem.Colors.card)
+        .clipShape(RoundedRectangle(cornerRadius: DesignSystem.Dimensions.cornerRadiusMD))
+        .onAppear { bodyWeight = session.bodyWeightKg ?? 0 }
     }
 }
 

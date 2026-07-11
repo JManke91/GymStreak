@@ -43,6 +43,16 @@ No progress chart feature on watchOS. Watch app has real-time workout metrics on
 
 ## Metrics
 
+### Counterweight-assisted exercises
+
+Exercises can declare that their entered load is **counterweight assistance** rather than added
+resistance (for example, Assisted Pull-Up). Lower assistance is progress. For a workout that has
+a body-weight snapshot, effective load is `body weight − assistance`, and the normal max-load,
+estimated-1RM, volume, and PR calculations use that effective value. If any point in an assisted
+exercise's selected chart range lacks a snapshot, the chart safely falls back to a single
+**Assistance** metric: lower is better and the trend is inverted. It never presents a fabricated
+1RM or volume in that case.
+
 | Metric | Label (EN) | Label (DE) | Calculation |
 |--------|-----------|-----------|-------------|
 | Max Weight | Max Weight | Max. Gewicht | Highest weight lifted in any completed set during the session |

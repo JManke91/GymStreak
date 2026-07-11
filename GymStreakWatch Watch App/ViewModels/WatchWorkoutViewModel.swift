@@ -463,7 +463,8 @@ final class WatchWorkoutViewModel: ObservableObject {
                     name: plannedName,
                     muscleGroup: exercise.originalMuscleGroup ?? exercise.muscleGroup,
                     sets: exercise.originalSets ?? [],
-                    order: -1
+                    order: -1,
+                    loadBehaviorRaw: exercise.originalLoadBehaviorRaw ?? exercise.loadBehaviorRaw
                 )
             )
         }
@@ -485,6 +486,7 @@ final class WatchWorkoutViewModel: ObservableObject {
             exercise.plannedExerciseId = exercise.exerciseId
             exercise.plannedExerciseName = exercise.name
             exercise.originalMuscleGroup = exercise.muscleGroup
+            exercise.originalLoadBehaviorRaw = exercise.loadBehaviorRaw
             exercise.originalSets = exercise.sets.map { set in
                 WatchSet(id: set.id, reps: set.plannedReps, weight: set.plannedWeight, restTime: set.restTime)
             }
@@ -494,6 +496,7 @@ final class WatchWorkoutViewModel: ObservableObject {
         exercise.name = alternative.name
         exercise.muscleGroup = alternative.muscleGroup
         exercise.exerciseId = alternative.exerciseId
+        exercise.loadBehaviorRaw = alternative.loadBehaviorRaw ?? "resistance"
         exercise.sets = alternative.sets.enumerated().map { setIndex, set in
             ActiveWorkoutSet(
                 id: set.id,
@@ -512,6 +515,7 @@ final class WatchWorkoutViewModel: ObservableObject {
             exercise.plannedExerciseId = nil
             exercise.plannedExerciseName = nil
             exercise.originalMuscleGroup = nil
+            exercise.originalLoadBehaviorRaw = nil
             exercise.originalSets = nil
         }
 

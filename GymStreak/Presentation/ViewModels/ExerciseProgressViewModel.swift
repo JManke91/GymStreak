@@ -35,6 +35,9 @@ class ExerciseProgressViewModel: ObservableObject {
     func loadData() {
         isLoading = true
         progressData = progressService.fetchProgressData(for: exerciseName, exerciseId: exerciseId, timeframe: selectedTimeframe)
+        if !availableMetrics.contains(selectedMetric) {
+            selectedMetric = .maxWeight
+        }
         isLoading = false
     }
 
@@ -45,6 +48,7 @@ class ExerciseProgressViewModel: ObservableObject {
     }
 
     func updateMetric(_ metric: ProgressMetric) {
+        guard availableMetrics.contains(metric) else { return }
         selectedMetric = metric
         selectedDataPoint = nil
     }
@@ -67,6 +71,24 @@ class ExerciseProgressViewModel: ObservableObject {
     }
 
     // MARK: - Computed Properties for Display
+
+    var availableMetrics: [ProgressMetric] {
+        guard let data = progressData,
+              data.loadBehavior.isCounterweightAssistance,
+              !data.usesEffectiveLoad else {
+            return ProgressMetric.allCases
+        }
+        return [.maxWeight]
+    }
+
+    var selectedMetricTitle: String {
+        guard selectedMetric == .maxWeight,
+              progressData?.loadBehavior.isCounterweightAssistance == true,
+              progressData?.usesEffectiveLoad == false else {
+            return selectedMetric.localizedTitle
+        }
+        return "exercise.assistance".localized
+    }
 
     var personalRecordString: String? {
         guard let data = progressData else { return nil }

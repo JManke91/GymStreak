@@ -98,8 +98,18 @@ class ExercisesViewModel: ObservableObject {
         exercises = exerciseRepository.fetchAll()
     }
 
-    func addExercise(name: String, muscleGroups: [String], equipmentType: EquipmentType = .dumbbell) -> Exercise? {
-        let exercise = Exercise(name: name, muscleGroups: muscleGroups, equipmentType: equipmentType)
+    func addExercise(
+        name: String,
+        muscleGroups: [String],
+        equipmentType: EquipmentType = .dumbbell,
+        loadBehavior: ExerciseLoadBehavior = .resistance
+    ) -> Exercise? {
+        let exercise = Exercise(
+            name: name,
+            muscleGroups: muscleGroups,
+            equipmentType: equipmentType,
+            loadBehavior: loadBehavior
+        )
         exerciseRepository.insert(exercise)
         save()
         fetchExercises()

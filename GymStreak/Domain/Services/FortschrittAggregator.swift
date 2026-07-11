@@ -40,7 +40,8 @@ struct FortschrittAggregator {
             var displayName: String
             var muscleGroups: [String]
             var liveId: UUID
-            var sessionValues: [(date: Date, est1RM: Double, maxWeight: Double)] = []
+            var loadBehavior: ExerciseLoadBehavior
+            var sessionValues: [(date: Date, value: Double, isEffectiveLoad: Bool)] = []
         }
 
         var map: [UUID: Accumulator] = [:]
@@ -54,38 +55,63 @@ struct FortschrittAggregator {
                     byId: liveById,
                     byName: liveByName
                 ) else { continue }
+                // A library setting only describes future workouts. Keep the
+                // progress series homogeneous by excluding older snapshots
+                // with a different meaning for the entered number.
+                guard workoutExercise.loadBehavior == live.loadBehavior else { continue }
 
                 var acc = map[live.id] ?? Accumulator(
                     displayName: live.name,
                     muscleGroups: live.muscleGroups,
-                    liveId: live.id
+                    liveId: live.id,
+                    loadBehavior: live.loadBehavior
                 )
                 acc.displayName = live.name
                 acc.muscleGroups = live.muscleGroups
+                acc.loadBehavior = workoutExercise.loadBehavior
 
                 let usePlanned = workoutExercise.progressiveOverloadApplied
-                var bestEst1RM: Double = 0
-                var bestWeight: Double = 0
+                var bestValue: Double = 0
+                let behavior = workoutExercise.loadBehavior
+                let canUseEffectiveLoad = !behavior.isCounterweightAssistance || session.bodyWeightKg != nil
                 for set in completed {
                     let w = usePlanned ? set.plannedWeight : set.actualWeight
                     let r = usePlanned ? set.plannedReps   : set.actualReps
-                    guard w > 0, r > 0 else { continue }
-                    let est = w * (1 + Double(r) / 30.0)
-                    bestEst1RM = max(bestEst1RM, est)
-                    bestWeight = max(bestWeight, w)
+                    guard r > 0,
+                          w > 0 || behavior.isCounterweightAssistance else { continue }
+                    if canUseEffectiveLoad,
+                       let effective = ExerciseLoadMetrics.effectiveWeight(
+                        enteredWeight: w,
+                        behavior: behavior,
+                        bodyWeightKg: session.bodyWeightKg
+                       ) {
+                        bestValue = max(bestValue, ExerciseLoadMetrics.estimatedOneRepMax(weight: effective, reps: r))
+                    } else if behavior.isCounterweightAssistance {
+                        bestValue = bestValue == 0 ? w : min(bestValue, w)
+                    }
                 }
-                acc.sessionValues.append((session.startTime, bestEst1RM, bestWeight))
+                acc.sessionValues.append((session.startTime, bestValue, canUseEffectiveLoad))
                 map[live.id] = acc
             }
         }
 
         let models: [FortschrittExerciseModel] = map.map { id, acc in
             let values = acc.sessionValues.sorted { $0.date < $1.date }
-            let sparkline = values.map(\.est1RM)
+            let usesEffectiveLoad = !acc.loadBehavior.isCounterweightAssistance || values.allSatisfy(\.isEffectiveLoad)
+            let sparkline: [Double]
+            if acc.loadBehavior.isCounterweightAssistance && !usesEffectiveLoad {
+                let baseline = values.map(\.value).max() ?? 0
+                sparkline = values.map { baseline - $0.value }
+            } else {
+                sparkline = values.map(\.value)
+            }
             let trend: Double? = {
                 guard let first = values.first, let last = values.last,
-                      first.est1RM > 0, values.count >= 2 else { return nil }
-                return ((last.est1RM - first.est1RM) / first.est1RM) * 100
+                      first.value > 0, values.count >= 2 else { return nil }
+                let delta = acc.loadBehavior.isCounterweightAssistance && !usesEffectiveLoad
+                    ? first.value - last.value
+                    : last.value - first.value
+                return (delta / first.value) * 100
             }()
             return FortschrittExerciseModel(
                 id: id.uuidString,

@@ -235,7 +235,8 @@ class WorkoutViewModel: ObservableObject {
                         exerciseName: routineExercise.exercise?.name ?? orphan.routineName,
                         muscleGroups: [routineExercise.exercise?.primaryMuscleGroup ?? "General"],
                         order: routineExercise.order,
-                        exerciseId: routineExercise.exercise?.id
+                        exerciseId: routineExercise.exercise?.id,
+                        loadBehavior: routineExercise.exercise?.loadBehavior ?? .resistance
                     )
                     workoutExercise.workoutSession = session
                     workoutExercise.supersetId = routineExercise.supersetId
@@ -740,6 +741,13 @@ class WorkoutViewModel: ObservableObject {
         save()
     }
 
+    func updateBodyWeight(_ bodyWeightKg: Double?) {
+        guard let session = currentSession else { return }
+        objectWillChange.send()
+        session.bodyWeightKg = bodyWeightKg
+        save()
+    }
+
     func updateRestTimeForExercise(_ workoutExercise: WorkoutExercise, restTime: TimeInterval) {
         objectWillChange.send()
         for set in workoutExercise.setsList {
@@ -762,7 +770,11 @@ class WorkoutViewModel: ObservableObject {
             set.plannedReps = set.actualReps
             set.plannedWeight = set.actualWeight
 
-            set.actualWeight += weightIncrement
+            if workoutExercise.loadBehavior.isCounterweightAssistance {
+                set.actualWeight = max(0, set.actualWeight - weightIncrement)
+            } else {
+                set.actualWeight += weightIncrement
+            }
             set.actualReps = minReps
         }
 
@@ -774,7 +786,11 @@ class WorkoutViewModel: ObservableObject {
            let routineExercise = routine.routineExercisesList
             .first(where: { $0.exercise?.name == workoutExercise.exerciseName }) {
             for set in routineExercise.setsList {
-                set.weight += weightIncrement
+                if workoutExercise.loadBehavior.isCounterweightAssistance {
+                    set.weight = max(0, set.weight - weightIncrement)
+                } else {
+                    set.weight += weightIncrement
+                }
                 set.reps = minReps
             }
         }
@@ -819,7 +835,8 @@ class WorkoutViewModel: ObservableObject {
             exerciseName: exercise.name,
             muscleGroups: exercise.muscleGroups,
             order: nextOrder,
-            exerciseId: exercise.id
+            exerciseId: exercise.id,
+            loadBehavior: exercise.loadBehavior
         )
         workoutExercise.workoutSession = session
 
