@@ -24,4 +24,7 @@ Work the frontier: choose only a ticket whose blockers are complete. For a linea
 
 Reading a parent task is part of planning. Updating, completing, rescheduling, tagging, or creating Things tasks requires explicit user direction; local ticket generation alone is not authorization.
 
-One sanctioned exception: when every local implementation ticket for a parent task is complete, the agent must ask the user whether the feature is finished and tested. An explicit yes to that question authorizes completing the parent Things to-do (and nothing else); any other answer leaves it untouched.
+Two sanctioned exceptions:
+
+1. **On ticket publication**: once the approved local tickets are written under `.scratch/<feature-slug>/issues/`, move the parent Things to-do under the **"Plan is ready in Claude Code"** heading in its project (`update_todo` with `heading: "Plan is ready in Claude Code"`). This only relocates the to-do — title, notes, checklist, and completion state are untouched. If the heading is missing or the call fails, tell the user and proceed; it never blocks ticket publication.
+2. **On feature completion**: when every local implementation ticket for a parent task is complete, the agent must ask the user whether the feature is finished and tested. An explicit yes to that question authorizes completing the parent Things to-do (and nothing else); any other answer leaves it untouched.
