@@ -136,3 +136,7 @@ ios/Pods/Flipper*
 ios/Pods/boost-for-react-native
 ios/Pods/Flipper-RSocket
 .codex/config.toml
+
+# Scratch/design working directories (not part of the shipped repo)
+.scratch/
+design/
