@@ -96,5 +96,9 @@
       "Bash(git *)"
     ],
     "defaultMode": "acceptEdits"
-  }
+  },
+  "enabledMcpjsonServers": [
+    "context7",
+    "things"
+  ]
 }
