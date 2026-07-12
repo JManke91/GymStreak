@@ -10,3 +10,6 @@
 - Fixed: choosing "update routine" after a workout now also saves your new weights and reps when you swapped an exercise for one of its alternatives — previously the alternative's values in the routine stayed unchanged (on Apple Watch workouts and iPhone workouts alike).
 - Creating a new routine now uses the same modern exercise picker as editing an existing routine — with search, "already added" markers, inline set configuration, alternatives, and creating a new exercise on the spot.
 - The exercise picker for routines now has the same muscle-group filter pills as the exercise library — tap a muscle group (or combine it with search) to narrow the list, in both the new-routine and edit-routine flows.
+- Apple Watch: set navigation and progress are now clearly separated from the Complete/Undo action, so you can browse sets without mistaking Next for completion.
+- Apple Watch: eligible exercise rows now have a visible Swap button, while the set editor keeps total elapsed/rest time visible and uncluttered.
+- Apple Watch: the workout screen has a new look — a glass-style Complete button that fills up with your set progress, round set-navigation buttons beside it, shared +/− buttons with live heart rate and calories next to the weight/reps cards, a brief green "Done" celebration when an exercise is finished, and a calmer elapsed-time chip at the top.

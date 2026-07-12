@@ -77,6 +77,10 @@ final class WatchWorkoutViewModel: ObservableObject {
 //        observeHealthKitMetrics()
         requestNotificationPermission()
 
+        // Metric pipelines dedupe on the displayed value: HealthKit delivers
+        // bursts of near-identical samples, and republishing an unchanged value
+        // invalidates every observing view (SwiftUI logs "tried to update
+        // multiple times per frame" when several land in one frame).
         healthKitManager.$elapsedTime
             .receive(on: DispatchQueue.main)
             .compactMap { $0 }
@@ -85,39 +89,39 @@ final class WatchWorkoutViewModel: ObservableObject {
                     let seconds = Int(interval) % 60
                     return String(format: "%02d:%02d", minutes, seconds)
                 }
-            .assign(to: \.elapsedTimeString, on: self)
-//            .sink { elapsedTime in
-//                self.elapsedTime = elapsedTime
-//            }
+            .removeDuplicates()
+            .sink { [weak self] formatted in
+                self?.elapsedTimeString = formatted
+            }
             .store(in: &cancellabes)
 
         healthKitManager.$heartRate
             .receive(on: DispatchQueue.main)
             .compactMap { $0 }
-            .sink { heartRate in
-                print("wtf heartRate received: \(heartRate)")
-                self.heartRate = Int(heartRate)
+            .map { Int($0) }
+            .removeDuplicates()
+            .sink { [weak self] heartRate in
+                self?.heartRate = heartRate
             }
             .store(in: &cancellabes)
 
         healthKitManager.$activeCalories
-//            .subscribe(on: DispatchQueue.main)
             .receive(on: DispatchQueue.main)
             .compactMap { $0 }
-            .sink { calories in
-                print("wtf calories received: \(calories)")
-            self.activeCalories = Int(calories)
-        }
-        .store(in: &cancellabes)
+            .map { Int($0) }
+            .removeDuplicates()
+            .sink { [weak self] calories in
+                self?.activeCalories = calories
+            }
+            .store(in: &cancellabes)
 
         healthKitManager.$activeCalories.compactMap { $0 }.removeDuplicates().combineLatest(healthKitManager.$heartRate.compactMap { $0 }.removeDuplicates())
         // state only needs to be set once
         // FIXME: prevents data showing in a subsequent workout
 //            .prefix(1)
-            .filter { _ in self.workoutState != .running }
-            .sink { combined in
-                print("wtf received workout metrics: \(combined.0 ?? 0), \(combined.1 ?? 0)")
-                self.workoutState = .running
+            .filter { [weak self] _ in self?.workoutState != .running }
+            .sink { [weak self] _ in
+                self?.workoutState = .running
             }
             .store(in: &cancellabes)
     }
@@ -567,6 +571,10 @@ final class WatchWorkoutViewModel: ObservableObject {
     /// GymStreak under Settings → Action Button → Workout.
     func donateActionButtonIntent() {
         guard !isUITesting else { return }
+        // linkd (the donation service) doesn't run in the simulator — the call
+        // always fails with XPC error 4099, and the Action Button can't be
+        // tested there anyway (see docs/action-button.md).
+        #if !targetEnvironment(simulator)
         Task {
             do {
                 try await GymStreakStartWorkoutIntent()
@@ -576,6 +584,7 @@ final class WatchWorkoutViewModel: ObservableObject {
                 print("Action Button intent donation failed: \(error)")
             }
         }
+        #endif
     }
 
     /// Entry point for hardware shortcuts (Action Button press, Double Tap).
@@ -912,8 +921,8 @@ final class WatchWorkoutViewModel: ObservableObject {
         WKInterfaceDevice.current().play(.start)
 
         let timer = Timer(timeInterval: 1.0, repeats: true) { [weak self] _ in
-            Task { @MainActor in
-                guard let self = self else { return }
+            Task { @MainActor [weak self] in
+                guard let self else { return }
 
                 if self.restTimeRemaining > 0 {
                     self.restTimeRemaining -= 1

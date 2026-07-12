@@ -324,6 +324,16 @@
         }
       }
     },
+    "Decrease" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Verringern"
+          }
+        }
+      }
+    },
     "Discard" : {
       "localizations" : {
         "de" : {
@@ -503,6 +513,16 @@
         }
       }
     },
+    "Increase" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Erhöhen"
+          }
+        }
+      }
+    },
     "kCal" : {
 
     },
@@ -525,6 +545,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Markiert den aktuellen Übungssatz als abgeschlossen"
+          }
+        }
+      }
+    },
+    "Next set" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nächster Satz"
           }
         }
       }
@@ -572,6 +602,16 @@
     "Pause" : {
 
     },
+    "Previous set" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Vorheriger Satz"
+          }
+        }
+      }
+    },
     "reps" : {
       "localizations" : {
         "de" : {
@@ -588,6 +628,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "WDH."
+          }
+        }
+      }
+    },
+    "Reps" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Wiederholungen"
           }
         }
       }
@@ -686,6 +736,7 @@
 
     },
     "Set" : {
+      "extractionState" : "stale",
       "localizations" : {
         "de" : {
           "stringUnit" : {
@@ -697,6 +748,12 @@
     },
     "Set %lld of %lld" : {
       "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Satz %1$lld von %2$lld"
+          }
+        },
         "en" : {
           "stringUnit" : {
             "state" : "new",
@@ -706,6 +763,7 @@
       }
     },
     "Set %lld of %lld completed" : {
+      "extractionState" : "stale",
       "localizations" : {
         "de" : {
           "stringUnit" : {
@@ -875,6 +933,36 @@
         }
       }
     },
+    "Undo" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Rückgängig"
+          }
+        }
+      }
+    },
+    "Undo set" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Satz rückgängig machen"
+          }
+        }
+      }
+    },
+    "Undo set %lld of %lld" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Satz %1$lld von %2$lld rückgängig machen"
+          }
+        }
+      }
+    },
     "Up Next" : {
       "localizations" : {
         "de" : {
@@ -891,6 +979,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "GEWICHT"
+          }
+        }
+      }
+    },
+    "Weight" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gewicht"
           }
         }
       }

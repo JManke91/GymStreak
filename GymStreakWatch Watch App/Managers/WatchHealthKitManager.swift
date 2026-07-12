@@ -283,8 +283,8 @@ final class WatchHealthKitManager: NSObject, ObservableObject {
 
     private func startElapsedTimeTimer() {
         elapsedTimeTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
-            Task { @MainActor in
-                guard let self = self, let startDate = self.workoutStartDate else { return }
+            Task { @MainActor [weak self] in
+                guard let self, let startDate = self.workoutStartDate else { return }
                 self.elapsedTime = Date().timeIntervalSince(startDate)
             }
         }
@@ -336,13 +336,20 @@ extension WatchHealthKitManager: HKWorkoutSessionDelegate {
 
 extension WatchHealthKitManager: HKLiveWorkoutBuilderDelegate {
     nonisolated func workoutBuilder(_ workoutBuilder: HKLiveWorkoutBuilder, didCollectDataOf collectedTypes: Set<HKSampleType>) {
-        for type in collectedTypes {
-            guard let quantityType = type as? HKQuantityType else { continue }
+        // Coalesce all collected types into ONE main-actor hop: heart rate and
+        // energy often arrive in the same callback, and publishing them from
+        // separate tasks lands as separate SwiftUI transactions in the same
+        // frame ("tried to update multiple times per frame" warnings).
+        let collected = collectedTypes.compactMap { type -> (HKQuantityType, HKStatistics)? in
+            guard let quantityType = type as? HKQuantityType,
+                  let statistics = workoutBuilder.statistics(for: quantityType) else { return nil }
+            return (quantityType, statistics)
+        }
+        guard !collected.isEmpty else { return }
 
-            if let statistics = workoutBuilder.statistics(for: quantityType) {
-                Task { @MainActor in
-                    self.updateMetrics(for: quantityType, statistics: statistics)
-                }
+        Task { @MainActor in
+            for (quantityType, statistics) in collected {
+                self.updateMetrics(for: quantityType, statistics: statistics)
             }
         }
     }

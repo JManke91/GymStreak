@@ -1,4 +1,5 @@
 import SwiftUI
+import WatchKit
 
 struct ExerciseListView: View {
     let exercises: [ActiveWorkoutExercise]
@@ -39,25 +40,17 @@ struct ExerciseListView: View {
                         exercise: exercise,
                         index: index,
                         isCurrent: index == currentIndex,
-                        onTap: { onSelectExercise(index) }
+                        onTap: { onSelectExercise(index) },
+                        onSwap: { presentSwapPicker(for: exercise) }
                     )
                     .swipeActions(edge: .trailing) {
                         if exercise.canSwap {
                             Button {
-                                swapTargetExercise = exercise
+                                presentSwapPicker(for: exercise)
                             } label: {
                                 Label("Swap", systemImage: "arrow.triangle.2.circlepath")
                             }
                             .tint(OnyxWatch.Colors.tint)
-                        }
-                    }
-                    .contextMenu {
-                        if exercise.canSwap {
-                            Button {
-                                swapTargetExercise = exercise
-                            } label: {
-                                Label("Swap Exercise", systemImage: "arrow.triangle.2.circlepath")
-                            }
                         }
                     }
                 }
@@ -87,6 +80,11 @@ struct ExerciseListView: View {
             WatchSwapPickerView(exercise: exercise)
                 .environmentObject(viewModel)
         }
+    }
+
+    private func presentSwapPicker(for exercise: ActiveWorkoutExercise) {
+        WKInterfaceDevice.current().play(.click)
+        swapTargetExercise = exercise
     }
 }
 
@@ -377,6 +375,7 @@ struct ExerciseRow: View {
     let index: Int
     let isCurrent: Bool
     let onTap: () -> Void
+    let onSwap: () -> Void
 
     private var status: ExerciseStatus {
         if exercise.isComplete {
@@ -391,45 +390,59 @@ struct ExerciseRow: View {
     }
 
     var body: some View {
-        Button(action: onTap) {
-            HStack(spacing: 12) {
-                StatusIcon(status: status)
+        HStack(spacing: 4) {
+            Button(action: onTap) {
+                HStack(spacing: 12) {
+                    StatusIcon(status: status)
 
-                VStack(alignment: .leading, spacing: 2) {
-                    HStack(spacing: 6) {
+                    VStack(alignment: .leading, spacing: 2) {
                         Text(exercise.name)
                             .font(.headline)
                             .fontWeight(isCurrent ? .semibold : .regular)
                             .lineLimit(1)
 
-                        // Superset badge
-                        if exercise.isInSuperset {
-                            WatchSupersetBadge(
-                                position: exercise.supersetOrder + 1,
-                                total: nil // We don't have total easily accessible here
-                            )
-                        }
-
-                        // Alternatives available — swap via swipe or long-press
-                        if exercise.canSwap {
-                            Image(systemName: "arrow.triangle.2.circlepath")
-                                .font(.system(size: 10, weight: .semibold))
+                        HStack(spacing: 6) {
+                            Text("\(exercise.completedSetsCount)/\(exercise.sets.count) sets")
+                                .font(.caption)
                                 .foregroundStyle(.secondary)
+
+                            if exercise.isInSuperset {
+                                WatchSupersetBadge(
+                                    position: exercise.supersetOrder + 1,
+                                    total: nil
+                                )
+                            }
                         }
                     }
 
-                    Text("\(exercise.completedSetsCount)/\(exercise.sets.count) sets")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
+                    Spacer(minLength: 4)
 
-                Spacer()
-
-                if !exercise.isComplete {
-                    Image(systemName: "chevron.right")
-                        .font(.caption)
-                        .foregroundStyle(.tertiary)
+                    if !exercise.isComplete && !exercise.canSwap {
+                        Image(systemName: "chevron.right")
+                            .font(.caption)
+                            .foregroundStyle(.tertiary)
+                    }
                 }
+                .frame(maxWidth: .infinity, minHeight: OnyxWatch.Dimensions.minTouchTarget)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .frame(maxWidth: .infinity)
+            .accessibilityLabel(rowAccessibilityLabel)
+            .accessibilityHint("Double tap to view sets")
+
+            if exercise.canSwap {
+                Button(action: onSwap) {
+                    Image(systemName: "arrow.triangle.2.circlepath")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(OnyxWatch.Colors.tint)
+                        .frame(width: 30, height: 30)
+                        .background(Circle().fill(OnyxWatch.Colors.tint.opacity(0.15)))
+                        .frame(width: 44, height: 44)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Swap \(exercise.name) for an alternative")
             }
         }
         .listRowBackground(
@@ -437,9 +450,6 @@ struct ExerciseRow: View {
                 ? Color.accentColor.opacity(0.1)
                 : (isCurrent ? Color.accentColor.opacity(0.15) : Color.clear)
         )
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel(rowAccessibilityLabel)
-        .accessibilityHint("Double tap to view sets")
     }
 
     private var rowAccessibilityLabel: String {

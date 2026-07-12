@@ -11,10 +11,6 @@ struct ActiveWorkoutView: View {
     @State private var showEndConfirmation = false
     @State private var exercisePath = NavigationPath()
 
-    private var isShowingExerciseDetail: Bool {
-        !exercisePath.isEmpty
-    }
-
     var body: some View {
         ZStack {
             OnyxWatch.Colors.background.ignoresSafeArea()
@@ -26,7 +22,21 @@ struct ActiveWorkoutView: View {
                     dismiss()
                 }
             } else {
-                workoutTabs
+                // One NavigationStack per presentation context, wrapping the
+                // vertical TabView, with the set editor pushed OVER the tabs
+                // (Apple's watch workout-app pattern). A stack nested inside
+                // tab 0 made two PUIC navigation controllers observe the
+                // carousel list ("UIScrollView does not support multiple
+                // observers…" assert) and re-triggered per-frame toolbar
+                // warnings on every push.
+                NavigationStack(path: $exercisePath) {
+                    workoutTabs
+                        .navigationDestination(for: Int.self) { index in
+                            if index < viewModel.exercises.count {
+                                FullScreenSetEditorView(exercise: viewModel.exercises[index])
+                            }
+                        }
+                }
 
                 // Overlay full-screen rest timer on top
                 if viewModel.isResting && !viewModel.isRestTimerMinimized {
@@ -92,49 +102,17 @@ struct ActiveWorkoutView: View {
 
     private var workoutTabs: some View {
         TabView(selection: $selectedTab) {
-            // Tab 0: Exercise flow with state-based navigation
-            ZStack {
-                if isShowingExerciseDetail, let exercise = viewModel.currentExercise {
-                    FullScreenSetEditorView(
-                        exercise: exercise,
-                        initialSetIndex: viewModel.currentSetIndex,
-                        onBack: {
-                            withAnimation {
-                                if !exercisePath.isEmpty {
-                                    exercisePath.removeLast()
-                                }
-                            }
-                        }
-                    )
-                    .transition(.move(edge: .trailing))
-                    .gesture(
-                        DragGesture()
-                            .onEnded { gesture in
-                                if gesture.translation.width > 50 {
-                                    WKInterfaceDevice.current().play(.click)
-                                    withAnimation {
-                                        if !exercisePath.isEmpty {
-                                            exercisePath.removeLast()
-                                        }
-                                    }
-                                }
-                            }
-                    )
-                } else {
-                    ExerciseListView(
-                        exercises: viewModel.exercises,
-                        currentIndex: viewModel.currentExerciseIndex,
-                        onSelectExercise: { index in
-                            viewModel.goToExercise(at: index)
-                            withAnimation {
-                                exercisePath.append(index)
-                            }
-                        },
-                        onEnd: { showEndConfirmation = true }
-                    )
-                    .transition(.move(edge: .leading))
-                }
-            }
+            // Tab 0: Exercise list; tapping a row pushes the set editor onto
+            // the enclosing NavigationStack (native slide + edge-swipe back).
+            ExerciseListView(
+                exercises: viewModel.exercises,
+                currentIndex: viewModel.currentExerciseIndex,
+                onSelectExercise: { index in
+                    viewModel.goToExercise(at: index)
+                    exercisePath.append(index)
+                },
+                onEnd: { showEndConfirmation = true }
+            )
             .tag(0)
 
             // Tab 1: HealthKit Metrics

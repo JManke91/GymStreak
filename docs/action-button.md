@@ -74,6 +74,7 @@ The system only knows the intents after it indexes a build that contains them. I
 - **UI testing**: donation is skipped under `-UI_TESTING` (no HealthKit session exists there).
 - **watchOS 26.5 regression**: donation override reportedly fails with `LNTranscriptErrorDomain error 1003` when the button is assigned to "Open App" (not the Workout function). Testing should cover both assignments.
 - **Simulator**: the Action Button cannot be tested in the simulator (no hardware); on-device testing on an Ultra is required. (The KhaosT reference example notes `actionButtonIntent` does not work on simulator.)
+- **Simulator donation noise (fixed 2026-07-12)**: in the simulator the donation itself always fails with `NSCocoaErrorDomain Code=4099 — connection to com.apple.linkd.transcript invalidated`, because `linkd` (the daemon backing the Siri/Shortcuts transcript store that donations write to) doesn't run there — the same "daemon absent in simulator" pattern known from other XPC services. Since the Action Button flow can't be exercised in the simulator anyway (see above), `donateActionButtonIntent()` is now compiled out with `#if !targetEnvironment(simulator)`. Note this simulator error is **distinct** from the on-device watchOS 26.5 `LNTranscriptErrorDomain 1003` regression above; the on-device `do/catch` logging is kept so that regression stays visible.
 
 ## References
 

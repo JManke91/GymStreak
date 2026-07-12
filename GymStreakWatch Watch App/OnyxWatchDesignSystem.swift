@@ -34,6 +34,23 @@ struct OnyxWatch {
 
         // UI Elements
         static let divider = Color(white: 0.15)
+
+        // Active Workout Screen (glass design, see docs/watch-set-completion-button.md)
+        static let accentGreen = Color(red: 52/255, green: 224/255, blue: 122/255) // #34E07A
+        static let surfaceCardActive = Color(red: 12/255, green: 36/255, blue: 23/255) // #0C2417
+        static let stepperGreen = Color(red: 29/255, green: 81/255, blue: 56/255) // #1D5138
+        static let stepperIcon = Color(red: 99/255, green: 239/255, blue: 155/255) // #63EF9B
+        static let strokeSubtle = Color(red: 58/255, green: 58/255, blue: 60/255) // #3A3A3C
+        static let textMuted = Color(red: 152/255, green: 152/255, blue: 157/255) // #98989D
+        static let chipBackground = Color(red: 26/255, green: 26/255, blue: 28/255) // #1A1A1C
+        static let chipText = Color(red: 199/255, green: 199/255, blue: 204/255) // #C7C7CC
+        static let glassLabel = Color(red: 234/255, green: 255/255, blue: 242/255) // #EAFFF2
+        static let textOnDone = Color(red: 3/255, green: 20/255, blue: 10/255) // #03140A
+        static let doneGradient = [
+            Color(red: 109/255, green: 255/255, blue: 168/255), // #6DFFA8
+            Color(red: 47/255, green: 216/255, blue: 115/255),  // #2FD873
+            Color(red: 23/255, green: 180/255, blue: 90/255)    // #17B45A
+        ]
     }
 
     // MARK: - Spacing (Smaller for Watch)
