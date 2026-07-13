@@ -26,6 +26,11 @@ struct WorkoutScreenMetrics {
     let valueCardRadius: CGFloat
     let valueFontSize: CGFloat
     let valueUnitSize: CGFloat
+    /// Top-zone (exercise name + workout progress) tiers, design §4.
+    let topNameSize: CGFloat
+    let topPercentSize: CGFloat
+    let topSegmentHeight: CGFloat
+    let topZoneSpacing: CGFloat
 
     static let current: WorkoutScreenMetrics = {
         let width = WKInterfaceDevice.current().screenBounds.width
@@ -39,7 +44,8 @@ struct WorkoutScreenMetrics {
         completeButtonHeight: 35, completeLabelSize: 11, segmentsWidth: 62,
         chevronDiameter: 27, chevronIconSize: 10, fusedRowGap: 5.5,
         stepperDiameter: 36, stepperIconSize: 13,
-        valueCardHeight: 46, valueCardRadius: 8, valueFontSize: 15.5, valueUnitSize: 9
+        valueCardHeight: 46, valueCardRadius: 8, valueFontSize: 15.5, valueUnitSize: 9,
+        topNameSize: 15, topPercentSize: 11, topSegmentHeight: 3.5, topZoneSpacing: 6
     )
 
     private static let mid = WorkoutScreenMetrics(
@@ -47,7 +53,8 @@ struct WorkoutScreenMetrics {
         completeButtonHeight: 33, completeLabelSize: 10.5, segmentsWidth: 58,
         chevronDiameter: 26, chevronIconSize: 10, fusedRowGap: 5.5,
         stepperDiameter: 34, stepperIconSize: 12.5,
-        valueCardHeight: 43, valueCardRadius: 8, valueFontSize: 14.5, valueUnitSize: 8.5
+        valueCardHeight: 43, valueCardRadius: 8, valueFontSize: 14.5, valueUnitSize: 8.5,
+        topNameSize: 14, topPercentSize: 10.5, topSegmentHeight: 3.5, topZoneSpacing: 5.5
     )
 
     private static let small = WorkoutScreenMetrics(
@@ -55,7 +62,8 @@ struct WorkoutScreenMetrics {
         completeButtonHeight: 30, completeLabelSize: 9.5, segmentsWidth: 52,
         chevronDiameter: 23, chevronIconSize: 8.5, fusedRowGap: 4.5,
         stepperDiameter: 31, stepperIconSize: 11.5,
-        valueCardHeight: 37, valueCardRadius: 7, valueFontSize: 13.5, valueUnitSize: 8
+        valueCardHeight: 37, valueCardRadius: 7, valueFontSize: 13.5, valueUnitSize: 8,
+        topNameSize: 12, topPercentSize: 9.5, topSegmentHeight: 3, topZoneSpacing: 4.5
     )
 }
 

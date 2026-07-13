@@ -1,1 +1,3 @@
 - Fortschrittsvergleiche wurden korrigiert, wenn dieselbe Übung mehrfach vorkommt oder ihren Namen mit einer anderen Ausrüstungsvariante teilt.
+- Apple Watch: Der Trainingsbildschirm zeigt jetzt oben den Namen der aktuellen Übung, deinen Gesamtfortschritt in Prozent sowie einen Fortschrittsbalken pro Übung.
+- Apple Watch: Die +/--Tasten sitzen jetzt wieder über dem Wert, den du gerade bearbeitest (Gewicht oder Wiederholungen), und tauschen die Seite mit der Herzfrequenz-/Kalorienanzeige.

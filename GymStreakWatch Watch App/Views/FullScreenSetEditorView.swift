@@ -20,10 +20,50 @@ struct FullScreenSetEditorView: View {
     @State private var focusedField: FocusedField = .weight
     @State private var showDoneFlash = false
 
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
     private let metrics = WorkoutScreenMetrics.current
 
     enum FocusedField {
         case weight, reps
+    }
+
+    /// Stable identities for the two items in the steppers/metrics row. Keying
+    /// the ForEach on these (never on position) is what lets SwiftUI animate the
+    /// focus swap as a slide instead of a crossfade.
+    private enum ClusterSlot: Hashable {
+        case steppers, metrics
+    }
+
+    private var hasMetrics: Bool {
+        viewModel.heartRate != nil && viewModel.activeCalories != nil
+    }
+
+    /// Row order: the steppers sit on the focused card's side (weight = left,
+    /// reps = right); the metrics take the opposite side, dropped entirely until
+    /// HealthKit delivers values.
+    private var clusterOrder: [ClusterSlot] {
+        let base: [ClusterSlot] = focusedField == .weight
+            ? [.steppers, .metrics]
+            : [.metrics, .steppers]
+        return hasMetrics ? base : base.filter { $0 != .metrics }
+    }
+
+    /// Outer edge each slot hugs — derived from focus (not row position) so the
+    /// steppers stay on the correct side even when the metrics slot is absent.
+    private func alignment(for slot: ClusterSlot) -> Alignment {
+        switch slot {
+        case .steppers: return focusedField == .weight ? .leading : .trailing
+        case .metrics: return focusedField == .weight ? .trailing : .leading
+        }
+    }
+
+    @ViewBuilder
+    private func clusterView(for slot: ClusterSlot) -> some View {
+        switch slot {
+        case .steppers: steppersCluster
+        case .metrics: metricsCluster
+        }
     }
 
     /// The current exercise from the ViewModel - used for superset navigation
@@ -40,6 +80,15 @@ struct FullScreenSetEditorView: View {
     /// The set index within the displayed exercise (from ViewModel)
     private var displayedSetIndex: Int {
         viewModel.currentSetIndex
+    }
+
+    /// Per-exercise completion fraction for the top-zone segment bar, in workout
+    /// order (one segment per exercise, filled by its completed sets).
+    private var exerciseProgress: [Double] {
+        viewModel.exercises.map { exercise in
+            guard !exercise.sets.isEmpty else { return 0 }
+            return Double(exercise.completedSetsCount) / Double(exercise.sets.count)
+        }
     }
 
     private var currentSet: Binding<ActiveWorkoutSet> {
@@ -80,25 +129,35 @@ struct FullScreenSetEditorView: View {
                 // pile all the leftover space above the steppers. On small
                 // cases the spacers collapse to the compact design spacing.
                 VStack(spacing: 0) {
+                    // Top zone: exercise name + workout-completion percent +
+                    // per-exercise segment bar (design §4).
+                    WorkoutTopProgressView(
+                        exerciseName: displayedExercise.name,
+                        workoutProgress: viewModel.progress,
+                        exerciseProgress: exerciseProgress
+                    )
+                    .padding(.horizontal, 2)
+
                     Spacer(minLength: 4)
 
-                    // Steppers (adjust the focused value) + live metrics
-                    HStack(alignment: .center) {
-                        HStack(spacing: 7) {
-                            stepperButton("minus", accessibilityLabel: "Decrease") {
-                                adjustFocusedValue(by: -1)
-                            }
-                            stepperButton("plus", accessibilityLabel: "Increase") {
-                                adjustFocusedValue(by: 1)
-                            }
-                        }
-
-                        Spacer(minLength: 4)
-
-                        if let heartRate = viewModel.heartRate, let calories = viewModel.activeCalories {
-                            WorkoutMetricsView(heartRate: heartRate, calories: calories, size: .small)
+                    // Steppers (adjust the focused value) + live metrics.
+                    // The +/- cluster stays on the same side as the focused value
+                    // card (weight = left, reps = right) so it reads as directly
+                    // controlling that card; the HR/kCal metrics take the other
+                    // side and the two SLIDE past each other when focus changes.
+                    // A ForEach keyed by the stable ClusterSlot identity (not by
+                    // position) lets SwiftUI treat the reorder as a move and
+                    // interpolate each cluster's frame — an if/else swap only
+                    // crossfades, because the branches are distinct identities.
+                    // Equal-width, outer-aligned frames stand in for the Spacer
+                    // (a Spacer between reordered ForEach items jitters).
+                    HStack(alignment: .center, spacing: 0) {
+                        ForEach(clusterOrder, id: \.self) { slot in
+                            clusterView(for: slot)
+                                .frame(maxWidth: .infinity, alignment: alignment(for: slot))
                         }
                     }
+                    .animation(reduceMotion ? nil : .snappy(duration: 0.22, extraBounce: 0.05), value: clusterOrder)
                     .padding(.bottom, 7)
 
                     // Weight / reps value cards
@@ -160,6 +219,7 @@ struct FullScreenSetEditorView: View {
                 .animation(.easeInOut(duration: 0.2), value: showDoneFlash)
                 .animation(.easeInOut(duration: 0.25), value: viewModel.currentSetIndex)
                 .animation(.easeInOut(duration: 0.25), value: viewModel.currentExerciseIndex)
+                .animation(.spring(response: 0.35, dampingFraction: 0.8), value: viewModel.progress)
             }
         }
         .toolbar {
@@ -203,6 +263,28 @@ struct FullScreenSetEditorView: View {
     }
 
     // MARK: - Subviews
+
+    /// The +/- pair that edits the focused value card. Kept as a single unit so
+    /// it can move to the focused card's side without duplicating the buttons.
+    private var steppersCluster: some View {
+        HStack(spacing: 7) {
+            stepperButton("minus", accessibilityLabel: "Decrease") {
+                adjustFocusedValue(by: -1)
+            }
+            stepperButton("plus", accessibilityLabel: "Increase") {
+                adjustFocusedValue(by: 1)
+            }
+        }
+    }
+
+    /// Live HR/kCal metrics (only once HealthKit delivers values); occupies the
+    /// side opposite the steppers.
+    @ViewBuilder
+    private var metricsCluster: some View {
+        if let heartRate = viewModel.heartRate, let calories = viewModel.activeCalories {
+            WorkoutMetricsView(heartRate: heartRate, calories: calories, size: .small)
+        }
+    }
 
     private func stepperButton(
         _ systemName: String,

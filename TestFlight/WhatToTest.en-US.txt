@@ -1,1 +1,3 @@
 - Fixed workout progress comparisons when the same exercise appears multiple times or shares its name with another equipment variant.
+- Apple Watch: the active-workout screen now shows the current exercise name, your overall workout completion percentage, and a per-exercise progress bar at the top.
+- Apple Watch: the +/- buttons now move to sit above whichever value (weight or reps) you're editing, swapping sides with the heart-rate/calorie readout.

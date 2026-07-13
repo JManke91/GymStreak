@@ -73,6 +73,12 @@
     "%lld" : {
 
     },
+    "%lld %%" : {
+
+    },
+    "%lld percent complete" : {
+
+    },
     "%lld cal" : {
       "localizations" : {
         "de" : {
