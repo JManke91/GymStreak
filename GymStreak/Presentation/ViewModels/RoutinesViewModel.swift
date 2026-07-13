@@ -436,9 +436,16 @@ class RoutinesViewModel: ObservableObject {
 
     func applyProgressiveOverload(for routineExercise: RoutineExercise, weightIncrement: Double) {
         guard let min = routineExercise.targetRepMin else { return }
-        for set in routineExercise.setsList {
-            set.weight += weightIncrement
-            set.reps = min
+        let sets = routineExercise.setsList
+        let increase = ProgressiveOverloadService.applyIncrease(
+            toWeights: sets.map(\.weight),
+            increment: weightIncrement,
+            targetRepMin: min,
+            loadBehavior: routineExercise.exercise?.loadBehavior ?? .resistance
+        )
+        for (set, newWeight) in zip(sets, increase.weights) {
+            set.weight = newWeight
+            set.reps = increase.reps
         }
         if let routine = routineExercise.routine {
             updateRoutine(routine)

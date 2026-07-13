@@ -174,10 +174,10 @@ final class RoutineExercise {
     }
 
     var allSetsAtUpperLimit: Bool {
-        guard let max = targetRepMax else { return false }
-        let sets = setsList
-        guard !sets.isEmpty else { return false }
-        return sets.allSatisfy { $0.reps >= max }
+        ProgressiveOverloadService.templateQualifiesForIncrease(
+            reps: setsList.map(\.reps),
+            targetRepMax: targetRepMax
+        )
     }
 }
 
@@ -465,13 +465,11 @@ final class WorkoutExercise {
     }
 
     var allCompletedSetsAtUpperLimit: Bool {
-        // If progressive overload was applied, the user already hit the upper limit
-        // (that's what triggered the overload in the first place)
-        if progressiveOverloadApplied { return true }
-        guard let max = targetRepMax else { return false }
-        let allSets = setsList
-        guard !allSets.isEmpty else { return false }
-        return allSets.allSatisfy { $0.isCompleted && $0.actualReps >= max }
+        ProgressiveOverloadService.workoutQualifiesForIncrease(
+            sets: setsList.map { .init(reps: $0.actualReps, isCompleted: $0.isCompleted) },
+            targetRepMax: targetRepMax,
+            overloadAlreadyApplied: progressiveOverloadApplied
+        )
     }
 }
 

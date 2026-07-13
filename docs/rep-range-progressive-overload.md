@@ -16,6 +16,19 @@ Adds a **rep range goal** (e.g., 8-12 reps) to exercises within routines. When a
 
 ## Architecture
 
+### Shared Domain Logic — `ProgressiveOverloadService`
+
+**`Domain/Services/ProgressiveOverloadService.swift`** (added 2026-07) is the single source of truth for the overload domain logic. It is pure value math (Foundation only — no SwiftData/SwiftUI), so future surfaces (completion screen, history, watch — the watch target gets its own file copy per the project's target-sharing convention) apply identical rules:
+
+- `templateQualifiesForIncrease(reps:targetRepMax:)` — routine editor qualify: every template set's reps ≥ max (no completion concept)
+- `workoutQualifiesForIncrease(sets:targetRepMax:overloadAlreadyApplied:)` — workout qualify: all sets completed AND actual reps ≥ max; `overloadAlreadyApplied` short-circuits to `true`
+- `increasedWeight(_:increment:loadBehavior:)` — direction-aware weight step: counterweight assistance *subtracts* the increment (clamped at 0), resistance adds it
+- `applyIncrease(toWeights:increment:targetRepMin:loadBehavior:)` — returns the new weight per set + the reps every set resets to (range minimum)
+
+The model computed properties (`RoutineExercise.allSetsAtUpperLimit`, `WorkoutExercise.allCompletedSetsAtUpperLimit`) and both ViewModels delegate to this service; no qualify/apply math is duplicated anywhere else. Covered by `GymStreakTests/ProgressiveOverloadServiceTests.swift` (Swift Testing).
+
+**Root cause fixed during consolidation:** `RoutinesViewModel.applyProgressiveOverload` previously always did `weight += increment`, even for counterweight-assistance exercises — while `WeightIncreaseSheet` displayed "−increment" and `WorkoutViewModel` correctly subtracted. Applying an increase from the **routine editor** on an assistance exercise therefore *raised* the assistance weight (making the exercise easier) despite the sheet promising a reduction. The shared service's direction-aware math now applies in both paths. The same +only math also existed in `ActiveWorkoutView`'s post-apply confirmation chip (display only); it now uses `increasedWeight` too.
+
 ### Data Model
 
 **`RoutineExercise`** (Models.swift):
@@ -29,6 +42,7 @@ Adds a **rep range goal** (e.g., 8-12 reps) to exercises within routines. When a
 - `progressiveOverloadApplied: Bool` - Flag set when progressive overload is applied during a workout
 - `hasRepRangeGoal: Bool` / `allCompletedSetsAtUpperLimit: Bool` - Computed properties
 - `allCompletedSetsAtUpperLimit` returns `true` immediately when `progressiveOverloadApplied` is set (the user already hit the upper limit to trigger overload)
+- Both `allSetsAtUpperLimit` (RoutineExercise) and `allCompletedSetsAtUpperLimit` (WorkoutExercise) delegate to `ProgressiveOverloadService` — the properties are thin adapters mapping model sets to plain values
 
 **Design decisions:**
 - Optional `Int?` fields with nil defaults for seamless CloudKit/SwiftData lightweight migration
@@ -48,7 +62,10 @@ Adds a **rep range goal** (e.g., 8-12 reps) to exercises within routines. When a
 
 **`RoutinesViewModel`**:
 - `updateRepRange(for:min:max:)` - Sets/clears rep range on a RoutineExercise
-- `applyProgressiveOverload(for:weightIncrement:)` - Increases weight and resets reps to min for all sets
+- `applyProgressiveOverload(for:weightIncrement:)` - Increases weight and resets reps to min for all sets, via `ProgressiveOverloadService.applyIncrease`
+
+**`WorkoutViewModel`**:
+- `applyProgressiveOverload(for:weightIncrement:)` - Gets the new weights/reps from `ProgressiveOverloadService.applyIncrease` (for both the live workout sets and the routine template), and owns the persistence workflow around it: planned-value snapshotting, setting `progressiveOverloadApplied`, and saving
 
 ## Components
 

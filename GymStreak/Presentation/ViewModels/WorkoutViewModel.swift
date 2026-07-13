@@ -767,16 +767,18 @@ class WorkoutViewModel: ObservableObject {
 
         // Snapshot current actual performance into planned values (for comparison/history accuracy),
         // then update actual values with overloaded values for UI display
-        for set in workoutExercise.setsList {
+        let workoutSets = workoutExercise.setsList
+        let increase = ProgressiveOverloadService.applyIncrease(
+            toWeights: workoutSets.map(\.actualWeight),
+            increment: weightIncrement,
+            targetRepMin: minReps,
+            loadBehavior: workoutExercise.loadBehavior
+        )
+        for (set, newWeight) in zip(workoutSets, increase.weights) {
             set.plannedReps = set.actualReps
             set.plannedWeight = set.actualWeight
-
-            if workoutExercise.loadBehavior.isCounterweightAssistance {
-                set.actualWeight = max(0, set.actualWeight - weightIncrement)
-            } else {
-                set.actualWeight += weightIncrement
-            }
-            set.actualReps = minReps
+            set.actualWeight = newWeight
+            set.actualReps = increase.reps
         }
 
         // Mark that progressive overload was applied
@@ -786,13 +788,16 @@ class WorkoutViewModel: ObservableObject {
         if let routine = currentSession?.routine,
            let routineExercise = routine.routineExercisesList
             .first(where: { $0.exercise?.name == workoutExercise.exerciseName }) {
-            for set in routineExercise.setsList {
-                if workoutExercise.loadBehavior.isCounterweightAssistance {
-                    set.weight = max(0, set.weight - weightIncrement)
-                } else {
-                    set.weight += weightIncrement
-                }
-                set.reps = minReps
+            let templateSets = routineExercise.setsList
+            let templateIncrease = ProgressiveOverloadService.applyIncrease(
+                toWeights: templateSets.map(\.weight),
+                increment: weightIncrement,
+                targetRepMin: minReps,
+                loadBehavior: workoutExercise.loadBehavior
+            )
+            for (set, newWeight) in zip(templateSets, templateIncrease.weights) {
+                set.weight = newWeight
+                set.reps = templateIncrease.reps
             }
         }
 

@@ -611,7 +611,11 @@ struct ExerciseCard: View {
             WeightIncreaseSheet(
                 routineExercise: routineExercise,
                 onApply: { increment in
-                    let newWeight = (routineExercise.setsList.first?.weight ?? 0) + increment
+                    let newWeight = ProgressiveOverloadService.increasedWeight(
+                        routineExercise.setsList.first?.weight ?? 0,
+                        increment: increment,
+                        loadBehavior: workoutExercise.loadBehavior
+                    )
                     let minReps = routineExercise.targetRepMin ?? 0
                     viewModel.applyProgressiveOverload(for: workoutExercise, weightIncrement: increment)
                     selectedRoutineExerciseForOverload = nil
