@@ -1,3 +1,6 @@
 - Fortschrittsvergleiche wurden korrigiert, wenn dieselbe Übung mehrfach vorkommt oder ihren Namen mit einer anderen Ausrüstungsvariante teilt.
 - Apple Watch: Der Trainingsbildschirm zeigt jetzt oben den Namen der aktuellen Übung, deinen Gesamtfortschritt in Prozent sowie einen Fortschrittsbalken pro Übung.
 - Apple Watch: Die +/--Tasten sitzen jetzt wieder über dem Wert, den du gerade bearbeitest (Gewicht oder Wiederholungen), und tauschen die Seite mit der Herzfrequenz-/Kalorienanzeige.
+- Apple Watch: Wenn du deinen letzten Satz abschließt, wird das Training jetzt automatisch beendet und die Zusammenfassung angezeigt – du musst nicht mehr zurück und auf „Beenden“ tippen.
+- Apple Watch: Beim letzten Satz zeigt die Abschließen-Taste jetzt „Training beenden“, damit du weißt, dass dieser Tipp das Training beendet.
+- Apple Watch: Wenn du während des Trainings Sätze geändert hast, fragt das automatische Beenden weiterhin, ob deine Routinenvorlage aktualisiert werden soll, bevor gespeichert wird.

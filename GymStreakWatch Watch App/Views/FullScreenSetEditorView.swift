@@ -201,6 +201,7 @@ struct FullScreenSetEditorView: View {
                         totalSets: totalSets,
                         completedSets: displayedExercise.sets.map { $0.isCompleted },
                         showDoneFlash: showDoneFlash,
+                        isFinishing: viewModel.isFinishingSet,
                         onComplete: { toggleSetCompletion() },
                         onPrevious: { goToPreviousSet() },
                         onNext: { goToNextSet() }

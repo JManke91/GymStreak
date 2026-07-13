@@ -15,6 +15,10 @@ struct CompactActionBar: View {
     let completedSets: [Bool]
     /// Momentary "exercise finished" celebration state driven by the parent.
     let showDoneFlash: Bool
+    /// True when completing the displayed set finishes the whole workout (it is
+    /// the last remaining incomplete set) — relabels the capsule to "Finish
+    /// Workout". Derived in the ViewModel; the bar holds no state for it.
+    let isFinishing: Bool
     let onComplete: () -> Void
     let onPrevious: () -> Void
     let onNext: () -> Void
@@ -120,7 +124,10 @@ struct CompactActionBar: View {
         if showDoneFlash {
             return String(localized: "Done")
         }
-        return isCompleted ? String(localized: "Undo") : String(localized: "Complete")
+        if isCompleted {
+            return String(localized: "Undo")
+        }
+        return isFinishing ? String(localized: "Finish Workout") : String(localized: "Complete")
     }
 
     private var capsuleBackground: some View {
@@ -215,6 +222,9 @@ struct CompactActionBar: View {
     }
 
     private var completionAccessibilityLabel: Text {
+        if isFinishing {
+            return Text("Finish Workout")
+        }
         if totalSets > 1 {
             return isCompleted
                 ? Text("Undo set \(currentSetIndex + 1) of \(totalSets)")
@@ -257,6 +267,7 @@ struct CompactActionBar: View {
                 totalSets: 3,
                 completedSets: [true, false, false],
                 showDoneFlash: false,
+                isFinishing: false,
                 onComplete: {},
                 onPrevious: {},
                 onNext: {}
@@ -268,6 +279,7 @@ struct CompactActionBar: View {
                 totalSets: 3,
                 completedSets: [true, true, true],
                 showDoneFlash: true,
+                isFinishing: false,
                 onComplete: {},
                 onPrevious: {},
                 onNext: {}

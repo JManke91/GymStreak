@@ -56,6 +56,14 @@ struct ActiveWorkoutView: View {
         .task {
             await viewModel.startWorkout(with: routine)
         }
+        // Auto-finish on a workout with modified sets surfaces the same
+        // "Update your routine template?" dialog as the manual End flow.
+        .onChange(of: viewModel.requestsFinishConfirmation) { _, requested in
+            if requested {
+                showEndConfirmation = true
+                viewModel.requestsFinishConfirmation = false
+            }
+        }
         .confirmationDialog(
             "End Workout?",
             isPresented: $showEndConfirmation,

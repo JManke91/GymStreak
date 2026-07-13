@@ -50,6 +50,12 @@ final class WatchWorkoutViewModel: ObservableObject {
     @Published var workoutSummary: WatchWorkoutSummary?
     @Published var templateWasUpdated = false
 
+    /// Set by auto-finish when the final set completes on a workout with modified
+    /// sets: ActiveWorkoutView observes it and surfaces the existing
+    /// "Update your routine template?" confirmation dialog instead of saving
+    /// directly. The view resets it once the dialog is presented.
+    @Published var requestsFinishConfirmation = false
+
     // Error handling
     @Published var errorMessage: String?
 
@@ -228,6 +234,19 @@ final class WatchWorkoutViewModel: ObservableObject {
         exercises.count
     }
 
+    /// True when the currently displayed set is the last remaining incomplete
+    /// set of the whole workout — completing it finishes the workout (see the
+    /// auto-finish in applyToggleSetCompletion). Order-independent: derived from
+    /// the total incomplete-set count, so the complete button can relabel to
+    /// "Finish Workout" for any exercise/set that happens to be the final one.
+    var isFinishingSet: Bool {
+        guard let set = currentSet, !set.isCompleted else { return false }
+        let incompleteCount = exercises.reduce(0) { count, exercise in
+            count + exercise.sets.filter { !$0.isCompleted }.count
+        }
+        return incompleteCount == 1
+    }
+
     var hasModifiedSets: Bool {
         exercises.contains { exercise in
             exercise.sets.contains(where: \.wasModified)
@@ -323,6 +342,24 @@ final class WatchWorkoutViewModel: ObservableObject {
         }
     }
 
+    /// Finishes the workout automatically once its final set is completed.
+    /// Waits briefly so the completing tap's "Done" celebration flash is visible
+    /// before the summary/dialog appears (the delay matches the flash duration in
+    /// FullScreenSetEditorView). Workouts with modified sets route through the
+    /// existing "Update your routine template?" confirmation dialog (surfaced by
+    /// ActiveWorkoutView) exactly like the manual End flow; unmodified workouts
+    /// finish directly via endWorkout().
+    private func autoFinishWorkout() {
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(800))
+            if hasModifiedSets {
+                requestsFinishConfirmation = true
+            } else {
+                await endWorkout()
+            }
+        }
+    }
+
     func dismissSummary() {
         workoutSummary = nil
         resetState()
@@ -343,6 +380,17 @@ final class WatchWorkoutViewModel: ObservableObject {
         if r.newState {
             exercises[r.exerciseIndex].sets[r.setIndex].completedAt = Date()
             WKInterfaceDevice.current().play(.success)
+
+            // Completing the final remaining incomplete set anywhere in the
+            // routine (any exercise, any order, last superset round) finishes
+            // the workout instead of starting a rest timer / advancing. Because
+            // this lives in the shared completion path, all three entry points
+            // — on-screen Complete button, Ultra Action Button, Double Tap —
+            // finish identically.
+            if findNextIncompleteSet() == nil {
+                autoFinishWorkout()
+                return
+            }
 
             let exercise = exercises[r.exerciseIndex]
 

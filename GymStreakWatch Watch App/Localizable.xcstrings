@@ -509,6 +509,16 @@
         }
       }
     },
+    "Finish Workout" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Training beenden"
+          }
+        }
+      }
+    },
     "In progress" : {
       "localizations" : {
         "de" : {
