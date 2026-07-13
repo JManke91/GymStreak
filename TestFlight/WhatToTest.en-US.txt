@@ -5,3 +5,4 @@
 - Apple Watch: on your final set the complete button now reads "Finish Workout" so you know the tap will end the workout.
 - Apple Watch: if you changed any sets during the workout, auto-finishing still asks whether to update your routine template before saving.
 - Fixed: applying a weight-increase suggestion from the routine editor on assisted exercises (e.g. assisted pull-ups) now reduces the assistance weight as shown, instead of increasing it.
+- Exercises added or removed during a workout can now be saved back to the routine for future workouts when “Update Routine Template” is enabled.

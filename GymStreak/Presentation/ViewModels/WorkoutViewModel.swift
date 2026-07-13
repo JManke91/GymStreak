@@ -46,6 +46,7 @@ class WorkoutViewModel: ObservableObject {
 
     private let workoutSessionRepository: WorkoutSessionRepository
     private let routineRepository: RoutineRepository
+    private let exerciseRepository: ExerciseRepository
     private let watchSync: WatchSyncServicing
     private let aiCoachCache: AICoachCaching
     private var timer: Timer?
@@ -88,12 +89,14 @@ class WorkoutViewModel: ObservableObject {
     init(
         workoutSessionRepository: WorkoutSessionRepository,
         routineRepository: RoutineRepository,
+        exerciseRepository: ExerciseRepository,
         healthKitManager: HealthKitWorkoutServicing,
         watchSync: WatchSyncServicing,
         aiCoachCache: AICoachCaching? = nil
     ) {
         self.workoutSessionRepository = workoutSessionRepository
         self.routineRepository = routineRepository
+        self.exerciseRepository = exerciseRepository
         self.healthKitManager = healthKitManager
         self.watchSync = watchSync
         self.aiCoachCache = aiCoachCache ?? AICoachCache.shared
@@ -588,7 +591,7 @@ class WorkoutViewModel: ObservableObject {
         session.didUpdateTemplate = updateTemplate
 
         if updateTemplate {
-            updateRoutineTemplate(session: session)
+            updateRoutineTemplate(session: session, reconcileExerciseMembership: true)
         }
 
         save()
@@ -1414,7 +1417,7 @@ class WorkoutViewModel: ObservableObject {
         session.didUpdateTemplate = updateTemplate
 
         if updateTemplate {
-            updateRoutineTemplate(session: session) // also calls save()
+            updateRoutineTemplate(session: session, reconcileExerciseMembership: false) // also calls save()
         } else {
             save()
         }
@@ -1433,82 +1436,170 @@ class WorkoutViewModel: ObservableObject {
 
     // MARK: - Template Update
 
-    /// Pushes a session's performed values back onto its routine template. Reps/weight are taken
-    /// from completed sets only; rest time from the exercise; and the template's set count is
-    /// reconciled to match the session (extra sets appended, surplus removed) so edits that add
-    /// or delete sets are reflected for future workouts. Shared by `completeWorkout` and
-    /// `saveEditedWorkout`.
-    private func updateRoutineTemplate(session: WorkoutSession) {
+    /// Pushes a session's performed values back onto its routine template. Active-workout
+    /// completion also reconciles exercise membership; historical edits deliberately do not,
+    /// because a routine may have changed since that older workout was recorded.
+    private func updateRoutineTemplate(
+        session: WorkoutSession,
+        reconcileExerciseMembership: Bool
+    ) {
         guard let routine = session.routine else { return }
 
-        for workoutExercise in session.workoutExercisesList {
-            // Find the routine exercise this workout exercise originated from. A
-            // swapped exercise carries the performed alternative's name/id, so the
-            // origin slot must be matched via the originally-planned exercise.
-            let originId = workoutExercise.plannedExerciseId ?? workoutExercise.exerciseId
-            let originName = workoutExercise.plannedExerciseName ?? workoutExercise.exerciseName
-            guard let routineExercise = routine.routineExercisesList.first(where: { candidate in
-                if let originId, let candidateId = candidate.exercise?.id {
-                    return candidateId == originId
-                }
-                return candidate.exercise?.name == originName
-            }) else { continue }
+        let routineExercises = routine.routineExercisesList.sorted { $0.order < $1.order }
+        let workoutExercises = session.workoutExercisesList.sorted { $0.order < $1.order }
+        let allowsLegacyFallback = !reconcileExerciseMembership
+            && workoutExercises.allSatisfy { $0.routineExerciseId == nil }
+        var claimedRoutineExerciseIds: Set<UUID> = []
+        let matches: [(workout: WorkoutExercise, routine: RoutineExercise?)] = workoutExercises.map {
+            workoutExercise in
+            let match = matchingRoutineExercise(
+                for: workoutExercise,
+                in: routineExercises,
+                excluding: claimedRoutineExerciseIds,
+                allowsLegacyFallback: allowsLegacyFallback
+            )
+            if let match {
+                claimedRoutineExerciseIds.insert(match.id)
+            }
+            return (workoutExercise, match)
+        }
 
-            // Swapped exercises write their values back into the performed
-            // alternative's own set scheme — the primary's sets stay untouched.
-            if workoutExercise.wasSwapped {
-                if let alternative = routineExercise.alternativesList.first(where: { $0.exercise?.id == workoutExercise.exerciseId }) {
-                    updateAlternativeTemplateSets(alternative, from: workoutExercise)
+        if reconcileExerciseMembership {
+            for removedExercise in routineExercises where !claimedRoutineExerciseIds.contains(removedExercise.id) {
+                routine.routineExercises?.removeAll { $0.id == removedExercise.id }
+                for set in removedExercise.setsList {
+                    removedExercise.sets?.removeAll { $0.id == set.id }
+                    routineRepository.delete(set)
+                }
+                routineRepository.delete(removedExercise)
+            }
+
+            for (order, routineExercise) in routine.routineExercisesList
+                .sorted(by: { $0.order < $1.order })
+                .enumerated() {
+                routineExercise.order = order
+            }
+        }
+
+        for match in matches {
+            guard let routineExercise = match.routine else {
+                if reconcileExerciseMembership {
+                    appendRoutineExercise(from: match.workout, to: routine)
                 }
                 continue
             }
 
-            // Get the rest time from the first set (all sets should have same rest time)
-            let exerciseRestTime = workoutExercise.setsList.first?.restTime ?? 60.0
-            let workoutSets = workoutExercise.setsList.sorted(by: { $0.order < $1.order })
-            var routineSets = routineExercise.setsList.sorted(by: { $0.order < $1.order })
-
-            // Remove surplus template sets beyond the session's set count
-            if routineSets.count > workoutSets.count {
-                for routineSet in routineSets[workoutSets.count...] {
-                    routineExercise.sets?.removeAll { $0.id == routineSet.id }
-                    routineRepository.delete(routineSet)
+            // Swapped exercises write their values back into the performed
+            // alternative's own set scheme — the primary's sets stay untouched.
+            if match.workout.wasSwapped {
+                if let alternative = routineExercise.alternativesList.first(where: { $0.exercise?.id == match.workout.exerciseId }) {
+                    updateAlternativeTemplateSets(alternative, from: match.workout)
                 }
-                routineSets = Array(routineSets[..<workoutSets.count])
+                continue
             }
 
-            // Update existing template sets in order
-            for (index, routineSet) in routineSets.enumerated() {
-                routineSet.order = index
-                // Always update rest time for all sets
-                routineSet.restTime = exerciseRestTime
-                // Update reps and weight only for completed sets
-                let workoutSet = workoutSets[index]
-                if workoutSet.isCompleted {
-                    routineSet.reps = workoutSet.actualReps
-                    routineSet.weight = workoutSet.actualWeight
-                }
-            }
-
-            // Append new template sets for extra session sets
-            if workoutSets.count > routineSets.count {
-                for index in routineSets.count..<workoutSets.count {
-                    let workoutSet = workoutSets[index]
-                    let newRoutineSet = ExerciseSet(
-                        reps: workoutSet.actualReps,
-                        weight: workoutSet.actualWeight,
-                        restTime: exerciseRestTime,
-                        order: index
-                    )
-                    newRoutineSet.routineExercise = routineExercise
-                    routineExercise.sets?.append(newRoutineSet)
-                    routineRepository.insert(newRoutineSet)
-                }
-            }
+            updatePrimaryTemplateSets(routineExercise, from: match.workout)
         }
 
         routine.updatedAt = Date()
         save()
+    }
+
+    private func matchingRoutineExercise(
+        for workoutExercise: WorkoutExercise,
+        in candidates: [RoutineExercise],
+        excluding claimedIds: Set<UUID>,
+        allowsLegacyFallback: Bool
+    ) -> RoutineExercise? {
+        if let slotId = workoutExercise.routineExerciseId {
+            return candidates.first { $0.id == slotId && !claimedIds.contains($0.id) }
+        }
+
+        guard allowsLegacyFallback else { return nil }
+        let originId = workoutExercise.plannedExerciseId ?? workoutExercise.exerciseId
+        let originName = workoutExercise.plannedExerciseName ?? workoutExercise.exerciseName
+        return candidates.first { candidate in
+            guard !claimedIds.contains(candidate.id) else { return false }
+            if let originId, let candidateId = candidate.exercise?.id {
+                return candidateId == originId
+            }
+            return candidate.exercise?.name == originName
+        }
+    }
+
+    private func appendRoutineExercise(from workoutExercise: WorkoutExercise, to routine: Routine) {
+        guard let exerciseId = workoutExercise.exerciseId,
+              let exercise = exerciseRepository.fetch(id: exerciseId) else { return }
+
+        let routineExercise = RoutineExercise(order: routine.routineExercisesList.count)
+        routineRepository.insert(routineExercise)
+        routineExercise.exercise = exercise
+        routineExercise.routine = routine
+        if !routine.routineExercisesList.contains(where: { $0.id == routineExercise.id }) {
+            routine.routineExercises?.append(routineExercise)
+        }
+
+        for (order, workoutSet) in workoutExercise.setsList
+            .sorted(by: { $0.order < $1.order })
+            .enumerated() {
+            let routineSet = ExerciseSet(
+                reps: workoutSet.actualReps,
+                weight: workoutSet.actualWeight,
+                restTime: workoutSet.restTime,
+                order: order
+            )
+            routineRepository.insert(routineSet)
+            routineSet.routineExercise = routineExercise
+            if !routineExercise.setsList.contains(where: { $0.id == routineSet.id }) {
+                routineExercise.sets?.append(routineSet)
+            }
+        }
+
+        workoutExercise.routineExerciseId = routineExercise.id
+    }
+
+    private func updatePrimaryTemplateSets(
+        _ routineExercise: RoutineExercise,
+        from workoutExercise: WorkoutExercise
+    ) {
+        let exerciseRestTime = workoutExercise.setsList.first?.restTime ?? 60.0
+        let workoutSets = workoutExercise.setsList.sorted(by: { $0.order < $1.order })
+        var routineSets = routineExercise.setsList.sorted(by: { $0.order < $1.order })
+
+        if routineSets.count > workoutSets.count {
+            for routineSet in routineSets[workoutSets.count...] {
+                routineExercise.sets?.removeAll { $0.id == routineSet.id }
+                routineRepository.delete(routineSet)
+            }
+            routineSets = Array(routineSets[..<workoutSets.count])
+        }
+
+        for (index, routineSet) in routineSets.enumerated() {
+            routineSet.order = index
+            routineSet.restTime = exerciseRestTime
+            let workoutSet = workoutSets[index]
+            if workoutSet.isCompleted {
+                routineSet.reps = workoutSet.actualReps
+                routineSet.weight = workoutSet.actualWeight
+            }
+        }
+
+        if workoutSets.count > routineSets.count {
+            for index in routineSets.count..<workoutSets.count {
+                let workoutSet = workoutSets[index]
+                let newRoutineSet = ExerciseSet(
+                    reps: workoutSet.actualReps,
+                    weight: workoutSet.actualWeight,
+                    restTime: exerciseRestTime,
+                    order: index
+                )
+                routineRepository.insert(newRoutineSet)
+                newRoutineSet.routineExercise = routineExercise
+                if !routineExercise.setsList.contains(where: { $0.id == newRoutineSet.id }) {
+                    routineExercise.sets?.append(newRoutineSet)
+                }
+            }
+        }
     }
 
     /// Mirrors the primary-set template update for a performed alternative:

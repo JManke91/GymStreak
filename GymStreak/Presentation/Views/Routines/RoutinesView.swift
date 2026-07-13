@@ -30,6 +30,7 @@ private struct RoutinesViewInternal: View {
         self._workoutViewModel = StateObject(wrappedValue: WorkoutViewModel(
             workoutSessionRepository: dependencies.workoutSessionRepository,
             routineRepository: dependencies.routineRepository,
+            exerciseRepository: dependencies.exerciseRepository,
             healthKitManager: dependencies.makeHealthKitWorkoutService(),
             watchSync: dependencies.watchSync
         ))

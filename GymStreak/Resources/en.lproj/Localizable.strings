@@ -338,7 +338,7 @@
 "save_workout.apple_health" = "Save to Apple Health";
 "save_workout.apple_health_footer" = "Your workout will appear in the Fitness app and contribute to your activity rings";
 "save_workout.update_template" = "Update Routine Template";
-"save_workout.update_template_footer" = "Apply changes to reps and weight back to the routine template for future workouts";
+"save_workout.update_template_footer" = "Apply exercise and set changes back to the routine template for future workouts";
 
 // MARK: - Workout Detail View
 "workout_detail.date" = "Date";

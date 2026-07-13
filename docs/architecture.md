@@ -121,8 +121,8 @@ CloudKit: `.private("iCloud.com.jmanke.gymstreak")` with silent fallback to loca
 
 ### Repositories
 
-- `RoutineRepository`: `fetchAll/fetch(id:)/fetch(name:)/insert/delete` + child deletes (`RoutineExercise`, `ExerciseSet`, alternatives) + `save()`
-- `ExerciseRepository`: `fetchAll/insert/delete/save`
+- `RoutineRepository`: `fetchAll/fetch(id:)/fetch(name:)/insert/delete` + explicit `RoutineExercise`/`ExerciseSet` inserts and child deletes + `save()`
+- `ExerciseRepository`: `fetchAll/fetch(id:)/insert/delete/save`
 - `WorkoutSessionRepository`: `fetchAll/fetchCompleted/findSession(id:healthKitWorkoutId:)` (watch-workout dedup) + inserts/deletes + `save()`
 
 Child models normally cascade-insert via relationship attachment; explicit `delete` is always required (removing from a relationship array does not delete the record).

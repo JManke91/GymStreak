@@ -5,3 +5,4 @@
 - Apple Watch: Beim letzten Satz zeigt die Abschließen-Taste jetzt „Training beenden“, damit du weißt, dass dieser Tipp das Training beendet.
 - Apple Watch: Wenn du während des Trainings Sätze geändert hast, fragt das automatische Beenden weiterhin, ob deine Routinenvorlage aktualisiert werden soll, bevor gespeichert wird.
 - Behoben: Wenn du einen Gewichtssteigerungs-Vorschlag im Routinen-Editor bei unterstützten Übungen (z. B. Klimmzüge mit Unterstützung) anwendest, wird das Unterstützungsgewicht jetzt wie angezeigt reduziert statt erhöht.
+- Übungen, die du während eines Workouts hinzufügst oder entfernst, können jetzt mit aktivierter Option „Routinenvorlage aktualisieren“ für zukünftige Workouts in der Routine gespeichert werden.

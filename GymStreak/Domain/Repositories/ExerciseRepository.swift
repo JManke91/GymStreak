@@ -12,6 +12,7 @@ import Foundation
 protocol ExerciseRepository: AnyObject {
     /// All exercises, alphabetical by name.
     func fetchAll() -> [Exercise]
+    func fetch(id: UUID) -> Exercise?
 
     func insert(_ exercise: Exercise)
     func delete(_ exercise: Exercise)

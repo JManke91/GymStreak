@@ -24,6 +24,11 @@ final class SwiftDataExerciseRepository: ExerciseRepository {
         }
     }
 
+    func fetch(id: UUID) -> Exercise? {
+        let descriptor = FetchDescriptor<Exercise>(predicate: #Predicate { $0.id == id })
+        return try? modelContext.fetch(descriptor).first
+    }
+
     func insert(_ exercise: Exercise) {
         modelContext.insert(exercise)
     }

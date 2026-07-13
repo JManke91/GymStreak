@@ -152,6 +152,15 @@ final class RoutineExercise {
         self.order = order
     }
 
+    /// Creates an unattached slot for insertion before SwiftData relationships
+    /// are wired to already-persisted models.
+    init(order: Int) {
+        self.id = UUID()
+        self.exercise = nil
+        self.sets = []
+        self.order = order
+    }
+
     // Convenience accessor for non-optional usage
     var setsList: [ExerciseSet] {
         sets ?? []

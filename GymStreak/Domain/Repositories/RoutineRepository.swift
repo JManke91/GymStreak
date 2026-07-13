@@ -20,6 +20,11 @@ protocol RoutineRepository: AnyObject {
     func insert(_ routine: Routine)
     func delete(_ routine: Routine)
 
+    /// Explicit insertion is required when a routine slot is synthesized for an
+    /// already-persisted routine so SwiftData relationships can be wired only
+    /// after both sides belong to the same model context.
+    func insert(_ routineExercise: RoutineExercise)
+
     /// `RoutineExercise` is not managed purely through the `Routine.routineExercises`
     /// relationship — callers explicitly remove it (e.g. when the user deletes an
     /// exercise from a routine, or deletes an `Exercise` that is referenced by one).

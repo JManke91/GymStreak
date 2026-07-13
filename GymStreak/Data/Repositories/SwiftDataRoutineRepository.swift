@@ -42,6 +42,10 @@ final class SwiftDataRoutineRepository: RoutineRepository {
         modelContext.delete(routine)
     }
 
+    func insert(_ routineExercise: RoutineExercise) {
+        modelContext.insert(routineExercise)
+    }
+
     func delete(_ routineExercise: RoutineExercise) {
         modelContext.delete(routineExercise)
     }

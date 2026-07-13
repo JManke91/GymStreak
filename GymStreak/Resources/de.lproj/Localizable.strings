@@ -338,7 +338,7 @@
 "save_workout.apple_health" = "In Apple Health speichern";
 "save_workout.apple_health_footer" = "Dein Workout erscheint in der Fitness-App und trägt zu deinen Aktivitätsringen bei";
 "save_workout.update_template" = "Routinenvorlage aktualisieren";
-"save_workout.update_template_footer" = "Änderungen bei Wiederholungen und Gewicht auf die Routinenvorlage für zukünftige Workouts anwenden";
+"save_workout.update_template_footer" = "Änderungen an Übungen und Sätzen auf die Routinenvorlage für zukünftige Workouts anwenden";
 
 // MARK: - Workout Detail View
 "workout_detail.date" = "Datum";
