@@ -21,7 +21,7 @@ struct WorkoutDetailView: View {
     /// Kept only to pass through to the (out-of-scope) AI Coach analysis ViewModel API.
     @Environment(\.modelContext) private var modelContext
 
-    @State private var prDetails: [String: PersonalRecordService.PRDetail] = [:]
+    @State private var prDetails: [UUID: PersonalRecordService.PRDetail] = [:]
     @State private var healthKitKcal: Double?
     @State private var comparisons: [UUID: ExerciseComparisonResult] = [:]
     @State private var analysisVM = WorkoutAnalysisViewModel()
@@ -322,7 +322,7 @@ struct WorkoutDetailView: View {
                 ForEach(exercises, id: \.id) { exercise in
                     WorkoutDetailExerciseBlock(
                         exercise: exercise,
-                        prDetail: prDetails[exercise.stableKey],
+                        prDetail: prDetails[exercise.id],
                         comparison: comparisons[exercise.id]
                     )
                 }

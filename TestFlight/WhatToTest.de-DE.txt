@@ -1,0 +1,1 @@
+- Fortschrittsvergleiche wurden korrigiert, wenn dieselbe Übung mehrfach vorkommt oder ihren Namen mit einer anderen Ausrüstungsvariante teilt.

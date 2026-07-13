@@ -12,7 +12,7 @@ Workout summary screens provide users with a quick review of their completed wor
 - **Duration**: Formatted workout time
 - **Sets**: Combined format showing `completed/total (percentage%)` — green text at 100%
 - **Est. Calories**: Based on duration (4.5 kcal/minute for strength training)
-- **Exercise Progress**: Per-exercise volume change compared to the previous workout of the same exercise
+- **Exercise Progress**: Per-slot volume change compared to the previous workout of the same routine exercise; repeated heavy/high-rep uses remain separate
   - Volume increase: green arrow with percentage
   - Volume decrease: orange arrow with percentage
   - First time: tint-colored "New" badge
@@ -22,9 +22,11 @@ Workout summary screens provide users with a quick review of their completed wor
 
 ### How exercise progress works
 Uses `ExerciseProgressService.compareWithPrevious(workout:)` which:
-1. For each exercise in the current session, finds the most recent previous workout containing that exercise
-2. Computes `volumeDeltaPercentage` = `((currentVolume - previousVolume) / previousVolume) * 100`
-3. Returns `ExerciseComparisonResult` with comparison data
+1. Identifies the exercise by `exerciseId`, keeping same-name equipment variants separate
+2. Selects the same `routineExerciseId` programming slot so repeated uses do not cross-compare
+3. For legacy history without slot ids, matches the ordered occurrence only when the stable routine relationship proves the same routine; missing or ambiguous identity produces no comparison
+4. Computes `volumeDeltaPercentage` = `((currentVolume - previousVolume) / previousVolume) * 100`
+5. Returns `ExerciseComparisonResult` with comparison data
 
 The service requires `ModelContext` (SwiftData) and is loaded via `.task` modifier on the view.
 

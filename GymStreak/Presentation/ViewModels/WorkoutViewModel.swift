@@ -236,6 +236,7 @@ class WorkoutViewModel: ObservableObject {
                         muscleGroups: [routineExercise.exercise?.primaryMuscleGroup ?? "General"],
                         order: routineExercise.order,
                         exerciseId: routineExercise.exercise?.id,
+                        routineExerciseId: routineExercise.id,
                         loadBehavior: routineExercise.exercise?.loadBehavior ?? .resistance
                     )
                     workoutExercise.workoutSession = session
@@ -891,6 +892,10 @@ class WorkoutViewModel: ObservableObject {
     /// originally-planned exercise id (falls back to current id when not swapped).
     private func originRoutineExercise(for workoutExercise: WorkoutExercise) -> RoutineExercise? {
         guard let routine = currentSession?.routine else { return nil }
+        if let routineExerciseId = workoutExercise.routineExerciseId,
+           let exactSlot = routine.routineExercisesList.first(where: { $0.id == routineExerciseId }) {
+            return exactSlot
+        }
         let originId = workoutExercise.plannedExerciseId ?? workoutExercise.exerciseId
         return routine.routineExercisesList.first { $0.exercise?.id == originId }
     }
@@ -943,6 +948,7 @@ class WorkoutViewModel: ObservableObject {
         workoutExercise.exerciseId = target.exercise.id
         workoutExercise.exerciseName = target.exercise.name
         workoutExercise.muscleGroups = target.exercise.muscleGroups
+        workoutExercise.loadBehavior = target.exercise.loadBehavior
 
         // Reverting to the originally-planned exercise clears the swap metadata.
         if target.isOriginal {

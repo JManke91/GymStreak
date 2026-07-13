@@ -17,6 +17,8 @@ struct PersonalRecordService {
     struct PRDetail {
         /// `WorkoutExercise.stableKey` of the exercise that scored the PR.
         let exerciseKey: String
+        /// The concrete workout occurrence containing the record-setting set.
+        let workoutExerciseId: UUID
         /// The completed set that achieved the new best estimated 1RM.
         let setId: UUID
         let weight: Double
@@ -29,13 +31,13 @@ struct PersonalRecordService {
     /// Pre-computed PR lookup: for each session, the count of exercises in that session that
     /// achieved at least one PR-setting set when compared to all earlier sessions.
     ///
-    /// Also returns per-session PR details (keyed by exercise `stableKey`) — used by the
-    /// workout detail view to show which record was achieved and by which set.
+    /// Also returns per-session PR details keyed by the winning `WorkoutExercise.id` —
+    /// used by workout detail to attach the record to exactly one occurrence.
     struct PRResult {
         /// session.id -> count of PR-scoring exercises in that session
         let prCountBySession: [UUID: Int]
-        /// session.id -> (exercise stableKey -> record details) for exercises that scored a PR
-        let prDetailsBySession: [UUID: [String: PRDetail]]
+        /// session.id -> (workout exercise id -> record details)
+        let prDetailsBySession: [UUID: [UUID: PRDetail]]
     }
 
     /// Walks every completed session chronologically and records a PR whenever a new exercise
@@ -48,12 +50,18 @@ struct PersonalRecordService {
         // exercise stableKey -> best estimated 1RM seen so far (strictly before the current session)
         var bestByExercise: [String: Double] = [:]
         var prCountBySession: [UUID: Int] = [:]
-        var prDetailsBySession: [UUID: [String: PRDetail]] = [:]
+        var prDetailsBySession: [UUID: [UUID: PRDetail]] = [:]
 
         for session in sorted {
             // 1. Determine the best set (by estimated 1RM) for each exercise within this session.
-            var sessionBests: [String: (setId: UUID, weight: Double, reps: Int, estimated: Double)] = [:]
-            for exercise in session.workoutExercisesList {
+            var sessionBests: [String: (
+                workoutExerciseId: UUID,
+                setId: UUID,
+                weight: Double,
+                reps: Int,
+                estimated: Double
+            )] = [:]
+            for exercise in session.workoutExercisesList.sorted(by: { $0.order < $1.order }) {
                 let nameKey = exercise.stableKey
                 let usePlanned = exercise.progressiveOverloadApplied
                 for set in exercise.setsList where set.isCompleted {
@@ -68,18 +76,19 @@ struct PersonalRecordService {
                           ) else { continue }
                     let estimated = ExerciseLoadMetrics.estimatedOneRepMax(weight: weight, reps: reps)
                     if estimated > (sessionBests[nameKey]?.estimated ?? 0) {
-                        sessionBests[nameKey] = (set.id, weight, reps, estimated)
+                        sessionBests[nameKey] = (exercise.id, set.id, weight, reps, estimated)
                     }
                 }
             }
 
             // 2. Compare against historical bests (strictly before this session).
-            var details: [String: PRDetail] = [:]
+            var details: [UUID: PRDetail] = [:]
             for (nameKey, best) in sessionBests {
                 let prior = bestByExercise[nameKey]
                 guard best.estimated > (prior ?? 0) else { continue }
-                details[nameKey] = PRDetail(
+                details[best.workoutExerciseId] = PRDetail(
                     exerciseKey: nameKey,
+                    workoutExerciseId: best.workoutExerciseId,
                     setId: best.setId,
                     weight: best.weight,
                     reps: best.reps,

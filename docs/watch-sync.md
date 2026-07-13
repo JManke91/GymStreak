@@ -136,6 +136,8 @@ observeWatchWorkoutCompletions() → processPendingWatchWorkouts() → fetchRout
 - `CompletedWatchWorkout` / `CompletedWatchExercise` / `CompletedWatchSet`: Completed workout data sent to iOS (Codable wire DTOs; live in `Data/Sync/` on iOS)
 - `IncomingWatchWorkout` / `IncomingWatchExercise` / `IncomingWatchSet` (iOS Domain only): the Domain mirror of the completed-workout DTOs. `WatchConnectivityManager` maps the wire DTO into these at the boundary so the Domain ingestion service and `RoutinesViewModel` never reference a Data type
 
+`WatchExercise.id` is the source `RoutineExercise.id` and remains unchanged through `ActiveWorkoutExercise`, `CompletedWatchExercise`, and `IncomingWatchExercise`. On ingestion, iOS snapshots that value into `WorkoutExercise.routineExerciseId`. This distinguishes repeated uses of the same library exercise in history without adding a new Watch wire field, so old cached routines and mixed app versions retain their existing Codable compatibility.
+
 All models preserve UUIDs from the iOS SwiftData originals for ID-based matching when updating templates.
 
 ## UI Feedback

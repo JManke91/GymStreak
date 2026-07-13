@@ -359,6 +359,10 @@ final class WorkoutExercise {
     var exerciseName: String = "" // Denormalized for history display
     var muscleGroups: [String] = []
     var exerciseId: UUID? = nil // Links back to Exercise library for reliable filtering
+    /// Stable identity of the source slot in a routine. This is a denormalized
+    /// UUID rather than a relationship so history survives routine edits/deletion.
+    /// Nil marks legacy history and exercises added ad hoc during a workout.
+    var routineExerciseId: UUID? = nil
     /// Snapshot of the source exercise's load behavior. Historical workouts
     /// must not change meaning when the library exercise is edited later.
     var loadBehaviorRaw: String = ExerciseLoadBehavior.resistance.rawValue
@@ -387,6 +391,7 @@ final class WorkoutExercise {
     init(from routineExercise: RoutineExercise, order: Int) {
         self.id = UUID()
         self.exerciseId = routineExercise.exercise?.id
+        self.routineExerciseId = routineExercise.id
         self.exerciseName = routineExercise.exercise?.name ?? "Unknown"
         self.muscleGroups = routineExercise.exercise?.muscleGroups ?? ["General"]
         self.loadBehaviorRaw = routineExercise.exercise?.loadBehavior.rawValue ?? ExerciseLoadBehavior.resistance.rawValue
@@ -408,10 +413,12 @@ final class WorkoutExercise {
         muscleGroups: [String],
         order: Int,
         exerciseId: UUID? = nil,
+        routineExerciseId: UUID? = nil,
         loadBehavior: ExerciseLoadBehavior = .resistance
     ) {
         self.id = UUID()
         self.exerciseId = exerciseId
+        self.routineExerciseId = routineExerciseId
         self.exerciseName = exerciseName
         self.muscleGroups = muscleGroups
         self.loadBehaviorRaw = loadBehavior.rawValue

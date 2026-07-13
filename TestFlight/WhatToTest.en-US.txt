@@ -1,0 +1,1 @@
+- Fixed workout progress comparisons when the same exercise appears multiple times or shares its name with another equipment variant.

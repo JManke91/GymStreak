@@ -85,6 +85,7 @@ final class WatchWorkoutIngestionService {
                 muscleGroups: [completedExercise.muscleGroup],
                 order: completedExercise.order,
                 exerciseId: completedExercise.exerciseId,
+                routineExerciseId: completedExercise.id,
                 loadBehavior: ExerciseLoadBehavior(rawValue: completedExercise.loadBehaviorRaw) ?? .resistance
             )
             workoutExercise.workoutSession = workoutSession

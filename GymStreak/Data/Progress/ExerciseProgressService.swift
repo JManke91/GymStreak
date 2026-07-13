@@ -157,7 +157,10 @@ class ExerciseProgressService: ExerciseProgressProviding {
         for exerciseName: String,
         exerciseId: UUID? = nil,
         before date: Date,
-        expectedLoadBehavior: ExerciseLoadBehavior? = nil
+        expectedLoadBehavior: ExerciseLoadBehavior? = nil,
+        routineId: UUID? = nil,
+        occurrenceIndex: Int = 0,
+        routineExerciseId: UUID? = nil
     ) -> PreviousExercisePerformance? {
         let nameIsUnique = isLiveNameUnique(exerciseName)
 
@@ -172,14 +175,33 @@ class ExerciseProgressService: ExerciseProgressProviding {
         do {
             let sessions = try modelContext.fetch(descriptor)
 
-            // Find the most recent session that contains this exercise
+            // Find the most recent same-routine session containing the same
+            // ordered occurrence. The occurrence index is the legacy identity
+            // for workouts recorded before routine-slot ids were snapshotted.
             for session in sessions {
-                let matchingExercise = session.workoutExercisesList.first {
+                let matchingExercises = session.workoutExercisesList
+                    .filter {
                     Self.matches($0, exerciseId: exerciseId, exerciseName: exerciseName, nameIsUnique: nameIsUnique)
                         && (expectedLoadBehavior == nil || $0.loadBehavior == expectedLoadBehavior)
-                }
+                    }
+                    .sorted { $0.order < $1.order }
 
-                guard let exercise = matchingExercise else { continue }
+                let exercise: WorkoutExercise
+                if let routineExerciseId,
+                   let exactMatch = matchingExercises.first(where: { $0.routineExerciseId == routineExerciseId }) {
+                    exercise = exactMatch
+                } else {
+                    // Occurrence order is only meaningful inside a proven
+                    // routine context. If the relationship no longer exists,
+                    // a display-name match could silently join two routines
+                    // with the same name, so legacy comparison stays empty.
+                    guard let routineId, session.routine?.id == routineId else { continue }
+                    let legacyMatches = routineExerciseId == nil
+                        ? matchingExercises
+                        : matchingExercises.filter { $0.routineExerciseId == nil }
+                    guard legacyMatches.indices.contains(occurrenceIndex) else { continue }
+                    exercise = legacyMatches[occurrenceIndex]
+                }
 
                 let usePlanned = exercise.progressiveOverloadApplied
                 let sets = exercise.setsList.sorted(by: { $0.order < $1.order }).map { set in
@@ -217,13 +239,26 @@ class ExerciseProgressService: ExerciseProgressProviding {
     /// - Returns: Array of comparison results for each exercise
     func compareWithPrevious(workout: WorkoutSession) -> [ExerciseComparisonResult] {
         var results: [ExerciseComparisonResult] = []
+        let sortedExercises = workout.workoutExercisesList.sorted(by: { $0.order < $1.order })
 
-        for exercise in workout.workoutExercisesList.sorted(by: { $0.order < $1.order }) {
+        for exercise in sortedExercises {
+            let matchingCurrentExercises = sortedExercises.filter {
+                Self.matches(
+                    $0,
+                    exerciseId: exercise.exerciseId,
+                    exerciseName: exercise.exerciseName,
+                    nameIsUnique: isLiveNameUnique(exercise.exerciseName)
+                ) && $0.loadBehavior == exercise.loadBehavior
+            }
+            let occurrenceIndex = matchingCurrentExercises.firstIndex { $0.id == exercise.id } ?? 0
             let previous = previousPerformance(
                 for: exercise.exerciseName,
                 exerciseId: exercise.exerciseId,
                 before: workout.startTime,
-                expectedLoadBehavior: exercise.loadBehavior
+                expectedLoadBehavior: exercise.loadBehavior,
+                routineId: workout.routine?.id,
+                occurrenceIndex: occurrenceIndex,
+                routineExerciseId: exercise.routineExerciseId
             )
 
             let completedSets = exercise.setsList.filter(\.isCompleted)
