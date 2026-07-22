@@ -12,9 +12,13 @@ class RoutinesViewModel: ObservableObject {
     private let routineRepository: RoutineRepository
     private let workoutSessionRepository: WorkoutSessionRepository
     private let watchSync: WatchSyncServicing
-    private let watchWorkoutIngestionService: WatchWorkoutIngestionService
     private var cloudSyncObserver: NSObjectProtocol?
 
+    // Watch-workout ingestion lives in WatchWorkoutIngestionCoordinator
+    // (composition root) since ticket 04 — payloads are drained from the
+    // durable inbox before any view/ViewModel exists. This ViewModel only
+    // reacts to `.routineTemplateDidChange` (posted by the coordinator after
+    // a template update) via observeRoutineTemplateChanges().
     init(
         routineRepository: RoutineRepository,
         workoutSessionRepository: WorkoutSessionRepository,
@@ -23,12 +27,6 @@ class RoutinesViewModel: ObservableObject {
         self.routineRepository = routineRepository
         self.workoutSessionRepository = workoutSessionRepository
         self.watchSync = watchSync
-        self.watchWorkoutIngestionService = WatchWorkoutIngestionService(
-            routineRepository: routineRepository,
-            workoutSessionRepository: workoutSessionRepository
-        )
-        observeWatchWorkoutCompletions()
-        processPendingWatchWorkouts()
         fetchRoutines()
         observeCloudKitChanges()
         observeWatchAvailability()
@@ -70,36 +68,24 @@ class RoutinesViewModel: ObservableObject {
                 self?.fetchRoutines()
             }
         }
-    }
-
-    private func observeWatchWorkoutCompletions() {
+        // A committed watch template transaction refreshes the cached list but
+        // must NOT trigger a watch sync: it already staged its own
+        // authoritative snapshot, and an ordinary sync from this cache would
+        // emit a competing generation (ticket 05).
         NotificationCenter.default.addObserver(
-            forName: .watchWorkoutCompleted,
+            forName: .routineTemplateDidChangeLocally,
             object: nil,
             queue: .main
-        ) { [weak self] notification in
-            guard let workout = notification.userInfo?["workout"] as? IncomingWatchWorkout else {
-                return
-            }
+        ) { [weak self] _ in
             Task { @MainActor in
-                self?.handleCompletedWatchWorkout(workout)
+                self?.refreshRoutinesWithoutWatchSync()
             }
         }
     }
 
-    private func processPendingWatchWorkouts() {
-        // Drain ALL workouts that arrived before we started observing or that
-        // were buffered to disk because a prior process crashed before saving.
-        // The persistent buffer is App-Group-backed so it survives app crashes;
-        // entries are removed individually by `markPendingProcessed` inside
-        // handleCompletedWatchWorkout once the SwiftData save succeeds (or a
-        // duplicate is detected).
-        let pending = watchSync.pendingWorkouts()
-        guard !pending.isEmpty else { return }
-        print("Processing \(pending.count) pending watch workout(s)")
-        for workout in pending {
-            handleCompletedWatchWorkout(workout)
-        }
+    private func refreshRoutinesWithoutWatchSync() {
+        routines = routineRepository.fetchAll()
+        refreshLastPerformedDates()
     }
 
     func fetchRoutines() {
@@ -667,27 +653,6 @@ class RoutinesViewModel: ObservableObject {
             try routineRepository.save()
         } catch {
             print("Error saving context: \(error)")
-        }
-    }
-
-    // MARK: - Watch Workout Handling
-
-    /// Delegates ingestion (dedup, materialization, save, template update) to
-    /// `WatchWorkoutIngestionService`, then applies the two side effects that
-    /// stay ViewModel-owned: acking with the watch and refreshing the
-    /// published `routines` list if the template changed.
-    private func handleCompletedWatchWorkout(_ workout: IncomingWatchWorkout) {
-        let result = watchWorkoutIngestionService.ingest(workout)
-
-        if result.shouldAcknowledge {
-            watchSync.markPendingProcessed(id: workout.id)
-            // Confirm the save back to the watch so it can drop the rich payload from
-            // its durable retry queue. Until this ack arrives the watch keeps retrying.
-            watchSync.acknowledgeWorkoutSaved(id: workout.id)
-        }
-
-        if result.templateWasUpdated {
-            fetchRoutines()
         }
     }
 }

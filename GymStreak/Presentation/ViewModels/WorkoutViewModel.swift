@@ -48,6 +48,7 @@ class WorkoutViewModel: ObservableObject {
     private let routineRepository: RoutineRepository
     private let exerciseRepository: ExerciseRepository
     private let watchSync: WatchSyncServicing
+    private let workoutHistoryCorrelation: WorkoutHistoryCorrelationProviding
     private let aiCoachCache: AICoachCaching
     private var timer: Timer?
     private var restTimer: Timer?
@@ -92,6 +93,7 @@ class WorkoutViewModel: ObservableObject {
         exerciseRepository: ExerciseRepository,
         healthKitManager: HealthKitWorkoutServicing,
         watchSync: WatchSyncServicing,
+        workoutHistoryCorrelation: WorkoutHistoryCorrelationProviding,
         aiCoachCache: AICoachCaching? = nil
     ) {
         self.workoutSessionRepository = workoutSessionRepository
@@ -99,6 +101,7 @@ class WorkoutViewModel: ObservableObject {
         self.exerciseRepository = exerciseRepository
         self.healthKitManager = healthKitManager
         self.watchSync = watchSync
+        self.workoutHistoryCorrelation = workoutHistoryCorrelation
         self.aiCoachCache = aiCoachCache ?? AICoachCache.shared
         fetchWorkoutHistory()
         // Skip notification permission during UI testing to avoid alert in screenshots
@@ -147,7 +150,15 @@ class WorkoutViewModel: ObservableObject {
     /// `orphanedWatchWorkouts`. Called on init, on `.workoutHistoryDidChange`,
     /// and from HistoryView's scenePhase observer when the app becomes active.
     func reconcileWatchWorkouts() async {
-        let knownIds = Set(workoutHistory.compactMap(\.healthKitWorkoutId))
+        let knownIds: Set<UUID>
+        do {
+            knownIds = try workoutHistoryCorrelation.healthKitWorkoutIDs()
+        } catch {
+            print("Watch workout reconciliation skipped: committed history unavailable — \(error.localizedDescription)")
+            orphanFirstSeen.removeAll()
+            orphanedWatchWorkouts = []
+            return
+        }
         var orphans = await reconciler.findOrphanedWorkouts(knownIds: knownIds)
 
         // HKWorkouts replicate from the watch via background device sync, while
@@ -210,19 +221,22 @@ class WorkoutViewModel: ObservableObject {
         let orphans = orphanedWatchWorkouts
         guard !orphans.isEmpty else { return }
 
-        let existingHKIds = Set(workoutHistory.compactMap(\.healthKitWorkoutId))
+        var existingHKIds: Set<UUID>
+        do {
+            existingHKIds = try workoutHistoryCorrelation.healthKitWorkoutIDs()
+        } catch {
+            print("Watch workout recovery skipped: committed history unavailable — \(error.localizedDescription)")
+            return
+        }
         var didInsert = false
 
         for orphan in orphans where !existingHKIds.contains(orphan.id) {
             let routine = matchRoutine(for: orphan)
 
-            // WorkoutSession.init requires a Routine. For an unmatched workout we pass a
-            // transient one purely to satisfy the initializer, then detach it so no
-            // phantom routine is persisted — the denormalized routineName drives display.
-            let session = WorkoutSession(routine: routine ?? Routine(name: orphan.routineName))
-            if routine == nil {
-                session.routine = nil
-            }
+            // For an unmatched workout the session stays routine-less — no
+            // phantom routine is persisted; the denormalized routineName
+            // drives display.
+            let session = WorkoutSession(routine: routine)
             session.id = UUID()
             session.healthKitWorkoutId = orphan.id
             session.startTime = orphan.startDate
@@ -268,6 +282,7 @@ class WorkoutViewModel: ObservableObject {
             }
 
             workoutSessionRepository.insert(session)
+            existingHKIds.insert(orphan.id)
             didInsert = true
         }
 

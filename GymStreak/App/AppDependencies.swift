@@ -17,6 +17,7 @@ final class AppDependencies: ObservableObject {
     let routineRepository: RoutineRepository
     let exerciseRepository: ExerciseRepository
     let workoutSessionRepository: WorkoutSessionRepository
+    let workoutHistoryCorrelation: WorkoutHistoryCorrelationProviding
 
     /// A true app-wide singleton — `WatchConnectivityManager.shared` must be the same
     /// instance everywhere so its WCSession delegate (registered at app launch) is the
@@ -35,13 +36,57 @@ final class AppDependencies: ObservableObject {
     /// docs/starter-exercise-library.md). Invoked once from GymStreakApp at launch.
     let defaultContentSeeder: DefaultContentSeeder
 
+    /// App-lifetime owner of the exercise-catalogue → watch sync triggers
+    /// (post-seed, committed library mutations, CloudKit changes). ViewModels
+    /// receive it as `ExerciseCatalogSyncRequesting` — never the concrete type.
+    let exerciseCatalogSync: ExerciseCatalogSyncRequesting
+
+    /// App-lifetime owner of the completed-watch-workout receive pipeline
+    /// (ticket 04): serialized durable-inbox drain, isolated no-template
+    /// ingestion, terminal receipts, and watch acks. Lives here — not in a
+    /// ViewModel — because payloads must be ingested before any view exists
+    /// and mutation order must not depend on view lifecycles.
+    let watchWorkoutIngestion: WatchWorkoutIngestionCoordinator
+
     init(modelContext: ModelContext) {
         self.routineRepository = SwiftDataRoutineRepository(modelContext: modelContext)
         self.exerciseRepository = SwiftDataExerciseRepository(modelContext: modelContext)
         self.workoutSessionRepository = SwiftDataWorkoutSessionRepository(modelContext: modelContext)
-        self.watchSync = WatchConnectivityManager.shared
+        self.workoutHistoryCorrelation = SwiftDataWorkoutHistoryCorrelationProvider(
+            container: modelContext.container
+        )
+        let watchConnectivity = WatchConnectivityManager.shared
+        self.watchSync = watchConnectivity
         self.exerciseProgressService = ExerciseProgressService(modelContext: modelContext)
         self.defaultContentSeeder = DefaultContentSeeder(modelContext: modelContext)
+        self.exerciseCatalogSync = ExerciseCatalogSyncCoordinator(
+            exerciseRepository: exerciseRepository,
+            watchSync: watchSync
+        )
+        self.watchWorkoutIngestion = WatchWorkoutIngestionCoordinator(
+            inbox: watchConnectivity.workoutInbox,
+            receipts: WorkoutIngestReceiptStore(),
+            historyTransactions: SwiftDataWorkoutHistoryTransactionFactory(container: modelContext.container),
+            routineSnapshots: SwiftDataAuthoritativeRoutineSnapshotProvider(
+                container: modelContext.container
+            ),
+            routineSnapshotTransport: watchConnectivity,
+            mainContextCache: SwiftDataMainContextRoutineCacheRefresher(modelContext: modelContext),
+            watchSync: watchConnectivity
+        )
+        // Receipt-of-payload and activation drains route through the manager;
+        // weak because the manager is an app-lifetime singleton and must not
+        // retain the composition root's coordinator.
+        watchConnectivity.onWorkoutInboxUpdated = { [weak coordinator = watchWorkoutIngestion] in
+            coordinator?.drainInbox()
+        }
+        watchConnectivity.onRoutineChallengeUpdated = { [weak coordinator = watchWorkoutIngestion] in
+            coordinator?.routineAuthorityDidChange()
+        }
+        // Launch drain: entries that arrived before this init or were left by
+        // a prior crash (processed before any RoutinesViewModel can trigger a
+        // routine sync with stale data).
+        watchWorkoutIngestion.routineAuthorityDidChange()
     }
 
     /// Each `WorkoutViewModel` owns its own HealthKit workout session — unlike

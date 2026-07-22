@@ -60,14 +60,32 @@ struct GymStreakCompleteSetIntent: AppIntent {
         IntentDescription("Mark the current exercise set as complete")
     }
 
-    static var openAppWhenRun: Bool { true }
+    /// Runs in the background — no foreground activation. The legacy
+    /// `openAppWhenRun = true` (deprecated in watchOS 26) forced a full
+    /// foreground-activation handshake on EVERY press; with the app already
+    /// frontmost during a workout that handshake could stall past the system's
+    /// intent timeout, leaving the orange Action Button overlay stuck until
+    /// "»Satz abschließen« … ist fehlgeschlagen" (observed on device,
+    /// July 2026). perform() only calls into the live view model and presents
+    /// no UI, so background mode is correct: a press completes the set (with
+    /// haptic) even from the watch face, and during a workout the app is
+    /// visible anyway. Do NOT reintroduce a foreground requirement here —
+    /// GymStreakStartWorkoutIntent must keep openAppWhenRun (StartWorkoutIntent
+    /// requires it) but this intent must not.
+    static let supportedModes: IntentModes = .background
 
     @MainActor
     func perform() async throws -> some IntentResult {
+        print("Action Button: complete-set perform() started")
         AppStateProvider.shared.workoutViewModel?.handleActionButtonPress()
 
-        // Re-donate so the next press completes the following set.
-        return .result(actionButtonIntent: GymStreakCompleteSetIntent())
+        // The donated next action persists for the active workout session.
+        // Do not launch another donation here: an unstructured registration
+        // races this intent finishing and can make the following press vanish.
+        // Apple's workout example donates once and returns a plain result for
+        // every invocation of its session action.
+        print("Action Button: complete-set perform() finished")
+        return .result()
     }
 }
 

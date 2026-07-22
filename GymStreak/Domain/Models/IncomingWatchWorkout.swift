@@ -27,6 +27,12 @@ struct IncomingWatchWorkout {
     /// HealthKit. Correlates the SwiftData `WorkoutSession` with the HK workout.
     let healthKitWorkoutId: UUID?
 
+    // Template-transaction ordering identity (ticket 05); nil on no-template
+    // workouts and on payloads from pre-ticket-05 watch builds.
+    var templateTransactionID: UUID? = nil
+    var templateSenderEpoch: UUID? = nil
+    var templateSequence: UInt64? = nil
+
     var modifiedSetsCount: Int {
         exercises.reduce(0) { total, exercise in
             total + exercise.sets.filter { $0.actualReps != $0.plannedReps || $0.actualWeight != $0.plannedWeight }.count

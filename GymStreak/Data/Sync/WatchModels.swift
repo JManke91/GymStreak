@@ -66,6 +66,17 @@ struct CompletedWatchWorkout: Codable {
     /// Used to correlate SwiftData WorkoutSession with HealthKit workout.
     let healthKitWorkoutId: UUID?
 
+    // Template-transaction ordering identity (ticket 05). Optional (nil
+    // default) keeps old payloads decodable. Assigned by the watch sync-state
+    // owner in the same atomic commit as the enqueue, only when
+    // `shouldUpdateTemplate == true`; stable across retries. The transaction
+    // ID is the semantic transaction identity; the workout id is correlation.
+    var templateTransactionID: UUID? = nil
+    /// Persistent watch sender epoch shared by every template-mutating kind.
+    var templateSenderEpoch: UUID? = nil
+    /// Monotonic per-routine sequence within `templateSenderEpoch`.
+    var templateSequence: UInt64? = nil
+
     var duration: TimeInterval {
         endTime.timeIntervalSince(startTime)
     }
@@ -134,7 +145,10 @@ extension CompletedWatchWorkout {
             endTime: endTime,
             exercises: exercises.map { $0.toIncomingWatchExercise() },
             shouldUpdateTemplate: shouldUpdateTemplate,
-            healthKitWorkoutId: healthKitWorkoutId
+            healthKitWorkoutId: healthKitWorkoutId,
+            templateTransactionID: templateTransactionID,
+            templateSenderEpoch: templateSenderEpoch,
+            templateSequence: templateSequence
         )
     }
 }

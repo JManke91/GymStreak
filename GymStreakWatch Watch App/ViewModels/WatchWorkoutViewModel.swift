@@ -56,6 +56,10 @@ final class WatchWorkoutViewModel: ObservableObject {
     /// directly. The view resets it once the dialog is presented.
     @Published var requestsFinishConfirmation = false
 
+    /// True while a finalization attempt (endWorkout) is in flight. Duplicate
+    /// End/Save actions are rejected and every workout mutator is frozen.
+    @Published var isEnding = false
+
     // Error handling
     @Published var errorMessage: String?
 
@@ -72,6 +76,13 @@ final class WatchWorkoutViewModel: ObservableObject {
     private var pendingCompletedWorkoutId: UUID?
     private var pendingHealthKitWorkoutId: UUID?
     private var restTimer: Timer?
+    /// The delayed auto-finish, kept cancellable so a manual End (or discard)
+    /// entering the terminal state can revoke it before it fires.
+    private var autoFinishTask: Task<Void, Never>?
+    /// Terminal finalization state machine (durable enqueue → HealthKit
+    /// metadata → HealthKit finish → transport), shared by manual End and
+    /// auto-finish. Operates on the connectivity manager's durable queue.
+    private lazy var finalizer = WatchWorkoutFinalizer(syncState: connectivityManager.syncState)
     private var cancellabes = Set<AnyCancellable>()
 
     // MARK: - Initialization
@@ -261,7 +272,18 @@ final class WatchWorkoutViewModel: ObservableObject {
 
     // MARK: - Workout Lifecycle
 
-    func startWorkout(with routine: WatchRoutine) async {
+    /// Resolves the newest effective template exactly once at the workout
+    /// boundary. Navigation keeps only the routine identity; later routine
+    /// synchronization must not mutate an already-running workout.
+    func startWorkout(routineID: UUID) async {
+        guard let routine = routineStore.routine(for: routineID) else {
+            print("WatchWorkoutViewModel: routine \(routineID) unavailable at workout start")
+            return
+        }
+        await startWorkout(with: routine)
+    }
+
+    private func startWorkout(with routine: WatchRoutine) async {
         currentRoutine = routine
         exercises = routine.exercises.sorted { $0.order < $1.order }.map { $0.toActiveWorkoutExercise() }
         currentExerciseIndex = 0
@@ -269,6 +291,12 @@ final class WatchWorkoutViewModel: ObservableObject {
         workoutStartTime = Date()
         pendingCompletedWorkoutId = nil
         pendingHealthKitWorkoutId = nil
+        // Defensive: a prior workout's finalization awaiting a slow/hung
+        // HealthKit finish must never leave a fresh workout frozen, and a
+        // prior summary dismissed through a system path (bypassing
+        // dismissSummary) must never mask the fresh workout screen.
+        isEnding = false
+        workoutSummary = nil
 
         // Skip HealthKit for UI testing - immediately set running state with mock data
         if isUITesting {
@@ -310,35 +338,110 @@ final class WatchWorkoutViewModel: ObservableObject {
         isPaused = false
     }
 
-    func endWorkout(updateTemplate: Bool = false) async {
-        // Capture summary BEFORE ending HealthKit session (metrics stop updating after)
-        workoutSummary = generateWorkoutSummary()
+    /// True from the moment a finalization attempt has begun or has durably
+    /// frozen this workout's payload. While frozen, every workout mutator and
+    /// hardware input is rejected and the workout can no longer be discarded —
+    /// after the durable enqueue, external side effects (queue entry, possibly
+    /// a HealthKit save) exist that a discard could not undo, and retries must
+    /// operate on the exact frozen bytes.
+    var isWorkoutFrozen: Bool {
+        if isEnding { return true }
+        guard let id = pendingCompletedWorkoutId else { return false }
+        return connectivityManager.syncState.entry(id: id) != nil
+    }
 
+    /// One terminal finalization sequence shared by manual End, auto-finish,
+    /// and hardware inputs: durable enqueue BEFORE HealthKit finalization
+    /// (the reverse order had a loss window that stranded workouts in Apple
+    /// Health with no payload anywhere), phased HealthKit metadata/finish,
+    /// then transport from the durable queue. Reentrant calls are rejected;
+    /// a retry after a failure re-enters with the same frozen payload and ids.
+    func endWorkout(updateTemplate: Bool = false) async {
+        guard !isEnding else { return }
+        guard let routine = currentRoutine, let startTime = workoutStartTime else { return }
+        isEnding = true
+        defer { isEnding = false }
+
+        // Entering the terminal state revokes the delayed auto-finish (a
+        // manual End racing it must not fire a second attempt).
+        autoFinishTask?.cancel()
+        autoFinishTask = nil
         stopRestTimer()
 
-        // Apply template update locally on watch BEFORE syncing to iOS
-        if updateTemplate, let routineId = currentRoutine?.id {
-            templateWasUpdated = routineStore.applyWorkoutChanges(routineId: routineId, exercises: exercises)
-        }
-
+        let workoutId = pendingCompletedWorkoutId ?? UUID()
+        pendingCompletedWorkoutId = workoutId
         let healthKitWorkoutId = pendingHealthKitWorkoutId ?? UUID()
         pendingHealthKitWorkoutId = healthKitWorkoutId
 
-        // Hand the payload to the durable send queue BEFORE finishing the
-        // HealthKit workout. The reverse order had a loss window: once HealthKit
-        // had saved, a crash or termination before the payload was persisted
-        // left a workout in Apple Health that iOS could only reconstruct from
-        // the routine template. Sending first also preserves the actual values
-        // if the HealthKit save fails outright.
-        sendCompletedWorkoutToiPhone(updateTemplate: updateTemplate, healthKitWorkoutId: healthKitWorkoutId)
+        let payload: CompletedWatchWorkout
+        if let frozen = connectivityManager.syncState.entry(id: workoutId)?.completedWorkout {
+            // A previous attempt already froze this workout — retries never
+            // reconstruct the payload (same bytes, same end time, same ids).
+            payload = frozen
+        } else {
+            // First attempt: build the one stable payload with its one final
+            // end time. A requested template update is NOT applied to a
+            // separate local copy anymore (ticket 05) — enqueuing the payload
+            // allocates its transaction identity and the sync-state owner
+            // folds the intent over the authoritative routine base, so the
+            // optimistic value and the pending transaction can never diverge.
+            templateWasUpdated = updateTemplate
+            payload = CompletedWatchWorkout(
+                id: workoutId,
+                routineId: routine.id,
+                routineName: routine.name,
+                startTime: startTime,
+                endTime: Date(),
+                exercises: exercises.map { $0.toCompletedExercise() },
+                shouldUpdateTemplate: updateTemplate,
+                healthKitWorkoutId: healthKitWorkoutId
+            )
+        }
 
-        do {
-            _ = try await healthKitManager.endWorkout(externalId: healthKitWorkoutId)
-            isWorkoutActive = false
-            workoutState = .stopped
-            WKInterfaceDevice.current().play(.success)
-        } catch {
-            errorMessage = "Failed to save workout: \(error.localizedDescription)"
+        let healthKit: WorkoutFinalizationHealthKit? = isUITesting ? nil : healthKitManager
+        let outcome = await finalizer.finalize(
+            payload,
+            healthKit: healthKit,
+            // Anchor for the routine's first pending transaction: what the
+            // user effectively saw when the update was requested, so the
+            // optimistic values survive even a base that doesn't know it yet.
+            routineAnchor: routineStore.routine(for: routine.id),
+            onFrozen: { [weak self] in
+                // The payload is durably enqueued: the workout WILL reach iOS
+                // regardless of the HealthKit outcome. Show the summary now so
+                // the user isn't staring at a frozen workout screen while
+                // HealthKit endCollection/metadata/finish runs (that gap made
+                // the Action Button's Complete-Set intent time out and the app
+                // appear frozen). HealthKit finalization continues below.
+                guard let self else { return }
+                self.workoutSummary = self.generateWorkoutSummary(endTime: payload.endTime)
+                self.isWorkoutActive = false
+                self.workoutState = .stopped
+                WKInterfaceDevice.current().play(.success)
+            },
+            onTransportEligible: { [connectivityManager] in
+                connectivityManager.transportEligibleWorkouts()
+            }
+        )
+
+        switch outcome {
+        case .notEnqueued(let error):
+            // The durable queue write failed BEFORE any irreversible HealthKit
+            // transition and BEFORE onFrozen — nothing external happened and no
+            // summary was shown, so return to editing with an error.
+            errorMessage = "Could not save workout: \(error.localizedDescription)"
+        case .healthKitFailed:
+            // The payload is frozen and durable (summary already shown via
+            // onFrozen), so the workout is safely recorded in GymStreak. Only
+            // the secondary HealthKit/Apple Health write didn't complete —
+            // surfacing an error over the summary would be misleading.
+            // Recovery: dismissSummary retries the finalization while the
+            // bound builder is still alive; failing that, the launch-time
+            // promotion (WatchSyncStateStore) makes the entry
+            // transport-eligible so it still reaches iOS.
+            break
+        case .rejectedReentrant, .completed:
+            break
         }
     }
 
@@ -348,10 +451,15 @@ final class WatchWorkoutViewModel: ObservableObject {
     /// FullScreenSetEditorView). Workouts with modified sets route through the
     /// existing "Update your routine template?" confirmation dialog (surfaced by
     /// ActiveWorkoutView) exactly like the manual End flow; unmodified workouts
-    /// finish directly via endWorkout().
+    /// finish directly via endWorkout(). The delayed task revalidates before
+    /// firing: a manual End, a discard, or an un-completed set in the meantime
+    /// cancels or invalidates it.
     private func autoFinishWorkout() {
-        Task { @MainActor in
+        autoFinishTask?.cancel()
+        autoFinishTask = Task { @MainActor in
             try? await Task.sleep(for: .milliseconds(800))
+            guard !Task.isCancelled, isWorkoutActive, !isEnding,
+                  findNextIncompleteSet() == nil else { return }
             if hasModifiedSets {
                 requestsFinishConfirmation = true
             } else {
@@ -361,11 +469,41 @@ final class WatchWorkoutViewModel: ObservableObject {
     }
 
     func dismissSummary() {
+        retryStuckFinalizationIfNeeded()
         workoutSummary = nil
         resetState()
     }
 
+    /// If HealthKit finalization failed after the payload was frozen (the
+    /// summary was shown anyway — see `.healthKitFailed`), retry it once at
+    /// this bounded trigger, while the bound session/builder still exist
+    /// in-process, so the Apple Health record isn't lost. A repeat failure
+    /// leaves the entry for the launch-time promotion; reentrance is rejected
+    /// by the finalizer itself. No `onFrozen`: the summary handling already
+    /// happened on the first attempt.
+    private func retryStuckFinalizationIfNeeded() {
+        guard let id = pendingCompletedWorkoutId,
+              let entry = connectivityManager.syncState.entry(id: id),
+              entry.phase == .awaitingHealthKitMetadata || entry.phase == .awaitingHealthKitFinish else { return }
+        let healthKit: WorkoutFinalizationHealthKit? = isUITesting ? nil : healthKitManager
+        Task { [finalizer, connectivityManager] in
+            guard let workout = entry.completedWorkout else { return }
+            _ = await finalizer.finalize(
+                workout,
+                healthKit: healthKit,
+                onTransportEligible: { connectivityManager.transportEligibleWorkouts() }
+            )
+        }
+    }
+
     func discardWorkout() {
+        // Once a finalization attempt has durably frozen the payload, the
+        // workout can no longer be discarded — a queue entry (and possibly a
+        // HealthKit save) already exists. Before that, nothing external
+        // happened and discarding is safe.
+        guard !isWorkoutFrozen else { return }
+        autoFinishTask?.cancel()
+        autoFinishTask = nil
         stopRestTimer()
         healthKitManager.discardWorkout()
         isWorkoutActive = false
@@ -375,7 +513,7 @@ final class WatchWorkoutViewModel: ObservableObject {
 
     @MainActor
     private func applyToggleSetCompletion(_ result: (exerciseIndex: Int, setIndex: Int, newState: Bool)?) {
-        guard let r = result else { return }
+        guard let r = result, !isWorkoutFrozen else { return }
 
         if r.newState {
             exercises[r.exerciseIndex].sets[r.setIndex].completedAt = Date()
@@ -436,6 +574,7 @@ final class WatchWorkoutViewModel: ObservableObject {
     // MARK: - Set Management
 
     func toggleSetCompletion(_ setId: UUID, in exerciseId: UUID) {
+        guard !isWorkoutFrozen else { return }
 //        isResting = true
 //        guard let exerciseIndex = exercises.firstIndex(where: { $0.id == exerciseId }),
 //              let setIndex = exercises[exerciseIndex].sets.firstIndex(where: { $0.id == setId }) else {
@@ -476,6 +615,7 @@ final class WatchWorkoutViewModel: ObservableObject {
     }
 
     func updateSet(_ updatedSet: ActiveWorkoutSet, in exerciseId: UUID) {
+        guard !isWorkoutFrozen else { return }
         guard let exerciseIndex = exercises.firstIndex(where: { $0.id == exerciseId }),
               let setIndex = exercises[exerciseIndex].sets.firstIndex(where: { $0.id == updatedSet.id }) else {
             return
@@ -486,6 +626,7 @@ final class WatchWorkoutViewModel: ObservableObject {
     }
 
     func updateRestTime(for exerciseId: UUID, newRestTime: TimeInterval) {
+        guard !isWorkoutFrozen else { return }
         guard let exerciseIndex = exercises.firstIndex(where: { $0.id == exerciseId }) else {
             return
         }
@@ -527,6 +668,7 @@ final class WatchWorkoutViewModel: ObservableObject {
     /// Swaps an exercise for one of its alternatives (or back to the original).
     /// Only allowed before any set is completed; rebuilds the sets from the target scheme.
     func swapExercise(_ exerciseId: UUID, to alternative: WatchExerciseAlternative) {
+        guard !isWorkoutFrozen else { return }
         guard let index = exercises.firstIndex(where: { $0.id == exerciseId }) else { return }
         var exercise = exercises[index]
         guard exercise.completedSetsCount == 0 else { return }
@@ -583,6 +725,7 @@ final class WatchWorkoutViewModel: ObservableObject {
     }
 
     func completeCurrentSet() {
+        guard !isWorkoutFrozen else { return }
         guard var exercise = currentExercise,
               currentSetIndex < exercise.sets.count else { return }
 
@@ -617,33 +760,34 @@ final class WatchWorkoutViewModel: ObservableObject {
     /// .running — donating earlier (while the session is still starting) can fail
     /// silently. Only takes effect when the user has the Action Button assigned to
     /// GymStreak under Settings → Action Button → Workout.
-    func donateActionButtonIntent() {
+    func donateActionButtonIntent() async {
         guard !isUITesting else { return }
         // linkd (the donation service) doesn't run in the simulator — the call
         // always fails with XPC error 4099, and the Action Button can't be
         // tested there anyway (see docs/action-button.md).
         #if !targetEnvironment(simulator)
-        Task {
-            do {
-                try await GymStreakStartWorkoutIntent()
-                    .donate(result: .result(actionButtonIntent: GymStreakCompleteSetIntent()))
-                print("Action Button: complete-set intent donated")
-            } catch {
-                print("Action Button intent donation failed: \(error)")
-            }
+        do {
+            try await GymStreakStartWorkoutIntent()
+                .donate(result: .result(actionButtonIntent: GymStreakCompleteSetIntent()))
+            print("Action Button: complete-set intent donated")
+        } catch {
+            print("Action Button intent donation failed: \(error)")
         }
         #endif
     }
 
     /// Entry point for hardware shortcuts (Action Button press, Double Tap).
-    /// Skips an active rest period, otherwise completes the current set via the
-    /// same superset-aware path the on-screen complete button uses.
+    /// An active rest period is stopped first, then the currently selected
+    /// incomplete set is completed through the same superset-aware path as the
+    /// on-screen button. That completion starts the next applicable rest timer.
     func handleActionButtonPress() {
-        guard isWorkoutActive else { return }
+        guard isWorkoutActive, !isWorkoutFrozen else { return }
 
         if isResting {
-            skipRest()
-            return
+            // This is a combined hardware action, not the rest screen's
+            // skip-only action. Completion below supplies the user feedback.
+            stopRestTimer()
+            isResting = false
         }
 
         guard let exercise = currentExercise,
@@ -1050,32 +1194,9 @@ final class WatchWorkoutViewModel: ObservableObject {
 //        RunLoop.current.add(timer, forMode: .common)
 //    }
 
-    // MARK: - Sync to iPhone
-
-    private func sendCompletedWorkoutToiPhone(updateTemplate: Bool, healthKitWorkoutId: UUID) {
-        guard let routine = currentRoutine,
-              let startTime = workoutStartTime else { return }
-
-        let workoutId = pendingCompletedWorkoutId ?? UUID()
-        pendingCompletedWorkoutId = workoutId
-
-        let completedWorkout = CompletedWatchWorkout(
-            id: workoutId,
-            routineId: routine.id,
-            routineName: routine.name,
-            startTime: startTime,
-            endTime: Date(),
-            exercises: exercises.map { $0.toCompletedExercise() },
-            shouldUpdateTemplate: updateTemplate,
-            healthKitWorkoutId: healthKitWorkoutId
-        )
-
-        connectivityManager.sendCompletedWorkout(completedWorkout)
-    }
-
     // MARK: - Workout Summary
 
-    private func generateWorkoutSummary() -> WatchWorkoutSummary {
+    private func generateWorkoutSummary(endTime: Date) -> WatchWorkoutSummary {
         let exerciseSummaries = exercises.sorted(by: { $0.order < $1.order }).map { exercise in
             WatchWorkoutSummary.ExerciseSummary(
                 id: exercise.id,
@@ -1090,7 +1211,9 @@ final class WatchWorkoutViewModel: ObservableObject {
 
         let duration: TimeInterval
         if let startTime = workoutStartTime {
-            duration = Date().timeIntervalSince(startTime)
+            // The frozen payload's end time, so the summary matches what iOS
+            // and HealthKit will show (not the moment finalization finished).
+            duration = endTime.timeIntervalSince(startTime)
         } else {
             duration = elapsedTime ?? 0
         }
@@ -1109,6 +1232,8 @@ final class WatchWorkoutViewModel: ObservableObject {
     // MARK: - Helper Methods
 
     private func resetState() {
+        autoFinishTask?.cancel()
+        autoFinishTask = nil
         currentRoutine = nil
         exercises = []
         currentExerciseIndex = 0
@@ -1120,5 +1245,6 @@ final class WatchWorkoutViewModel: ObservableObject {
         restTimeRemaining = 0
         isPaused = false
         templateWasUpdated = false
+        isEnding = false
     }
 }

@@ -210,6 +210,6 @@ struct WatchWorkoutSummaryView: View {
     .environmentObject(WatchWorkoutViewModel(
         healthKitManager: WatchHealthKitManager(),
         connectivityManager: WatchConnectivityManager.shared,
-        routineStore: RoutineStore()
+        routineStore: RoutineStore(syncState: WatchSyncStateStore())
     ))
 }

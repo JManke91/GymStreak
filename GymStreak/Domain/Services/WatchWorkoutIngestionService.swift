@@ -2,16 +2,19 @@
 //  WatchWorkoutIngestionService.swift
 //  GymStreak
 //
-//  Materializes a completed watch workout (`.watchWorkoutCompleted` payload)
-//  into a `WorkoutSession`, including dedup against already-ingested
-//  sessions and the optional routine-template update. Constructor-injected
-//  with the Domain repository protocols it needs, and consumes the Domain
-//  `IncomingWatchWorkout` model — no dependency on any concrete Data type
-//  (the Data layer maps its wire DTO into that model at the sync boundary).
-//  `RoutinesViewModel` owns the NotificationCenter
-//  subscription and the watch-ack side effects (it already owns `watchSync`);
-//  this service reports back what it did via `Result` so the ViewModel knows
-//  whether to ack and whether to refresh its `routines` list.
+//  Materializes a completed watch workout into a `WorkoutSession`, including
+//  dedup against already-ingested sessions. Constructor-injected with the
+//  Domain repository protocols it needs, and consumes the Domain
+//  `IncomingWatchWorkout` model — no dependency on any concrete Data type (the
+//  Data layer maps its wire DTO into that model at the sync boundary).
+//
+//  Since ticket 04 the caller is `WatchWorkoutIngestionCoordinator`
+//  (composition root), which owns the durable inbox drain, receipts, and watch
+//  acknowledgment side effects, and constructs this service over an isolated
+//  single-save transaction's repositories. Since ticket 05 the routine
+//  template update is no longer part of this service: a requested template
+//  update is a transaction (`WatchTemplateTransactionService`) that stages its
+//  history through `stageHistory` and commits both halves in ONE save.
 //
 
 import Foundation
@@ -28,26 +31,54 @@ final class WatchWorkoutIngestionService {
 
     /// Outcome of ingesting one completed watch workout.
     struct Result {
-        /// Whether the caller should ack + mark-processed with the watch.
-        /// True for the duplicate-skip path and a successful session save;
-        /// false only when the SwiftData save itself failed, so the workout
-        /// stays in the durable pending buffer and is retried later.
+        /// Whether the caller should acknowledge to the watch. True for the
+        /// duplicate-skip path and a successful session save; false only when
+        /// the SwiftData save itself failed, so the workout stays in the
+        /// durable inbox and is retried later.
         let shouldAcknowledge: Bool
-        /// Whether the routine template was edited in place, meaning the
-        /// caller's cached routine list needs refetching.
-        let templateWasUpdated: Bool
     }
 
-    /// Mirrors the original `RoutinesViewModel.handleCompletedWatchWorkout` logic 1:1.
+    /// Result of staging history into the (uncommitted) context.
+    enum StageResult {
+        /// Already ingested under the same id — nothing staged.
+        case duplicate(WorkoutSession)
+        case staged(WorkoutSession)
+    }
+
+    /// Idempotently ingests one completed no-template watch workout: stage
+    /// history, then commit the isolated context exactly once.
     func ingest(_ workout: IncomingWatchWorkout) -> Result {
         print("Received completed watch workout: \(workout.routineName)")
 
-        // Step 1: Create WorkoutSession to appear in history
-        // Idempotency: if this workout has already been ingested (e.g. from a
-        // watch-side retry after a previously dropped transferUserInfo), skip
-        // re-inserting. We match on the workout's UUID first, then on the
-        // healthKitWorkoutId as a secondary key (covers cross-device cases
-        // where the iOS-stored id might differ but HK metadata aligns).
+        guard case .staged = stageHistory(workout) else {
+            return Result(shouldAcknowledge: true)
+        }
+
+        do {
+            try workoutSessionRepository.save()
+            print("Created workout session from watch workout: \(workout.routineName)")
+            // Notify any view models cached on the History tab to refresh.
+            NotificationCenter.default.post(name: .workoutHistoryDidChange, object: nil)
+            return Result(shouldAcknowledge: true)
+        } catch {
+            // Leave the workout in the durable inbox so we retry on the next
+            // drain. Do NOT report success.
+            print("Error creating workout session from watch workout: \(error)")
+            return Result(shouldAcknowledge: false)
+        }
+    }
+
+    /// Materializes the denormalized history graph into the injected
+    /// repositories WITHOUT saving, so a caller can commit it together with a
+    /// routine template mutation in one transaction.
+    ///
+    /// Idempotency: if this workout has already been ingested (e.g. from a
+    /// watch-side retry after a previously dropped transfer), nothing is
+    /// staged. We match on the workout's UUID first, then on the
+    /// healthKitWorkoutId as a secondary key (covers cross-device cases where
+    /// the iOS-stored id might differ but HK metadata aligns).
+    @discardableResult
+    func stageHistory(_ workout: IncomingWatchWorkout) -> StageResult {
         if let existing = workoutSessionRepository.findSession(id: workout.id, healthKitWorkoutId: workout.healthKitWorkoutId) {
             if existing.id != workout.id {
                 // Matched by healthKitWorkoutId under a *different* session id:
@@ -61,24 +92,26 @@ final class WatchWorkoutIngestionService {
                 workoutSessionRepository.delete(existing)
             } else {
                 print("Skipping duplicate watch workout: \(workout.routineName) (existing session id=\(existing.id))")
-                return Result(shouldAcknowledge: true, templateWasUpdated: false)
+                return .duplicate(existing)
             }
         }
 
-        // Find the routine by ID
+        // Find the routine by ID. A missing routine (deleted since the watch
+        // cached it) produces denormalized history with `routine == nil` —
+        // never a placeholder Routine, which would resurrect the deleted
+        // template (and reach the watch again via routine sync).
         let routine = routineRepository.fetch(id: workout.routineId)
 
         // Create workout session — preserve the watch-generated id so retries
         // are detectable above and to keep iOS/watch in agreement on identity.
-        let workoutSession = WorkoutSession(routine: routine ?? createPlaceholderRoutine(from: workout))
+        let workoutSession = WorkoutSession(routine: routine)
         workoutSession.id = workout.id
         workoutSession.startTime = workout.startTime
         workoutSession.endTime = workout.endTime
-        workoutSession.didUpdateTemplate = workout.shouldUpdateTemplate
+        workoutSession.didUpdateTemplate = false
         workoutSession.routineName = workout.routineName
         workoutSession.healthKitWorkoutId = workout.healthKitWorkoutId
 
-        // Create workout exercises
         for completedExercise in workout.exercises {
             let workoutExercise = WorkoutExercise(
                 exerciseName: completedExercise.name,
@@ -89,17 +122,14 @@ final class WatchWorkoutIngestionService {
                 loadBehavior: ExerciseLoadBehavior(rawValue: completedExercise.loadBehaviorRaw) ?? .resistance
             )
             workoutExercise.workoutSession = workoutSession
-            // Copy superset fields from completed exercise
             workoutExercise.supersetId = completedExercise.supersetId
             workoutExercise.supersetOrder = completedExercise.supersetOrder
-            // Copy rep range fields from completed exercise
             workoutExercise.targetRepMin = completedExercise.targetRepMin
             workoutExercise.targetRepMax = completedExercise.targetRepMax
-            // Copy alternative-swap metadata (name/exerciseId already reflect what was performed)
+            // Alternative-swap metadata (name/exerciseId already reflect what was performed)
             workoutExercise.plannedExerciseId = completedExercise.plannedExerciseId
             workoutExercise.plannedExerciseName = completedExercise.plannedExerciseName
 
-            // Create workout sets
             for completedSet in completedExercise.sets {
                 let workoutSet = WorkoutSet(
                     plannedReps: completedSet.plannedReps,
@@ -121,104 +151,6 @@ final class WatchWorkoutIngestionService {
         }
 
         workoutSessionRepository.insert(workoutSession)
-        var shouldAcknowledge = false
-        do {
-            try workoutSessionRepository.save()
-            print("Created workout session from watch workout: \(workout.routineName)")
-            shouldAcknowledge = true
-            // Notify any view models cached on the History tab to refresh.
-            NotificationCenter.default.post(name: .workoutHistoryDidChange, object: nil)
-        } catch {
-            // Leave the workout in the persistent pending buffer so we retry on
-            // next app launch / observer registration. Do NOT report success.
-            print("Error creating workout session from watch workout: \(error)")
-        }
-
-        // Step 2: Optionally update routine template
-        guard workout.shouldUpdateTemplate else {
-            print("Not updating template - user chose not to update")
-            return Result(shouldAcknowledge: shouldAcknowledge, templateWasUpdated: false)
-        }
-
-        guard let templateRoutine = routineRepository.fetch(id: workout.routineId) else {
-            print("Could not find routine with ID: \(workout.routineId)")
-            return Result(shouldAcknowledge: shouldAcknowledge, templateWasUpdated: false)
-        }
-
-        print("Updating template for routine: \(templateRoutine.name)")
-        var updatedAny = false
-
-        // Update each routine exercise's sets with the actual values
-        for completedExercise in workout.exercises {
-            guard let routineExercise = templateRoutine.routineExercisesList.first(where: { $0.id == completedExercise.id }) else {
-                print("Could not find routine exercise with ID: \(completedExercise.id)")
-                continue
-            }
-
-            // A swapped exercise's completed sets carry the alternative's own set
-            // ids (the watch rebuilds the scheme from `WatchExerciseAlternative.sets`
-            // on swap), so the actual values belong to that alternative's template —
-            // matching them against the primary's sets can never succeed.
-            if completedExercise.plannedExerciseId != nil {
-                guard let alternative = routineExercise.alternativesList.first(where: { $0.exercise?.id == completedExercise.exerciseId }) else {
-                    print("Could not find alternative \(completedExercise.name) on routine exercise \(completedExercise.id)")
-                    continue
-                }
-
-                for completedSet in completedExercise.sets {
-                    guard let set = alternative.setsList.first(where: { $0.id == completedSet.id }) else {
-                        print("Could not find alternative set with ID: \(completedSet.id)")
-                        continue
-                    }
-
-                    // Only update if the set was modified
-                    if completedSet.actualReps != completedSet.plannedReps ||
-                       completedSet.actualWeight != completedSet.plannedWeight {
-                        set.reps = completedSet.actualReps
-                        set.weight = completedSet.actualWeight
-                        updatedAny = true
-                        print("Updated alternative set: \(completedSet.actualWeight)kg × \(completedSet.actualReps) reps")
-                    }
-                }
-                continue
-            }
-
-            for completedSet in completedExercise.sets {
-                guard let set = routineExercise.setsList.first(where: { $0.id == completedSet.id }) else {
-                    print("Could not find set with ID: \(completedSet.id)")
-                    continue
-                }
-
-                // Only update if the set was modified
-                if completedSet.actualReps != completedSet.plannedReps ||
-                   completedSet.actualWeight != completedSet.plannedWeight {
-                    set.reps = completedSet.actualReps
-                    set.weight = completedSet.actualWeight
-                    updatedAny = true
-                    print("Updated set: \(completedSet.actualWeight)lbs × \(completedSet.actualReps) reps")
-                }
-            }
-        }
-
-        guard updatedAny else {
-            print("No sets were actually modified")
-            return Result(shouldAcknowledge: shouldAcknowledge, templateWasUpdated: false)
-        }
-
-        templateRoutine.updatedAt = Date()
-        do {
-            try routineRepository.save()
-            print("Template updated successfully - \(workout.modifiedSetsCount) sets modified")
-        } catch {
-            print("Error saving context: \(error)")
-        }
-        return Result(shouldAcknowledge: shouldAcknowledge, templateWasUpdated: true)
-    }
-
-    // Helper method to create a placeholder routine if the original was deleted
-    private func createPlaceholderRoutine(from workout: IncomingWatchWorkout) -> Routine {
-        let routine = Routine(name: workout.routineName)
-        routine.id = workout.routineId
-        return routine
+        return .staged(workoutSession)
     }
 }

@@ -5,6 +5,7 @@
 //  Covers workout occurrence identity across iPhone creation and swaps.
 //
 
+import Foundation
 import SwiftData
 import Testing
 @testable import GymStreak
@@ -12,6 +13,9 @@ import Testing
 @Suite(.serialized)
 @MainActor
 struct WorkoutViewModelTests {
+    private final class EmptyWorkoutHistoryCorrelationProvider: WorkoutHistoryCorrelationProviding {
+        func healthKitWorkoutIDs() throws -> Set<UUID> { [] }
+    }
 
     @Test
     func routineWorkoutSnapshotsSlotWhileAdHocExerciseDoesNot() {
@@ -77,7 +81,8 @@ struct WorkoutViewModelTests {
             routineRepository: routineRepository,
             exerciseRepository: exerciseRepository,
             healthKitManager: MockHealthKitWorkoutServicing(),
-            watchSync: MockWatchSyncServicing()
+            watchSync: MockWatchSyncServicing(),
+            workoutHistoryCorrelation: EmptyWorkoutHistoryCorrelationProvider()
         )
         viewModel.currentSession = session
 
@@ -144,7 +149,8 @@ struct WorkoutViewModelTests {
             routineRepository: routineRepository,
             exerciseRepository: exerciseRepository,
             healthKitManager: MockHealthKitWorkoutServicing(),
-            watchSync: MockWatchSyncServicing()
+            watchSync: MockWatchSyncServicing(),
+            workoutHistoryCorrelation: EmptyWorkoutHistoryCorrelationProvider()
         )
         viewModel.currentSession = session
 
@@ -207,7 +213,8 @@ struct WorkoutViewModelTests {
             routineRepository: routineRepository,
             exerciseRepository: exerciseRepository,
             healthKitManager: MockHealthKitWorkoutServicing(),
-            watchSync: MockWatchSyncServicing()
+            watchSync: MockWatchSyncServicing(),
+            workoutHistoryCorrelation: EmptyWorkoutHistoryCorrelationProvider()
         )
         viewModel.currentSession = session
 
@@ -255,7 +262,8 @@ struct WorkoutViewModelTests {
             routineRepository: routineRepository,
             exerciseRepository: exerciseRepository,
             healthKitManager: MockHealthKitWorkoutServicing(),
-            watchSync: MockWatchSyncServicing()
+            watchSync: MockWatchSyncServicing(),
+            workoutHistoryCorrelation: EmptyWorkoutHistoryCorrelationProvider()
         )
         viewModel.currentSession = session
 

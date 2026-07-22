@@ -2,7 +2,7 @@ import SwiftUI
 import WatchKit
 
 struct ActiveWorkoutView: View {
-    let routine: WatchRoutine
+    let routineID: UUID
 
     @EnvironmentObject var viewModel: WatchWorkoutViewModel
     @Environment(\.dismiss) private var dismiss
@@ -54,7 +54,7 @@ struct ActiveWorkoutView: View {
         }
         .toolbar(.hidden, for: .navigationBar)
         .task {
-            await viewModel.startWorkout(with: routine)
+            await viewModel.startWorkout(routineID: routineID)
         }
         // Auto-finish on a workout with modified sets surfaces the same
         // "Update your routine template?" dialog as the manual End flow.
@@ -141,45 +141,69 @@ struct ActiveWorkoutView: View {
             .tag(2)
         }
         .tabViewStyle(.verticalPage)
+        // A modally-presented NavigationStack auto-fills its leading toolbar
+        // slot with a system close ("X"). Left as the default it dismisses the
+        // cover directly — bypassing the End-Workout confirmation and leaving
+        // the HealthKit session running (the user could then start a second
+        // workout). `.interactiveDismissDisabled()` does NOT remove it (that
+        // only governs drag-to-dismiss, which watchOS lacks). Claiming the same
+        // `.cancellationAction` slot replaces the system button with our own,
+        // routed through the existing Save / Discard / Continue dialog.
+        .toolbar {
+            ToolbarItem(placement: .cancellationAction) {
+                Button {
+                    showEndConfirmation = true
+                } label: {
+                    Image(systemName: "xmark")
+                }
+                .accessibilityLabel("End workout")
+            }
+        }
     }
 }
 
 #Preview {
-    ActiveWorkoutView(
-        routine: WatchRoutine(
-            id: UUID(),
-            name: "Push Day",
-            exercises: [
-                WatchExercise(
-                    id: UUID(),
-                    name: "Bench Press",
-                    muscleGroup: "Chest",
-                    sets: [
-                        WatchSet(id: UUID(), reps: 10, weight: 135, restTime: 90),
-                        WatchSet(id: UUID(), reps: 10, weight: 135, restTime: 90)
-                    ],
-                    order: 0,
-                    supersetId: nil,
-                    supersetOrder: 0
-                ),
-                WatchExercise(
-                    id: UUID(),
-                    name: "Shoulder Press",
-                    muscleGroup: "Shoulders",
-                    sets: [
-                        WatchSet(id: UUID(), reps: 10, weight: 65, restTime: 60),
-                        WatchSet(id: UUID(), reps: 10, weight: 65, restTime: 60)
-                    ],
-                    order: 1,
-                    supersetId: nil,
-                    supersetOrder: 0
-                )
-            ]
-        )
+    let routine = WatchRoutine(
+        id: UUID(),
+        name: "Push Day",
+        exercises: [
+            WatchExercise(
+                id: UUID(),
+                name: "Bench Press",
+                muscleGroup: "Chest",
+                sets: [
+                    WatchSet(id: UUID(), reps: 10, weight: 135, restTime: 90),
+                    WatchSet(id: UUID(), reps: 10, weight: 135, restTime: 90)
+                ],
+                order: 0,
+                supersetId: nil,
+                supersetOrder: 0
+            ),
+            WatchExercise(
+                id: UUID(),
+                name: "Shoulder Press",
+                muscleGroup: "Shoulders",
+                sets: [
+                    WatchSet(id: UUID(), reps: 10, weight: 65, restTime: 60),
+                    WatchSet(id: UUID(), reps: 10, weight: 65, restTime: 60)
+                ],
+                order: 1,
+                supersetId: nil,
+                supersetOrder: 0
+            )
+        ]
     )
-    .environmentObject(WatchWorkoutViewModel(
+    let store: RoutineStore = {
+        let store = RoutineStore(syncState: WatchSyncStateStore())
+        store.updateRoutines([routine])
+        return store
+    }()
+    let viewModel = WatchWorkoutViewModel(
         healthKitManager: WatchHealthKitManager(),
         connectivityManager: WatchConnectivityManager.shared,
-        routineStore: RoutineStore()
-    ))
+        routineStore: store
+    )
+
+    ActiveWorkoutView(routineID: routine.id)
+        .environmentObject(viewModel)
 }

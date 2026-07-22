@@ -1,16 +1,20 @@
 import SwiftUI
 
-// Wrapper to distinguish workout navigation from routine detail navigation
-struct WorkoutDestination: Hashable {
-    let routine: WatchRoutine
+private struct RoutineDestination: Hashable {
+    let routineID: UUID
+}
+
+private struct WorkoutDestination: Identifiable {
+    let routineID: UUID
+
+    var id: UUID { routineID }
 }
 
 struct RoutineListView: View {
     @EnvironmentObject var routineStore: RoutineStore
     @EnvironmentObject var workoutViewModel: WatchWorkoutViewModel
 
-    @State private var selectedRoutine: WatchRoutine?
-    @State private var showWorkout = false
+    @State private var workoutDestination: WorkoutDestination?
 
     var body: some View {
         Group {
@@ -23,8 +27,21 @@ struct RoutineListView: View {
             }
         }
         .navigationTitle("Routines")
-        .fullScreenCover(item: $selectedRoutine) { routine in
-            ActiveWorkoutView(routine: routine)
+        // `onDismiss` is the documented, single-fire signal for an actual
+        // cover dismissal (unlike `.onDisappear`, which can fire on wrist-down
+        // and would wrongly kill a live workout). It's a safety net: the
+        // primary exit now runs through the End-Workout confirmation (see the
+        // cancellationAction button in ActiveWorkoutView). If the cover is ever
+        // closed while a workout is still live and unfinalized, tear the
+        // HealthKit session down so it can't keep running in the background and
+        // block starting another workout. No-op once the workout is finalized,
+        // discarded, or frozen mid-finalization (`discardWorkout` guards that).
+        .fullScreenCover(item: $workoutDestination, onDismiss: {
+            if workoutViewModel.isWorkoutActive && workoutViewModel.workoutSummary == nil {
+                workoutViewModel.discardWorkout()
+            }
+        }) { destination in
+            ActiveWorkoutView(routineID: destination.routineID)
                 .environmentObject(workoutViewModel)
                 .interactiveDismissDisabled()
         }
@@ -40,7 +57,7 @@ struct RoutineListView: View {
         List {
             if let upNext = routineStore.routines.first {
                 Section {
-                    NavigationLink(value: upNext) {
+                    NavigationLink(value: RoutineDestination(routineID: upNext.id)) {
                         RoutineRowView(routine: upNext)
                     }
                     quickStartButton(for: upNext)
@@ -52,7 +69,7 @@ struct RoutineListView: View {
             if routineStore.routines.count > 1 {
                 Section {
                     ForEach(routineStore.routines.dropFirst()) { routine in
-                        NavigationLink(value: routine) {
+                        NavigationLink(value: RoutineDestination(routineID: routine.id)) {
                             RoutineRowView(routine: routine)
                         }
                     }
@@ -62,16 +79,16 @@ struct RoutineListView: View {
             }
         }
         .listStyle(.carousel)
-        .navigationDestination(for: WatchRoutine.self) { routine in
-            RoutineDetailView(routine: routine) {
-                selectedRoutine = routine
+        .navigationDestination(for: RoutineDestination.self) { destination in
+            RoutineDetailDestination(routineID: destination.routineID) { latestRoutineID in
+                startWorkout(routineID: latestRoutineID)
             }
         }
     }
 
     private func quickStartButton(for routine: WatchRoutine) -> some View {
         Button {
-            selectedRoutine = routine
+            startWorkout(routineID: routine.id)
         } label: {
             Label("Start Workout", systemImage: "play.fill")
                 .font(.watchSubheadline)
@@ -94,6 +111,14 @@ struct RoutineListView: View {
         .accessibilityLabel("Start workout \(routine.name)")
     }
 
+    /// A navigation row carries only stable identity. Resolving the routine at
+    /// the moment the workout starts prevents an already-open detail screen
+    /// from launching with the value snapshot that originally opened it.
+    private func startWorkout(routineID: UUID) {
+        guard routineStore.routine(for: routineID) != nil else { return }
+        workoutDestination = WorkoutDestination(routineID: routineID)
+    }
+
     private var loadingView: some View {
         VStack(spacing: 8) {
             ProgressView()
@@ -108,6 +133,27 @@ struct RoutineListView: View {
             Label("No Routines", systemImage: "dumbbell")
         } description: {
             Text("Create routines in GymStreak on your iPhone")
+        }
+    }
+}
+
+/// Keeps an open routine detail screen subscribed to the store and resolves
+/// its value by identity on every render. `WatchRoutine` is a value type, so
+/// putting the whole routine in `NavigationPath` freezes the old set values
+/// until that path is rebuilt (which previously happened only after relaunch).
+private struct RoutineDetailDestination: View {
+    @EnvironmentObject private var routineStore: RoutineStore
+
+    let routineID: UUID
+    let onStartWorkout: (UUID) -> Void
+
+    var body: some View {
+        if let routine = routineStore.routine(for: routineID) {
+            RoutineDetailView(routine: routine) {
+                onStartWorkout(routineID)
+            }
+        } else {
+            ProgressView()
         }
     }
 }
@@ -135,11 +181,11 @@ struct RoutineRowView: View {
 #Preview {
     NavigationStack {
         RoutineListView()
-            .environmentObject(RoutineStore())
+            .environmentObject(RoutineStore(syncState: WatchSyncStateStore()))
             .environmentObject(WatchWorkoutViewModel(
                 healthKitManager: WatchHealthKitManager(),
                 connectivityManager: WatchConnectivityManager.shared,
-                routineStore: RoutineStore()
+                routineStore: RoutineStore(syncState: WatchSyncStateStore())
             ))
     }
 }

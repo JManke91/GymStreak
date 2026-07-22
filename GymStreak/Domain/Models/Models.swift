@@ -281,6 +281,13 @@ final class WorkoutSession {
     var workoutExercises: [WorkoutExercise]? = []
     var notes: String = ""
     var didUpdateTemplate: Bool = false
+    /// Durable witness that this history row and its template outcome were
+    /// committed by the ticket-05 atomic transaction path. Legacy builds set
+    /// `didUpdateTemplate` before a separate template save, so that boolean
+    /// alone cannot safely answer a redelivered transaction after upgrade.
+    var watchTemplateTransactionID: UUID?
+    /// `TemplateTransactionOutcome` raw value, committed with the witness.
+    var watchTemplateOutcomeRaw: String?
     /// The UUID used as HKMetadataKeyExternalUUID when the workout was saved to HealthKit.
     /// Used to correlate this SwiftData record with its HealthKit counterpart.
     var healthKitWorkoutId: UUID?
@@ -288,15 +295,22 @@ final class WorkoutSession {
     /// exercises calculate the actual load moved (body mass - assistance).
     var bodyWeightKg: Double? = nil
 
-    init(routine: Routine) {
+    /// `routine` is optional: history is denormalized and must survive
+    /// routine deletion, so a session whose template no longer exists (e.g. a
+    /// watch workout arriving after the routine was deleted, or a recovery
+    /// from HealthKit) carries only `routineName` — never a placeholder
+    /// Routine that could resurrect the deleted template.
+    init(routine: Routine?) {
         self.id = UUID()
         self.routine = routine
-        self.routineName = routine.name
+        self.routineName = routine?.name ?? ""
         self.startTime = Date()
         self.endTime = nil
         self.workoutExercises = []
         self.notes = ""
         self.didUpdateTemplate = false
+        self.watchTemplateTransactionID = nil
+        self.watchTemplateOutcomeRaw = nil
     }
 
     // Convenience accessor for non-optional usage

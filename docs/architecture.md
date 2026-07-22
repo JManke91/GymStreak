@@ -96,7 +96,7 @@ Full design rationale, method-surface decisions, and edge cases: **`docs/reposit
 - **No UseCase-per-action layer.** Coarse domain services (`Domain/Services/`) hold multi-entity business rules; simple CRUD is a ViewModel → repository call. A `CreateRoutineUseCase` wrapping one repository call is ceremony, not architecture.
 - **Legacy ViewModels stay `ObservableObject`** (`@Observable` migration is a separate, deliberate ripple — `@StateObject`/`@EnvironmentObject` call sites everywhere). **New ViewModels use `@Observable` + `@MainActor`** (the AI-coach VMs are the pattern).
 - **Denormalized workout history**: `WorkoutSession`/`WorkoutExercise`/`WorkoutSet` copy routine data so history survives routine deletion/edits.
-- **No SwiftData on watchOS** — attempted and reverted (`dc4a7d2`). Watch persists `WatchRoutine` Codable models via `RoutineStore` (App Group UserDefaults).
+- **No SwiftData on watchOS** — attempted and reverted (`dc4a7d2`). `WatchSyncStateStore` atomically persists the authoritative `WatchRoutine` base plus pending transaction overlays in one App Group file; `RoutineStore` is only the published UI projection.
 - **Domain logic as computed properties on `@Model` classes** (e.g. `totalVolume`, `exercisesGroupedBySupersets`) is acceptable — they are the domain models.
 - **`Domain/` may import `FoundationModels`** (AI-coach input/output models use `@Generable`; `AICoachServicing` exposes streaming response types). The SwiftUI ban stays absolute; FoundationModels coupling is accepted because the generable models ARE the coach's domain contract.
 
@@ -129,18 +129,18 @@ Child models normally cascade-insert via relationship attachment; explicit `dele
 
 ### Watch sync
 
-iOS → Watch: `updateApplicationContext`/`sendMessage` with JSON `[WatchRoutine]`. Watch → iOS: `transferUserInfo` with `CompletedWatchWorkout`; iOS creates `WorkoutSession` history. Sync DTOs + `Routine.toWatchRoutine()` mapper: `Data/Sync/WatchModels.swift`.
+iOS → Watch routines use versioned `updateApplicationContext` snapshots owned by `RoutineSyncAuthority` (legacy unversioned snapshots remain available for old watches). Watch → iOS template mutations use a generic `TemplateTransactionEnvelope` over both `sendMessage` and `transferUserInfo`; ticket 05's payload is `completedWorkoutUpdate`, with `CompletedWatchWorkout.id` retained only as optional history correlation. No-template workouts keep the legacy workout envelope. Both routes first enter `WatchWorkoutInboxStore`; the composition-root `WatchWorkoutIngestionCoordinator` performs isolated one-save ingestion and durable receipt/ack handling. Wire DTOs + `Routine.toWatchRoutine()` mapper: `Data/Sync/WatchModels.swift` and `WatchTemplateTransactionModels.swift`.
 
-The wire DTO `CompletedWatchWorkout` never crosses into Domain/Presentation. `WatchConnectivityManager` maps it (via `CompletedWatchWorkout.toIncomingWatchWorkout()` in `WatchModels.swift`) into the Domain-owned `IncomingWatchWorkout` (`Domain/Models/`) at the boundary — both the `.watchWorkoutCompleted` notification payload and `WatchSyncServicing.pendingWorkouts()` carry `IncomingWatchWorkout`, so `WatchWorkoutIngestionService` (Domain) and `RoutinesViewModel` (Presentation) depend only on Domain types (hard rule 4). The two structs mirror each other deliberately: the on-the-wire Codable format can evolve independently of the domain ingestion contract.
+The wire DTO `CompletedWatchWorkout` never crosses into Presentation. `WatchConnectivityManager` maps pending correlation views through `CompletedWatchWorkout.toIncomingWatchWorkout()`, while the Data-layer ingestion coordinator supplies the Domain-owned input to `WatchWorkoutIngestionService` / `WatchTemplateTransactionService`. Presentation therefore depends only on Domain protocols/models; wire evolution stays isolated at the Data boundary.
 
 ### Cross-component events (NotificationCenter)
 
 | Notification | Posted by | Handled by |
 |---|---|---|
 | `.cloudKitDataDidChange` | CloudSyncObserver | RoutinesViewModel, ExercisesViewModel (refetch) |
-| `.watchWorkoutCompleted` | WatchConnectivityManager | RoutinesViewModel (create WorkoutSession) |
 | `.watchAppBecameAvailable` | WatchConnectivityManager | RoutinesViewModel (sync routines) |
-| `.workoutHistoryDidChange` / `.routineTemplateDidChange` | ViewModels | History/Routine screens (refresh) |
+| `.workoutHistoryDidChange` | Domain ingestion services | WorkoutViewModel (refresh history) |
+| `.routineTemplateDidChange` / `.routineTemplateDidChangeLocally` | ViewModels / transaction coordinator | RoutinesViewModel (syncing / non-syncing refresh) |
 
 Accepted as the inter-ViewModel event mechanism; don't add new notification names when a direct repository/service call works.
 
@@ -150,7 +150,8 @@ Accepted as the inter-ViewModel event mechanism; don't add new notification name
 
 Cleaner, smaller architecture — keep it that way:
 
-- `Managers/RoutineStore.swift` — persistence isolation (App Group UserDefaults, JSON `WatchRoutine`)
+- `Managers/WatchSyncStateStore.swift` — the one atomic App Group owner for outgoing sync work, routine authority/base, and optimistic anchors
+- `Managers/RoutineStore.swift` — published projection of `WatchSyncStateStore.effectiveRoutines()`; no independent persistence
 - `Managers/WatchConnectivityManager.swift`, `WatchHealthKitManager.swift` — system gateways
 - `ViewModels/` — constructor-injected (`WatchRoutinesViewModel(routineStore:)`), `AppState` in `GymStreakWatchApp` is the DI container via `.environmentObject`
 - `Views/` — UI only

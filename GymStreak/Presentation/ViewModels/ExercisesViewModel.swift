@@ -73,11 +73,17 @@ class ExercisesViewModel: ObservableObject {
 
     private let exerciseRepository: ExerciseRepository
     private let routineRepository: RoutineRepository
+    private let catalogSync: ExerciseCatalogSyncRequesting
     private var cloudSyncObserver: NSObjectProtocol?
 
-    init(exerciseRepository: ExerciseRepository, routineRepository: RoutineRepository) {
+    init(
+        exerciseRepository: ExerciseRepository,
+        routineRepository: RoutineRepository,
+        catalogSync: ExerciseCatalogSyncRequesting
+    ) {
         self.exerciseRepository = exerciseRepository
         self.routineRepository = routineRepository
+        self.catalogSync = catalogSync
         fetchExercises()
         observeCloudKitChanges()
     }
@@ -111,15 +117,17 @@ class ExercisesViewModel: ObservableObject {
             loadBehavior: loadBehavior
         )
         exerciseRepository.insert(exercise)
-        save()
+        let saved = save()
         fetchExercises()
+        if saved { catalogSync.requestCatalogSync() }
         return exercise
     }
 
     func updateExercise(_ exercise: Exercise) {
         exercise.updatedAt = Date()
-        save()
+        let saved = save()
         fetchExercises()
+        if saved { catalogSync.requestCatalogSync() }
     }
 
     /// Finds all routines that use the given exercise
@@ -170,8 +178,9 @@ class ExercisesViewModel: ObservableObject {
 
         // Now delete the exercise itself
         exerciseRepository.delete(exercise)
-        save()
+        let saved = save()
         fetchExercises()
+        if saved { catalogSync.requestCatalogSync() }
     }
 
     /// Cancels the delete operation
@@ -201,8 +210,9 @@ class ExercisesViewModel: ObservableObject {
             // Then delete the exercise
             exerciseRepository.delete(exercise)
         }
-        save()
+        let saved = save()
         fetchExercises()
+        if saved { catalogSync.requestCatalogSync() }
         showingDeleteAllConfirmation = false
     }
 
@@ -211,11 +221,17 @@ class ExercisesViewModel: ObservableObject {
         showingDeleteAllConfirmation = false
     }
 
-    private func save() {
+    /// Commits pending changes. Success must be observable so callers request
+    /// a catalogue sync only for state that actually reached the store — a
+    /// failed save must never publish an in-memory snapshot to the watch.
+    @discardableResult
+    private func save() -> Bool {
         do {
             try exerciseRepository.save()
+            return true
         } catch {
             print("Error saving context: \(error)")
+            return false
         }
     }
 }

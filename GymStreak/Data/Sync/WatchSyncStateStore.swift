@@ -1,0 +1,599 @@
+//
+//  WatchSyncStateStore.swift
+//  GymStreak
+//
+//  The single watch sync-state owner (ticket 04, extended by ticket 05 of
+//  in-workout routine editing). Formerly `WatchWorkoutOutgoingQueue` — the
+//  responsibility grew from "outgoing workout FIFO" to everything the watch
+//  must keep consistent across the sync boundary, all in ONE atomically
+//  replaced App Group state file:
+//
+//    • the durable FIFO of completed workouts / template transactions,
+//      each with its finalization phase and any held terminal acknowledgment;
+//    • the persistent template sender epoch and per-routine sequence counters;
+//    • the routine authority state (epoch/generation/nonce/retired epochs);
+//    • the authoritative routine base plus per-routine optimistic anchors.
+//
+//  They share one file because they must commit together: allocating a
+//  transaction identity with its payload, and accepting a routine handover
+//  while retiring the acknowledged head, are each a single transaction.
+//  `RoutineStore` no longer persists an overlapping copy of the routines — it
+//  is a published projection of `effectiveRoutines()`.
+//
+//  Finalization phases (unchanged from ticket 04):
+//    awaitingHealthKitMetadata → awaitingHealthKitFinish → transportEligible
+//  (`quarantined` marks payloads whose exact bytes can never transport).
+//
+//  Entries are retired only by an app-level acknowledgment from iOS — never by
+//  WatchConnectivity transfer callbacks. A template transaction additionally
+//  requires that the correlated authoritative routine generation has applied
+//  locally, so ack-first and context-first delivery converge identically.
+//
+//  IDENTICAL COPY in both targets — `GymStreak/Data/Sync/` and
+//  `GymStreakWatch Watch App/Managers/` — keep them in sync. There is no
+//  watch unit-test target, so the iOS test target covers this logic
+//  (see WatchSyncStateStoreTests / WatchWorkoutFinalizerTests).
+//
+
+import Foundation
+
+/// Versioned envelope so future schema revisions stay backward-decodable.
+/// v1/v2 entries decode through `OutgoingSyncEntry`'s legacy `workout` key;
+/// v3 stores the generic transaction-first payload.
+private struct WatchSyncStateFile: Codable {
+    var version: Int
+    var entries: [OutgoingSyncEntry]
+    var senderEpoch: UUID?
+    /// routineID.uuidString → next sequence to allocate.
+    var nextSequenceByRoutine: [String: UInt64]?
+    var routineAuthority: WatchRoutineAuthorityState?
+    /// Last accepted authoritative routine list; nil until one arrives.
+    var authoritativeRoutines: [WatchRoutine]?
+    /// routineID.uuidString → the effective routine captured when that
+    /// routine's first pending template transaction was queued.
+    var routineAnchors: [String: WatchRoutine]?
+    var lastRoutineSyncDate: Date?
+}
+
+@MainActor
+final class WatchSyncStateStore {
+    nonisolated static let appGroupID = "group.com.gymstreak.shared"
+    nonisolated static let legacyDefaultsKey = "pendingCompletedWorkouts"
+    /// RoutineStore's pre-ticket-05 persistence, adopted once as the initial
+    /// authoritative base so an upgrade never blanks the watch's routines.
+    nonisolated static let legacyRoutinesKey = "syncedRoutines"
+
+    private var entries: [OutgoingSyncEntry] = []
+    private var senderEpoch: UUID?
+    private var nextSequenceByRoutine: [String: UInt64] = [:]
+    private var routineAuthority = WatchRoutineAuthorityState.initial()
+    private var authoritativeRoutines: [WatchRoutine]?
+    private var routineAnchors: [String: WatchRoutine] = [:]
+    private(set) var lastRoutineSyncDate: Date?
+    private var isStateDurable = false
+
+    private let fileURL: URL?
+
+    /// Invoked whenever the effective routines may have changed (new base,
+    /// new pending transaction, retirement). `RoutineStore` republishes on it.
+    var onEffectiveRoutinesChanged: (() -> Void)?
+    /// Invoked when the published routine challenge changed and must be
+    /// republished to iOS (bootstrap, handover acceptance).
+    var onChallengeStateChanged: (() -> Void)?
+    /// Invoked after a durable retirement can expose the next per-routine FIFO
+    /// head. The transport coordinator uses this to continue draining without
+    /// waiting for another Watch lifecycle event.
+    var onTransportEligibilityChanged: (() -> Void)?
+
+    /// - Parameters:
+    ///   - directory: override for tests; defaults to the App Group's
+    ///     WorkoutSync directory.
+    ///   - legacyDefaults: source of the pre-ticket-04 UserDefaults queue and
+    ///     the pre-ticket-05 routine cache, migrated on first init.
+    init(
+        directory: URL? = nil,
+        legacyDefaults: UserDefaults? = UserDefaults(suiteName: WatchSyncStateStore.appGroupID)
+    ) {
+        let base = directory ?? FileManager.default
+            .containerURL(forSecurityApplicationGroupIdentifier: Self.appGroupID)?
+            .appendingPathComponent("WorkoutSync", isDirectory: true)
+        self.fileURL = base?.appendingPathComponent("outgoing-queue.json")
+        if let base { try? FileManager.default.createDirectory(at: base, withIntermediateDirectories: true) }
+
+        var hadState = false
+        if let fileURL, let data = try? Data(contentsOf: fileURL) {
+            if let decoded = try? JSONDecoder().decode(WatchSyncStateFile.self, from: data) {
+                entries = decoded.entries
+                senderEpoch = decoded.senderEpoch
+                nextSequenceByRoutine = decoded.nextSequenceByRoutine ?? [:]
+                if let authority = decoded.routineAuthority { routineAuthority = authority }
+                authoritativeRoutines = decoded.authoritativeRoutines
+                routineAnchors = decoded.routineAnchors ?? [:]
+                lastRoutineSyncDate = decoded.lastRoutineSyncDate
+                hadState = true
+                isStateDurable = true
+            } else {
+                // An undecodable state file is preserved for diagnostics
+                // instead of being silently overwritten.
+                try? FileManager.default.moveItem(at: fileURL, to: fileURL.appendingPathExtension("corrupt"))
+                print("WatchSyncStateStore: state file undecodable — quarantined as .corrupt")
+            }
+        }
+        let originalEntries = entries
+        let originalEpoch = senderEpoch
+        let originalSequences = nextSequenceByRoutine
+        let originalRoutines = authoritativeRoutines
+        let didMigrateEntries = migrateLegacyEntries(from: legacyDefaults)
+        let didMigrateRoutines = migrateLegacyRoutines(from: legacyDefaults)
+        let didAssignIdentities = assignMissingTransactionIdentities()
+
+        // Queue migration, identity allocation, sequence counters, routine
+        // anchor/base state, and the stable watch authority are committed in
+        // one replacement before any migrated entry can transport.
+        if !hadState || didMigrateEntries || didMigrateRoutines || didAssignIdentities {
+            do {
+                try persist()
+                if didMigrateEntries {
+                    legacyDefaults?.removeObject(forKey: Self.legacyDefaultsKey)
+                }
+            } catch {
+                entries = originalEntries
+                senderEpoch = originalEpoch
+                nextSequenceByRoutine = originalSequences
+                authoritativeRoutines = originalRoutines
+                print("WatchSyncStateStore: migration/state write failed — \(error.localizedDescription)")
+            }
+        }
+    }
+
+    // MARK: - Reading
+
+    var all: [OutgoingSyncEntry] { entries }
+
+    func entry(id: UUID) -> OutgoingSyncEntry? {
+        entries.first { $0.workoutID == id || $0.id == id }
+    }
+
+    /// Entries whose frozen bytes may be handed to WatchConnectivity now.
+    /// No-template workouts are always eligible once finalized; a template
+    /// transaction only when it is the head of its routine's FIFO — the next
+    /// one is released when the head retires (matching ack + applied routine
+    /// generation), never merely when its transfer completes.
+    func transportEligibleEntries() -> [OutgoingSyncEntry] {
+        guard isStateDurable else { return [] }
+        return entries.filter { entry in
+            guard entry.phase == .transportEligible else { return false }
+            guard entry.hasTemplateIntent else { return true }
+            guard entry.hasDurableTemplateIdentity else { return false }
+            return isHeadTransaction(entry)
+        }
+    }
+
+    /// The oldest unretired template transaction for a routine.
+    func headTransaction(forRoutine routineId: UUID) -> OutgoingSyncEntry? {
+        entries.first { $0.hasTemplateIntent && $0.routineID == routineId }
+    }
+
+    private func isHeadTransaction(_ entry: OutgoingSyncEntry) -> Bool {
+        guard let routineID = entry.routineID else { return false }
+        return headTransaction(forRoutine: routineID)?.id == entry.id
+    }
+
+    // MARK: - Routine authority + effective routines
+
+    var routineChallengeContext: [String: String] {
+        isStateDurable ? routineAuthority.challengeContext : [:]
+    }
+
+    var acceptedRoutineEpoch: UUID? { routineAuthority.acceptedEpoch }
+    var acceptedRoutineGeneration: UInt64 { routineAuthority.acceptedGeneration }
+
+    /// What the watch UI must show: the newest authoritative base with every
+    /// unresolved template transaction folded back over it, so an ordinary or
+    /// legacy routine context can never erase pending optimistic values.
+    func effectiveRoutines() -> [WatchRoutine] {
+        var routines = authoritativeRoutines ?? []
+        // A routine the base doesn't carry (never-synced base, or an anchor
+        // captured before the first context) falls back to its anchor.
+        for (key, anchor) in routineAnchors where !routines.contains(where: { $0.id.uuidString == key }) {
+            routines.append(anchor)
+        }
+        for entry in entries where entry.hasTemplateIntent {
+            guard let workout = entry.completedWorkout else { continue }
+            routines = routines.map { WatchRoutineTemplateFold.apply(workout, to: $0) }
+        }
+        return routines
+    }
+
+    /// Applies an incoming iOS → watch routine snapshot.
+    ///
+    /// `header` is nil for a legacy unversioned context (pre-ticket-05 iOS):
+    /// it replaces the base but never touches the authority, so it can neither
+    /// establish nor advance a generation — and the fold still protects
+    /// pending optimistic values.
+    ///
+    /// Returns true when the base was replaced.
+    @discardableResult
+    func applyRoutineContext(_ routines: [WatchRoutine], header: RoutineSnapshotHeader?) -> Bool {
+        guard let header else {
+            let previousRoutines = authoritativeRoutines
+            let previousSyncDate = lastRoutineSyncDate
+            authoritativeRoutines = routines
+            lastRoutineSyncDate = Date()
+            do {
+                try persist()
+            } catch {
+                authoritativeRoutines = previousRoutines
+                lastRoutineSyncDate = previousSyncDate
+                print("WatchSyncStateStore: legacy routine context write failed — \(error.localizedDescription)")
+                return false
+            }
+            onEffectiveRoutinesChanged?()
+            return true
+        }
+
+        switch routineAuthority.decision(for: header) {
+        case .reject(let reason):
+            print("WatchSyncStateStore: rejected routine context (\(reason))")
+            return false
+        case .duplicate:
+            // Same epoch/generation already applied. Still re-evaluate held
+            // acknowledgments: an ack may have arrived after the context.
+            retireSatisfiedAcknowledgments()
+            return false
+        case .apply(let isHandover):
+            let previous = routineAuthority
+            routineAuthority.accept(header, isHandover: isHandover)
+            let previousBase = authoritativeRoutines
+            let previousSyncDate = lastRoutineSyncDate
+            authoritativeRoutines = routines
+            lastRoutineSyncDate = Date()
+            do {
+                try persist()
+            } catch {
+                routineAuthority = previous
+                authoritativeRoutines = previousBase
+                lastRoutineSyncDate = previousSyncDate
+                print("WatchSyncStateStore: routine context write failed — \(error.localizedDescription)")
+                return false
+            }
+            if isHandover { onChallengeStateChanged?() }
+            onEffectiveRoutinesChanged?()
+            retireSatisfiedAcknowledgments()
+            return true
+        }
+    }
+
+    // MARK: - Mutations (throwing = atomic write is the persistence boundary)
+
+    /// Idempotent enqueue: an existing entry with the same workout id keeps
+    /// its FIFO position, frozen payload bytes, and phase — retries never
+    /// reconstruct a finalized workout. Throws when the atomic state write
+    /// fails, in which case nothing was enqueued and no identity was
+    /// allocated.
+    ///
+    /// A workout carrying template intent is assigned its transaction identity
+    /// (stable transaction ID, the persistent sender epoch, and the next
+    /// per-routine sequence) here, and `routineAnchor` is retained for the
+    /// routine's first pending transaction — payload, identity, counter, FIFO
+    /// position, and anchor all commit in one replacement, before transport or
+    /// any optimistic local mutation.
+    @discardableResult
+    func enqueue(
+        _ workout: CompletedWatchWorkout,
+        phase: OutgoingWorkoutPhase,
+        routineAnchor: WatchRoutine? = nil
+    ) throws -> OutgoingSyncEntry {
+        if let existing = entry(id: workout.id) { return existing }
+
+        var payload = workout
+        let previousEpoch = senderEpoch
+        let previousSequences = nextSequenceByRoutine
+        let previousAnchors = routineAnchors
+
+        if payload.shouldUpdateTemplate,
+           payload.templateTransactionID == nil
+            || payload.templateSenderEpoch == nil
+            || payload.templateSequence == nil {
+            let identity = allocateTransactionIdentity(for: payload.routineId)
+            payload.templateTransactionID = UUID()
+            payload.templateSenderEpoch = identity.epoch
+            payload.templateSequence = identity.sequence
+        }
+        if payload.shouldUpdateTemplate, let routineAnchor,
+           routineAnchors[payload.routineId.uuidString] == nil,
+           headTransaction(forRoutine: payload.routineId) == nil {
+            routineAnchors[payload.routineId.uuidString] = routineAnchor
+        }
+
+        let syncPayload: OutgoingSyncPayload = payload.shouldUpdateTemplate
+            ? .templateTransaction(TemplateTransactionEnvelope(completedWorkout: payload))
+            : .completedWorkout(payload)
+        let newEntry = OutgoingSyncEntry(
+            payload: syncPayload, phase: phase, enqueuedAt: Date(), quarantineReason: nil, heldAck: nil
+        )
+        entries.append(newEntry)
+        do {
+            try persist()
+        } catch {
+            entries.removeLast()
+            senderEpoch = previousEpoch
+            nextSequenceByRoutine = previousSequences
+            routineAnchors = previousAnchors
+            throw error
+        }
+        onEffectiveRoutinesChanged?()
+        return newEntry
+    }
+
+    /// Advances an entry's finalization phase. Throws (and keeps the previous
+    /// phase) when the atomic write fails, so callers never treat an
+    /// unpersisted advancement as durable.
+    func advance(id: UUID, to phase: OutgoingWorkoutPhase) throws {
+        guard let index = entries.firstIndex(where: { $0.workoutID == id || $0.id == id }) else { return }
+        let previous = entries[index].phase
+        entries[index].phase = phase
+        do {
+            try persist()
+        } catch {
+            entries[index].phase = previous
+            throw error
+        }
+    }
+
+    /// Marks an entry's exact bytes as permanently untransportable. Best
+    /// effort: a failed write leaves the previous phase, which at worst
+    /// retries a doomed transfer once more on the next lifecycle trigger.
+    func quarantine(id: UUID, reason: String) {
+        guard let index = entries.firstIndex(where: { $0.workoutID == id || $0.id == id }) else { return }
+        let previousPhase = entries[index].phase
+        let previousReason = entries[index].quarantineReason
+        entries[index].phase = .quarantined
+        entries[index].quarantineReason = reason
+        do {
+            try persist()
+        } catch {
+            entries[index].phase = previousPhase
+            entries[index].quarantineReason = previousReason
+            print("WatchSyncStateStore: quarantine write failed — \(error.localizedDescription)")
+            return
+        }
+        print("WatchSyncStateStore: quarantined workout \(id) — \(reason)")
+    }
+
+    /// Promotes entries stranded in a HealthKit phase by a previous process
+    /// (crash mid-finalization, or a HealthKit failure that was never retried
+    /// in-process) to `transportEligible`, so the frozen payload still reaches
+    /// iOS. Call only at process start, before any finalization can be in
+    /// flight — promoting an entry whose finalizer is mid-sequence would let
+    /// its next `advance` move the phase backwards.
+    ///
+    /// Safe against HealthKit-side duplicates because `finishWorkout()` is the
+    /// only step that saves the HKWorkout and metadata is stamped before it:
+    /// an interrupted finalization either never produced an HKWorkout at all,
+    /// or produced a complete one carrying its external UUID (crash between
+    /// finish and the phase write), which iOS ingestion/reconciliation already
+    /// handles idempotently. The Apple Health record of a never-finished
+    /// workout is lost — GymStreak history is the primary record. Interim
+    /// policy until ticket 08 adds live-session recovery.
+    func promoteInterruptedFinalizations() {
+        let previousEntries = entries
+        var promoted = false
+        for index in entries.indices
+        where entries[index].phase == .awaitingHealthKitMetadata || entries[index].phase == .awaitingHealthKitFinish {
+            entries[index].phase = .transportEligible
+            promoted = true
+            print("WatchSyncStateStore: promoted interrupted finalization \(entries[index].id) to transportEligible")
+        }
+        guard promoted else { return }
+        do {
+            try persist()
+        } catch {
+            entries = previousEntries
+            print("WatchSyncStateStore: interrupted-finalization promotion failed — \(error.localizedDescription)")
+        }
+    }
+
+    // MARK: - Acknowledgments
+
+    /// Records a plain legacy `workoutAck`. It retires only a no-template
+    /// workout: an old iOS build acknowledges history without ever having
+    /// processed the template intent, so discarding a template transaction on
+    /// it would silently drop the user's requested update. Such entries stay
+    /// queued and are re-sent on lifecycle triggers until iOS is upgraded.
+    func acknowledgePlain(workoutId: UUID) {
+        guard let entry = entry(id: workoutId) else { return }
+        guard !entry.hasTemplateIntent else {
+            print("WatchSyncStateStore: plain ack for template transaction \(workoutId) — retained (old iOS build)")
+            return
+        }
+        retire(id: workoutId)
+    }
+
+    /// Records a versioned terminal acknowledgment. The entry is retired only
+    /// once the correlated authoritative routine generation has also applied
+    /// locally; until then the ack is held durably, so ack-first and
+    /// context-first delivery converge identically.
+    func acknowledgeTemplateTransaction(workoutId: UUID, ack: TemplateAckRecord) {
+        acknowledgeTemplateTransaction(ack)
+    }
+
+    func acknowledgeTemplateTransaction(_ ack: TemplateAckRecord) {
+        guard let index = entries.firstIndex(where: { $0.templateTransaction?.transactionID == ack.transactionID }),
+              let transaction = entries[index].templateTransaction else { return }
+        guard transaction.senderEpoch == ack.senderEpoch,
+              transaction.sequence == ack.sequence,
+              TemplateTransactionOutcomeWire(rawValue: ack.outcomeRaw) != nil else {
+            print("WatchSyncStateStore: template ack identity mismatch for transaction \(ack.transactionID) — ignored")
+            return
+        }
+        let previous = entries[index].heldAck
+        entries[index].heldAck = ack
+        do {
+            try persist()
+        } catch {
+            entries[index].heldAck = previous
+            print("WatchSyncStateStore: failed to persist template ack — \(error.localizedDescription)")
+            return
+        }
+        retireSatisfiedAcknowledgments()
+    }
+
+    /// Retires every entry whose held acknowledgment's routine version has
+    /// been applied locally, then recomputes the effective routines and lets
+    /// the next transaction for that routine through.
+    private func retireSatisfiedAcknowledgments() {
+        // A later transaction may already have an ack/context because legacy
+        // migration could leave multiple transfers in flight. Retire only the
+        // satisfied prefix for each routine; removing B while A remains would
+        // fold older A over B's authoritative base and visibly regress state.
+        var blockedRoutines: Set<UUID> = []
+        var satisfied: [OutgoingSyncEntry] = []
+        for entry in entries where entry.hasTemplateIntent {
+            guard let routineID = entry.routineID, !blockedRoutines.contains(routineID) else { continue }
+            guard let ack = entry.heldAck,
+                  routineAuthority.hasApplied(
+                    epoch: ack.routineEpoch, generation: ack.routineGeneration
+                  ) else {
+                blockedRoutines.insert(routineID)
+                continue
+            }
+            satisfied.append(entry)
+        }
+        guard !satisfied.isEmpty else { return }
+        for entry in satisfied {
+            print("WatchSyncStateStore: retiring template transaction \(entry.id) — ack + routine generation applied")
+        }
+        retire(ids: satisfied.map(\.id))
+    }
+
+    /// Removes an acknowledged workout. Best effort: if the write fails the
+    /// entry stays queued and iOS re-acks the redelivered duplicate, so
+    /// retirement converges.
+    func retire(id: UUID) {
+        retire(ids: [id])
+    }
+
+    private func retire(ids: [UUID]) {
+        let removed = Set(ids)
+        let previousEntries = entries
+        let previousAnchors = routineAnchors
+        entries.removeAll { removed.contains($0.id) || $0.workoutID.map(removed.contains) == true }
+        let before = previousEntries.count
+        guard entries.count != before else { return }
+        // An anchor exists only to protect unresolved intent for its routine.
+        for key in routineAnchors.keys
+        where !entries.contains(where: { $0.hasTemplateIntent && $0.routineID?.uuidString == key }) {
+            routineAnchors.removeValue(forKey: key)
+        }
+        do {
+            try persist()
+        } catch {
+            entries = previousEntries
+            routineAnchors = previousAnchors
+            print("WatchSyncStateStore: failed to retire durable entry — \(error.localizedDescription)")
+            return
+        }
+        onEffectiveRoutinesChanged?()
+        onTransportEligibilityChanged?()
+    }
+
+    // MARK: - Persistence
+
+    private func persist() throws {
+        guard let fileURL else { throw CocoaError(.fileNoSuchFile) }
+        let file = WatchSyncStateFile(
+            version: 3,
+            entries: entries,
+            senderEpoch: senderEpoch,
+            nextSequenceByRoutine: nextSequenceByRoutine,
+            routineAuthority: routineAuthority,
+            authoritativeRoutines: authoritativeRoutines,
+            routineAnchors: routineAnchors,
+            lastRoutineSyncDate: lastRoutineSyncDate
+        )
+        let data = try JSONEncoder().encode(file)
+        try data.write(to: fileURL, options: .atomic)
+        isStateDurable = true
+    }
+
+    /// Assigns transaction identities to template entries queued before
+    /// ticket 05 (or migrated from the legacy blob), in their existing FIFO
+    /// order, so ordering identity is established before any of them is sent.
+    @discardableResult
+    private func assignMissingTransactionIdentities() -> Bool {
+        let pending = entries.indices.filter {
+            entries[$0].hasTemplateIntent && entries[$0].templateTransaction == nil
+        }
+        guard !pending.isEmpty else { return false }
+        for index in pending {
+            guard var workout = entries[index].completedWorkout else { continue }
+            let identity = allocateTransactionIdentity(for: workout.routineId)
+            workout.templateTransactionID = UUID()
+            workout.templateSenderEpoch = identity.epoch
+            workout.templateSequence = identity.sequence
+            entries[index].payload = .templateTransaction(
+                TemplateTransactionEnvelope(completedWorkout: workout)
+            )
+        }
+        print("WatchSyncStateStore: prepared transaction identity for \(pending.count) pre-ticket-05 template transaction(s)")
+        return true
+    }
+
+    /// Allocates without trapping at `UInt64.max`. Sequence exhaustion starts
+    /// a fresh sender epoch and resets every per-routine counter; already
+    /// queued envelopes retain their old epoch and remain fully identifiable.
+    private func allocateTransactionIdentity(for routineID: UUID) -> (epoch: UUID, sequence: UInt64) {
+        let key = routineID.uuidString
+        if nextSequenceByRoutine[key] == UInt64.max {
+            let newEpoch = UUID()
+            senderEpoch = newEpoch
+            nextSequenceByRoutine = [key: 1]
+            return (newEpoch, 0)
+        }
+        let epoch = senderEpoch ?? UUID()
+        senderEpoch = epoch
+        let sequence = nextSequenceByRoutine[key] ?? 0
+        nextSequenceByRoutine[key] = sequence + 1
+        return (epoch, sequence)
+    }
+
+    /// Migrates the pre-ticket-04 UserDefaults queue. Those entries were
+    /// created by the old flow (transport attempted immediately after
+    /// enqueue), so they enter as `transportEligible` in their original
+    /// order. The legacy blob is removed only after the state file committed;
+    /// on a failed write it stays the recovery source and migration re-runs
+    /// on the next launch (id-deduped).
+    @discardableResult
+    private func migrateLegacyEntries(from defaults: UserDefaults?) -> Bool {
+        guard let defaults,
+              let data = defaults.data(forKey: Self.legacyDefaultsKey),
+              let legacy = try? JSONDecoder().decode([CompletedWatchWorkout].self, from: data),
+              !legacy.isEmpty else { return false }
+        var didAdd = false
+        for workout in legacy where entry(id: workout.id) == nil {
+            entries.append(OutgoingSyncEntry(
+                payload: .completedWorkout(workout), phase: .transportEligible, enqueuedAt: Date(),
+                quarantineReason: nil, heldAck: nil
+            ))
+            didAdd = true
+        }
+        return didAdd
+    }
+
+    /// Adopts RoutineStore's pre-ticket-05 UserDefaults cache as the initial
+    /// authoritative base, so upgrading does not blank the watch's routine
+    /// list while waiting for the next iOS context. The legacy key is left in
+    /// place (harmless, and it keeps a downgrade readable).
+    @discardableResult
+    private func migrateLegacyRoutines(from defaults: UserDefaults?) -> Bool {
+        guard authoritativeRoutines == nil,
+              let defaults,
+              let data = defaults.data(forKey: Self.legacyRoutinesKey),
+              let legacy = try? JSONDecoder().decode([WatchRoutine].self, from: data),
+              !legacy.isEmpty else { return false }
+        authoritativeRoutines = legacy
+        print("WatchSyncStateStore: adopted \(legacy.count) cached routine(s) as the initial authoritative base")
+        return true
+    }
+}

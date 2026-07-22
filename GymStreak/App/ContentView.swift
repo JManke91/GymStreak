@@ -33,7 +33,8 @@ private struct ContentViewInternal: View {
             routineRepository: dependencies.routineRepository,
             exerciseRepository: dependencies.exerciseRepository,
             healthKitManager: dependencies.makeHealthKitWorkoutService(),
-            watchSync: dependencies.watchSync
+            watchSync: dependencies.watchSync,
+            workoutHistoryCorrelation: dependencies.workoutHistoryCorrelation
         ))
     }
 

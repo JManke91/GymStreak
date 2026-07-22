@@ -10,6 +10,8 @@ import SwiftData
 
 @main
 struct GymStreakApp: App {
+    @Environment(\.scenePhase) private var scenePhase
+
     // Initialize CloudSyncObserver early to catch all sync events
     @StateObject private var cloudSyncObserver = CloudSyncObserver.shared
 
@@ -73,6 +75,15 @@ struct GymStreakApp: App {
                         seedTestData()
                     } else {
                         dependencies.defaultContentSeeder.run()
+                        // Stage the first catalogue snapshot only after
+                        // seeding/dedup committed, so it can't race ahead of
+                        // the built-in library.
+                        dependencies.exerciseCatalogSync.requestCatalogSync()
+                    }
+                }
+                .onChange(of: scenePhase) { _, newPhase in
+                    if newPhase == .active {
+                        watchConnectivity.requestWorkoutQueueDrain()
                     }
                 }
         }

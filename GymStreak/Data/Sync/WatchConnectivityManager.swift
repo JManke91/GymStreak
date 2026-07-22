@@ -2,7 +2,8 @@ import Foundation
 import WatchConnectivity
 
 @MainActor
-final class WatchConnectivityManager: NSObject, ObservableObject, WatchSyncServicing {
+final class WatchConnectivityManager: NSObject, ObservableObject, WatchSyncServicing,
+    WatchRoutineSnapshotTransporting {
     static let shared = WatchConnectivityManager()
 
     @Published var isReachable = false
@@ -11,10 +12,31 @@ final class WatchConnectivityManager: NSObject, ObservableObject, WatchSyncServi
 
     private var session: WCSession?
 
-    /// Persistent multi-slot buffer for completed workouts that arrived before any
-    /// observer (RoutinesViewModel) was ready to consume them. App-Group-backed so
-    /// it survives crashes between WC delivery and SwiftData save.
-    private let pendingQueue = PendingReceivedWorkoutQueue()
+    /// Durable receive inbox for completed watch workouts (ticket 04). Owned
+    /// here because payload bytes must be persisted synchronously inside the
+    /// receive callbacks — BEFORE any ingestion, notification, or ack. Drained
+    /// serially by WatchWorkoutIngestionCoordinator (composition root).
+    let workoutInbox = WatchWorkoutInboxStore()
+
+    /// Set by the composition root's ingestion coordinator. Invoked after a
+    /// payload was durably persisted to the inbox and on session activation,
+    /// so the coordinator drains on receipt, launch, and activation.
+    var onWorkoutInboxUpdated: (() -> Void)?
+    var onRoutineChallengeUpdated: (() -> Void)?
+
+    /// State machine for the exercise-catalogue file sync. Lazy so `self` can
+    /// be its transport; this manager is an app-lifetime singleton.
+    private lazy var catalogSender = ExerciseCatalogSender(transport: self)
+
+    /// iOS-side policy for the receiver-driven workout replay request.
+    private lazy var workoutQueueDrainRequester = WatchWorkoutQueueDrainRequestCoordinator(
+        transport: self
+    )
+
+    /// The single serialized owner of routine context generations (ticket 05).
+    /// Ordinary list syncs and authoritative post-commit snapshots both go
+    /// through it, so no two paths can emit competing versions.
+    private lazy var routineAuthority = RoutineSyncAuthority(transport: self)
 
     private override init() {
         super.init()
@@ -27,19 +49,11 @@ final class WatchConnectivityManager: NSObject, ObservableObject, WatchSyncServi
 
     // MARK: - Pending Workout Handling
 
-    /// Returns all workouts currently buffered but not yet committed to SwiftData.
-    /// Does NOT remove them — the consumer is responsible for calling
-    /// `markPendingProcessed(id:)` after a successful save (or after detecting
-    /// the workout is a duplicate of an already-saved one).
+    /// Returns all workouts currently in the durable inbox but not yet
+    /// committed to SwiftData. Read-only view for the HealthKit reconciler
+    /// (orphan detection); removal is the ingestion coordinator's job.
     func pendingWorkouts() -> [IncomingWatchWorkout] {
-        pendingQueue.all().map { $0.toIncomingWatchWorkout() }
-    }
-
-    /// Removes a workout from the persistent pending buffer. Call after the
-    /// consumer (RoutinesViewModel) has successfully written the WorkoutSession
-    /// to SwiftData, or after dedup detected an existing record.
-    func markPendingProcessed(id: UUID) {
-        pendingQueue.remove(id: id)
+        workoutInbox.entries().compactMap { $0.completedWorkout?.toIncomingWatchWorkout() }
     }
 
     /// Sends an app-level acknowledgment to the watch confirming a completed workout
@@ -51,17 +65,45 @@ final class WatchConnectivityManager: NSObject, ObservableObject, WatchSyncServi
     /// the sendMessage fast-path (when reachable) and transferUserInfo (guaranteed),
     /// and re-sent whenever a duplicate arrives, so delivery is self-healing.
     func acknowledgeWorkoutSaved(id: UUID) {
+        sendAck([WatchWorkoutWire.ackKey: id.uuidString], description: "save-ack for workout \(id)")
+    }
+
+    /// Sends the versioned terminal acknowledgment for a template transaction
+    /// (ticket 05). It carries the workout id under the legacy `workoutAck`
+    /// key as well, so an older watch build still reads it as a plain
+    /// acknowledgment and ignores the extra fields. All values are
+    /// property-list-safe strings.
+    func acknowledgeTemplateTransaction(_ ack: WatchTemplateTransactionAck) {
+        var payload: [String: Any] = [
+            WatchRoutineSync.ackVersionKey: String(WatchRoutineSync.templateUpdateVersion),
+            WatchRoutineSync.ackTransactionIDKey: ack.transactionID.uuidString,
+            WatchRoutineSync.ackOutcomeKey: ack.outcome.rawValue,
+            WatchRoutineSync.ackSenderEpochKey: ack.senderEpoch.uuidString,
+            WatchRoutineSync.ackSequenceKey: String(ack.sequence),
+            WatchRoutineSync.ackRoutineEpochKey: ack.routineEpoch.uuidString,
+            WatchRoutineSync.ackRoutineGenerationKey: String(ack.routineGeneration)
+        ]
+        if let workoutId = ack.workoutId {
+            payload[WatchWorkoutWire.ackKey] = workoutId.uuidString
+        }
+        sendAck(payload, description: "\(ack.outcome.rawValue) template ack for transaction \(ack.transactionID)")
+    }
+
+    private func sendAck(_ payload: [String: Any], description: String) {
         guard let session = session, session.activationState == .activated else {
             return
         }
-        let payload: [String: Any] = ["workoutAck": id.uuidString]
         if session.isReachable {
             session.sendMessage(payload, replyHandler: nil) { error in
                 print("WatchConnectivity: ack sendMessage failed — \(error.localizedDescription) (transferUserInfo will still deliver)")
             }
         }
         session.transferUserInfo(payload)
-        print("WatchConnectivity: sent save-ack for workout \(id)")
+        print("WatchConnectivity: sent \(description)")
+    }
+
+    var watchRoutineChallenge: (epoch: UUID?, generation: UInt64)? {
+        routineAuthority.publishedChallenge
     }
 
     /// True while WatchConnectivity may still be holding watch content it has
@@ -79,52 +121,140 @@ final class WatchConnectivityManager: NSObject, ObservableObject, WatchSyncServi
 
     // MARK: - Public Methods
 
+    /// Requests that the watch reconcile GymStreak's durable workout queue
+    /// with WatchConnectivity's system queue. `transferUserInfo` makes the
+    /// request survive an unreachable watch; `sendMessage` is only a fast path.
+    /// At most one durable request is outstanding, so repeated foreground
+    /// events cannot grow the system queue.
+    func requestWorkoutQueueDrain() {
+        workoutQueueDrainRequester.requestDrain()
+    }
+
+    /// Ordinary routine list sync. Versioned and suppressed-if-identical by
+    /// the routine authority; the watch applies it only if it is newer than
+    /// what it already accepted, so a delayed context can never regress it.
     func syncRoutines(_ routines: [Routine]) {
+        syncRoutineSnapshot(routines.map { $0.toWatchRoutine() })
+    }
+
+    func syncRoutineSnapshot(_ routines: [WatchRoutine]) {
+        guard canSyncRoutines else { return }
+        routineAuthority.sendOrdinary(routines)
+    }
+
+    /// Stages the authoritative post-commit routine list for a template
+    /// transaction and returns the version the watch will apply. Never
+    /// suppressed as a duplicate: a deliberately rejected transaction leaves
+    /// the routine bytes unchanged but its acknowledgment still has to name a
+    /// correlated generation.
+    @discardableResult
+    func stageAuthoritativeRoutineSnapshot(
+        _ routines: [WatchRoutine]
+    ) -> (epoch: UUID, generation: UInt64)? {
+        guard canSyncRoutines else { return nil }
+        return routineAuthority.sendAuthoritative(routines)
+    }
+
+    private var canSyncRoutines: Bool {
         guard let session = session, session.activationState == .activated else {
             print("WatchConnectivity: Cannot sync - session not activated")
-            return
+            return false
         }
-
         // On simulator, isWatchAppInstalled is always false even when Watch app is running
         #if !targetEnvironment(simulator)
         guard session.isWatchAppInstalled else {
             print("WatchConnectivity: Cannot sync - Watch app not installed")
-            return
+            return false
         }
         #endif
+        return true
+    }
 
-        let watchRoutines = routines.map { $0.toWatchRoutine() }
+    /// Deterministic encoding (sorted keys) so identical routine content always
+    /// produces identical bytes — the basis of the duplicate-sync suppression.
+    static func encodeRoutinesPayload(_ routines: [WatchRoutine]) -> Data? {
+        RoutineSyncAuthority.encode(routines)
+    }
 
-        do {
-            let data = try JSONEncoder().encode(watchRoutines)
-            let context: [String: Any] = ["routines": data]
+    /// Stages the current exercise library as a full catalogue snapshot. The
+    /// sender persists it durably and transfers it when the session, watch
+    /// state, and receiver challenge allow — callers never need to check
+    /// reachability or session state.
+    func syncExerciseCatalog(_ exercises: [Exercise]) {
+        catalogSender.requestSync(items: WatchExerciseCatalogMapper.items(from: exercises))
+    }
+}
 
-            try session.updateApplicationContext(context)
-            print("WatchConnectivity: Synced \(routines.count) routines to Watch")
-        } catch {
-            print("WatchConnectivity: Failed to sync routines - \(error.localizedDescription)")
+// MARK: - WatchWorkoutQueueDrainRequestTransporting
+
+extension WatchConnectivityManager: WatchWorkoutQueueDrainRequestTransporting {
+    var isWorkoutQueueDrainTransportReady: Bool {
+        guard let session else { return false }
+        return session.activationState == .activated
+            && session.isPaired
+            && session.isWatchAppInstalled
+    }
+
+    var isWorkoutQueueDrainMessageReachable: Bool {
+        session?.isReachable == true
+    }
+
+    var hasOutstandingWorkoutQueueDrainRequest: Bool {
+        session?.outstandingUserInfoTransfers.contains { transfer in
+            WatchWorkoutWire.isQueueDrainRequest(transfer.userInfo)
+        } == true
+    }
+
+    func sendWorkoutQueueDrainMessage(_ payload: [String: Any]) {
+        session?.sendMessage(payload, replyHandler: nil) { [weak self] error in
+            print("WatchConnectivity: workout queue-drain fast path failed — \(error.localizedDescription)")
+            Task { @MainActor in
+                self?.workoutQueueDrainRequester.messageSendFailed()
+            }
         }
     }
 
-    func sendRoutinesIfReachable(_ routines: [Routine]) {
-        guard let session = session, session.isReachable else {
-            // Fall back to application context
-            syncRoutines(routines)
-            return
+    func enqueueWorkoutQueueDrainUserInfo(_ payload: [String: Any]) {
+        session?.transferUserInfo(payload)
+        print("WatchConnectivity: requested workout queue drain from Watch")
+    }
+}
+
+// MARK: - RoutineContextTransporting
+
+extension WatchConnectivityManager: RoutineContextTransporting {
+    func sendRoutineContext(_ context: [String: Any]) throws {
+        guard let session else { throw WCError(.sessionNotActivated) }
+        try session.updateApplicationContext(context)
+    }
+}
+
+// MARK: - ExerciseCatalogTransporting
+
+extension WatchConnectivityManager: ExerciseCatalogTransporting {
+    var isReadyForCatalogTransfer: Bool {
+        guard let session, session.activationState == .activated else { return false }
+        // On simulator, isPaired/isWatchAppInstalled are always false even when
+        // the Watch app runs — but transferFile is not exercised by the
+        // simulator anyway (paired hardware only).
+        #if targetEnvironment(simulator)
+        return true
+        #else
+        return session.isPaired && session.isWatchAppInstalled
+        #endif
+    }
+
+    func cancelOutstandingCatalogTransfers() {
+        guard let session else { return }
+        for transfer in session.outstandingFileTransfers where
+            transfer.file.metadata?[WatchExerciseCatalogSync.metadataTypeKey] as? String
+                == WatchExerciseCatalogSync.metadataTypeValue {
+            transfer.cancel()
         }
+    }
 
-        let watchRoutines = routines.map { $0.toWatchRoutine() }
-
-        do {
-            let data = try JSONEncoder().encode(watchRoutines)
-            let message: [String: Any] = ["routines": data]
-
-            session.sendMessage(message, replyHandler: nil) { error in
-                print("WatchConnectivity: Failed to send message - \(error.localizedDescription)")
-            }
-        } catch {
-            print("WatchConnectivity: Failed to encode routines - \(error.localizedDescription)")
-        }
+    func transferCatalogFile(at url: URL, metadata: [String: Any]) {
+        session?.transferFile(url, metadata: metadata)
     }
 }
 
@@ -137,6 +267,10 @@ extension WatchConnectivityManager: WCSessionDelegate {
                 print("WatchConnectivity: Activation failed - \(error.localizedDescription)")
                 return
             }
+            guard activationState == .activated else {
+                print("WatchConnectivity: Activation completed in non-active state \(activationState.rawValue)")
+                return
+            }
 
             self.isPaired = session.isPaired
             self.isWatchAppInstalled = session.isWatchAppInstalled
@@ -144,10 +278,28 @@ extension WatchConnectivityManager: WCSessionDelegate {
 
             print("WatchConnectivity: Activated - paired: \(session.isPaired), installed: \(session.isWatchAppInstalled)")
 
-            // If we already have buffered workouts (e.g. from a previous launch
-            // that crashed before SwiftData save), notify any current observers
-            // so they get processed.
-            self.republishPendingWorkouts()
+            // Drain the durable inbox (e.g. entries left by a previous launch
+            // that crashed before the SwiftData save committed).
+            self.onWorkoutInboxUpdated?()
+
+            // Catalogue sync lifecycle: recover the watch's challenge (WC
+            // re-delivers receivedApplicationContext across launches), drop
+            // staging files no outstanding transfer references anymore, and
+            // re-enqueue the latest staged snapshot.
+            if !session.receivedApplicationContext.isEmpty {
+                self.catalogSender.updateChallenge(fromApplicationContext: session.receivedApplicationContext)
+                self.routineAuthority.updateChallenge(fromApplicationContext: session.receivedApplicationContext)
+                self.onRoutineChallengeUpdated?()
+            }
+            self.catalogSender.cleanUpOrphanedStagingFiles(
+                keeping: session.outstandingFileTransfers.map { $0.file.fileURL }
+            )
+            self.catalogSender.sessionDidBecomeReady()
+
+            // iOS cannot pull watch-owned userInfo. Ask the watch to reconcile
+            // its durable queue whenever this process activates so a transfer
+            // that failed while the phone was powered off self-heals.
+            self.requestWorkoutQueueDrain()
         }
     }
 
@@ -159,12 +311,20 @@ extension WatchConnectivityManager: WCSessionDelegate {
         print("WatchConnectivity: Session deactivated")
         // Reactivate session for switching watches
         session.activate()
+        Task { @MainActor in
+            // A different watch has its own (empty) applicationContext — the
+            // duplicate-sync suppression must not starve it.
+            self.routineAuthority.resetSuppression()
+        }
     }
 
     nonisolated func sessionReachabilityDidChange(_ session: WCSession) {
         Task { @MainActor in
             self.isReachable = session.isReachable
             print("WatchConnectivity: Reachability changed - \(session.isReachable)")
+            if session.isReachable {
+                self.requestWorkoutQueueDrain()
+            }
         }
     }
 
@@ -176,8 +336,56 @@ extension WatchConnectivityManager: WCSessionDelegate {
 
             // Notify so RoutinesViewModel can trigger sync
             if session.isWatchAppInstalled {
+                // A newly installed/switched watch app must receive the
+                // current routines even if the content hasn't changed.
+                self.routineAuthority.resetSuppression()
                 NotificationCenter.default.post(name: .watchAppBecameAvailable, object: nil)
+                // Newly paired/installed/switched watch: re-enqueue the latest
+                // staged catalogue snapshot (a switched watch will publish its
+                // own challenge, which restages a targeted handover).
+                self.catalogSender.sessionDidBecomeReady()
+                self.requestWorkoutQueueDrain()
             }
+        }
+    }
+
+    /// Watch → iOS applicationContext carries both receiver challenges — the
+    /// catalogue's (ticket 03) and the routine authority's (ticket 05) — in
+    /// one merged dictionary. Reachability-independent.
+    nonisolated func session(_ session: WCSession, didReceiveApplicationContext applicationContext: [String: Any]) {
+        // Extract the plist values we need before hopping actors.
+        let context = applicationContext
+        Task { @MainActor in
+            self.catalogSender.updateChallenge(fromApplicationContext: context)
+            self.routineAuthority.updateChallenge(fromApplicationContext: context)
+            self.onRoutineChallengeUpdated?()
+        }
+    }
+
+    /// Completion of a catalogue file transfer — success or error. The sender
+    /// owns the staging file's lifetime and the retry/poison classification.
+    nonisolated func session(_ session: WCSession, didFinish fileTransfer: WCSessionFileTransfer, error: Error?) {
+        let metadata = fileTransfer.file.metadata
+        guard metadata?[WatchExerciseCatalogSync.metadataTypeKey] as? String
+            == WatchExerciseCatalogSync.metadataTypeValue else { return }
+        let fileURL = fileTransfer.file.fileURL
+        let snapshotID = (metadata?[WatchExerciseCatalogSync.metadataSnapshotIDKey] as? String)
+            .flatMap(UUID.init(uuidString:))
+        Task { @MainActor in
+            self.catalogSender.transferDidFinish(fileURL: fileURL, snapshotID: snapshotID, error: error)
+        }
+    }
+
+    nonisolated func session(
+        _ session: WCSession,
+        didFinish userInfoTransfer: WCSessionUserInfoTransfer,
+        error: Error?
+    ) {
+        guard WatchWorkoutWire.isQueueDrainRequest(userInfoTransfer.userInfo) else { return }
+        if let error {
+            print("WatchConnectivity: workout queue-drain transfer failed — \(error.localizedDescription)")
+        } else {
+            print("WatchConnectivity: workout queue-drain transfer completed")
         }
     }
 
@@ -198,51 +406,47 @@ extension WatchConnectivityManager: WCSessionDelegate {
 
     @MainActor
     private func handleIncomingPayload(_ payload: [String: Any], source: String) {
-        guard let workoutData = payload["completedWorkout"] as? Data else {
+        if let transactionData = payload[WatchWorkoutWire.templateTransactionKey] as? Data,
+           let idString = payload[WatchWorkoutWire.transactionIdKey] as? String,
+           let transactionID = UUID(uuidString: idString) {
+            do {
+                try workoutInbox.store(transactionData: transactionData, transactionID: transactionID)
+            } catch {
+                print("WatchConnectivity: failed to persist template transaction (\(source)) — \(error.localizedDescription)")
+                return
+            }
+            print("WatchConnectivity: received template transaction \(transactionID) (\(source))")
+            onWorkoutInboxUpdated?()
+            return
+        }
+        // Validate only the routing envelope here; full decoding happens in
+        // the coordinator's serialized drain.
+        guard let workoutData = payload[WatchWorkoutWire.payloadKey] as? Data else {
+            return
+        }
+        guard let idString = payload[WatchWorkoutWire.workoutIdKey] as? String,
+              let workoutId = UUID(uuidString: idString) else {
+            print("WatchConnectivity: workout payload without valid id (\(source)) — ignored")
             return
         }
         do {
-            let workout = try JSONDecoder().decode(CompletedWatchWorkout.self, from: workoutData)
-            handleCompletedWorkout(workout, source: source)
+            // Persist the exact bytes BEFORE any ingestion, notification, or
+            // ack — WC receive callbacks are not an app-persistence boundary.
+            try workoutInbox.store(payloadData: workoutData, workoutId: workoutId)
         } catch {
-            print("WatchConnectivity: Failed to decode workout (\(source)) - \(error.localizedDescription)")
+            // No ack is ever sent for this delivery, so the watch's durable
+            // queue keeps the workout replayable.
+            print("WatchConnectivity: failed to persist incoming workout (\(source)) — \(error.localizedDescription)")
+            return
         }
-    }
-
-    @MainActor
-    private func handleCompletedWorkout(_ workout: CompletedWatchWorkout, source: String) {
-        // Buffer to disk first. RoutinesViewModel may not yet exist (cold start)
-        // or may be re-initializing. Idempotency on the consumer + a persistent
-        // buffer ensures no workout is dropped between receipt and save.
-        pendingQueue.add(workout)
-
-        NotificationCenter.default.post(
-            name: .watchWorkoutCompleted,
-            object: nil,
-            userInfo: ["workout": workout.toIncomingWatchWorkout()]
-        )
-        print("WatchConnectivity: Received completed workout from Watch (\(source)) - \(workout.routineName)")
-    }
-
-    @MainActor
-    private func republishPendingWorkouts() {
-        let pending = pendingQueue.all()
-        guard !pending.isEmpty else { return }
-        print("WatchConnectivity: Re-publishing \(pending.count) buffered workout(s) on activation")
-        for workout in pending {
-            NotificationCenter.default.post(
-                name: .watchWorkoutCompleted,
-                object: nil,
-                userInfo: ["workout": workout.toIncomingWatchWorkout()]
-            )
-        }
+        print("WatchConnectivity: Received completed workout from Watch (\(source)) - \(workoutId)")
+        onWorkoutInboxUpdated?()
     }
 }
 
 // MARK: - Notification Names
 
 extension Notification.Name {
-    static let watchWorkoutCompleted = Notification.Name("watchWorkoutCompleted")
     static let watchAppBecameAvailable = Notification.Name("watchAppBecameAvailable")
     /// Posted after a watch-originated WorkoutSession has been committed to
     /// SwiftData. Lets the History tab refresh without a tab switch.
@@ -251,55 +455,9 @@ extension Notification.Name {
     /// (e.g. editing a past workout in History). Triggers a routine re-fetch +
     /// watch sync so the corrected values reach iOS and the watch.
     static let routineTemplateDidChange = Notification.Name("routineTemplateDidChange")
-}
-
-// MARK: - Persistent buffer for incoming watch workouts
-
-/// App-Group-backed buffer for completed workouts received from the watch but
-/// not yet committed to SwiftData. Persists across iOS app crashes that occur
-/// between WatchConnectivity delivery and the RoutinesViewModel save. Reuses
-/// `group.com.gymstreak.shared`.
-@MainActor
-private final class PendingReceivedWorkoutQueue {
-    private let userDefaults = UserDefaults(suiteName: "group.com.gymstreak.shared")
-    private let key = "pendingReceivedWorkouts"
-
-    func add(_ workout: CompletedWatchWorkout) {
-        var current = all()
-        current.removeAll { $0.id == workout.id }
-        current.append(workout)
-        save(current)
-    }
-
-    func remove(id: UUID) {
-        var current = all()
-        current.removeAll { $0.id == id }
-        save(current)
-    }
-
-    func all() -> [CompletedWatchWorkout] {
-        guard let userDefaults, let data = userDefaults.data(forKey: key) else {
-            return []
-        }
-        do {
-            return try JSONDecoder().decode([CompletedWatchWorkout].self, from: data)
-        } catch {
-            print("PendingReceivedWorkoutQueue: failed to decode — \(error.localizedDescription)")
-            return []
-        }
-    }
-
-    private func save(_ workouts: [CompletedWatchWorkout]) {
-        guard let userDefaults else { return }
-        if workouts.isEmpty {
-            userDefaults.removeObject(forKey: key)
-            return
-        }
-        do {
-            let data = try JSONEncoder().encode(workouts)
-            userDefaults.set(data, forKey: key)
-        } catch {
-            print("PendingReceivedWorkoutQueue: failed to encode — \(error.localizedDescription)")
-        }
-    }
+    /// Posted after a watch template transaction committed. Refreshes cached
+    /// routine lists WITHOUT triggering a watch sync: that transaction already
+    /// staged its own authoritative snapshot, and an ordinary sync from a
+    /// stale cache could emit a competing generation.
+    static let routineTemplateDidChangeLocally = Notification.Name("routineTemplateDidChangeLocally")
 }

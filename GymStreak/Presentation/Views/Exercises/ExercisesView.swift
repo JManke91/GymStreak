@@ -19,7 +19,8 @@ private struct ExercisesViewInternal: View {
     init(dependencies: AppDependencies) {
         self._viewModel = StateObject(wrappedValue: ExercisesViewModel(
             exerciseRepository: dependencies.exerciseRepository,
-            routineRepository: dependencies.routineRepository
+            routineRepository: dependencies.routineRepository,
+            catalogSync: dependencies.exerciseCatalogSync
         ))
     }
 
