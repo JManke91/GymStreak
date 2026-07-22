@@ -989,6 +989,456 @@
         }
       }
     },
+    "%lld kg" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld kg"
+          }
+        }
+      }
+    },
+    "%lld kilograms" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld Kilogramm"
+          }
+        }
+      }
+    },
+    "%lld min" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld Min."
+          }
+        }
+      }
+    },
+    "%lld min %lld sec" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$lld Min. %2$lld Sek."
+          }
+        }
+      }
+    },
+    "%lld sec" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld Sek."
+          }
+        }
+      }
+    },
+    "Add an exercise or end the workout." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Füge eine Übung hinzu oder beende das Training."
+          }
+        }
+      }
+    },
+    "Add an exercise in the iPhone app, then sync again." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Füge in der iPhone-App eine Übung hinzu und synchronisiere erneut."
+          }
+        }
+      }
+    },
+    "Add Exercise" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Übung hinzufügen"
+          }
+        }
+      }
+    },
+    "Already in workout" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bereits im Training"
+          }
+        }
+      }
+    },
+    "Cancel" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Abbrechen"
+          }
+        }
+      }
+    },
+    "Configure" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Konfigurieren"
+          }
+        }
+      }
+    },
+    "Configure sets for this exercise" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sätze für diese Übung konfigurieren"
+          }
+        }
+      }
+    },
+    "Decrease weight" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gewicht verringern"
+          }
+        }
+      }
+    },
+    "Exercise library not synced" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Übungsbibliothek nicht synchronisiert"
+          }
+        }
+      }
+    },
+    "Exercise no longer available" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Übung nicht mehr verfügbar"
+          }
+        }
+      }
+    },
+    "Exercise unavailable" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Übung nicht verfügbar"
+          }
+        }
+      }
+    },
+    "General" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Allgemein"
+          }
+        }
+      }
+    },
+    "Increase weight" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gewicht erhöhen"
+          }
+        }
+      }
+    },
+    "No exercises in this workout" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Keine Übungen in diesem Training"
+          }
+        }
+      }
+    },
+    "No exercises on iPhone" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Keine Übungen auf dem iPhone"
+          }
+        }
+      }
+    },
+    "No rest" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Keine Pause"
+          }
+        }
+      }
+    },
+    "Open GymStreak on your iPhone to sync your exercise library." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Öffne GymStreak auf deinem iPhone, um deine Übungsbibliothek zu synchronisieren."
+          }
+        }
+      }
+    },
+    "Opens your synced iPhone exercise library" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Öffnet deine synchronisierte iPhone-Übungsbibliothek"
+          }
+        }
+      }
+    },
+    "Remove" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Entfernen"
+          }
+        }
+      }
+    },
+    "Remove %@" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ entfernen"
+          }
+        }
+      }
+    },
+    "Remove %@ from this workout?" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ aus diesem Training entfernen?"
+          }
+        }
+      }
+    },
+    "Remove Exercise?" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Übung entfernen?"
+          }
+        }
+      }
+    },
+    "Remove it from the workout before adding it again" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Entferne sie aus dem Training, bevor du sie erneut hinzufügst"
+          }
+        }
+      }
+    },
+    "Removing %@ also removes its %lld completed sets from this workout's saved history." : {
+      "localizations" : {
+        "de" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "Wenn du %1$@ entfernst, wird auch der %2$lld abgeschlossene Satz aus dem gespeicherten Trainingsverlauf entfernt."
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "Wenn du %1$@ entfernst, werden auch die %2$lld abgeschlossenen Sätze aus dem gespeicherten Trainingsverlauf entfernt."
+                }
+              }
+            }
+          }
+        },
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "Removing %1$@ also removes its %2$lld completed set from this workout's saved history."
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "Removing %1$@ also removes its %2$lld completed sets from this workout's saved history."
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "Reps per set" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Wiederholungen pro Satz"
+          }
+        }
+      }
+    },
+    "Search exercises" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Übungen suchen"
+          }
+        }
+      }
+    },
+    "Set configuration" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Satzkonfiguration"
+          }
+        }
+      }
+    },
+    "The workout could not be saved because its exercise data is invalid." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Das Training konnte wegen ungültiger Übungsdaten nicht gespeichert werden."
+          }
+        }
+      }
+    },
+    "This exercise could not be added." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Diese Übung konnte nicht hinzugefügt werden."
+          }
+        }
+      }
+    },
+    "This exercise is already in the workout." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Diese Übung ist bereits im Training."
+          }
+        }
+      }
+    },
+    "This exercise is no longer available in your iPhone library." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Diese Übung ist in deiner iPhone-Bibliothek nicht mehr verfügbar."
+          }
+        }
+      }
+    },
+    "Turn the Digital Crown or swipe up and down to adjust" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Zum Anpassen die Digital Crown drehen oder nach oben und unten streichen"
+          }
+        }
+      }
+    },
+    "You changed the exercises in this workout. Update your routine template?" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Du hast die Übungen in diesem Training geändert. Trainingsvorlage aktualisieren?"
+          }
+        }
+      }
+    },
+    "You modified %lld sets and changed exercises. Update your routine template?" : {
+      "localizations" : {
+        "de" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "Du hast %lld Satz und die Übungen geändert. Trainingsvorlage aktualisieren?"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "Du hast %lld Sätze und die Übungen geändert. Trainingsvorlage aktualisieren?"
+                }
+              }
+            }
+          }
+        },
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "You modified %lld set and changed exercises. Update your routine template?"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "You modified %lld sets and changed exercises. Update your routine template?"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "WEIGHT" : {
       "localizations" : {
         "de" : {

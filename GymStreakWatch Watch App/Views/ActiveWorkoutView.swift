@@ -1,6 +1,20 @@
 import SwiftUI
 import WatchKit
 
+enum WorkoutRoute: Hashable {
+    case setEditor(slotID: UUID)
+    case exerciseCatalogue
+    case configureExercise(exerciseID: UUID)
+}
+
+private struct PendingExerciseRemoval: Identifiable {
+    let slotID: UUID
+    let name: String
+    let completedSetCount: Int
+
+    var id: UUID { slotID }
+}
+
 struct ActiveWorkoutView: View {
     let routineID: UUID
 
@@ -9,7 +23,8 @@ struct ActiveWorkoutView: View {
 
     @State private var selectedTab = 0
     @State private var showEndConfirmation = false
-    @State private var exercisePath = NavigationPath()
+    @State private var exercisePath: [WorkoutRoute] = []
+    @State private var pendingRemoval: PendingExerciseRemoval?
 
     var body: some View {
         ZStack {
@@ -31,9 +46,30 @@ struct ActiveWorkoutView: View {
                 // warnings on every push.
                 NavigationStack(path: $exercisePath) {
                     workoutTabs
-                        .navigationDestination(for: Int.self) { index in
-                            if index < viewModel.exercises.count {
-                                FullScreenSetEditorView(exercise: viewModel.exercises[index])
+                        .navigationDestination(for: WorkoutRoute.self) { route in
+                            switch route {
+                            case .setEditor(let slotID):
+                                if let exercise = viewModel.exercise(slotID: slotID) {
+                                    FullScreenSetEditorView(exercise: exercise)
+                                } else {
+                                    unavailableDestination("Exercise no longer available")
+                                }
+
+                            case .exerciseCatalogue:
+                                WorkoutExerciseCatalogView { item in
+                                    viewModel.beginExerciseConfiguration(item: item)
+                                    exercisePath.append(.configureExercise(exerciseID: item.id))
+                                }
+
+                            case .configureExercise(let exerciseID):
+                                if let selection = viewModel.pendingExerciseSelection,
+                                   selection.exerciseID == exerciseID {
+                                    WatchExerciseConfigurationView(selection: selection) {
+                                        exercisePath.removeAll()
+                                    }
+                                } else {
+                                    unavailableDestination("Exercise no longer available")
+                                }
                             }
                         }
                 }
@@ -60,8 +96,25 @@ struct ActiveWorkoutView: View {
         // "Update your routine template?" dialog as the manual End flow.
         .onChange(of: viewModel.requestsFinishConfirmation) { _, requested in
             if requested {
-                showEndConfirmation = true
                 viewModel.requestsFinishConfirmation = false
+                requestEndConfirmation()
+            }
+        }
+        .onChange(of: exercisePath) { _, path in
+            let isInCatalogue = path.contains(.exerciseCatalogue)
+            let isConfiguring = path.contains { route in
+                if case .configureExercise = route { return true }
+                return false
+            }
+            viewModel.updateExerciseEditingState(
+                isInCatalogueFlow: isInCatalogue,
+                isConfiguring: isConfiguring
+            )
+        }
+        .onChange(of: viewModel.workoutSummary != nil) { _, hasSummary in
+            if hasSummary {
+                exercisePath.removeAll()
+                pendingRemoval = nil
             }
         }
         .confirmationDialog(
@@ -69,7 +122,7 @@ struct ActiveWorkoutView: View {
             isPresented: $showEndConfirmation,
             titleVisibility: .visible
         ) {
-            if viewModel.hasModifiedSets {
+            if viewModel.hasTemplateChanges {
                 Button("Save & Update Template") {
                     Task {
                         await viewModel.endWorkout(updateTemplate: true)
@@ -96,12 +149,39 @@ struct ActiveWorkoutView: View {
 
             Button("Continue", role: .cancel) { }
         } message: {
-            if viewModel.hasModifiedSets {
-                // Key "You modified %lld sets. Update your routine template?" carries
-                // plural variations in Localizable.xcstrings (en + de).
+            if viewModel.hasModifiedSets && viewModel.hasStructuralChanges {
+                Text("You modified \(viewModel.modifiedSetsCount) sets and changed exercises. Update your routine template?")
+            } else if viewModel.hasStructuralChanges {
+                Text("You changed the exercises in this workout. Update your routine template?")
+            } else if viewModel.hasModifiedSets {
                 Text("You modified \(viewModel.modifiedSetsCount) sets. Update your routine template?")
             } else {
                 Text("Save your workout progress?")
+            }
+        }
+        .confirmationDialog(
+            "Remove Exercise?",
+            isPresented: Binding(
+                get: { pendingRemoval != nil },
+                set: { if !$0 { pendingRemoval = nil } }
+            ),
+            titleVisibility: .visible,
+            presenting: pendingRemoval
+        ) { removal in
+            Button("Remove \(removal.name)", role: .destructive) {
+                _ = viewModel.removeExercise(slotID: removal.slotID)
+                exercisePath.removeAll { route in
+                    if case .setEditor(let slotID) = route { return slotID == removal.slotID }
+                    return false
+                }
+                pendingRemoval = nil
+            }
+            Button("Cancel", role: .cancel) { pendingRemoval = nil }
+        } message: { removal in
+            if removal.completedSetCount > 0 {
+                Text("Removing \(removal.name) also removes its \(removal.completedSetCount) completed sets from this workout's saved history.")
+            } else {
+                Text("Remove \(removal.name) from this workout?")
             }
         }
     }
@@ -115,11 +195,23 @@ struct ActiveWorkoutView: View {
             ExerciseListView(
                 exercises: viewModel.exercises,
                 currentIndex: viewModel.currentExerciseIndex,
-                onSelectExercise: { index in
-                    viewModel.goToExercise(at: index)
-                    exercisePath.append(index)
+                onSelectExercise: { slotID in
+                    viewModel.goToExercise(slotID: slotID)
+                    exercisePath.append(.setEditor(slotID: slotID))
                 },
-                onEnd: { showEndConfirmation = true }
+                onAddExercise: {
+                    viewModel.beginExerciseCatalogue()
+                    exercisePath.append(.exerciseCatalogue)
+                },
+                onRequestRemoval: { exercise in
+                    showEndConfirmation = false
+                    pendingRemoval = PendingExerciseRemoval(
+                        slotID: exercise.id,
+                        name: exercise.name,
+                        completedSetCount: exercise.completedSetsCount
+                    )
+                },
+                onEnd: requestEndConfirmation
             )
             .tag(0)
 
@@ -136,7 +228,7 @@ struct ActiveWorkoutView: View {
                 isPaused: viewModel.isPaused,
                 onPause: viewModel.pauseWorkout,
                 onResume: viewModel.resumeWorkout,
-                onEnd: { showEndConfirmation = true }
+                onEnd: requestEndConfirmation
             )
             .tag(2)
         }
@@ -152,7 +244,7 @@ struct ActiveWorkoutView: View {
         .toolbar {
             ToolbarItem(placement: .cancellationAction) {
                 Button {
-                    showEndConfirmation = true
+                    requestEndConfirmation()
                 } label: {
                     Image(systemName: "xmark")
                 }
@@ -160,50 +252,26 @@ struct ActiveWorkoutView: View {
             }
         }
     }
-}
 
-#Preview {
-    let routine = WatchRoutine(
-        id: UUID(),
-        name: "Push Day",
-        exercises: [
-            WatchExercise(
-                id: UUID(),
-                name: "Bench Press",
-                muscleGroup: "Chest",
-                sets: [
-                    WatchSet(id: UUID(), reps: 10, weight: 135, restTime: 90),
-                    WatchSet(id: UUID(), reps: 10, weight: 135, restTime: 90)
-                ],
-                order: 0,
-                supersetId: nil,
-                supersetOrder: 0
-            ),
-            WatchExercise(
-                id: UUID(),
-                name: "Shoulder Press",
-                muscleGroup: "Shoulders",
-                sets: [
-                    WatchSet(id: UUID(), reps: 10, weight: 65, restTime: 60),
-                    WatchSet(id: UUID(), reps: 10, weight: 65, restTime: 60)
-                ],
-                order: 1,
-                supersetId: nil,
-                supersetOrder: 0
-            )
-        ]
-    )
-    let store: RoutineStore = {
-        let store = RoutineStore(syncState: WatchSyncStateStore())
-        store.updateRoutines([routine])
-        return store
-    }()
-    let viewModel = WatchWorkoutViewModel(
-        healthKitManager: WatchHealthKitManager(),
-        connectivityManager: WatchConnectivityManager.shared,
-        routineStore: store
-    )
+    private func requestEndConfirmation() {
+        pendingRemoval = nil
+        viewModel.prepareForTerminalPresentation()
+        exercisePath.removeAll()
+        Task { @MainActor in
+            await Task.yield()
+            showEndConfirmation = true
+        }
+    }
 
-    ActiveWorkoutView(routineID: routine.id)
-        .environmentObject(viewModel)
+    private func unavailableDestination(_ message: LocalizedStringKey) -> some View {
+        VStack(spacing: 8) {
+            Image(systemName: "exclamationmark.circle")
+                .font(.title2)
+                .foregroundStyle(.secondary)
+            Text(message)
+                .font(.headline)
+                .multilineTextAlignment(.center)
+        }
+        .padding(.horizontal, 8)
+    }
 }

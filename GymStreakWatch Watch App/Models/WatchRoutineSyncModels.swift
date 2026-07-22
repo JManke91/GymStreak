@@ -287,6 +287,8 @@ enum WatchRoutineTemplateFold {
                 targetRepMin: exercise.targetRepMin,
                 targetRepMax: exercise.targetRepMax,
                 exerciseId: exercise.exerciseId,
+                exerciseSeedKey: exercise.exerciseSeedKey,
+                isPendingWatchAddition: exercise.isPendingWatchAddition,
                 loadBehaviorRaw: exercise.loadBehaviorRaw,
                 alternatives: updatedAlternatives
             )

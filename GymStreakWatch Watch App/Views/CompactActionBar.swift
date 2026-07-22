@@ -19,6 +19,7 @@ struct CompactActionBar: View {
     /// the last remaining incomplete set) — relabels the capsule to "Finish
     /// Workout". Derived in the ViewModel; the bar holds no state for it.
     let isFinishing: Bool
+    let isInputEnabled: Bool
     let onComplete: () -> Void
     let onPrevious: () -> Void
     let onNext: () -> Void
@@ -116,7 +117,7 @@ struct CompactActionBar: View {
         }
         .buttonStyle(PressScaleStyle())
         .frame(height: OnyxWatch.Dimensions.minTouchTarget)
-        .handGestureShortcut(.primaryAction)
+        .handGestureShortcut(.primaryAction, isEnabled: isInputEnabled)
         .accessibilityLabel(completionAccessibilityLabel)
     }
 
@@ -268,6 +269,7 @@ struct CompactActionBar: View {
                 completedSets: [true, false, false],
                 showDoneFlash: false,
                 isFinishing: false,
+                isInputEnabled: true,
                 onComplete: {},
                 onPrevious: {},
                 onNext: {}
@@ -280,6 +282,7 @@ struct CompactActionBar: View {
                 completedSets: [true, true, true],
                 showDoneFlash: true,
                 isFinishing: false,
+                isInputEnabled: true,
                 onComplete: {},
                 onPrevious: {},
                 onNext: {}

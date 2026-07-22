@@ -14,9 +14,9 @@ struct WorkoutTopProgressView: View {
     let exerciseName: String
     /// Whole-workout completion, 0…1 (completed sets / total sets).
     let workoutProgress: Double
-    /// Per-exercise completion fraction (completed sets / sets), one entry per
-    /// exercise in workout order.
-    let exerciseProgress: [Double]
+    /// Per-exercise completion keyed by stable slot UUID. Structural edits can
+    /// shift positions without making SwiftUI animate one exercise as another.
+    let exerciseProgress: [WatchWorkoutProgressSegment]
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -51,8 +51,8 @@ struct WorkoutTopProgressView: View {
             }
 
             HStack(spacing: 2.5) {
-                ForEach(exerciseProgress.indices, id: \.self) { index in
-                    segment(fraction: exerciseProgress[index])
+                ForEach(exerciseProgress) { progress in
+                    segment(fraction: progress.fraction)
                 }
             }
             .frame(height: metrics.topSegmentHeight)
@@ -91,12 +91,16 @@ struct WorkoutTopProgressView: View {
             WorkoutTopProgressView(
                 exerciseName: "Bankdrücken",
                 workoutProgress: 0.37,
-                exerciseProgress: [1, 0.33, 0, 0, 0]
+                exerciseProgress: [1, 0.33, 0, 0, 0].map {
+                    WatchWorkoutProgressSegment(id: UUID(), fraction: $0)
+                }
             )
             WorkoutTopProgressView(
                 exerciseName: "Schrägbankdrücken mit Kurzhanteln",
                 workoutProgress: 0.8,
-                exerciseProgress: [1, 1, 0.5]
+                exerciseProgress: [1, 1, 0.5].map {
+                    WatchWorkoutProgressSegment(id: UUID(), fraction: $0)
+                }
             )
         }
         .padding(.horizontal, 8)

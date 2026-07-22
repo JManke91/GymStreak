@@ -82,15 +82,6 @@ struct FullScreenSetEditorView: View {
         viewModel.currentSetIndex
     }
 
-    /// Per-exercise completion fraction for the top-zone segment bar, in workout
-    /// order (one segment per exercise, filled by its completed sets).
-    private var exerciseProgress: [Double] {
-        viewModel.exercises.map { exercise in
-            guard !exercise.sets.isEmpty else { return 0 }
-            return Double(exercise.completedSetsCount) / Double(exercise.sets.count)
-        }
-    }
-
     private var currentSet: Binding<ActiveWorkoutSet> {
         Binding(
             get: {
@@ -134,7 +125,7 @@ struct FullScreenSetEditorView: View {
                     WorkoutTopProgressView(
                         exerciseName: displayedExercise.name,
                         workoutProgress: viewModel.progress,
-                        exerciseProgress: exerciseProgress
+                        exerciseProgress: viewModel.progressSegments
                     )
                     .padding(.horizontal, 2)
 
@@ -202,6 +193,7 @@ struct FullScreenSetEditorView: View {
                         completedSets: displayedExercise.sets.map { $0.isCompleted },
                         showDoneFlash: showDoneFlash,
                         isFinishing: viewModel.isFinishingSet,
+                        isInputEnabled: !viewModel.isWorkoutInputSuspended && !viewModel.isWorkoutFrozen,
                         onComplete: { toggleSetCompletion() },
                         onPrevious: { goToPreviousSet() },
                         onNext: { goToNextSet() }

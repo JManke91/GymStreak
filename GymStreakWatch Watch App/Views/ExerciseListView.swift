@@ -4,7 +4,9 @@ import WatchKit
 struct ExerciseListView: View {
     let exercises: [ActiveWorkoutExercise]
     let currentIndex: Int
-    let onSelectExercise: (Int) -> Void
+    let onSelectExercise: (UUID) -> Void
+    let onAddExercise: () -> Void
+    let onRequestRemoval: (ActiveWorkoutExercise) -> Void
     let onEnd: () -> Void
 
     @EnvironmentObject var viewModel: WatchWorkoutViewModel
@@ -35,15 +37,25 @@ struct ExerciseListView: View {
 
             // Exercise rows
             Section {
+                if exercises.isEmpty {
+                    EmptyWorkoutExerciseListState()
+                }
+
                 ForEach(Array(exercises.enumerated()), id: \.element.id) { index, exercise in
                     ExerciseRow(
                         exercise: exercise,
                         index: index,
                         isCurrent: index == currentIndex,
-                        onTap: { onSelectExercise(index) },
+                        onTap: { onSelectExercise(exercise.id) },
                         onSwap: { presentSwapPicker(for: exercise) }
                     )
                     .swipeActions(edge: .trailing) {
+                        Button(role: .destructive) {
+                            onRequestRemoval(exercise)
+                        } label: {
+                            Label("Remove", systemImage: "trash")
+                        }
+
                         if exercise.canSwap {
                             Button {
                                 presentSwapPicker(for: exercise)
@@ -54,6 +66,10 @@ struct ExerciseListView: View {
                         }
                     }
                 }
+            }
+
+            Section {
+                AddWorkoutExerciseButton(action: onAddExercise)
             }
 
             // End workout button at bottom

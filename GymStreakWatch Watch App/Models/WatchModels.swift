@@ -28,6 +28,13 @@ struct WatchExercise: Codable, Identifiable, Hashable {
     var targetRepMin: Int? = nil
     var targetRepMax: Int? = nil
     var exerciseId: UUID? = nil
+    /// Stable seeded-library fallback identity. Optional for cached payloads
+    /// produced before the in-workout catalogue flow existed.
+    var exerciseSeedKey: String? = nil
+    /// Ticket 07 sets this while a Watch-minted slot is still awaiting iOS
+    /// confirmation. Ticket 06 captures it in the workout baseline so removing
+    /// a pending slot can cancel the same identity later.
+    var isPendingWatchAddition: Bool? = nil
     var loadBehaviorRaw: String? = nil
     // Optional (nil default) keeps old cached payloads decodable.
     var alternatives: [WatchExerciseAlternative]? = nil
@@ -89,18 +96,20 @@ struct WatchExerciseAlternative: Codable, Identifiable, Hashable {
 
 // MARK: - Active Workout State Models
 
-struct ActiveWorkoutExercise: Identifiable {
+struct ActiveWorkoutExercise: Identifiable, Equatable {
     let id: UUID
     // Mutable so swapping to an alternative updates the displayed identity in place.
     var name: String
     var muscleGroup: String
     var sets: [ActiveWorkoutSet]
-    let order: Int
-    let supersetId: UUID?
-    let supersetOrder: Int
+    var order: Int
+    var supersetId: UUID?
+    var supersetOrder: Int
     var targetRepMin: Int? = nil
     var targetRepMax: Int? = nil
     var exerciseId: UUID? = nil
+    var exerciseSeedKey: String? = nil
+    var isPendingWatchAddition: Bool = false
     var loadBehaviorRaw: String = "resistance"
     // Alternative exercises available for swapping (with their own set schemes).
     var alternatives: [WatchExerciseAlternative] = []
@@ -144,7 +153,7 @@ struct ActiveWorkoutExercise: Identifiable {
     }
 }
 
-struct ActiveWorkoutSet: Identifiable {
+struct ActiveWorkoutSet: Identifiable, Equatable {
     let id: UUID
     var plannedReps: Int
     var actualReps: Int
@@ -300,6 +309,8 @@ extension WatchExercise {
             targetRepMin: targetRepMin,
             targetRepMax: targetRepMax,
             exerciseId: exerciseId,
+            exerciseSeedKey: exerciseSeedKey,
+            isPendingWatchAddition: isPendingWatchAddition ?? false,
             loadBehaviorRaw: loadBehaviorRaw ?? "resistance",
             alternatives: alternatives ?? []
         )

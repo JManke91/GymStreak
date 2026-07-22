@@ -46,6 +46,14 @@ finish machinery). The delay matches the "Done" flash duration in
 summary before the celebration flash is visible. Both timers start from the same tap,
 so they stay aligned.
 
+Ticket 06 made the delayed task explicitly cancellable by structural editing.
+Opening the exercise catalogue/configuration, adding, removing, manually ending,
+or discarding cancels the pending task. The delayed closure also rechecks both
+`findNextIncompleteSet() == nil` and workout-input suspension before presenting
+the dialog or ending. This prevents an all-complete workout from ending behind a
+configuration draft, and adding a new incomplete exercise immediately revokes a
+previous finish condition.
+
 `endWorkout()` (unchanged) generates the summary before stopping HealthKit, hands the
 payload to the durable send queue, then ends the HealthKit session.
 `ActiveWorkoutView` shows `WatchWorkoutSummaryView` as soon as `workoutSummary` is set.
@@ -69,14 +77,15 @@ intentional rather than surprising the user with the summary.
 - New string `"Finish Workout"` localized in `GymStreakWatch Watch App/Localizable.xcstrings`
   (en source + de "Training beenden").
 
-## Modified-sets template prompt
-If any set was changed during the workout (`hasModifiedSets`), auto-finish does **not**
+## Template-change prompt
+If any set or exercise membership was changed during the workout
+(`hasTemplateChanges`), auto-finish does **not**
 save directly — it routes through the same **"Update your routine template?"** choice as
 the manual End flow (Save & Update Template / Save Don't Update / Continue), then finishes
 via the chosen `endWorkout(updateTemplate:)` path. Unmodified workouts still finish
 directly.
 
-Mechanism: `autoFinishWorkout()` (after the 800 ms flash delay) checks `hasModifiedSets`.
+Mechanism: `autoFinishWorkout()` (after the 800 ms flash delay) checks `hasTemplateChanges`.
 If true it sets `WatchWorkoutViewModel.requestsFinishConfirmation`; `ActiveWorkoutView`
 observes that flag via `.onChange` and flips its existing `showEndConfirmation` state,
 surfacing the **same** `confirmationDialog` the manual "End" buttons use — no duplicated
@@ -84,6 +93,11 @@ dialog or template logic. The view resets the flag once presented. Choosing "Con
 (cancel) leaves the workout active (all sets complete) so the user can still End manually.
 Because the trigger lives in the shared completion path, all three entry points
 (on-screen button, Action Button, Double Tap) honor the prompt.
+
+The dialog distinguishes set-only, structural-only, and combined changes; a
+structural-only workout never claims that a number of sets changed. Before the
+dialog or summary appears, catalogue/configuration routes and their draft
+selection are cleared so navigation and modal presentation do not collide.
 
 ## Scope / deliberate omissions
 - The Action Button / Double Tap paths never showed the on-screen "Done" flash (it is a

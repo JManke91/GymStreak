@@ -18,3 +18,4 @@
 - Apple Watch Ultra: pressing the Action Button during a rest timer now stops that timer, completes the next set, and starts the following rest timer in one press.
 - Apple Watch: fixed workout syncing getting stuck after restarting the iPhone; normal reachable sync and offline recovery now coexist safely.
 - Apple Watch: multiple offline workouts saved with “Save & Update Template” now continue syncing to iPhone history without reopening the Watch app.
+- Apple Watch: add or remove exercises during an active workout, with set, rep, weight, and rest configuration before adding.

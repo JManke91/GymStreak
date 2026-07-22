@@ -60,6 +60,11 @@ final class WatchWorkoutViewModel: ObservableObject {
     /// End/Save actions are rejected and every workout mutator is frozen.
     @Published var isEnding = false
 
+    /// Suspends set input while the user is in the catalogue/configuration
+    /// flow. HealthKit keeps running; only workout mutations are gated.
+    @Published var isWorkoutInputSuspended = false
+    @Published var pendingExerciseSelection: WatchExerciseSelection?
+
     // Error handling
     @Published var errorMessage: String?
 
@@ -78,7 +83,8 @@ final class WatchWorkoutViewModel: ObservableObject {
     private var restTimer: Timer?
     /// The delayed auto-finish, kept cancellable so a manual End (or discard)
     /// entering the terminal state can revoke it before it fires.
-    private var autoFinishTask: Task<Void, Never>?
+    var autoFinishTask: Task<Void, Never>?
+    var structuralBaseline: WatchWorkoutStructuralBaseline?
     /// Terminal finalization state machine (durable enqueue → HealthKit
     /// metadata → HealthKit finish → transport), shared by manual End and
     /// auto-finish. Operates on the connectivity manager's durable queue.
@@ -190,7 +196,7 @@ final class WatchWorkoutViewModel: ObservableObject {
     // MARK: - Computed Properties
 
     var currentExercise: ActiveWorkoutExercise? {
-        guard currentExerciseIndex < exercises.count else { return nil }
+        guard currentExerciseIndex >= 0, currentExerciseIndex < exercises.count else { return nil }
         return exercises[currentExerciseIndex]
     }
 
@@ -285,7 +291,9 @@ final class WatchWorkoutViewModel: ObservableObject {
 
     private func startWorkout(with routine: WatchRoutine) async {
         currentRoutine = routine
-        exercises = routine.exercises.sorted { $0.order < $1.order }.map { $0.toActiveWorkoutExercise() }
+        let orderedExercises = routine.exercises.sorted { $0.order < $1.order }
+        structuralBaseline = WatchWorkoutStructuralBaseline(exercises: orderedExercises)
+        exercises = orderedExercises.map { $0.toActiveWorkoutExercise() }
         currentExerciseIndex = 0
         currentSetIndex = 0
         workoutStartTime = Date()
@@ -296,6 +304,8 @@ final class WatchWorkoutViewModel: ObservableObject {
         // prior summary dismissed through a system path (bypassing
         // dismissSummary) must never mask the fresh workout screen.
         isEnding = false
+        isWorkoutInputSuspended = false
+        pendingExerciseSelection = nil
         workoutSummary = nil
 
         // Skip HealthKit for UI testing - immediately set running state with mock data
@@ -359,7 +369,14 @@ final class WatchWorkoutViewModel: ObservableObject {
     func endWorkout(updateTemplate: Bool = false) async {
         guard !isEnding else { return }
         guard let routine = currentRoutine, let startTime = workoutStartTime else { return }
+        guard WatchWorkoutStructuralReducer.hasUniqueIdentities(exercises) else {
+            assertionFailure("Active workout slot/set UUIDs must be unique before finalization")
+            errorMessage = String(localized: "The workout could not be saved because its exercise data is invalid.")
+            return
+        }
         isEnding = true
+        isWorkoutInputSuspended = false
+        pendingExerciseSelection = nil
         defer { isEnding = false }
 
         // Entering the terminal state revokes the delayed auto-finish (a
@@ -459,8 +476,9 @@ final class WatchWorkoutViewModel: ObservableObject {
         autoFinishTask = Task { @MainActor in
             try? await Task.sleep(for: .milliseconds(800))
             guard !Task.isCancelled, isWorkoutActive, !isEnding,
+                  !isWorkoutInputSuspended,
                   findNextIncompleteSet() == nil else { return }
-            if hasModifiedSets {
+            if hasTemplateChanges {
                 requestsFinishConfirmation = true
             } else {
                 await endWorkout()
@@ -504,6 +522,8 @@ final class WatchWorkoutViewModel: ObservableObject {
         guard !isWorkoutFrozen else { return }
         autoFinishTask?.cancel()
         autoFinishTask = nil
+        isWorkoutInputSuspended = false
+        pendingExerciseSelection = nil
         stopRestTimer()
         healthKitManager.discardWorkout()
         isWorkoutActive = false
@@ -512,11 +532,13 @@ final class WatchWorkoutViewModel: ObservableObject {
     }
 
     @MainActor
-    private func applyToggleSetCompletion(_ result: (exerciseIndex: Int, setIndex: Int, newState: Bool)?) {
-        guard let r = result, !isWorkoutFrozen else { return }
+    private func applyToggleSetCompletion(_ result: (exerciseID: UUID, setID: UUID, newState: Bool)?) {
+        guard let r = result, !isWorkoutFrozen, !isWorkoutInputSuspended,
+              let exerciseIndex = exercises.firstIndex(where: { $0.id == r.exerciseID }),
+              let setIndex = exercises[exerciseIndex].sets.firstIndex(where: { $0.id == r.setID }) else { return }
 
         if r.newState {
-            exercises[r.exerciseIndex].sets[r.setIndex].completedAt = Date()
+            exercises[exerciseIndex].sets[setIndex].completedAt = Date()
             WKInterfaceDevice.current().play(.success)
 
             // Completing the final remaining incomplete set anywhere in the
@@ -530,51 +552,49 @@ final class WatchWorkoutViewModel: ObservableObject {
                 return
             }
 
-            let exercise = exercises[r.exerciseIndex]
+            let exercise = exercises[exerciseIndex]
 
             // For superset exercises, only start rest timer at end of round
             if exercise.isInSuperset {
-                if isEndOfSupersetRound(exerciseIndex: r.exerciseIndex, setIndex: r.setIndex) {
-                    let restTime = supersetRoundRestTime(exerciseIndex: r.exerciseIndex, setIndex: r.setIndex)
+                if isEndOfSupersetRound(exerciseIndex: exerciseIndex, setIndex: setIndex) {
+                    let restTime = supersetRoundRestTime(exerciseIndex: exerciseIndex, setIndex: setIndex)
                     if restTime > 0 {
                         startRestTimer(duration: restTime)
                     }
                 }
                 // Advance to next exercise in superset (or next incomplete set)
-                advanceToNextSetAfterCompletion(fromExerciseIndex: r.exerciseIndex, setIndex: r.setIndex)
+                advanceToNextSetAfterCompletion(fromExerciseIndex: exerciseIndex, setIndex: setIndex)
             } else {
                 // Standard behavior for non-superset exercises
-                let restTime = exercise.sets[r.setIndex].restTime
+                let restTime = exercise.sets[setIndex].restTime
                 if restTime > 0 {
                     startRestTimer(duration: restTime)
                 }
                 // Advance to next set in same exercise or next exercise
-                advanceToNextSetAfterCompletion(fromExerciseIndex: r.exerciseIndex, setIndex: r.setIndex)
+                advanceToNextSetAfterCompletion(fromExerciseIndex: exerciseIndex, setIndex: setIndex)
             }
         } else {
-            exercises[r.exerciseIndex].sets[r.setIndex].completedAt = nil
+            exercises[exerciseIndex].sets[setIndex].completedAt = nil
             WKInterfaceDevice.current().play(.directionDown)
         }
     }
 
-    private func performToggleSetCompletion(_ setId: UUID, exerciseId: UUID) async -> (exerciseIndex: Int, setIndex: Int, newState: Bool)? {
-        // Heavy work only, NO UI
+    private func performToggleSetCompletion(
+        _ setId: UUID,
+        exerciseId: UUID
+    ) async -> (exerciseID: UUID, setID: UUID, newState: Bool)? {
         guard let exerciseIndex = exercises.firstIndex(where: { $0.id == exerciseId }),
               let setIndex = exercises[exerciseIndex].sets.firstIndex(where: { $0.id == setId }) else {
             return nil
         }
-
-        // Simulate heavy work
-//        try? await Task.sleep(nanoseconds: 50_000_000)
-
         let newState = !exercises[exerciseIndex].sets[setIndex].isCompleted
-        return (exerciseIndex, setIndex, newState)
+        return (exerciseId, setId, newState)
     }
 
     // MARK: - Set Management
 
     func toggleSetCompletion(_ setId: UUID, in exerciseId: UUID) {
-        guard !isWorkoutFrozen else { return }
+        guard !isWorkoutFrozen, !isWorkoutInputSuspended else { return }
 //        isResting = true
 //        guard let exerciseIndex = exercises.firstIndex(where: { $0.id == exerciseId }),
 //              let setIndex = exercises[exerciseIndex].sets.firstIndex(where: { $0.id == setId }) else {
@@ -615,7 +635,7 @@ final class WatchWorkoutViewModel: ObservableObject {
     }
 
     func updateSet(_ updatedSet: ActiveWorkoutSet, in exerciseId: UUID) {
-        guard !isWorkoutFrozen else { return }
+        guard !isWorkoutFrozen, !isWorkoutInputSuspended else { return }
         guard let exerciseIndex = exercises.firstIndex(where: { $0.id == exerciseId }),
               let setIndex = exercises[exerciseIndex].sets.firstIndex(where: { $0.id == updatedSet.id }) else {
             return
@@ -626,7 +646,7 @@ final class WatchWorkoutViewModel: ObservableObject {
     }
 
     func updateRestTime(for exerciseId: UUID, newRestTime: TimeInterval) {
-        guard !isWorkoutFrozen else { return }
+        guard !isWorkoutFrozen, !isWorkoutInputSuspended else { return }
         guard let exerciseIndex = exercises.firstIndex(where: { $0.id == exerciseId }) else {
             return
         }
@@ -668,7 +688,7 @@ final class WatchWorkoutViewModel: ObservableObject {
     /// Swaps an exercise for one of its alternatives (or back to the original).
     /// Only allowed before any set is completed; rebuilds the sets from the target scheme.
     func swapExercise(_ exerciseId: UUID, to alternative: WatchExerciseAlternative) {
-        guard !isWorkoutFrozen else { return }
+        guard !isWorkoutFrozen, !isWorkoutInputSuspended else { return }
         guard let index = exercises.firstIndex(where: { $0.id == exerciseId }) else { return }
         var exercise = exercises[index]
         guard exercise.completedSetsCount == 0 else { return }
@@ -725,7 +745,7 @@ final class WatchWorkoutViewModel: ObservableObject {
     }
 
     func completeCurrentSet() {
-        guard !isWorkoutFrozen else { return }
+        guard !isWorkoutFrozen, !isWorkoutInputSuspended else { return }
         guard var exercise = currentExercise,
               currentSetIndex < exercise.sets.count else { return }
 
@@ -782,6 +802,10 @@ final class WatchWorkoutViewModel: ObservableObject {
     /// on-screen button. That completion starts the next applicable rest timer.
     func handleActionButtonPress() {
         guard isWorkoutActive, !isWorkoutFrozen else { return }
+        guard !isWorkoutInputSuspended else {
+            WKInterfaceDevice.current().play(.failure)
+            return
+        }
 
         if isResting {
             // This is a combined hardware action, not the rest screen's
@@ -1241,6 +1265,9 @@ final class WatchWorkoutViewModel: ObservableObject {
         workoutStartTime = nil
         pendingCompletedWorkoutId = nil
         pendingHealthKitWorkoutId = nil
+        structuralBaseline = nil
+        isWorkoutInputSuspended = false
+        pendingExerciseSelection = nil
         isResting = false
         restTimeRemaining = 0
         isPaused = false

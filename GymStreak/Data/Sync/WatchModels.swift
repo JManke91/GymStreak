@@ -29,6 +29,8 @@ struct WatchExercise: Codable, Identifiable, Hashable {
     var targetRepMin: Int? = nil
     var targetRepMax: Int? = nil
     var exerciseId: UUID? = nil
+    var exerciseSeedKey: String? = nil
+    var isPendingWatchAddition: Bool? = nil
     var loadBehaviorRaw: String? = nil
     // Optional (nil default) keeps old cached payloads decodable.
     var alternatives: [WatchExerciseAlternative]? = nil
@@ -50,6 +52,61 @@ struct WatchExerciseAlternative: Codable, Identifiable, Hashable {
     let sets: [WatchSet]
     let order: Int
     var loadBehaviorRaw: String? = nil
+}
+
+// MARK: - Active workout structural state
+
+/// Duplicated in the watch target so the pure structural reducer can be
+/// exercised by the existing iOS unit-test target without adding SwiftUI or
+/// WatchKit dependencies to the test seam.
+struct ActiveWorkoutExercise: Identifiable, Equatable {
+    let id: UUID
+    var name: String
+    var muscleGroup: String
+    var sets: [ActiveWorkoutSet]
+    var order: Int
+    var supersetId: UUID?
+    var supersetOrder: Int
+    var targetRepMin: Int? = nil
+    var targetRepMax: Int? = nil
+    var exerciseId: UUID? = nil
+    var exerciseSeedKey: String? = nil
+    var isPendingWatchAddition: Bool = false
+    var loadBehaviorRaw: String = "resistance"
+    var alternatives: [WatchExerciseAlternative] = []
+    var plannedExerciseId: UUID? = nil
+    var plannedExerciseName: String? = nil
+    var originalMuscleGroup: String? = nil
+    var originalLoadBehaviorRaw: String? = nil
+    var originalSets: [WatchSet]? = nil
+
+    var completedSetsCount: Int { sets.filter(\.isCompleted).count }
+    var isComplete: Bool { sets.allSatisfy(\.isCompleted) }
+    var isInSuperset: Bool { supersetId != nil }
+    var wasSwapped: Bool { plannedExerciseId != nil }
+    var canSwap: Bool { completedSetsCount == 0 && !alternatives.isEmpty }
+    var hasRepRangeGoal: Bool { targetRepMin != nil && targetRepMax != nil }
+
+    var allCompletedSetsAtUpperLimit: Bool {
+        guard let max = targetRepMax, !sets.isEmpty else { return false }
+        return sets.allSatisfy { $0.isCompleted && $0.actualReps >= max }
+    }
+}
+
+struct ActiveWorkoutSet: Identifiable, Equatable {
+    let id: UUID
+    var plannedReps: Int
+    var actualReps: Int
+    var plannedWeight: Double
+    var actualWeight: Double
+    var restTime: TimeInterval
+    var completedAt: Date?
+    var order: Int
+
+    var isCompleted: Bool { completedAt != nil }
+    var wasModified: Bool {
+        actualReps != plannedReps || actualWeight != plannedWeight
+    }
 }
 
 // MARK: - Completed Workout for syncing back to iOS
@@ -216,6 +273,9 @@ extension Routine {
                     targetRepMin: routineExercise.targetRepMin,
                     targetRepMax: routineExercise.targetRepMax,
                     exerciseId: routineExercise.exercise?.id,
+                    exerciseSeedKey: routineExercise.exercise.flatMap {
+                        $0.seedKey.isEmpty ? nil : $0.seedKey
+                    },
                     loadBehaviorRaw: routineExercise.exercise?.loadBehavior.rawValue ?? ExerciseLoadBehavior.resistance.rawValue,
                     alternatives: routineExercise.alternativesList.compactMap { alternative in
                         guard let exercise = alternative.exercise else { return nil }
