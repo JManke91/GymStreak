@@ -40,6 +40,21 @@ extension WatchWorkoutStructuralReducerTests {
             isWorkoutFrozen: true,
             isInputSuspended: false
         ))
+        #expect(WatchWorkoutInteractionPolicy.allowsConfiguredAdd(
+            isWorkoutActive: true,
+            isWorkoutFrozen: false,
+            hasPendingSelection: true
+        ))
+        #expect(!WatchWorkoutInteractionPolicy.allowsConfiguredAdd(
+            isWorkoutActive: false,
+            isWorkoutFrozen: false,
+            hasPendingSelection: true
+        ))
+        #expect(!WatchWorkoutInteractionPolicy.allowsConfiguredAdd(
+            isWorkoutActive: true,
+            isWorkoutFrozen: false,
+            hasPendingSelection: false
+        ))
         #expect(WatchWorkoutInteractionPolicy.shouldAutoFinish(
             isTaskCancelled: false,
             isWorkoutActive: true,

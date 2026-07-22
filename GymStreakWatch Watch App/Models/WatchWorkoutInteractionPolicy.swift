@@ -33,6 +33,14 @@ enum WatchWorkoutInteractionPolicy {
         isWorkoutActive && !isWorkoutFrozen && !isInputSuspended
     }
 
+    static func allowsConfiguredAdd(
+        isWorkoutActive: Bool,
+        isWorkoutFrozen: Bool,
+        hasPendingSelection: Bool
+    ) -> Bool {
+        isWorkoutActive && !isWorkoutFrozen && hasPendingSelection
+    }
+
     static func shouldAutoFinish(
         isTaskCancelled: Bool,
         isWorkoutActive: Bool,

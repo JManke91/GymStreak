@@ -77,7 +77,11 @@ extension WatchWorkoutViewModel {
         draft: WatchExerciseConfigurationDraft,
         catalogueItems: [WatchExerciseCatalogItem]
     ) -> UUID? {
-        guard !isWorkoutFrozen, let pendingExerciseSelection else { return nil }
+        guard WatchWorkoutInteractionPolicy.allowsConfiguredAdd(
+            isWorkoutActive: isWorkoutActive,
+            isWorkoutFrozen: isWorkoutFrozen,
+            hasPendingSelection: pendingExerciseSelection != nil
+        ), let pendingExerciseSelection else { return nil }
         cancelDelayedAutoFinish()
 
         guard let item = WatchWorkoutStructuralReducer.resolve(

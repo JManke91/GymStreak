@@ -22,7 +22,8 @@ struct WatchExerciseConfigurationView: View {
                     Text(currentItem?.name ?? String(localized: "Exercise unavailable"))
                         .font(.headline)
                     if let item = currentItem {
-                        Text(item.muscleGroups.first ?? String(localized: "General"))
+                        Text(item.muscleGroups.first.map(localizedWatchMuscleGroup)
+                            ?? String(localized: "General"))
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
