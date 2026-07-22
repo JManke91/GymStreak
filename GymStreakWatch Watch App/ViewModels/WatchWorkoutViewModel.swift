@@ -360,6 +360,14 @@ final class WatchWorkoutViewModel: ObservableObject {
         return connectivityManager.syncState.entry(id: id) != nil
     }
 
+    var canMutateWorkout: Bool {
+        WatchWorkoutInteractionPolicy.allowsMutation(
+            isWorkoutActive: isWorkoutActive,
+            isWorkoutFrozen: isWorkoutFrozen,
+            isInputSuspended: isWorkoutInputSuspended
+        )
+    }
+
     /// One terminal finalization sequence shared by manual End, auto-finish,
     /// and hardware inputs: durable enqueue BEFORE HealthKit finalization
     /// (the reverse order had a loss window that stranded workouts in Apple
@@ -475,9 +483,13 @@ final class WatchWorkoutViewModel: ObservableObject {
         autoFinishTask?.cancel()
         autoFinishTask = Task { @MainActor in
             try? await Task.sleep(for: .milliseconds(800))
-            guard !Task.isCancelled, isWorkoutActive, !isEnding,
-                  !isWorkoutInputSuspended,
-                  findNextIncompleteSet() == nil else { return }
+            guard WatchWorkoutInteractionPolicy.shouldAutoFinish(
+                isTaskCancelled: Task.isCancelled,
+                isWorkoutActive: isWorkoutActive,
+                isWorkoutFrozen: isWorkoutFrozen,
+                isInputSuspended: isWorkoutInputSuspended,
+                hasIncompleteSet: findNextIncompleteSet() != nil
+            ) else { return }
             if hasTemplateChanges {
                 requestsFinishConfirmation = true
             } else {
@@ -533,11 +545,16 @@ final class WatchWorkoutViewModel: ObservableObject {
 
     @MainActor
     private func applyToggleSetCompletion(_ result: (exerciseID: UUID, setID: UUID, newState: Bool)?) {
-        guard let r = result, !isWorkoutFrozen, !isWorkoutInputSuspended,
-              let exerciseIndex = exercises.firstIndex(where: { $0.id == r.exerciseID }),
-              let setIndex = exercises[exerciseIndex].sets.firstIndex(where: { $0.id == r.setID }) else { return }
+        guard let toggleResult = result, canMutateWorkout,
+              let location = WatchWorkoutInteractionPolicy.setLocation(
+                exerciseID: toggleResult.exerciseID,
+                setID: toggleResult.setID,
+                in: exercises
+              ) else { return }
+        let exerciseIndex = location.exerciseIndex
+        let setIndex = location.setIndex
 
-        if r.newState {
+        if toggleResult.newState {
             exercises[exerciseIndex].sets[setIndex].completedAt = Date()
             WKInterfaceDevice.current().play(.success)
 
@@ -594,7 +611,7 @@ final class WatchWorkoutViewModel: ObservableObject {
     // MARK: - Set Management
 
     func toggleSetCompletion(_ setId: UUID, in exerciseId: UUID) {
-        guard !isWorkoutFrozen, !isWorkoutInputSuspended else { return }
+        guard canMutateWorkout else { return }
 //        isResting = true
 //        guard let exerciseIndex = exercises.firstIndex(where: { $0.id == exerciseId }),
 //              let setIndex = exercises[exerciseIndex].sets.firstIndex(where: { $0.id == setId }) else {
@@ -635,7 +652,7 @@ final class WatchWorkoutViewModel: ObservableObject {
     }
 
     func updateSet(_ updatedSet: ActiveWorkoutSet, in exerciseId: UUID) {
-        guard !isWorkoutFrozen, !isWorkoutInputSuspended else { return }
+        guard canMutateWorkout else { return }
         guard let exerciseIndex = exercises.firstIndex(where: { $0.id == exerciseId }),
               let setIndex = exercises[exerciseIndex].sets.firstIndex(where: { $0.id == updatedSet.id }) else {
             return
@@ -646,7 +663,7 @@ final class WatchWorkoutViewModel: ObservableObject {
     }
 
     func updateRestTime(for exerciseId: UUID, newRestTime: TimeInterval) {
-        guard !isWorkoutFrozen, !isWorkoutInputSuspended else { return }
+        guard canMutateWorkout else { return }
         guard let exerciseIndex = exercises.firstIndex(where: { $0.id == exerciseId }) else {
             return
         }
@@ -688,7 +705,7 @@ final class WatchWorkoutViewModel: ObservableObject {
     /// Swaps an exercise for one of its alternatives (or back to the original).
     /// Only allowed before any set is completed; rebuilds the sets from the target scheme.
     func swapExercise(_ exerciseId: UUID, to alternative: WatchExerciseAlternative) {
-        guard !isWorkoutFrozen, !isWorkoutInputSuspended else { return }
+        guard canMutateWorkout else { return }
         guard let index = exercises.firstIndex(where: { $0.id == exerciseId }) else { return }
         var exercise = exercises[index]
         guard exercise.completedSetsCount == 0 else { return }
@@ -710,6 +727,7 @@ final class WatchWorkoutViewModel: ObservableObject {
         exercise.name = alternative.name
         exercise.muscleGroup = alternative.muscleGroup
         exercise.exerciseId = alternative.exerciseId
+        exercise.exerciseSeedKey = nil
         exercise.loadBehaviorRaw = alternative.loadBehaviorRaw ?? "resistance"
         exercise.sets = alternative.sets.enumerated().map { setIndex, set in
             ActiveWorkoutSet(
@@ -745,7 +763,7 @@ final class WatchWorkoutViewModel: ObservableObject {
     }
 
     func completeCurrentSet() {
-        guard !isWorkoutFrozen, !isWorkoutInputSuspended else { return }
+        guard canMutateWorkout else { return }
         guard var exercise = currentExercise,
               currentSetIndex < exercise.sets.count else { return }
 

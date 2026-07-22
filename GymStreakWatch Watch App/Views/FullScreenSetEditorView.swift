@@ -193,7 +193,7 @@ struct FullScreenSetEditorView: View {
                         completedSets: displayedExercise.sets.map { $0.isCompleted },
                         showDoneFlash: showDoneFlash,
                         isFinishing: viewModel.isFinishingSet,
-                        isInputEnabled: !viewModel.isWorkoutInputSuspended && !viewModel.isWorkoutFrozen,
+                        isInputEnabled: viewModel.canMutateWorkout,
                         onComplete: { toggleSetCompletion() },
                         onPrevious: { goToPreviousSet() },
                         onNext: { goToNextSet() }

@@ -49,7 +49,7 @@ Supported in the active-workout add flow. Both existing library exercises and ne
 
 Ticket 06 adds live-session exercise membership editing on Apple Watch. `ActiveWorkoutView` retains the single workout-owned `NavigationStack`, but its path is now a homogeneous `[WorkoutRoute]` containing only UUID-backed routes: set editor, catalogue, and configuration. Every destination re-resolves its slot/catalogue selection, so removing a preceding exercise or refreshing the catalogue cannot make a stored array index point at the wrong model. The flow is pushed navigation—exercise list → synced catalogue → compact configuration—not a sheet.
 
-`WorkoutExerciseCatalogView` explicitly distinguishes a never-synced catalogue from a valid empty library and a populated library. Active entries are disabled using identity in this order: library UUID, non-empty seed key, then normalized name only for a legacy active slot with neither known identity. A configuration draft snapshots only the selected UUID/seed key and the four values; it does not retain a catalogue model. Commit re-resolves the latest item by UUID and then seed key. Failure leaves the live workout untouched.
+`WorkoutExerciseCatalogView` explicitly distinguishes a never-synced catalogue from a valid empty library and a populated library. Active entries are disabled using identity in this order: library UUID, non-empty seed key, then normalized name only for a legacy active slot with neither known identity. A swap clears the prior seed key because the alternative wire model supplies a new UUID but no seed key; this prevents both the old and new library entries from appearing active. Muscle and equipment metadata is localized for English/German display and search. A configuration draft snapshots only the selected UUID/seed key and the four values; it does not retain a catalogue model. Commit re-resolves the latest item by UUID and then seed key. Failure leaves the live workout untouched.
 
 The compact configuration defaults to one set, 10 reps, 0 kg, and 60 seconds rest. Sets, reps, and rest use pushed navigation-link pickers. Weight has a dedicated non-scrolling editor with one focused Digital Crown owner, touch ± controls, and VoiceOver adjustable actions. Commit atomically mints one slot UUID and distinct set UUIDs, copies planned values into actual values, makes the slot standalone, selects it, and returns to the exercise list. Back navigation discards the draft.
 
@@ -62,6 +62,7 @@ Structural input also extends the completion safety rules. Entering catalogue/co
 Implementation components:
 
 - `Models/WatchWorkoutStructuralReducer.swift` (duplicated under `GymStreak/Data/Sync` for the existing iOS unit-test target): pure catalogue, draft, baseline, add/remove, identity, cursor/superset, invariant, and progress rules.
+- `Models/WatchWorkoutInteractionPolicy.swift` (also duplicated into the iOS test seam): pure finish-dialog, auto-finish/input gate, and UUID set-location decisions used by the ViewModel.
 - `ViewModels/WatchWorkoutViewModel.swift`: baseline ownership, atomic structural mutations, delayed-finish cancellation, input suspension, UUID async re-resolution, and combined template-change state.
 - `Views/ActiveWorkoutView.swift`, `WorkoutExerciseCatalogView.swift`, and `WatchExerciseConfigurationView.swift`: typed navigation, root confirmations, catalogue states, configuration, and Crown/accessibility UI.
 - `Models/WatchModels.swift`: seed-key/pending provenance plus mutable active ordering/superset metadata. Optional wire defaults preserve older cached routine snapshots.
@@ -70,7 +71,7 @@ Apple API research validated the typed value-path navigation, navigation-link pi
 
 Verification status for ticket 06:
 
-- Automated reducer tests cover catalogue states/matching/stale selection, draft bounds and atomic identities, ordered baseline semantics including pending additions, add/remove cancellation and remove/re-add, cursor/empty state, superset cleanup, and stable progress identity.
+- Automated reducer/policy tests cover catalogue states/matching/stale selection, draft bounds and atomic identities, ordered baseline semantics including pending additions, add/remove cancellation and remove/re-add, cursor/empty state, superset cleanup, stable progress identity, structural/set/combined finish copy, suspended/ending/cancelled auto-finish gates, and UUID re-resolution after index shifts/removal.
 - The focused structural-reducer tests and complete `GymStreakTests` suite pass, and both the actual `GymStreak` iOS scheme and Watch app target compile under Xcode.
 - Physical hardware verification remains required on supported case sizes at the largest Dynamic Type size with VoiceOver/Crown, Action Button, supported Double Tap hardware, active/minimized rest timers, completed-work deletion, the empty workout, and auto-finish timing. Simulator cannot validate Action Button/Double Tap hardware delivery.
 

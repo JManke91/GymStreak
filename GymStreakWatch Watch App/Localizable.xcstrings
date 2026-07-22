@@ -1079,6 +1079,126 @@
         }
       }
     },
+    "Abs" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Bauchmuskeln" } }
+      }
+    },
+    "Barbell" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Langhantel" } }
+      }
+    },
+    "Biceps" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Bizeps" } }
+      }
+    },
+    "Bodyweight" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Körpergewicht" } }
+      }
+    },
+    "Cable" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Kabelzug" } }
+      }
+    },
+    "Calves" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Waden" } }
+      }
+    },
+    "Chest" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Brust" } }
+      }
+    },
+    "Dumbbell" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Kurzhantel" } }
+      }
+    },
+    "Forearms" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Unterarme" } }
+      }
+    },
+    "Front Delts" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Vordere Schultern" } }
+      }
+    },
+    "Glutes" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Gesäß" } }
+      }
+    },
+    "Hamstrings" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Beinbeuger" } }
+      }
+    },
+    "Hip Flexors" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Hüftbeuger" } }
+      }
+    },
+    "Lats" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Latissimus" } }
+      }
+    },
+    "Lower Back" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Unterer Rücken" } }
+      }
+    },
+    "Machine" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Maschine" } }
+      }
+    },
+    "Obliques" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Seitliche Bauchmuskeln" } }
+      }
+    },
+    "Quadriceps" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Quadrizeps" } }
+      }
+    },
+    "Rear Delts" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Hintere Schultern" } }
+      }
+    },
+    "Shoulders" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Schultern" } }
+      }
+    },
+    "Side Delts" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Seitliche Schultern" } }
+      }
+    },
+    "Triceps" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Trizeps" } }
+      }
+    },
+    "Upper Back" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Oberer Rücken" } }
+      }
+    },
+    "Upper Chest" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Obere Brust" } }
+      }
+    },
     "Cancel" : {
       "localizations" : {
         "de" : {

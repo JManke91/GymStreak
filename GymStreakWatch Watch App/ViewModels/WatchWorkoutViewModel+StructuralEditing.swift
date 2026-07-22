@@ -17,6 +17,12 @@ extension WatchWorkoutViewModel {
     var outgoingRemovedSlotIDs: [UUID] { structuralChanges.outgoingRemovedSlotIDs }
     var hasStructuralChanges: Bool { structuralChanges.hasStructuralChanges }
     var hasTemplateChanges: Bool { hasModifiedSets || hasStructuralChanges }
+    var finishDialogState: WatchWorkoutFinishDialogState {
+        WatchWorkoutInteractionPolicy.finishDialogState(
+            modifiedSetCount: modifiedSetsCount,
+            hasStructuralChanges: hasStructuralChanges
+        )
+    }
 
     var progressSegments: [WatchWorkoutProgressSegment] {
         WatchWorkoutStructuralReducer.progressSegments(for: exercises)
@@ -122,7 +128,7 @@ extension WatchWorkoutViewModel {
 
     @discardableResult
     func removeExercise(slotID: UUID) -> WatchWorkoutRemovalResult? {
-        guard !isWorkoutFrozen, !isWorkoutInputSuspended else { return nil }
+        guard canMutateWorkout else { return nil }
         cancelDelayedAutoFinish()
         let result = WatchWorkoutStructuralReducer.remove(
             slotID: slotID,

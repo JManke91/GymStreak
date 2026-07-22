@@ -149,13 +149,14 @@ struct ActiveWorkoutView: View {
 
             Button("Continue", role: .cancel) { }
         } message: {
-            if viewModel.hasModifiedSets && viewModel.hasStructuralChanges {
-                Text("You modified \(viewModel.modifiedSetsCount) sets and changed exercises. Update your routine template?")
-            } else if viewModel.hasStructuralChanges {
+            switch viewModel.finishDialogState {
+            case .combined(let modifiedSetCount):
+                Text("You modified \(modifiedSetCount) sets and changed exercises. Update your routine template?")
+            case .structuralOnly:
                 Text("You changed the exercises in this workout. Update your routine template?")
-            } else if viewModel.hasModifiedSets {
-                Text("You modified \(viewModel.modifiedSetsCount) sets. Update your routine template?")
-            } else {
+            case .setsOnly(let count):
+                Text("You modified \(count) sets. Update your routine template?")
+            case .unchanged:
                 Text("Save your workout progress?")
             }
         }

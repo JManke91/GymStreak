@@ -19,8 +19,8 @@ struct WorkoutExerciseCatalogView: View {
         guard !searchText.isEmpty else { return catalogStore.items }
         return catalogStore.items.filter {
             $0.name.localizedStandardContains(searchText)
-                || $0.muscleGroups.contains { $0.localizedStandardContains(searchText) }
-                || $0.equipmentTypeRaw.localizedStandardContains(searchText)
+                || $0.muscleGroups.contains { localizedMuscleGroup($0).localizedStandardContains(searchText) }
+                || localizedEquipment($0.equipmentTypeRaw).localizedStandardContains(searchText)
         }
     }
 
@@ -107,10 +107,45 @@ struct WorkoutExerciseCatalogView: View {
     }
 
     private func metadata(for item: WatchExerciseCatalogItem) -> String {
-        let muscle = item.muscleGroups.first ?? String(localized: "General")
-        let equipment = item.equipmentTypeRaw
-            .replacingOccurrences(of: "_", with: " ")
-            .capitalized
+        let muscle = item.muscleGroups.first.map(localizedMuscleGroup)
+            ?? String(localized: "General")
+        let equipment = localizedEquipment(item.equipmentTypeRaw)
         return "\(muscle) · \(equipment)"
+    }
+
+    private func localizedMuscleGroup(_ value: String) -> String {
+        switch value {
+        case "Biceps": String(localized: "Biceps")
+        case "Triceps": String(localized: "Triceps")
+        case "Forearms": String(localized: "Forearms")
+        case "Chest": String(localized: "Chest")
+        case "Upper Chest": String(localized: "Upper Chest")
+        case "Upper Back": String(localized: "Upper Back")
+        case "Lats": String(localized: "Lats")
+        case "Lower Back": String(localized: "Lower Back")
+        case "Shoulders": String(localized: "Shoulders")
+        case "Front Delts": String(localized: "Front Delts")
+        case "Side Delts": String(localized: "Side Delts")
+        case "Rear Delts": String(localized: "Rear Delts")
+        case "Abs": String(localized: "Abs")
+        case "Obliques": String(localized: "Obliques")
+        case "Quadriceps": String(localized: "Quadriceps")
+        case "Hamstrings": String(localized: "Hamstrings")
+        case "Glutes": String(localized: "Glutes")
+        case "Calves": String(localized: "Calves")
+        case "Hip Flexors": String(localized: "Hip Flexors")
+        default: value
+        }
+    }
+
+    private func localizedEquipment(_ value: String) -> String {
+        switch value {
+        case "dumbbell": String(localized: "Dumbbell")
+        case "barbell": String(localized: "Barbell")
+        case "machine": String(localized: "Machine")
+        case "cable": String(localized: "Cable")
+        case "bodyweight": String(localized: "Bodyweight")
+        default: value.replacingOccurrences(of: "_", with: " ").capitalized
+        }
     }
 }
