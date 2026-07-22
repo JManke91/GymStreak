@@ -273,4 +273,151 @@ struct WorkoutViewModelTests {
         #expect(unchangedRoutine.routineExercisesList.map(\.id) == [slot.id])
         #expect(addedWorkoutExercise.routineExerciseId == nil)
     }
+
+    // MARK: - Progressive overload from history (after-the-fact)
+
+    /// Builds a completed session whose single exercise hit the top of an 8–12
+    /// rep goal, wired to a still-live routine template. Returns everything a
+    /// history-apply test needs. `linkRoutineExerciseId` toggles legacy history
+    /// (nil slot id → resolution falls back to exercise identity).
+    @MainActor
+    private func makeHistoryScenario(
+        context: ModelContext,
+        routineRepository: SwiftDataRoutineRepository,
+        sessionRepository: SwiftDataWorkoutSessionRepository,
+        linkRoutineExerciseId: Bool = true
+    ) throws -> (session: WorkoutSession, workoutExercise: WorkoutExercise, slot: RoutineExercise, exercise: Exercise) {
+        let exercise = Exercise(name: "Bench Press", loadBehavior: .resistance)
+        let routine = Routine(name: "Push")
+        let slot = RoutineExercise(exercise: exercise, order: 0)
+        slot.routine = routine
+        slot.targetRepMin = 8
+        slot.targetRepMax = 12
+        routine.routineExercises = [slot]
+        let templateSet = ExerciseSet(reps: 12, weight: 50, restTime: 60)
+        templateSet.routineExercise = slot
+        slot.sets = [templateSet]
+
+        context.insert(exercise)
+        context.insert(slot)
+        context.insert(templateSet)
+        routineRepository.insert(routine)
+
+        let session = WorkoutSession(routine: routine)
+        let workoutExercise = WorkoutExercise(from: slot, order: 0)
+        if !linkRoutineExerciseId { workoutExercise.routineExerciseId = nil }
+        workoutExercise.workoutSession = session
+        for set in workoutExercise.setsList {
+            set.actualReps = 12
+            set.isCompleted = true
+        }
+        session.workoutExercises = [workoutExercise]
+        sessionRepository.insert(session)
+        try sessionRepository.save()
+
+        return (session, workoutExercise, slot, exercise)
+    }
+
+    @MainActor
+    private func makeViewModel(
+        sessionRepository: SwiftDataWorkoutSessionRepository,
+        routineRepository: SwiftDataRoutineRepository,
+        exerciseRepository: SwiftDataExerciseRepository
+    ) -> WorkoutViewModel {
+        WorkoutViewModel(
+            workoutSessionRepository: sessionRepository,
+            routineRepository: routineRepository,
+            exerciseRepository: exerciseRepository,
+            healthKitManager: MockHealthKitWorkoutServicing(),
+            watchSync: MockWatchSyncServicing(),
+            workoutHistoryCorrelation: EmptyWorkoutHistoryCorrelationProvider()
+        )
+    }
+
+    @Test
+    func applyingOverloadFromHistoryBumpsLiveTemplateAndLeavesHistoryUnchanged() throws {
+        let context = ModelContext(InMemoryModelContainer.make())
+        let sessionRepository = SwiftDataWorkoutSessionRepository(modelContext: context)
+        let routineRepository = SwiftDataRoutineRepository(modelContext: context)
+        let exerciseRepository = SwiftDataExerciseRepository(modelContext: context)
+        let scenario = try makeHistoryScenario(
+            context: context, routineRepository: routineRepository, sessionRepository: sessionRepository
+        )
+        let viewModel = makeViewModel(
+            sessionRepository: sessionRepository, routineRepository: routineRepository, exerciseRepository: exerciseRepository
+        )
+
+        // Snapshot the historical set before applying — it must not change.
+        let historySet = try #require(scenario.workoutExercise.setsList.first)
+        let before = (historySet.actualWeight, historySet.actualReps, historySet.plannedWeight, historySet.plannedReps)
+
+        #expect(viewModel.hasResolvableOverloadTemplate(from: scenario.session, for: scenario.workoutExercise))
+        let newWeight = viewModel.applyProgressiveOverloadFromHistory(
+            from: scenario.session, for: scenario.workoutExercise, weightIncrement: 2.5
+        )
+
+        // Live template bumped: +2.5 kg, reps reset to the range minimum.
+        #expect(newWeight == 52.5)
+        let templateSet = try #require(scenario.slot.setsList.first)
+        #expect(templateSet.weight == 52.5)
+        #expect(templateSet.reps == 8)
+
+        // History is immutable: nothing on the workout set or its flag changed.
+        #expect(historySet.actualWeight == before.0)
+        #expect(historySet.actualReps == before.1)
+        #expect(historySet.plannedWeight == before.2)
+        #expect(historySet.plannedReps == before.3)
+        #expect(scenario.workoutExercise.progressiveOverloadApplied == false)
+    }
+
+    @Test
+    func applyingOverloadFromHistoryResolvesRenamedExerciseViaIdentityFallback() throws {
+        let context = ModelContext(InMemoryModelContainer.make())
+        let sessionRepository = SwiftDataWorkoutSessionRepository(modelContext: context)
+        let routineRepository = SwiftDataRoutineRepository(modelContext: context)
+        let exerciseRepository = SwiftDataExerciseRepository(modelContext: context)
+        // Legacy history (no slot id) forces resolution through exercise identity.
+        let scenario = try makeHistoryScenario(
+            context: context, routineRepository: routineRepository, sessionRepository: sessionRepository,
+            linkRoutineExerciseId: false
+        )
+        let viewModel = makeViewModel(
+            sessionRepository: sessionRepository, routineRepository: routineRepository, exerciseRepository: exerciseRepository
+        )
+
+        // Rename the live library exercise after the workout — identity (id) still matches.
+        scenario.exercise.name = "Barbell Bench Press"
+
+        #expect(viewModel.hasResolvableOverloadTemplate(from: scenario.session, for: scenario.workoutExercise))
+        let newWeight = viewModel.applyProgressiveOverloadFromHistory(
+            from: scenario.session, for: scenario.workoutExercise, weightIncrement: 5
+        )
+        #expect(newWeight == 55)
+        #expect(try #require(scenario.slot.setsList.first).weight == 55)
+    }
+
+    @Test
+    func applyingOverloadFromHistoryIsNoOpWhenRoutineDeleted() throws {
+        let context = ModelContext(InMemoryModelContainer.make())
+        let sessionRepository = SwiftDataWorkoutSessionRepository(modelContext: context)
+        let routineRepository = SwiftDataRoutineRepository(modelContext: context)
+        let exerciseRepository = SwiftDataExerciseRepository(modelContext: context)
+        let scenario = try makeHistoryScenario(
+            context: context, routineRepository: routineRepository, sessionRepository: sessionRepository
+        )
+        let viewModel = makeViewModel(
+            sessionRepository: sessionRepository, routineRepository: routineRepository, exerciseRepository: exerciseRepository
+        )
+
+        // Simulate the source routine being deleted since the workout.
+        scenario.session.routine = nil
+
+        #expect(viewModel.hasResolvableOverloadTemplate(from: scenario.session, for: scenario.workoutExercise) == false)
+        let newWeight = viewModel.applyProgressiveOverloadFromHistory(
+            from: scenario.session, for: scenario.workoutExercise, weightIncrement: 2.5
+        )
+        #expect(newWeight == nil)
+        // The now-orphaned template slot is untouched.
+        #expect(try #require(scenario.slot.setsList.first).weight == 50)
+    }
 }

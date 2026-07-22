@@ -207,6 +207,7 @@
 // MARK: - Common Actions
 "action.save" = "Speichern";
 "action.cancel" = "Abbrechen";
+"action.undo" = "Rückgängig";
 "action.delete" = "Löschen";
 "action.edit" = "Bearbeiten";
 "action.done" = "Fertig";
@@ -294,6 +295,12 @@
 "rep_range.goal_achieved_detail" = "Alle %d Sätze haben %d Wdh. erreicht";
 "rep_range.routine_updated" = "Routine aktualisiert: %@kg × %d Wdh. beim nächsten Mal";
 "rep_range.sets_with_range" = "%d Sätze | %d-%d Wdh.";
+"rep_range.ready_for_more" = "Bereit für mehr Gewicht";
+"rep_range.overload_card.description" = "Alle %d Sätze bei **%d Wdh.** — dein Zielbereich %d–%d ist ausgereizt.";
+"rep_range.overload_card.increased_to" = "Erhöht auf **%@**";
+"rep_range.overload_card.reduced_to" = "Unterstützung reduziert auf **%@**";
+"rep_range.overload_card.next_workout" = "Nächstes Training: %d × %d Wdh. · %@";
+"rep_range.overload_card.routine_unavailable" = "Diese Routine ist nicht mehr verfügbar";
 
 // MARK: - Accessibility
 "accessibility.set.label" = "Satz %d: %d Wiederholungen, %.2f Kilogramm";
@@ -392,6 +399,8 @@
 "add_to_workout.available" = "Verfügbare Übungen";
 "add_to_workout.title" = "Übung hinzufügen";
 "add_to_workout.search" = "Übungen oder Muskelgruppen suchen";
+"add_to_workout.add" = "Zum Workout hinzufügen";
+"add_to_workout.configure_hint" = "Doppeltippen, um die Sätze vor dem Hinzufügen zum Workout zu konfigurieren";
 
 // MARK: - Exercise Picker View
 "exercise_picker.search" = "Übungen oder Muskelgruppen suchen";

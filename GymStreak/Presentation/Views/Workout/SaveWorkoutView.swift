@@ -14,6 +14,7 @@ struct SaveWorkoutView: View {
     @State private var exerciseComparisons: [ExerciseComparisonResult] = []
     @State private var isLoadingComparisons = true
     @State private var recapVM = PostWorkoutRecapViewModel()
+    @State private var overloadSheetExercise: WorkoutExercise?
 
     let onSave: () -> Void
 
@@ -21,9 +22,9 @@ struct SaveWorkoutView: View {
         NavigationView {
             Form {
                 summarySection
+                readyForMoreSection
                 aiRecapSection
                 exerciseProgressSection
-                repGoalAchievedSection
                 healthKitSection
                 templateUpdateSection
                 notesSection
@@ -138,45 +139,73 @@ struct SaveWorkoutView: View {
         }
     }
 
-    // MARK: - Rep Goal Achieved Section
+    // MARK: - Ready For More Weight Section
 
     @ViewBuilder
-    private var repGoalAchievedSection: some View {
-        let achievedExercises = viewModel.currentSession?.workoutExercisesList.filter {
-            $0.allCompletedSetsAtUpperLimit
-        } ?? []
+    private var readyForMoreSection: some View {
+        // Eligibility (rep goal maxed + persistable template target, swap-aware)
+        // lives in the ViewModel — see overloadSuggestionExercises.
+        let exercises = viewModel.overloadSuggestionExercises
 
-        if !achievedExercises.isEmpty {
+        if !exercises.isEmpty {
             Section {
-                ForEach(achievedExercises, id: \.id) { exercise in
-                    HStack(spacing: 10) {
-                        Image(systemName: "trophy.fill")
-                            .foregroundStyle(.orange)
-                            .font(.body)
-
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(exercise.exerciseName)
-                                .font(.subheadline.weight(.medium))
-
-                            if let max = exercise.targetRepMax {
-                                Text("rep_range.goal_achieved_detail".localized(
-                                    exercise.setsList.count,
-                                    max
-                                ))
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
+                ForEach(exercises, id: \.id) { exercise in
+                    ProgressiveOverloadCard(
+                        exercise: exercise,
+                        libraryExercise: viewModel.performedExercise(for: exercise),
+                        canUndo: viewModel.canUndoProgressiveOverload(for: exercise),
+                        onIncrease: { overloadSheetExercise = exercise },
+                        onUndo: {
+                            withAnimation(DesignSystem.Animation.spring) {
+                                viewModel.undoProgressiveOverload(for: exercise)
                             }
                         }
-
-                        Spacer()
-
-                        Image(systemName: "checkmark.seal.fill")
-                            .foregroundStyle(.orange)
-                            .font(.caption)
-                    }
+                    )
+                    .listRowBackground(Color.clear)
+                    .listRowInsets(EdgeInsets(top: 6, leading: 0, bottom: 6, trailing: 0))
+                    .listRowSeparator(.hidden)
                 }
             } header: {
-                Text("rep_range.goal_achieved".localized)
+                readyForMoreHeader(exercises: exercises)
+            }
+            .sheet(item: $overloadSheetExercise) { exercise in
+                WeightIncreaseSheet(
+                    workoutExercise: exercise,
+                    onApply: { increment in
+                        withAnimation(DesignSystem.Animation.spring) {
+                            viewModel.applyProgressiveOverload(for: exercise, weightIncrement: increment)
+                        }
+                        overloadSheetExercise = nil
+                        HapticManager.shared.success()
+                    },
+                    onCancel: { overloadSheetExercise = nil }
+                )
+            }
+        }
+    }
+
+    private func readyForMoreHeader(exercises: [WorkoutExercise]) -> some View {
+        let pending = exercises.filter { !$0.progressiveOverloadApplied }.count
+        let anyApplied = exercises.contains { $0.progressiveOverloadApplied }
+        let badgeColor: Color = anyApplied ? DesignSystem.Colors.tint : .orange
+
+        return HStack(spacing: 8) {
+            Image(systemName: "arrow.up")
+                .font(.caption.weight(.bold))
+                .foregroundStyle(.orange)
+
+            Text("rep_range.ready_for_more".localized)
+
+            Spacer()
+
+            if pending > 0 {
+                Text("\(pending)")
+                    .font(.caption.weight(.heavy))
+                    .monospacedDigit()
+                    .foregroundStyle(badgeColor)
+                    .padding(.horizontal, 7)
+                    .frame(minWidth: 22, minHeight: 22)
+                    .background(badgeColor.opacity(0.2), in: Capsule())
             }
         }
     }

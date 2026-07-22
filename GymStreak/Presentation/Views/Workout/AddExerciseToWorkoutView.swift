@@ -103,7 +103,7 @@ struct AddExerciseToWorkoutView: View {
                     Section("add_to_workout.available".localized) {
                         ForEach(availableExercises) { exercise in
                             Button {
-                                addExercise(exercise)
+                                navigationPath.append(exercise.id)
                             } label: {
                                 HStack(spacing: 12) {
                                     // Muscle group badge (active)
@@ -137,7 +137,7 @@ struct AddExerciseToWorkoutView: View {
                             }
                             .buttonStyle(.plain)
                             .accessibilityLabel("Add \(exercise.name), \(MuscleGroups.displayString(for: exercise.muscleGroups)), \(exercise.equipmentType.displayName)")
-                            .accessibilityHint("Double-tap to add to workout")
+                            .accessibilityHint("add_to_workout.configure_hint".localized)
                         }
                     }
                 }
@@ -162,8 +162,22 @@ struct AddExerciseToWorkoutView: View {
                         viewModel: exercisesViewModel,
                         presentationMode: .navigation,
                         onExerciseCreated: { newExercise in
-                            // Add the newly created exercise to the workout
-                            addExercise(newExercise)
+                            navigationPath.removeLast()
+                            exercises.append(newExercise)
+                            navigationPath.append(newExercise.id)
+                        }
+                    )
+                }
+            }
+            .navigationDestination(for: UUID.self) { exerciseId in
+                if let exercise = exercises.first(where: { $0.id == exerciseId }) {
+                    ConfigureExerciseSetsView(
+                        exercise: exercise,
+                        navigationTitleKey: "add_to_workout.title",
+                        saveButtonKey: "add_to_workout.add",
+                        includesAlternatives: false,
+                        onSave: { exercise, configuredSets, _ in
+                            addExercise(exercise, configuredSets: configuredSets)
                         }
                     )
                 }
@@ -175,8 +189,8 @@ struct AddExerciseToWorkoutView: View {
         exercises = dependencies.exerciseRepository.fetchAll()
     }
 
-    private func addExercise(_ exercise: Exercise) {
-        workoutViewModel.addExerciseToWorkout(exercise: exercise)
+    private func addExercise(_ exercise: Exercise, configuredSets: [ExerciseSet]) {
+        workoutViewModel.addExerciseToWorkout(exercise: exercise, configuredSets: configuredSets)
         UIImpactFeedbackGenerator(style: .medium).impactOccurred()
         dismiss()
     }

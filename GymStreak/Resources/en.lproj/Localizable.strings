@@ -207,6 +207,7 @@
 // MARK: - Common Actions
 "action.save" = "Save";
 "action.cancel" = "Cancel";
+"action.undo" = "Undo";
 "action.delete" = "Delete";
 "action.edit" = "Edit";
 "action.done" = "Done";
@@ -294,6 +295,12 @@
 "rep_range.goal_achieved_detail" = "All %d sets reached %d reps";
 "rep_range.routine_updated" = "Routine updated: %@kg × %d reps next time";
 "rep_range.sets_with_range" = "%d sets | %d-%d reps";
+"rep_range.ready_for_more" = "Ready for More Weight";
+"rep_range.overload_card.description" = "All %d sets at **%d reps** — your target range %d–%d is maxed out.";
+"rep_range.overload_card.increased_to" = "Increased to **%@**";
+"rep_range.overload_card.reduced_to" = "Assistance reduced to **%@**";
+"rep_range.overload_card.next_workout" = "Next workout: %d × %d reps · %@";
+"rep_range.overload_card.routine_unavailable" = "This routine is no longer available";
 
 // MARK: - Accessibility
 "accessibility.set.label" = "Set %d: %d reps, %.2f kilograms";
@@ -392,6 +399,8 @@
 "add_to_workout.available" = "Available Exercises";
 "add_to_workout.title" = "Add Exercise";
 "add_to_workout.search" = "Search exercises or muscle groups";
+"add_to_workout.add" = "Add to Workout";
+"add_to_workout.configure_hint" = "Double-tap to configure sets before adding to the workout";
 
 // MARK: - Exercise Picker View
 "exercise_picker.search" = "Search exercises or muscle groups";

@@ -208,6 +208,9 @@ struct RoutineExercisePickerView: View {
 // MARK: - Configure Exercise Sets View
 struct ConfigureExerciseSetsView: View {
     let exercise: Exercise
+    var navigationTitleKey = "add_to_routine.add_title"
+    var saveButtonKey = "action.save"
+    var includesAlternatives = true
     /// Called with the finalized sets (rest time and order applied) and any
     /// pending alternatives; the caller owns persistence.
     var onSave: (Exercise, [ExerciseSet], [PendingAlternative]) -> Void
@@ -288,11 +291,11 @@ struct ConfigureExerciseSetsView: View {
                             }
                         }) {
                             HStack {
-                                Text("Set \(index(of: set) + 1)")
+                                Text(String(format: "set.number".localized, index(of: set) + 1))
                                     .font(.headline)
                                     .foregroundColor(.primary)
                                 Spacer()
-                                Text("\(set.reps) reps • \(set.weight, specifier: "%.1f") kg")
+                                Text(String(format: "configure_exercise.set_detail".localized, set.reps, set.weight))
                                     .foregroundColor(.secondary)
                                 Image(systemName: "chevron.right")
                                     .font(.caption)
@@ -333,7 +336,7 @@ struct ConfigureExerciseSetsView: View {
                                 }
 
                                 HorizontalStepper(
-                                    title: "Reps",
+                                    title: "set.reps_label".localized,
                                     value: $editingReps,
                                     range: 1...100,
                                     step: 1
@@ -344,7 +347,7 @@ struct ConfigureExerciseSetsView: View {
                                 }
 
                                 WeightInput(
-                                    title: "Weight (kg)",
+                                    title: "set.weight_label".localized,
                                     weight: $editingWeight,
                                     increment: 0.25
                                 ) { _ in
@@ -404,12 +407,14 @@ struct ConfigureExerciseSetsView: View {
                     }
             }
 
-            PendingAlternativesSection(
-                primaryExercise: exercise,
-                alternatives: $pendingAlternatives,
-                showingPicker: $showingAlternativePicker,
-                expandedAlternativeId: $expandedAlternativeId
-            )
+            if includesAlternatives {
+                PendingAlternativesSection(
+                    primaryExercise: exercise,
+                    alternatives: $pendingAlternatives,
+                    showingPicker: $showingAlternativePicker,
+                    expandedAlternativeId: $expandedAlternativeId
+                )
+            }
         }
         .navigationDestination(isPresented: $showingAlternativePicker) {
             AlternativeExercisePicker(
@@ -426,11 +431,11 @@ struct ConfigureExerciseSetsView: View {
                 }
             )
         }
-        .navigationTitle("add_to_routine.add_title".localized)
+        .navigationTitle(navigationTitleKey.localized)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
-                Button("action.save".localized) {
+                Button(saveButtonKey.localized) {
                     finishConfiguration()
                 }
                 .disabled(sets.isEmpty)

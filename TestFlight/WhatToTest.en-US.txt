@@ -5,7 +5,11 @@
 - Apple Watch: on your final set the complete button now reads "Finish Workout" so you know the tap will end the workout.
 - Apple Watch: if you changed any sets during the workout, auto-finishing still asks whether to update your routine template before saving.
 - Fixed: applying a weight-increase suggestion from the routine editor on assisted exercises (e.g. assisted pull-ups) now reduces the assistance weight as shown, instead of increasing it.
+- The workout completion screen now lets you act on achieved rep goals: exercises that hit the top of their rep range show an "Increase Weight" card — pick an increment and your routine is updated for next time, with an Undo option.
+- Exercises added during a workout can now be configured with the exact number of sets, reps, weight, and rest time before they join the session.
 - Exercises added or removed during a workout can now be saved back to the routine for future workouts when “Update Routine Template” is enabled.
+- Fixed: weight-increase suggestions now also work for swapped (alternative) exercises — the mid-workout "Increase" button responds again, and applying updates the alternative's own sets in your routine.
+- You can now apply a weight increase after the fact: opening a past workout that maxed a rep range shows the "Increase Weight" card, and applying updates your routine for next time (your saved workout history stays unchanged).
 - Apple Watch: workouts you finish on the watch now reach your iPhone history far more reliably — a completed workout is saved durably before it's sent and retried until confirmed, including when the iPhone was powered off or out of range.
 - Apple Watch: fixed a freeze when finishing your last set (including via the Action Button) — the workout summary now appears immediately instead of waiting on the Health save.
 - Apple Watch: closing an in-progress workout now asks whether to save or discard, and always stops the underlying Health workout so it can't keep running in the background or block starting a new one.

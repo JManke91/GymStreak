@@ -27,6 +27,11 @@ struct WorkoutDetailView: View {
     @State private var analysisVM = WorkoutAnalysisViewModel()
     @State private var hasPreviousSession: Bool = false
     @State private var showingEdit = false
+    /// Which exercise's weight-increase sheet is open (after-the-fact overload).
+    @State private var overloadSheetExercise: WorkoutExercise?
+    /// New live-template weight per exercise applied from this history view. The
+    /// historical session is never mutated, so applied state is tracked here.
+    @State private var appliedTemplateWeights: [UUID: Double] = [:]
 
     private var workoutType: WorkoutType {
         WorkoutType.classify(routineName: workout.routineName)
@@ -39,6 +44,7 @@ struct WorkoutDetailView: View {
                 VStack(alignment: .leading, spacing: 16) {
                     header
                     statsGrid
+                    progressiveOverloadSection
                     if workout.healthKitWorkoutId != nil {
                         healthKitBanner
                     }
@@ -183,6 +189,76 @@ struct WorkoutDetailView: View {
             return String(format: "%.1ft", kg / 1000)
         }
         return "\(Int(kg))kg"
+    }
+
+    // MARK: - Progressive overload (after-the-fact)
+
+    /// Exercises whose completed sets hit the top of their rep range. Re-surfaces
+    /// the rep-goal achievement the history redesign dropped, and lets the user
+    /// apply the increase to the live routine template after the workout is done.
+    private var qualifyingOverloadExercises: [WorkoutExercise] {
+        workout.workoutExercisesList
+            .filter { $0.hasRepRangeGoal && $0.allCompletedSetsAtUpperLimit }
+            .sorted { $0.order < $1.order }
+    }
+
+    @ViewBuilder
+    private var progressiveOverloadSection: some View {
+        let exercises = qualifyingOverloadExercises
+        if !exercises.isEmpty {
+            VStack(alignment: .leading, spacing: 8) {
+                Text("rep_range.ready_for_more".localized.uppercased())
+                    .font(.system(size: 11, weight: .semibold))
+                    .tracking(0.4)
+                    .foregroundStyle(Color.white.opacity(0.45))
+                    .padding(.horizontal, 20)
+                    .padding(.top, 6)
+
+                VStack(spacing: 8) {
+                    ForEach(exercises, id: \.id) { exercise in
+                        overloadCard(for: exercise)
+                    }
+                }
+                .padding(.horizontal, 16)
+            }
+            .sheet(item: $overloadSheetExercise) { exercise in
+                WeightIncreaseSheet(
+                    workoutExercise: exercise,
+                    onApply: { increment in
+                        if let newWeight = viewModel.applyProgressiveOverloadFromHistory(
+                            from: workout, for: exercise, weightIncrement: increment
+                        ) {
+                            withAnimation(DesignSystem.Animation.spring) {
+                                appliedTemplateWeights[exercise.id] = newWeight
+                            }
+                            HapticManager.shared.success()
+                        }
+                        overloadSheetExercise = nil
+                    },
+                    onCancel: { overloadSheetExercise = nil }
+                )
+            }
+        }
+    }
+
+    private func overloadCard(for exercise: WorkoutExercise) -> some View {
+        let appliedNow = appliedTemplateWeights[exercise.id]
+        // Only the never-progressed exercises whose live template is gone show the
+        // no-op note; a mid-workout-applied one keeps its confirmed state.
+        let unavailable = appliedNow == nil
+            && !exercise.progressiveOverloadApplied
+            && !viewModel.hasResolvableOverloadTemplate(from: workout, for: exercise)
+
+        return ProgressiveOverloadCard(
+            exercise: exercise,
+            libraryExercise: viewModel.performedExercise(in: workout, for: exercise),
+            canUndo: false,
+            appliedOverride: appliedNow != nil,
+            appliedWeight: appliedNow,
+            isTemplateUnavailable: unavailable,
+            onIncrease: { overloadSheetExercise = exercise },
+            onUndo: {}
+        )
     }
 
     // MARK: - HealthKit banner

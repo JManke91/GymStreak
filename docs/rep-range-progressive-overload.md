@@ -13,6 +13,8 @@ Adds a **rep range goal** (e.g., 8-12 reps) to exercises within routines. When a
 3. **Achieve**: When all sets reach the upper limit, a gold banner appears suggesting a weight increase
 4. **Progress**: Tap "Increase" to open the weight increase sheet, select an increment (1.25/2.5/5 kg), and apply
 5. **Reset**: All sets update to the new weight with reps reset to the lower limit
+6. **Second chance (completion screen)**: If the mid-workout banner was skipped or dismissed, the post-workout completion screen (`SaveWorkoutView`) shows an actionable "Ready for More Weight" card per qualifying exercise — same increment sheet, same apply path — with an Undo while the screen is still open
+7. **After the fact (history)**: Opening a past session in `WorkoutDetailView` re-surfaces the same card for any exercise that maxed its rep range. Applying here bumps the **live routine template only** for future workouts — it never rewrites the immutable history — so there is no Undo. If the routine/exercise no longer exists, the achievement still shows but the CTA becomes a muted no-op note
 
 ## Architecture
 
@@ -65,7 +67,12 @@ The model computed properties (`RoutineExercise.allSetsAtUpperLimit`, `WorkoutEx
 - `applyProgressiveOverload(for:weightIncrement:)` - Increases weight and resets reps to min for all sets, via `ProgressiveOverloadService.applyIncrease`
 
 **`WorkoutViewModel`**:
-- `applyProgressiveOverload(for:weightIncrement:)` - Gets the new weights/reps from `ProgressiveOverloadService.applyIncrease` (for both the live workout sets and the routine template), and owns the persistence workflow around it: planned-value snapshotting, setting `progressiveOverloadApplied`, and saving
+- `applyProgressiveOverload(for:weightIncrement:)` - Gets the new weights/reps from `ProgressiveOverloadService.applyIncrease` (for both the live workout sets and the routine template), and owns the persistence workflow around it: planned-value snapshotting, setting `progressiveOverloadApplied`, and saving. Also captures an in-memory pre-apply snapshot (per-set planned/actual values + template set values) keyed by `WorkoutExercise.id` to power Undo
+- `routineExercise(for:)` - Resolves the routine-template slot a `WorkoutExercise` originated from, swapped or not: matches by `routineExerciseId` (stable slot identity) first, falls back to the originally-planned exercise id/name for legacy data (mirroring `updateRoutineTemplate`)
+- `performedExercise(for:)` / private `alternativeEntry(for:)` - For a swapped exercise, resolve the performed alternative's library `Exercise` and its `RoutineExerciseAlternative` entry. **Swap rule (2026-07 fix):** applying overload on a swapped exercise writes into the *alternative's own set scheme* (`AlternativeExerciseSet`), never the primary slot's sets — the same rule `updateRoutineTemplate` follows. Before this fix the whole overload path was dead for swaps: the mid-workout banner resolved the slot by performed-exercise name, which never matches the primary, so "Increase" was a silent no-op
+- `overloadSuggestionExercises` - The completion screen's eligibility list: rep goal maxed AND (already applied OR a persistable template target exists — the slot's sets, or the alternative's set scheme for swaps)
+- `undoProgressiveOverload(for:)` / `canUndoProgressiveOverload(for:)` - Reverts an overload applied during this session from the completion screen: restores the sets' pre-apply planned/actual values, clears `progressiveOverloadApplied`, and restores the template's set scheme. Snapshots are in-memory only and cleared when the session ends (save or discard), so undo is available exactly while the completion screen can still be shown
+- `applyProgressiveOverloadFromHistory(from:for:weightIncrement:)` - The **history (after-the-fact)** apply path. Resolves the live template from the *completed session's* `routine` (not `currentSession`) via the routine-parameterized `routineExercise(in:for:)`/`alternativeEntry(in:for:)`, bumps the slot's sets (or the swapped alternative's set scheme) through `ProgressiveOverloadService.applyIncrease`, and returns the new weight. **Never touches the historical `WorkoutExercise`/`WorkoutSet` or the `progressiveOverloadApplied` flag** — history is immutable. Returns `nil` (no-op) if the routine/exercise was edited/deleted. `hasResolvableOverloadTemplate(from:for:)` and `performedExercise(in:for:)` are its resolution/display companions. The generic `applyOverloadToTemplateSets(_:weightKey:repsKey:…)` bumps either template set type (`ExerciseSet`, `AlternativeExerciseSet`) via key paths, avoiding duplicated increment/reset math
 
 ## Components
 
@@ -75,7 +82,8 @@ The model computed properties (`RoutineExercise.allSetsAtUpperLimit`, `WorkoutEx
 |-----------|------|-------------|
 | `RepRangeConfigView` | Views/Components/RepRangeConfigView.swift | Collapsible config with min/max steppers and presets (Strength/Hypertrophy/Endurance) |
 | `ProgressiveOverloadBanner` | Views/Components/ProgressiveOverloadBanner.swift | Gold/orange banner shown when all sets reach upper limit |
-| `WeightIncreaseSheet` | Views/Components/WeightIncreaseSheet.swift | Bottom sheet for selecting weight increment (+1.25/+2.5/+5 kg) |
+| `WeightIncreaseSheet` | Views/Components/WeightIncreaseSheet.swift | Bottom sheet for selecting weight increment (+1.25/+2.5/+5 kg). Value-based with two inits: `init(routineExercise:)` shows template values (routine editor), `init(workoutExercise:)` shows performed actual values (active workout + completion screen — correct for swapped exercises, whose weights never live on the primary template sets) |
+| `ProgressiveOverloadCard` | Views/Components/ProgressiveOverloadCard.swift | Achievement card (from the Claude Design "Progressive Overload" handoff, Surface 1): orange actionable state with per-set recap + full-width increase CTA, and a quiet confirmed state with the new weight and Undo. Reuses `ExerciseAvatarView` (muscle color + equipment glyph — the app's avatar idiom, deliberately not the mock's initials). Set recap hides at accessibility Dynamic Type sizes; title + action always stay visible. Shared by the completion screen and history: history-only params (`appliedOverride`/`appliedWeight` force the confirmed state and supply its weight because the immutable history can't be read for it; `isTemplateUnavailable` swaps the CTA for the muted no-op note) default to the completion-screen behavior |
 
 ### Integration Points
 
@@ -85,8 +93,8 @@ The model computed properties (`RoutineExercise.allSetsAtUpperLimit`, `WorkoutEx
 | `ExerciseHeaderView` | Subtitle shows "3 sets \| 8-12 reps" when configured |
 | `RoutineSetRowView` | Rep count colored by range position + "X/max" badge |
 | `ActiveWorkoutView` | Rep progress badges on sets + ProgressiveOverloadBanner |
-| `SaveWorkoutView` | "Rep Goal Achieved" section with trophy badges |
-| `WorkoutDetailView` | Trophy badge on exercises + rep-range-colored set rows |
+| `SaveWorkoutView` | "Ready for More Weight" section: one `ProgressiveOverloadCard` per exercise in `WorkoutViewModel.overloadSuggestionExercises` (replaced the passive trophy section 2026-07), section header shows a pending-suggestion counter (orange; turns green once one was applied). Applying opens `WeightIncreaseSheet(workoutExercise:)` and calls `WorkoutViewModel.applyProgressiveOverload`; exercises overloaded mid-workout appear in their confirmed state. No persistable template target (slot or alternative entry) → no CTA |
+| `WorkoutDetailView` | "Ready for More Weight" section (after the stat grid): one `ProgressiveOverloadCard` per exercise whose completed sets maxed the rep range — re-surfacing the achievement the history redesign dropped. Applying opens `WeightIncreaseSheet(workoutExercise:)` and calls `WorkoutViewModel.applyProgressiveOverloadFromHistory`, which bumps the **live routine template only** — the historical `WorkoutExercise`/`WorkoutSet` are never rewritten. Applied state (and the shown new weight) is tracked in view-local `@State` since the immutable history can't hold it; no Undo. Exercises overloaded during that workout show their confirmed state directly. If the source routine/exercise was edited/deleted, the card keeps the achievement but replaces the CTA with a muted "routine no longer available" note (`rep_range.overload_card.routine_unavailable`) |
 
 ### Watch Integration
 
@@ -128,6 +136,10 @@ The following services check `progressiveOverloadApplied` and use planned values
 
 This ensures the summary screen, workout detail view, and progress charts all show the user's actual performance rather than the overloaded values.
 
+The completion screen's apply path is the **same** `applyProgressiveOverload` call, so applying there never rewrites the session's history either — the just-performed reps/weights survive in `plannedReps`/`plannedWeight` via the identical snapshot. Undo (completion screen only) restores both the session sets' pre-apply planned/actual values and the template's set scheme (the alternative's for swapped exercises) from the in-memory snapshot; it is intentionally unavailable after the session ends.
+
+**Root cause fixed (2026-07, swapped exercises):** every overload surface used to resolve the template slot by comparing the *performed* exercise name against slot primaries (`exercise?.name == workoutExercise.exerciseName`). For a swapped exercise the names never match, so the mid-workout banner's "Increase" silently did nothing (nil sheet item) and the mid-workout template write no-opped. Resolution now goes through `WorkoutViewModel.routineExercise(for:)` (stable `routineExerciseId`, then planned-exercise fallback) and swapped exercises persist into the alternative's own set scheme. Do not reintroduce name-based slot matching against performed names.
+
 ## Localization
 
-All user-facing strings are localized in both English and German via `Localizable.strings`. Keys are prefixed with `rep_range.*`.
+All user-facing strings are localized in both English and German via `Localizable.strings`. Keys are prefixed with `rep_range.*` (card copy under `rep_range.overload_card.*` — including `rep_range.overload_card.routine_unavailable` for the history no-op note — plus `rep_range.ready_for_more` and `action.undo`). The card's description/confirmation strings embed `**bold**` markdown markers that `ProgressiveOverloadCard` parses and colors with the accent (orange/green) — keep the markers when editing translations.

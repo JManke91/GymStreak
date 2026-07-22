@@ -327,16 +327,9 @@ struct ExerciseCard: View {
     @State private var showingSwapPicker = false
     @State private var showingSwapLockedInfo = false
     @State private var overloadBannerDismissed = false
-    @State private var selectedRoutineExerciseForOverload: RoutineExercise?
+    @State private var showingOverloadSheet = false
     @State private var overloadAppliedInfo: (weight: Double, reps: Int)?
     var onSetCompleted: (() -> Void)?
-
-    /// Find the matching RoutineExercise from the source routine (by exercise name)
-    private var matchingRoutineExercise: RoutineExercise? {
-        viewModel.currentSession?.routine?.routineExercisesList
-            .sorted { $0.order < $1.order }
-            .first { $0.exercise?.name == workoutExercise.exerciseName }
-    }
 
     // Computed property to get current rest time from the exercise's sets
     private var exerciseRestTime: TimeInterval {
@@ -525,7 +518,7 @@ struct ExerciseCard: View {
                     targetRepMax: workoutExercise.targetRepMax ?? 0,
                     isAssistance: workoutExercise.loadBehavior.isCounterweightAssistance,
                     onIncrease: {
-                        selectedRoutineExerciseForOverload = matchingRoutineExercise
+                        showingOverloadSheet = true
                     },
                     onDismiss: {
                         withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
@@ -607,25 +600,30 @@ struct ExerciseCard: View {
             RoundedRectangle(cornerRadius: DesignSystem.Dimensions.cornerRadiusMD)
                 .strokeBorder(isCurrentExercise ? DesignSystem.Colors.tint : Color.clear, lineWidth: 2)
         )
-        .sheet(item: $selectedRoutineExerciseForOverload) { routineExercise in
+        .sheet(isPresented: $showingOverloadSheet) {
             WeightIncreaseSheet(
-                routineExercise: routineExercise,
+                workoutExercise: workoutExercise,
                 onApply: { increment in
+                    // Compute the confirmation values from the performed weight
+                    // BEFORE applying — apply rewrites the actual values.
+                    let currentWeight = workoutExercise.setsList
+                        .sorted { $0.order < $1.order }
+                        .first?.actualWeight ?? 0
                     let newWeight = ProgressiveOverloadService.increasedWeight(
-                        routineExercise.setsList.first?.weight ?? 0,
+                        currentWeight,
                         increment: increment,
                         loadBehavior: workoutExercise.loadBehavior
                     )
-                    let minReps = routineExercise.targetRepMin ?? 0
+                    let minReps = workoutExercise.targetRepMin ?? 0
                     viewModel.applyProgressiveOverload(for: workoutExercise, weightIncrement: increment)
-                    selectedRoutineExerciseForOverload = nil
+                    showingOverloadSheet = false
                     withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
                         overloadBannerDismissed = true
                         overloadAppliedInfo = (weight: newWeight, reps: minReps)
                     }
                 },
                 onCancel: {
-                    selectedRoutineExerciseForOverload = nil
+                    showingOverloadSheet = false
                 }
             )
         }

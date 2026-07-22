@@ -6,7 +6,11 @@
 import SwiftUI
 
 struct WeightIncreaseSheet: View {
-    let routineExercise: RoutineExercise
+    let currentWeight: Double
+    let currentReps: Int
+    let setCount: Int
+    let targetMin: Int
+    let isAssistance: Bool
     let onApply: (Double) -> Void
     let onCancel: () -> Void
 
@@ -14,28 +18,33 @@ struct WeightIncreaseSheet: View {
 
     private let increments: [Double] = [1.25, 2.5, 5.0]
 
-    private var currentWeight: Double {
-        routineExercise.setsList.first?.weight ?? 0
+    /// Routine-editor surface: current values come from the template sets.
+    init(routineExercise: RoutineExercise, onApply: @escaping (Double) -> Void, onCancel: @escaping () -> Void) {
+        self.currentWeight = routineExercise.setsList.first?.weight ?? 0
+        self.currentReps = routineExercise.setsList.first?.reps ?? 0
+        self.setCount = routineExercise.setsList.count
+        self.targetMin = routineExercise.targetRepMin ?? 0
+        self.isAssistance = routineExercise.exercise?.loadBehavior.isCounterweightAssistance == true
+        self.onApply = onApply
+        self.onCancel = onCancel
     }
 
-    private var isAssistance: Bool {
-        routineExercise.exercise?.loadBehavior.isCounterweightAssistance == true
+    /// Workout surfaces (active workout, completion screen): current values are
+    /// what the user actually lifted — correct for swapped exercises too, whose
+    /// performed weights never live on the primary template sets.
+    init(workoutExercise: WorkoutExercise, onApply: @escaping (Double) -> Void, onCancel: @escaping () -> Void) {
+        let firstSet = workoutExercise.setsList.sorted { $0.order < $1.order }.first
+        self.currentWeight = firstSet?.actualWeight ?? 0
+        self.currentReps = firstSet?.actualReps ?? 0
+        self.setCount = workoutExercise.setsList.count
+        self.targetMin = workoutExercise.targetRepMin ?? 0
+        self.isAssistance = workoutExercise.loadBehavior.isCounterweightAssistance
+        self.onApply = onApply
+        self.onCancel = onCancel
     }
 
     private var resultingWeight: Double {
         isAssistance ? max(0, currentWeight - selectedIncrement) : currentWeight + selectedIncrement
-    }
-
-    private var currentReps: Int {
-        routineExercise.setsList.first?.reps ?? 0
-    }
-
-    private var setCount: Int {
-        routineExercise.setsList.count
-    }
-
-    private var targetMin: Int {
-        routineExercise.targetRepMin ?? 0
     }
 
     var body: some View {

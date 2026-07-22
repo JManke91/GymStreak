@@ -74,6 +74,25 @@ class WorkoutViewModel: ObservableObject {
     /// `orphanGracePeriod` — see `reconcileWatchWorkouts` for why.
     private var orphanFirstSeen: [UUID: Date] = [:]
     private var reconcileRetryTask: Task<Void, Never>?
+
+    /// Pre-apply values captured when progressive overload is applied, keyed by
+    /// WorkoutExercise.id, so the completion screen can offer Undo. In-memory
+    /// only — undo is available while the session is still open.
+    private struct OverloadSnapshot {
+        struct SetValues {
+            let plannedReps: Int
+            let actualReps: Int
+            let plannedWeight: Double
+            let actualWeight: Double
+        }
+        struct TemplateValues {
+            let reps: Int
+            let weight: Double
+        }
+        let workoutSetValues: [UUID: SetValues]
+        let templateSetValues: [UUID: TemplateValues]
+    }
+    private var overloadSnapshots: [UUID: OverloadSnapshot] = [:]
     /// How long an HKWorkout must remain unmatched before the recovery banner
     /// appears. transferUserInfo has no delivery deadline, but with both devices
     /// nearby and the app foregrounded, delivery normally completes well within
@@ -586,6 +605,7 @@ class WorkoutViewModel: ObservableObject {
         currentExerciseIndex = 0
         currentSetIndex = 0
         healthKitSyncStatus = .idle
+        overloadSnapshots.removeAll()
     }
 
     func pauseForCompletion() {
@@ -617,6 +637,7 @@ class WorkoutViewModel: ObservableObject {
 
         currentSession = nil
         elapsedTime = 0
+        overloadSnapshots.removeAll()
     }
 
     private func saveWorkoutToHealthKit(session: WorkoutSession) {
@@ -783,6 +804,9 @@ class WorkoutViewModel: ObservableObject {
 
         objectWillChange.send()
 
+        var workoutSetValues: [UUID: OverloadSnapshot.SetValues] = [:]
+        var templateSetValues: [UUID: OverloadSnapshot.TemplateValues] = [:]
+
         // Snapshot current actual performance into planned values (for comparison/history accuracy),
         // then update actual values with overloaded values for UI display
         let workoutSets = workoutExercise.setsList
@@ -793,6 +817,10 @@ class WorkoutViewModel: ObservableObject {
             loadBehavior: workoutExercise.loadBehavior
         )
         for (set, newWeight) in zip(workoutSets, increase.weights) {
+            workoutSetValues[set.id] = OverloadSnapshot.SetValues(
+                plannedReps: set.plannedReps, actualReps: set.actualReps,
+                plannedWeight: set.plannedWeight, actualWeight: set.actualWeight
+            )
             set.plannedReps = set.actualReps
             set.plannedWeight = set.actualWeight
             set.actualWeight = newWeight
@@ -802,10 +830,25 @@ class WorkoutViewModel: ObservableObject {
         // Mark that progressive overload was applied
         workoutExercise.progressiveOverloadApplied = true
 
-        // Update routine template (so it persists for future workouts)
-        if let routine = currentSession?.routine,
-           let routineExercise = routine.routineExercisesList
-            .first(where: { $0.exercise?.name == workoutExercise.exerciseName }) {
+        // Update routine template (so it persists for future workouts). A swapped
+        // exercise writes into the performed alternative's own set scheme — the
+        // primary slot's sets stay untouched.
+        if workoutExercise.wasSwapped {
+            if let alternative = alternativeEntry(for: workoutExercise) {
+                let templateSets = alternative.setsList
+                let templateIncrease = ProgressiveOverloadService.applyIncrease(
+                    toWeights: templateSets.map(\.weight),
+                    increment: weightIncrement,
+                    targetRepMin: minReps,
+                    loadBehavior: workoutExercise.loadBehavior
+                )
+                for (set, newWeight) in zip(templateSets, templateIncrease.weights) {
+                    templateSetValues[set.id] = OverloadSnapshot.TemplateValues(reps: set.reps, weight: set.weight)
+                    set.weight = newWeight
+                    set.reps = templateIncrease.reps
+                }
+            }
+        } else if let routineExercise = routineExercise(for: workoutExercise) {
             let templateSets = routineExercise.setsList
             let templateIncrease = ProgressiveOverloadService.applyIncrease(
                 toWeights: templateSets.map(\.weight),
@@ -814,12 +857,208 @@ class WorkoutViewModel: ObservableObject {
                 loadBehavior: workoutExercise.loadBehavior
             )
             for (set, newWeight) in zip(templateSets, templateIncrease.weights) {
+                templateSetValues[set.id] = OverloadSnapshot.TemplateValues(reps: set.reps, weight: set.weight)
                 set.weight = newWeight
                 set.reps = templateIncrease.reps
             }
         }
 
+        overloadSnapshots[workoutExercise.id] = OverloadSnapshot(
+            workoutSetValues: workoutSetValues,
+            templateSetValues: templateSetValues
+        )
+
         save()
+    }
+
+    /// Resolves the routine-template slot a workout exercise originated from,
+    /// swapped or not: by the stable routineExerciseId first, then via the
+    /// originally-planned exercise (mirroring updateRoutineTemplate).
+    func routineExercise(for workoutExercise: WorkoutExercise) -> RoutineExercise? {
+        guard let routine = currentSession?.routine else { return nil }
+        return routineExercise(in: routine, for: workoutExercise)
+    }
+
+    /// Same slot resolution against an explicit routine — lets a completed
+    /// (historical) session reach its still-live template via `session.routine`,
+    /// not just the active `currentSession`.
+    func routineExercise(in routine: Routine, for workoutExercise: WorkoutExercise) -> RoutineExercise? {
+        if let slotId = workoutExercise.routineExerciseId,
+           let slot = routine.routineExercisesList.first(where: { $0.id == slotId }) {
+            return slot
+        }
+        let originId = workoutExercise.plannedExerciseId ?? workoutExercise.exerciseId
+        let originName = workoutExercise.plannedExerciseName ?? workoutExercise.exerciseName
+        return routine.routineExercisesList.first { candidate in
+            if let originId, let candidateId = candidate.exercise?.id {
+                return candidateId == originId
+            }
+            return candidate.exercise?.name == originName
+        }
+    }
+
+    /// The alternative entry whose set scheme a swapped exercise's values
+    /// belong to (the primary's sets stay untouched, as in updateRoutineTemplate).
+    private func alternativeEntry(for workoutExercise: WorkoutExercise) -> RoutineExerciseAlternative? {
+        guard let routine = currentSession?.routine else { return nil }
+        return alternativeEntry(in: routine, for: workoutExercise)
+    }
+
+    private func alternativeEntry(in routine: Routine, for workoutExercise: WorkoutExercise) -> RoutineExerciseAlternative? {
+        guard workoutExercise.wasSwapped,
+              let slot = routineExercise(in: routine, for: workoutExercise) else { return nil }
+        return slot.alternativesList.first { $0.exercise?.id == workoutExercise.exerciseId }
+    }
+
+    /// The live library exercise that was actually performed — the alternative's
+    /// exercise for swapped workout exercises. For display surfaces.
+    func performedExercise(for workoutExercise: WorkoutExercise) -> Exercise? {
+        if workoutExercise.wasSwapped {
+            return alternativeEntry(for: workoutExercise)?.exercise
+        }
+        return routineExercise(for: workoutExercise)?.exercise
+    }
+
+    /// Exercises the completion screen offers an overload suggestion for: rep
+    /// goal maxed AND either already applied or a template target to persist to
+    /// (the slot's sets, or the alternative's set scheme for swaps).
+    var overloadSuggestionExercises: [WorkoutExercise] {
+        (currentSession?.workoutExercisesList ?? [])
+            .filter { $0.allCompletedSetsAtUpperLimit }
+            .filter { $0.progressiveOverloadApplied || hasOverloadTemplateTarget(for: $0) }
+            .sorted { $0.order < $1.order }
+    }
+
+    private func hasOverloadTemplateTarget(for workoutExercise: WorkoutExercise) -> Bool {
+        workoutExercise.wasSwapped
+            ? alternativeEntry(for: workoutExercise) != nil
+            : routineExercise(for: workoutExercise) != nil
+    }
+
+    func canUndoProgressiveOverload(for workoutExercise: WorkoutExercise) -> Bool {
+        overloadSnapshots[workoutExercise.id] != nil
+    }
+
+    /// Reverts an overload applied during this session: restores the sets'
+    /// pre-apply planned/actual values and the routine template's set scheme.
+    func undoProgressiveOverload(for workoutExercise: WorkoutExercise) {
+        guard let snapshot = overloadSnapshots.removeValue(forKey: workoutExercise.id) else { return }
+
+        objectWillChange.send()
+
+        for set in workoutExercise.setsList {
+            guard let values = snapshot.workoutSetValues[set.id] else { continue }
+            set.plannedReps = values.plannedReps
+            set.actualReps = values.actualReps
+            set.plannedWeight = values.plannedWeight
+            set.actualWeight = values.actualWeight
+        }
+        workoutExercise.progressiveOverloadApplied = false
+
+        if workoutExercise.wasSwapped {
+            if let alternative = alternativeEntry(for: workoutExercise) {
+                for set in alternative.setsList {
+                    guard let values = snapshot.templateSetValues[set.id] else { continue }
+                    set.reps = values.reps
+                    set.weight = values.weight
+                }
+            }
+        } else if let routineExercise = routineExercise(for: workoutExercise) {
+            for set in routineExercise.setsList {
+                guard let values = snapshot.templateSetValues[set.id] else { continue }
+                set.reps = values.reps
+                set.weight = values.weight
+            }
+        }
+
+        save()
+    }
+
+    // MARK: - Progressive overload from history (after-the-fact)
+
+    /// The live library exercise actually performed, resolved from a completed
+    /// (historical) session's still-live `routine`. Nil once the routine is gone.
+    /// History surface — the active `currentSession` is irrelevant here.
+    func performedExercise(in session: WorkoutSession, for workoutExercise: WorkoutExercise) -> Exercise? {
+        guard let routine = session.routine else { return nil }
+        if workoutExercise.wasSwapped {
+            return alternativeEntry(in: routine, for: workoutExercise)?.exercise
+        }
+        return routineExercise(in: routine, for: workoutExercise)?.exercise
+    }
+
+    /// Whether an increase applied from this completed session can still reach a
+    /// live routine-template target (the slot's own sets, or the alternative's
+    /// set scheme for swaps). False if the routine/exercise was edited or deleted.
+    func hasResolvableOverloadTemplate(from session: WorkoutSession, for workoutExercise: WorkoutExercise) -> Bool {
+        overloadTemplateSetCount(from: session, for: workoutExercise) > 0
+    }
+
+    private func overloadTemplateSetCount(from session: WorkoutSession, for workoutExercise: WorkoutExercise) -> Int {
+        guard let routine = session.routine else { return 0 }
+        if workoutExercise.wasSwapped {
+            return alternativeEntry(in: routine, for: workoutExercise)?.setsList.count ?? 0
+        }
+        return routineExercise(in: routine, for: workoutExercise)?.setsList.count ?? 0
+    }
+
+    /// Applies a weight increase to the LIVE routine template only, resolved from
+    /// a completed (historical) session. The historical `WorkoutExercise`/
+    /// `WorkoutSet` are never mutated — history is denormalized and immutable by
+    /// design. Returns the new template weight, or nil (no-op) when the source
+    /// routine or exercise no longer exists.
+    @discardableResult
+    func applyProgressiveOverloadFromHistory(
+        from session: WorkoutSession,
+        for workoutExercise: WorkoutExercise,
+        weightIncrement: Double
+    ) -> Double? {
+        guard let routine = session.routine else { return nil }
+        let minReps = workoutExercise.targetRepMin ?? 1
+
+        objectWillChange.send()
+        let newWeight: Double?
+        if workoutExercise.wasSwapped {
+            guard let alternative = alternativeEntry(in: routine, for: workoutExercise) else { return nil }
+            newWeight = applyOverloadToTemplateSets(
+                alternative.setsList, weightKey: \.weight, repsKey: \.reps,
+                increment: weightIncrement, minReps: minReps, loadBehavior: workoutExercise.loadBehavior
+            )
+        } else {
+            guard let slot = routineExercise(in: routine, for: workoutExercise) else { return nil }
+            newWeight = applyOverloadToTemplateSets(
+                slot.setsList, weightKey: \.weight, repsKey: \.reps,
+                increment: weightIncrement, minReps: minReps, loadBehavior: workoutExercise.loadBehavior
+            )
+        }
+        guard newWeight != nil else { return nil }
+        save()
+        return newWeight
+    }
+
+    /// Bumps a set of template sets in place via the shared overload service and
+    /// returns the new (first) weight. Generic over the two template set types
+    /// (`ExerciseSet`, `AlternativeExerciseSet`), which share `weight`/`reps`.
+    private func applyOverloadToTemplateSets<S: AnyObject>(
+        _ sets: [S],
+        weightKey: ReferenceWritableKeyPath<S, Double>,
+        repsKey: ReferenceWritableKeyPath<S, Int>,
+        increment: Double,
+        minReps: Int,
+        loadBehavior: ExerciseLoadBehavior
+    ) -> Double? {
+        guard !sets.isEmpty else { return nil }
+        let increase = ProgressiveOverloadService.applyIncrease(
+            toWeights: sets.map { $0[keyPath: weightKey] },
+            increment: increment,
+            targetRepMin: minReps,
+            loadBehavior: loadBehavior
+        )
+        for (set, newWeight) in zip(sets, increase.weights) {
+            set[keyPath: weightKey] = newWeight
+            set[keyPath: repsKey] = increase.reps
+        }
+        return increase.weights.first
     }
 
     func addSetToExercise(_ workoutExercise: WorkoutExercise) {
@@ -846,10 +1085,14 @@ class WorkoutViewModel: ObservableObject {
         save()
     }
 
-    func addExerciseToWorkout(exercise: Exercise) {
+    func addExerciseToWorkout(exercise: Exercise, configuredSets: [ExerciseSet]) {
         guard let session = currentSession else { return }
 
         objectWillChange.send()
+
+        let workoutSets = configuredSets.enumerated().map { index, set in
+            WorkoutSet(from: set, order: index)
+        }
 
         // Determine the order for the new exercise
         let nextOrder = (session.workoutExercisesList.map(\.order).max() ?? -1) + 1
@@ -864,21 +1107,16 @@ class WorkoutViewModel: ObservableObject {
         )
         workoutExercise.workoutSession = session
 
-        // Add default set
-        let defaultSet = WorkoutSet(
-            plannedReps: 10,
-            actualReps: 10,
-            plannedWeight: 0.0,
-            actualWeight: 0.0,
-            restTime: 60.0,
-            order: 0
-        )
-        defaultSet.workoutExercise = workoutExercise
-        workoutExercise.sets?.append(defaultSet)
+        for set in workoutSets {
+            set.workoutExercise = workoutExercise
+            workoutExercise.sets?.append(set)
+        }
 
         session.workoutExercises?.append(workoutExercise)
         workoutSessionRepository.insert(workoutExercise)
-        workoutSessionRepository.insert(defaultSet)
+        for set in workoutSets {
+            workoutSessionRepository.insert(set)
+        }
         save()
     }
 

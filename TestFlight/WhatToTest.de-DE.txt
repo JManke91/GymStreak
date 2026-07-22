@@ -5,7 +5,11 @@
 - Apple Watch: Beim letzten Satz zeigt die Abschließen-Taste jetzt „Training beenden“, damit du weißt, dass dieser Tipp das Training beendet.
 - Apple Watch: Wenn du während des Trainings Sätze geändert hast, fragt das automatische Beenden weiterhin, ob deine Routinenvorlage aktualisiert werden soll, bevor gespeichert wird.
 - Behoben: Wenn du einen Gewichtssteigerungs-Vorschlag im Routinen-Editor bei unterstützten Übungen (z. B. Klimmzüge mit Unterstützung) anwendest, wird das Unterstützungsgewicht jetzt wie angezeigt reduziert statt erhöht.
+- Erreichte Wiederholungsziele zeigen jetzt eine „Gewicht erhöhen“-Karte, die deine Routine fürs nächste Mal aktualisiert – inklusive Rückgängig-Option.
+- Übungen, die du während eines Workouts hinzufügst, lassen sich jetzt vorab mit der genauen Anzahl an Sätzen, Wiederholungen, Gewicht und Pausenzeit konfigurieren.
 - Übungen, die du während eines Workouts hinzufügst oder entfernst, können jetzt mit aktivierter Option „Routinenvorlage aktualisieren“ für zukünftige Workouts in der Routine gespeichert werden.
+- Behoben: Gewichtssteigerungs-Vorschläge funktionieren jetzt auch bei getauschten (Alternativ-)Übungen — die „Erhöhen“-Taste im Workout reagiert wieder, und das Übernehmen aktualisiert die eigenen Sätze der Alternative in deiner Routine.
+- Gewichtssteigerungen lassen sich auch aus vergangenen Trainings übernehmen, ohne den gespeicherten Verlauf zu ändern.
 - Apple Watch: Auf der Uhr beendete Workouts erreichen deinen iPhone-Verlauf jetzt deutlich zuverlässiger — ein abgeschlossenes Workout wird vor dem Senden dauerhaft gespeichert und bis zur Bestätigung erneut übertragen, auch wenn das iPhone ausgeschaltet oder außer Reichweite war.
 - Apple Watch: Ein Einfrieren beim Abschließen des letzten Satzes (auch über die Action-Taste) wurde behoben — die Workout-Zusammenfassung erscheint jetzt sofort, statt auf die Health-Speicherung zu warten.
 - Apple Watch: Beim Schließen eines laufenden Workouts wirst du jetzt gefragt, ob du speichern oder verwerfen möchtest, und das zugrunde liegende Health-Workout wird immer beendet, sodass es nicht im Hintergrund weiterläuft oder den Start eines neuen Workouts blockiert.
