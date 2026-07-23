@@ -95,6 +95,39 @@ struct WatchWorkoutTransportCoordinatorTests {
     }
 
     @Test
+    func missingSystemTransferIsRequeuedUntilAppAcknowledgmentRetiresWorkout() throws {
+        let directory = try Fixtures.makeTempDirectory()
+        let workout = Fixtures.makeWorkout()
+        let store = WatchSyncStateStore(directory: directory, legacyDefaults: nil)
+        try store.enqueue(workout, phase: .transportEligible)
+        let transport = RecordingWorkoutTransport()
+        transport.isWorkoutTransportActivated = true
+        let coordinator = WatchWorkoutTransportCoordinator(
+            syncState: store, transport: transport
+        )
+
+        coordinator.reconcile()
+        #expect(transport.transfers.count == 1)
+        #expect(store.entry(id: workout.id) != nil)
+
+        // Model WatchConnectivity losing its private queued payload: the
+        // semantic ID is no longer outstanding, but no app-level ack arrived.
+        transport.outstandingWorkoutSemanticIDs.remove(workout.id)
+        let reloadedStore = WatchSyncStateStore(directory: directory, legacyDefaults: nil)
+        let relaunchedCoordinator = WatchWorkoutTransportCoordinator(
+            syncState: reloadedStore, transport: transport
+        )
+
+        relaunchedCoordinator.reconcile()
+
+        #expect(transport.transfers.count == 2)
+        #expect(reloadedStore.entry(id: workout.id) != nil)
+
+        reloadedStore.acknowledgePlain(workoutId: workout.id)
+        #expect(reloadedStore.entry(id: workout.id) == nil)
+    }
+
+    @Test
     func fastDrainRequestUsesMessageWithoutDuplicatingOutstandingTransfer() throws {
         let store = WatchSyncStateStore(
             directory: try Fixtures.makeTempDirectory(), legacyDefaults: nil

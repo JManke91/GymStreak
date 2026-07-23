@@ -620,6 +620,29 @@ struct WatchTemplateTransactionSyncTests {
     }
 
     @Test
+    func identicalUnversionedContextRefreshesAndPersistsSyncDate() async throws {
+        let directory = try Fixtures.makeTempDirectory()
+        let routine = Fixtures.makeWatchRoutine()
+        let store = WatchSyncStateStore(directory: directory, legacyDefaults: nil)
+
+        #expect(store.applyRoutineContext([routine], header: nil))
+        let initialSyncDate = try #require(store.lastRoutineSyncDate)
+        var refreshCount = 0
+        store.onEffectiveRoutinesChanged = { refreshCount += 1 }
+
+        try await Task.sleep(for: .milliseconds(20))
+        #expect(!store.applyRoutineContext([routine], header: nil))
+
+        let refreshedSyncDate = try #require(store.lastRoutineSyncDate)
+        #expect(refreshedSyncDate > initialSyncDate)
+        #expect(refreshCount == 1)
+
+        let reloaded = WatchSyncStateStore(directory: directory, legacyDefaults: nil)
+        #expect(reloaded.lastRoutineSyncDate == refreshedSyncDate)
+        #expect(reloaded.effectiveRoutines() == [routine])
+    }
+
+    @Test
     func malformedVersionedRoutineHeadersCannotDowngradeToLegacy() {
         #expect(RoutineSnapshotHeader.parse(context: [:]) == .legacy)
         #expect(RoutineSnapshotHeader.parse(context: [

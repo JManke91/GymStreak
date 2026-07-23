@@ -40,6 +40,63 @@ struct WatchSyncStateStoreTests {
     }
 
     @Test
+    func completedMigrationDoesNotReopenLegacyDefaults() throws {
+        let dir = try Fixtures.makeTempDirectory()
+        let (defaults, suiteName) = Fixtures.makeDefaultsSuite()
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        let migratedWorkout = Fixtures.makeWorkout()
+        defaults.set(
+            try JSONEncoder().encode([migratedWorkout]),
+            forKey: WatchSyncStateStore.legacyDefaultsKey
+        )
+        _ = WatchSyncStateStore(directory: dir, legacyDefaults: defaults)
+
+        // A stale legacy blob must never be consulted after the one-time
+        // migration marker commits. This also avoids reopening the App Group
+        // preferences suite on every watch startup.
+        let staleWorkout = Fixtures.makeWorkout()
+        defaults.set(
+            try JSONEncoder().encode([staleWorkout]),
+            forKey: WatchSyncStateStore.legacyDefaultsKey
+        )
+
+        let reloaded = WatchSyncStateStore(directory: dir, legacyDefaults: defaults)
+
+        #expect(reloaded.all.compactMap(\.completedWorkout).map(\.id) == [migratedWorkout.id])
+    }
+
+    @Test
+    func malformedLegacyDataRetriesAfterItBecomesDecodable() throws {
+        let dir = try Fixtures.makeTempDirectory()
+        let (defaults, suiteName) = Fixtures.makeDefaultsSuite()
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        defaults.set(Data("malformed workout queue".utf8), forKey: WatchSyncStateStore.legacyDefaultsKey)
+        defaults.set(Data("malformed routine cache".utf8), forKey: WatchSyncStateStore.legacyRoutinesKey)
+
+        let firstAttempt = WatchSyncStateStore(directory: dir, legacyDefaults: defaults)
+        #expect(firstAttempt.all.isEmpty)
+        #expect(firstAttempt.effectiveRoutines().isEmpty)
+
+        let workout = Fixtures.makeWorkout()
+        let routine = Fixtures.makeWatchRoutine(name: "Recovered")
+        defaults.set(
+            try JSONEncoder().encode([workout]),
+            forKey: WatchSyncStateStore.legacyDefaultsKey
+        )
+        defaults.set(
+            try JSONEncoder().encode([routine]),
+            forKey: WatchSyncStateStore.legacyRoutinesKey
+        )
+
+        let recovered = WatchSyncStateStore(directory: dir, legacyDefaults: defaults)
+
+        #expect(recovered.all.compactMap(\.completedWorkout).map(\.id) == [workout.id])
+        #expect(recovered.effectiveRoutines().map(\.id) == [routine.id])
+    }
+
+    @Test
     func enqueueIsIdempotentAndPreservesFIFOPositionAndFrozenBytes() throws {
         let dir = try Fixtures.makeTempDirectory()
         let queue = WatchSyncStateStore(directory: dir, legacyDefaults: nil)

@@ -53,6 +53,9 @@ private struct WatchSyncStateFile: Codable {
     /// routine's first pending template transaction was queued.
     var routineAnchors: [String: WatchRoutine]?
     var lastRoutineSyncDate: Date?
+    /// Once true, the pre-file UserDefaults stores never need to be opened
+    /// again. Optional so state written before this marker remains decodable.
+    var hasCompletedLegacyDefaultsMigration: Bool?
 }
 
 @MainActor
@@ -70,6 +73,7 @@ final class WatchSyncStateStore {
     private var authoritativeRoutines: [WatchRoutine]?
     private var routineAnchors: [String: WatchRoutine] = [:]
     private(set) var lastRoutineSyncDate: Date?
+    private var hasCompletedLegacyDefaultsMigration = false
     private var isStateDurable = false
 
     private let fileURL: URL?
@@ -92,7 +96,7 @@ final class WatchSyncStateStore {
     ///     the pre-ticket-05 routine cache, migrated on first init.
     init(
         directory: URL? = nil,
-        legacyDefaults: UserDefaults? = UserDefaults(suiteName: WatchSyncStateStore.appGroupID)
+        legacyDefaults: UserDefaults? = nil
     ) {
         let base = directory ?? FileManager.default
             .containerURL(forSecurityApplicationGroupIdentifier: Self.appGroupID)?
@@ -110,6 +114,8 @@ final class WatchSyncStateStore {
                 authoritativeRoutines = decoded.authoritativeRoutines
                 routineAnchors = decoded.routineAnchors ?? [:]
                 lastRoutineSyncDate = decoded.lastRoutineSyncDate
+                hasCompletedLegacyDefaultsMigration =
+                    decoded.hasCompletedLegacyDefaultsMigration ?? false
                 hadState = true
                 isStateDurable = true
             } else {
@@ -119,28 +125,54 @@ final class WatchSyncStateStore {
                 print("WatchSyncStateStore: state file undecodable — quarantined as .corrupt")
             }
         }
+
+        // The App Group suite exists only to adopt state written by older
+        // releases. Resolve it lazily until a successful atomic state write
+        // records that migration is complete; later launches stay file-only.
+        let migrationDefaults: UserDefaults?
+        if hasCompletedLegacyDefaultsMigration {
+            migrationDefaults = nil
+        } else if let legacyDefaults {
+            migrationDefaults = legacyDefaults
+        } else if directory == nil {
+            migrationDefaults = UserDefaults(suiteName: Self.appGroupID)
+        } else {
+            migrationDefaults = nil
+        }
+
         let originalEntries = entries
         let originalEpoch = senderEpoch
         let originalSequences = nextSequenceByRoutine
         let originalRoutines = authoritativeRoutines
-        let didMigrateEntries = migrateLegacyEntries(from: legacyDefaults)
-        let didMigrateRoutines = migrateLegacyRoutines(from: legacyDefaults)
+        let originalMigrationCompletion = hasCompletedLegacyDefaultsMigration
+        let entryMigration = migrateLegacyEntries(from: migrationDefaults)
+        let routineMigration = migrateLegacyRoutines(from: migrationDefaults)
         let didAssignIdentities = assignMissingTransactionIdentities()
+        let didCompleteLegacyMigration =
+            !hasCompletedLegacyDefaultsMigration
+            && migrationDefaults != nil
+            && entryMigration.isComplete
+            && routineMigration.isComplete
+        if didCompleteLegacyMigration {
+            hasCompletedLegacyDefaultsMigration = true
+        }
 
         // Queue migration, identity allocation, sequence counters, routine
         // anchor/base state, and the stable watch authority are committed in
         // one replacement before any migrated entry can transport.
-        if !hadState || didMigrateEntries || didMigrateRoutines || didAssignIdentities {
+        if !hadState || entryMigration.didChange || routineMigration.didChange
+            || didAssignIdentities || didCompleteLegacyMigration {
             do {
                 try persist()
-                if didMigrateEntries {
-                    legacyDefaults?.removeObject(forKey: Self.legacyDefaultsKey)
+                if entryMigration.didChange {
+                    migrationDefaults?.removeObject(forKey: Self.legacyDefaultsKey)
                 }
             } catch {
                 entries = originalEntries
                 senderEpoch = originalEpoch
                 nextSequenceByRoutine = originalSequences
                 authoritativeRoutines = originalRoutines
+                hasCompletedLegacyDefaultsMigration = originalMigrationCompletion
                 print("WatchSyncStateStore: migration/state write failed — \(error.localizedDescription)")
             }
         }
@@ -216,6 +248,19 @@ final class WatchSyncStateStore {
     @discardableResult
     func applyRoutineContext(_ routines: [WatchRoutine], header: RoutineSnapshotHeader?) -> Bool {
         guard let header else {
+            if routines == authoritativeRoutines {
+                let previousSyncDate = lastRoutineSyncDate
+                lastRoutineSyncDate = Date()
+                do {
+                    try persist()
+                } catch {
+                    lastRoutineSyncDate = previousSyncDate
+                    print("WatchSyncStateStore: legacy routine freshness write failed — \(error.localizedDescription)")
+                    return false
+                }
+                onEffectiveRoutinesChanged?()
+                return false
+            }
             let previousRoutines = authoritativeRoutines
             let previousSyncDate = lastRoutineSyncDate
             authoritativeRoutines = routines
@@ -510,7 +555,8 @@ final class WatchSyncStateStore {
             routineAuthority: routineAuthority,
             authoritativeRoutines: authoritativeRoutines,
             routineAnchors: routineAnchors,
-            lastRoutineSyncDate: lastRoutineSyncDate
+            lastRoutineSyncDate: lastRoutineSyncDate,
+            hasCompletedLegacyDefaultsMigration: hasCompletedLegacyDefaultsMigration
         )
         let data = try JSONEncoder().encode(file)
         try data.write(to: fileURL, options: .atomic)
@@ -564,12 +610,18 @@ final class WatchSyncStateStore {
     /// order. The legacy blob is removed only after the state file committed;
     /// on a failed write it stays the recovery source and migration re-runs
     /// on the next launch (id-deduped).
-    @discardableResult
-    private func migrateLegacyEntries(from defaults: UserDefaults?) -> Bool {
-        guard let defaults,
-              let data = defaults.data(forKey: Self.legacyDefaultsKey),
-              let legacy = try? JSONDecoder().decode([CompletedWatchWorkout].self, from: data),
-              !legacy.isEmpty else { return false }
+    private func migrateLegacyEntries(
+        from defaults: UserDefaults?
+    ) -> (didChange: Bool, isComplete: Bool) {
+        guard let defaults else { return (false, false) }
+        guard let data = defaults.data(forKey: Self.legacyDefaultsKey) else {
+            return (false, true)
+        }
+        guard let legacy = try? JSONDecoder().decode([CompletedWatchWorkout].self, from: data) else {
+            print("WatchSyncStateStore: legacy workout queue is undecodable — migration will retry")
+            return (false, false)
+        }
+        guard !legacy.isEmpty else { return (false, true) }
         var didAdd = false
         for workout in legacy where entry(id: workout.id) == nil {
             entries.append(OutgoingSyncEntry(
@@ -578,22 +630,28 @@ final class WatchSyncStateStore {
             ))
             didAdd = true
         }
-        return didAdd
+        return (didAdd, true)
     }
 
     /// Adopts RoutineStore's pre-ticket-05 UserDefaults cache as the initial
     /// authoritative base, so upgrading does not blank the watch's routine
     /// list while waiting for the next iOS context. The legacy key is left in
     /// place (harmless, and it keeps a downgrade readable).
-    @discardableResult
-    private func migrateLegacyRoutines(from defaults: UserDefaults?) -> Bool {
-        guard authoritativeRoutines == nil,
-              let defaults,
-              let data = defaults.data(forKey: Self.legacyRoutinesKey),
-              let legacy = try? JSONDecoder().decode([WatchRoutine].self, from: data),
-              !legacy.isEmpty else { return false }
+    private func migrateLegacyRoutines(
+        from defaults: UserDefaults?
+    ) -> (didChange: Bool, isComplete: Bool) {
+        guard authoritativeRoutines == nil else { return (false, true) }
+        guard let defaults else { return (false, false) }
+        guard let data = defaults.data(forKey: Self.legacyRoutinesKey) else {
+            return (false, true)
+        }
+        guard let legacy = try? JSONDecoder().decode([WatchRoutine].self, from: data) else {
+            print("WatchSyncStateStore: legacy routine cache is undecodable — migration will retry")
+            return (false, false)
+        }
+        guard !legacy.isEmpty else { return (false, true) }
         authoritativeRoutines = legacy
         print("WatchSyncStateStore: adopted \(legacy.count) cached routine(s) as the initial authoritative base")
-        return true
+        return (true, true)
     }
 }

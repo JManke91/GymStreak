@@ -59,16 +59,6 @@ final class WatchConnectivityManager: NSObject, ObservableObject {
         }
     }
 
-    /// Replays the context WatchConnectivity is already holding. Since ticket
-    /// 05 the routines live in `syncState` (RoutineStore only projects them),
-    /// so no store has to be handed over — but a context delivered before this
-    /// launch's observers existed still has to be applied once.
-    func replayPendingRoutineContext() {
-        if let session = session, !session.receivedApplicationContext.isEmpty {
-            processApplicationContext(session.receivedApplicationContext)
-        }
-    }
-
     // MARK: - Exercise catalogue
 
     /// Publishes the watch → iOS challenge context: the catalogue receiver
@@ -189,9 +179,12 @@ extension WatchConnectivityManager: WCSessionDelegate {
             self.isReachable = session.isReachable
             print("WatchConnectivity: Activated on Watch")
 
-            // Check for any pending context
-            if !session.receivedApplicationContext.isEmpty {
-                self.processApplicationContext(session.receivedApplicationContext)
+            // Bootstrap exactly once after activation. The delegate handles
+            // new arrivals; this read recovers the latest context that a
+            // previous process already received.
+            let applicationContext = session.receivedApplicationContext
+            if !applicationContext.isEmpty {
+                self.processApplicationContext(applicationContext)
             }
 
             // Retry transport for any finalized workouts still awaiting an
@@ -343,11 +336,13 @@ extension WatchConnectivityManager: WCSessionDelegate {
             let routines = try JSONDecoder().decode([WatchRoutine].self, from: routineData)
             switch RoutineSnapshotHeader.parse(context: context) {
             case .legacy:
-                syncState.applyRoutineContext(routines, header: nil)
-                print("WatchConnectivity: Received \(routines.count) legacy routines from iPhone")
+                if syncState.applyRoutineContext(routines, header: nil) {
+                    print("WatchConnectivity: Applied \(routines.count) legacy routines from iPhone")
+                }
             case .versioned(let header):
-                syncState.applyRoutineContext(routines, header: header)
-                print("WatchConnectivity: Received \(routines.count) routines from iPhone (generation \(header.generation))")
+                if syncState.applyRoutineContext(routines, header: header) {
+                    print("WatchConnectivity: Applied \(routines.count) routines from iPhone (generation \(header.generation))")
+                }
             case .malformed:
                 print("WatchConnectivity: Rejected malformed versioned routine context")
             }
