@@ -17,6 +17,99 @@ struct WorkoutViewModelTests {
         func healthKitWorkoutIDs() throws -> Set<UUID> { [] }
     }
 
+    private final class RecordingRestTimerReminders: RestTimerReminderScheduling {
+        private(set) var scheduledReminders: [(id: UUID, deadline: Date)] = []
+        private(set) var cancelledIDs: [UUID] = []
+        var outcome: RestTimerReminderOutcome = .scheduled
+
+        func scheduleReminder(
+            id: UUID,
+            deadline: Date
+        ) async -> RestTimerReminderOutcome {
+            scheduledReminders.append((id, deadline))
+            return outcome
+        }
+
+        func cancelReminder(id: UUID) {
+            cancelledIDs.append(id)
+        }
+    }
+
+    @Test
+    func restTimerRemindersAreDeferredUntilTimerStarts() async {
+        let context = ModelContext(InMemoryModelContainer.make())
+        let reminders = RecordingRestTimerReminders()
+        let now = Date(timeIntervalSinceReferenceDate: 1_000)
+        let viewModel = WorkoutViewModel(
+            workoutSessionRepository: SwiftDataWorkoutSessionRepository(modelContext: context),
+            routineRepository: SwiftDataRoutineRepository(modelContext: context),
+            exerciseRepository: SwiftDataExerciseRepository(modelContext: context),
+            healthKitManager: MockHealthKitWorkoutServicing(),
+            watchSync: MockWatchSyncServicing(),
+            workoutHistoryCorrelation: EmptyWorkoutHistoryCorrelationProvider(),
+            restTimerReminders: reminders,
+            now: { now }
+        )
+
+        #expect(reminders.scheduledReminders.isEmpty)
+        #expect(reminders.cancelledIDs.isEmpty)
+
+        viewModel.startRestTimer(duration: 60)
+        await Task.yield()
+        let scheduledReminder = reminders.scheduledReminders.first
+        #expect(reminders.scheduledReminders.count == 1)
+        #expect(scheduledReminder?.deadline == now.addingTimeInterval(60))
+        #expect(viewModel.restTimerReminderOutcome == .scheduled)
+
+        viewModel.stopRestTimer()
+        #expect(reminders.cancelledIDs == [scheduledReminder?.id].compactMap { $0 })
+    }
+
+    @Test
+    func deniedRestTimerReminderIsExposedAsWarning() async {
+        let context = ModelContext(InMemoryModelContainer.make())
+        let reminders = RecordingRestTimerReminders()
+        reminders.outcome = .authorizationDenied
+        let viewModel = WorkoutViewModel(
+            workoutSessionRepository: SwiftDataWorkoutSessionRepository(modelContext: context),
+            routineRepository: SwiftDataRoutineRepository(modelContext: context),
+            exerciseRepository: SwiftDataExerciseRepository(modelContext: context),
+            healthKitManager: MockHealthKitWorkoutServicing(),
+            watchSync: MockWatchSyncServicing(),
+            workoutHistoryCorrelation: EmptyWorkoutHistoryCorrelationProvider(),
+            restTimerReminders: reminders
+        )
+
+        viewModel.startRestTimer(duration: 60)
+        await Task.yield()
+
+        #expect(viewModel.restTimerReminderWarning != nil)
+        viewModel.stopRestTimer()
+    }
+
+    @Test
+    func restoringRestTimerDerivesRemainingTimeFromPersistedDeadline() {
+        let context = ModelContext(InMemoryModelContainer.make())
+        var currentDate = Date(timeIntervalSinceReferenceDate: 1_000)
+        let viewModel = WorkoutViewModel(
+            workoutSessionRepository: SwiftDataWorkoutSessionRepository(modelContext: context),
+            routineRepository: SwiftDataRoutineRepository(modelContext: context),
+            exerciseRepository: SwiftDataExerciseRepository(modelContext: context),
+            healthKitManager: MockHealthKitWorkoutServicing(),
+            watchSync: MockWatchSyncServicing(),
+            workoutHistoryCorrelation: EmptyWorkoutHistoryCorrelationProvider(),
+            restTimerReminders: RecordingRestTimerReminders(),
+            now: { currentDate }
+        )
+
+        viewModel.startRestTimer(duration: 60)
+        currentDate = currentDate.addingTimeInterval(25)
+        viewModel.restoreTimerState()
+
+        #expect(viewModel.restTimeRemaining == 35)
+        viewModel.stopRestTimer()
+    }
+
     @Test
     func routineWorkoutSnapshotsSlotWhileAdHocExerciseDoesNot() {
         let exercise = Exercise(name: "Biceps Curls")
@@ -82,7 +175,8 @@ struct WorkoutViewModelTests {
             exerciseRepository: exerciseRepository,
             healthKitManager: MockHealthKitWorkoutServicing(),
             watchSync: MockWatchSyncServicing(),
-            workoutHistoryCorrelation: EmptyWorkoutHistoryCorrelationProvider()
+            workoutHistoryCorrelation: EmptyWorkoutHistoryCorrelationProvider(),
+            restTimerReminders: RecordingRestTimerReminders()
         )
         viewModel.currentSession = session
 
@@ -150,7 +244,8 @@ struct WorkoutViewModelTests {
             exerciseRepository: exerciseRepository,
             healthKitManager: MockHealthKitWorkoutServicing(),
             watchSync: MockWatchSyncServicing(),
-            workoutHistoryCorrelation: EmptyWorkoutHistoryCorrelationProvider()
+            workoutHistoryCorrelation: EmptyWorkoutHistoryCorrelationProvider(),
+            restTimerReminders: RecordingRestTimerReminders()
         )
         viewModel.currentSession = session
 
@@ -214,7 +309,8 @@ struct WorkoutViewModelTests {
             exerciseRepository: exerciseRepository,
             healthKitManager: MockHealthKitWorkoutServicing(),
             watchSync: MockWatchSyncServicing(),
-            workoutHistoryCorrelation: EmptyWorkoutHistoryCorrelationProvider()
+            workoutHistoryCorrelation: EmptyWorkoutHistoryCorrelationProvider(),
+            restTimerReminders: RecordingRestTimerReminders()
         )
         viewModel.currentSession = session
 
@@ -263,7 +359,8 @@ struct WorkoutViewModelTests {
             exerciseRepository: exerciseRepository,
             healthKitManager: MockHealthKitWorkoutServicing(),
             watchSync: MockWatchSyncServicing(),
-            workoutHistoryCorrelation: EmptyWorkoutHistoryCorrelationProvider()
+            workoutHistoryCorrelation: EmptyWorkoutHistoryCorrelationProvider(),
+            restTimerReminders: RecordingRestTimerReminders()
         )
         viewModel.currentSession = session
 
@@ -330,7 +427,8 @@ struct WorkoutViewModelTests {
             exerciseRepository: exerciseRepository,
             healthKitManager: MockHealthKitWorkoutServicing(),
             watchSync: MockWatchSyncServicing(),
-            workoutHistoryCorrelation: EmptyWorkoutHistoryCorrelationProvider()
+            workoutHistoryCorrelation: EmptyWorkoutHistoryCorrelationProvider(),
+            restTimerReminders: RecordingRestTimerReminders()
         )
     }
 

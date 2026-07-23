@@ -18,6 +18,7 @@ final class AppDependencies: ObservableObject {
     let exerciseRepository: ExerciseRepository
     let workoutSessionRepository: WorkoutSessionRepository
     let workoutHistoryCorrelation: WorkoutHistoryCorrelationProviding
+    let restTimerReminders: RestTimerReminderScheduling
 
     /// A true app-wide singleton — `WatchConnectivityManager.shared` must be the same
     /// instance everywhere so its WCSession delegate (registered at app launch) is the
@@ -55,6 +56,7 @@ final class AppDependencies: ObservableObject {
         self.workoutHistoryCorrelation = SwiftDataWorkoutHistoryCorrelationProvider(
             container: modelContext.container
         )
+        self.restTimerReminders = UserNotificationRestTimerScheduler()
         let watchConnectivity = WatchConnectivityManager.shared
         self.watchSync = watchConnectivity
         self.exerciseProgressService = ExerciseProgressService(modelContext: modelContext)

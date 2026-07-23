@@ -135,6 +135,11 @@
 "rest_timer.set" = "Pausentimer setzen";
 "rest_timer.disable" = "Pausentimer deaktivieren";
 "rest_timer.rest" = "Pause:";
+"notification.rest_timer.title" = "Pause beendet";
+"notification.rest_timer.body" = "Zeit für deinen nächsten Satz!";
+"rest_timer.reminder.authorization_denied" = "Mitteilungen sind deaktiviert. Lass GymStreak für den Pausentimer-Hinweis geöffnet.";
+"rest_timer.reminder.alerts_unavailable" = "Pausentimer-Hinweise sind in deinen Mitteilungseinstellungen nicht aktiviert.";
+"rest_timer.reminder.failed" = "GymStreak konnte die Pausentimer-Mitteilung nicht planen.";
 
 // MARK: - Rest Timer Config
 "rest_timer.config.title" = "Pausentimer";

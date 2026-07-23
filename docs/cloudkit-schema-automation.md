@@ -51,7 +51,7 @@ The app launches normally; the schema upload runs concurrently in the background
 - **Extra system fields appear in the schema** and are normal, safe, and deployable:
   - `CD_<field>_ckAsset ASSET` companions on String/BYTES fields — NSPersistentCloudKitContainer stores oversized variable-length values as CKAssets; full schema initialization materializes these upfront, whereas lazy record-driven schema creation only adds them when actually needed.
   - `CD_moveReceipt` + `CD_moveReceipt_ckAsset` on every record type — internal Core Data↔CloudKit mirroring bookkeeping.
-- **Harmless log noise during the run:** the live app container logs `CloudSyncObserver: Remote change detected` while the temporary records are created/deleted, and the throwaway container logs error 134407 ("store was removed from the coordinator") plus BGTaskScheduler cancellation errors during teardown — that's the temp store being removed while its mirroring delegate is still winding down. A ✅ line means the upload succeeded regardless.
+- **Harmless log noise during the run:** the live app container logs `CloudSyncObserver: Persistent store change detected` while the temporary records are created/deleted, and the throwaway container logs error 134407 ("store was removed from the coordinator") plus BGTaskScheduler cancellation errors during teardown — that's the temp store being removed while its mirroring delegate is still winding down. A ✅ line means the upload succeeded regardless.
 
 ## Why this design (dead ends considered)
 

@@ -19,3 +19,4 @@
 - Apple Watch: Es wurde behoben, dass die Workout-Synchronisierung nach einem iPhone-Neustart hängen blieb; normale Synchronisierung und Offline-Wiederherstellung funktionieren jetzt sicher nebeneinander.
 - Apple Watch: Mehrere offline mit „Speichern & Vorlage aktualisieren“ gesicherte Workouts werden jetzt weiter mit dem iPhone-Verlauf synchronisiert, ohne die Watch-App erneut zu öffnen.
 - Apple Watch: Füge während eines Trainings Übungen hinzu oder entferne sie und konfiguriere Sätze, Wiederholungen, Gewicht und Pause vorab.
+- Pausentimer-Mitteilungen werden nur bei Bedarf angefragt, bleiben mit dem Countdown synchron und zeigen einen Hinweis, wenn Mitteilungen nicht verfügbar sind.

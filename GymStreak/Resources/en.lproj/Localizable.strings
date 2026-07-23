@@ -135,6 +135,11 @@
 "rest_timer.set" = "Set Rest Timer";
 "rest_timer.disable" = "Disable Rest Timer";
 "rest_timer.rest" = "Rest:";
+"notification.rest_timer.title" = "Rest Complete";
+"notification.rest_timer.body" = "Time to start your next set!";
+"rest_timer.reminder.authorization_denied" = "Notifications are off. Keep GymStreak open for the rest-timer alert.";
+"rest_timer.reminder.alerts_unavailable" = "Rest-timer alerts are not enabled in your notification settings.";
+"rest_timer.reminder.failed" = "GymStreak couldn't schedule the rest-timer notification.";
 
 // MARK: - Rest Timer Config
 "rest_timer.config.title" = "Rest Timer";

@@ -27,7 +27,7 @@ GymStreak is a multi-platform fitness tracking app for iOS and Apple Watch: work
 
 | Target | Platform | Notes |
 |---|---|---|
-| GymStreak | iOS 18.5+ | Main app — Clean Architecture layout below |
+| GymStreak | iOS 26+ | Main app — Clean Architecture layout below |
 | GymStreakWatch Watch App | watchOS | Own lightweight architecture (no SwiftData) |
 | GymStreakWidgets | iOS widget ext. | Rest-timer Live Activity UI |
 | GymStreakUITests / GymStreakWatchUITests | UI tests | Screenshot generation |
@@ -59,10 +59,11 @@ GymStreak/
 | App | `App/` | `GymStreakApp` (@main, ModelContainer), `AppDependencies` (composition root), `ContentView` (tab root), `TestDataSeeder` |
 | Domain | `Domain/Models/` | SwiftData `@Model` classes (`Models.swift`), `MuscleGroups`, `EquipmentType`, `WorkoutType`, chart models, AI-coach input/output models, `IncomingWatchWorkout` (Domain input for watch-workout ingestion) |
 | Domain | `Domain/Repositories/` | `RoutineRepository`, `ExerciseRepository`, `WorkoutSessionRepository` — `@MainActor` protocols |
-| Domain | `Domain/Interfaces/` | System-gateway protocols: `WatchSyncServicing`, `HealthKitWorkoutServicing`, `AICoach/` (`AICoachServicing`, `AICoachCaching`, `AICoachPreferencesProviding`) |
+| Domain | `Domain/Interfaces/` | System-gateway protocols: `WatchSyncServicing`, `HealthKitWorkoutServicing`, `RestTimerReminderScheduling`, `AICoach/` (`AICoachServicing`, `AICoachCaching`, `AICoachPreferencesProviding`) |
 | Domain | `Domain/Services/` | Pure business logic on model arrays: `HistoryStatsService`, `PersonalRecordService`, `FortschrittAggregator`, `SupersetLabelProvider`, `SupersetEditor` (superset-editor set-algebra), `WatchWorkoutIngestionService` (`@MainActor`, materializes an `IncomingWatchWorkout` into a `WorkoutSession`) |
 | Data | `Data/Repositories/` | `SwiftData*Repository` — `@MainActor final class`, `init(modelContext:)` |
 | Data | `Data/HealthKit/` | `HealthKitWorkoutManager`, `HealthKitWorkoutReconciler` |
+| Data | `Data/Notifications/` | `UserNotificationRestTimerScheduler` |
 | Data | `Data/Sync/` | `WatchConnectivityManager`, `CloudSyncObserver`, `WatchModels` (sync DTOs + mappers) |
 | Data | `Data/Progress/` | `ExerciseProgressService` (chart aggregation queries) |
 | Data | `Data/AICoach/` | `AICoachService` (FoundationModels), cache, preferences, telemetry, availability, aggregators, system prompts |
@@ -117,7 +118,7 @@ Full design rationale, method-surface decisions, and edge cases: **`docs/reposit
 
 All models: UUID ids, CloudKit-compatible defaults (every property has a default, relationships optional). **Any schema change requires manual CloudKit Console schema deploy before release** — otherwise sync silently fails in TestFlight/prod.
 
-CloudKit: `.private("iCloud.com.jmanke.gymstreak")` with silent fallback to local-only. `CloudSyncObserver` posts `.cloudKitDataDidChange` on remote changes.
+CloudKit: `.private("iCloud.com.jmanke.gymstreak")` with silent fallback to local-only. `CloudSyncObserver` posts the legacy-named `.cloudKitDataDidChange` whenever Core Data reports `NSPersistentStoreRemoteChange`; that signal is not exclusive proof of a CloudKit import.
 
 ### Repositories
 

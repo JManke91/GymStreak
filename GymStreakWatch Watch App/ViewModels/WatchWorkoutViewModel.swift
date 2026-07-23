@@ -1,7 +1,6 @@
 import Foundation
 import Combine
 import WatchKit
-import UserNotifications
 import AppIntents
 
 @MainActor
@@ -98,7 +97,6 @@ final class WatchWorkoutViewModel: ObservableObject {
         self.connectivityManager = connectivityManager
         self.routineStore = routineStore
 //        observeHealthKitMetrics()
-        requestNotificationPermission()
 
         // Metric pipelines dedupe on the displayed value: HealthKit delivers
         // bursts of near-identical samples, and republishing an unchanged value
@@ -151,46 +149,6 @@ final class WatchWorkoutViewModel: ObservableObject {
 
     private var isUITesting: Bool {
         ProcessInfo.processInfo.arguments.contains("-UI_TESTING")
-    }
-
-    // MARK: - Notification Permission
-
-    private func requestNotificationPermission() {
-        guard !isUITesting else { return }
-        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge]) { granted, error in
-            if let error = error {
-                print("Watch notification permission error: \(error)")
-            }
-            if granted {
-                print("Watch notification permission granted")
-            } else {
-                print("Watch notification permission denied")
-            }
-        }
-    }
-
-    private func scheduleRestTimerNotification(duration: TimeInterval) {
-        let content = UNMutableNotificationContent()
-        content.title = String(localized: "Rest Complete")
-        content.body = String(localized: "Time to start your next set!")
-        content.sound = .default
-
-        let trigger = UNTimeIntervalNotificationTrigger(timeInterval: duration, repeats: false)
-        let request = UNNotificationRequest(
-            identifier: "watchRestTimer",
-            content: content,
-            trigger: trigger
-        )
-
-        UNUserNotificationCenter.current().add(request) { error in
-            if let error = error {
-                print("Error scheduling watch rest timer notification: \(error)")
-            }
-        }
-    }
-
-    private func cancelRestTimerNotification() {
-        UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: ["watchRestTimer"])
     }
 
     // MARK: - Computed Properties

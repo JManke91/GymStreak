@@ -45,6 +45,84 @@ struct WatchWorkoutInboxStoreTests {
     }
 
     @Test
+    func completedLegacyMigrationNeverReopensTheDefaultsSource() throws {
+        let dir = try Fixtures.makeTempDirectory()
+        let (defaults, suiteName) = Fixtures.makeDefaultsSuite()
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        _ = WatchWorkoutInboxStore(directory: dir, legacyDefaults: defaults)
+
+        let lateLegacyWorkout = Fixtures.makeWorkout()
+        defaults.set(
+            try JSONEncoder().encode([lateLegacyWorkout]),
+            forKey: WatchWorkoutInboxStore.legacyDefaultsKey
+        )
+
+        let reloaded = WatchWorkoutInboxStore(directory: dir, legacyDefaults: defaults)
+
+        #expect(reloaded.entries().isEmpty)
+        #expect(defaults.data(forKey: WatchWorkoutInboxStore.legacyDefaultsKey) != nil)
+    }
+
+    @Test
+    func malformedLegacyDataRemainsRetryable() throws {
+        let dir = try Fixtures.makeTempDirectory()
+        let (defaults, suiteName) = Fixtures.makeDefaultsSuite()
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        defaults.set(Data("malformed".utf8), forKey: WatchWorkoutInboxStore.legacyDefaultsKey)
+        _ = WatchWorkoutInboxStore(directory: dir, legacyDefaults: defaults)
+        #expect(defaults.data(forKey: WatchWorkoutInboxStore.legacyDefaultsKey) != nil)
+
+        let recoveredWorkout = Fixtures.makeWorkout()
+        defaults.set(
+            try JSONEncoder().encode([recoveredWorkout]),
+            forKey: WatchWorkoutInboxStore.legacyDefaultsKey
+        )
+        let retried = WatchWorkoutInboxStore(directory: dir, legacyDefaults: defaults)
+
+        #expect(retried.entries().compactMap(\.completedWorkout).map(\.id) == [recoveredWorkout.id])
+        #expect(defaults.data(forKey: WatchWorkoutInboxStore.legacyDefaultsKey) == nil)
+    }
+
+    @Test
+    func failedLegacyWritePreservesBlobAndRetriesMigration() throws {
+        let dir = try Fixtures.makeTempDirectory()
+        let inboxDirectory = dir.appendingPathComponent("Inbox", isDirectory: true)
+        try FileManager.default.createDirectory(
+            at: inboxDirectory,
+            withIntermediateDirectories: true
+        )
+        let restoreWritePermission = try Fixtures.makeReadOnly(inboxDirectory)
+        defer { restoreWritePermission() }
+
+        let (defaults, suiteName) = Fixtures.makeDefaultsSuite()
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let legacyWorkout = Fixtures.makeWorkout()
+        defaults.set(
+            try JSONEncoder().encode([legacyWorkout]),
+            forKey: WatchWorkoutInboxStore.legacyDefaultsKey
+        )
+
+        let failed = WatchWorkoutInboxStore(
+            directory: dir,
+            legacyDefaults: defaults
+        )
+
+        #expect(failed.entries().isEmpty)
+        #expect(defaults.data(forKey: WatchWorkoutInboxStore.legacyDefaultsKey) != nil)
+
+        restoreWritePermission()
+        let retried = WatchWorkoutInboxStore(
+            directory: dir,
+            legacyDefaults: defaults
+        )
+
+        #expect(retried.entries().compactMap(\.completedWorkout).map(\.id) == [legacyWorkout.id])
+        #expect(defaults.data(forKey: WatchWorkoutInboxStore.legacyDefaultsKey) == nil)
+    }
+
+    @Test
     func duplicateDeliveryKeepsSingleEntryAtOriginalPosition() throws {
         let dir = try Fixtures.makeTempDirectory()
         let inbox = WatchWorkoutInboxStore(directory: dir, legacyDefaults: nil)

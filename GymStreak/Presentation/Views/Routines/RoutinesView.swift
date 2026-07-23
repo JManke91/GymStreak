@@ -34,7 +34,8 @@ private struct RoutinesViewInternal: View {
             exerciseRepository: dependencies.exerciseRepository,
             healthKitManager: dependencies.makeHealthKitWorkoutService(),
             watchSync: dependencies.watchSync,
-            workoutHistoryCorrelation: dependencies.workoutHistoryCorrelation
+            workoutHistoryCorrelation: dependencies.workoutHistoryCorrelation,
+            restTimerReminders: dependencies.restTimerReminders
         ))
     }
 

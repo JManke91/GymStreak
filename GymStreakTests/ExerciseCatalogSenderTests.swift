@@ -177,18 +177,26 @@ struct ExerciseCatalogSenderTests {
     }
 
     @Test
-    func identicalRequestsDoNotEnqueueDuplicates() {
+    func identicalChallengesLogOnceWithoutSkippingSyncProcessing() {
         let transport = MockCatalogTransport()
-        let sender = ExerciseCatalogSender(transport: transport, directory: makeTempDirectory())
+        var challengeLogs: [String] = []
+        let sender = ExerciseCatalogSender(
+            transport: transport,
+            directory: makeTempDirectory(),
+            challengeLogger: { challengeLogs.append($0) }
+        )
         let items = makeItems(["Bench Press"])
-
-        sender.updateChallenge(fromApplicationContext: challengeContext(
+        let context = challengeContext(
             watch: UUID(), epoch: nil, generation: 0, nonce: UUID()
-        ))
+        )
+
+        sender.updateChallenge(fromApplicationContext: context)
+        sender.updateChallenge(fromApplicationContext: context)
         sender.requestSync(items: items)
         sender.requestSync(items: items)
         sender.sessionDidBecomeReady()
 
+        #expect(challengeLogs.count == 1)
         #expect(transport.transferredSnapshots.count == 1)
     }
 

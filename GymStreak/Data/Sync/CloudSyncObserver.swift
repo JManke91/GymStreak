@@ -2,12 +2,12 @@ import Foundation
 import CoreData
 import Combine
 
-/// Notification name posted when CloudKit remote changes are detected
+/// Legacy notification name posted when the persistent store reports a remote change.
 extension Notification.Name {
     static let cloudKitDataDidChange = Notification.Name("cloudKitDataDidChange")
 }
 
-/// Observes CloudKit sync events and notifies subscribers when remote changes occur.
+/// Observes persistent-store remote-change events and notifies subscribers.
 /// This is a singleton that should be initialized once at app startup.
 @MainActor
 final class CloudSyncObserver: ObservableObject {
@@ -23,7 +23,7 @@ final class CloudSyncObserver: ObservableObject {
     }
 
     private func setupRemoteChangeObserver() {
-        // Observe NSPersistentStoreRemoteChange which is posted when CloudKit syncs data
+        // This Core Data notification is not exclusive to CloudKit.
         notificationObserver = NotificationCenter.default.addObserver(
             forName: .NSPersistentStoreRemoteChange,
             object: nil,
@@ -36,7 +36,7 @@ final class CloudSyncObserver: ObservableObject {
     }
 
     private func handleRemoteChange() {
-        print("CloudSyncObserver: Remote change detected from CloudKit")
+        print("CloudSyncObserver: Persistent store change detected")
         syncVersion += 1
 
         // Post notification for ViewModels that prefer notification-based updates

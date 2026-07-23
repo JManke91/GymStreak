@@ -1192,6 +1192,7 @@
       }
     },
     "Rest Complete" : {
+      "extractionState" : "stale",
       "localizations" : {
         "de" : {
           "stringUnit" : {
@@ -1533,6 +1534,7 @@
       }
     },
     "Time to start your next set!" : {
+      "extractionState" : "stale",
       "localizations" : {
         "de" : {
           "stringUnit" : {

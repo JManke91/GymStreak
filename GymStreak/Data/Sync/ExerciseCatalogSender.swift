@@ -29,6 +29,7 @@ final class ExerciseCatalogSender {
     /// this sender. Tests injecting a mock transport must keep it alive for
     /// the sender's whole lifetime.
     private unowned let transport: ExerciseCatalogTransporting
+    private let challengeLogger: (String) -> Void
 
     private(set) var state = ExerciseCatalogSenderState()
     /// Latest challenge reported by the watch (delegate delivery or
@@ -51,8 +52,13 @@ final class ExerciseCatalogSender {
         return encoder
     }()
 
-    init(transport: ExerciseCatalogTransporting, directory: URL? = nil) {
+    init(
+        transport: ExerciseCatalogTransporting,
+        directory: URL? = nil,
+        challengeLogger: @escaping (String) -> Void = { print($0) }
+    ) {
         self.transport = transport
+        self.challengeLogger = challengeLogger
         let base = directory ?? FileManager.default
             .urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("ExerciseCatalogSync", isDirectory: true)
@@ -85,8 +91,13 @@ final class ExerciseCatalogSender {
     /// the generation high-water mark, and restages if needed.
     func updateChallenge(fromApplicationContext context: [String: Any]) {
         guard let challenge = WatchCatalogChallenge(applicationContext: context) else { return }
+        let isNewChallenge = currentChallenge != challenge
         currentChallenge = challenge
-        print("CatalogSync: challenge from watch \(challenge.watchInstanceID) — epoch \(challenge.currentEpoch?.uuidString ?? "bootstrap"), generation \(challenge.currentGeneration)")
+        if isNewChallenge {
+            challengeLogger(
+                "CatalogSync: challenge from watch \(challenge.watchInstanceID) — epoch \(challenge.currentEpoch?.uuidString ?? "bootstrap"), generation \(challenge.currentGeneration)"
+            )
+        }
 
         var newState = state
         if let proposal = newState.proposedAuthority, challenge.currentEpoch == proposal.epoch {

@@ -34,6 +34,15 @@ struct RestTimerView: View {
                 }
             }
 
+            if let warning = viewModel.restTimerReminderWarning {
+                Label(warning, systemImage: "bell.slash.fill")
+                    .font(.footnote)
+                    .foregroundStyle(.orange)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(12)
+                    .background(.orange.opacity(0.12), in: RoundedRectangle(cornerRadius: 12))
+            }
+
             // Action buttons
             HStack(spacing: 12) {
                 // Minimize button

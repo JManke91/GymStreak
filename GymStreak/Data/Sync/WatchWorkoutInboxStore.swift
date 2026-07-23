@@ -37,6 +37,7 @@ final class WatchWorkoutInboxStore {
 
     nonisolated static let appGroupID = "group.com.gymstreak.shared"
     nonisolated static let legacyDefaultsKey = "pendingReceivedWorkouts"
+    private nonisolated static let legacyMigrationMarkerName = ".legacy-defaults-migration-complete"
 
     private let inboxDirectory: URL?
     private let quarantineDirectory: URL?
@@ -48,7 +49,7 @@ final class WatchWorkoutInboxStore {
     ///     migrated (order preserved) on first init.
     init(
         directory: URL? = nil,
-        legacyDefaults: UserDefaults? = UserDefaults(suiteName: WatchWorkoutInboxStore.appGroupID)
+        legacyDefaults: UserDefaults? = nil
     ) {
         let base = directory ?? FileManager.default
             .containerURL(forSecurityApplicationGroupIdentifier: Self.appGroupID)?
@@ -58,7 +59,21 @@ final class WatchWorkoutInboxStore {
         if let inboxDirectory {
             try? FileManager.default.createDirectory(at: inboxDirectory, withIntermediateDirectories: true)
         }
-        migrateLegacyEntries(from: legacyDefaults)
+
+        guard let base else { return }
+        let migrationMarker = base.appendingPathComponent(Self.legacyMigrationMarkerName)
+        guard !FileManager.default.fileExists(atPath: migrationMarker.path) else { return }
+
+        // Opening App Group UserDefaults can emit a CFPrefs diagnostic. Do it
+        // only while the one-time legacy migration is still outstanding.
+        let migrationDefaults = legacyDefaults
+            ?? (directory == nil ? UserDefaults(suiteName: Self.appGroupID) : nil)
+        guard migrateLegacyEntries(from: migrationDefaults) else { return }
+        do {
+            try Data().write(to: migrationMarker, options: .atomic)
+        } catch {
+            print("WatchWorkoutInboxStore: could not record completed legacy migration — will retry")
+        }
     }
 
     // MARK: - Writing
@@ -155,12 +170,14 @@ final class WatchWorkoutInboxStore {
     /// timestamp, keeping legacy entries at the front. The blob is removed
     /// only after every file write succeeded; on failure it stays the
     /// recovery source and migration re-runs next launch (id-deduped).
-    private func migrateLegacyEntries(from defaults: UserDefaults?) {
-        guard let defaults,
-              let data = defaults.data(forKey: Self.legacyDefaultsKey),
-              let legacy = try? JSONDecoder().decode([CompletedWatchWorkout].self, from: data),
-              !legacy.isEmpty,
-              let inboxDirectory else { return }
+    private func migrateLegacyEntries(from defaults: UserDefaults?) -> Bool {
+        guard let defaults else { return false }
+        guard let data = defaults.data(forKey: Self.legacyDefaultsKey) else { return true }
+        guard let legacy = try? JSONDecoder().decode([CompletedWatchWorkout].self, from: data) else {
+            print("WatchWorkoutInboxStore: legacy migration data is malformed — keeping legacy blob")
+            return false
+        }
+        guard let inboxDirectory else { return false }
         do {
             for (index, workout) in legacy.enumerated() where !containsEntry(for: workout.id) {
                 let payload = try JSONEncoder().encode(workout)
@@ -169,9 +186,13 @@ final class WatchWorkoutInboxStore {
                 try payload.write(to: inboxDirectory.appendingPathComponent(name), options: .atomic)
             }
             defaults.removeObject(forKey: Self.legacyDefaultsKey)
-            print("WatchWorkoutInboxStore: migrated \(legacy.count) legacy buffered workout(s)")
+            if !legacy.isEmpty {
+                print("WatchWorkoutInboxStore: migrated \(legacy.count) legacy buffered workout(s)")
+            }
+            return true
         } catch {
             print("WatchWorkoutInboxStore: legacy migration failed — \(error.localizedDescription); keeping legacy blob")
+            return false
         }
     }
 }

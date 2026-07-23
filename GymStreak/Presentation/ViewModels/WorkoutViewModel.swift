@@ -1,7 +1,6 @@
 import Foundation
 import SwiftUI
 import Combine
-import UserNotifications
 import ActivityKit
 import HealthKit
 
@@ -32,6 +31,7 @@ class WorkoutViewModel: ObservableObject {
     @Published var isRestTimerActive = false
     @Published var restTimeRemaining: TimeInterval = 0
     @Published var restDuration: TimeInterval = 0
+    @Published private(set) var restTimerReminderOutcome: RestTimerReminderOutcome?
     @Published var workoutHistory: [WorkoutSession] = []
     @Published var showingWorkoutCompletePrompt = false
     /// HealthKit-saved workouts (from this device's GymStreak iOS or watch app)
@@ -44,20 +44,39 @@ class WorkoutViewModel: ObservableObject {
     @Published var healthKitSyncStatus: HealthKitSyncStatus = .idle
     @Published var showHealthKitAuthPrompt = false
 
+    var restTimerReminderWarning: String? {
+        switch restTimerReminderOutcome {
+        case .authorizationDenied:
+            return "rest_timer.reminder.authorization_denied".localized
+        case .alertsUnavailable:
+            return "rest_timer.reminder.alerts_unavailable".localized
+        case .failed:
+            return "rest_timer.reminder.failed".localized
+        case .scheduled, .deadlinePassed, .cancelled, nil:
+            return nil
+        }
+    }
+
     private let workoutSessionRepository: WorkoutSessionRepository
     private let routineRepository: RoutineRepository
     private let exerciseRepository: ExerciseRepository
     private let watchSync: WatchSyncServicing
     private let workoutHistoryCorrelation: WorkoutHistoryCorrelationProviding
+    private let restTimerReminders: RestTimerReminderScheduling
     private let aiCoachCache: AICoachCaching
+    private let now: () -> Date
     private var timer: Timer?
     private var restTimer: Timer?
+    private var restTimerReminderTask: Task<Void, Never>?
     private var cloudSyncObserver: NSObjectProtocol?
     private var workoutHistoryObserver: NSObjectProtocol?
 
     // Date-based timer tracking for background persistence
     private var workoutStartTime: Date?
     private var restTimerStartTime: Date?
+    private var restTimerDeadline: Date?
+    private var restTimerID: UUID?
+    private var hasPlayedRestCountdownHaptic = false
 
     // Live Activity for rest timer
     private var currentRestActivity: Activity<RestTimerAttributes>?
@@ -113,7 +132,9 @@ class WorkoutViewModel: ObservableObject {
         healthKitManager: HealthKitWorkoutServicing,
         watchSync: WatchSyncServicing,
         workoutHistoryCorrelation: WorkoutHistoryCorrelationProviding,
-        aiCoachCache: AICoachCaching? = nil
+        restTimerReminders: RestTimerReminderScheduling,
+        aiCoachCache: AICoachCaching? = nil,
+        now: @escaping () -> Date = Date.init
     ) {
         self.workoutSessionRepository = workoutSessionRepository
         self.routineRepository = routineRepository
@@ -121,12 +142,10 @@ class WorkoutViewModel: ObservableObject {
         self.healthKitManager = healthKitManager
         self.watchSync = watchSync
         self.workoutHistoryCorrelation = workoutHistoryCorrelation
+        self.restTimerReminders = restTimerReminders
         self.aiCoachCache = aiCoachCache ?? AICoachCache.shared
+        self.now = now
         fetchWorkoutHistory()
-        // Skip notification permission during UI testing to avoid alert in screenshots
-        if !isUITesting {
-            requestNotificationPermission()
-        }
         cleanupStaleActivities()
         loadHealthKitPreferences()
         healthKitManager.checkAuthorizationStatus()
@@ -347,59 +366,23 @@ class WorkoutViewModel: ObservableObject {
         }
     }
 
-    // MARK: - Notification Permission
-
-    func requestNotificationPermission() {
-        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge]) { granted, error in
-            if let error = error {
-                print("Notification permission error: \(error)")
-            }
-            if granted {
-                print("Notification permission granted")
-            } else {
-                print("Notification permission denied")
-            }
-        }
-    }
-
-    private func scheduleRestTimerNotification(duration: TimeInterval) {
-        let content = UNMutableNotificationContent()
-        content.title = "Rest Complete"
-        content.body = "Time to start your next set!"
-        content.sound = .default
-
-        let trigger = UNTimeIntervalNotificationTrigger(timeInterval: duration, repeats: false)
-        let request = UNNotificationRequest(
-            identifier: "restTimer",
-            content: content,
-            trigger: trigger
-        )
-
-        UNUserNotificationCenter.current().add(request) { error in
-            if let error = error {
-                print("Error scheduling rest timer notification: \(error)")
-            }
-        }
-    }
-
-    private func cancelRestTimerNotification() {
-        UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: ["restTimer"])
-    }
-
     // MARK: - Live Activity Management
 
     private func cleanupStaleActivities() {
         Task {
             for activity in Activity<RestTimerAttributes>.activities {
                 // Check if timer has expired
-                if activity.contentState.timerRange.upperBound < Date() {
-                    await activity.end(dismissalPolicy: .immediate)
+                if activity.content.state.timerRange.upperBound < now() {
+                    await activity.end(nil, dismissalPolicy: .immediate)
                 }
             }
         }
     }
 
-    private func startRestTimerLiveActivity(duration: TimeInterval) {
+    private func startRestTimerLiveActivity(
+        startDate: Date,
+        deadline: Date
+    ) {
         // Check if Live Activities are enabled
         let authInfo = ActivityAuthorizationInfo()
         print("Live Activity Authorization Status: \(authInfo.areActivitiesEnabled)")
@@ -410,8 +393,7 @@ class WorkoutViewModel: ObservableObject {
             return
         }
 
-        let endDate = Date().addingTimeInterval(duration)
-        let timerRange = Date.now...endDate
+        let timerRange = startDate...deadline
 
         // Get current exercise name if available
         let exerciseName: String? = {
@@ -432,9 +414,13 @@ class WorkoutViewModel: ObservableObject {
         )
 
         do {
+            let content = ActivityContent(
+                state: initialContentState,
+                staleDate: deadline
+            )
             let activity = try Activity<RestTimerAttributes>.request(
                 attributes: attributes,
-                contentState: initialContentState,
+                content: content,
                 pushType: nil
             )
             currentRestActivity = activity
@@ -465,8 +451,12 @@ class WorkoutViewModel: ObservableObject {
                 completionMessage: "Rest Complete! 💪"
             )
 
+            let content = ActivityContent(
+                state: finalState,
+                staleDate: nil
+            )
             await activity.end(
-                using: finalState,
+                content,
                 dismissalPolicy: .after(Date.now.addingTimeInterval(3))
             )
         }
@@ -483,9 +473,14 @@ class WorkoutViewModel: ObservableObject {
         }
 
         // Save rest timer state
-        if let restStart = restTimerStartTime, restDuration > 0 {
+        if let restStart = restTimerStartTime,
+           let deadline = restTimerDeadline,
+           let timerID = restTimerID,
+           restDuration > 0 {
             UserDefaults.standard.set(restStart, forKey: "restTimerStartTime")
             UserDefaults.standard.set(restDuration, forKey: "restDuration")
+            UserDefaults.standard.set(deadline, forKey: "restTimerDeadline")
+            UserDefaults.standard.set(timerID.uuidString, forKey: "restTimerID")
         }
     }
 
@@ -500,19 +495,30 @@ class WorkoutViewModel: ObservableObject {
         // Restore rest timer
         if let restStart = UserDefaults.standard.object(forKey: "restTimerStartTime") as? Date,
            let duration = UserDefaults.standard.object(forKey: "restDuration") as? TimeInterval {
-            let elapsed = Date().timeIntervalSince(restStart)
-            let remaining = max(0, duration - elapsed)
+            let persistedDeadline = UserDefaults.standard.object(
+                forKey: "restTimerDeadline"
+            ) as? Date
+            let deadline = persistedDeadline ?? restStart.addingTimeInterval(duration)
+            let persistedID = UserDefaults.standard.string(forKey: "restTimerID")
+                .flatMap(UUID.init(uuidString:))
+            let timerID = persistedID ?? UUID()
+            let remaining = ceil(max(0, deadline.timeIntervalSince(now())))
 
             if remaining > 0 {
                 // Timer still running
                 restTimeRemaining = remaining
                 isRestTimerActive = true
                 restTimerStartTime = restStart
+                restTimerDeadline = deadline
+                restTimerID = timerID
                 restDuration = duration
 
                 // Restart Live Activity if not already active
                 if currentRestActivity == nil {
-                    startRestTimerLiveActivity(duration: remaining)
+                    startRestTimerLiveActivity(
+                        startDate: restStart,
+                        deadline: deadline
+                    )
                 }
 
                 // Restart the UI update timer
@@ -528,6 +534,8 @@ class WorkoutViewModel: ObservableObject {
         UserDefaults.standard.removeObject(forKey: "workoutStartTime")
         UserDefaults.standard.removeObject(forKey: "restTimerStartTime")
         UserDefaults.standard.removeObject(forKey: "restDuration")
+        UserDefaults.standard.removeObject(forKey: "restTimerDeadline")
+        UserDefaults.standard.removeObject(forKey: "restTimerID")
     }
 
     // MARK: - Workout Session Management
@@ -1328,19 +1336,37 @@ class WorkoutViewModel: ObservableObject {
     func startRestTimer(duration: TimeInterval) {
         stopRestTimer()
 
+        let startDate = now()
+        let deadline = startDate.addingTimeInterval(duration)
+        let timerID = UUID()
+
         restTimeRemaining = duration
         isRestTimerActive = true
+        restTimerReminderOutcome = nil
+        hasPlayedRestCountdownHaptic = false
 
-        // Save rest timer start time and duration for background persistence
-        restTimerStartTime = Date()
+        // The identity and absolute deadline are authoritative across all timer surfaces.
+        restTimerStartTime = startDate
+        restTimerDeadline = deadline
+        restTimerID = timerID
         restDuration = duration
         saveTimerState()
 
-        // Schedule notification for when rest timer completes
-        scheduleRestTimerNotification(duration: duration)
+        restTimerReminderTask = Task { [weak self] in
+            guard let self else { return }
+            let outcome = await restTimerReminders.scheduleReminder(
+                id: timerID,
+                deadline: deadline
+            )
+            guard !Task.isCancelled, restTimerID == timerID else { return }
+            restTimerReminderOutcome = outcome
+        }
 
         // Start Live Activity for Lock Screen display
-        startRestTimerLiveActivity(duration: duration)
+        startRestTimerLiveActivity(
+            startDate: startDate,
+            deadline: deadline
+        )
 
         // Start UI update timer
         startRestTimerUI()
@@ -1351,13 +1377,18 @@ class WorkoutViewModel: ObservableObject {
 
         let newRestTimer = Timer(timeInterval: 1, repeats: true) { [weak self] _ in
             Task { @MainActor [weak self] in
-                guard let self = self else { return }
+                guard let self,
+                      let deadline = self.restTimerDeadline else { return }
 
-                if self.restTimeRemaining > 0 {
-                    self.restTimeRemaining -= 1
+                let previousRemaining = self.restTimeRemaining
+                let remaining = ceil(max(0, deadline.timeIntervalSince(self.now())))
+                if remaining > 0 {
+                    self.restTimeRemaining = remaining
 
-                    // Haptic feedback at 3 seconds
-                    if self.restTimeRemaining == 3 {
+                    if !self.hasPlayedRestCountdownHaptic,
+                       previousRemaining > 3,
+                       remaining <= 3 {
+                        self.hasPlayedRestCountdownHaptic = true
                         UIImpactFeedbackGenerator(style: .medium).impactOccurred()
                     }
                 } else {
@@ -1373,17 +1404,26 @@ class WorkoutViewModel: ObservableObject {
     }
 
     func stopRestTimer() {
+        let timerID = restTimerID
         restTimer?.invalidate()
         restTimer = nil
+        restTimerReminderTask?.cancel()
+        restTimerReminderTask = nil
         isRestTimerActive = false
         restTimeRemaining = 0
+        restTimerReminderOutcome = nil
 
         // Clear rest timer state
         restTimerStartTime = nil
+        restTimerDeadline = nil
+        restTimerID = nil
         restDuration = 0
+        hasPlayedRestCountdownHaptic = false
 
         // Cancel any pending notification
-        cancelRestTimerNotification()
+        if let timerID {
+            restTimerReminders.cancelReminder(id: timerID)
+        }
 
         // End Live Activity
         endRestTimerLiveActivity()
@@ -1391,6 +1431,8 @@ class WorkoutViewModel: ObservableObject {
         // Clear saved state
         UserDefaults.standard.removeObject(forKey: "restTimerStartTime")
         UserDefaults.standard.removeObject(forKey: "restDuration")
+        UserDefaults.standard.removeObject(forKey: "restTimerDeadline")
+        UserDefaults.standard.removeObject(forKey: "restTimerID")
     }
 
     // MARK: - Workout Completion Check
@@ -1943,6 +1985,7 @@ class WorkoutViewModel: ObservableObject {
     deinit {
         timer?.invalidate()
         restTimer?.invalidate()
+        restTimerReminderTask?.cancel()
         reconcileRetryTask?.cancel()
     }
 }
