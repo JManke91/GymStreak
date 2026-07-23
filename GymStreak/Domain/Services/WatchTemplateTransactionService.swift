@@ -34,36 +34,49 @@ final class WatchTemplateTransactionService {
         case saveFailed(Error)
     }
 
-    private let routineRepository: RoutineRepository
-    private let workoutSessionRepository: WorkoutSessionRepository
+    let routineRepository: RoutineRepository
+    let workoutSessionRepository: WorkoutSessionRepository
+    /// Library used to resolve a Watch-added exercise (ticket 07). Bound to the
+    /// same isolated context as the routine, so a resolved `Exercise` links to
+    /// the new `RoutineExercise` and commits in this transaction's single save.
+    let exerciseRepository: ExerciseRepository
     private let historyService: WatchWorkoutIngestionService
 
-    init(routineRepository: RoutineRepository, workoutSessionRepository: WorkoutSessionRepository) {
+    init(
+        routineRepository: RoutineRepository,
+        workoutSessionRepository: WorkoutSessionRepository,
+        exerciseRepository: ExerciseRepository
+    ) {
         self.routineRepository = routineRepository
         self.workoutSessionRepository = workoutSessionRepository
+        self.exerciseRepository = exerciseRepository
         self.historyService = WatchWorkoutIngestionService(
             routineRepository: routineRepository,
             workoutSessionRepository: workoutSessionRepository
         )
     }
 
-    /// Completed-workout kind: denormalized history and the complete set-only
-    /// template update stage in the same isolated context and commit in ONE
-    /// save. Validation runs before any mutation, so a missing routine or a
-    /// missing/unmatched required row rejects the whole request instead of
-    /// applying part of it.
+    /// Completed-workout kind: denormalized history and the complete template
+    /// update — set values PLUS explicit structural add/remove intent
+    /// (ticket 07) — stage in the same isolated context and commit in ONE save.
+    /// The entire request is validated before any mutation, so a missing
+    /// routine, an unresolvable added exercise, or malformed membership intent
+    /// rejects the whole request (history still saved, routine untouched)
+    /// instead of applying part of it. Only explicit intent is merged against
+    /// the CURRENT routine, so concurrent iOS edits win unless the watch
+    /// explicitly added or removed that exact slot.
     func execute(_ workout: IncomingWatchWorkout) -> Outcome {
         let routine = liveRoutine(for: workout)
 
         // Validate the complete request first — no partial updates.
-        let plan: [SetUpdate]
+        let plan: MergePlan
         var rejection: String?
-        switch validate(workout, against: routine) {
+        switch validateMerge(workout, against: routine) {
         case .failure(let reason):
-            plan = []
+            plan = .empty
             rejection = reason
-        case .success(let updates):
-            plan = updates
+        case .success(let resolved):
+            plan = resolved
         }
 
         // History is staged either way: a rejection is a terminal decision
@@ -87,14 +100,17 @@ final class WatchTemplateTransactionService {
                 }
             }
             // Legacy history without an atomic witness still needs the
-            // idempotent upgrade reconciliation required by the protocol.
+            // idempotent upgrade reconciliation required by the protocol. The
+            // structural merge below is itself idempotent (minted-slot-absent
+            // guard, already-absent removals, value-set updates).
             session = existing
         case .staged(let staged):
             session = staged
         }
 
-        if rejection == nil {
-            apply(plan)
+        if rejection == nil, let routine {
+            apply(plan.setUpdates)
+            applyStructural(plan, to: routine)
             session.didUpdateTemplate = true
             markAtomicOutcome(.applied, transactionID: workout.templateTransactionID, on: session)
         } else {
@@ -111,7 +127,7 @@ final class WatchTemplateTransactionService {
             print("Template transaction rejected: \(rejection) — history saved, routine untouched")
             return .rejected(rejection)
         }
-        print("Template transaction applied: \(plan.count) set(s) on '\(workout.routineName)'")
+        print("Template transaction applied: \(plan.setUpdates.count) set(s), +\(plan.additions.count)/-\(plan.removals.count) exercise(s) on '\(workout.routineName)'")
         return .applied
     }
 
@@ -161,64 +177,6 @@ final class WatchTemplateTransactionService {
         let target: Target
         let reps: Int
         let weight: Double
-    }
-
-    private enum Validation {
-        case success([SetUpdate])
-        case failure(String)
-    }
-
-    private func validate(_ workout: IncomingWatchWorkout, against routine: Routine?) -> Validation {
-        guard let routine else {
-            return .failure("routine \(workout.routineId) not found")
-        }
-
-        var updates: [SetUpdate] = []
-        for completedExercise in workout.exercises {
-            let modifiedSets = completedExercise.sets.filter {
-                $0.actualReps != $0.plannedReps || $0.actualWeight != $0.plannedWeight
-            }
-            guard !modifiedSets.isEmpty else { continue }
-
-            guard let routineExercise = routine.routineExercisesList
-                .first(where: { $0.id == completedExercise.id }) else {
-                return .failure("routine exercise \(completedExercise.id) not found")
-            }
-
-            // A swapped exercise's completed sets carry the alternative's own
-            // set ids (the watch rebuilds the scheme from the alternative on
-            // swap), so those values belong to that alternative's template —
-            // matching them against the primary's sets can never succeed.
-            if completedExercise.plannedExerciseId != nil {
-                guard let alternative = routineExercise.alternativesList
-                    .first(where: { $0.exercise?.id == completedExercise.exerciseId }) else {
-                    return .failure("alternative \(completedExercise.name) not found on \(completedExercise.id)")
-                }
-                for completedSet in modifiedSets {
-                    guard let set = alternative.setsList.first(where: { $0.id == completedSet.id }) else {
-                        return .failure("alternative set \(completedSet.id) not found")
-                    }
-                    updates.append(SetUpdate(
-                        target: .alternativeSet(set),
-                        reps: completedSet.actualReps,
-                        weight: completedSet.actualWeight
-                    ))
-                }
-                continue
-            }
-
-            for completedSet in modifiedSets {
-                guard let set = routineExercise.setsList.first(where: { $0.id == completedSet.id }) else {
-                    return .failure("set \(completedSet.id) not found")
-                }
-                updates.append(SetUpdate(
-                    target: .routineSet(set),
-                    reps: completedSet.actualReps,
-                    weight: completedSet.actualWeight
-                ))
-            }
-        }
-        return .success(updates)
     }
 
     // MARK: - Mutation + commit

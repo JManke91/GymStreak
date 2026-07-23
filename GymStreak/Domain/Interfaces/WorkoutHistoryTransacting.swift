@@ -27,5 +27,10 @@ protocol WorkoutHistoryTransacting: AnyObject {
 protocol WorkoutHistoryTransaction: AnyObject {
     var routineRepository: RoutineRepository { get }
     var workoutSessionRepository: WorkoutSessionRepository { get }
+    /// Exercise library bound to the SAME isolated context (ticket 07). A
+    /// structural template merge resolves a Watch-added exercise here so the
+    /// resolved `Exercise` and the `RoutineExercise` it is linked to belong to
+    /// one context and commit in the single transaction save.
+    var exerciseRepository: ExerciseRepository { get }
     func rollback()
 }

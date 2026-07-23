@@ -124,7 +124,10 @@ struct FullScreenSetEditorView: View {
                     // per-exercise segment bar (design §4).
                     WorkoutTopProgressView(
                         exerciseName: displayedExercise.name,
-                        workoutProgress: viewModel.progress,
+                        exerciseIndex: viewModel.currentExerciseIndex,
+                        exerciseCount: viewModel.exercises.count,
+                        setIndex: displayedSetIndex,
+                        setCount: totalSets,
                         exerciseProgress: viewModel.progressSegments
                     )
                     .padding(.horizontal, 2)
@@ -218,39 +221,49 @@ struct FullScreenSetEditorView: View {
         .toolbar {
             // The native back chevron of the shared stack replaces the old
             // custom back button.
-            ToolbarItem(placement: .topBarTrailing) {
-                Group {
-                    if viewModel.isResting && viewModel.isRestTimerMinimized {
-                        NewShrinkingRestTimer(
-                            timeRemaining: viewModel.restTimeRemaining,
-                            totalDuration: viewModel.restDuration,
-                            onExpand: viewModel.expandRestTimer, onSkip: viewModel.skipRest
-                        )
-                        .frame(maxWidth: 100, maxHeight: 20)
-                        // No .transition here: transitions inside ToolbarItem
-                        // builders are unsupported and feed the per-frame
-                        // toolbar-update warnings.
-                    } else if let elapsedTime = viewModel.elapsedTimeString {
-                        // Calm elapsed-time capsule chip with tabular digits
-                        HStack(spacing: 4) {
-                            Image(systemName: "stopwatch")
-                                .font(.system(size: 9, weight: .medium))
-                                .foregroundStyle(OnyxWatch.Colors.textMuted)
-                            Text(elapsedTime)
-                                .font(.system(size: 10, weight: .semibold))
-                                .monospacedDigit()
-                                .foregroundStyle(OnyxWatch.Colors.chipText)
-                        }
-                        .padding(.horizontal, 7)
-                        .frame(height: 20)
-                        .background(OnyxWatch.Colors.chipBackground, in: Capsule())
-                        .accessibilityLabel("Elapsed time \(elapsedTime)")
-                    }
+            //
+            // Only declare the trailing item when it has real content. An
+            // empty ToolbarItem still creates a watchOS bar button, which the
+            // system forces square (width == height); with zero-width content
+            // that contradicts the fixed 37 pt bar-button height and logs
+            // "Unable to simultaneously satisfy constraints". Hoisting the
+            // condition to the toolbar-content level omits the button entirely
+            // in the empty state (e.g. before the first elapsed-time tick).
+            if viewModel.isResting && viewModel.isRestTimerMinimized {
+                ToolbarItem(placement: .topBarTrailing) {
+                    NewShrinkingRestTimer(
+                        timeRemaining: viewModel.restTimeRemaining,
+                        totalDuration: viewModel.restDuration,
+                        onExpand: viewModel.expandRestTimer, onSkip: viewModel.skipRest
+                    )
+                    .frame(maxWidth: 100, maxHeight: 20)
+                    // No .transition here: transitions inside ToolbarItem
+                    // builders are unsupported and feed the per-frame
+                    // toolbar-update warnings.
+                    //
+                    // Lift the status onto the system clock's centerline —
+                    // toolbar trailing items otherwise sit ~8 pt lower than the
+                    // clock (the design has them on one line).
+                    .offset(y: -8)
                 }
-                // Lift the status onto the system clock's centerline — toolbar
-                // trailing items otherwise sit ~8 pt lower than the clock (the
-                // design has them on one line).
-                .offset(y: -8)
+            } else if let elapsedTime = viewModel.elapsedTimeString {
+                ToolbarItem(placement: .topBarTrailing) {
+                    // Calm elapsed-time capsule chip with tabular digits
+                    HStack(spacing: 4) {
+                        Image(systemName: "stopwatch")
+                            .font(.system(size: 9, weight: .medium))
+                            .foregroundStyle(OnyxWatch.Colors.textMuted)
+                        Text(elapsedTime)
+                            .font(.system(size: 10, weight: .semibold))
+                            .monospacedDigit()
+                            .foregroundStyle(OnyxWatch.Colors.chipText)
+                    }
+                    .padding(.horizontal, 7)
+                    .frame(height: 20)
+                    .background(OnyxWatch.Colors.chipBackground, in: Capsule())
+                    .accessibilityLabel("Elapsed time \(elapsedTime)")
+                    .offset(y: -8)
+                }
             }
         }
     }

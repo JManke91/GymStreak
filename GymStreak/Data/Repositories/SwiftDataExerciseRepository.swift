@@ -29,6 +29,13 @@ final class SwiftDataExerciseRepository: ExerciseRepository {
         return try? modelContext.fetch(descriptor).first
     }
 
+    func fetchBySeedKey(_ seedKey: String) -> [Exercise] {
+        let trimmed = seedKey.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return [] }
+        let descriptor = FetchDescriptor<Exercise>(predicate: #Predicate { $0.seedKey == trimmed })
+        return (try? modelContext.fetch(descriptor)) ?? []
+    }
+
     func insert(_ exercise: Exercise) {
         modelContext.insert(exercise)
     }

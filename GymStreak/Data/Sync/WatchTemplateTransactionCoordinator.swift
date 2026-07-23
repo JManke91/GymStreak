@@ -151,7 +151,8 @@ final class WatchTemplateTransactionCoordinator {
         let transaction = historyTransactions.makeIsolatedTransaction()
         let service = WatchTemplateTransactionService(
             routineRepository: transaction.routineRepository,
-            workoutSessionRepository: transaction.workoutSessionRepository
+            workoutSessionRepository: transaction.workoutSessionRepository,
+            exerciseRepository: transaction.exerciseRepository
         )
         let outcome: TemplateTransactionOutcome
         switch service.execute(workout.toIncomingWatchWorkout()) {
@@ -322,7 +323,8 @@ final class WatchTemplateTransactionCoordinator {
         if receipts.hasSequencedOutcome(forRoutine: workout.routineId) {
             let service = WatchTemplateTransactionService(
                 routineRepository: transaction.routineRepository,
-                workoutSessionRepository: transaction.workoutSessionRepository
+                workoutSessionRepository: transaction.workoutSessionRepository,
+                exerciseRepository: transaction.exerciseRepository
             )
             guard case .rejected = service.executeHistoryOnlyRejection(
                 workout.toIncomingWatchWorkout()
@@ -334,7 +336,8 @@ final class WatchTemplateTransactionCoordinator {
         } else {
             let service = WatchTemplateTransactionService(
                 routineRepository: transaction.routineRepository,
-                workoutSessionRepository: transaction.workoutSessionRepository
+                workoutSessionRepository: transaction.workoutSessionRepository,
+                exerciseRepository: transaction.exerciseRepository
             )
             switch service.execute(workout.toIncomingWatchWorkout()) {
             case .saveFailed:

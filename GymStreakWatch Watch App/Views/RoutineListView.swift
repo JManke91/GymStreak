@@ -29,15 +29,23 @@ struct RoutineListView: View {
         .navigationTitle("Routines")
         // `onDismiss` is the documented, single-fire signal for an actual
         // cover dismissal (unlike `.onDisappear`, which can fire on wrist-down
-        // and would wrongly kill a live workout). It's a safety net: the
-        // primary exit now runs through the End-Workout confirmation (see the
-        // cancellationAction button in ActiveWorkoutView). If the cover is ever
-        // closed while a workout is still live and unfinalized, tear the
-        // HealthKit session down so it can't keep running in the background and
-        // block starting another workout. No-op once the workout is finalized,
-        // discarded, or frozen mid-finalization (`discardWorkout` guards that).
+        // and would wrongly kill a live workout). All visible-state teardown is
+        // deferred to here so it runs AFTER the cover is off screen — clearing
+        // the view model's state while the cover is still animating away would
+        // flash the empty active-workout list ("no exercises"). Both the
+        // Discard button and the summary's Done button now only call dismiss()
+        // and converge on these branches:
+        //   • summary present  → dismissSummary() (retry stuck finalization,
+        //     clear summary, reset)
+        //   • still live        → discardWorkout() (explicit Discard AND an
+        //     accidental cover dismissal both land here; tears the HealthKit
+        //     session down so it can't keep running in the background and block
+        //     starting another workout). No-op once frozen mid-finalization
+        //     (`discardWorkout` guards that).
         .fullScreenCover(item: $workoutDestination, onDismiss: {
-            if workoutViewModel.isWorkoutActive && workoutViewModel.workoutSummary == nil {
+            if workoutViewModel.workoutSummary != nil {
+                workoutViewModel.dismissSummary()
+            } else if workoutViewModel.isWorkoutActive {
                 workoutViewModel.discardWorkout()
             }
         }) { destination in

@@ -42,6 +42,7 @@ struct OnyxWatch {
         static let stepperIcon = Color(red: 99/255, green: 239/255, blue: 155/255) // #63EF9B
         static let strokeSubtle = Color(red: 58/255, green: 58/255, blue: 60/255) // #3A3A3C
         static let segmentTrack = Color(red: 42/255, green: 42/255, blue: 44/255) // #2A2A2C (top workout-progress bar track)
+        static let segmentFill = Color(red: 92/255, green: 92/255, blue: 96/255) // #5C5C60 (neutral routine-progress fill — green is reserved for the current set)
         static let textMuted = Color(red: 152/255, green: 152/255, blue: 157/255) // #98989D
         static let chipBackground = Color(red: 26/255, green: 26/255, blue: 28/255) // #1A1A1C
         static let chipText = Color(red: 199/255, green: 199/255, blue: 204/255) // #C7C7CC

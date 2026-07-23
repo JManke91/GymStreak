@@ -56,6 +56,7 @@ private final class FailingSaveExerciseRepository: ExerciseRepository {
 
     func fetchAll() -> [Exercise] { wrapped.fetchAll() }
     func fetch(id: UUID) -> Exercise? { wrapped.fetch(id: id) }
+    func fetchBySeedKey(_ seedKey: String) -> [Exercise] { wrapped.fetchBySeedKey(seedKey) }
     func insert(_ exercise: Exercise) { wrapped.insert(exercise) }
     func delete(_ exercise: Exercise) { wrapped.delete(exercise) }
     func save() throws { throw SaveError() }

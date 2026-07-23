@@ -31,9 +31,11 @@ struct ActiveWorkoutView: View {
             OnyxWatch.Colors.background.ignoresSafeArea()
 
             if let summary = viewModel.workoutSummary {
-                // Show summary after workout is saved
+                // Show summary after workout is saved. Teardown (dismissSummary)
+                // is deferred to the cover's onDismiss so the summary stays
+                // visible during the slide-away instead of the view clearing its
+                // state mid-dismiss and flashing the empty active-workout list.
                 WatchWorkoutSummaryView(summary: summary) {
-                    viewModel.dismissSummary()
                     dismiss()
                 }
             } else {
@@ -143,7 +145,10 @@ struct ActiveWorkoutView: View {
             }
 
             Button("Discard", role: .destructive) {
-                viewModel.discardWorkout()
+                // Only dismiss here — the actual discard (HealthKit teardown +
+                // state reset) runs in the cover's onDismiss once it's off
+                // screen, so the cleared state can't flash the empty
+                // active-workout list during the dismiss animation.
                 dismiss()
             }
 

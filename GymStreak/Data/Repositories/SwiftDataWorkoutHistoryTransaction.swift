@@ -31,6 +31,7 @@ final class SwiftDataWorkoutHistoryTransactionFactory: WorkoutHistoryTransacting
 final class SwiftDataWorkoutHistoryTransaction: WorkoutHistoryTransaction {
     let routineRepository: RoutineRepository
     let workoutSessionRepository: WorkoutSessionRepository
+    let exerciseRepository: ExerciseRepository
     private let context: ModelContext
 
     init(container: ModelContainer) {
@@ -41,6 +42,7 @@ final class SwiftDataWorkoutHistoryTransaction: WorkoutHistoryTransaction {
         self.context = context
         self.routineRepository = SwiftDataRoutineRepository(modelContext: context)
         self.workoutSessionRepository = SwiftDataWorkoutSessionRepository(modelContext: context)
+        self.exerciseRepository = SwiftDataExerciseRepository(modelContext: context)
     }
 
     func rollback() {

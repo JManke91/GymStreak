@@ -20,3 +20,6 @@
 - Apple Watch: Mehrere offline mit „Speichern & Vorlage aktualisieren“ gesicherte Workouts werden jetzt weiter mit dem iPhone-Verlauf synchronisiert, ohne die Watch-App erneut zu öffnen.
 - Apple Watch: Füge während eines Trainings Übungen hinzu oder entferne sie und konfiguriere Sätze, Wiederholungen, Gewicht und Pause vorab.
 - Pausentimer-Mitteilungen werden nur bei Bedarf angefragt, bleiben mit dem Countdown synchron und zeigen einen Hinweis, wenn Mitteilungen nicht verfügbar sind.
+- Apple Watch: Ein kurzes Aufblitzen eines leeren „Keine Übungen“-Bildschirms beim Verwerfen eines Trainings oder Schließen der Zusammenfassung wurde behoben — der Bildschirm wird jetzt sauber ausgeblendet.
+- Apple Watch: Der Trainingsbildschirm zeigt jetzt über einer neutralen Fortschrittsleiste an, bei welcher Übung du bist („Übung 2 / 5“), darunter den Übungsnamen und einen „Satz 1/3“-Zähler direkt über den Werten — Grün ist jetzt ausschließlich dem aktuellen Satz vorbehalten.
+- Apple Watch: Übungen, die du während eines Workouts hinzufügst oder entfernst, aktualisieren jetzt auch deine Routine für zukünftige Workouts, wenn du „Speichern & Vorlage aktualisieren“ wählst — Ergänzungen behalten ihre Sätze, Wiederholungen, Gewicht und Pause, und deine zwischenzeitlich am iPhone vorgenommenen Routinenänderungen bleiben erhalten.

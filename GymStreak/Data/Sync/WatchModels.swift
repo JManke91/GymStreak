@@ -134,6 +134,16 @@ struct CompletedWatchWorkout: Codable {
     /// Monotonic per-routine sequence within `templateSenderEpoch`.
     var templateSequence: UInt64? = nil
 
+    // Explicit structural membership intent (ticket 07). Optional (nil default)
+    // keeps old payloads decodable; the Data→Domain mapper normalizes absence
+    // to empty. Additions are emitted in final exercise order and identify a
+    // minted slot present in `exercises`; removals are emitted in workout-start
+    // baseline order and are absent from `exercises`. When
+    // `shouldUpdateTemplate == false` these are historical metadata only and
+    // never mutate a routine.
+    var addedRoutineExerciseIDs: [UUID]? = nil
+    var removedRoutineExerciseIDs: [UUID]? = nil
+
     var duration: TimeInterval {
         endTime.timeIntervalSince(startTime)
     }
@@ -166,6 +176,10 @@ struct CompletedWatchExercise: Codable {
     var targetRepMin: Int? = nil
     var targetRepMax: Int? = nil
     var exerciseId: UUID? = nil
+    /// Stable seeded-library fallback identity (ticket 07). Carried so iOS can
+    /// resolve a Watch-added exercise by seed key when its `exerciseId` no
+    /// longer resolves (e.g. seed-dedup changed the surviving row's UUID).
+    var exerciseSeedKey: String? = nil
     var loadBehaviorRaw: String? = nil
     // Set only when the exercise was swapped for an alternative during the workout.
     // name/muscleGroup/exerciseId describe what was actually performed.
@@ -205,7 +219,9 @@ extension CompletedWatchWorkout {
             healthKitWorkoutId: healthKitWorkoutId,
             templateTransactionID: templateTransactionID,
             templateSenderEpoch: templateSenderEpoch,
-            templateSequence: templateSequence
+            templateSequence: templateSequence,
+            addedRoutineExerciseIDs: addedRoutineExerciseIDs ?? [],
+            removedRoutineExerciseIDs: removedRoutineExerciseIDs ?? []
         )
     }
 }
@@ -223,6 +239,7 @@ extension CompletedWatchExercise {
             targetRepMin: targetRepMin,
             targetRepMax: targetRepMax,
             exerciseId: exerciseId,
+            exerciseSeedKey: exerciseSeedKey,
             loadBehaviorRaw: loadBehaviorRaw ?? ExerciseLoadBehavior.resistance.rawValue,
             plannedExerciseId: plannedExerciseId,
             plannedExerciseName: plannedExerciseName

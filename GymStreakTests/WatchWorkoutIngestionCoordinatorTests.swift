@@ -57,6 +57,7 @@ private final class FailingSaveTransactionFactory: WorkoutHistoryTransacting {
 private final class FailingSaveTransaction: WorkoutHistoryTransaction {
     let routineRepository: RoutineRepository
     let workoutSessionRepository: WorkoutSessionRepository
+    let exerciseRepository: ExerciseRepository
     private let wrapped: WorkoutHistoryTransaction
     private let onRollback: () -> Void
 
@@ -66,6 +67,7 @@ private final class FailingSaveTransaction: WorkoutHistoryTransaction {
         self.workoutSessionRepository = FailingSaveWorkoutSessionRepository(
             wrapping: wrapped.workoutSessionRepository
         )
+        self.exerciseRepository = wrapped.exerciseRepository
         self.onRollback = onRollback
     }
 
@@ -830,7 +832,8 @@ struct WatchWorkoutIngestionCoordinatorTests {
         let set = try #require(routine.routineExercisesList.first?.setsList.first)
         let service = WatchTemplateTransactionService(
             routineRepository: transaction.routineRepository,
-            workoutSessionRepository: transaction.workoutSessionRepository
+            workoutSessionRepository: transaction.workoutSessionRepository,
+            exerciseRepository: transaction.exerciseRepository
         )
 
         let outcome = service.executeTemplateOnly(

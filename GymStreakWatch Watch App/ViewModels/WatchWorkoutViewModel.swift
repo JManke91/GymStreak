@@ -369,6 +369,14 @@ final class WatchWorkoutViewModel: ObservableObject {
             // folds the intent over the authoritative routine base, so the
             // optimistic value and the pending transaction can never diverge.
             templateWasUpdated = updateTemplate
+            // Explicit structural membership intent (ticket 07). Captured from
+            // the workout-start baseline: additions retain unconfirmed pending
+            // slots so a later removal can still cancel them; removals are the
+            // known slots dropped this workout. These are deterministic and
+            // valid by construction (unique, disjoint, added ⊆ final, removed
+            // ∉ final); iOS still revalidates defensively. Emitted regardless
+            // of `updateTemplate` — historical metadata when the user declines
+            // the template update, structural intent when they accept it.
             payload = CompletedWatchWorkout(
                 id: workoutId,
                 routineId: routine.id,
@@ -377,7 +385,9 @@ final class WatchWorkoutViewModel: ObservableObject {
                 endTime: Date(),
                 exercises: exercises.map { $0.toCompletedExercise() },
                 shouldUpdateTemplate: updateTemplate,
-                healthKitWorkoutId: healthKitWorkoutId
+                healthKitWorkoutId: healthKitWorkoutId,
+                addedRoutineExerciseIDs: outgoingAddedSlotIDs,
+                removedRoutineExerciseIDs: outgoingRemovedSlotIDs
             )
         }
 

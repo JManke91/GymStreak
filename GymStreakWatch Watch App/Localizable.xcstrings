@@ -1,10 +1,16 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+    ", " : {
+
+    },
     "..." : {
 
     },
     "·" : {
+
+    },
+    "/%lld" : {
 
     },
     "%@" : {
@@ -71,9 +77,6 @@
       }
     },
     "%lld" : {
-
-    },
-    "%lld %%" : {
 
     },
     "%lld cal" : {
@@ -165,9 +168,6 @@
           }
         }
       }
-    },
-    "%lld percent complete" : {
-
     },
     "%lld pounds" : {
 
@@ -695,6 +695,38 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Workout beenden?"
+          }
+        }
+      }
+    },
+    "Exercise %lld / %lld" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Übung %1$lld / %2$lld"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Exercise %1$lld / %2$lld"
+          }
+        }
+      }
+    },
+    "Exercise %lld of %lld" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Übung %1$lld von %2$lld"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Exercise %1$lld of %2$lld"
           }
         }
       }
@@ -1286,7 +1318,6 @@
       }
     },
     "Set" : {
-      "extractionState" : "stale",
       "localizations" : {
         "de" : {
           "stringUnit" : {
