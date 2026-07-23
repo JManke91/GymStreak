@@ -76,9 +76,6 @@
     "%lld %%" : {
 
     },
-    "%lld percent complete" : {
-
-    },
     "%lld cal" : {
       "localizations" : {
         "de" : {
@@ -129,11 +126,64 @@
         }
       }
     },
+    "%lld kg" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld kg"
+          }
+        }
+      }
+    },
+    "%lld kilograms" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld Kilogramm"
+          }
+        }
+      }
+    },
+    "%lld min" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld Min."
+          }
+        }
+      }
+    },
+    "%lld min %lld sec" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$lld Min. %2$lld Sek."
+          }
+        }
+      }
+    },
+    "%lld percent complete" : {
+
+    },
     "%lld pounds" : {
 
     },
     "%lld reps" : {
 
+    },
+    "%lld sec" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld Sek."
+          }
+        }
+      }
     },
     "%lld sets" : {
       "localizations" : {
@@ -208,6 +258,46 @@
     "%lld%%" : {
 
     },
+    "Abs" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bauchmuskeln"
+          }
+        }
+      }
+    },
+    "Add an exercise in the iPhone app, then sync again." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Füge in der iPhone-App eine Übung hinzu und synchronisiere erneut."
+          }
+        }
+      }
+    },
+    "Add an exercise or end the workout." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Füge eine Übung hinzu oder beende das Training."
+          }
+        }
+      }
+    },
+    "Add Exercise" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Übung hinzufügen"
+          }
+        }
+      }
+    },
     "Adjustable. Swipe up or down to change value." : {
 
     },
@@ -217,6 +307,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Alle Routinen"
+          }
+        }
+      }
+    },
+    "Already in workout" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bereits im Training"
           }
         }
       }
@@ -234,8 +334,48 @@
     "Back to exercise list" : {
 
     },
+    "Barbell" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Langhantel"
+          }
+        }
+      }
+    },
+    "Biceps" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bizeps"
+          }
+        }
+      }
+    },
+    "Bodyweight" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Körpergewicht"
+          }
+        }
+      }
+    },
     "BPM" : {
 
+    },
+    "Cable" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kabelzug"
+          }
+        }
+      }
     },
     "CAL" : {
 
@@ -246,6 +386,36 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Kalorien"
+          }
+        }
+      }
+    },
+    "Calves" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Waden"
+          }
+        }
+      }
+    },
+    "Cancel" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Abbrechen"
+          }
+        }
+      }
+    },
+    "Chest" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Brust"
           }
         }
       }
@@ -300,6 +470,26 @@
         }
       }
     },
+    "Configure" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Konfigurieren"
+          }
+        }
+      }
+    },
+    "Configure sets for this exercise" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sätze für diese Übung konfigurieren"
+          }
+        }
+      }
+    },
     "Continue" : {
       "localizations" : {
         "de" : {
@@ -336,6 +526,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Verringern"
+          }
+        }
+      }
+    },
+    "Decrease weight" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gewicht verringern"
           }
         }
       }
@@ -439,6 +639,16 @@
         }
       }
     },
+    "Dumbbell" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kurzhantel"
+          }
+        }
+      }
+    },
     "Duration" : {
       "localizations" : {
         "de" : {
@@ -489,6 +699,36 @@
         }
       }
     },
+    "Exercise library not synced" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Übungsbibliothek nicht synchronisiert"
+          }
+        }
+      }
+    },
+    "Exercise no longer available" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Übung nicht mehr verfügbar"
+          }
+        }
+      }
+    },
+    "Exercise unavailable" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Übung nicht verfügbar"
+          }
+        }
+      }
+    },
     "exercises" : {
       "localizations" : {
         "de" : {
@@ -519,6 +759,66 @@
         }
       }
     },
+    "Forearms" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Unterarme"
+          }
+        }
+      }
+    },
+    "Front Delts" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Vordere Schultern"
+          }
+        }
+      }
+    },
+    "General" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Allgemein"
+          }
+        }
+      }
+    },
+    "Glutes" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gesäß"
+          }
+        }
+      }
+    },
+    "Hamstrings" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Beinbeuger"
+          }
+        }
+      }
+    },
+    "Hip Flexors" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hüftbeuger"
+          }
+        }
+      }
+    },
     "In progress" : {
       "localizations" : {
         "de" : {
@@ -539,8 +839,28 @@
         }
       }
     },
+    "Increase weight" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gewicht erhöhen"
+          }
+        }
+      }
+    },
     "kCal" : {
 
+    },
+    "Lats" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Latissimus"
+          }
+        }
+      }
     },
     "lbs" : {
 
@@ -551,6 +871,26 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Metriken werden geladen"
+          }
+        }
+      }
+    },
+    "Lower Back" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Unterer Rücken"
+          }
+        }
+      }
+    },
+    "Machine" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Maschine"
           }
         }
       }
@@ -575,6 +915,36 @@
         }
       }
     },
+    "No exercises in this workout" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Keine Übungen in diesem Training"
+          }
+        }
+      }
+    },
+    "No exercises on iPhone" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Keine Übungen auf dem iPhone"
+          }
+        }
+      }
+    },
+    "No rest" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Keine Pause"
+          }
+        }
+      }
+    },
     "No Routines" : {
       "localizations" : {
         "de" : {
@@ -591,6 +961,39 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Nicht begonnen"
+          }
+        }
+      }
+    },
+    "Obliques" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Seitliche Bauchmuskeln"
+          }
+        }
+      }
+    },
+    "OK" : {
+
+    },
+    "Open GymStreak on your iPhone to sync your exercise library." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Öffne GymStreak auf deinem iPhone, um deine Übungsbibliothek zu synchronisieren."
+          }
+        }
+      }
+    },
+    "Opens your synced iPhone exercise library" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Öffnet deine synchronisierte iPhone-Übungsbibliothek"
           }
         }
       }
@@ -628,12 +1031,132 @@
         }
       }
     },
+    "Quadriceps" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Quadrizeps"
+          }
+        }
+      }
+    },
+    "Rear Delts" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hintere Schultern"
+          }
+        }
+      }
+    },
+    "Remove" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Entfernen"
+          }
+        }
+      }
+    },
+    "Remove %@" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ entfernen"
+          }
+        }
+      }
+    },
+    "Remove %@ from this workout?" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ aus diesem Training entfernen?"
+          }
+        }
+      }
+    },
+    "Remove Exercise?" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Übung entfernen?"
+          }
+        }
+      }
+    },
+    "Remove it from the workout before adding it again" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Entferne sie aus dem Training, bevor du sie erneut hinzufügst"
+          }
+        }
+      }
+    },
+    "Removing %@ also removes its %lld completed sets from this workout's saved history." : {
+      "localizations" : {
+        "de" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "Wenn du %1$@ entfernst, wird auch der %2$lld abgeschlossene Satz aus dem gespeicherten Trainingsverlauf entfernt."
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "Wenn du %1$@ entfernst, werden auch die %2$lld abgeschlossenen Sätze aus dem gespeicherten Trainingsverlauf entfernt."
+                }
+              }
+            }
+          }
+        },
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "Removing %1$@ also removes its %2$lld completed set from this workout's saved history."
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "Removing %1$@ also removes its %2$lld completed sets from this workout's saved history."
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "reps" : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "Wdh."
+          }
+        }
+      }
+    },
+    "Reps" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Wiederholungen"
           }
         }
       }
@@ -648,12 +1171,12 @@
         }
       }
     },
-    "Reps" : {
+    "Reps per set" : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Wiederholungen"
+            "value" : "Wiederholungen pro Satz"
           }
         }
       }
@@ -751,6 +1274,16 @@
     "scroll crown" : {
 
     },
+    "Search exercises" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Übungen suchen"
+          }
+        }
+      }
+    },
     "Set" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -799,6 +1332,16 @@
         }
       }
     },
+    "Set configuration" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Satzkonfiguration"
+          }
+        }
+      }
+    },
     "sets" : {
       "localizations" : {
         "de" : {
@@ -815,6 +1358,26 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Sätze"
+          }
+        }
+      }
+    },
+    "Shoulders" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Schultern"
+          }
+        }
+      }
+    },
+    "Side Delts" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Seitliche Schultern"
           }
         }
       }
@@ -929,6 +1492,46 @@
         }
       }
     },
+    "The workout could not be saved because its exercise data is invalid." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Das Training konnte wegen ungültiger Übungsdaten nicht gespeichert werden."
+          }
+        }
+      }
+    },
+    "This exercise could not be added." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Diese Übung konnte nicht hinzugefügt werden."
+          }
+        }
+      }
+    },
+    "This exercise is already in the workout." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Diese Übung ist bereits im Training."
+          }
+        }
+      }
+    },
+    "This exercise is no longer available in your iPhone library." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Diese Übung ist in deiner iPhone-Bibliothek nicht mehr verfügbar."
+          }
+        }
+      }
+    },
     "Time to start your next set!" : {
       "localizations" : {
         "de" : {
@@ -945,6 +1548,26 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Gesamte Workout-Zeit %@"
+          }
+        }
+      }
+    },
+    "Triceps" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Trizeps"
+          }
+        }
+      }
+    },
+    "Turn the Digital Crown or swipe up and down to adjust" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Zum Anpassen die Digital Crown drehen oder nach oben und unten streichen"
           }
         }
       }
@@ -989,525 +1612,61 @@
         }
       }
     },
-    "%lld kg" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%lld kg"
-          }
-        }
-      }
-    },
-    "%lld kilograms" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%lld Kilogramm"
-          }
-        }
-      }
-    },
-    "%lld min" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%lld Min."
-          }
-        }
-      }
-    },
-    "%lld min %lld sec" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%1$lld Min. %2$lld Sek."
-          }
-        }
-      }
-    },
-    "%lld sec" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%lld Sek."
-          }
-        }
-      }
-    },
-    "Add an exercise or end the workout." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Füge eine Übung hinzu oder beende das Training."
-          }
-        }
-      }
-    },
-    "Add an exercise in the iPhone app, then sync again." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Füge in der iPhone-App eine Übung hinzu und synchronisiere erneut."
-          }
-        }
-      }
-    },
-    "Add Exercise" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Übung hinzufügen"
-          }
-        }
-      }
-    },
-    "Already in workout" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Bereits im Training"
-          }
-        }
-      }
-    },
-    "Abs" : {
-      "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Bauchmuskeln" } }
-      }
-    },
-    "Barbell" : {
-      "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Langhantel" } }
-      }
-    },
-    "Biceps" : {
-      "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Bizeps" } }
-      }
-    },
-    "Bodyweight" : {
-      "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Körpergewicht" } }
-      }
-    },
-    "Cable" : {
-      "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Kabelzug" } }
-      }
-    },
-    "Calves" : {
-      "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Waden" } }
-      }
-    },
-    "Chest" : {
-      "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Brust" } }
-      }
-    },
-    "Dumbbell" : {
-      "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Kurzhantel" } }
-      }
-    },
-    "Forearms" : {
-      "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Unterarme" } }
-      }
-    },
-    "Front Delts" : {
-      "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Vordere Schultern" } }
-      }
-    },
-    "Glutes" : {
-      "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Gesäß" } }
-      }
-    },
-    "Hamstrings" : {
-      "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Beinbeuger" } }
-      }
-    },
-    "Hip Flexors" : {
-      "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Hüftbeuger" } }
-      }
-    },
-    "Lats" : {
-      "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Latissimus" } }
-      }
-    },
-    "Lower Back" : {
-      "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Unterer Rücken" } }
-      }
-    },
-    "Machine" : {
-      "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Maschine" } }
-      }
-    },
-    "Obliques" : {
-      "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Seitliche Bauchmuskeln" } }
-      }
-    },
-    "Quadriceps" : {
-      "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Quadrizeps" } }
-      }
-    },
-    "Rear Delts" : {
-      "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Hintere Schultern" } }
-      }
-    },
-    "Shoulders" : {
-      "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Schultern" } }
-      }
-    },
-    "Side Delts" : {
-      "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Seitliche Schultern" } }
-      }
-    },
-    "Triceps" : {
-      "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Trizeps" } }
-      }
-    },
     "Upper Back" : {
       "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Oberer Rücken" } }
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Oberer Rücken"
+          }
+        }
       }
     },
     "Upper Chest" : {
       "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Obere Brust" } }
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Obere Brust"
+          }
+        }
       }
     },
-    "Cancel" : {
+    "Weight" : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Abbrechen"
+            "value" : "Gewicht"
           }
         }
       }
     },
-    "Configure" : {
+    "WEIGHT" : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Konfigurieren"
+            "value" : "GEWICHT"
           }
         }
       }
     },
-    "Configure sets for this exercise" : {
+    "Workout" : {
+
+    },
+    "Workout Complete" : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Sätze für diese Übung konfigurieren"
+            "value" : "Workout abgeschlossen"
           }
         }
       }
     },
-    "Decrease weight" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Gewicht verringern"
-          }
-        }
-      }
-    },
-    "Exercise library not synced" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Übungsbibliothek nicht synchronisiert"
-          }
-        }
-      }
-    },
-    "Exercise no longer available" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Übung nicht mehr verfügbar"
-          }
-        }
-      }
-    },
-    "Exercise unavailable" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Übung nicht verfügbar"
-          }
-        }
-      }
-    },
-    "General" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Allgemein"
-          }
-        }
-      }
-    },
-    "Increase weight" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Gewicht erhöhen"
-          }
-        }
-      }
-    },
-    "No exercises in this workout" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Keine Übungen in diesem Training"
-          }
-        }
-      }
-    },
-    "No exercises on iPhone" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Keine Übungen auf dem iPhone"
-          }
-        }
-      }
-    },
-    "No rest" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Keine Pause"
-          }
-        }
-      }
-    },
-    "Open GymStreak on your iPhone to sync your exercise library." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Öffne GymStreak auf deinem iPhone, um deine Übungsbibliothek zu synchronisieren."
-          }
-        }
-      }
-    },
-    "Opens your synced iPhone exercise library" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Öffnet deine synchronisierte iPhone-Übungsbibliothek"
-          }
-        }
-      }
-    },
-    "Remove" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Entfernen"
-          }
-        }
-      }
-    },
-    "Remove %@" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%@ entfernen"
-          }
-        }
-      }
-    },
-    "Remove %@ from this workout?" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%@ aus diesem Training entfernen?"
-          }
-        }
-      }
-    },
-    "Remove Exercise?" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Übung entfernen?"
-          }
-        }
-      }
-    },
-    "Remove it from the workout before adding it again" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Entferne sie aus dem Training, bevor du sie erneut hinzufügst"
-          }
-        }
-      }
-    },
-    "Removing %@ also removes its %lld completed sets from this workout's saved history." : {
-      "localizations" : {
-        "de" : {
-          "variations" : {
-            "plural" : {
-              "one" : {
-                "stringUnit" : {
-                  "state" : "translated",
-                  "value" : "Wenn du %1$@ entfernst, wird auch der %2$lld abgeschlossene Satz aus dem gespeicherten Trainingsverlauf entfernt."
-                }
-              },
-              "other" : {
-                "stringUnit" : {
-                  "state" : "translated",
-                  "value" : "Wenn du %1$@ entfernst, werden auch die %2$lld abgeschlossenen Sätze aus dem gespeicherten Trainingsverlauf entfernt."
-                }
-              }
-            }
-          }
-        },
-        "en" : {
-          "variations" : {
-            "plural" : {
-              "one" : {
-                "stringUnit" : {
-                  "state" : "translated",
-                  "value" : "Removing %1$@ also removes its %2$lld completed set from this workout's saved history."
-                }
-              },
-              "other" : {
-                "stringUnit" : {
-                  "state" : "translated",
-                  "value" : "Removing %1$@ also removes its %2$lld completed sets from this workout's saved history."
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "Reps per set" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Wiederholungen pro Satz"
-          }
-        }
-      }
-    },
-    "Search exercises" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Übungen suchen"
-          }
-        }
-      }
-    },
-    "Set configuration" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Satzkonfiguration"
-          }
-        }
-      }
-    },
-    "The workout could not be saved because its exercise data is invalid." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Das Training konnte wegen ungültiger Übungsdaten nicht gespeichert werden."
-          }
-        }
-      }
-    },
-    "This exercise could not be added." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Diese Übung konnte nicht hinzugefügt werden."
-          }
-        }
-      }
-    },
-    "This exercise is already in the workout." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Diese Übung ist bereits im Training."
-          }
-        }
-      }
-    },
-    "This exercise is no longer available in your iPhone library." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Diese Übung ist in deiner iPhone-Bibliothek nicht mehr verfügbar."
-          }
-        }
-      }
-    },
-    "Turn the Digital Crown or swipe up and down to adjust" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Zum Anpassen die Digital Crown drehen oder nach oben und unten streichen"
-          }
-        }
-      }
+    "Workout Complete!" : {
+
     },
     "You changed the exercises in this workout. Update your routine template?" : {
       "localizations" : {
@@ -1558,42 +1717,6 @@
           }
         }
       }
-    },
-    "WEIGHT" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "GEWICHT"
-          }
-        }
-      }
-    },
-    "Weight" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Gewicht"
-          }
-        }
-      }
-    },
-    "Workout" : {
-
-    },
-    "Workout Complete" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Workout abgeschlossen"
-          }
-        }
-      }
-    },
-    "Workout Complete!" : {
-
     },
     "You modified %lld sets. Update your routine template?" : {
       "localizations" : {
