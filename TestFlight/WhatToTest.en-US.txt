@@ -26,3 +26,4 @@
 - Apple Watch: the workout set navigation arrows are no longer clipped by the screen corners on Apple Watch Ultra — the bottom row now stays inside the safe area.
 - Apple Watch: the workout Complete button is now a clean, larger checkmark (no text label), and the set controls and spacing were refined so everything stays comfortably inside the screen edges.
 - Apple Watch: the total workout time moved out of the top bar (where it overlapped the clock) into the workout screen next to the exercise counter, larger and easier to read; the rest-timer countdown now appears in that same spot while you rest.
+- Apple Watch: if the Watch app is closed or relaunched during a workout, it now recovers the in-progress workout — reconnecting the live Health session and restoring your exercises, sets, and progress — so you can carry on without losing anything or creating a duplicate.

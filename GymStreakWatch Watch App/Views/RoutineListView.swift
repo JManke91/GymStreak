@@ -53,6 +53,15 @@ struct RoutineListView: View {
                 .environmentObject(workoutViewModel)
                 .interactiveDismissDisabled()
         }
+        // Ticket 08: a workout recovered after process termination re-presents
+        // the active-workout cover. `initial: true` also covers the case where
+        // recovery finished before this view appeared. The cover's onDismiss
+        // clears the view model's `resumedWorkoutRoutineID` via resetState.
+        .onChange(of: workoutViewModel.resumedWorkoutRoutineID, initial: true) { _, routineID in
+            if let routineID, workoutDestination == nil {
+                workoutDestination = WorkoutDestination(routineID: routineID)
+            }
+        }
     }
 
     // MARK: - Subviews

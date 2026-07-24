@@ -12,6 +12,10 @@ import Combine
 struct GymStreakWatchApp: App {
     @Environment(\.scenePhase) private var scenePhase
 
+    /// Ticket 08: the modern SwiftUI-lifecycle delegate that receives watchOS's
+    /// `handleActiveWorkoutRecovery()` crash-relaunch callback.
+    @WKApplicationDelegateAdaptor(WatchAppDelegate.self) private var appDelegate
+
     // MARK: - State Objects
 
     @StateObject private var appState = AppState()
@@ -79,6 +83,14 @@ final class AppState: ObservableObject {
         }
         // Register workout view model for Action Button intents
         AppStateProvider.shared.setWorkoutViewModel(workoutViewModel)
+        // Ticket 08: register the live components with the recovery coordinator
+        // (which may already hold a buffered recovery request from the app
+        // delegate) and attempt active-workout recovery on this launch.
+        WatchWorkoutRecoveryCoordinator.shared.register(
+            viewModel: workoutViewModel,
+            healthKitManager: healthKitManager
+        )
+        WatchWorkoutRecoveryCoordinator.shared.recoverIfNeeded()
         applicationDidBecomeActive()
     }
 

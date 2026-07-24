@@ -201,6 +201,16 @@ final class WatchSyncStateStore {
         }
     }
 
+    /// Workout IDs of entries a previous process left mid-HealthKit
+    /// finalization (`awaitingHealthKitMetadata`/`awaitingHealthKitFinish`),
+    /// oldest first. Ticket 08 recovery inspects these to reconnect or reconcile
+    /// the live HealthKit session before the launch-time promotion sweep.
+    func interruptedFinalizationWorkoutIDs() -> [UUID] {
+        entries
+            .filter { $0.phase == .awaitingHealthKitMetadata || $0.phase == .awaitingHealthKitFinish }
+            .compactMap { $0.workoutID }
+    }
+
     /// The oldest unretired template transaction for a routine.
     func headTransaction(forRoutine routineId: UUID) -> OutgoingSyncEntry? {
         entries.first { $0.hasTemplateIntent && $0.routineID == routineId }

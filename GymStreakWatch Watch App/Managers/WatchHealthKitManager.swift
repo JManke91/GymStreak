@@ -244,6 +244,110 @@ final class WatchHealthKitManager: NSObject, ObservableObject {
         print("HealthKit: Workout discarded")
     }
 
+    // MARK: - Active Session Recovery (ticket 08)
+
+    /// True when this manager currently owns a live session/builder. Used to
+    /// classify recovery outcomes and gate idempotent adoption.
+    var hasLiveWorkoutSession: Bool { workoutSession != nil }
+
+    /// Attempts to reconnect an active `HKWorkoutSession` a previous process
+    /// left behind (crash/relaunch mid-workout). Returns nil when nothing is
+    /// active to recover — Apple restores ONLY a still-active session, never one
+    /// already ended or finished (see docs/watch-workout-recovery.md). Available
+    /// since watchOS 5; safe to call whether or not a recovery callback fired.
+    func recoverActiveSession() async -> HKWorkoutSession? {
+        guard HKHealthStore.isHealthDataAvailable() else { return nil }
+        do {
+            return try await healthStore.recoverActiveWorkoutSession()
+        } catch {
+            print("HealthKit: recoverActiveWorkoutSession failed — \(error.localizedDescription)")
+            return nil
+        }
+    }
+
+    /// Reconnects a recovered session and its builder to this manager. Delegates
+    /// are reattached BEFORE the live data source: a freshly-assigned
+    /// `HKLiveWorkoutDataSource` can immediately surface already-buffered samples
+    /// through `HKLiveWorkoutBuilderDelegate`, so attaching the delegate first
+    /// avoids dropping that first batch. Idempotent — a second adoption while a
+    /// session is already owned is a no-op (guards against duplicate recovery
+    /// callbacks, whose repeat behavior Apple does not document).
+    @discardableResult
+    func adoptRecoveredSession(_ session: HKWorkoutSession, startDate: Date) -> Bool {
+        guard workoutSession == nil else { return workoutSession === session }
+        let builder = session.associatedWorkoutBuilder()
+
+        session.delegate = self
+        builder.delegate = self
+        builder.dataSource = HKLiveWorkoutDataSource(
+            healthStore: healthStore,
+            workoutConfiguration: session.workoutConfiguration
+        )
+
+        workoutSession = session
+        workoutBuilder = builder
+        workoutStartDate = startDate
+        isWorkoutActive = true
+        startElapsedTimeTimer()
+        print("HealthKit: recovered active workout session adopted")
+        return true
+    }
+
+    /// Restores the routine name/id used for finalization metadata on a resumed
+    /// workout. The recovered session/builder carries no app metadata until
+    /// `endCollectionAndAddMetadata` stamps it, so a resuming caller supplies it
+    /// from the app checkpoint / frozen payload.
+    func restoreRoutineMetadata(routineName: String?, routineId: UUID?) {
+        currentRoutineName = routineName
+        currentRoutineId = routineId
+    }
+
+    /// Whether an `HKWorkout` carrying `externalUUID` is already saved. Used to
+    /// reconcile a durable finalization phase against Apple Health when no active
+    /// session is recoverable — the workout may have finished-and-saved just
+    /// before the crash. Reuses the app's cross-device external-UUID key.
+    func savedWorkoutExists(externalUUID: UUID) async -> Bool {
+        await withCheckedContinuation { continuation in
+            let predicate = HKQuery.predicateForObjects(
+                withMetadataKey: HKMetadataKeyExternalUUID,
+                allowedValues: [externalUUID.uuidString]
+            )
+            let query = HKSampleQuery(
+                sampleType: .workoutType(),
+                predicate: predicate,
+                limit: 1,
+                sortDescriptors: nil
+            ) { _, samples, _ in
+                continuation.resume(returning: (samples?.isEmpty == false))
+            }
+            healthStore.execute(query)
+        }
+    }
+
+    /// Finishes a recovered session that has no app checkpoint (missing/corrupt):
+    /// preserve the workout in Apple Health WITHOUT fabricating GymStreak routine
+    /// or template membership. iOS orphan reconciliation later surfaces it under
+    /// the History "Add to history" banner. No-op if no live session is owned.
+    func finishOrphanRecoveredSession() async {
+        guard let session = workoutSession, let builder = workoutBuilder else { return }
+        do {
+            session.end()
+            try await builder.endCollection(at: Date())
+            try await builder.addMetadata([HKMetadataKeyWorkoutBrandName: "GymStreak"])
+            _ = try await builder.finishWorkout()
+            print("HealthKit: orphan recovered session finished and saved (no app checkpoint)")
+        } catch {
+            print("HealthKit: failed to finish orphan recovered session — \(error.localizedDescription)")
+        }
+        isWorkoutActive = false
+        stopElapsedTimeTimer()
+        resetMetrics()
+        workoutSession = nil
+        workoutBuilder = nil
+        currentRoutineName = nil
+        currentRoutineId = nil
+    }
+
     // MARK: - Timer Management
 
 //    private func startCaloriesBurnedQuery(config: HKWorkoutConfiguration) {

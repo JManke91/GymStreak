@@ -127,6 +127,8 @@ extension WatchWorkoutViewModel {
         isWorkoutInputSuspended = false
         assert(WatchWorkoutStructuralReducer.hasUniqueIdentities(exercises))
         WKInterfaceDevice.current().play(.success)
+        // Persist the added slot durably (ticket 08) so a crash can't lose it.
+        persistActiveCheckpoint()
         return slotID
     }
 
@@ -143,6 +145,7 @@ extension WatchWorkoutViewModel {
         if result != nil {
             assert(WatchWorkoutStructuralReducer.hasUniqueIdentities(exercises))
             WKInterfaceDevice.current().play(.success)
+            persistActiveCheckpoint()
         }
         return result
     }

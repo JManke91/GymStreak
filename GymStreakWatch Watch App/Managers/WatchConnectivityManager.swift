@@ -43,12 +43,14 @@ final class WatchConnectivityManager: NSObject, ObservableObject {
 
     private override init() {
         super.init()
-        // Entries a previous process left mid-HealthKit-finalization can never
-        // be resumed here (live-session recovery is ticket 08), so promote
-        // them to transport now — before WCSession activation or any new
-        // finalization — or the payload would be stranded and never reach iOS
-        // despite the summary the user already saw.
-        syncState.promoteInterruptedFinalizations()
+        // Interrupted-finalization handling moved to ticket 08 recovery: the
+        // foreground `WatchWorkoutRecoveryCoordinator` first tries to reconnect
+        // the still-active HKWorkoutSession and finish it properly (a blind
+        // promotion here would leave a running session that blocks the next
+        // workout). Entries it can't reconnect — and a cold background wake with
+        // no UI — fall back to `promoteInterruptedFinalizations()`
+        // (`handleWatchConnectivityBackgroundWake`), so the durable payload
+        // still reaches iOS.
         syncState.onChallengeStateChanged = { [weak self] in
             self?.publishChallengeContext()
         }
@@ -113,6 +115,13 @@ final class WatchConnectivityManager: NSObject, ObservableObject {
         // replayable durable input).
         exerciseCatalogStore.drainInbox()
         publishChallengeContext()
+        // Background backstop for interrupted finalizations (ticket 08): a cold
+        // wake has no UI and no recovery coordinator, so promote any entry a
+        // previous process left mid-HealthKit finalization straight to
+        // transport-eligible — the durable payload still reaches iOS. Foreground
+        // relaunch instead runs WatchWorkoutRecoveryCoordinator, which reconnects
+        // the live session before falling back to this promotion.
+        syncState.promoteInterruptedFinalizations()
         transportEligibleWorkouts()
     }
 

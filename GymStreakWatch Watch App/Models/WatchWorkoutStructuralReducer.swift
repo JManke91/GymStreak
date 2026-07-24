@@ -54,7 +54,7 @@ struct WatchWorkoutStructuralChanges: Equatable {
     }
 }
 
-struct WatchWorkoutStructuralBaseline: Equatable {
+struct WatchWorkoutStructuralBaseline: Equatable, Codable {
     let knownSlotIDsInOrder: [UUID]
     let authoritativeSlotIDsInOrder: [UUID]
     let knownSlotIDSet: Set<UUID>

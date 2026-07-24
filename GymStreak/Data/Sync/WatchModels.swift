@@ -59,7 +59,7 @@ struct WatchExerciseAlternative: Codable, Identifiable, Hashable {
 /// Duplicated in the watch target so the pure structural reducer can be
 /// exercised by the existing iOS unit-test target without adding SwiftUI or
 /// WatchKit dependencies to the test seam.
-struct ActiveWorkoutExercise: Identifiable, Equatable {
+struct ActiveWorkoutExercise: Identifiable, Equatable, Codable {
     let id: UUID
     var name: String
     var muscleGroup: String
@@ -93,7 +93,7 @@ struct ActiveWorkoutExercise: Identifiable, Equatable {
     }
 }
 
-struct ActiveWorkoutSet: Identifiable, Equatable {
+struct ActiveWorkoutSet: Identifiable, Equatable, Codable {
     let id: UUID
     var plannedReps: Int
     var actualReps: Int

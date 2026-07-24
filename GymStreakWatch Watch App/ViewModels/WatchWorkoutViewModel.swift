@@ -67,18 +67,25 @@ final class WatchWorkoutViewModel: ObservableObject {
     // Error handling
     @Published var errorMessage: String?
 
+    /// Set by recovery (ticket 08) when a live workout is rebuilt from the
+    /// durable checkpoint after process termination. `RoutineListView` observes
+    /// it to re-present the active-workout cover; cleared in `resetState`.
+    @Published var resumedWorkoutRoutineID: UUID?
+
     // MARK: - Private Properties
 
-    private let healthKitManager: WatchHealthKitManager
-    private let connectivityManager: WatchConnectivityManager
+    // `internal` (not `private`) so the WatchWorkoutViewModel+Recovery.swift
+    // extension can reach them — same convention as +StructuralEditing.
+    let healthKitManager: WatchHealthKitManager
+    let connectivityManager: WatchConnectivityManager
     private let routineStore: RoutineStore
-    private var workoutStartTime: Date?
+    var workoutStartTime: Date?
     /// Identity of the current workout's outgoing payload / HealthKit save,
     /// generated once per workout so a retried end (e.g. after a HealthKit
     /// failure) reuses the same ids — the durable send queue replaces entries
     /// by id and iOS dedupes on them, so stable ids prevent duplicate sessions.
-    private var pendingCompletedWorkoutId: UUID?
-    private var pendingHealthKitWorkoutId: UUID?
+    var pendingCompletedWorkoutId: UUID?
+    var pendingHealthKitWorkoutId: UUID?
     private var restTimer: Timer?
     /// The delayed auto-finish, kept cancellable so a manual End (or discard)
     /// entering the terminal state can revoke it before it fires.
@@ -87,7 +94,11 @@ final class WatchWorkoutViewModel: ObservableObject {
     /// Terminal finalization state machine (durable enqueue → HealthKit
     /// metadata → HealthKit finish → transport), shared by manual End and
     /// auto-finish. Operates on the connectivity manager's durable queue.
-    private lazy var finalizer = WatchWorkoutFinalizer(syncState: connectivityManager.syncState)
+    lazy var finalizer = WatchWorkoutFinalizer(syncState: connectivityManager.syncState)
+    /// Durable app-owned active-workout checkpoint (ticket 08). Reads/writes an
+    /// atomic App Group file shared with the recovery coordinator's reader — the
+    /// file is the shared state, so a separate instance here is intentional.
+    let checkpointStore = WatchActiveWorkoutCheckpointStore()
     private var cancellabes = Set<AnyCancellable>()
 
     // MARK: - Initialization
@@ -147,7 +158,7 @@ final class WatchWorkoutViewModel: ObservableObject {
             .store(in: &cancellabes)
     }
 
-    private var isUITesting: Bool {
+    var isUITesting: Bool {
         ProcessInfo.processInfo.arguments.contains("-UI_TESTING")
     }
 
@@ -240,6 +251,10 @@ final class WatchWorkoutViewModel: ObservableObject {
     /// boundary. Navigation keeps only the routine identity; later routine
     /// synchronization must not mutate an already-running workout.
     func startWorkout(routineID: UUID) async {
+        // A recovered workout (ticket 08) is already live in this view model;
+        // the re-presented cover must not start a second HealthKit session or
+        // reset the recovered state.
+        if isWorkoutActive, currentRoutine?.id == routineID { return }
         guard let routine = routineStore.routine(for: routineID) else {
             print("WatchWorkoutViewModel: routine \(routineID) unavailable at workout start")
             return
@@ -255,8 +270,12 @@ final class WatchWorkoutViewModel: ObservableObject {
         currentExerciseIndex = 0
         currentSetIndex = 0
         workoutStartTime = Date()
-        pendingCompletedWorkoutId = nil
-        pendingHealthKitWorkoutId = nil
+        // Preallocate the stable identifiers at workout START (ticket 08), not
+        // at finalization, so a crash mid-workout can recover the exact same
+        // GymStreak workout / HealthKit external UUID and never mint a second.
+        pendingCompletedWorkoutId = UUID()
+        pendingHealthKitWorkoutId = UUID()
+        resumedWorkoutRoutineID = nil
         // Defensive: a prior workout's finalization awaiting a slow/hung
         // HealthKit finish must never leave a fresh workout frozen, and a
         // prior summary dismissed through a system path (bypassing
@@ -291,6 +310,8 @@ final class WatchWorkoutViewModel: ObservableObject {
             isWorkoutActive = true
             workoutState = .started
             WKInterfaceDevice.current().play(.start)
+            // First durable checkpoint for this workout (ticket 08).
+            persistActiveCheckpoint()
         } catch {
             errorMessage = "Failed to start workout: \(error.localizedDescription)"
         }
@@ -429,12 +450,18 @@ final class WatchWorkoutViewModel: ObservableObject {
             // the secondary HealthKit/Apple Health write didn't complete —
             // surfacing an error over the summary would be misleading.
             // Recovery: dismissSummary retries the finalization while the
-            // bound builder is still alive; failing that, the launch-time
-            // promotion (WatchSyncStateStore) makes the entry
+            // bound builder is still alive; failing that, ticket 08 recovery
+            // (or the background-wake promotion) makes the entry
             // transport-eligible so it still reaches iOS.
             break
-        case .rejectedReentrant, .completed:
+        case .rejectedReentrant:
             break
+        case .completed:
+            // Finalization is durably past HealthKit — the durable outgoing
+            // entry now owns the workout, so the live checkpoint can be cleared
+            // (ticket 08). A crash before this clear reconciles to
+            // `.finalizationComplete` on relaunch.
+            checkpointStore.clear()
         }
     }
 
@@ -525,6 +552,8 @@ final class WatchWorkoutViewModel: ObservableObject {
         if toggleResult.newState {
             exercises[exerciseIndex].sets[setIndex].completedAt = Date()
             WKInterfaceDevice.current().play(.success)
+            // Capture the completion durably before any auto-finish delay (ticket 08).
+            persistActiveCheckpoint()
 
             // Completing the final remaining incomplete set anywhere in the
             // routine (any exercise, any order, last superset round) finishes
@@ -561,6 +590,7 @@ final class WatchWorkoutViewModel: ObservableObject {
         } else {
             exercises[exerciseIndex].sets[setIndex].completedAt = nil
             WKInterfaceDevice.current().play(.directionDown)
+            persistActiveCheckpoint()
         }
     }
 
@@ -628,6 +658,7 @@ final class WatchWorkoutViewModel: ObservableObject {
 
         exercises[exerciseIndex].sets[setIndex] = updatedSet
         WKInterfaceDevice.current().play(.success)
+        persistActiveCheckpoint()
     }
 
     func updateRestTime(for exerciseId: UUID, newRestTime: TimeInterval) {
@@ -642,6 +673,7 @@ final class WatchWorkoutViewModel: ObservableObject {
         }
 
         WKInterfaceDevice.current().play(.success)
+        persistActiveCheckpoint()
         print("Updated rest time for exercise \(exercises[exerciseIndex].name) to \(newRestTime)s")
     }
 
@@ -728,6 +760,7 @@ final class WatchWorkoutViewModel: ObservableObject {
         }
 
         WKInterfaceDevice.current().play(.success)
+        persistActiveCheckpoint()
     }
 
     func completeCurrentSet() {
@@ -751,6 +784,7 @@ final class WatchWorkoutViewModel: ObservableObject {
 
         // Advance to next set
         advanceToNextSet()
+        persistActiveCheckpoint()
     }
 
     func skipRest() {
@@ -815,6 +849,7 @@ final class WatchWorkoutViewModel: ObservableObject {
         // Find first incomplete set, or start at 0
         currentSetIndex = exercises[currentExerciseIndex].sets.firstIndex { !$0.isCompleted } ?? 0
         WKInterfaceDevice.current().play(.click)
+        persistActiveCheckpoint()
     }
 
     func goToNextExercise() {
@@ -823,6 +858,7 @@ final class WatchWorkoutViewModel: ObservableObject {
         // Find first incomplete set, or start at 0
         currentSetIndex = exercises[currentExerciseIndex].sets.firstIndex { !$0.isCompleted } ?? 0
         WKInterfaceDevice.current().play(.click)
+        persistActiveCheckpoint()
     }
 
     func goToExercise(at index: Int) {
@@ -831,6 +867,7 @@ final class WatchWorkoutViewModel: ObservableObject {
         // Find first incomplete set, or start at 0
         currentSetIndex = exercises[currentExerciseIndex].sets.firstIndex { !$0.isCompleted } ?? 0
         WKInterfaceDevice.current().play(.click)
+        persistActiveCheckpoint()
     }
 
     // MARK: - Set Navigation
@@ -1259,5 +1296,9 @@ final class WatchWorkoutViewModel: ObservableObject {
         isPaused = false
         templateWasUpdated = false
         isEnding = false
+        resumedWorkoutRoutineID = nil
+        // The live workout is over (discarded or summary dismissed); drop its
+        // durable recovery checkpoint (ticket 08).
+        checkpointStore.clear()
     }
 }

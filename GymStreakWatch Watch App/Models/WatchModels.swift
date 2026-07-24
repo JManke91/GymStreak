@@ -96,7 +96,7 @@ struct WatchExerciseAlternative: Codable, Identifiable, Hashable {
 
 // MARK: - Active Workout State Models
 
-struct ActiveWorkoutExercise: Identifiable, Equatable {
+struct ActiveWorkoutExercise: Identifiable, Equatable, Codable {
     let id: UUID
     // Mutable so swapping to an alternative updates the displayed identity in place.
     var name: String
@@ -153,7 +153,7 @@ struct ActiveWorkoutExercise: Identifiable, Equatable {
     }
 }
 
-struct ActiveWorkoutSet: Identifiable, Equatable {
+struct ActiveWorkoutSet: Identifiable, Equatable, Codable {
     let id: UUID
     var plannedReps: Int
     var actualReps: Int
