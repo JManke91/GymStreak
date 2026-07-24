@@ -35,7 +35,8 @@ private struct RoutinesViewInternal: View {
             healthKitManager: dependencies.makeHealthKitWorkoutService(),
             watchSync: dependencies.watchSync,
             workoutHistoryCorrelation: dependencies.workoutHistoryCorrelation,
-            restTimerReminders: dependencies.restTimerReminders
+            restTimerReminders: dependencies.restTimerReminders,
+            recovery: dependencies.workoutRecovery
         ))
     }
 

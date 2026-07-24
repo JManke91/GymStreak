@@ -49,6 +49,12 @@ final class AppDependencies: ObservableObject {
     /// and mutation order must not depend on view lifecycles.
     let watchWorkoutIngestion: WatchWorkoutIngestionCoordinator
 
+    /// App-lifetime HealthKit-orphan recovery engine (ticket 09): incremental
+    /// anchored discovery, the durable recovery ledger, background observer,
+    /// and the conservative reconciler. ViewModels receive it as
+    /// `WorkoutRecoveryCoordinating` — never the concrete type.
+    let workoutRecovery: WorkoutRecoveryCoordinating
+
     init(modelContext: ModelContext) {
         self.routineRepository = SwiftDataRoutineRepository(modelContext: modelContext)
         self.exerciseRepository = SwiftDataExerciseRepository(modelContext: modelContext)
@@ -65,9 +71,13 @@ final class AppDependencies: ObservableObject {
             exerciseRepository: exerciseRepository,
             watchSync: watchSync
         )
+        // One receipt store shared by ingestion (which writes terminal
+        // receipts + their external-UUID index) and recovery (which reads that
+        // index to prove a workout was already ingested).
+        let receipts = WorkoutIngestReceiptStore()
         self.watchWorkoutIngestion = WatchWorkoutIngestionCoordinator(
             inbox: watchConnectivity.workoutInbox,
-            receipts: WorkoutIngestReceiptStore(),
+            receipts: receipts,
             historyTransactions: SwiftDataWorkoutHistoryTransactionFactory(container: modelContext.container),
             routineSnapshots: SwiftDataAuthoritativeRoutineSnapshotProvider(
                 container: modelContext.container
@@ -76,11 +86,25 @@ final class AppDependencies: ObservableObject {
             mainContextCache: SwiftDataMainContextRoutineCacheRefresher(modelContext: modelContext),
             watchSync: watchConnectivity
         )
+        let recovery = WorkoutRecoveryCoordinator(
+            anchorStore: HealthKitWorkoutAnchorStore(),
+            ledger: WorkoutRecoveryLedgerStore(),
+            drain: HealthKitAnchoredWorkoutDrain(),
+            observer: HealthKitWorkoutObserver(),
+            historyCorrelation: workoutHistoryCorrelation,
+            receipts: receipts,
+            watchSync: watchConnectivity
+        )
+        self.workoutRecovery = recovery
         // Receipt-of-payload and activation drains route through the manager;
         // weak because the manager is an app-lifetime singleton and must not
-        // retain the composition root's coordinator.
-        watchConnectivity.onWorkoutInboxUpdated = { [weak coordinator = watchWorkoutIngestion] in
-            coordinator?.drainInbox()
+        // retain the composition root's coordinators.
+        watchConnectivity.onWorkoutInboxUpdated = {
+            [weak ingestion = watchWorkoutIngestion, weak recovery] in
+            ingestion?.drainInbox()
+            // A new/settled payload changes the buffered set and may resolve a
+            // recovery candidate — re-reconcile without a fresh HealthKit drain.
+            recovery?.reconcile()
         }
         watchConnectivity.onRoutineChallengeUpdated = { [weak coordinator = watchWorkoutIngestion] in
             coordinator?.routineAuthorityDidChange()
@@ -89,6 +113,8 @@ final class AppDependencies: ObservableObject {
         // a prior crash (processed before any RoutinesViewModel can trigger a
         // routine sync with stale data).
         watchWorkoutIngestion.routineAuthorityDidChange()
+        // Register the HealthKit observer + run the first incremental drain.
+        recovery.start()
     }
 
     /// Each `WorkoutViewModel` owns its own HealthKit workout session — unlike

@@ -86,6 +86,7 @@ struct WorkoutIngestReceipt: Codable, Equatable {
 final class WorkoutIngestReceiptStore {
     private let directory: URL?
     private let indexDirectory: URL?
+    private let hkIndexDirectory: URL?
     private let sequenceDirectory: URL?
     private let readyRecoveryDirectory: URL?
 
@@ -97,9 +98,10 @@ final class WorkoutIngestReceiptStore {
             .appendingPathComponent("WatchWorkoutSync/Receipts", isDirectory: true)
         self.directory = base
         self.indexDirectory = base?.appendingPathComponent("Index", isDirectory: true)
+        self.hkIndexDirectory = base?.appendingPathComponent("HKIndex", isDirectory: true)
         self.sequenceDirectory = base?.appendingPathComponent("Sequences", isDirectory: true)
         self.readyRecoveryDirectory = base?.appendingPathComponent("ReadyRecovery", isDirectory: true)
-        for url in [base, indexDirectory, sequenceDirectory, readyRecoveryDirectory].compactMap({ $0 }) {
+        for url in [base, indexDirectory, hkIndexDirectory, sequenceDirectory, readyRecoveryDirectory].compactMap({ $0 }) {
             try? FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
         }
     }
@@ -122,6 +124,17 @@ final class WorkoutIngestReceiptStore {
     /// workout correlation.
     func receipt(for key: TemplateTransactionKey) -> WorkoutIngestReceipt? {
         decode(directory?.appendingPathComponent(key.fileName))
+    }
+
+    /// Receipt correlated to a HealthKit external UUID. Recovery consults this
+    /// so a workout that was already ingested — even if the user has since
+    /// deleted its history — is never re-offered as a HealthKit-only recovery
+    /// candidate (which would resurrect deleted history).
+    func receipt(forHealthKitWorkoutId healthKitWorkoutId: UUID) -> WorkoutIngestReceipt? {
+        guard let indexURL = hkIndexDirectory?.appendingPathComponent("\(healthKitWorkoutId.uuidString).json"),
+              let data = try? Data(contentsOf: indexURL),
+              let fileName = String(data: data, encoding: .utf8) else { return nil }
+        return decode(directory?.appendingPathComponent(fileName))
     }
 
     /// Ready template outcomes retained after inbox removal. Used to recover
@@ -197,6 +210,14 @@ final class WorkoutIngestReceiptStore {
         if receipt.transactionKey != nil, let workoutId = receipt.workoutId, let indexDirectory {
             try Data(fileName.utf8).write(
                 to: indexDirectory.appendingPathComponent("\(workoutId.uuidString).json"),
+                options: .atomic
+            )
+        }
+        // Correlation: HealthKit external UUID → receipt file, so recovery can
+        // prove a workout was already ingested even after its history is gone.
+        if let healthKitWorkoutId = receipt.healthKitWorkoutId, let hkIndexDirectory {
+            try Data(fileName.utf8).write(
+                to: hkIndexDirectory.appendingPathComponent("\(healthKitWorkoutId.uuidString).json"),
                 options: .atomic
             )
         }

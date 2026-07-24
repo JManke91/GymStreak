@@ -15,6 +15,7 @@ import Testing
 struct WorkoutViewModelTests {
     private final class EmptyWorkoutHistoryCorrelationProvider: WorkoutHistoryCorrelationProviding {
         func healthKitWorkoutIDs() throws -> Set<UUID> { [] }
+        func sessionID(forHealthKitWorkoutId id: UUID) throws -> UUID? { nil }
     }
 
     private final class RecordingRestTimerReminders: RestTimerReminderScheduling {

@@ -37,7 +37,7 @@ class WorkoutViewModel: ObservableObject {
     /// HealthKit-saved workouts (from this device's GymStreak iOS or watch app)
     /// that have no matching `WorkoutSession` in SwiftData. Populated by the
     /// reconciler safety-net layer of the watch sync pipeline.
-    @Published var orphanedWatchWorkouts: [HealthKitWorkoutReconciler.OrphanedWorkout] = []
+    @Published var orphanedWatchWorkouts: [OrphanedWorkout] = []
 
     // HealthKit integration
     @Published var healthKitSyncEnabled = true
@@ -84,15 +84,11 @@ class WorkoutViewModel: ObservableObject {
     // HealthKit workout manager
     let healthKitManager: HealthKitWorkoutServicing
 
-    /// Detects HKWorkout records authored by GymStreak that have no matching
-    /// SwiftData WorkoutSession. Last line of defense in the watch sync pipeline.
-    private let reconciler = HealthKitWorkoutReconciler()
-
-    /// First time each orphan candidate was seen by the reconciler. An orphan is
-    /// only surfaced to the user once it has stayed unresolved for
-    /// `orphanGracePeriod` — see `reconcileWatchWorkouts` for why.
-    private var orphanFirstSeen: [UUID: Date] = [:]
-    private var reconcileRetryTask: Task<Void, Never>?
+    /// App-lifetime engine that owns incremental HealthKit discovery, the
+    /// durable recovery ledger, and the conservative reconciler (ticket 09).
+    /// The banner mirrors its `recoverableWorkouts`; nil in unit tests.
+    private let recovery: WorkoutRecoveryCoordinating?
+    private var recoverableWorkoutsObserver: NSObjectProtocol?
 
     /// Pre-apply values captured when progressive overload is applied, keyed by
     /// WorkoutExercise.id, so the completion screen can offer Undo. In-memory
@@ -112,11 +108,6 @@ class WorkoutViewModel: ObservableObject {
         let templateSetValues: [UUID: TemplateValues]
     }
     private var overloadSnapshots: [UUID: OverloadSnapshot] = [:]
-    /// How long an HKWorkout must remain unmatched before the recovery banner
-    /// appears. transferUserInfo has no delivery deadline, but with both devices
-    /// nearby and the app foregrounded, delivery normally completes well within
-    /// this window after activation.
-    private let orphanGracePeriod: TimeInterval = 60
 
     private var isUITesting: Bool {
         ProcessInfo.processInfo.arguments.contains("-UI_TESTING")
@@ -133,6 +124,7 @@ class WorkoutViewModel: ObservableObject {
         watchSync: WatchSyncServicing,
         workoutHistoryCorrelation: WorkoutHistoryCorrelationProviding,
         restTimerReminders: RestTimerReminderScheduling,
+        recovery: WorkoutRecoveryCoordinating? = nil,
         aiCoachCache: AICoachCaching? = nil,
         now: @escaping () -> Date = Date.init
     ) {
@@ -143,6 +135,7 @@ class WorkoutViewModel: ObservableObject {
         self.watchSync = watchSync
         self.workoutHistoryCorrelation = workoutHistoryCorrelation
         self.restTimerReminders = restTimerReminders
+        self.recovery = recovery
         self.aiCoachCache = aiCoachCache ?? AICoachCache.shared
         self.now = now
         fetchWorkoutHistory()
@@ -151,6 +144,7 @@ class WorkoutViewModel: ObservableObject {
         healthKitManager.checkAuthorizationStatus()
         observeCloudKitChanges()
         observeWorkoutHistoryChanges()
+        observeRecoverableWorkouts()
     }
 
     private func observeCloudKitChanges() {
@@ -177,84 +171,46 @@ class WorkoutViewModel: ObservableObject {
         ) { [weak self] _ in
             Task { @MainActor in
                 self?.fetchWorkoutHistory()
-                await self?.reconcileWatchWorkouts()
+                // A committed session may resolve a recovery candidate — let
+                // the engine re-evaluate against the new history.
+                self?.recovery?.reconcile()
+            }
+        }
+    }
+
+    /// Mirrors the recovery engine's published candidates into
+    /// `orphanedWatchWorkouts` so the History banner stays in sync.
+    private func observeRecoverableWorkouts() {
+        orphanedWatchWorkouts = recovery?.recoverableWorkouts ?? []
+        recoverableWorkoutsObserver = NotificationCenter.default.addObserver(
+            forName: .recoverableWorkoutsDidChange,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in
+                self?.orphanedWatchWorkouts = self?.recovery?.recoverableWorkouts ?? []
             }
         }
     }
 
     // MARK: - Watch Workout Reconciliation
 
-    /// Cross-references HealthKit workouts against `workoutHistory` and updates
-    /// `orphanedWatchWorkouts`. Called on init, on `.workoutHistoryDidChange`,
-    /// and from HistoryView's scenePhase observer when the app becomes active.
+    /// Triggers a fresh incremental HealthKit drain + reconcile in the recovery
+    /// engine and mirrors its current candidates. Called from HistoryView's
+    /// scenePhase observer when the app becomes active; the engine also drains
+    /// at launch and on HealthKit background wake-ups.
     func reconcileWatchWorkouts() async {
-        let knownIds: Set<UUID>
-        do {
-            knownIds = try workoutHistoryCorrelation.healthKitWorkoutIDs()
-        } catch {
-            print("Watch workout reconciliation skipped: committed history unavailable — \(error.localizedDescription)")
-            orphanFirstSeen.removeAll()
-            orphanedWatchWorkouts = []
-            return
-        }
-        var orphans = await reconciler.findOrphanedWorkouts(knownIds: knownIds)
-
-        // HKWorkouts replicate from the watch via background device sync, while
-        // the rich WatchConnectivity payload is only delivered after this app
-        // launches and WCSession activates — with no timing guarantee. Flagging
-        // an orphan the moment HealthKit knows about it therefore races the
-        // payload; if the user recovers before it lands, the reconstruction
-        // shadows the real per-set data. Defenses, in order:
-        //
-        // 1. A payload already buffered on this iPhone (received, awaiting
-        //    SwiftData save) is in-flight, not orphaned.
-        let bufferedIds = Set(
-            watchSync.pendingWorkouts().compactMap(\.healthKitWorkoutId)
-        )
-        orphans.removeAll { bufferedIds.contains($0.id) }
-
-        // 2. Never surface orphans while WatchConnectivity still holds
-        //    undelivered content from the watch.
-        // 3. Each orphan must stay unresolved for a grace period from first
-        //    sighting — hasContentPending can't see payloads still crossing
-        //    the radio.
-        let now = Date()
-        orphanFirstSeen = orphanFirstSeen.filter { id, _ in orphans.contains { $0.id == id } }
-        for orphan in orphans where orphanFirstSeen[orphan.id] == nil {
-            orphanFirstSeen[orphan.id] = now
-        }
-
-        let wcMayDeliver = watchSync.mayHaveUndeliveredContent
-        let settled = orphans.filter { orphan in
-            !wcMayDeliver
-                && now.timeIntervalSince(orphanFirstSeen[orphan.id] ?? now) >= orphanGracePeriod
-        }
-        self.orphanedWatchWorkouts = settled
-
-        // Candidates still settling: re-check once the grace period has passed.
-        // A payload arriving earlier re-runs reconciliation anyway via
-        // .workoutHistoryDidChange after its save.
-        if settled.count < orphans.count {
-            scheduleReconcileRetry()
-        }
-    }
-
-    private func scheduleReconcileRetry() {
-        guard reconcileRetryTask == nil else { return }
-        reconcileRetryTask = Task { [weak self, orphanGracePeriod] in
-            try? await Task.sleep(for: .seconds(orphanGracePeriod + 5))
-            guard let self, !Task.isCancelled else { return }
-            self.reconcileRetryTask = nil
-            await self.reconcileWatchWorkouts()
-        }
+        recovery?.refresh()
+        orphanedWatchWorkouts = recovery?.recoverableWorkouts ?? []
     }
 
     /// Reconstructs SwiftData `WorkoutSession`s from HealthKit workouts the watch
     /// recorded but never delivered to iOS. The rich per-set payload is gone by this
     /// point, so we rebuild from the matched routine template as a best-effort and tag
     /// the session as recovered. Called when the user confirms recovery from the
-    /// History banner. After recovery the workout carries the HKWorkout's external
-    /// UUID, so the reconciler no longer flags it.
+    /// History banner. The placeholder is history-only and is marked provisional in
+    /// the recovery ledger, so it never mutates a routine and a later rich payload
+    /// atomically replaces it (the ingestion path keys off the shared external UUID).
     func recoverOrphanedWorkouts() async {
         let orphans = orphanedWatchWorkouts
         guard !orphans.isEmpty else { return }
@@ -267,13 +223,15 @@ class WorkoutViewModel: ObservableObject {
             return
         }
         var didInsert = false
+        var savedPlaceholders: [(external: UUID, sessionId: UUID)] = []
 
         for orphan in orphans where !existingHKIds.contains(orphan.id) {
             let routine = matchRoutine(for: orphan)
 
             // For an unmatched workout the session stays routine-less — no
             // phantom routine is persisted; the denormalized routineName
-            // drives display.
+            // drives display. A FRESH session id (distinct from any watch id)
+            // is what lets a later rich payload be detected as a replacement.
             let session = WorkoutSession(routine: routine)
             session.id = UUID()
             session.healthKitWorkoutId = orphan.id
@@ -321,6 +279,7 @@ class WorkoutViewModel: ObservableObject {
 
             workoutSessionRepository.insert(session)
             existingHKIds.insert(orphan.id)
+            savedPlaceholders.append((orphan.id, session.id))
             didInsert = true
         }
 
@@ -333,14 +292,21 @@ class WorkoutViewModel: ObservableObject {
             return
         }
 
+        // Mark each placeholder provisional in the ledger (records its session
+        // id for later replacement detection); this also re-reconciles and
+        // republishes, dropping the now-resolved candidates from the banner.
+        for placeholder in savedPlaceholders {
+            recovery?.markPlaceholderSaved(externalUUID: placeholder.external, sessionId: placeholder.sessionId)
+        }
+
         fetchWorkoutHistory()
-        await reconcileWatchWorkouts()
+        orphanedWatchWorkouts = recovery?.recoverableWorkouts ?? []
         NotificationCenter.default.post(name: .workoutHistoryDidChange, object: nil)
     }
 
     /// Finds the routine a recovered HealthKit workout belongs to: an exact id match
     /// when the workout embedded `RoutineId` metadata, otherwise a name match.
-    private func matchRoutine(for orphan: HealthKitWorkoutReconciler.OrphanedWorkout) -> Routine? {
+    private func matchRoutine(for orphan: OrphanedWorkout) -> Routine? {
         if let routineId = orphan.routineId, let match = routineRepository.fetch(id: routineId) {
             return match
         }
@@ -1986,6 +1952,8 @@ class WorkoutViewModel: ObservableObject {
         timer?.invalidate()
         restTimer?.invalidate()
         restTimerReminderTask?.cancel()
-        reconcileRetryTask?.cancel()
+        if let recoverableWorkoutsObserver {
+            NotificationCenter.default.removeObserver(recoverableWorkoutsObserver)
+        }
     }
 }

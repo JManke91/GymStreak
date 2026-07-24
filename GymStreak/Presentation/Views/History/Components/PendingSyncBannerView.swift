@@ -16,7 +16,7 @@ import SwiftUI
 /// This works even when the watch can no longer redeliver (e.g. it already cleared
 /// its queue, or the app was reinstalled) — HealthKit is the surviving source.
 struct PendingSyncBannerView: View {
-    let orphans: [HealthKitWorkoutReconciler.OrphanedWorkout]
+    let orphans: [OrphanedWorkout]
     /// Invoked when the user *confirms* recovery in the dialog. The caller runs the
     /// reconstruction. The confirmation dialog is hosted here (on the button) rather
     /// than on the parent container: on iOS 26 a `confirmationDialog` anchors to the
@@ -106,7 +106,7 @@ struct PendingSyncBannerView: View {
         return String(format: format, orphans.count)
     }
 
-    private func earliestText(for orphan: HealthKitWorkoutReconciler.OrphanedWorkout) -> String {
+    private func earliestText(for orphan: OrphanedWorkout) -> String {
         let format = "history.pendingSync.earliest".localized
         return String(format: format, Self.dateFormatter.string(from: orphan.startDate))
     }
@@ -114,15 +114,14 @@ struct PendingSyncBannerView: View {
 
 #Preview {
     PendingSyncBannerView(orphans: [
-        HealthKitWorkoutReconciler.OrphanedWorkout(
+        OrphanedWorkout(
             id: UUID(),
             startDate: Date().addingTimeInterval(-3600 * 26),
             endDate: Date().addingTimeInterval(-3600 * 25),
-            duration: 3600,
             activeEnergyBurnedKilocalories: 285,
-            sourceBundleIdentifier: "com.shotat24fps.GymStreak.watchkitapp",
             routineName: "Push Day",
-            routineId: nil
+            routineId: nil,
+            fromWatch: true
         )
     ])
     .padding()

@@ -167,8 +167,10 @@ If HealthKit reports an active session but there is no valid app checkpoint
 finished via `finishOrphanRecoveredSession()` (ends collection, stamps only a
 `GymStreak` brand name, finishes) so the user's effort is saved to Apple Health.
 It does **not** fabricate routine or template membership. The finished
-`HKWorkout` then surfaces through the existing iOS orphan reconciler's "Add to
-history" banner (see docs/watch-sync.md → "HealthKit reconciliation").
+`HKWorkout` then surfaces through the iOS HealthKit recovery pipeline's "Add to
+history" banner (ticket 09: incremental anchored discovery → durable recovery
+ledger → conservative reconciler; see docs/watch-sync.md → "HealthKit
+incremental discovery + conservative recovery").
 
 **Deliberate omission:** a richer in-app "constrained recovery/finish" screen
 was intentionally NOT built for this rare corruption path — the safe,
@@ -337,11 +339,12 @@ This splits into two sub-problems with different verdicts:
   syntactically possible but the backdate distance is unverified for hours-old
   gaps). It carries real cost: (1) an inherent HR/energy **data gap** for the
   reboot window that no API can fill; and (2) it risks the "one `HKWorkout` per
-  `HKMetadataKeyExternalUUID`" invariant that iOS `HealthKitWorkoutReconciler`
-  assumes (it maps each fetched workout to an `OrphanedWorkout` keyed by the
-  external UUID without de-duping) — so a continuation session must either be
-  guarded by `savedWorkoutExists(externalUUID:)` first or mint a distinct UUID
-  and teach the reconciler to merge two into one history row.
+  `HKMetadataKeyExternalUUID`" invariant. Under the ticket-09 recovery ledger,
+  two HealthKit objects sharing one external UUID are unioned into a single
+  candidate and **flagged as a conflict** — diagnosed and never reconstructed,
+  rather than silently producing two rows — so a continuation session must
+  either be guarded by `savedWorkoutExists(externalUUID:)` first or mint a
+  distinct external UUID (which then reconciles as an independent workout).
   **Recommendation: document as a platform limitation; do NOT build the
   continuation session** unless product explicitly wants best-effort partial HR
   data at that cost. GymStreak history stays the primary record and is fully
@@ -370,3 +373,59 @@ This splits into two sub-problems with different verdicts:
    `adoptRecoveredSession` read `HKWorkoutSession.state` — if `.paused`, keep it
    paused instead of resuming as running (`.pause()` re-pause is safe;
    `session.state` is a readable property). Low severity.
+
+### Ticket-09 HealthKit-orphan recovery — paired-hardware QA (2026-07-24, all pass)
+
+This is a **separate** matrix from the ticket-08 live-recovery one above. It
+covers the ticket-09 HealthKit-orphan / observability path (anchored discovery,
+background observer delivery, provisional placeholder ↔ rich-payload
+replacement). **Run on a physical iPhone + Apple Watch pair on 2026-07-24 — all
+cases pass**, closing the one gap that automated tests, the iOS build, and
+architecture review could not cover (background HealthKit observer delivery is
+Simulator-unavailable). The checklist below is retained for regression re-runs.
+
+**Prerequisite:** the App ID / provisioning profile must have the **HealthKit
+Background Delivery** capability enabled, or the device build won't install.
+
+**The bar for every case:** the finished watch workout ends up as **exactly one**
+History row and **one** Apple Health workout — no duplicates, and no routine /
+template mutated by a placeholder.
+
+Core happy path:
+
+- [x] Record a full workout on the watch, end it, iPhone nearby and unlocked →
+  lands in History once, matches Apple Health once.
+
+Arrival ordering (the primary thing being verified):
+
+- [x] **Watch unreachable at completion** — end a watch workout with the iPhone in
+  Airplane Mode / out of range, then bring it back online → still exactly one
+  History row, no duplicate.
+- [x] **HealthKit-first (provisional → replacement)** — case where Apple Health's
+  workout syncs to the phone *before* the rich watch payload arrives: a
+  provisional placeholder appears, then the rich payload **replaces it in place**
+  (rich exercises/sets, not a second row).
+- [x] **Payload-first** — normal case where the rich payload beats HealthKit: no
+  placeholder is ever offered.
+
+iPhone app state at completion (repeat the core path):
+
+- [x] Foreground
+- [x] Backgrounded / suspended
+- [x] Force-quit (terminated) — workout still arrives; the background observer is
+  a wake signal, not a real-time clock, so latency is expected.
+
+Edge cases:
+
+- [x] **Delayed Health sync** — wait several minutes before Health syncs → the
+  placeholder stays provisional and replaceable, never duplicated.
+- [x] **Lost acknowledgment** — kill the app right after the payload lands but
+  before ack, relaunch → no re-processing, no duplicate.
+- [x] **User-declined recovery** — decline an offered provisional recovery → state
+  stays clean and the rich payload can still arrive and land later.
+- [x] **Idempotency** — relaunch the app several times after any of the above →
+  History and Apple Health counts never change.
+
+Throughout, watch the sync banner / debug summary: states must progress cleanly
+and never show a premature "done" while a payload is still outstanding (unknown
+remote state stays `unknown`, never inferred from `hasContentPending == false`).
