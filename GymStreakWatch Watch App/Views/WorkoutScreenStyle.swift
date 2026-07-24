@@ -11,15 +11,16 @@ import SwiftUI
 import WatchKit
 
 struct WorkoutScreenMetrics {
-    /// Distance from the physical bottom screen edge to the bottom of the
-    /// complete-button capsule (design: 19/17/15 pt for 49/45/41 mm).
-    let footerBottomGap: CGFloat
     let completeButtonHeight: CGFloat
-    let completeLabelSize: CGFloat
+    /// Size of the icon-only checkmark glyph on the Complete button.
+    let completeIconSize: CGFloat
     let segmentsWidth: CGFloat
     let chevronDiameter: CGFloat
     let chevronIconSize: CGFloat
     let fusedRowGap: CGFloat
+    /// Extra horizontal inset on the footer (fused) row so the round chevrons
+    /// stay inside the display's curved corners (design `--pad-chrome`).
+    let fusedRowHPad: CGFloat
     let stepperDiameter: CGFloat
     let stepperIconSize: CGFloat
     let valueCardHeight: CGFloat
@@ -31,6 +32,10 @@ struct WorkoutScreenMetrics {
     let topPercentSize: CGFloat
     let topSegmentHeight: CGFloat
     let topZoneSpacing: CGFloat
+    /// Elapsed-time label in the routine row (bold text + stopwatch glyph) —
+    /// moved out of the top toolbar so it no longer collides with the clock.
+    let elapsedFontSize: CGFloat
+    let elapsedIconSize: CGFloat
 
     static let current: WorkoutScreenMetrics = {
         let width = WKInterfaceDevice.current().screenBounds.width
@@ -40,30 +45,30 @@ struct WorkoutScreenMetrics {
     }()
 
     private static let large = WorkoutScreenMetrics(
-        footerBottomGap: 19,
-        completeButtonHeight: 35, completeLabelSize: 11, segmentsWidth: 62,
-        chevronDiameter: 27, chevronIconSize: 10, fusedRowGap: 5.5,
-        stepperDiameter: 36, stepperIconSize: 13,
-        valueCardHeight: 46, valueCardRadius: 8, valueFontSize: 15.5, valueUnitSize: 9,
-        topNameSize: 15, topPercentSize: 11, topSegmentHeight: 3.5, topZoneSpacing: 6
+        completeButtonHeight: 35, completeIconSize: 17, segmentsWidth: 62,
+        chevronDiameter: 27, chevronIconSize: 10, fusedRowGap: 5.5, fusedRowHPad: 14,
+        stepperDiameter: 32, stepperIconSize: 12,
+        valueCardHeight: 40, valueCardRadius: 8, valueFontSize: 15.5, valueUnitSize: 9,
+        topNameSize: 15, topPercentSize: 11, topSegmentHeight: 3.5, topZoneSpacing: 6,
+        elapsedFontSize: 16, elapsedIconSize: 12
     )
 
     private static let mid = WorkoutScreenMetrics(
-        footerBottomGap: 17,
-        completeButtonHeight: 33, completeLabelSize: 10.5, segmentsWidth: 58,
-        chevronDiameter: 26, chevronIconSize: 10, fusedRowGap: 5.5,
-        stepperDiameter: 34, stepperIconSize: 12.5,
-        valueCardHeight: 43, valueCardRadius: 8, valueFontSize: 14.5, valueUnitSize: 8.5,
-        topNameSize: 14, topPercentSize: 10.5, topSegmentHeight: 3.5, topZoneSpacing: 5.5
+        completeButtonHeight: 33, completeIconSize: 15.5, segmentsWidth: 58,
+        chevronDiameter: 26, chevronIconSize: 10, fusedRowGap: 5.5, fusedRowHPad: 15.5,
+        stepperDiameter: 31.5, stepperIconSize: 11.5,
+        valueCardHeight: 40, valueCardRadius: 8, valueFontSize: 14.5, valueUnitSize: 8.5,
+        topNameSize: 14, topPercentSize: 10.5, topSegmentHeight: 3.5, topZoneSpacing: 5.5,
+        elapsedFontSize: 15, elapsedIconSize: 11.5
     )
 
     private static let small = WorkoutScreenMetrics(
-        footerBottomGap: 15,
-        completeButtonHeight: 30, completeLabelSize: 9.5, segmentsWidth: 52,
-        chevronDiameter: 23, chevronIconSize: 8.5, fusedRowGap: 4.5,
-        stepperDiameter: 31, stepperIconSize: 11.5,
-        valueCardHeight: 37, valueCardRadius: 7, valueFontSize: 13.5, valueUnitSize: 8,
-        topNameSize: 12, topPercentSize: 9.5, topSegmentHeight: 3, topZoneSpacing: 4.5
+        completeButtonHeight: 30, completeIconSize: 13.5, segmentsWidth: 52,
+        chevronDiameter: 23, chevronIconSize: 8.5, fusedRowGap: 4.5, fusedRowHPad: 13,
+        stepperDiameter: 29, stepperIconSize: 11,
+        valueCardHeight: 35, valueCardRadius: 7, valueFontSize: 13.5, valueUnitSize: 8,
+        topNameSize: 12, topPercentSize: 9.5, topSegmentHeight: 3, topZoneSpacing: 4.5,
+        elapsedFontSize: 13.5, elapsedIconSize: 10
     )
 }
 

@@ -94,21 +94,12 @@ struct FullScreenSetEditorView: View {
         )
     }
 
-    /// Shifts the action row down past the bottom safe-area boundary so the
-    /// capsule's visual bottom sits `footerBottomGap` above the physical screen
-    /// edge, matching the design. Accounts for the 44 pt touch frame centering
-    /// the smaller capsule. Never pulls the row upward (clamped at 0).
-    private func bottomSafeAreaOverlap(for inset: CGFloat) -> CGFloat {
-        let touchFramePadding = (OnyxWatch.Dimensions.minTouchTarget - metrics.completeButtonHeight) / 2
-        return max(0, inset + touchFramePadding - metrics.footerBottomGap)
-    }
-
     var body: some View {
         // No NavigationStack of its own: this view is pushed onto the shared
         // stack owned by ActiveWorkoutView. A second stack created mid-swap
         // fed "ToolbarReader/navigationEventHandlers tried to update multiple
         // times per frame" warnings.
-        GeometryReader { geometry in
+        GeometryReader { _ in
             ZStack {
                 // Background extends edge-to-edge
                 OnyxWatch.Colors.background
@@ -120,8 +111,8 @@ struct FullScreenSetEditorView: View {
                 // pile all the leftover space above the steppers. On small
                 // cases the spacers collapse to the compact design spacing.
                 VStack(spacing: 0) {
-                    // Top zone: exercise name + workout-completion percent +
-                    // per-exercise segment bar (design §4).
+                    // Top zone: routine level ("Exercise X / Y" + neutral
+                    // segment bar) and exercise level (name + "Set X/Y") (design §4).
                     WorkoutTopProgressView(
                         exerciseName: displayedExercise.name,
                         exerciseIndex: viewModel.currentExerciseIndex,
@@ -129,7 +120,9 @@ struct FullScreenSetEditorView: View {
                         setIndex: displayedSetIndex,
                         setCount: totalSets,
                         exerciseProgress: viewModel.progressSegments
-                    )
+                    ) {
+                        topTrailingAccessory
+                    }
                     .padding(.horizontal, 2)
 
                     Spacer(minLength: 4)
@@ -201,10 +194,9 @@ struct FullScreenSetEditorView: View {
                         onPrevious: { goToPreviousSet() },
                         onNext: { goToNextSet() }
                     )
-                    .padding(
-                        .bottom,
-                        -bottomSafeAreaOverlap(for: geometry.safeAreaInsets.bottom)
-                    )
+                    // Sits within the bottom safe area so the side chevrons stay
+                    // clear of the watch's rounded corners (an earlier negative
+                    // overlap pushed the row past the edge and clipped them).
                 }
                 .padding(.horizontal, 8)
                 // Scoped to the content, NOT the navigation container: implicit
@@ -218,57 +210,50 @@ struct FullScreenSetEditorView: View {
                 .animation(.spring(response: 0.35, dampingFraction: 0.8), value: viewModel.progress)
             }
         }
-        .toolbar {
-            // The native back chevron of the shared stack replaces the old
-            // custom back button.
-            //
-            // Only declare the trailing item when it has real content. An
-            // empty ToolbarItem still creates a watchOS bar button, which the
-            // system forces square (width == height); with zero-width content
-            // that contradicts the fixed 37 pt bar-button height and logs
-            // "Unable to simultaneously satisfy constraints". Hoisting the
-            // condition to the toolbar-content level omits the button entirely
-            // in the empty state (e.g. before the first elapsed-time tick).
-            if viewModel.isResting && viewModel.isRestTimerMinimized {
-                ToolbarItem(placement: .topBarTrailing) {
-                    NewShrinkingRestTimer(
-                        timeRemaining: viewModel.restTimeRemaining,
-                        totalDuration: viewModel.restDuration,
-                        onExpand: viewModel.expandRestTimer, onSkip: viewModel.skipRest
-                    )
-                    .frame(maxWidth: 100, maxHeight: 20)
-                    // No .transition here: transitions inside ToolbarItem
-                    // builders are unsupported and feed the per-frame
-                    // toolbar-update warnings.
-                    //
-                    // Lift the status onto the system clock's centerline —
-                    // toolbar trailing items otherwise sit ~8 pt lower than the
-                    // clock (the design has them on one line).
-                    .offset(y: -8)
-                }
-            } else if let elapsedTime = viewModel.elapsedTimeString {
-                ToolbarItem(placement: .topBarTrailing) {
-                    // Calm elapsed-time capsule chip with tabular digits
-                    HStack(spacing: 4) {
-                        Image(systemName: "stopwatch")
-                            .font(.system(size: 9, weight: .medium))
-                            .foregroundStyle(OnyxWatch.Colors.textMuted)
-                        Text(elapsedTime)
-                            .font(.system(size: 10, weight: .semibold))
-                            .monospacedDigit()
-                            .foregroundStyle(OnyxWatch.Colors.chipText)
-                    }
-                    .padding(.horizontal, 7)
-                    .frame(height: 20)
-                    .background(OnyxWatch.Colors.chipBackground, in: Capsule())
-                    .accessibilityLabel("Elapsed time \(elapsedTime)")
-                    .offset(y: -8)
-                }
-            }
-        }
     }
 
     // MARK: - Subviews
+
+    /// Right-aligned accessory on the routine label's line. Shows the minimized
+    /// rest timer while resting, otherwise the elapsed-time label — both moved
+    /// here from the top toolbar (design 2026-07-24) so they no longer collide
+    /// with the system clock. Mutually exclusive, exactly as the shared toolbar
+    /// slot was.
+    @ViewBuilder
+    private var topTrailingAccessory: some View {
+        if viewModel.isResting && viewModel.isRestTimerMinimized {
+            NewShrinkingRestTimer(
+                timeRemaining: viewModel.restTimeRemaining,
+                totalDuration: viewModel.restDuration,
+                onExpand: viewModel.expandRestTimer, onSkip: viewModel.skipRest
+            )
+            .frame(maxWidth: 96, maxHeight: 22)
+            // Unlike the elapsed text, the rest-timer pill has bulky chrome below
+            // its digits' baseline. Pin its BOTTOM edge (not its text baseline) to
+            // the routine-label line so the pill sits fully above it and clears
+            // the segment progress bar below instead of crowding it.
+            .alignmentGuide(.firstTextBaseline) { $0[.bottom] }
+        } else if let elapsedTime = viewModel.elapsedTimeString {
+            // Large bold elapsed-time label with a stopwatch glyph (no capsule).
+            // WorkoutTopProgressView places this as a baseline-pinned overlay, so
+            // its extra height grows upward into the free status-bar space with
+            // zero effect on the row height — no negative-inset math. The icon is
+            // baselined against the digits (Apple's documented SF-Symbol-vs-Text
+            // alignment pattern).
+            HStack(alignment: .firstTextBaseline, spacing: 3.5) {
+                Image(systemName: "stopwatch")
+                    .font(.system(size: metrics.elapsedIconSize, weight: .medium))
+                    .foregroundStyle(OnyxWatch.Colors.textMuted)
+                    .alignmentGuide(.firstTextBaseline) { $0[.bottom] - 0.1 * $0.height }
+                Text(elapsedTime)
+                    .font(.system(size: metrics.elapsedFontSize, weight: .bold))
+                    .monospacedDigit()
+                    .foregroundStyle(Color(white: 0.9))
+            }
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel("Elapsed time \(elapsedTime)")
+        }
+    }
 
     /// The +/- pair that edits the focused value card. Kept as a single unit so
     /// it can move to the focused card's side without duplicating the buttons.

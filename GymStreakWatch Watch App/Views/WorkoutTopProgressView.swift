@@ -6,6 +6,10 @@
 //  (Watch Final Design handoff, §4):
 //    1. Routine level  — "Exercise X / Y" label + a NEUTRAL-GRAY segment bar
 //       (one segment per exercise, filled by that exercise's completed sets).
+//       A trailing accessory rides on the label's line, right-aligned: the
+//       elapsed-time label, or the minimized rest timer while resting (both
+//       relocated here from the top toolbar so they no longer collide with the
+//       system clock).
 //    2. Exercise level — the current exercise name + a "Set X/Y" counter,
 //       sitting directly above the value cards.
 //  Green is reserved exclusively for the current set (its counter number and
@@ -14,7 +18,7 @@
 
 import SwiftUI
 
-struct WorkoutTopProgressView: View {
+struct WorkoutTopProgressView<Trailing: View>: View {
     let exerciseName: String
     /// Zero-based index of the current exercise within the routine.
     let exerciseIndex: Int
@@ -27,6 +31,10 @@ struct WorkoutTopProgressView: View {
     /// Per-exercise completion keyed by stable slot UUID. Structural edits can
     /// shift positions without making SwiftUI animate one exercise as another.
     let exerciseProgress: [WatchWorkoutProgressSegment]
+    /// Right-aligned accessory on the routine label's line (elapsed-time label
+    /// or minimized rest timer). Kept as an injected view so this stays a pure
+    /// layout container and the rest timer's own buttons remain accessible.
+    @ViewBuilder let trailingAccessory: Trailing
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -42,24 +50,36 @@ struct WorkoutTopProgressView: View {
         String(localized: "Exercise \(exerciseIndex + 1) / \(exerciseCount)")
     }
 
-    private var accessibilitySummary: Text {
-        Text(exerciseName)
-            + Text(", ")
-            + Text("Exercise \(exerciseIndex + 1) of \(exerciseCount)")
-            + Text(", ")
-            + Text("Set \(setIndex + 1) of \(setCount)")
-    }
-
     var body: some View {
-        VStack(alignment: .leading, spacing: metrics.topZoneSpacing + 3) {
-            // Routine level: label + neutral-gray segment bar.
-            VStack(alignment: .leading, spacing: metrics.topZoneSpacing) {
-                Text(exerciseCounter)
-                    .font(.system(size: metrics.topPercentSize, weight: .semibold))
-                    .textCase(.uppercase)
-                    .kerning(0.5)
-                    .foregroundStyle(OnyxWatch.Colors.textMuted)
-                    .lineLimit(1)
+        VStack(alignment: .leading, spacing: metrics.topZoneSpacing) {
+            // Routine level: label + trailing accessory on one line, then the
+            // neutral-gray segment bar.
+            VStack(alignment: .leading, spacing: metrics.topZoneSpacing - 2) {
+                // Only the small label + spacer size this row; the trailing
+                // accessory (elapsed time / rest timer) is an overlay pinned to
+                // the label's text baseline, so it contributes ZERO height and
+                // its extra height overflows *upward* into the free status-bar
+                // space — no manual negative-inset math. Verified via
+                // ios-api-researcher: `overlay(alignment:)` is contractually
+                // size-decoupling ("the original view continues to provide the
+                // layout characteristics"), and `.trailingFirstTextBaseline`
+                // locks the accessory's text baseline to the label's. Design
+                // `.routine-top { align-items: flex-end }` + `.elapsed
+                // { margin-top: -14px }`.
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    Text(exerciseCounter)
+                        .font(.system(size: metrics.topPercentSize, weight: .semibold))
+                        .textCase(.uppercase)
+                        .kerning(0.5)
+                        .foregroundStyle(OnyxWatch.Colors.textMuted)
+                        .lineLimit(1)
+                        .accessibilityLabel(Text("Exercise \(exerciseIndex + 1) of \(exerciseCount)"))
+
+                    Spacer(minLength: 8)
+                }
+                .overlay(alignment: .trailingFirstTextBaseline) {
+                    trailingAccessory
+                }
 
                 HStack(spacing: 2.5) {
                     ForEach(exerciseProgress) { progress in
@@ -68,6 +88,7 @@ struct WorkoutTopProgressView: View {
                 }
                 .frame(height: metrics.topSegmentHeight)
                 .animation(barAnimation, value: exerciseProgress)
+                .accessibilityHidden(true)
             }
 
             // Exercise level: name + green-accented set counter.
@@ -85,9 +106,11 @@ struct WorkoutTopProgressView: View {
                     .monospacedDigit()
                     .fixedSize()
             }
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel(
+                Text(exerciseName) + Text(", ") + Text("Set \(setIndex + 1) of \(setCount)")
+            )
         }
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel(accessibilitySummary)
     }
 
     /// "Set 1/3" — the current set number in green, the rest muted.
@@ -136,7 +159,18 @@ struct WorkoutTopProgressView: View {
                 exerciseProgress: [1, 0.33, 0, 0, 0].map {
                     WatchWorkoutProgressSegment(id: UUID(), fraction: $0)
                 }
-            )
+            ) {
+                HStack(alignment: .firstTextBaseline, spacing: 3.5) {
+                    Image(systemName: "stopwatch")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(OnyxWatch.Colors.textMuted)
+                        .alignmentGuide(.firstTextBaseline) { $0[.bottom] - 0.1 * $0.height }
+                    Text("00:19")
+                        .font(.system(size: 16, weight: .bold))
+                        .monospacedDigit()
+                        .foregroundStyle(Color(white: 0.9))
+                }
+            }
             WorkoutTopProgressView(
                 exerciseName: "Schrägbankdrücken mit Kurzhanteln",
                 exerciseIndex: 2,
@@ -146,7 +180,9 @@ struct WorkoutTopProgressView: View {
                 exerciseProgress: [1, 1, 0.5].map {
                     WatchWorkoutProgressSegment(id: UUID(), fraction: $0)
                 }
-            )
+            ) {
+                EmptyView()
+            }
         }
         .padding(.horizontal, 8)
     }

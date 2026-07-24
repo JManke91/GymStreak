@@ -51,27 +51,32 @@ struct CompactActionBar: View {
     }
 
     var body: some View {
-        if totalSets > 1 {
-            HStack(spacing: metrics.fusedRowGap) {
-                navigationButton(
-                    systemImage: "chevron.left",
-                    accessibilityLabel: "Previous set",
-                    isEnabled: hasPrevious,
-                    action: onPrevious
-                )
+        Group {
+            if totalSets > 1 {
+                HStack(spacing: metrics.fusedRowGap) {
+                    navigationButton(
+                        systemImage: "chevron.left",
+                        accessibilityLabel: "Previous set",
+                        isEnabled: hasPrevious,
+                        action: onPrevious
+                    )
 
+                    completionButton
+
+                    navigationButton(
+                        systemImage: "chevron.right",
+                        accessibilityLabel: "Next set",
+                        isEnabled: hasNext,
+                        action: onNext
+                    )
+                }
+            } else {
                 completionButton
-
-                navigationButton(
-                    systemImage: "chevron.right",
-                    accessibilityLabel: "Next set",
-                    isEnabled: hasNext,
-                    action: onNext
-                )
             }
-        } else {
-            completionButton
         }
+        // Extra horizontal inset so the round chevrons stay inside the display's
+        // curved corners near the bottom edge (design `--pad-chrome`).
+        .padding(.horizontal, metrics.fusedRowHPad)
     }
 
     // MARK: - Completion Button
@@ -83,18 +88,14 @@ struct CompactActionBar: View {
             onComplete()
         } label: {
             VStack(spacing: 3) {
-                HStack(spacing: 5) {
-                    Image(systemName: showDoneFlash || !isCompleted ? "checkmark" : "arrow.uturn.backward")
-                        .font(.system(size: metrics.completeLabelSize + 1.5, weight: .heavy))
-                        .foregroundStyle(showDoneFlash ? OnyxWatch.Colors.textOnDone : accent)
-                        .symbolEffect(.bounce, value: completedCount)
-
-                    Text(completionLabel)
-                        .font(.system(size: metrics.completeLabelSize, weight: .bold))
-                        .foregroundStyle(showDoneFlash ? OnyxWatch.Colors.textOnDone : OnyxWatch.Colors.glassLabel)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.75)
-                }
+                // Icon-only primary CTA: a single large checkmark (or the undo
+                // arrow when the set is already complete). The mini-segments +
+                // fill carry the progress context, so the glyph replaces the
+                // word (design: unambiguous primary CTA, HIG icon-only pattern).
+                Image(systemName: showDoneFlash || !isCompleted ? "checkmark" : "arrow.uturn.backward")
+                    .font(.system(size: metrics.completeIconSize, weight: .heavy))
+                    .foregroundStyle(showDoneFlash ? OnyxWatch.Colors.textOnDone : OnyxWatch.Colors.completeCheckmark)
+                    .symbolEffect(.bounce, value: completedCount)
 
                 if totalSets > 1 {
                     miniSegments
@@ -119,16 +120,6 @@ struct CompactActionBar: View {
         .frame(height: OnyxWatch.Dimensions.minTouchTarget)
         .handGestureShortcut(.primaryAction, isEnabled: isInputEnabled)
         .accessibilityLabel(completionAccessibilityLabel)
-    }
-
-    private var completionLabel: String {
-        if showDoneFlash {
-            return String(localized: "Done")
-        }
-        if isCompleted {
-            return String(localized: "Undo")
-        }
-        return isFinishing ? String(localized: "Finish Workout") : String(localized: "Complete")
     }
 
     private var capsuleBackground: some View {

@@ -47,6 +47,7 @@ struct OnyxWatch {
         static let chipBackground = Color(red: 26/255, green: 26/255, blue: 28/255) // #1A1A1C
         static let chipText = Color(red: 199/255, green: 199/255, blue: 204/255) // #C7C7CC
         static let glassLabel = Color(red: 234/255, green: 255/255, blue: 242/255) // #EAFFF2
+        static let completeCheckmark = Color(red: 141/255, green: 255/255, blue: 187/255) // #8DFFBB (icon-only Complete-button checkmark, brighter than accent)
         static let textOnDone = Color(red: 3/255, green: 20/255, blue: 10/255) // #03140A
         static let doneGradient = [
             Color(red: 109/255, green: 255/255, blue: 168/255), // #6DFFA8

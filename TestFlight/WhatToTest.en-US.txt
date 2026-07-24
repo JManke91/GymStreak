@@ -23,3 +23,6 @@
 - Apple Watch: fixed a brief flash of an empty "no exercises" screen when discarding a workout or closing the summary — the screen now slides away cleanly.
 - Apple Watch: the active-workout screen now shows which exercise you are on ("Exercise 2 / 5") above a neutral progress bar, with the exercise name and a "Set 1/3" counter right above the values — green is now reserved for the current set only.
 - Apple Watch: exercises you add or remove during a workout now also update your routine for future workouts when you choose "Save & Update Template" — additions keep their sets, reps, weight, and rest, and any routine changes you made on iPhone in the meantime are preserved.
+- Apple Watch: the workout set navigation arrows are no longer clipped by the screen corners on Apple Watch Ultra — the bottom row now stays inside the safe area.
+- Apple Watch: the workout Complete button is now a clean, larger checkmark (no text label), and the set controls and spacing were refined so everything stays comfortably inside the screen edges.
+- Apple Watch: the total workout time moved out of the top bar (where it overlapped the clock) into the workout screen next to the exercise counter, larger and easier to read; the rest-timer countdown now appears in that same spot while you rest.
