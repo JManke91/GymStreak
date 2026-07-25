@@ -20,21 +20,6 @@ struct ExerciseListView: View {
 //                    .frame(height: 80)
             }
 
-            // Compact timer integrated into layout
-            if viewModel.isResting && viewModel.isRestTimerMinimized {
-                Section {
-                    CompactRestTimer(
-                        timeRemaining: viewModel.restTimeRemaining,
-                        totalDuration: viewModel.restDuration,
-                        formattedTime: viewModel.formattedRestTime,
-                        onSkip: viewModel.skipRest,
-                        onExpand: viewModel.expandRestTimer
-                    )
-                    .listRowInsets(EdgeInsets(top: 4, leading: 8, bottom: 4, trailing: 8))
-                }
-                .transition(.move(edge: .top).combined(with: .opacity))
-            }
-
             // Exercise rows
             Section {
                 if exercises.isEmpty {
@@ -90,12 +75,25 @@ struct ExerciseListView: View {
             }
         }
         .listStyle(.carousel)
-        .animation(.easeInOut(duration: 0.25), value: viewModel.isResting)
-        .animation(.easeInOut(duration: 0.25), value: viewModel.isRestTimerMinimized)
+        // The minimized rest pill is drawn by ActiveWorkoutView's overlay, above
+        // this list. Unlike the set editor — whose top zone has an empty slot the
+        // pill drops into — this list starts with a full-width card right at the
+        // safe-area top, so the pill would sit ON the progress ring. Reserving
+        // the same amount of space keeps the one-pill/one-position rule and the
+        // card clear of it. This view still declares NO timer of its own.
+        .safeAreaInset(edge: .top, spacing: 0) {
+            Color.clear
+                .frame(height: showsRestTimerSlot ? WatchRestTimerMorph.reservedSlotHeight : 0)
+                .animation(WatchRestTimerMorph.presenceAnimation, value: showsRestTimerSlot)
+        }
         .sheet(item: $swapTargetExercise) { exercise in
             WatchSwapPickerView(exercise: exercise)
                 .environmentObject(viewModel)
         }
+    }
+
+    private var showsRestTimerSlot: Bool {
+        viewModel.isResting && viewModel.isRestTimerMinimized
     }
 
     private func presentSwapPicker(for exercise: ActiveWorkoutExercise) {

@@ -76,18 +76,14 @@ struct ActiveWorkoutView: View {
                         }
                 }
 
-                // Overlay full-screen rest timer on top
-                if viewModel.isResting && !viewModel.isRestTimerMinimized {
-                    NewRestTimerView(
-                        timeRemaining: viewModel.restTimeRemaining,
-                        totalDuration: viewModel.restDuration,
-                        formattedTime: viewModel.formattedRestTime,
-                        state: viewModel.restTimerState,
-                        onSkip: viewModel.skipRest,
-                        onMinimize: viewModel.minimizeRestTimer
-                    )
-                    .transition(.opacity)
-                }
+                // The one and only rest timer of the active workout, in BOTH of
+                // its states. Owned here — a sibling of the NavigationStack —
+                // so exactly one instance is ever mounted (the vertical TabView
+                // keeps neighbouring pages alive, so per-page copies used to be
+                // mounted simultaneously) and so the minimized pill layers above
+                // a pushed set editor. Large and minimized therefore share one
+                // coordinate space, which is what the morph needs.
+                WorkoutRestTimerOverlay()
             }
         }
         .toolbar(.hidden, for: .navigationBar)

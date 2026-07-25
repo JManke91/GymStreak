@@ -18,7 +18,7 @@ local-notification side (scheduling, authorization, deadline handling) see
 `rest-timer-notifications.md`.
 
 > Scope: **iOS target only.** The watchOS rest timer is a separate implementation
-> (already overlay-based) and is not covered here.
+> (already overlay-based) — see `watch-rest-timer-ui.md`.
 
 ## Behavior
 
@@ -193,5 +193,10 @@ overlay does not, so the workout list and the bottom `ActionBar` carry
 | `RestTimerMorph` | `Presentation/Views/Workout/RestTimerRing.swift` | Constants shared by both states: matched-geometry ids, the two diameters, and the spring animation. |
 | `WorkoutViewModel` | `Presentation/ViewModels/` | Source of truth for timer state and actions (`stopRestTimer`, `formatTime`, `restDuration`, …). |
 
-The watchOS target has its own, unrelated `CompactRestTimer` — a separate
-implementation in `GymStreakWatch Watch App/Views/`, out of scope here.
+The watchOS target has its own, separate rest timer — `RestTimerLargeView` plus the
+`RestTimerMinimizedPill`, mounted by `WorkoutRestTimerOverlay` in
+`GymStreakWatch Watch App/Views/`. Out of scope here; see
+`watch-rest-timer-ui.md`. It reuses the rules above for its own morph (shared
+shape, effect inside the frame, position-only digits, `geometryGroup()`,
+re-toggle guard), but its shared vocabulary is a **progress surface** and the
+digits — there is no ring on the watch.

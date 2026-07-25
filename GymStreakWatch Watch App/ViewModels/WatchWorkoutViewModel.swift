@@ -1214,7 +1214,6 @@ final class WatchWorkoutViewModel: ObservableObject {
 
     private func stopRestTimer() {
         print("⏹️ stopRestTimer called - remaining: \(restTimeRemaining)s of \(restDuration)s")
-        print("⏹️ Call stack: \(Thread.callStackSymbols.prefix(5).joined(separator: "\n"))")
 
         restTimer?.invalidate()
         restTimer = nil

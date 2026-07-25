@@ -87,7 +87,7 @@ the system recovers by breaking the square constraint and nothing renders wrong.
 ### The only provable elimination (deliberately NOT taken)
 Remove every private PUIC bar-button code path from the screen: replace the native
 `.confirmationDialog` **and** the `.cancellationAction` toolbar "X" with
-hand-rolled overlay views (the same `ZStack` overlay pattern as `NewRestTimerView`
+hand-rolled overlay views (the same `ZStack` overlay pattern as `RestTimerLargeView`
 / `WatchWorkoutSummaryView`, which have no toolbar chrome). Not done because:
 1. It changes the confirmation UI (native dialog chrome/animation and the nav-bar
    X become custom look-alikes).

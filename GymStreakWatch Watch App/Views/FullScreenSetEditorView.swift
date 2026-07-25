@@ -214,26 +214,17 @@ struct FullScreenSetEditorView: View {
 
     // MARK: - Subviews
 
-    /// Right-aligned accessory on the routine label's line. Shows the minimized
-    /// rest timer while resting, otherwise the elapsed-time label — both moved
-    /// here from the top toolbar (design 2026-07-24) so they no longer collide
-    /// with the system clock. Mutually exclusive, exactly as the shared toolbar
-    /// slot was.
+    /// Right-aligned accessory on the routine label's line: the elapsed-time
+    /// label, moved here from the top toolbar (design 2026-07-24) so it no longer
+    /// collides with the system clock.
+    ///
+    /// While the rest timer is minimized this slot stays EMPTY: the single
+    /// minimized pill is owned by ActiveWorkoutView and overlays this screen from
+    /// the same corner, so the two would otherwise stack on top of each other.
     @ViewBuilder
     private var topTrailingAccessory: some View {
-        if viewModel.isResting && viewModel.isRestTimerMinimized {
-            NewShrinkingRestTimer(
-                timeRemaining: viewModel.restTimeRemaining,
-                totalDuration: viewModel.restDuration,
-                onExpand: viewModel.expandRestTimer, onSkip: viewModel.skipRest
-            )
-            .frame(maxWidth: 96, maxHeight: 22)
-            // Unlike the elapsed text, the rest-timer pill has bulky chrome below
-            // its digits' baseline. Pin its BOTTOM edge (not its text baseline) to
-            // the routine-label line so the pill sits fully above it and clears
-            // the segment progress bar below instead of crowding it.
-            .alignmentGuide(.firstTextBaseline) { $0[.bottom] }
-        } else if let elapsedTime = viewModel.elapsedTimeString {
+        if !(viewModel.isResting && viewModel.isRestTimerMinimized),
+           let elapsedTime = viewModel.elapsedTimeString {
             // Large bold elapsed-time label with a stopwatch glyph (no capsule).
             // WorkoutTopProgressView places this as a baseline-pinned overlay, so
             // its extra height grows upward into the free status-bar space with

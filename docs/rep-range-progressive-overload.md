@@ -100,8 +100,14 @@ The model computed properties (`RoutineExercise.allSetsAtUpperLimit`, `WorkoutEx
 
 | View | Integration |
 |------|-------------|
-| `ExerciseSetView` | Rep range goal text below reps + color coding |
 | `WatchWorkoutSummaryView` | Trophy icon next to exercises that achieved rep goal |
+
+`targetRepMin`/`targetRepMax` still ride along in the watch payload
+(`WatchModels.swift`), but **no watch view renders them** since 2026-07-25: the
+only rep-range goal text + color coding lived in the unused legacy
+`ExerciseSetView`, which was deleted with the rest of the dead watch views. The
+live set screen (`FullScreenSetEditorView`) never had it. Recover the old
+rendering from git history if the goal indicator is wanted on watch.
 
 ## Color Scheme
 
