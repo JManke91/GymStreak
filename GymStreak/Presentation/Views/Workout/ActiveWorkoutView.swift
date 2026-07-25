@@ -15,6 +15,12 @@ struct ActiveWorkoutView: View {
     @State private var expandedSetId: UUID?
     @State private var lastActiveExerciseId: UUID?
 
+    /// Shared geometry namespace for the large↔compact rest-timer morph.
+    @Namespace private var restTimerNamespace
+    /// True while the morph animation is in flight — used to swallow rapid
+    /// re-toggles, a known trigger for matchedGeometryEffect glitches.
+    @State private var isRestTimerMorphing = false
+
     var body: some View {
         ZStack {
             // Main Content
@@ -129,15 +135,19 @@ struct ActiveWorkoutView: View {
                 VStack(spacing: 0) {
                     TimerHeader(viewModel: viewModel)
 
-                    // Compact Rest Timer (shows when sheet is dismissed but timer is active)
+                    // Compact Rest Timer (shows when the large timer is minimized
+                    // but the timer is still active)
                     if viewModel.isRestTimerActive && !showingRestTimerSheet {
                         CompactRestTimer(
                             viewModel: viewModel,
+                            namespace: restTimerNamespace,
                             onExpand: {
-                                showingRestTimerSheet = true
+                                setRestTimerExpanded(true)
                             }
                         )
-                        .transition(.move(edge: .top).combined(with: .opacity))
+                        // Only the non-shared chrome fades; the ring and time
+                        // label travel via matchedGeometryEffect.
+                        .transition(.opacity)
                     }
                 }
             }
@@ -150,6 +160,30 @@ struct ActiveWorkoutView: View {
                         showingFinishConfirmation = true
                     }
                 )
+            }
+            // The large timer is an in-tree overlay, not a sheet, so it does not
+            // make what's behind it inert on its own.
+            .accessibilityHidden(showingRestTimerSheet)
+
+            // Large Rest Timer — rendered as a full-screen overlay inside this view
+            // tree (formerly a bottom .sheet) so it shares the same coordinate space as
+            // the compact top banner. This co-location is what lets the shared ring and
+            // time label morph between the two states: matchedGeometryEffect cannot
+            // cross a .sheet boundary.
+            if showingRestTimerSheet {
+                ZStack {
+                    DesignSystem.Colors.background
+                        .ignoresSafeArea()
+                    RestTimerView(
+                        viewModel: viewModel,
+                        namespace: restTimerNamespace,
+                        onDismiss: {
+                            setRestTimerExpanded(false)
+                        }
+                    )
+                }
+                .transition(.opacity)
+                .zIndex(1)
             }
         }
         .alert("workout.cancel.title".localized, isPresented: $showingCancelAlert) {
@@ -207,21 +241,18 @@ struct ActiveWorkoutView: View {
                 dismiss()
             }
         }
-        .sheet(isPresented: $showingRestTimerSheet) {
-            RestTimerView(viewModel: viewModel, onDismiss: {
-                showingRestTimerSheet = false
-            })
-            .presentationDetents([.height(320), .medium])
-            .presentationDragIndicator(.visible)
-            .interactiveDismissDisabled(false)
-        }
         .sheet(isPresented: $showingAddExercise) {
             AddExerciseToWorkoutView(workoutViewModel: viewModel, exercisesViewModel: exercisesViewModel)
         }
         .onChange(of: viewModel.isRestTimerActive) { _, isActive in
             if isActive {
-                // Auto-show sheet when timer starts
-                showingRestTimerSheet = true
+                // Auto-show the large timer overlay when a rest starts
+                setRestTimerExpanded(true)
+            } else {
+                // The timer stopped (skipped or elapsed) — close the large
+                // overlay even if a morph is still in flight, so it can never
+                // get stuck open with no running timer.
+                setRestTimerExpanded(false, force: true)
             }
         }
         .onChange(of: scenePhase) { oldPhase, newPhase in
@@ -238,6 +269,25 @@ struct ActiveWorkoutView: View {
             @unknown default:
                 break
             }
+        }
+    }
+
+    /// Switches between the large rest-timer overlay and the compact banner in a
+    /// single animated transaction, so exactly one variant is mounted at a time
+    /// and the shared ring/label morph between them.
+    ///
+    /// Taps arriving while a morph is in flight are ignored — rapid re-toggling
+    /// of `matchedGeometryEffect` is a known source of ghosting and AttributeGraph
+    /// glitches. Pass `force` for state-driven closes that must never be dropped.
+    private func setRestTimerExpanded(_ expanded: Bool, force: Bool = false) {
+        guard showingRestTimerSheet != expanded else { return }
+        guard force || !isRestTimerMorphing else { return }
+
+        isRestTimerMorphing = true
+        withAnimation(RestTimerMorph.animation) {
+            showingRestTimerSheet = expanded
+        } completion: {
+            isRestTimerMorphing = false
         }
     }
 
@@ -1039,83 +1089,6 @@ struct ActionBar: View {
             .padding(.vertical, DesignSystem.Spacing.md)
             .background(DesignSystem.Colors.card)
         }
-    }
-}
-
-// MARK: - Compact Rest Timer
-
-struct CompactRestTimer: View {
-    @ObservedObject var viewModel: WorkoutViewModel
-    let onExpand: () -> Void
-
-    var body: some View {
-        HStack(spacing: 12) {
-            // Circular progress indicator (small)
-            ZStack {
-                Circle()
-                    .stroke(DesignSystem.Colors.divider, lineWidth: 3)
-                    .frame(width: 32, height: 32)
-
-                Circle()
-                    .trim(from: 0, to: progress)
-                    .stroke(DesignSystem.Colors.tint, style: StrokeStyle(lineWidth: 3, lineCap: .round))
-                    .frame(width: 32, height: 32)
-                    .rotationEffect(.degrees(-90))
-                    .animation(.linear(duration: 1), value: progress)
-            }
-
-            // Timer text
-            VStack(alignment: .leading, spacing: 2) {
-                Text("rest_timer.title".localized)
-                    .font(.onyxCaption)
-                    .foregroundStyle(DesignSystem.Colors.textSecondary)
-
-                Text(viewModel.formatTime(viewModel.restTimeRemaining))
-                    .font(.onyxNumber)
-            }
-
-            Spacer()
-
-            // Action buttons
-            HStack(spacing: 8) {
-                // Skip button
-                Button {
-                    viewModel.stopRestTimer()
-                } label: {
-                    Image(systemName: "forward.fill")
-                        .font(.caption)
-                        .foregroundStyle(DesignSystem.Colors.warning)
-                }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
-
-                // Expand button
-                Button {
-                    onExpand()
-                } label: {
-                    Image(systemName: "arrow.up.left.and.arrow.down.right")
-                        .font(.caption)
-                }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
-            }
-        }
-        .padding(.horizontal, DesignSystem.Spacing.lg)
-        .padding(.vertical, DesignSystem.Spacing.md)
-        .background(DesignSystem.Colors.card)
-        .overlay(
-            Rectangle()
-                .frame(height: 1)
-                .foregroundStyle(DesignSystem.Colors.divider),
-            alignment: .bottom
-        )
-    }
-
-    private var progress: CGFloat {
-        let totalDuration = viewModel.restDuration
-        guard totalDuration > 0 else { return 0 }
-
-        return CGFloat(viewModel.restTimeRemaining / totalDuration)
     }
 }
 

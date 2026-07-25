@@ -2,8 +2,9 @@ import SwiftUI
 
 struct RestTimerView: View {
     @ObservedObject var viewModel: WorkoutViewModel
+    /// Shared namespace with `CompactRestTimer` — carries the shrink/grow morph.
+    let namespace: Namespace.ID
     let onDismiss: () -> Void
-    @Environment(\.dismiss) private var dismiss
 
     var body: some View {
         VStack(spacing: 32) {
@@ -11,28 +12,34 @@ struct RestTimerView: View {
                 .font(.headline)
                 .foregroundStyle(.secondary)
 
-            // Circular Progress Ring
+            // Circular Progress Ring + time label — both shared with the compact
+            // banner via matchedGeometryEffect, so they shrink and travel into
+            // the top banner on minimize (and grow back on expand).
             ZStack {
-                Circle()
-                    .stroke(DesignSystem.Colors.divider, lineWidth: 12)
-                    .frame(width: 160, height: 160)
-
-                Circle()
-                    .trim(from: 0, to: progress)
-                    .stroke(DesignSystem.Colors.tint, style: StrokeStyle(lineWidth: 12, lineCap: .round))
-                    .frame(width: 160, height: 160)
-                    .rotationEffect(.degrees(-90))
-                    .animation(.linear(duration: 1), value: progress)
+                // The effect must sit *inside* the frame: it overrides the size
+                // proposal handed to the ring, which is what makes the diameter
+                // interpolate. A hard frame between effect and ring would pin it.
+                RestTimerRing(progress: progress)
+                    .matchedGeometryEffect(id: RestTimerMorph.ringID, in: namespace)
+                    .frame(width: RestTimerMorph.largeRingDiameter, height: RestTimerMorph.largeRingDiameter)
 
                 VStack(spacing: 4) {
                     Text(viewModel.formatTime(viewModel.restTimeRemaining))
                         .font(.system(.largeTitle, design: .rounded, weight: .bold))
                         .monospacedDigit()
+                        // Position-only match + fixedSize: the label travels but
+                        // always renders at its own intrinsic size. Matching the
+                        // frame would squeeze it into the other state's box and
+                        // make it re-lay out (and jitter) on every step.
+                        .fixedSize()
+                        .contentTransition(.identity)
+                        .matchedGeometryEffect(id: RestTimerMorph.timeLabelID, in: namespace, properties: .position)
                     Text("rest_timer.remaining".localized)
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                 }
             }
+            .geometryGroup()
 
             if let warning = viewModel.restTimerReminderWarning {
                 Label(warning, systemImage: "bell.slash.fill")
@@ -47,7 +54,6 @@ struct RestTimerView: View {
             HStack(spacing: 12) {
                 // Minimize button
                 Button {
-                    dismiss()
                     onDismiss()
                 } label: {
                     Text("rest_timer.minimize".localized)
@@ -60,7 +66,6 @@ struct RestTimerView: View {
                 // Skip button
                 Button {
                     viewModel.stopRestTimer()
-                    dismiss()
                     onDismiss()
                 } label: {
                     Text("rest_timer.skip".localized)
@@ -73,12 +78,9 @@ struct RestTimerView: View {
             }
         }
         .padding(32)
-        .onChange(of: viewModel.isRestTimerActive) { _, isActive in
-            if !isActive {
-                dismiss()
-                onDismiss()
-            }
-        }
+        // Note: closing when the timer stops is owned by ActiveWorkoutView, which
+        // observes `isRestTimerActive` and forces the overlay closed — no handler
+        // here, so the two never race on the same state change.
     }
 
     private var progress: CGFloat {
