@@ -3,8 +3,8 @@
 //  GymStreak
 //
 //  The single delete confirmation shared by every entry point into deleting a
-//  recorded workout (the detail screen's ellipsis menu, the history card's
-//  swipe action, and its long-press context menu). Keeping it in one place is
+//  recorded workout (the detail screen's ellipsis menu and the history card's
+//  long-press context menu). Keeping it in one place is
 //  what lets the choice copy stay identical wherever the user starts the
 //  deletion.
 //
@@ -23,8 +23,7 @@ import SwiftUI
 /// attaching one to a large ancestor (which both call sites are) makes it
 /// mis-anchor as a floating popover — the same trap documented on
 /// `PendingSyncBannerView`. An alert has no anchor and both call sites already
-/// used one. (The swipe action reaches this same alert through the history
-/// screen's call site, so it inherits that behaviour.)
+/// used one.
 private struct DeleteWorkoutConfirmation: ViewModifier {
     @Binding var isPresented: Bool
     /// Whether the workout being deleted has an Apple Health counterpart.

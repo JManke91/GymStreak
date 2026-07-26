@@ -4,7 +4,6 @@
 //
 
 import SwiftUI
-import SwiftData
 
 /// Stack destination for the AI Coach settings screen.
 private struct AICoachSettingsDestination: Hashable {}
@@ -14,44 +13,71 @@ private struct AICoachSettingsDestination: Hashable {}
 struct HistoryView: View {
     @ObservedObject var viewModel: WorkoutViewModel
     @Environment(\.scenePhase) private var scenePhase
-    @Query(sort: \Exercise.name) private var allExercises: [Exercise]
-    /// Live routines (with their schedules) drive the dynamic weekly goal.
-    @Query private var routines: [Routine]
+#if DEBUG
+    @State private var stallProbe = HistoryMainThreadStallProbe()
+#endif
+    private let aiCoachPreferences: AICoachPreferencesProviding
+    private let aiCoachAvailability: AICoachAvailabilityProviding
+    private let proactivePromptCoordinator: ProactivePromptCoordinating
 
-    enum Section: String, CaseIterable {
-        case trainings, fortschritt
+    /// Owns everything this screen renders, precomputed. See `HistoryViewModel`.
+    @State private var model: HistoryViewModel
 
-        var title: String {
-            switch self {
-            case .trainings:    return "history.mode.workouts".localized
-            case .fortschritt:  return "history.mode.progress".localized
-            }
-        }
-    }
-
-    @State private var section: Section = .trainings
-    @State private var fortschrittExercises: [FortschrittExerciseModel] = []
-    @State private var prExerciseCountBySession: [UUID: Int] = [:]
+    @State private var section: HistorySection = .trainings
+    @State private var currentDay = Calendar.current.startOfDay(for: Date())
     @State private var workoutToDelete: WorkoutSession?
     @State private var showingDeleteAlert = false
     @State private var isRecovering = false
-    /// Swipe-to-delete state for the Trainings list cards. Owned here because
-    /// this view owns the scroll view that has to close an open card.
-    @State private var swipeState = HistorySwipeState()
-    /// Backs the stack so the swipeable list cards can push programmatically.
-    /// Type-erased on purpose: the same stack also pushes `ExerciseWithHistory`
-    /// and `PeriodRecapDestination` values from other links.
+    /// Type-erased because the stack pushes workout ids, exercise models, period
+    /// destinations and the AI Coach settings destination.
     @State private var path = NavigationPath()
 
-    private var sessions: [WorkoutSession] {
-        viewModel.workoutHistory.filter { $0.endTime != nil }
+    init(
+        viewModel: WorkoutViewModel,
+        historySnapshotProvider: HistorySnapshotProviding,
+        aiCoachPreferences: AICoachPreferencesProviding,
+        aiCoachAvailability: AICoachAvailabilityProviding,
+        proactivePromptCoordinator: ProactivePromptCoordinating
+    ) {
+        self.viewModel = viewModel
+        self.aiCoachPreferences = aiCoachPreferences
+        self.aiCoachAvailability = aiCoachAvailability
+        self.proactivePromptCoordinator = proactivePromptCoordinator
+        self._model = State(
+            initialValue: HistoryViewModel(provider: historySnapshotProvider)
+        )
     }
 
-    /// Stable signature of the live Exercise library — flips whenever a user adds, removes,
-    /// or renames an exercise. Used to retrigger the Fortschritt aggregator so the list never
-    /// shows entries for exercises the user has since deleted.
-    private var exerciseLibrarySignature: [String] {
-        allExercises.map { "\($0.id.uuidString):\($0.name)" }
+    /// Change token for the Trainings snapshot. Replaces three separate triggers (`onAppear` +
+    /// `onChange(history.count)` + `onChange(exerciseLibrarySignature)`) that could each fire a full
+    /// double aggregation, up to three times per appearance.
+    ///
+    /// Explicit invalidation rather than retaining the full model array. Editing an existing
+    /// workout and a CloudKit modify do not change a count, so callers bump this version whenever
+    /// persisted History data changes.
+    private struct DataToken: Equatable {
+        let historyVersion: Int
+        let currentDay: Date
+    }
+
+    /// Fortschritt's aggregation is a whole extra walk of the session graph, so it is keyed
+    /// separately and only runs while that tab is the visible one. Deliberately *not* folded into
+    /// `DataToken`: including `section` there made the segmented toggle re-run `computePRs` and the
+    /// whole snapshot build, neither of which depends on which tab is showing.
+    private struct FortschrittToken: Equatable {
+        let data: DataToken
+        let section: HistorySection
+    }
+
+    private var dataToken: DataToken {
+        DataToken(
+            historyVersion: viewModel.historyVersion,
+            currentDay: currentDay
+        )
+    }
+
+    private var fortschrittToken: FortschrittToken {
+        FortschrittToken(data: dataToken, section: section)
     }
 
     var body: some View {
@@ -61,16 +87,25 @@ struct HistoryView: View {
 
                 ScrollView {
                     VStack(alignment: .leading, spacing: 14) {
-                        header
-                        segmented
-                            .padding(.horizontal, 20)
+                        HistoryHeaderView(
+                            section: $section,
+                            onOpenSettings: {
+                                path.append(AICoachSettingsDestination())
+                            },
+                            onInteractionStarted: {
+#if DEBUG
+                                stallProbe.reset()
+#endif
+                            }
+                        )
                         if !viewModel.orphanedWatchWorkouts.isEmpty {
                             PendingSyncBannerView(orphans: viewModel.orphanedWatchWorkouts) {
                                 isRecovering = true
                                 Task {
+                                    // Recovery re-fetches, which bumps `historyVersion` and
+                                    // re-fires the rebuild tasks on its own.
                                     await viewModel.recoverOrphanedWorkouts()
                                     isRecovering = false
-                                    refresh()
                                 }
                             }
                             .padding(.horizontal, 20)
@@ -89,17 +124,26 @@ struct HistoryView: View {
                             switch section {
                             case .trainings:
                                 TrainingsTabView(
-                                    sessions: sessions,
-                                    routines: routines,
-                                    prExerciseCountBySession: prExerciseCountBySession,
+                                    snapshot: model.snapshot,
+                                    aiCoachPreferences: aiCoachPreferences,
+                                    aiCoachAvailability: aiCoachAvailability,
+                                    proactivePromptCoordinator: proactivePromptCoordinator,
+                                    hasLoaded: model.hasLoaded,
+                                    didFailLoading: model.didFailLoading,
+                                    onRetry: {
+                                        Task { await refreshSnapshot() }
+                                    },
                                     onDeleteRequested: requestDelete,
-                                    onSelectWorkout: pushWorkout,
-                                    swipeState: $swipeState
+                                    onSelectWorkout: pushWorkout
                                 )
                             case .fortschritt:
                                 FortschrittTabView(
-                                    exercises: fortschrittExercises,
-                                    allExerciseNames: fortschrittExercises.map(\.name)
+                                    model: model.fortschrittList,
+                                    isLoading: model.isLoadingFortschritt,
+                                    didFailLoading: model.didFailFortschritt,
+                                    onRetry: {
+                                        Task { await refreshFortschritt() }
+                                    }
                                 )
                             }
                         }
@@ -110,27 +154,21 @@ struct HistoryView: View {
                     .animation(.easeInOut(duration: 0.25), value: viewModel.healthKitDeleteFailed)
                 }
                 .refreshable {
-                    refresh()
+                    viewModel.refreshHistory()
                 }
-                // Scrolling closes an open swipe card, the way a List does.
-                // Suppressed mid-drag so a slightly diagonal swipe cannot close
-                // the card it is opening.
-                .onScrollGeometryChange(for: CGFloat.self) { geometry in
-                    geometry.contentOffset.y
-                } action: { oldValue, newValue in
-                    guard oldValue != newValue,
-                          swipeState.openCardId != nil,
-                          swipeState.draggingCardId == nil else { return }
-                    withAnimation(DesignSystem.Animation.spring) {
-                        swipeState.openCardId = nil
+#if DEBUG
+                .onScrollPhaseChange { _, newPhase in
+                    if newPhase == .interacting {
+                        stallProbe.reset()
                     }
                 }
+#endif
             }
             // Keep the tab root free of navigation chrome without passing that
             // preference to its pushed destinations.
             .toolbar(.hidden, for: .navigationBar)
             .navigationDestination(for: UUID.self) { sessionId in
-                if let session = sessions.first(where: { $0.id == sessionId }) {
+                if let session = viewModel.workoutSession(id: sessionId) {
                     WorkoutDetailView(workout: session, viewModel: viewModel)
                 }
             }
@@ -151,20 +189,27 @@ struct HistoryView: View {
                 AICoachSettingsView()
             }
             .onAppear {
-                viewModel.fetchWorkoutHistory()
+#if DEBUG
+                stallProbe.reset()
+#endif
                 Task { await viewModel.reconcileWatchWorkouts() }
-                refresh()
             }
-            .onChange(of: viewModel.workoutHistory.count) {
-                refresh()
+            // `.task(id:)` also cancels a superseded rebuild, which the three separate onChange
+            // handlers it replaced could not.
+            .task(id: dataToken) {
+                await refreshSnapshot()
             }
-            .onChange(of: exerciseLibrarySignature) {
-                refresh()
+            .task(id: fortschrittToken) {
+                await refreshFortschritt()
+            }
+            .task {
+                await observeDayBoundary()
             }
             .onChange(of: scenePhase) { _, newPhase in
                 // Re-run the HK reconciler when the user returns to the app —
                 // catches workouts saved on the watch while iOS was backgrounded.
                 if newPhase == .active {
+                    currentDay = Calendar.current.startOfDay(for: Date())
                     Task { await viewModel.reconcileWatchWorkouts() }
                 }
             }
@@ -173,100 +218,70 @@ struct HistoryView: View {
                 hasHealthKitWorkout: workoutToDelete?.healthKitWorkoutId != nil,
                 onDelete: { alsoFromHealthKit in
                     if let workout = workoutToDelete {
+                        // Deleting re-fetches, which bumps `historyVersion` and re-fires the
+                        // rebuild tasks; rebuilding here as well would do the work twice.
                         viewModel.deleteWorkout(workout, alsoFromHealthKit: alsoFromHealthKit)
                         workoutToDelete = nil
-                        refresh()
                         HapticManager.shared.success()
                     }
                 },
                 onCancel: { workoutToDelete = nil }
             )
-        }
-    }
-
-    // MARK: - Header
-
-    private var header: some View {
-        HStack {
-            Text("history.title".localized)
-                .font(.system(size: 32, weight: .bold, design: .rounded))
-                .kerning(-0.7)
-                .foregroundStyle(Color.white)
-
-            Spacer()
-
-            Button {
-                path.append(AICoachSettingsDestination())
-            } label: {
-                Image(systemName: "gearshape.fill")
-                    .font(.system(size: 20, weight: .medium))
-                    .foregroundStyle(Color.white.opacity(0.6))
+#if DEBUG
+            .overlay(alignment: .bottomLeading) {
+                HistoryMainThreadStallProbeOverlay(probe: stallProbe)
             }
-            .buttonStyle(.plain)
-            .accessibilityLabel("ai_coach.settings.open".localized)
+#endif
         }
-        .padding(.horizontal, 20)
-        .padding(.top, 8)
-    }
-
-    // MARK: - Segmented
-
-    private var segmented: some View {
-        HStack(spacing: 0) {
-            ForEach(Section.allCases, id: \.self) { target in
-                Button {
-                    HapticManager.shared.selection()
-                    swipeState.openCardId = nil
-                    withAnimation(.easeOut(duration: 0.18)) { section = target }
-                } label: {
-                    Text(target.title)
-                        .font(.system(size: 15, weight: section == target ? .semibold : .medium, design: .rounded))
-                        .foregroundStyle(section == target ? Color.white : Color.white.opacity(0.55))
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 10)
-                        .background(
-                            section == target ? Color.white.opacity(0.12) : Color.clear
-                        )
-                        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-                }
-                .buttonStyle(.plain)
-            }
-        }
-        .padding(4)
-        .background(Color.white.opacity(0.06))
-        .overlay(
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .stroke(Color.white.opacity(0.04), lineWidth: 1)
-        )
-        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
     }
 
     // MARK: - Actions
 
-    /// Pushes a workout detail screen for a list card.
-    ///
-    /// A `NavigationLink` could not fire twice; a programmatic push can, so a fast
-    /// double tap is ignored. Cards are only tappable at the root of the stack.
+    /// Pushes a workout detail screen for the calendar's selected-day card.
+    /// Trainings list rows use native `NavigationLink`s.
     private func pushWorkout(_ sessionId: UUID) {
         guard path.isEmpty else { return }
         path.append(sessionId)
     }
 
-    private func requestDelete(_ session: WorkoutSession) {
+    /// Rows carry only a card id, so the `@Model` object is resolved here — the list itself never
+    /// holds one.
+    private func requestDelete(_ sessionId: UUID) {
+        guard let session = viewModel.workoutSession(id: sessionId) else { return }
         workoutToDelete = session
         showingDeleteAlert = true
     }
 
     // MARK: - Data loading
 
-    private func refresh() {
-        let capturedSessions = sessions
-        let liveExercises = allExercises
-        let prs = PersonalRecordService.computePRs(sessions: capturedSessions)
-        prExerciseCountBySession = prs.prCountBySession
-        fortschrittExercises = FortschrittAggregator.build(
-            sessions: capturedSessions,
-            liveExercises: liveExercises
+    private func refreshSnapshot() async {
+        guard await model.reloadTraining() else { return }
+        proactivePromptCoordinator.evaluate(
+            lastMonth: model.snapshot.lastMonth
         )
+    }
+
+    private func refreshFortschritt() async {
+        guard section == .fortschritt else { return }
+        await model.reloadFortschritt()
+    }
+
+    private func observeDayBoundary() async {
+        while !Task.isCancelled {
+            let calendar = Calendar.current
+            let now = Date()
+            guard let nextDay = calendar.date(
+                byAdding: .day,
+                value: 1,
+                to: calendar.startOfDay(for: now)
+            ) else { return }
+
+            do {
+                try await Task.sleep(for: .seconds(max(1, nextDay.timeIntervalSince(now))))
+            } catch {
+                return
+            }
+            currentDay = calendar.startOfDay(for: Date())
+        }
     }
 }

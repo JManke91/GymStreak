@@ -113,11 +113,12 @@ After completing a code change and before reporting it as done, decide whether t
 - New or changed `import` statements, new types (class/struct/enum/protocol/actor), or new dependency wiring (anything touching `App/AppDependencies.swift`)
 - Changes in `Domain/` or `Data/`, or a diff spanning more than one layer
 - Refactors, or diffs beyond ~50 changed Swift lines
+- **Rendering surface**, regardless of diff size: any change to a scrolling/list view, a row or cell view, or a view that reads SwiftData model properties — and any diff that adds a `ForEach`, a formatter, a collection operation, or a `@Model` property read to a view body (see "Performance: main thread and rendering")
 - Any doubt about whether a Hard rule or deliberate decision is affected — when in doubt, review
 
 When it runs: **CRITICAL findings must be fixed** and the reviewer re-run until it returns PASS (or PASS WITH WARNINGS with the warnings explicitly acknowledged), and include the verdict in your final report.
 
-**Skip the reviewer** for changes with no architectural surface: localization/strings, comments/docs, asset or config tweaks, TestFlight notes, and small in-place edits inside existing function or view bodies (copy/layout/value tweaks, guard fixes, threshold changes) that add no files, types, imports, or dependencies. When skipping, self-check the diff against the Hard rules above and state in your final report that the review was skipped and why (one line).
+**Skip the reviewer** for changes with no architectural surface: localization/strings, comments/docs, asset or config tweaks, TestFlight notes, and small in-place edits inside existing function or view bodies (copy/layout/value tweaks, guard fixes, threshold changes) that add no files, types, imports, or dependencies. **The size-based skip does not apply to rendering surface** — a one-line edit that puts a formatter, a loop, or a relationship read into a view body is exactly the mistake this gate exists to catch, so it goes to review however small it is. When skipping, self-check the diff against the Hard rules and the main-thread rules above, and state in your final report that the review was skipped and why (one line).
 
 This remains a second review layer — it does not replace compiling the app or self-review.
 
@@ -163,10 +164,43 @@ Be deliberate about what occupies the main context window — wasted tokens are 
 - avoid having files over 200-300 lines of code. Refactor at that point
 - Mocking data is only needed for tests, never mock data for dev or prod
 
-## Performance and Optimization
+## Performance: main thread and rendering (hard rules)
 
-- Implement lazy loading for large lists or grid using `LazyVStack` or `LazyHStack`, or `LazyVGrid` or `LazyHGrid`
-- Optimize ForEach loops by using stable identifiers
+SwiftUI re-evaluates `body` on every invalidation, and a non-lazy `VStack` builds every
+child eagerly — so per-item work that looks trivial becomes a multi-hundred-millisecond
+main-thread hang at real data volumes. This section is written as prohibitions rather
+than preferences because exactly this shipped: see `docs/history-performance.md` for the
+measured 630 ms hang, its seven causes, and the remediation.
+
+1. **`ForEach` over user-scaled data belongs in a lazy container** — `LazyVStack` /
+   `LazyHStack` / `LazyVGrid` / `LazyHGrid`, or `List`. A plain `VStack`/`HStack` +
+   `ForEach` inside a `ScrollView` constructs and lays out every row, offscreen ones
+   included, before the first frame. A bounded literal set (a 7-day strip, a 2-item
+   segmented control) is fine in a plain stack.
+2. **Never construct a formatter in `body`, in a computed property `body` reads, or in a
+   per-row helper.** `DateFormatter`, `RelativeDateTimeFormatter`, `NumberFormatter`,
+   `MeasurementFormatter`, `ISO8601DateFormatter`, `JSONEncoder`/`JSONDecoder` are all
+   expensive to allocate and these sites run once per row per render. Hoist to `static let`.
+3. **No aggregation in `body`.** If a computed property read by `body` iterates a
+   collection (`reduce`, `filter`, `sorted`, `flatMap`, `Dictionary(grouping:)`) or calls a
+   service, precompute it into `@State` or the ViewModel and pass the result in.
+4. **Row and cell views take value structs, not `@Model` objects.** Reading a SwiftData
+   `@Relationship` — or any computed property that walks one — is a potential disk fetch;
+   doing it per row is an N+1 fault. Build the display struct once, hand that to the row.
+5. **Prefetch relationships you know you will traverse.** A `FetchDescriptor` whose results
+   feed a list that reads relationship-derived values sets
+   `relationshipKeyPathsForPrefetching`.
+6. **Observe narrowly.** Don't bind a view to a broad multi-purpose `ObservableObject` for
+   two properties — every unrelated `@Published` change re-renders it. Be especially wary
+   of view models that own a timer.
+7. **`onAppear` does no heavy synchronous work.** `.task` is not a fix by itself: it runs
+   synchronously up to its first `await`, so the work must actually become async or move
+   off the main actor (`@ModelActor` for SwiftData aggregation).
+8. **Use stable identifiers in `ForEach`** so diffing doesn't rebuild rows needlessly.
+
+When a screen's cost scales with user data, measure rather than assume — Instruments'
+SwiftUI template; `docs/history-performance.md` §5 has the click paths, the acceptance
+targets and a before/after comparison method.
 
 ## Naming
 

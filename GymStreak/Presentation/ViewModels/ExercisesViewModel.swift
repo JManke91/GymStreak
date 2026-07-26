@@ -228,6 +228,7 @@ class ExercisesViewModel: ObservableObject {
     private func save() -> Bool {
         do {
             try exerciseRepository.save()
+            NotificationCenter.default.post(name: .historySourceDataDidChange, object: nil)
             return true
         } catch {
             print("Error saving context: \(error)")

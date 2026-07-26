@@ -73,31 +73,19 @@ struct FortschrittExerciseRowView: View {
         return "\(sign)\(String(format: "%.1f", pct))%"
     }
 
-    private func relativeDate(_ date: Date) -> String {
+    // Hoisted out of `body`: this was allocated once per row, per render
+    // (docs/history-performance.md §2.7). `@MainActor` because RelativeDateTimeFormatter carries no
+    // documented thread-safety guarantee, so sharing one instance is only sound while every access
+    // is from a view body on the main thread.
+    @MainActor
+    private static let relativeFormatter: RelativeDateTimeFormatter = {
         let formatter = RelativeDateTimeFormatter()
         formatter.locale = Locale.current
         formatter.unitsStyle = .short
-        return formatter.localizedString(for: date, relativeTo: Date())
-    }
-}
+        return formatter
+    }()
 
-/// Plain-struct payload for the Fortschritt row. Hoisted into its own type so the row can be
-/// previewed and reused without talking to SwiftData directly.
-struct FortschrittExerciseModel: Identifiable, Hashable {
-    let id: String
-    let name: String
-    let primaryMuscleGroup: String
-    let muscleGroups: [String]
-    let exerciseId: UUID?
-    let workoutCount: Int
-    let lastPerformed: Date?
-    let trendPct: Double?
-    let sparkline: [Double]
-
-    func hash(into hasher: inout Hasher) {
-        hasher.combine(id)
-    }
-    static func == (lhs: FortschrittExerciseModel, rhs: FortschrittExerciseModel) -> Bool {
-        lhs.id == rhs.id
+    private func relativeDate(_ date: Date) -> String {
+        Self.relativeFormatter.localizedString(for: date, relativeTo: Date())
     }
 }

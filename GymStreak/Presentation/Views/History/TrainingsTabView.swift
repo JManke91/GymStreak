@@ -5,22 +5,27 @@
 
 import SwiftUI
 
-/// The Trainings sub-tab: WeekHero + List/Calendar toggle + month-grouped workout list or calendar view.
+/// The Trainings sub-tab: WeekHero + List/Calendar toggle + month-grouped workout list or calendar.
+///
+/// Renders a precomputed `HistorySnapshot` and nothing else. It deliberately holds no
+/// `WorkoutSession` and derives no aggregates: every value it shows was computed once in
+/// `HistoryViewModel.rebuild`, because doing it here meant five whole-history aggregations on every
+/// render and four relationship traversals per visible card (docs/history-performance.md).
 struct TrainingsTabView: View {
-    let sessions: [WorkoutSession]
-    let routines: [Routine]
-    let prExerciseCountBySession: [UUID: Int]
-    let onDeleteRequested: (WorkoutSession) -> Void
-    /// Pushes the workout detail screen. List cards are not `NavigationLink`s, so
-    /// the push is programmatic — see `SwipeToDeleteContainer`.
+    let snapshot: HistorySnapshot
+    let aiCoachPreferences: AICoachPreferencesProviding
+    let aiCoachAvailability: AICoachAvailabilityProviding
+    let proactivePromptCoordinator: ProactivePromptCoordinating
+    /// False until the first snapshot build finishes. Without it, the first body evaluation — which
+    /// necessarily happens before `.task` can run — renders the empty snapshot and briefly tells the
+    /// user they have no workouts.
+    let hasLoaded: Bool
+    let didFailLoading: Bool
+    let onRetry: () -> Void
+    let onDeleteRequested: (UUID) -> Void
+    /// Pushes a workout detail screen from calendar mode. List rows navigate
+    /// through native `NavigationLink`s.
     let onSelectWorkout: (UUID) -> Void
-    /// Owned by `HistoryView`, which also closes the open card when the list scrolls.
-    @Binding var swipeState: HistorySwipeState
-
-    /// Dynamic weekly plan derived from the user's scheduled routines.
-    private var plannedWeek: WorkoutPlanningService.PlannedWeek {
-        WorkoutPlanningService.plannedWeek(routines: routines, completedSessions: sessions)
-    }
 
     enum DisplayMode: String, CaseIterable {
         case list, calendar
@@ -30,15 +35,11 @@ struct TrainingsTabView: View {
 
     // MARK: - AI Coach entry card state
 
-    private let coordinator = ProactivePromptCoordinator.shared
-    private let preferences = AICoachPreferences.shared
-    private let availability = AICoachAvailability.shared
-
     /// Whether conditions are met to show any AI Coach card.
     private var shouldShowCoachCards: Bool {
-        availability.isAvailable
-            && preferences.isPeriodRecapEffectivelyEnabled
-            && sessions.count >= 3
+        aiCoachAvailability.isAvailable
+            && aiCoachPreferences.isPeriodRecapEffectivelyEnabled
+            && snapshot.sessionCount >= 3
     }
 
     /// Default range: lastMonth if we're early in the month (day <= 5), else thisMonth.
@@ -46,72 +47,36 @@ struct TrainingsTabView: View {
         Calendar.current.component(.day, from: Date()) <= 5 ? .lastMonth : .thisMonth
     }
 
-    /// Lightweight last-month stats for the entry card subline.
-    private var lastMonthStats: (count: Int, volumeTons: Double, prs: Int) {
-        let calendar = Calendar.current
-        let now = Date()
-        guard let prevDate = calendar.date(byAdding: .month, value: -1, to: now),
-              let interval = calendar.dateInterval(of: .month, for: prevDate) else {
-            return (0, 0, 0)
-        }
-        let prev = sessions.filter {
-            $0.endTime != nil && $0.startTime >= interval.start && $0.startTime < interval.end
-        }
-        let vol = prev.reduce(0.0) { $0 + $1.totalVolume } / 1000.0
-        let prs = prev.reduce(0) { $0 + (prExerciseCountBySession[$1.id] ?? 0) }
-        return (prev.count, vol, prs)
-    }
-
-    /// Label for the last completed month.
-    private var lastMonthLabel: String {
-        let calendar = Calendar.current
-        let now = Date()
-        guard let prevDate = calendar.date(byAdding: .month, value: -1, to: now),
-              let interval = calendar.dateInterval(of: .month, for: prevDate) else { return "" }
-        let fmt = DateFormatter()
-        fmt.locale = Locale.current
-        fmt.setLocalizedDateFormatFromTemplate("MMMM yyyy")
-        return fmt.string(from: interval.start)
-    }
-
     var body: some View {
         VStack(spacing: 14) {
             // Proactive monthly prompt (above everything else)
-            if coordinator.shouldShow {
+            if proactivePromptCoordinator.shouldShow {
                 ProactivePeriodPromptCard(
-                    monthLabel: coordinator.monthLabel,
-                    sessionCount: coordinator.sessionCount,
-                    totalVolumeTons: coordinator.totalVolumeTons,
-                    newPRCount: coordinator.newPRCount,
+                    monthLabel: proactivePromptCoordinator.monthLabel,
+                    sessionCount: proactivePromptCoordinator.sessionCount,
+                    totalVolumeTons: proactivePromptCoordinator.totalVolumeTons,
+                    newPRCount: proactivePromptCoordinator.newPRCount,
                     destination: PeriodRecapDestination(range: .lastMonth),
-                    onDismiss: { coordinator.dismiss() }
+                    onDismiss: { proactivePromptCoordinator.dismiss() }
                 )
                 .padding(.horizontal, 16)
             }
 
             // Coach entry card
-            if shouldShowCoachCards && !coordinator.shouldShow {
-                let stats = lastMonthStats
+            if shouldShowCoachCards && !proactivePromptCoordinator.shouldShow {
                 CoachEntryCard(
-                    periodLabel: lastMonthLabel,
-                    sessionCount: stats.count,
-                    totalVolumeTons: stats.volumeTons,
-                    newPRCount: stats.prs,
+                    periodLabel: snapshot.lastMonth.label,
+                    sessionCount: snapshot.lastMonth.count,
+                    totalVolumeTons: snapshot.lastMonth.volumeTons,
+                    newPRCount: snapshot.lastMonth.prs,
                     destination: PeriodRecapDestination(range: defaultEntryRange)
                 )
                 .padding(.horizontal, 16)
             }
 
             WeekHeroView(
-                weekStats: HistoryStatsService.weekStats(
-                    sessions: sessions,
-                    prExerciseCountBySession: prExerciseCountBySession,
-                    goal: plannedWeek.goal
-                ),
-                weekDays: HistoryStatsService.weekDayStatuses(
-                    sessions: sessions,
-                    plannedDates: plannedWeek.plannedDates
-                )
+                weekStats: snapshot.weekStats,
+                weekDays: snapshot.weekDays
             )
             .padding(.horizontal, 16)
 
@@ -119,18 +84,13 @@ struct TrainingsTabView: View {
 
             if mode == .calendar {
                 HistoryCalendarView(
-                    sessions: sessions,
-                    prExerciseCountBySession: prExerciseCountBySession
+                    cardsByDay: snapshot.cardsByDay,
+                    monthTotals: snapshot.monthTotals,
+                    typesByMonth: snapshot.typesByMonth
                 )
             } else {
                 listContent
             }
-        }
-        .onAppear {
-            coordinator.evaluate(sessions: sessions, prCountBySession: prExerciseCountBySession)
-        }
-        .onChange(of: sessions.count) {
-            coordinator.evaluate(sessions: sessions, prCountBySession: prExerciseCountBySession)
         }
     }
 
@@ -165,7 +125,6 @@ struct TrainingsTabView: View {
         Button {
             if mode != target {
                 HapticManager.shared.selection()
-                swipeState.openCardId = nil
                 mode = target
             }
         } label: {
@@ -183,7 +142,23 @@ struct TrainingsTabView: View {
 
     @ViewBuilder
     private var listContent: some View {
-        if sessions.isEmpty {
+        if !hasLoaded {
+            if didFailLoading {
+                ContentUnavailableView {
+                    Label("history.load_error.title".localized, systemImage: "exclamationmark.triangle")
+                } description: {
+                    Text("history.load_error.description".localized)
+                } actions: {
+                    Button("action.try_again".localized, action: onRetry)
+                        .buttonStyle(.bordered)
+                }
+                .padding(.top, 32)
+            } else {
+                ProgressView()
+                    .frame(maxWidth: .infinity)
+                    .padding(.top, 48)
+            }
+        } else if snapshot.rows.isEmpty {
             ContentUnavailableView {
                 Label("history.empty.title".localized, systemImage: "figure.strengthtraining.traditional")
             } description: {
@@ -191,72 +166,68 @@ struct TrainingsTabView: View {
             }
             .padding(.top, 40)
         } else {
-            let groups = HistoryStatsService.groupByMonth(sessions: sessions)
-            VStack(alignment: .leading, spacing: 0) {
-                ForEach(Array(groups.enumerated()), id: \.offset) { index, group in
-                    if index > 0 {
-                        monthDivider(for: group)
+            // One flat lazy stack over pre-interleaved rows. Not a lazy stack of month groups each
+            // containing a lazy stack of cards: nesting them is an undocumented shape with
+            // corroborated reports of scroll stutter and a reproducible hang, and it bought nothing
+            // that flattening does not.
+            LazyVStack(alignment: .leading, spacing: 0) {
+                ForEach(snapshot.rows) { row in
+                    switch row {
+                    case .monthHeader(let month):
+                        monthDivider(for: month)
+                    case .card(let card):
+                        cardRow(card)
                     }
-                    workoutList(for: group)
                 }
             }
         }
     }
 
-    private func monthDivider(for group: HistoryStatsService.MonthSectionInfo) -> some View {
+    private func monthDivider(for month: MonthSectionModel) -> some View {
         HStack {
-            Text(group.label)
+            Text(month.label)
                 .font(.system(size: 15, weight: .bold, design: .rounded))
                 .kerning(-0.3)
                 .foregroundStyle(Color.white)
             Spacer()
-            Text(monthSummary(for: group))
+            Text(monthSummary(for: month))
                 .font(.system(size: 11, weight: .medium))
                 .foregroundStyle(Color.white.opacity(0.4))
         }
         .padding(.horizontal, 20)
-        .padding(.top, 18)
+        // 10, not the original 18: the cards now carry their own 8pt bottom padding (the flat stack
+        // has no `spacing:`), so 18 here would have grown the gap above a divider to 26pt.
+        .padding(.top, 10)
         .padding(.bottom, 10)
     }
 
-    private func monthSummary(for group: HistoryStatsService.MonthSectionInfo) -> String {
+    private func monthSummary(for month: MonthSectionModel) -> String {
         let volumeTxt: String
-        if group.totalVolume >= 1000 {
-            volumeTxt = String(format: "%.0ft", group.totalVolume / 1000)
+        if month.totalVolume >= 1000 {
+            volumeTxt = String(format: "%.0ft", month.totalVolume / 1000)
         } else {
-            volumeTxt = "\(Int(group.totalVolume))kg"
+            volumeTxt = "\(Int(month.totalVolume))kg"
         }
-        return String(format: "history.month.summary".localized, group.sessions.count, volumeTxt)
+        return String(format: "history.month.summary".localized, month.sessionCount, volumeTxt)
     }
 
-    private func workoutList(for group: HistoryStatsService.MonthSectionInfo) -> some View {
-        VStack(spacing: 8) {
-            ForEach(group.sessions) { session in
-                // Deliberately not a NavigationLink: a button activates on
-                // touch-up anywhere inside its bounds, so every swipe counted
-                // as a tap and pushed the detail screen. The container owns the
-                // tap and reports it through onSelect instead.
-                SwipeToDeleteContainer(
-                    id: session.id,
-                    state: $swipeState,
-                    onDelete: { onDeleteRequested(session) },
-                    onSelect: { onSelectWorkout(session.id) }
-                ) {
-                    WorkoutCardView(
-                        workout: session,
-                        isPR: (prExerciseCountBySession[session.id] ?? 0) > 0,
-                        prLifts: prExerciseCountBySession[session.id] ?? 0
-                    )
-                    .contextMenu {
-                        Button(role: .destructive) {
-                            onDeleteRequested(session)
-                        } label: {
-                            Label("action.delete".localized, systemImage: "trash")
-                        }
-                    }
-                }
+    private func cardRow(_ card: WorkoutCardModel) -> some View {
+        NavigationLink(value: card.id) {
+            WorkoutCardView(card: card)
+        }
+        .buttonStyle(.plain)
+        .simultaneousGesture(TapGesture().onEnded { HapticManager.shared.light() })
+        .contextMenu {
+            Button(role: .destructive) {
+                onDeleteRequested(card.id)
+            } label: {
+                Label("action.delete".localized, systemImage: "trash")
             }
         }
+        .accessibilityAction(named: Text("action.delete".localized)) {
+            onDeleteRequested(card.id)
+        }
         .padding(.horizontal, 16)
+        .padding(.bottom, 8)
     }
 }

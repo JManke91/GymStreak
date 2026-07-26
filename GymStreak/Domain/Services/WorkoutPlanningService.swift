@@ -15,7 +15,6 @@
 
 import Foundation
 
-@MainActor
 enum WorkoutPlanningService {
 
     /// The planned shape of a single week.

@@ -50,17 +50,19 @@ Existing history cannot be safely backfilled because the live routine may have b
 ### Data flow
 ```
 ContentView
- └─ HistoryView (@ObservedObject viewModel: WorkoutViewModel,
-                 @Query allExercises: [Exercise])
-     ├─ loads viewModel.workoutHistory (already populated on app launch)
-     ├─ refresh()  ← retriggered when sessions count OR exercise library changes
-     │   ├─ PersonalRecordService.computePRs(sessions:) → [UUID: Int]
-     │   └─ FortschrittAggregator.build(sessions:liveExercises:) → [FortschrittExerciseModel]
-     │       (drops workout exercises that don't resolve to any live Exercise)
+ └─ HistoryView (@ObservedObject WorkoutViewModel for lightweight invalidation/UI actions,
+                 @State HistoryViewModel)
+     ├─ .task(id: historyVersion) → HistorySnapshotProviding
+     │   └─ SwiftDataHistorySnapshotProvider (detached off-main construction)
+     │       └─ SwiftDataHistorySnapshotStore (@ModelActor, own ModelContext)
+     │       ├─ prefetches completed session/exercise/set graph
+     │       ├─ PersonalRecordService + HistorySnapshotBuilder → Sendable HistorySnapshot
+     │       └─ FortschrittAggregator → Sendable [FortschrittExerciseModel]
+     ├─ publishes values on MainActor; no @Model arrays cross the actor boundary
      ├─ TrainingsTabView
-     │    ├─ WeekHeroView (HistoryStatsService.weekStats, weekDayStatuses)
-     │    ├─ HistoryCalendarView (uses same session set)
-     │    └─ Month-grouped list of WorkoutCardView in SwipeToDeleteContainer → path.append(UUID)
+     │    ├─ WeekHeroView (precomputed values)
+     │    ├─ HistoryCalendarView (precomputed cards/totals)
+     │    └─ Month-grouped native NavigationLink<UUID> rows containing WorkoutCardView
      └─ FortschrittTabView
           └─ Grouped list of FortschrittExerciseRowView → NavigationLink<ExerciseWithHistory>
 
@@ -121,6 +123,38 @@ GymStreak/WorkoutHistoryView.swift   — Replaced by HistoryView
 - `HistoryCalendarView` — Month grid (Monday-first, German locale). Prev/next navigation, dots colored by `WorkoutType`, today ring, selected-day fill, selected-day detail card below.
 - `TrainingsTabView` — Composes WeekHero, list/calendar segmented toggle, and month-grouped list.
 
+**Rendering: the screen renders a precomputed snapshot (2026-07-26).** `HistoryViewModel` owns a
+`HistorySnapshot` fetched through the injected `HistorySnapshotProviding` boundary.
+`SwiftDataHistorySnapshotStore` is a Data-layer `@ModelActor`: it fetches and aggregates on its
+own model executor and returns only immutable `Sendable` values. It must be reached through
+`SwiftDataHistorySnapshotProvider`, whose detached task constructs only the stable actor outside
+inherited MainActor isolation; constructing the model actor in MainActor-isolated
+`AppDependencies` ran this workload on the UI thread in testing. `TrainingsTabView`,
+`WorkoutCardView` and `HistoryCalendarView` render values and derive nothing. The binding rules,
+each of which this screen violated and hung because of it — see
+[history-performance.md](./history-performance.md):
+
+- **Rows take `WorkoutCardModel`, never `WorkoutSession`.** Reading `totalVolume`,
+  `completedSetsCount` or `completionPercentage` off the `@Model` walks the whole
+  `workoutExercises → sets` graph; those three reads were four traversals per card, re-paid on
+  every lazy re-realisation. Use `WorkoutSession.aggregates` (one pass) if you need them at all.
+- **The Trainings list is ONE flat `LazyVStack`** over pre-interleaved `HistoryListRow`s. Do not
+  nest a `LazyVStack` inside a `LazyVStack` — undocumented, with reported stutter and a
+  reproducible hang. No `Section`/`pinnedViews`, so month dividers stay inline.
+- **Nothing fetches or aggregates on MainActor.** Anything that walks the session list belongs
+  behind `SwiftDataHistorySnapshotStore`, triggered by the section-specific `.task(id:)` calls.
+- **Fortschritt's UI projection is cached.** `FortschrittListViewModel` rebuilds search results,
+  group statistics, navigation payloads and flat rows only when its exercise snapshot, query or
+  selected group changes; those collection operations never execute from SwiftUI `body`.
+- **No SwiftData model crosses the actor boundary.** Navigation and deletion carry a session UUID;
+  the main-context repository resolves that one model only at the action boundary.
+- The snapshot token includes the current local day and is updated both at the next day boundary
+  and whenever the app becomes active, keeping week/calendar/month-derived values current.
+- AI-coach preferences, availability and proactive prompt state enter through injected Domain
+  protocols; `HistoryView` and `TrainingsTabView` do not reach Data-layer singletons.
+- Every `DateFormatter` / `RelativeDateTimeFormatter` here is a `static let`.
+- `List` was reconsidered and deferred, not rejected — see history-performance.md §6.
+
 **Fortschritt tab:**
 - `FortschrittExerciseRowView` — Muscle-group badge + name + count + last date + sparkline + trend %. Taps push `ExerciseProgressChartView`.
 - `MusclePillView` — Horizontal-scroll filter pills with trend %.
@@ -152,7 +186,7 @@ Navigation uses `UUID`-based destinations to avoid requiring `@Model` classes to
 - `.navigationDestination(for: PeriodRecapDestination.self)` → `PeriodRecapView`
 - `.navigationDestination(for: AICoachSettingsDestination.self)` → `AICoachSettingsView`
 
-Most cards wrap their content in `NavigationLink(value: ...)` and fire a light haptic via a `simultaneousGesture` — the calendar card, the Fortschritt rows and the coach cards all still do. **The Trainings list cards are the exception:** they are plain views inside `SwipeToDeleteContainer`, which owns the tap and reports it so `HistoryView` can `path.append(...)`. That is required, not stylistic — a SwiftUI button activates on touch-up anywhere inside its bounds, so as a `NavigationLink` every swipe-to-delete gesture also pushed the detail screen. See [Delete a Recorded Workout](./delete-workout.md).
+Cards use `NavigationLink(value: ...)` and lightweight values. Trainings rows navigate with `UUID`; `HistoryView` resolves the `WorkoutSession` at the destination boundary. This restores native navigation, focus and accessibility semantics and avoids the custom per-row swipe interaction that caused the post-1.1.5 responsiveness regression. The list keeps a long-press context-menu delete shortcut, while the workout detail screen provides the visible delete route. See [Delete a Recorded Workout](./delete-workout.md).
 
 ### Localization
 New keys live under the `history.*` prefix (plus `history.type.*` for workout-type labels). Both `de.lproj` and `en.lproj` are kept in sync.

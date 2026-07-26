@@ -7,25 +7,29 @@
 //
 
 import Foundation
-import SwiftData
 
 /// Determines whether the proactive monthly recap prompt should be shown.
 ///
 /// Conditions (all must be true):
-/// 1. `AICoachPreferences.shared.isProactiveMonthlyEffectivelyEnabled`
-/// 2. `AICoachAvailability.shared.isAvailable`
+/// 1. The injected preferences enable proactive monthly prompts.
+/// 2. The injected AI-coach availability reports available.
 /// 3. User has ≥ 3 sessions in the previous completed month.
 /// 4. The prompt has not already been shown for this calendar-month boundary
 ///    (`lastProactivePromptShownForPeriodId != currentPeriodId`).
 /// 5. The user has not already dismissed/viewed it this in-memory session.
 @Observable
 @MainActor
-final class ProactivePromptCoordinator {
+final class ProactivePromptCoordinator: ProactivePromptCoordinating {
+    private let preferences: AICoachPreferencesProviding
+    private let availability: AICoachAvailabilityProviding
 
-    // MARK: - Singleton
-
-    static let shared = ProactivePromptCoordinator()
-    private init() {}
+    init(
+        preferences: AICoachPreferencesProviding,
+        availability: AICoachAvailabilityProviding
+    ) {
+        self.preferences = preferences
+        self.availability = availability
+    }
 
     // MARK: - Public state
 
@@ -47,17 +51,16 @@ final class ProactivePromptCoordinator {
 
     // MARK: - Evaluation
 
-    /// Call this whenever the session list changes (e.g. on appear or after workout save).
-    func evaluate(sessions: [WorkoutSession], prCountBySession: [UUID: Int]) {
+    /// Call this whenever the actor-owned History snapshot changes.
+    func evaluate(lastMonth: HistorySnapshot.LastMonthStats) {
         guard !dismissedThisSession else { return }
 
-        let preferences = AICoachPreferences.shared
         guard preferences.isProactiveMonthlyEffectivelyEnabled else {
             shouldShow = false
             return
         }
 
-        guard AICoachAvailability.shared.isAvailable else {
+        guard availability.isAvailable else {
             shouldShow = false
             return
         }
@@ -80,25 +83,15 @@ final class ProactivePromptCoordinator {
             return
         }
 
-        // Sessions in the previous month
-        let prevSessions = sessions.filter { s in
-            s.endTime != nil && s.startTime >= prevInterval.start && s.startTime < prevInterval.end
-        }
-        guard prevSessions.count >= 3 else {
+        guard lastMonth.count >= 3 else {
             shouldShow = false
             return
         }
 
-        // Populate display stats
-        sessionCount = prevSessions.count
-        totalVolumeTons = prevSessions.reduce(0) { $0 + $1.totalVolume } / 1000.0
-        newPRCount = prevSessions.reduce(0) { $0 + (prCountBySession[$1.id] ?? 0) }
-
-        // Human-readable month label
-        let fmt = DateFormatter()
-        fmt.locale = Locale.current
-        fmt.setLocalizedDateFormatFromTemplate("MMMM yyyy")
-        monthLabel = fmt.string(from: prevInterval.start)
+        sessionCount = lastMonth.count
+        totalVolumeTons = lastMonth.volumeTons
+        newPRCount = lastMonth.prs
+        monthLabel = lastMonth.label
 
         shouldShow = true
     }
@@ -116,7 +109,7 @@ final class ProactivePromptCoordinator {
         if let prevMonthDate = calendar.date(byAdding: .month, value: -1, to: now),
            let prevInterval = calendar.dateInterval(of: .month, for: prevMonthDate) {
             let id = periodIdentifier(for: prevInterval.start, calendar: calendar)
-            AICoachPreferences.shared.lastProactivePromptShownForPeriodId = id
+            preferences.lastProactivePromptShownForPeriodId = id
         }
     }
 

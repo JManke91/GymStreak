@@ -24,6 +24,10 @@ enum HealthKitSyncStatus: Equatable {
 
 @MainActor
 class WorkoutViewModel: ObservableObject {
+    /// Bumped whenever persisted data relevant to History changes. The History screen uses this as
+    /// an invalidation token for its actor-owned read model; it deliberately does not retain or
+    /// synchronously fetch the entire SwiftData history on MainActor.
+    @Published private(set) var historyVersion = 0
     @Published var currentSession: WorkoutSession?
     @Published var elapsedTime: TimeInterval = 0
     @Published var currentExerciseIndex: Int = 0
@@ -32,7 +36,6 @@ class WorkoutViewModel: ObservableObject {
     @Published var restTimeRemaining: TimeInterval = 0
     @Published var restDuration: TimeInterval = 0
     @Published private(set) var restTimerReminderOutcome: RestTimerReminderOutcome?
-    @Published var workoutHistory: [WorkoutSession] = []
     @Published var showingWorkoutCompletePrompt = false
     /// HealthKit-saved workouts (from this device's GymStreak iOS or watch app)
     /// that have no matching `WorkoutSession` in SwiftData. Populated by the
@@ -74,6 +77,7 @@ class WorkoutViewModel: ObservableObject {
     private var restTimerReminderTask: Task<Void, Never>?
     private var cloudSyncObserver: NSObjectProtocol?
     private var workoutHistoryObserver: NSObjectProtocol?
+    private var historySourceDataObserver: NSObjectProtocol?
 
     // Date-based timer tracking for background persistence
     private var workoutStartTime: Date?
@@ -142,12 +146,12 @@ class WorkoutViewModel: ObservableObject {
         self.recovery = recovery
         self.aiCoachCache = aiCoachCache ?? AICoachCache.shared
         self.now = now
-        fetchWorkoutHistory()
         cleanupStaleActivities()
         loadHealthKitPreferences()
         healthKitManager.checkAuthorizationStatus()
         observeCloudKitChanges()
         observeWorkoutHistoryChanges()
+        observeHistorySourceDataChanges()
         observeRecoverableWorkouts()
     }
 
@@ -158,7 +162,7 @@ class WorkoutViewModel: ObservableObject {
             queue: .main
         ) { [weak self] _ in
             Task { @MainActor in
-                self?.fetchWorkoutHistory()
+                self?.refreshHistory()
             }
         }
     }
@@ -174,10 +178,25 @@ class WorkoutViewModel: ObservableObject {
             queue: .main
         ) { [weak self] _ in
             Task { @MainActor in
-                self?.fetchWorkoutHistory()
+                self?.refreshHistory()
                 // A committed session may resolve a recovery candidate — let
                 // the engine re-evaluate against the new history.
                 self?.recovery?.reconcile()
+            }
+        }
+    }
+
+    /// Routine schedules and exercise metadata also contribute to History's immutable snapshots.
+    /// They are invalidated explicitly after a successful save rather than watched through broad
+    /// main-context queries whose hashing previously ran during SwiftUI updates.
+    private func observeHistorySourceDataChanges() {
+        historySourceDataObserver = NotificationCenter.default.addObserver(
+            forName: .historySourceDataDidChange,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in
+                self?.refreshHistory()
             }
         }
     }
@@ -303,7 +322,6 @@ class WorkoutViewModel: ObservableObject {
             recovery?.markPlaceholderSaved(externalUUID: placeholder.external, sessionId: placeholder.sessionId)
         }
 
-        fetchWorkoutHistory()
         orphanedWatchWorkouts = recovery?.recoverableWorkouts ?? []
         NotificationCenter.default.post(name: .workoutHistoryDidChange, object: nil)
     }
@@ -608,7 +626,7 @@ class WorkoutViewModel: ObservableObject {
         }
 
         save()
-        fetchWorkoutHistory()
+        refreshHistory()
 
         // Save to HealthKit
         saveWorkoutToHealthKit(session: session)
@@ -1687,7 +1705,7 @@ class WorkoutViewModel: ObservableObject {
             save()
         }
 
-        fetchWorkoutHistory()
+        refreshHistory()
 
         // The cached AI recap/analysis for this session reflect the old values — drop them.
         aiCoachCache.invalidatePostWorkout(workoutId: session.id)
@@ -1914,14 +1932,18 @@ class WorkoutViewModel: ObservableObject {
 
     // MARK: - History
 
-    func fetchWorkoutHistory() {
-        workoutHistory = workoutSessionRepository.fetchAll()
+    func refreshHistory() {
+        historyVersion += 1
+    }
+
+    func workoutSession(id: UUID) -> WorkoutSession? {
+        workoutSessionRepository.findSession(id: id, healthKitWorkoutId: nil)
     }
 
     func deleteWorkout(_ session: WorkoutSession) {
         workoutSessionRepository.delete(session)
         save()
-        fetchWorkoutHistory()
+        refreshHistory()
     }
 
     /// Deletes the session locally and, when asked, its Apple Health counterpart.
@@ -1984,6 +2006,15 @@ class WorkoutViewModel: ObservableObject {
         timer?.invalidate()
         restTimer?.invalidate()
         restTimerReminderTask?.cancel()
+        if let cloudSyncObserver {
+            NotificationCenter.default.removeObserver(cloudSyncObserver)
+        }
+        if let workoutHistoryObserver {
+            NotificationCenter.default.removeObserver(workoutHistoryObserver)
+        }
+        if let historySourceDataObserver {
+            NotificationCenter.default.removeObserver(historySourceDataObserver)
+        }
         if let recoverableWorkoutsObserver {
             NotificationCenter.default.removeObserver(recoverableWorkoutsObserver)
         }

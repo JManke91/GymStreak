@@ -7,7 +7,7 @@ import Foundation
 
 /// Classification used by the History redesign to color-code cards and calendar dots.
 /// Derived from a routine's name rather than stored on the model, so no schema migration is needed.
-enum WorkoutType: String, CaseIterable {
+enum WorkoutType: String, CaseIterable, Sendable {
     case push
     case pull
     case legs

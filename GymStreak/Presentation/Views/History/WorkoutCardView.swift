@@ -7,14 +7,13 @@ import SwiftUI
 
 /// A single workout row in the Trainings list (and in the calendar selected-day detail).
 /// Layout: date block | type + stats | intensity ring.
-struct WorkoutCardView: View {
-    let workout: WorkoutSession
-    let isPR: Bool
-    let prLifts: Int
-
-    private var workoutType: WorkoutType {
-        WorkoutType.classify(routineName: workout.routineName)
-    }
+///
+/// Takes a `WorkoutCardModel`, never a `WorkoutSession`. It previously read `completionPercentage`,
+/// `completedSetsCount` and `totalVolume` off the `@Model` object, which is four full traversals of
+/// the `workoutExercises → sets` graph per card — re-paid every time a lazy row was rebuilt. Being
+/// `Equatable` over plain values also lets SwiftUI skip unchanged rows outright.
+struct WorkoutCardView: View, Equatable {
+    let card: WorkoutCardModel
 
     var body: some View {
         HStack(alignment: .center, spacing: 14) {
@@ -24,7 +23,7 @@ struct WorkoutCardView: View {
                 metricsRow
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-            IntensityRing(value: workout.completionPercentage)
+            IntensityRing(value: card.completionPercentage)
         }
         .padding(14)
         .background(Color.white.opacity(0.035))
@@ -65,12 +64,12 @@ struct WorkoutCardView: View {
 
     private var titleRow: some View {
         HStack(spacing: 8) {
-            Text(workout.routineName)
+            Text(card.routineName)
                 .font(.system(size: 17, weight: .bold, design: .rounded))
                 .foregroundStyle(Color.white)
                 .lineLimit(1)
-            WorkoutTypeChip(type: workoutType, size: .small)
-            if isPR {
+            WorkoutTypeChip(type: card.type, size: .small)
+            if card.isPR {
                 prBadge
             }
         }
@@ -80,7 +79,7 @@ struct WorkoutCardView: View {
         HStack(spacing: 3) {
             Image(systemName: "trophy.fill")
                 .font(.system(size: 9, weight: .bold))
-            Text("history.pr.count".localized(prLifts))
+            Text("history.pr.count".localized(card.prLifts))
                 .font(.system(size: 10, weight: .bold))
         }
         .foregroundStyle(DesignSystem.Colors.pr)
@@ -94,9 +93,9 @@ struct WorkoutCardView: View {
 
     private var metricsRow: some View {
         HStack(spacing: 12) {
-            metricLabel(icon: "clock", text: "\(durationMinutes)m")
-            metricLabel(icon: "dumbbell", text: "history.card.sets".localized(workout.completedSetsCount))
-            metricLabel(icon: "bolt", text: formatVolume(workout.totalVolume))
+            metricLabel(icon: "clock", text: "\(card.durationMinutes)m")
+            metricLabel(icon: "dumbbell", text: "history.card.sets".localized(card.completedSets))
+            metricLabel(icon: "bolt", text: formatVolume(card.totalVolume))
         }
         .foregroundStyle(Color.white.opacity(0.6))
         .font(.system(size: 12))
@@ -121,25 +120,35 @@ struct WorkoutCardView: View {
 
     // MARK: - Date formatting
 
-    private var dowText: String {
+    // Hoisted out of `body`: these ran twice per card, per render — the dominant per-card cost
+    // in the history list (docs/history-performance.md §2.1). `@MainActor` because a shared mutable
+    // formatter is only safe while every access comes from a view body; it also keeps these clean
+    // when the app target moves to the Swift 6 language mode.
+    @MainActor
+    private static let dowFormatter: DateFormatter = {
         let fmt = DateFormatter()
         fmt.locale = Locale.current
         fmt.setLocalizedDateFormatFromTemplate("EEE")
-        return fmt.string(from: workout.startTime).uppercased()
-    }
+        return fmt
+    }()
 
-    private var day: Int {
-        Calendar.current.component(.day, from: workout.startTime)
-    }
-
-    private var monthText: String {
+    @MainActor
+    private static let monthFormatter: DateFormatter = {
         let fmt = DateFormatter()
         fmt.locale = Locale.current
         fmt.setLocalizedDateFormatFromTemplate("MMM")
-        return fmt.string(from: workout.startTime)
+        return fmt
+    }()
+
+    private var dowText: String {
+        Self.dowFormatter.string(from: card.startTime).uppercased()
     }
 
-    private var durationMinutes: Int {
-        max(0, Int(workout.duration / 60))
+    private var day: Int {
+        Calendar.current.component(.day, from: card.startTime)
+    }
+
+    private var monthText: String {
+        Self.monthFormatter.string(from: card.startTime)
     }
 }

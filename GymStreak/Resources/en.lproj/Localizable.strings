@@ -552,6 +552,9 @@
 "history.mode" = "View";
 "history.mode.workouts" = "Workouts";
 "history.mode.progress" = "Progress";
+"history.load_error.title" = "History couldn’t be loaded";
+"history.load_error.description" = "Your workouts are still safe. Please try again.";
+"action.try_again" = "Try again";
 
 // MARK: - Progress View
 "progress.empty.title" = "No Progress Yet";

@@ -552,6 +552,9 @@
 "history.mode" = "Ansicht";
 "history.mode.workouts" = "Trainings";
 "history.mode.progress" = "Fortschritt";
+"history.load_error.title" = "Verlauf konnte nicht geladen werden";
+"history.load_error.description" = "Deine Trainings sind weiterhin sicher. Bitte versuche es erneut.";
+"action.try_again" = "Erneut versuchen";
 
 // MARK: - Progress View
 "progress.empty.title" = "Noch kein Fortschritt";

@@ -9,12 +9,11 @@ import SwiftData
 /// Detects personal records (PRs) from existing WorkoutSession history, without adding new fields.
 /// A PR is defined as a completed set whose estimated 1RM (Epley) exceeds every prior completed
 /// set of the same exercise recorded in any prior workout session.
-@MainActor
 struct PersonalRecordService {
 
     /// The concrete record an exercise achieved in a session: the set that produced the new
     /// best estimated 1RM, plus the previous best for context.
-    struct PRDetail {
+    struct PRDetail: Sendable {
         /// `WorkoutExercise.stableKey` of the exercise that scored the PR.
         let exerciseKey: String
         /// The concrete workout occurrence containing the record-setting set.

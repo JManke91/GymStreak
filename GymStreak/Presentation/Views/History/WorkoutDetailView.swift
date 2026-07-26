@@ -103,8 +103,8 @@ struct WorkoutDetailView: View {
     }
 
     /// Pops the detail screen before the session is removed, so no view body ever
-    /// re-reads a deleted `@Model`. History (list + calendar) refreshes off the
-    /// ViewModel's republished `workoutHistory`.
+    /// re-reads a deleted `@Model`. Deletion bumps the History invalidation version, which causes
+    /// the actor-owned snapshot to reload.
     private func deleteWorkout(alsoFromHealthKit: Bool) {
         dismiss()
         viewModel.deleteWorkout(workout, alsoFromHealthKit: alsoFromHealthKit)
@@ -437,10 +437,15 @@ struct WorkoutDetailView: View {
 
     @MainActor
     private func loadPRs() async {
-        // Compute PRs by scanning all finished sessions up to and including this one.
-        let all = dependencies.workoutSessionRepository.fetchCompleted()
-        let prs = PersonalRecordService.computePRs(sessions: all)
-        prDetails = prs.prDetailsBySession[workout.id] ?? [:]
+        do {
+            prDetails = try await dependencies.historySnapshotProvider.fetchPRDetails(
+                sessionID: workout.id
+            )
+        } catch is CancellationError {
+            return
+        } catch {
+            prDetails = [:]
+        }
     }
 
     @MainActor

@@ -9,7 +9,6 @@ import SwiftData
 /// Pure aggregator that turns completed WorkoutSessions into the row models used by the
 /// Fortschritt tab. Pulled into its own type so the heavy per-exercise computation can be
 /// called from a background task and the tests can drive it directly.
-@MainActor
 struct FortschrittAggregator {
 
     /// Builds one row per *live* exercise in the user's Exercise library.

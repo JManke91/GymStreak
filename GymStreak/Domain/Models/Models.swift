@@ -331,23 +331,52 @@ final class WorkoutSession {
     }
 
     var completionPercentage: Int {
-        guard totalSetsCount > 0 else { return 0 }
-        return Int((Double(completedSetsCount) / Double(totalSetsCount)) * 100)
+        aggregates.completionPercentage
     }
 
     var totalVolume: Double {
-        workoutExercisesList.reduce(0) { total, exercise in
-            let completedSets = exercise.setsList.filter(\.isCompleted)
-            return total + completedSets.reduce(0) { subtotal, set in
-                let enteredWeight = exercise.progressiveOverloadApplied ? set.plannedWeight : set.actualWeight
-                let reps = exercise.progressiveOverloadApplied ? set.plannedReps : set.actualReps
+        aggregates.volume
+    }
+
+    /// Set counts and volume from a **single** traversal of `workoutExercises → sets`.
+    ///
+    /// Reading `completedSetsCount`, `completionPercentage` and `totalVolume` separately costs
+    /// four full walks of the relationship graph — the per-row cost that hung the History list
+    /// (see docs/history-performance.md). Any caller that needs more than one of these values,
+    /// and every caller anywhere near a view body, must use this instead of the individual
+    /// properties. The volume formula lives here and nowhere else.
+    var aggregates: Aggregates {
+        var completedSets = 0
+        var totalSets = 0
+        var volume = 0.0
+        for exercise in workoutExercisesList {
+            let usesPlannedValues = exercise.progressiveOverloadApplied
+            let behavior = exercise.loadBehavior
+            for set in exercise.setsList {
+                totalSets += 1
+                guard set.isCompleted else { continue }
+                completedSets += 1
+                let enteredWeight = usesPlannedValues ? set.plannedWeight : set.actualWeight
+                let reps = usesPlannedValues ? set.plannedReps : set.actualReps
                 let weight = ExerciseLoadMetrics.effectiveWeight(
                     enteredWeight: enteredWeight,
-                    behavior: exercise.loadBehavior,
+                    behavior: behavior,
                     bodyWeightKg: bodyWeightKg
                 ) ?? 0
-                return subtotal + (weight * Double(reps))
+                volume += weight * Double(reps)
             }
+        }
+        return Aggregates(completedSets: completedSets, totalSets: totalSets, volume: volume)
+    }
+
+    struct Aggregates: Sendable {
+        let completedSets: Int
+        let totalSets: Int
+        let volume: Double
+
+        var completionPercentage: Int {
+            guard totalSets > 0 else { return 0 }
+            return Int((Double(completedSets) / Double(totalSets)) * 100)
         }
     }
 

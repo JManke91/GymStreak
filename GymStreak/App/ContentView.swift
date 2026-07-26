@@ -18,6 +18,10 @@ struct ContentView: View {
 
 private struct ContentViewInternal: View {
     @StateObject private var workoutViewModel: WorkoutViewModel
+    private let historySnapshotProvider: HistorySnapshotProviding
+    private let aiCoachPreferences: AICoachPreferencesProviding
+    private let aiCoachAvailability: AICoachAvailabilityProviding
+    private let proactivePromptCoordinator: ProactivePromptCoordinating
 
     /// Observable singletons — @State so SwiftUI tracks their changes.
     @State private var preferences = AICoachPreferences.shared
@@ -28,6 +32,10 @@ private struct ContentViewInternal: View {
     @Namespace private var coachChatZoom
 
     init(dependencies: AppDependencies) {
+        self.historySnapshotProvider = dependencies.historySnapshotProvider
+        self.aiCoachPreferences = dependencies.aiCoachPreferences
+        self.aiCoachAvailability = dependencies.aiCoachAvailability
+        self.proactivePromptCoordinator = dependencies.proactivePromptCoordinator
         self._workoutViewModel = StateObject(wrappedValue: WorkoutViewModel(
             workoutSessionRepository: dependencies.workoutSessionRepository,
             routineRepository: dependencies.routineRepository,
@@ -52,7 +60,13 @@ private struct ContentViewInternal: View {
                     Label("tab.exercises".localized, systemImage: "dumbbell.fill")
                 }
 
-            HistoryView(viewModel: workoutViewModel)
+            HistoryView(
+                viewModel: workoutViewModel,
+                historySnapshotProvider: historySnapshotProvider,
+                aiCoachPreferences: aiCoachPreferences,
+                aiCoachAvailability: aiCoachAvailability,
+                proactivePromptCoordinator: proactivePromptCoordinator
+            )
                 .tabItem {
                     Label("tab.history".localized, systemImage: "clock.fill")
                 }

@@ -17,8 +17,12 @@ final class AppDependencies: ObservableObject {
     let routineRepository: RoutineRepository
     let exerciseRepository: ExerciseRepository
     let workoutSessionRepository: WorkoutSessionRepository
+    let historySnapshotProvider: HistorySnapshotProviding
     let workoutHistoryCorrelation: WorkoutHistoryCorrelationProviding
     let restTimerReminders: RestTimerReminderScheduling
+    let aiCoachPreferences: AICoachPreferencesProviding
+    let aiCoachAvailability: AICoachAvailabilityProviding
+    let proactivePromptCoordinator: ProactivePromptCoordinating
 
     /// A true app-wide singleton — `WatchConnectivityManager.shared` must be the same
     /// instance everywhere so its WCSession delegate (registered at app launch) is the
@@ -59,10 +63,21 @@ final class AppDependencies: ObservableObject {
         self.routineRepository = SwiftDataRoutineRepository(modelContext: modelContext)
         self.exerciseRepository = SwiftDataExerciseRepository(modelContext: modelContext)
         self.workoutSessionRepository = SwiftDataWorkoutSessionRepository(modelContext: modelContext)
+        self.historySnapshotProvider = SwiftDataHistorySnapshotProvider(
+            modelContainer: modelContext.container
+        )
         self.workoutHistoryCorrelation = SwiftDataWorkoutHistoryCorrelationProvider(
             container: modelContext.container
         )
         self.restTimerReminders = UserNotificationRestTimerScheduler()
+        let aiCoachPreferences = AICoachPreferences.shared
+        let aiCoachAvailability = AICoachAvailability.shared
+        self.aiCoachPreferences = aiCoachPreferences
+        self.aiCoachAvailability = aiCoachAvailability
+        self.proactivePromptCoordinator = ProactivePromptCoordinator(
+            preferences: aiCoachPreferences,
+            availability: aiCoachAvailability
+        )
         let watchConnectivity = WatchConnectivityManager.shared
         self.watchSync = watchConnectivity
         self.exerciseProgressService = ExerciseProgressService(modelContext: modelContext)

@@ -36,6 +36,37 @@ struct WorkoutViewModelTests {
         }
     }
 
+    /// History uses an invalidation version rather than retaining every SwiftData model on
+    /// MainActor. Content-only edits and CloudKit modifies do not change a count, so every explicit
+    /// refresh must still advance the generation.
+    @MainActor
+    @Test
+    func historyVersionChangesOnEveryRefreshAndSingleSessionLookupStillWorks() throws {
+        let context = ModelContext(InMemoryModelContainer.make())
+        let sessionRepository = SwiftDataWorkoutSessionRepository(modelContext: context)
+        let viewModel = makeViewModel(
+            sessionRepository: sessionRepository,
+            routineRepository: SwiftDataRoutineRepository(modelContext: context),
+            exerciseRepository: SwiftDataExerciseRepository(modelContext: context)
+        )
+
+        let session = WorkoutSession(routine: nil)
+        session.endTime = session.startTime.addingTimeInterval(600)
+        sessionRepository.insert(session)
+        try sessionRepository.save()
+
+        viewModel.refreshHistory()
+        let afterFirstRefresh = viewModel.historyVersion
+
+        // Mutating in place: the session count cannot signal this change.
+        session.notes = "edited"
+        try sessionRepository.save()
+        viewModel.refreshHistory()
+
+        #expect(viewModel.historyVersion != afterFirstRefresh)
+        #expect(viewModel.workoutSession(id: session.id) === session)
+    }
+
     @Test
     func restTimerRemindersAreDeferredUntilTimerStarts() async {
         let context = ModelContext(InMemoryModelContainer.make())
@@ -548,7 +579,6 @@ struct WorkoutViewModelTests {
 
         // The local delete stands; the failure only raises the non-blocking flag.
         #expect(sessionRepository.fetchAll().isEmpty)
-        #expect(viewModel.workoutHistory.isEmpty)
         #expect(viewModel.healthKitDeleteFailed)
     }
 

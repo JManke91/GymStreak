@@ -15,7 +15,12 @@ final class SwiftDataWorkoutSessionRepository: WorkoutSessionRepository {
     }
 
     func fetchAll() -> [WorkoutSession] {
-        let descriptor = FetchDescriptor<WorkoutSession>(sortBy: [SortDescriptor(\.startTime, order: .reverse)])
+        var descriptor = FetchDescriptor<WorkoutSession>(sortBy: [SortDescriptor(\.startTime, order: .reverse)])
+        // History cards and aggregations all walk workoutExercises → sets. Without prefetching,
+        // every card faults its exercises individually (N+1 against SQLite) — see
+        // docs/history-performance.md §2.4. Nested to-many prefetching (…exercises.sets) is not
+        // expressible as a key path, so only the first hop is prefetched.
+        descriptor.relationshipKeyPathsForPrefetching = [\.workoutExercises]
         do {
             return try modelContext.fetch(descriptor)
         } catch {

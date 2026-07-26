@@ -1,21 +1,14 @@
 //
-//  SwipeToDeleteUITests.swift
+//  WorkoutDeletionUITests.swift
 //  GymStreakUITests
 //
-//  Regression coverage for the history list's swipe-to-delete gesture.
-//
-//  These live in the UI test target because the behaviour under test is gesture
-//  arbitration — whether a horizontal swipe also counts as a tap — which no unit
-//  test can observe. The bug this guards against shipped once: the cards were
-//  `NavigationLink`s, and a SwiftUI button activates on touch-up anywhere inside
-//  its bounds, so every swipe pushed the detail screen before the revealed
-//  delete action could be tapped.
+//  Regression coverage for workout deletion entry points and History navigation.
 //
 
 import XCTest
 
 @MainActor
-final class SwipeToDeleteUITests: XCTestCase {
+final class WorkoutDeletionUITests: XCTestCase {
     private var app: XCUIApplication!
 
     private var isGerman: Bool {
@@ -36,7 +29,11 @@ final class SwipeToDeleteUITests: XCTestCase {
     override func setUpWithError() throws {
         continueAfterFailure = false
         app = XCUIApplication()
-        app.launchArguments = ["-UI_TESTING", "1", "-DISABLE_NOTIFICATIONS", "1"]
+        app.launchArguments = [
+            "-UI_TESTING", "1",
+            "-UI_TEST_EPHEMERAL_STORE", "1",
+            "-DISABLE_NOTIFICATIONS", "1"
+        ]
         app.launch()
         dismissSystemAlerts()
         _ = app.wait(for: .runningForeground, timeout: 10)
@@ -62,9 +59,6 @@ final class SwipeToDeleteUITests: XCTestCase {
     }
 
     /// The first seeded workout card in the Trainings list.
-    ///
-    /// The card is one combined accessibility element carrying the `.isButton`
-    /// trait, so its label includes the routine name alongside the date and metrics.
     private func firstWorkoutCard() throws -> XCUIElement {
         let historyTabButton = app.tabBars.buttons[historyTab]
         XCTAssertTrue(historyTabButton.waitForExistence(timeout: 10), "History tab should exist")
@@ -79,37 +73,39 @@ final class SwipeToDeleteUITests: XCTestCase {
         return card
     }
 
-    /// The regression: a swipe must reveal delete and must NOT navigate.
-    func testSwipingCardRevealsDeleteWithoutNavigating() throws {
+    /// The list keeps deletion available without attaching a horizontal drag recognizer
+    /// to every row. The long-press menu is the shortcut; the detail screen also has
+    /// an always-visible More menu.
+    func testLongPressCardOffersDeleteWithoutNavigating() throws {
         let card = try firstWorkoutCard()
 
-        card.swipeLeft()
+        card.press(forDuration: 1.2)
 
         let deleteAction = app.buttons[deleteLabel]
         XCTAssertTrue(
             deleteAction.waitForExistence(timeout: 3),
-            "Swiping a card left should reveal the delete action"
+            "Long-pressing a card should offer the delete action"
         )
         XCTAssertFalse(
             app.buttons[detailMenuLabel].exists,
-            "Swiping must not push the workout detail screen"
+            "Opening the context menu must not push the workout detail screen"
         )
     }
 
-    /// The revealed action must reach the same confirmation the detail screen uses.
-    func testRevealedDeleteOpensConfirmation() throws {
+    /// The context-menu shortcut must reach the same confirmation as the detail screen.
+    func testContextMenuDeleteOpensConfirmation() throws {
         let card = try firstWorkoutCard()
 
-        card.swipeLeft()
+        card.press(forDuration: 1.2)
 
         let deleteAction = app.buttons[deleteLabel]
-        XCTAssertTrue(deleteAction.waitForExistence(timeout: 3), "Delete action should be revealed")
+        XCTAssertTrue(deleteAction.waitForExistence(timeout: 3), "Delete action should be offered")
         deleteAction.tap()
 
         let alert = app.alerts[confirmationTitle]
         XCTAssertTrue(
             alert.waitForExistence(timeout: 3),
-            "Triggering the revealed delete should raise the shared delete confirmation"
+            "Context-menu deletion should raise the shared delete confirmation"
         )
     }
 
@@ -125,9 +121,7 @@ final class SwipeToDeleteUITests: XCTestCase {
         )
     }
 
-    /// The list cards push onto a `NavigationPath`, so the other destinations on the
-    /// same stack have to keep working — the settings screen was converted from an
-    /// `isPresented` push for exactly that reason.
+    /// The path-bound stack must keep its other destination types working.
     func testCoachSettingsStillPushesOnThePathBoundStack() throws {
         let historyTabButton = app.tabBars.buttons[historyTab]
         XCTAssertTrue(historyTabButton.waitForExistence(timeout: 10), "History tab should exist")

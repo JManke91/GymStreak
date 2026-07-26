@@ -20,6 +20,12 @@ protocol AICoachPreferencesProviding: AnyObject {
     /// Monthly period recap is active.
     var isPeriodRecapEffectivelyEnabled: Bool { get }
 
+    /// Proactive monthly prompt is active.
+    var isProactiveMonthlyEffectivelyEnabled: Bool { get }
+
+    /// Last monthly period for which the proactive prompt was consumed.
+    var lastProactivePromptShownForPeriodId: String? { get set }
+
     /// Exercise deep-dive surface is active.
     var isExerciseDeepDiveEffectivelyEnabled: Bool { get }
 

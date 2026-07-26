@@ -9,12 +9,11 @@ import SwiftData
 /// Aggregated statistics used by the History redesign (WeekHero, calendar month totals, streaks).
 /// All methods are synchronous and operate on already-fetched WorkoutSession arrays to keep the
 /// View layer simple and avoid re-hitting SwiftData on every render.
-@MainActor
 struct HistoryStatsService {
 
     // MARK: - Week Stats
 
-    struct WeekStats {
+    struct WeekStats: Sendable {
         let completedCount: Int          // finished workouts in the current week (Mon–Sun)
         let goal: Int                    // target workouts per week
         let weekVolume: Double           // summed volume for the current week, kg
@@ -68,8 +67,9 @@ struct HistoryStatsService {
 
     // MARK: - Week-day strip
 
-    struct WeekDayStatus: Identifiable {
-        let id = UUID()
+    struct WeekDayStatus: Identifiable, Sendable {
+        /// The day itself, so a rebuilt strip updates its cells instead of replacing them.
+        var id: Date { date }
         let date: Date
         let weekday: Int     // 1 = Monday ... 7 = Sunday
         let label: String    // "Mo", "Di", ...
@@ -103,7 +103,7 @@ struct HistoryStatsService {
             return WeekDayStatus(
                 date: startOfDate,
                 weekday: offset + 1,
-                label: weekdayLabel(for: startOfDate, calendar: calendar),
+                label: weekdayLabel(for: startOfDate),
                 isToday: startOfDate == today,
                 isFuture: startOfDate > today,
                 hasWorkout: workoutDays.contains(startOfDate),
@@ -114,48 +114,10 @@ struct HistoryStatsService {
 
     // MARK: - Month grouping
 
-    struct MonthSectionInfo {
-        let year: Int
-        let month: Int        // 1...12
-        let label: String
-        let sessions: [WorkoutSession]
-        let totalVolume: Double
-    }
-
-    static func groupByMonth(sessions: [WorkoutSession]) -> [MonthSectionInfo] {
-        let calendar = isoGermanCalendar()
-        let grouped = Dictionary(grouping: sessions) { session -> DateComponents in
-            calendar.dateComponents([.year, .month], from: session.startTime)
-        }
-        return grouped
-            .compactMap { (key, value) -> MonthSectionInfo? in
-                guard let year = key.year, let month = key.month else { return nil }
-                let label = monthLabel(year: year, month: month, calendar: calendar)
-                let volume = value.reduce(0.0) { $0 + $1.totalVolume }
-                return MonthSectionInfo(
-                    year: year,
-                    month: month,
-                    label: label,
-                    sessions: value.sorted { $0.startTime > $1.startTime },
-                    totalVolume: volume
-                )
-            }
-            .sorted { ($0.year, $0.month) > ($1.year, $1.month) }
-    }
-
-    /// Month stats (sessions, volume) for the given year / month.
-    static func monthStats(
-        sessions: [WorkoutSession],
-        year: Int,
-        month: Int
-    ) -> (sessions: Int, volume: Double) {
-        let calendar = isoGermanCalendar()
-        let matches = sessions.filter { session in
-            let comps = calendar.dateComponents([.year, .month], from: session.startTime)
-            return comps.year == year && comps.month == month && session.endTime != nil
-        }
-        return (matches.count, matches.reduce(0.0) { $0 + $1.totalVolume })
-    }
+    // `groupByMonth` and `monthStats` lived here until 2026-07-26. Both walked every session's
+    // `totalVolume` and were called from inside `body`; `HistorySnapshotBuilder` now derives the
+    // month sections and the calendar's month totals from the single pass that builds the cards, so
+    // both were dead and are gone rather than left as a tempting shortcut back into a view body.
 
     // MARK: - Streak
 
@@ -168,9 +130,11 @@ struct HistoryStatsService {
     ) -> Int {
         let calendar = calendar ?? isoGermanCalendar()
         let finished = sessions.filter { $0.endTime != nil }
-        let workoutWeeks = Set(finished.map { weekKey(for: $0.startTime, calendar: calendar) })
+        // The week's Monday (a Date) is the identity of a week — no string key, and therefore no
+        // DateFormatter per session and per loop iteration (docs/history-performance.md §2.2).
+        let workoutWeeks = Set(finished.map { weekStartKey(for: $0.startTime, calendar: calendar) })
 
-        let currentKey = weekKey(for: referenceDate, calendar: calendar)
+        let currentKey = weekStartKey(for: referenceDate, calendar: calendar)
         var streak = 0
         var cursor = referenceDate
 
@@ -180,7 +144,7 @@ struct HistoryStatsService {
         }
 
         while true {
-            let key = weekKey(for: cursor, calendar: calendar)
+            let key = weekStartKey(for: cursor, calendar: calendar)
             if workoutWeeks.contains(key) {
                 streak += 1
                 cursor = calendar.date(byAdding: .day, value: -7, to: cursor) ?? cursor
@@ -213,34 +177,58 @@ struct HistoryStatsService {
         return DateInterval(start: start, end: end)
     }
 
-    private static func weekKey(for date: Date, calendar: Calendar) -> String {
-        let interval = weekInterval(containing: date, calendar: calendar)
-        let fmt = DateFormatter()
-        fmt.calendar = calendar
-        fmt.dateFormat = "yyyy-MM-dd"
-        return fmt.string(from: interval.start)
+    /// Identity of the week containing `date`: its Monday, normalised to the start of that day.
+    ///
+    /// The extra `startOfDay` is not redundant. Where a DST transition happens *at* midnight
+    /// (America/Havana, America/Santiago), `weekInterval` can return the same Monday at 00:00 for
+    /// one weekday and at 01:00 for another, so one calendar week would yield two distinct keys and
+    /// a streak would break a week early. The formatter-based `"yyyy-MM-dd"` key this replaced
+    /// collapsed that hour implicitly; `startOfDay` restores the behaviour without a DateFormatter.
+    private static func weekStartKey(for date: Date, calendar: Calendar) -> Date {
+        calendar.startOfDay(for: weekInterval(containing: date, calendar: calendar).start)
     }
 
-    private static func weekdayLabel(for date: Date, calendar: Calendar) -> String {
-        let fmt = DateFormatter()
-        fmt.calendar = calendar
-        fmt.locale = Locale.current
-        fmt.setLocalizedDateFormatFromTemplate("EEEEEE") // "Mo", "Di"...
-        let raw = fmt.string(from: date)
+    // MARK: - Formatters
+
+    // Hoisted to statics: these were allocated per session, per weekday and per month group on
+    // every render of the History screen (docs/history-performance.md §2.2). Both are configured
+    // with the Monday-first calendar these labels are always rendered in.
+
+    private static let weekdayLabelStyle = Date.FormatStyle(
+        date: .omitted,
+        time: .omitted,
+        locale: .current,
+        calendar: isoGermanCalendar()
+    )
+    .weekday(.short)
+
+    private static let monthLabelStyle = Date.FormatStyle(
+        date: .omitted,
+        time: .omitted,
+        locale: .current,
+        calendar: isoGermanCalendar()
+    )
+    .month(.wide)
+    .year()
+
+    private static func weekdayLabel(for date: Date) -> String {
+        let raw = date.formatted(weekdayLabelStyle)
         // .shortWeekdaySymbols often include a trailing "."; keep first 2 alphabetic characters.
         return String(raw.filter(\.isLetter).prefix(2))
     }
 
-    private static func monthLabel(year: Int, month: Int, calendar: Calendar) -> String {
-        let fmt = DateFormatter()
-        fmt.calendar = calendar
-        fmt.locale = Locale.current
-        fmt.setLocalizedDateFormatFromTemplate("MMMM yyyy")
+    /// Localized "MMMM yyyy" label for a year/month pair. Shared by the calendar header, the
+    /// month dividers and the coach entry card so they cannot drift apart.
+    static func monthYearLabel(year: Int, month: Int) -> String {
         var comps = DateComponents()
         comps.year = year
         comps.month = month
         comps.day = 1
-        let date = calendar.date(from: comps) ?? Date()
-        return fmt.string(from: date)
+        let date = isoGermanCalendar().date(from: comps) ?? Date()
+        return date.formatted(monthLabelStyle)
+    }
+
+    static func monthYearLabel(for date: Date) -> String {
+        date.formatted(monthLabelStyle)
     }
 }

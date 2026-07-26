@@ -31,6 +31,22 @@ struct GymStreakApp: App {
 
     var sharedModelContainer: ModelContainer = {
         let schema = Schema(GymStreakSchema.modelTypes)
+        let isEphemeralUITest = ProcessInfo.processInfo.arguments.contains(
+            "-UI_TEST_EPHEMERAL_STORE"
+        )
+        if isEphemeralUITest {
+            let configuration = ModelConfiguration(
+                schema: schema,
+                isStoredInMemoryOnly: true,
+                cloudKitDatabase: .none
+            )
+            do {
+                return try ModelContainer(for: schema, configurations: [configuration])
+            } catch {
+                fatalError("Could not create ephemeral UI-test ModelContainer: \(error)")
+            }
+        }
+
         let modelConfiguration = ModelConfiguration(
             schema: schema,
             isStoredInMemoryOnly: false,

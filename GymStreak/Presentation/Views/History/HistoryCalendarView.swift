@@ -8,8 +8,13 @@ import SwiftUI
 /// iOS-style month calendar showing completed workouts as colored dots per workout type.
 /// Tap a day to reveal its workout card below the grid.
 struct HistoryCalendarView: View {
-    let sessions: [WorkoutSession]
-    let prExerciseCountBySession: [UUID: Int]
+    /// One precomputed card per day that has a finished workout, keyed by start-of-day. Built once
+    /// in `HistorySnapshotBuilder`; this view previously rebuilt the equivalent dictionary from the
+    /// full session list twice per render and read `@Model` properties per cell.
+    let cardsByDay: [Date: WorkoutCardModel]
+    /// Per-session month totals and workout types, keyed `"year-month"`. See `monthStats`.
+    let monthTotals: [String: MonthSectionModel]
+    let typesByMonth: [String: [WorkoutType]]
 
     @State private var viewMonth: Date = HistoryCalendarView.initialMonth()
     @State private var selectedDate: Date?
@@ -21,22 +26,6 @@ struct HistoryCalendarView: View {
     }
 
     private var calendar: Calendar { HistoryStatsService.isoGermanCalendar() }
-
-    private var sessionsByDay: [Date: WorkoutSession] {
-        var map: [Date: WorkoutSession] = [:]
-        for session in sessions where session.endTime != nil {
-            let day = calendar.startOfDay(for: session.startTime)
-            // If two finished workouts on the same day, prefer the most recent.
-            if let existing = map[day] {
-                if session.startTime > existing.startTime {
-                    map[day] = session
-                }
-            } else {
-                map[day] = session
-            }
-        }
-        return map
-    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -53,7 +42,7 @@ struct HistoryCalendarView: View {
     private var monthHeader: some View {
         let year = calendar.component(.year, from: viewMonth)
         let month = calendar.component(.month, from: viewMonth)
-        let stats = HistoryStatsService.monthStats(sessions: sessions, year: year, month: month)
+        let stats = monthStats(year: year, month: month)
 
         return HStack(alignment: .center) {
             VStack(alignment: .leading, spacing: 2) {
@@ -98,11 +87,19 @@ struct HistoryCalendarView: View {
     }
 
     private func monthLabel() -> String {
-        let fmt = DateFormatter()
-        fmt.calendar = calendar
-        fmt.locale = Locale.current
-        fmt.setLocalizedDateFormatFromTemplate("MMMM yyyy")
-        return fmt.string(from: viewMonth)
+        Self.monthFormatter.string(from: viewMonth)
+    }
+
+    /// Precomputed per-**session** totals for the visible month — a dictionary lookup.
+    ///
+    /// Deliberately not derived from `cardsByDay`: that holds one card per day, so on a two-workout
+    /// day it would undercount the sessions, drop the earlier workout's volume, and disagree with
+    /// the list's own divider for the same month.
+    private func monthStats(year: Int, month: Int) -> (sessions: Int, volume: Double) {
+        guard let totals = monthTotals[MonthSectionModel.id(year: year, month: month)] else {
+            return (0, 0)
+        }
+        return (totals.sessionCount, totals.totalVolume)
     }
 
     private func monthStatsLabel(stats: (sessions: Int, volume: Double)) -> String {
@@ -133,13 +130,9 @@ struct HistoryCalendarView: View {
 
     private func weekdaySymbol(for mondayIndex: Int) -> String {
         // mondayIndex: 0=Monday ... 6=Sunday (German locale)
-        let fmt = DateFormatter()
-        fmt.calendar = calendar
-        fmt.locale = Locale.current
-        let symbols = fmt.veryShortStandaloneWeekdaySymbols ?? ["S","M","T","W","T","F","S"]
         // veryShortStandaloneWeekdaySymbols[0] = Sunday in Gregorian; transform to Monday-first.
         let gregorianIndex = (mondayIndex + 1) % 7
-        return String(symbols[gregorianIndex].prefix(1)).uppercased()
+        return Self.veryShortWeekdaySymbols[gregorianIndex]
     }
 
     // MARK: - Grid
@@ -156,12 +149,15 @@ struct HistoryCalendarView: View {
     }
 
     private struct DayCell: Identifiable {
-        let id = UUID()
+        /// The day, plus whether it belongs to the visible month — a fresh `UUID()` per build gave
+        /// every cell a new identity on every render, so the whole grid was replaced rather than
+        /// updated. Leading/trailing filler days can repeat a date across months, hence the flag.
+        var id: String { "\(date.timeIntervalSince1970)-\(isOutside)" }
         let date: Date
         let day: Int
         let isOutside: Bool
         let isToday: Bool
-        let session: WorkoutSession?
+        let card: WorkoutCardModel?
     }
 
     private func buildCells() -> [DayCell] {
@@ -171,7 +167,7 @@ struct HistoryCalendarView: View {
         var cells: [DayCell] = []
         let firstWeekday = ((calendar.component(.weekday, from: firstOfMonth) - calendar.firstWeekday) + 7) % 7
         let today = calendar.startOfDay(for: Date())
-        let map = sessionsByDay
+        let map = cardsByDay
 
         // Preceding month tail
         if firstWeekday > 0 {
@@ -182,7 +178,7 @@ struct HistoryCalendarView: View {
                 var comps = calendar.dateComponents([.year, .month], from: prevMonthStart)
                 comps.day = day
                 let date = calendar.date(from: comps) ?? prevMonthStart
-                cells.append(DayCell(date: date, day: day, isOutside: true, isToday: false, session: nil))
+                cells.append(DayCell(date: date, day: day, isOutside: true, isToday: false, card: nil))
             }
         }
 
@@ -194,14 +190,14 @@ struct HistoryCalendarView: View {
             let date = calendar.date(from: comps) ?? firstOfMonth
             let startOfDay = calendar.startOfDay(for: date)
             let isToday = startOfDay == today
-            cells.append(DayCell(date: startOfDay, day: d, isOutside: false, isToday: isToday, session: map[startOfDay]))
+            cells.append(DayCell(date: startOfDay, day: d, isOutside: false, isToday: isToday, card: map[startOfDay]))
         }
 
         // Trailing next-month days to complete the last row
         while cells.count % 7 != 0 {
             guard let last = cells.last else { break }
             let next = calendar.date(byAdding: .day, value: 1, to: last.date) ?? last.date
-            cells.append(DayCell(date: next, day: calendar.component(.day, from: next), isOutside: true, isToday: false, session: nil))
+            cells.append(DayCell(date: next, day: calendar.component(.day, from: next), isOutside: true, isToday: false, card: nil))
         }
 
         // Let lastOfMonth silence "unused" in release builds
@@ -249,10 +245,9 @@ struct HistoryCalendarView: View {
 
     @ViewBuilder
     private func dot(for cell: DayCell, isSelected: Bool) -> some View {
-        if let session = cell.session, !cell.isOutside {
-            let type = WorkoutType.classify(routineName: session.routineName)
+        if let card = cell.card, !cell.isOutside {
             Circle()
-                .fill(isSelected ? DesignSystem.Colors.textOnTint : type.color)
+                .fill(isSelected ? DesignSystem.Colors.textOnTint : card.type.color)
                 .frame(width: 5, height: 5)
         } else {
             Color.clear.frame(width: 5, height: 5)
@@ -261,20 +256,13 @@ struct HistoryCalendarView: View {
 
     // MARK: - Legend
 
+    /// Workout types present in the visible month, newest session first. Precomputed per month for
+    /// the same reason as `monthStats`: a per-day view of the data can drop a type that a
+    /// two-workout day contained.
     private var legendTypes: [WorkoutType] {
         let year = calendar.component(.year, from: viewMonth)
         let month = calendar.component(.month, from: viewMonth)
-        var seen = Set<WorkoutType>()
-        var ordered: [WorkoutType] = []
-        for session in sessions where session.endTime != nil {
-            let comps = calendar.dateComponents([.year, .month], from: session.startTime)
-            guard comps.year == year, comps.month == month else { continue }
-            let type = WorkoutType.classify(routineName: session.routineName)
-            if seen.insert(type).inserted {
-                ordered.append(type)
-            }
-        }
-        return ordered
+        return typesByMonth[MonthSectionModel.id(year: year, month: month)] ?? []
     }
 
     @ViewBuilder
@@ -303,20 +291,16 @@ struct HistoryCalendarView: View {
     @ViewBuilder
     private var selectedDaySection: some View {
         if let date = selectedDate {
-            let session = sessionsByDay[calendar.startOfDay(for: date)]
+            let card = cardsByDay[calendar.startOfDay(for: date)]
             VStack(alignment: .leading, spacing: 10) {
                 Text(selectedDateLabel(date))
                     .font(.system(size: 15, weight: .bold, design: .rounded))
                     .kerning(-0.3)
                     .foregroundStyle(Color.white)
                     .padding(.horizontal, 20)
-                if let session {
-                    NavigationLink(value: session.id) {
-                        WorkoutCardView(
-                            workout: session,
-                            isPR: (prExerciseCountBySession[session.id] ?? 0) > 0,
-                            prLifts: prExerciseCountBySession[session.id] ?? 0
-                        )
+                if let card {
+                    NavigationLink(value: card.id) {
+                        WorkoutCardView(card: card)
                     }
                     .buttonStyle(.plain)
                     .simultaneousGesture(TapGesture().onEnded { HapticManager.shared.light() })
@@ -350,10 +334,40 @@ struct HistoryCalendarView: View {
     }
 
     private func selectedDateLabel(_ date: Date) -> String {
+        Self.selectedDayFormatter.string(from: date)
+    }
+
+    // MARK: - Formatters
+
+    // Hoisted to statics: the month header, the 7 weekday symbols and the selected-day label each
+    // allocated a DateFormatter on every render (docs/history-performance.md §1.3). `@MainActor`
+    // because a shared mutable formatter is only safe while every access comes from a view body.
+
+    @MainActor
+    private static let monthFormatter: DateFormatter = {
         let fmt = DateFormatter()
-        fmt.calendar = calendar
+        fmt.calendar = HistoryStatsService.isoGermanCalendar()
+        fmt.locale = Locale.current
+        fmt.setLocalizedDateFormatFromTemplate("MMMM yyyy")
+        return fmt
+    }()
+
+    @MainActor
+    private static let selectedDayFormatter: DateFormatter = {
+        let fmt = DateFormatter()
+        fmt.calendar = HistoryStatsService.isoGermanCalendar()
         fmt.locale = Locale.current
         fmt.setLocalizedDateFormatFromTemplate("EEE d. MMM")
-        return fmt.string(from: date)
-    }
+        return fmt
+    }()
+
+    /// Gregorian order (index 0 = Sunday), single uppercase letter each.
+    @MainActor
+    private static let veryShortWeekdaySymbols: [String] = {
+        let fmt = DateFormatter()
+        fmt.calendar = HistoryStatsService.isoGermanCalendar()
+        fmt.locale = Locale.current
+        let symbols = fmt.veryShortStandaloneWeekdaySymbols ?? ["S", "M", "T", "W", "T", "F", "S"]
+        return symbols.map { String($0.prefix(1)).uppercased() }
+    }()
 }

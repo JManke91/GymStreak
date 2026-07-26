@@ -154,13 +154,19 @@ class TestDataSeeder {
             return
         }
 
-        let dates = [
-            Calendar.current.date(byAdding: .day, value: -1, to: Date())!,
-            Calendar.current.date(byAdding: .day, value: -3, to: Date())!,
-            Calendar.current.date(byAdding: .day, value: -5, to: Date())!,
-            Calendar.current.date(byAdding: .day, value: -7, to: Date())!,
-            Calendar.current.date(byAdding: .day, value: -9, to: Date())!
-        ]
+        // The normal five rows preserve the App Store screenshot fixtures. The stress variant is
+        // opt-in from HistoryResponsivenessUITests and exercises the same hundreds-of-sessions
+        // relationship graph that exposed the release-blocking main-thread stall.
+        let arguments = ProcessInfo.processInfo.arguments
+        let stressCount: Int? = arguments
+            .firstIndex(of: "-UI_TEST_HISTORY_SESSION_COUNT")
+            .flatMap { index in
+                arguments.indices.contains(index + 1) ? Int(arguments[index + 1]) : nil
+            }
+        let sessionCount = stressCount ?? 5
+        let dates = (0..<sessionCount).compactMap { index in
+            Calendar.current.date(byAdding: .day, value: -(index * 2 + 1), to: Date())
+        }
 
         for (index, date) in dates.enumerated() {
             let routine = routines[index % routines.count]

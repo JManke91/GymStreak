@@ -651,6 +651,7 @@ class RoutinesViewModel: ObservableObject {
     private func save() {
         do {
             try routineRepository.save()
+            NotificationCenter.default.post(name: .historySourceDataDidChange, object: nil)
         } catch {
             print("Error saving context: \(error)")
         }

@@ -59,13 +59,14 @@ GymStreak/
 | App | `App/` | `GymStreakApp` (@main, ModelContainer), `AppDependencies` (composition root), `ContentView` (tab root), `TestDataSeeder` |
 | Domain | `Domain/Models/` | SwiftData `@Model` classes (`Models.swift`), `MuscleGroups`, `EquipmentType`, `WorkoutType`, chart models, AI-coach input/output models, `IncomingWatchWorkout` (Domain input for watch-workout ingestion) |
 | Domain | `Domain/Repositories/` | `RoutineRepository`, `ExerciseRepository`, `WorkoutSessionRepository` — `@MainActor` protocols |
-| Domain | `Domain/Interfaces/` | System-gateway protocols: `WatchSyncServicing`, `HealthKitWorkoutServicing`, `RestTimerReminderScheduling`, `AICoach/` (`AICoachServicing`, `AICoachCaching`, `AICoachPreferencesProviding`) |
+| Domain | `Domain/Interfaces/` | System-gateway and async read protocols: `WatchSyncServicing`, `HealthKitWorkoutServicing`, `RestTimerReminderScheduling`, `HistorySnapshotProviding`, `AICoach/` (`AICoachServicing`, `AICoachCaching`, `AICoachPreferencesProviding`, `AICoachAvailabilityProviding`, `ProactivePromptCoordinating`) |
 | Domain | `Domain/Services/` | Pure business logic on model arrays: `HistoryStatsService`, `PersonalRecordService`, `FortschrittAggregator`, `SupersetLabelProvider`, `SupersetEditor` (superset-editor set-algebra), `WatchWorkoutIngestionService` (`@MainActor`, materializes an `IncomingWatchWorkout` into a `WorkoutSession`) |
 | Data | `Data/Repositories/` | `SwiftData*Repository` — `@MainActor final class`, `init(modelContext:)` |
 | Data | `Data/HealthKit/` | `HealthKitWorkoutManager`, `HealthKitWorkoutReconciler` |
 | Data | `Data/Notifications/` | `UserNotificationRestTimerScheduler` |
 | Data | `Data/Sync/` | `WatchConnectivityManager`, `CloudSyncObserver`, `WatchModels` (sync DTOs + mappers) |
 | Data | `Data/Progress/` | `ExerciseProgressService` (chart aggregation queries) |
+| Data | `Data/History/` | `SwiftDataHistorySnapshotProvider` (detached off-main construction) + `SwiftDataHistorySnapshotStore` (`@ModelActor`; actor-owned History fetch and aggregation) |
 | Data | `Data/AICoach/` | `AICoachService` (FoundationModels), cache, preferences, telemetry, availability, aggregators, system prompts |
 | Presentation | `Presentation/ViewModels/` | `RoutinesViewModel`, `ExercisesViewModel`, `WorkoutViewModel`, `ExerciseProgressViewModel`, `AICoach/` VMs |
 | Presentation | `Presentation/Views/<FeatureArea>/` | `Routines/`, `Exercises/`, `Workout/`, `History/`, `Charts/`, `AICoach/`, `Components/`, `DesignSystem/` |
@@ -75,8 +76,15 @@ GymStreak/
 ### Dependency injection
 
 - `AppDependencies` (`App/AppDependencies.swift`) is a `@MainActor final class … ObservableObject` built once in `GymStreakApp.init()` from `sharedModelContainer.mainContext`, injected via `.environmentObject(dependencies)`.
-- It owns shared repository instances, `exerciseProgressService`, and `watchSync` (the `WatchConnectivityManager.shared` singleton — WCSession delegate identity must be the launch-time instance), and exposes `makeHealthKitWorkoutService()` as a **factory** (the two independent `WorkoutViewModel` instances each get their own HealthKit session — pre-existing behavior, kept deliberately).
+- It owns shared repository instances, the actor-owned `historySnapshotProvider`,
+  `exerciseProgressService`, and `watchSync` (the `WatchConnectivityManager.shared` singleton —
+  WCSession delegate identity must be the launch-time instance), and exposes
+  `makeHealthKitWorkoutService()` as a **factory** (the two independent `WorkoutViewModel`
+  instances each get their own HealthKit session — pre-existing behavior, kept deliberately).
 - ViewModels receive dependencies via initializer injection, typed as protocols.
+- History receives AI-coach preference, availability and proactive-prompt dependencies through
+  Domain protocols wired in `AppDependencies`; its Presentation views never access their concrete
+  Data singletons.
 - Views that own a `@StateObject` ViewModel use the **outer/inner view split** (outer reads `@EnvironmentObject dependencies`, inner constructs the ViewModel in `init` — the environment isn't readable inside a plain `init`). See `RoutinesView.swift` for the canonical example.
 - AI-coach ViewModels (`@Observable @MainActor`) default their protocol dependencies to the shared instances inside the `@MainActor` init body (`service ?? AICoachService.shared`) — NOT as `= Foo.shared` default arguments, which Swift 6 rejects (default args evaluate nonisolated).
 
@@ -141,6 +149,7 @@ The wire DTO `CompletedWatchWorkout` never crosses into Presentation. `WatchConn
 | `.cloudKitDataDidChange` | CloudSyncObserver | RoutinesViewModel, ExercisesViewModel (refetch) |
 | `.watchAppBecameAvailable` | WatchConnectivityManager | RoutinesViewModel (sync routines) |
 | `.workoutHistoryDidChange` | Domain ingestion services | WorkoutViewModel (refresh history) |
+| `.historySourceDataDidChange` | RoutinesViewModel, ExercisesViewModel after successful local saves | WorkoutViewModel (invalidate actor-owned History snapshot) |
 | `.routineTemplateDidChange` / `.routineTemplateDidChangeLocally` | ViewModels / transaction coordinator | RoutinesViewModel (syncing / non-syncing refresh) |
 
 Accepted as the inter-ViewModel event mechanism; don't add new notification names when a direct repository/service call works.
@@ -213,5 +222,6 @@ Changes with architectural surface (new/moved files, new types or imports, depen
 | Outer/inner view DI split | `Presentation/Views/Routines/RoutinesView.swift` |
 | Domain service | `Domain/Services/HistoryStatsService.swift` |
 | Gateway protocol + conformance | `Domain/Interfaces/WatchSyncServicing.swift` + `Data/Sync/WatchConnectivityManager.swift` |
+| Actor-owned value read model | `Domain/Interfaces/HistorySnapshotProviding.swift` + `Data/History/SwiftDataHistorySnapshotStore.swift` (`SwiftDataHistorySnapshotProvider` is the composition-root entry point) |
 | Domain-type styling in Presentation | `Presentation/Views/Components/DomainColorStyling.swift` |
 | Watch ViewModel + DI | `GymStreakWatch Watch App/ViewModels/WatchRoutinesViewModel.swift` |
