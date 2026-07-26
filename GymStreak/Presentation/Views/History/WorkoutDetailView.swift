@@ -20,6 +20,7 @@ struct WorkoutDetailView: View {
     @EnvironmentObject private var dependencies: AppDependencies
     /// Kept only to pass through to the (out-of-scope) AI Coach analysis ViewModel API.
     @Environment(\.modelContext) private var modelContext
+    @Environment(\.dismiss) private var dismiss
 
     @State private var prDetails: [UUID: PersonalRecordService.PRDetail] = [:]
     @State private var healthKitKcal: Double?
@@ -27,6 +28,7 @@ struct WorkoutDetailView: View {
     @State private var analysisVM = WorkoutAnalysisViewModel()
     @State private var hasPreviousSession: Bool = false
     @State private var showingEdit = false
+    @State private var showingDeleteConfirmation = false
     /// Which exercise's weight-increase sheet is open (after-the-fact overload).
     @State private var overloadSheetExercise: WorkoutExercise?
     /// New live-template weight per exercise applied from this history view. The
@@ -64,14 +66,24 @@ struct WorkoutDetailView: View {
         .toolbarColorScheme(.dark, for: .navigationBar)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
-                Button {
-                    HapticManager.shared.light()
-                    showingEdit = true
+                Menu {
+                    Button {
+                        HapticManager.shared.light()
+                        showingEdit = true
+                    } label: {
+                        Label("edit_workout.title".localized, systemImage: "square.and.pencil")
+                    }
+                    Button(role: .destructive) {
+                        HapticManager.shared.light()
+                        showingDeleteConfirmation = true
+                    } label: {
+                        Label("action.delete".localized, systemImage: "trash")
+                    }
                 } label: {
-                    Image(systemName: "square.and.pencil")
+                    Image(systemName: "ellipsis")
                         .font(.system(size: 16, weight: .semibold))
                 }
-                .accessibilityLabel("edit_workout.title".localized)
+                .accessibilityLabel("history.detail.more".localized)
             }
         }
         .task {
@@ -83,6 +95,20 @@ struct WorkoutDetailView: View {
         .sheet(isPresented: $showingEdit, onDismiss: reloadAfterEdit) {
             EditWorkoutSessionView(workout: workout, viewModel: viewModel)
         }
+        .deleteWorkoutConfirmation(
+            isPresented: $showingDeleteConfirmation,
+            hasHealthKitWorkout: workout.healthKitWorkoutId != nil,
+            onDelete: deleteWorkout
+        )
+    }
+
+    /// Pops the detail screen before the session is removed, so no view body ever
+    /// re-reads a deleted `@Model`. History (list + calendar) refreshes off the
+    /// ViewModel's republished `workoutHistory`.
+    private func deleteWorkout(alsoFromHealthKit: Bool) {
+        dismiss()
+        viewModel.deleteWorkout(workout, alsoFromHealthKit: alsoFromHealthKit)
+        HapticManager.shared.success()
     }
 
     /// Re-derives PR badges, vs-previous comparisons and coach state after the user

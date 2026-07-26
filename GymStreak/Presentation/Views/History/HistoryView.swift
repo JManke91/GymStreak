@@ -6,6 +6,9 @@
 import SwiftUI
 import SwiftData
 
+/// Stack destination for the AI Coach settings screen.
+private struct AICoachSettingsDestination: Hashable {}
+
 /// New top-level History tab replacing WorkoutHistoryView.
 /// Hosts a segmented "Trainings / Fortschritt" control and drives navigation to detail views.
 struct HistoryView: View {
@@ -31,8 +34,14 @@ struct HistoryView: View {
     @State private var prExerciseCountBySession: [UUID: Int] = [:]
     @State private var workoutToDelete: WorkoutSession?
     @State private var showingDeleteAlert = false
-    @State private var showingAICoachSettings = false
     @State private var isRecovering = false
+    /// Swipe-to-delete state for the Trainings list cards. Owned here because
+    /// this view owns the scroll view that has to close an open card.
+    @State private var swipeState = HistorySwipeState()
+    /// Backs the stack so the swipeable list cards can push programmatically.
+    /// Type-erased on purpose: the same stack also pushes `ExerciseWithHistory`
+    /// and `PeriodRecapDestination` values from other links.
+    @State private var path = NavigationPath()
 
     private var sessions: [WorkoutSession] {
         viewModel.workoutHistory.filter { $0.endTime != nil }
@@ -46,7 +55,7 @@ struct HistoryView: View {
     }
 
     var body: some View {
-        NavigationStack {
+        NavigationStack(path: $path) {
             ZStack {
                 DesignSystem.Colors.background.ignoresSafeArea()
 
@@ -68,6 +77,14 @@ struct HistoryView: View {
                             .padding(.top, 4)
                             .disabled(isRecovering)
                         }
+                        if viewModel.healthKitDeleteFailed {
+                            HealthDeleteFailureBanner {
+                                viewModel.dismissHealthKitDeleteNotice()
+                            }
+                            .padding(.horizontal, 20)
+                            .padding(.top, 4)
+                            .transition(.opacity)
+                        }
                         Group {
                             switch section {
                             case .trainings:
@@ -75,7 +92,9 @@ struct HistoryView: View {
                                     sessions: sessions,
                                     routines: routines,
                                     prExerciseCountBySession: prExerciseCountBySession,
-                                    onDeleteRequested: requestDelete
+                                    onDeleteRequested: requestDelete,
+                                    onSelectWorkout: pushWorkout,
+                                    swipeState: $swipeState
                                 )
                             case .fortschritt:
                                 FortschrittTabView(
@@ -88,9 +107,23 @@ struct HistoryView: View {
 
                         Color.clear.frame(height: 60)
                     }
+                    .animation(.easeInOut(duration: 0.25), value: viewModel.healthKitDeleteFailed)
                 }
                 .refreshable {
                     refresh()
+                }
+                // Scrolling closes an open swipe card, the way a List does.
+                // Suppressed mid-drag so a slightly diagonal swipe cannot close
+                // the card it is opening.
+                .onScrollGeometryChange(for: CGFloat.self) { geometry in
+                    geometry.contentOffset.y
+                } action: { oldValue, newValue in
+                    guard oldValue != newValue,
+                          swipeState.openCardId != nil,
+                          swipeState.draggingCardId == nil else { return }
+                    withAnimation(DesignSystem.Animation.spring) {
+                        swipeState.openCardId = nil
+                    }
                 }
             }
             // Keep the tab root free of navigation chrome without passing that
@@ -111,7 +144,10 @@ struct HistoryView: View {
             .navigationDestination(for: PeriodRecapDestination.self) { dest in
                 PeriodRecapView(initialRange: dest.range)
             }
-            .navigationDestination(isPresented: $showingAICoachSettings) {
+            // Value-based like every other destination here: an isPresented push
+            // is not represented in `path`, and the two views of the same stack
+            // can then disagree (spurious pops, double pushes).
+            .navigationDestination(for: AICoachSettingsDestination.self) { _ in
                 AICoachSettingsView()
             }
             .onAppear {
@@ -132,20 +168,19 @@ struct HistoryView: View {
                     Task { await viewModel.reconcileWatchWorkouts() }
                 }
             }
-            .alert("workout.history.delete.title".localized, isPresented: $showingDeleteAlert) {
-                Button("action.delete".localized, role: .destructive) {
+            .deleteWorkoutConfirmation(
+                isPresented: $showingDeleteAlert,
+                hasHealthKitWorkout: workoutToDelete?.healthKitWorkoutId != nil,
+                onDelete: { alsoFromHealthKit in
                     if let workout = workoutToDelete {
-                        viewModel.deleteWorkout(workout)
+                        viewModel.deleteWorkout(workout, alsoFromHealthKit: alsoFromHealthKit)
                         workoutToDelete = nil
                         refresh()
+                        HapticManager.shared.success()
                     }
-                }
-                Button("action.cancel".localized, role: .cancel) {
-                    workoutToDelete = nil
-                }
-            } message: {
-                Text("workout.history.delete.message".localized)
-            }
+                },
+                onCancel: { workoutToDelete = nil }
+            )
         }
     }
 
@@ -161,7 +196,7 @@ struct HistoryView: View {
             Spacer()
 
             Button {
-                showingAICoachSettings = true
+                path.append(AICoachSettingsDestination())
             } label: {
                 Image(systemName: "gearshape.fill")
                     .font(.system(size: 20, weight: .medium))
@@ -181,6 +216,7 @@ struct HistoryView: View {
             ForEach(Section.allCases, id: \.self) { target in
                 Button {
                     HapticManager.shared.selection()
+                    swipeState.openCardId = nil
                     withAnimation(.easeOut(duration: 0.18)) { section = target }
                 } label: {
                     Text(target.title)
@@ -206,6 +242,15 @@ struct HistoryView: View {
     }
 
     // MARK: - Actions
+
+    /// Pushes a workout detail screen for a list card.
+    ///
+    /// A `NavigationLink` could not fire twice; a programmatic push can, so a fast
+    /// double tap is ignored. Cards are only tappable at the root of the stack.
+    private func pushWorkout(_ sessionId: UUID) {
+        guard path.isEmpty else { return }
+        path.append(sessionId)
+    }
 
     private func requestDelete(_ session: WorkoutSession) {
         workoutToDelete = session

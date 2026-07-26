@@ -34,5 +34,17 @@ protocol HealthKitWorkoutServicing: AnyObject {
         metadata: [String: Any]?
     ) async throws -> (workout: HKWorkout?, healthKitWorkoutId: UUID)
 
+    /// Removes the Apple Health workout stamped with `externalUUID` in its
+    /// `HKMetadataKeyExternalUUID` metadata — the same id stored on
+    /// `WorkoutSession.healthKitWorkoutId`.
+    ///
+    /// - Returns: `true` when a matching workout was found and deleted, `false`
+    ///   when nothing matched. A zero-result lookup is indistinguishable from a
+    ///   silently denied read or a workout the user already removed in the Health
+    ///   app; in all three cases the desired end state already holds, so it is a
+    ///   success and never an error.
+    @discardableResult
+    func deleteWorkout(externalUUID: UUID) async throws -> Bool
+
     func estimateCaloriesBurned(durationInSeconds: TimeInterval) -> Double
 }

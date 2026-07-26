@@ -420,17 +420,161 @@ struct WorkoutViewModelTests {
     private func makeViewModel(
         sessionRepository: SwiftDataWorkoutSessionRepository,
         routineRepository: SwiftDataRoutineRepository,
-        exerciseRepository: SwiftDataExerciseRepository
+        exerciseRepository: SwiftDataExerciseRepository,
+        healthKitManager: HealthKitWorkoutServicing? = nil
     ) -> WorkoutViewModel {
         WorkoutViewModel(
             workoutSessionRepository: sessionRepository,
             routineRepository: routineRepository,
             exerciseRepository: exerciseRepository,
-            healthKitManager: MockHealthKitWorkoutServicing(),
+            healthKitManager: healthKitManager ?? MockHealthKitWorkoutServicing(),
             watchSync: MockWatchSyncServicing(),
             workoutHistoryCorrelation: EmptyWorkoutHistoryCorrelationProvider(),
             restTimerReminders: RecordingRestTimerReminders()
         )
+    }
+
+    // MARK: - Deleting a workout (with or without its Apple Health counterpart)
+
+    /// A completed, persisted session carrying a HealthKit external UUID.
+    @MainActor
+    private func makeDeletableSession(
+        sessionRepository: SwiftDataWorkoutSessionRepository,
+        routineRepository: SwiftDataRoutineRepository,
+        healthKitWorkoutId: UUID?
+    ) throws -> WorkoutSession {
+        let routine = Routine(name: "Push")
+        routineRepository.insert(routine)
+        let session = WorkoutSession(routine: routine)
+        session.endTime = session.startTime.addingTimeInterval(3_600)
+        session.healthKitWorkoutId = healthKitWorkoutId
+        sessionRepository.insert(session)
+        try sessionRepository.save()
+        return session
+    }
+
+    @Test
+    func deletingWorkoutWithAppleHealthChoiceRemovesBothCopies() async throws {
+        let context = ModelContext(InMemoryModelContainer.make())
+        let sessionRepository = SwiftDataWorkoutSessionRepository(modelContext: context)
+        let routineRepository = SwiftDataRoutineRepository(modelContext: context)
+        let healthKit = MockHealthKitWorkoutServicing()
+        let externalUUID = UUID()
+        let session = try makeDeletableSession(
+            sessionRepository: sessionRepository,
+            routineRepository: routineRepository, healthKitWorkoutId: externalUUID
+        )
+        let viewModel = makeViewModel(
+            sessionRepository: sessionRepository, routineRepository: routineRepository,
+            exerciseRepository: SwiftDataExerciseRepository(modelContext: context),
+            healthKitManager: healthKit
+        )
+
+        viewModel.deleteWorkout(session, alsoFromHealthKit: true)
+        await Task.yield()
+
+        #expect(sessionRepository.fetchAll().isEmpty)
+        #expect(healthKit.deletedExternalUUIDs == [externalUUID])
+        #expect(viewModel.healthKitDeleteFailed == false)
+    }
+
+    @Test
+    func deletingWorkoutGymStreakOnlyLeavesAppleHealthUntouched() async throws {
+        let context = ModelContext(InMemoryModelContainer.make())
+        let sessionRepository = SwiftDataWorkoutSessionRepository(modelContext: context)
+        let routineRepository = SwiftDataRoutineRepository(modelContext: context)
+        let healthKit = MockHealthKitWorkoutServicing()
+        let session = try makeDeletableSession(
+            sessionRepository: sessionRepository,
+            routineRepository: routineRepository, healthKitWorkoutId: UUID()
+        )
+        let viewModel = makeViewModel(
+            sessionRepository: sessionRepository, routineRepository: routineRepository,
+            exerciseRepository: SwiftDataExerciseRepository(modelContext: context),
+            healthKitManager: healthKit
+        )
+
+        viewModel.deleteWorkout(session, alsoFromHealthKit: false)
+        await Task.yield()
+
+        #expect(sessionRepository.fetchAll().isEmpty)
+        #expect(healthKit.deletedExternalUUIDs.isEmpty)
+    }
+
+    @Test
+    func deletingWorkoutWithoutHealthKitCounterpartSkipsHealthKit() async throws {
+        let context = ModelContext(InMemoryModelContainer.make())
+        let sessionRepository = SwiftDataWorkoutSessionRepository(modelContext: context)
+        let routineRepository = SwiftDataRoutineRepository(modelContext: context)
+        let healthKit = MockHealthKitWorkoutServicing()
+        let session = try makeDeletableSession(
+            sessionRepository: sessionRepository,
+            routineRepository: routineRepository, healthKitWorkoutId: nil
+        )
+        let viewModel = makeViewModel(
+            sessionRepository: sessionRepository, routineRepository: routineRepository,
+            exerciseRepository: SwiftDataExerciseRepository(modelContext: context),
+            healthKitManager: healthKit
+        )
+
+        // Even when Apple Health is requested there is nothing to remove.
+        viewModel.deleteWorkout(session, alsoFromHealthKit: true)
+        await Task.yield()
+
+        #expect(sessionRepository.fetchAll().isEmpty)
+        #expect(healthKit.deletedExternalUUIDs.isEmpty)
+        #expect(viewModel.healthKitDeleteFailed == false)
+    }
+
+    @Test
+    func healthKitDeleteFailureLeavesLocalDeleteCommitted() async throws {
+        let context = ModelContext(InMemoryModelContainer.make())
+        let sessionRepository = SwiftDataWorkoutSessionRepository(modelContext: context)
+        let routineRepository = SwiftDataRoutineRepository(modelContext: context)
+        let healthKit = MockHealthKitWorkoutServicing()
+        healthKit.deleteError = HealthKitError.deleteFailed("denied")
+        let session = try makeDeletableSession(
+            sessionRepository: sessionRepository,
+            routineRepository: routineRepository, healthKitWorkoutId: UUID()
+        )
+        let viewModel = makeViewModel(
+            sessionRepository: sessionRepository, routineRepository: routineRepository,
+            exerciseRepository: SwiftDataExerciseRepository(modelContext: context),
+            healthKitManager: healthKit
+        )
+
+        viewModel.deleteWorkout(session, alsoFromHealthKit: true)
+        await Task.yield()
+
+        // The local delete stands; the failure only raises the non-blocking flag.
+        #expect(sessionRepository.fetchAll().isEmpty)
+        #expect(viewModel.workoutHistory.isEmpty)
+        #expect(viewModel.healthKitDeleteFailed)
+    }
+
+    @Test
+    func alreadyAbsentHealthKitWorkoutIsNotTreatedAsFailure() async throws {
+        let context = ModelContext(InMemoryModelContainer.make())
+        let sessionRepository = SwiftDataWorkoutSessionRepository(modelContext: context)
+        let routineRepository = SwiftDataRoutineRepository(modelContext: context)
+        let healthKit = MockHealthKitWorkoutServicing()
+        // No match: already deleted in the Health app, or the read was denied.
+        healthKit.deleteResult = false
+        let session = try makeDeletableSession(
+            sessionRepository: sessionRepository,
+            routineRepository: routineRepository, healthKitWorkoutId: UUID()
+        )
+        let viewModel = makeViewModel(
+            sessionRepository: sessionRepository, routineRepository: routineRepository,
+            exerciseRepository: SwiftDataExerciseRepository(modelContext: context),
+            healthKitManager: healthKit
+        )
+
+        viewModel.deleteWorkout(session, alsoFromHealthKit: true)
+        await Task.yield()
+
+        #expect(sessionRepository.fetchAll().isEmpty)
+        #expect(viewModel.healthKitDeleteFailed == false)
     }
 
     @Test

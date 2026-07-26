@@ -301,6 +301,48 @@ class HealthKitWorkoutManager: NSObject, ObservableObject, HealthKitWorkoutServi
         }
     }
 
+    // MARK: - Deletion
+
+    /// Delete the HKWorkout carrying `externalUUID` in its external-UUID metadata.
+    ///
+    /// The workout is located by our own metadata rather than a persisted
+    /// `HKWorkout.uuid`, so no additional SwiftData field is needed. Scoping the
+    /// query to our own source is unnecessary — HealthKit enforces the ownership
+    /// rule on delete regardless of what the query matched.
+    ///
+    /// Deleting the workout also removes the quantity samples its builder
+    /// associated with it (active energy, distance, heart rate). Activity Ring
+    /// exercise minutes are system-awarded and cannot be deleted by any app.
+    @discardableResult
+    func deleteWorkout(externalUUID: UUID) async throws -> Bool {
+        guard isHealthKitAvailable else {
+            throw HealthKitError.notAvailable
+        }
+
+        let predicate = HKQuery.predicateForObjects(
+            withMetadataKey: HKMetadataKeyExternalUUID,
+            allowedValues: [externalUUID.uuidString]
+        )
+        let descriptor = HKSampleQueryDescriptor(
+            predicates: [.workout(predicate)],
+            sortDescriptors: [],
+            limit: 1
+        )
+
+        do {
+            let matches = try await descriptor.result(for: healthStore)
+            // Nothing to delete: already gone, or the read was silently denied.
+            // Either way the desired end state holds.
+            guard let workout = matches.first else { return false }
+            try await healthStore.delete(workout)
+            print("HealthKit workout deleted for external ID: \(externalUUID)")
+            return true
+        } catch {
+            print("Failed to delete HealthKit workout: \(error)")
+            throw HealthKitError.deleteFailed(error.localizedDescription)
+        }
+    }
+
     // MARK: - Utility
 
     /// Estimate calories burned for strength training
@@ -375,6 +417,7 @@ enum HealthKitError: LocalizedError {
     case noActiveWorkout
     case sessionStartFailed(String)
     case saveFailed(String)
+    case deleteFailed(String)
 
     var errorDescription: String? {
         switch self {
@@ -390,6 +433,8 @@ enum HealthKitError: LocalizedError {
             return "Failed to start workout session: \(message)"
         case .saveFailed(let message):
             return "Failed to save workout: \(message)"
+        case .deleteFailed(let message):
+            return "Failed to delete workout: \(message)"
         }
     }
 }

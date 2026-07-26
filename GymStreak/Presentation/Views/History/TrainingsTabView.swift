@@ -11,6 +11,11 @@ struct TrainingsTabView: View {
     let routines: [Routine]
     let prExerciseCountBySession: [UUID: Int]
     let onDeleteRequested: (WorkoutSession) -> Void
+    /// Pushes the workout detail screen. List cards are not `NavigationLink`s, so
+    /// the push is programmatic — see `SwipeToDeleteContainer`.
+    let onSelectWorkout: (UUID) -> Void
+    /// Owned by `HistoryView`, which also closes the open card when the list scrolls.
+    @Binding var swipeState: HistorySwipeState
 
     /// Dynamic weekly plan derived from the user's scheduled routines.
     private var plannedWeek: WorkoutPlanningService.PlannedWeek {
@@ -160,6 +165,7 @@ struct TrainingsTabView: View {
         Button {
             if mode != target {
                 HapticManager.shared.selection()
+                swipeState.openCardId = nil
                 mode = target
             }
         } label: {
@@ -226,20 +232,27 @@ struct TrainingsTabView: View {
     private func workoutList(for group: HistoryStatsService.MonthSectionInfo) -> some View {
         VStack(spacing: 8) {
             ForEach(group.sessions) { session in
-                NavigationLink(value: session.id) {
+                // Deliberately not a NavigationLink: a button activates on
+                // touch-up anywhere inside its bounds, so every swipe counted
+                // as a tap and pushed the detail screen. The container owns the
+                // tap and reports it through onSelect instead.
+                SwipeToDeleteContainer(
+                    id: session.id,
+                    state: $swipeState,
+                    onDelete: { onDeleteRequested(session) },
+                    onSelect: { onSelectWorkout(session.id) }
+                ) {
                     WorkoutCardView(
                         workout: session,
                         isPR: (prExerciseCountBySession[session.id] ?? 0) > 0,
                         prLifts: prExerciseCountBySession[session.id] ?? 0
                     )
-                }
-                .buttonStyle(.plain)
-                .simultaneousGesture(TapGesture().onEnded { HapticManager.shared.light() })
-                .contextMenu {
-                    Button(role: .destructive) {
-                        onDeleteRequested(session)
-                    } label: {
-                        Label("action.delete".localized, systemImage: "trash")
+                    .contextMenu {
+                        Button(role: .destructive) {
+                            onDeleteRequested(session)
+                        } label: {
+                            Label("action.delete".localized, systemImage: "trash")
+                        }
                     }
                 }
             }

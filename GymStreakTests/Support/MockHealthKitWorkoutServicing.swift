@@ -29,5 +29,21 @@ final class MockHealthKitWorkoutServicing: HealthKitWorkoutServicing {
         (nil, UUID())
     }
 
+    // MARK: - Delete
+
+    /// External UUIDs the ViewModel asked to remove from HealthKit, in order.
+    private(set) var deletedExternalUUIDs: [UUID] = []
+    /// When set, `deleteWorkout(externalUUID:)` throws it instead of deleting.
+    var deleteError: Error?
+    /// What a successful delete reports: `false` models "already gone".
+    var deleteResult = true
+
+    @discardableResult
+    func deleteWorkout(externalUUID: UUID) async throws -> Bool {
+        deletedExternalUUIDs.append(externalUUID)
+        if let deleteError { throw deleteError }
+        return deleteResult
+    }
+
     func estimateCaloriesBurned(durationInSeconds: TimeInterval) -> Double { 0 }
 }

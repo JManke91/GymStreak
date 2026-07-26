@@ -43,6 +43,10 @@ class WorkoutViewModel: ObservableObject {
     @Published var healthKitSyncEnabled = true
     @Published var healthKitSyncStatus: HealthKitSyncStatus = .idle
     @Published var showHealthKitAuthPrompt = false
+    /// Set when a requested Apple Health delete failed for a reason other than
+    /// "already gone". Purely informational — the local delete is already
+    /// committed — and surfaced without blocking the user.
+    @Published var healthKitDeleteFailed = false
 
     var restTimerReminderWarning: String? {
         switch restTimerReminderOutcome {
@@ -1918,6 +1922,34 @@ class WorkoutViewModel: ObservableObject {
         workoutSessionRepository.delete(session)
         save()
         fetchWorkoutHistory()
+    }
+
+    /// Deletes the session locally and, when asked, its Apple Health counterpart.
+    ///
+    /// SwiftData is the source of truth, so the local delete happens first and is
+    /// never gated on, blocked by, or rolled back for HealthKit. A HealthKit
+    /// failure only raises `healthKitDeleteFailed`, which the History screen
+    /// surfaces non-blockingly — the user may still see the workout in Health.
+    func deleteWorkout(_ session: WorkoutSession, alsoFromHealthKit: Bool) {
+        let healthKitWorkoutId = session.healthKitWorkoutId
+        deleteWorkout(session)
+
+        guard alsoFromHealthKit, let healthKitWorkoutId else { return }
+        Task {
+            do {
+                // A `false` result means the workout was already absent from
+                // HealthKit — the desired end state, not a failure.
+                _ = try await healthKitManager.deleteWorkout(externalUUID: healthKitWorkoutId)
+            } catch {
+                print("HealthKit workout delete failed: \(error)")
+                healthKitDeleteFailed = true
+            }
+        }
+    }
+
+    /// Clears the non-blocking Apple Health delete notice once the user has seen it.
+    func dismissHealthKitDeleteNotice() {
+        healthKitDeleteFailed = false
     }
 
     // MARK: - Helper Methods

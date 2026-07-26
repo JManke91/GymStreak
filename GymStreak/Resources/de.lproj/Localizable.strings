@@ -187,6 +187,10 @@
 "history.duration" = "%@ • %d Sätze";
 "workout.history.delete.title" = "Workout löschen?";
 "workout.history.delete.message" = "Möchtest du dieses Workout wirklich löschen? Diese Aktion kann nicht rückgängig gemacht werden.";
+"workout.history.delete.message_health" = "Dieses Workout ist auch in Apple Health gespeichert. Wähle, ob es dort ebenfalls entfernt werden soll. Diese Aktion kann nicht rückgängig gemacht werden. Bereits gutgeschriebene Trainingsminuten deiner Aktivitätsringe bleiben in Health erhalten – die kannst nur du selbst in der Health-App entfernen.";
+"workout.history.delete.gymstreak_only" = "Nur in GymStreak löschen";
+"workout.history.delete.with_health" = "In GymStreak und Apple Health löschen";
+"history.delete.health_failed" = "Das Workout wurde in GymStreak gelöscht, konnte aber nicht aus Apple Health entfernt werden. Es erscheint möglicherweise weiterhin in der Health-App, wo du es manuell löschen kannst.";
 
 // MARK: - Create Routine Flow
 "create_routine.title" = "Routine erstellen";
@@ -218,6 +222,7 @@
 "action.done" = "Fertig";
 "action.add" = "Hinzufügen";
 "action.remove" = "Entfernen";
+"action.dismiss" = "Schließen";
 "action.continue" = "Weiter";
 "action.back" = "Zurück";
 
@@ -651,6 +656,7 @@
 "history.detail.volume" = "Volumen";
 "history.detail.intensity" = "Intensität";
 "history.detail.exercises" = "Übungen";
+"history.detail.more" = "Mehr";
 "history.detail.set_n" = "SATZ %d";
 "history.detail.bw" = "KG";
 "history.detail.reps" = "Wdh.";

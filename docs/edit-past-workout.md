@@ -10,6 +10,11 @@ the next workout — on **both iOS and Apple Watch** — starts from the correct
 This mirrors the active-workout "Save & update template" flow (`SaveWorkoutView` →
 `WorkoutViewModel.completeWorkout`).
 
+**Entry point (updated 2026-07-26):** Edit is no longer a standalone pencil button. The detail screen's
+trailing toolbar item is now an ellipsis `Menu` holding **Edit Workout** and a destructive **Delete**;
+Edit presents the same `EditWorkoutSessionView` sheet as before. See [Delete a Recorded
+Workout](./delete-workout.md).
+
 **Targets:** iOS only. The watch needs **no code changes** — it receives the updated routine through the
 existing `applicationContext` routine-sync path (see `docs/watch-sync.md`).
 
@@ -82,10 +87,10 @@ updated template via `RoutineStore.updateRoutines`. No watch-target changes are 
 ## Key files
 | File | Role |
 |------|------|
-| `GymStreak/Views/History/EditWorkoutSessionView.swift` | Draft editor sheet + draft structs |
-| `GymStreak/WorkoutViewModel.swift` | `saveEditedWorkout`, reconciling `updateRoutineTemplate` |
-| `GymStreak/WorkoutDetailView.swift` | Edit button, sheet presentation, post-edit reload |
-| `GymStreak/RoutinesViewModel.swift` | `observeRoutineTemplateChanges()` → re-fetch + watch sync |
-| `GymStreak/WatchConnectivityManager.swift` | `Notification.Name.routineTemplateDidChange` |
-| `GymStreak/SetInputComponents.swift` | Reused `HorizontalStepper` / `WeightInput` |
+| `GymStreak/Presentation/Views/History/EditWorkoutSessionView.swift` | Draft editor sheet + draft structs |
+| `GymStreak/Presentation/ViewModels/WorkoutViewModel.swift` | `saveEditedWorkout`, reconciling `updateRoutineTemplate` |
+| `GymStreak/Presentation/Views/History/WorkoutDetailView.swift` | Ellipsis toolbar menu (Edit + Delete), sheet presentation, post-edit reload |
+| `GymStreak/Presentation/ViewModels/RoutinesViewModel.swift` | `observeRoutineTemplateChanges()` → re-fetch + watch sync |
+| `GymStreak/Data/Sync/WatchConnectivityManager.swift` | `Notification.Name.routineTemplateDidChange` |
+| `GymStreak/Presentation/Views/Workout/SetInputComponents.swift` | Reused `HorizontalStepper` / `WeightInput` |
 | `GymStreak/Resources/{en,de}.lproj/Localizable.strings` | `edit_workout.*` strings |

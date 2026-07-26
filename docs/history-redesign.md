@@ -11,7 +11,7 @@ Target: **iOS app only** (`GymStreak`). No changes to the watch target.
   - **Trainings** — `TrainingsTabView`: WeekHero + List / Calendar toggle + month-grouped workout cards.
   - **Fortschritt** — `FortschrittTabView`: Search + horizontal muscle-group pills + grouped exercise rows.
 - All data is derived from existing SwiftData models (`WorkoutSession`, `WorkoutExercise`, `WorkoutSet`). **No schema migration.**
-- Selecting a recorded workout pushes `WorkoutDetailView` through the tab's `NavigationStack`. The detail keeps the system navigation bar available with a transparent background, so iOS provides both its standard Back button and the leading-edge swipe-back gesture. The edit action remains a trailing toolbar item.
+- Selecting a recorded workout pushes `WorkoutDetailView` through the tab's `NavigationStack`. The detail keeps the system navigation bar available with a transparent background, so iOS provides both its standard Back button and the leading-edge swipe-back gesture. The trailing toolbar item is an ellipsis menu holding **Edit** and a destructive **Delete** — see [Delete a Recorded Workout](./delete-workout.md).
 
 ### Navigation research
 
@@ -60,7 +60,7 @@ ContentView
      ├─ TrainingsTabView
      │    ├─ WeekHeroView (HistoryStatsService.weekStats, weekDayStatuses)
      │    ├─ HistoryCalendarView (uses same session set)
-     │    └─ Month-grouped list of WorkoutCardView → NavigationLink<UUID>
+     │    └─ Month-grouped list of WorkoutCardView in SwipeToDeleteContainer → path.append(UUID)
      └─ FortschrittTabView
           └─ Grouped list of FortschrittExerciseRowView → NavigationLink<ExerciseWithHistory>
 
@@ -127,7 +127,7 @@ GymStreak/WorkoutHistoryView.swift   — Replaced by HistoryView
 - `FortschrittTabView` — Search bar + pills + grouped exercise rows.
 
 **Detail views (redesigned):**
-- `WorkoutDetailView` — System Back button with native leading-edge swipe-back, type chip + date, routine name title, 4-metric stat grid, optional Apple Health banner (reads kcal async from HealthKit via `HKMetadataKeyExternalUUID`), notes section, per-exercise blocks via `WorkoutDetailExerciseBlock`. The transparent navigation bar keeps the editorial canvas while preserving the native navigation interaction; Edit is a trailing toolbar item. On appear, loads PR details (`[WorkoutExercise.id: PRDetail]` for this session) + HealthKit kcal + a `[UUID: ExerciseComparisonResult]` dictionary via `ExerciseProgressService.compareWithPrevious(workout:)`, both keyed by the concrete `WorkoutExercise.id`. This prevents one exercise-wide PR from rendering on every repeated occurrence.
+- `WorkoutDetailView` — System Back button with native leading-edge swipe-back, type chip + date, routine name title, 4-metric stat grid, optional Apple Health banner (reads kcal async from HealthKit via `HKMetadataKeyExternalUUID`), notes section, per-exercise blocks via `WorkoutDetailExerciseBlock`. The transparent navigation bar keeps the editorial canvas while preserving the native navigation interaction; the trailing toolbar item is an ellipsis **Menu** holding Edit and a destructive Delete (see [Delete a Recorded Workout](./delete-workout.md)). On appear, loads PR details (`[WorkoutExercise.id: PRDetail]` for this session) + HealthKit kcal + a `[UUID: ExerciseComparisonResult]` dictionary via `ExerciseProgressService.compareWithPrevious(workout:)`, both keyed by the concrete `WorkoutExercise.id`. This prevents one exercise-wide PR from rendering on every repeated occurrence.
 - `WorkoutDetailExerciseBlock` (`Views/History/Components/`) — Per-exercise card. Takes `prDetail: PersonalRecordService.PRDetail?`. Renders: title row (exercise name + optional PR/trophy badge + set count). When `prDetail` is present, a gold **PR record banner** (`PRRecordStrip`, own file in `Views/History/Components/`) follows: trophy + "New record: 87.5 kg × 8" / "Neuer Rekord: …" plus a secondary line "est. 1RM 111 kg · previous best 105 kg" (previous part omitted on first-ever performance). Then either a comparison strip (when previous session exists) or a "First session" badge. Then the sets grid: each set cell shows set number + weight (kg or "BW"/"KG") + reps, plus a `SetDeltaChip` below; the **set that achieved the PR** gets a gold treatment (mini trophy next to the set label, gold-tinted background + border, VoiceOver appends "new personal record"). Note: an older tinted "best set" decoration was removed as cryptic (chat2 feedback) — the PR-set highlight is different and deliberate: it marks only genuine records and is explained by the adjacent record banner (user request 2026-07-08). PR gold is the shared `DesignSystem.Colors.pr` token (also used by `WorkoutCardView`).
 - `ExerciseComparisonStrip` — Inline strip rendered between exercise title and sets grid. Shows `vs. <prev date>` + `Top` delta chip (top-weight kg delta vs `previousPerformance.bestSet.weight`) + `Volume` delta chip (percentage delta vs `previousPerformance.totalVolume`). The previous performance comes from the same routine slot; legacy workouts use the conservative same-routine occurrence fallback above.
 - `SetDeltaChip` — Capsule chip with SF Symbol arrow + value. Four states: `.gain("+2.5 kg")` (success green), `.loss("−5 kg")` (destructive red), `.neutral` (= symbol, no label), `.new` (sparkles + "New"/"Neu" for set positions with no previous counterpart). Weight delta wins over reps delta; reps delta only shown if weight matched exactly. Values use `.contentTransition(.numericText())` for animated number changes. Each set cell exposes VoiceOver via `accessibilityLabel` ("Set 2") + `accessibilityValue` ("85 kg, 8 reps, up 2.5 kilograms from last time") so the chip itself stays decorative.
@@ -146,11 +146,13 @@ GymStreak/WorkoutHistoryView.swift   — Replaced by HistoryView
 `WorkoutDetailView` reads `activeEnergyBurned` back from HealthKit using the stored `WorkoutSession.healthKitWorkoutId` via `HKQuery.predicateForObjects(withMetadataKey: HKMetadataKeyExternalUUID, ...)`. If the read fails or no value is found, the banner falls back to showing just the minutes.
 
 ### Navigation notes
-Navigation uses `UUID`-based destinations to avoid requiring `@Model` classes to be `Hashable`. `HistoryView` registers:
+Navigation uses `UUID`-based destinations to avoid requiring `@Model` classes to be `Hashable`. The stack is **path-bound** — `NavigationStack(path: $path)` over a type-erased `NavigationPath`, because the Trainings list cards push programmatically (see below) while everything else pushes by link. Every destination is value-based; do not add an `.navigationDestination(isPresented:)` here, since an `isPresented` push is not represented in the path and the two views of the same stack can then disagree. `HistoryView` registers:
 - `.navigationDestination(for: UUID.self)` → `WorkoutDetailView`
 - `.navigationDestination(for: ExerciseWithHistory.self)` → `ExerciseProgressChartView`
+- `.navigationDestination(for: PeriodRecapDestination.self)` → `PeriodRecapView`
+- `.navigationDestination(for: AICoachSettingsDestination.self)` → `AICoachSettingsView`
 
-Cards wrap their content in `NavigationLink(value: ...)` and fire a light haptic via a `simultaneousGesture`.
+Most cards wrap their content in `NavigationLink(value: ...)` and fire a light haptic via a `simultaneousGesture` — the calendar card, the Fortschritt rows and the coach cards all still do. **The Trainings list cards are the exception:** they are plain views inside `SwipeToDeleteContainer`, which owns the tap and reports it so `HistoryView` can `path.append(...)`. That is required, not stylistic — a SwiftUI button activates on touch-up anywhere inside its bounds, so as a `NavigationLink` every swipe-to-delete gesture also pushed the detail screen. See [Delete a Recorded Workout](./delete-workout.md).
 
 ### Localization
 New keys live under the `history.*` prefix (plus `history.type.*` for workout-type labels). Both `de.lproj` and `en.lproj` are kept in sync.
