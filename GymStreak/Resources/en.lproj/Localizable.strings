@@ -274,6 +274,21 @@
 "muscle.calves" = "Calves";
 "muscle.hip_flexors" = "Hip Flexors";
 
+// MARK: - Muscle Map Regions (coarser than the muscle group keys above)
+"muscle_region.trapezius" = "Trapezius";
+"muscle_region.shoulders" = "Shoulders";
+"muscle_region.chest" = "Chest";
+"muscle_region.biceps" = "Biceps";
+"muscle_region.triceps" = "Triceps";
+"muscle_region.forearms" = "Forearms";
+"muscle_region.abs" = "Abs";
+"muscle_region.back" = "Back";
+"muscle_region.lower_back" = "Lower Back";
+"muscle_region.glutes" = "Glutes";
+"muscle_region.quadriceps" = "Quadriceps";
+"muscle_region.hamstrings" = "Hamstrings";
+"muscle_region.calves" = "Calves";
+
 // MARK: - Muscle Group Picker
 "exercises.muscle_groups" = "Muscle Groups";
 "muscle_picker.title" = "Select Muscle Groups";
@@ -684,6 +699,19 @@
 "history.detail.a11y.delta_equal" = "same as last time";
 "history.detail.a11y.delta_new" = "new set, no previous data";
 "history.detail.a11y.pr_set" = "new personal record";
+"history.detail.muscle_map.title" = "Trained Muscle Groups";
+"history.detail.muscle_map.primary" = "Primary";
+"history.detail.muscle_map.secondary" = "Secondary";
+"history.detail.muscle_map.front" = "Front";
+"history.detail.muscle_map.back" = "Back";
+"history.detail.muscle_map.sets_count" = "%d sets";
+"history.detail.muscle_map.reset" = "Reset";
+"history.detail.muscle_map.a11y.region_sets" = "%1$@ %2$d sets";
+"history.detail.muscle_map.a11y.primary" = "Primary: %@";
+"history.detail.muscle_map.a11y.secondary" = "Secondary: %@";
+"history.detail.muscle_map.a11y.belly_primary" = "%1$@, primary, %2$d sets";
+"history.detail.muscle_map.a11y.belly_secondary" = "%@, secondary";
+"history.detail.muscle_map.a11y.belly_untrained" = "%@, not trained";
 
 // MARK: - Exercise Detail (redesigned)
 "history.exercise.pr" = "Record";

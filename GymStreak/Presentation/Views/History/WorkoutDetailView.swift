@@ -27,6 +27,9 @@ struct WorkoutDetailView: View {
     @State private var comparisons: [UUID: ExerciseComparisonResult] = [:]
     @State private var analysisVM = WorkoutAnalysisViewModel()
     @State private var hasPreviousSession: Bool = false
+    /// Trained-muscle picture for the map card. Derived once per load — the aggregation walks
+    /// the session's exercises and sets, so it must stay off the render path.
+    @State private var muscleMap: MuscleMapCardModel = .empty
     @State private var showingEdit = false
     @State private var showingDeleteConfirmation = false
     /// Which exercise's weight-increase sheet is open (after-the-fact overload).
@@ -45,6 +48,7 @@ struct WorkoutDetailView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
                     header
+                    MuscleMapCardView(model: muscleMap)
                     statsGrid
                     progressiveOverloadSection
                     if workout.healthKitWorkoutId != nil {
@@ -58,6 +62,10 @@ struct WorkoutDetailView: View {
                     Color.clear.frame(height: 40)
                 }
             }
+            // The muscle map card is inserted above the fold once its aggregation lands, and
+            // without this the scroll view compensates by keeping the content below anchored —
+            // the screen would open already scrolled past the workout title.
+            .defaultScrollAnchor(.top)
         }
         .navigationTitle("")
         .navigationBarTitleDisplayMode(.inline)
@@ -87,6 +95,7 @@ struct WorkoutDetailView: View {
             }
         }
         .task {
+            loadMuscleMap()
             await loadPRs()
             await loadHealthKitKcal()
             await loadComparisons()
@@ -115,6 +124,7 @@ struct WorkoutDetailView: View {
     /// edits the session. The set grid itself is @Model-observed and updates on its own.
     private func reloadAfterEdit() {
         Task {
+            loadMuscleMap()
             await loadPRs()
             await loadComparisons()
             loadCoachState()
@@ -141,11 +151,17 @@ struct WorkoutDetailView: View {
         .padding(.bottom, 4)
     }
 
+    /// Hoisted out of `body`: `header` reads `dateString` on every state change, and building a
+    /// `DateFormatter` there is the allocation `docs/history-performance.md` was written about.
+    private static let dateFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = Locale.current
+        formatter.setLocalizedDateFormatFromTemplate("EEE d. MMM")
+        return formatter
+    }()
+
     private var dateString: String {
-        let fmt = DateFormatter()
-        fmt.locale = Locale.current
-        fmt.setLocalizedDateFormatFromTemplate("EEE d. MMM")
-        return fmt.string(from: workout.startTime)
+        Self.dateFormatter.string(from: workout.startTime)
     }
 
     // MARK: - Stats grid
@@ -434,6 +450,13 @@ struct WorkoutDetailView: View {
     }
 
     // MARK: - Data loading
+
+    /// Derives which muscle regions this session trained. One traversal of the session graph,
+    /// run when the screen loads and after an edit — never from a view body.
+    @MainActor
+    private func loadMuscleMap() {
+        muscleMap = MuscleMapCardModel.make(from: MuscleLoadAggregator.aggregate(session: workout))
+    }
 
     @MainActor
     private func loadPRs() async {

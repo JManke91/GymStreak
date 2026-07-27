@@ -274,6 +274,21 @@
 "muscle.calves" = "Waden";
 "muscle.hip_flexors" = "Hüftbeuger";
 
+// MARK: - Muscle Map Regions (gröber als die Muskelgruppen oben)
+"muscle_region.trapezius" = "Trapez";
+"muscle_region.shoulders" = "Schultern";
+"muscle_region.chest" = "Brust";
+"muscle_region.biceps" = "Bizeps";
+"muscle_region.triceps" = "Trizeps";
+"muscle_region.forearms" = "Unterarme";
+"muscle_region.abs" = "Bauch";
+"muscle_region.back" = "Rücken";
+"muscle_region.lower_back" = "Unterer Rücken";
+"muscle_region.glutes" = "Gesäß";
+"muscle_region.quadriceps" = "Quadrizeps";
+"muscle_region.hamstrings" = "Beinbeuger";
+"muscle_region.calves" = "Waden";
+
 // MARK: - Muscle Group Picker
 "exercises.muscle_groups" = "Muskelgruppen";
 "muscle_picker.title" = "Muskelgruppen wählen";
@@ -684,6 +699,19 @@
 "history.detail.a11y.delta_equal" = "gleich wie letztes Mal";
 "history.detail.a11y.delta_new" = "neuer Satz, keine Vergleichsdaten";
 "history.detail.a11y.pr_set" = "neuer persönlicher Rekord";
+"history.detail.muscle_map.title" = "Trainierte Muskelgruppen";
+"history.detail.muscle_map.primary" = "Primär";
+"history.detail.muscle_map.secondary" = "Sekundär";
+"history.detail.muscle_map.front" = "Vorne";
+"history.detail.muscle_map.back" = "Hinten";
+"history.detail.muscle_map.sets_count" = "%d Sätze";
+"history.detail.muscle_map.reset" = "Zurücksetzen";
+"history.detail.muscle_map.a11y.region_sets" = "%1$@ %2$d Sätze";
+"history.detail.muscle_map.a11y.primary" = "Primär: %@";
+"history.detail.muscle_map.a11y.secondary" = "Sekundär: %@";
+"history.detail.muscle_map.a11y.belly_primary" = "%1$@, primär, %2$d Sätze";
+"history.detail.muscle_map.a11y.belly_secondary" = "%@, sekundär";
+"history.detail.muscle_map.a11y.belly_untrained" = "%@, nicht trainiert";
 
 // MARK: - Exercise Detail (redesigned)
 "history.exercise.pr" = "Rekord";
