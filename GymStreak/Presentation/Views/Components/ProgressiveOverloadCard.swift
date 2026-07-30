@@ -26,6 +26,11 @@ struct ProgressiveOverloadCard: View {
     /// row — the historical workout sets aren't bumped, so it can't be read
     /// off them (as it can on the live completion screen).
     var appliedWeight: Double? = nil
+    /// History surface only: the increase was applied (from the Watch recap),
+    /// but the target's sets do not all share one weight — a pyramid or drop
+    /// scheme. The confirmed row then states that all sets moved instead of
+    /// naming a weight that is wrong for every set but the first.
+    var hasAmbiguousAppliedWeight: Bool = false
     /// History surface only: the source routine/exercise no longer exists, so
     /// the increase can't be applied. Replaces the CTA with a muted note.
     var isTemplateUnavailable: Bool = false
@@ -204,21 +209,36 @@ struct ProgressiveOverloadCard: View {
                 .background(DesignSystem.Colors.tint, in: Circle())
 
             VStack(alignment: .leading, spacing: 2) {
-                Text(accentedText(
-                    (isAssistance ? "rep_range.overload_card.reduced_to" : "rep_range.overload_card.increased_to")
-                        .localized(formattedWeight(currentWeight)),
-                    accent: DesignSystem.Colors.tint
-                ))
-                .font(.system(size: 14.5, weight: .bold))
-                .foregroundStyle(DesignSystem.Colors.textPrimary)
+                if hasAmbiguousAppliedWeight {
+                    Text(accentedText(
+                        "rep_range.overload_card.all_sets_adjusted".localized,
+                        accent: DesignSystem.Colors.tint
+                    ))
+                    .font(.system(size: 14.5, weight: .bold))
+                    .foregroundStyle(DesignSystem.Colors.textPrimary)
 
-                Text("rep_range.overload_card.next_workout".localized(
-                    sortedSets.count,
-                    exercise.targetRepMin ?? 0,
-                    formattedWeight(currentWeight)
-                ))
-                .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(DesignSystem.Colors.textSecondary)
+                    Text("rep_range.overload_card.next_workout_no_weight".localized(
+                        sortedSets.count, exercise.targetRepMin ?? 0
+                    ))
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(DesignSystem.Colors.textSecondary)
+                } else {
+                    Text(accentedText(
+                        (isAssistance ? "rep_range.overload_card.reduced_to" : "rep_range.overload_card.increased_to")
+                            .localized(formattedWeight(currentWeight)),
+                        accent: DesignSystem.Colors.tint
+                    ))
+                    .font(.system(size: 14.5, weight: .bold))
+                    .foregroundStyle(DesignSystem.Colors.textPrimary)
+
+                    Text("rep_range.overload_card.next_workout".localized(
+                        sortedSets.count,
+                        exercise.targetRepMin ?? 0,
+                        formattedWeight(currentWeight)
+                    ))
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(DesignSystem.Colors.textSecondary)
+                }
             }
 
             Spacer(minLength: 8)

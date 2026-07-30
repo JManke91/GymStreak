@@ -91,6 +91,18 @@ final class WatchWorkoutViewModel: ObservableObject {
     /// transport reuses the same transaction instead of allocating a second.
     var pendingOverloadTransactionIDs: [UUID: UUID] = [:]
 
+    // MARK: Progressive overload — post-workout summary (ticket 05)
+
+    /// What each applied overload asked for, so the recap can distinguish a
+    /// still-converging transaction from one the iPhone overrode. Parallel to
+    /// `appliedOverloadSlots` (which stays the checkpointed, payload-driving
+    /// record) because this is display state that recovery does not restore.
+    @Published var appliedOverloadResults: [UUID: WatchAppliedOverload] = [:]
+    /// Recap row state per routine slot, resolved by
+    /// `refreshSummaryOverloadRows` so no summary row performs lookups in its
+    /// body. Empty whenever no summary is showing.
+    @Published var summaryOverloadRows: [UUID: WatchSummaryOverloadRow] = [:]
+
     // Error handling
     @Published var errorMessage: String?
 
@@ -181,6 +193,20 @@ final class WatchWorkoutViewModel: ObservableObject {
             .filter { [weak self] _ in self?.workoutState != .running }
             .sink { [weak self] _ in
                 self?.workoutState = .running
+            }
+            .store(in: &cancellabes)
+
+        // The effective routines republish whenever a template transaction is
+        // retired — which is exactly when a pending overload's verdict becomes
+        // readable. Re-deriving the recap rows here is what keeps a summary the
+        // user is still looking at from claiming an increase the iPhone
+        // overrode. `dropFirst` skips the value already held at construction,
+        // and the rows are empty outside a summary anyway.
+        routineStore.$routines
+            .dropFirst()
+            .sink { [weak self] _ in
+                guard let self, self.workoutSummary != nil else { return }
+                self.refreshSummaryOverloadRows()
             }
             .store(in: &cancellabes)
     }
@@ -487,6 +513,9 @@ final class WatchWorkoutViewModel: ObservableObject {
                 self.workoutSummary = self.generateWorkoutSummary(endTime: payload.endTime)
                 self.isWorkoutActive = false
                 self.workoutState = .stopped
+                // Resolve the recap's overload rows against the now-frozen
+                // terminal state, once, before the summary renders (ticket 05).
+                self.refreshSummaryOverloadRows()
                 WKInterfaceDevice.current().play(.success)
             },
             onTransportEligible: { [connectivityManager] in
@@ -1406,6 +1435,8 @@ final class WatchWorkoutViewModel: ObservableObject {
         appliedOverloadSlots = [:]
         deferredOverloadSlotIDs = []
         pendingOverloadTransactionIDs = [:]
+        appliedOverloadResults = [:]
+        summaryOverloadRows = [:]
         // The live workout is over (discarded or summary dismissed); drop its
         // durable recovery checkpoint (ticket 08).
         checkpointStore.clear()

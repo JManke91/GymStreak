@@ -59,6 +59,12 @@ final class AppDependencies: ObservableObject {
     /// `WorkoutRecoveryCoordinating` — never the concrete type.
     let workoutRecovery: WorkoutRecoveryCoordinating
 
+    /// Which recorded workouts already had a weight increase applied from the
+    /// Watch's post-workout recap (progressive-overload ticket 05), so History
+    /// does not offer the same increase a second time. Read-only from
+    /// Presentation, and it never mutates a recorded workout.
+    let appliedOverloadCorrelation: AppliedOverloadCorrelationReading
+
     init(modelContext: ModelContext) {
         self.routineRepository = SwiftDataRoutineRepository(modelContext: modelContext)
         self.exerciseRepository = SwiftDataExerciseRepository(modelContext: modelContext)
@@ -90,6 +96,10 @@ final class AppDependencies: ObservableObject {
         // receipts + their external-UUID index) and recovery (which reads that
         // index to prove a workout was already ingested).
         let receipts = WorkoutIngestReceiptStore()
+        // The same store also holds the recap's applied-overload correlation:
+        // it is written by the transaction path that already owns receipts, so
+        // giving it a second home would mean two ledgers to keep in step.
+        self.appliedOverloadCorrelation = receipts
         self.watchWorkoutIngestion = WatchWorkoutIngestionCoordinator(
             inbox: watchConnectivity.workoutInbox,
             receipts: receipts,

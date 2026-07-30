@@ -341,6 +341,28 @@
         }
       }
     },
+    "all sets" : {
+      "comment" : "Increment picker preview when the target's sets do not share one weight",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "alle Sätze"
+          }
+        }
+      }
+    },
+    "All sets adjusted for your next workout" : {
+      "comment" : "Recap confirmation when a target's sets do not share one weight",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Alle Sätze für dein nächstes Training angepasst"
+          }
+        }
+      }
+    },
     "All sets at %lld reps — range maxed." : {
       "comment" : "Mid-workout progressive-overload suggestion subtitle; parameter is the rep-range maximum",
       "localizations" : {
@@ -348,6 +370,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Alle Sätze bei %lld Wdh. — Bereich ausgereizt."
+          }
+        }
+      }
+    },
+    "All sets increased" : {
+      "comment" : "Progressive-overload confirmation headline when the target's sets do not share one weight",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Alle Sätze erhöht"
           }
         }
       }
@@ -390,6 +423,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Übernehmen"
+          }
+        }
+      }
+    },
+    "Assistance now %@ next workout" : {
+      "comment" : "Recap confirmation for counterweight-assistance exercises; parameter is the new weight",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Unterstützung ab dem nächsten Training %@"
           }
         }
       }
@@ -984,6 +1028,7 @@
       }
     },
     "Increase weight" : {
+      "comment" : "Post-workout recap action to raise a routine's working weight",
       "localizations" : {
         "de" : {
           "stringUnit" : {
@@ -1118,12 +1163,34 @@
         }
       }
     },
+    "Not applied — changed on iPhone" : {
+      "comment" : "Recap state when iOS rejected the weight increase because its template had changed",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nicht übernommen — auf dem iPhone geändert"
+          }
+        }
+      }
+    },
     "Not started" : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "Nicht begonnen"
+          }
+        }
+      }
+    },
+    "Now %@ next workout" : {
+      "comment" : "Recap confirmation for an applied weight increase; parameter is the new weight",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ab dem nächsten Training %@"
           }
         }
       }
@@ -1207,6 +1274,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Quadrizeps"
+          }
+        }
+      }
+    },
+    "Raises this exercise's weight in your routine from the next workout." : {
+      "comment" : "VoiceOver hint for the post-workout recap's weight-increase action",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Erhöht das Gewicht dieser Übung in deiner Routine ab dem nächsten Training."
           }
         }
       }

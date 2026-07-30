@@ -37,6 +37,13 @@ struct WorkoutDetailView: View {
     /// New live-template weight per exercise applied from this history view. The
     /// historical session is never mutated, so applied state is tracked here.
     @State private var appliedTemplateWeights: [UUID: Double] = [:]
+    /// Exercises whose increase was already applied from the Watch's
+    /// post-workout recap (progressive-overload ticket 05). Separate from
+    /// `appliedTemplateWeights` because a pyramid/drop scheme is applied with no
+    /// single weight to show — "applied" and "applied to X kg" are not the same
+    /// fact, and collapsing them would make the card state a weight that is
+    /// wrong for every set but the first.
+    @State private var appliedOverloadExerciseIDs: Set<UUID> = []
 
     private var workoutType: WorkoutType {
         WorkoutType.classify(routineName: workout.routineName)
@@ -96,6 +103,7 @@ struct WorkoutDetailView: View {
         }
         .task {
             loadMuscleMap()
+            await loadAppliedOverloads()
             await loadPRs()
             await loadHealthKitKcal()
             await loadComparisons()
@@ -285,9 +293,12 @@ struct WorkoutDetailView: View {
 
     private func overloadCard(for exercise: WorkoutExercise) -> some View {
         let appliedNow = appliedTemplateWeights[exercise.id]
+        // Applied here, or already applied from the Watch recap — the latter can
+        // be true with no weight to show (pyramid/drop scheme).
+        let isApplied = appliedNow != nil || appliedOverloadExerciseIDs.contains(exercise.id)
         // Only the never-progressed exercises whose live template is gone show the
         // no-op note; a mid-workout-applied one keeps its confirmed state.
-        let unavailable = appliedNow == nil
+        let unavailable = !isApplied
             && !exercise.progressiveOverloadApplied
             && !viewModel.hasResolvableOverloadTemplate(from: workout, for: exercise)
 
@@ -295,8 +306,10 @@ struct WorkoutDetailView: View {
             exercise: exercise,
             libraryExercise: viewModel.performedExercise(in: workout, for: exercise),
             canUndo: false,
-            appliedOverride: appliedNow != nil,
+            appliedOverride: isApplied,
             appliedWeight: appliedNow,
+            hasAmbiguousAppliedWeight: appliedNow == nil
+                && appliedOverloadExerciseIDs.contains(exercise.id),
             isTemplateUnavailable: unavailable,
             onIncrease: { overloadSheetExercise = exercise },
             onUndo: {}
@@ -456,6 +469,31 @@ struct WorkoutDetailView: View {
     @MainActor
     private func loadMuscleMap() {
         muscleMap = MuscleMapCardModel.make(from: MuscleLoadAggregator.aggregate(session: workout))
+    }
+
+    /// Seeds the confirmed state for increases the user already applied from
+    /// the Watch's post-workout recap (progressive-overload ticket 05).
+    ///
+    /// Those arrive as a template-only transaction that deliberately never
+    /// amends the recorded workout, so the session itself carries no trace of
+    /// them — without this the card would invite the same increase again, and a
+    /// second tap would raise the template twice. A workout with no correlation
+    /// (any older one included) stays ordinarily eligible.
+    @MainActor
+    private func loadAppliedOverloads() async {
+        let applied = await dependencies.appliedOverloadCorrelation.appliedOverloads(
+            forWorkout: workout.id
+        )
+        guard !applied.isEmpty else { return }
+        // Correlated by routine slot — the only id both the Watch's template
+        // target and this recorded exercise agree on.
+        for exercise in workout.workoutExercisesList {
+            guard let slotID = exercise.routineExerciseId, let record = applied[slotID] else { continue }
+            appliedOverloadExerciseIDs.insert(exercise.id)
+            // Nil for a pyramid/drop scheme: applied, but with no single weight
+            // that would be true of every set.
+            if let weight = record.newWeight { appliedTemplateWeights[exercise.id] = weight }
+        }
     }
 
     @MainActor

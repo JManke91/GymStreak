@@ -83,12 +83,17 @@ struct WorkoutIngestReceipt: Codable, Equatable {
 }
 
 @MainActor
-final class WorkoutIngestReceiptStore {
+final class WorkoutIngestReceiptStore: AppliedOverloadCorrelationReading {
     private let directory: URL?
     private let indexDirectory: URL?
     private let hkIndexDirectory: URL?
     private let sequenceDirectory: URL?
     private let readyRecoveryDirectory: URL?
+    /// Ticket 05's applied-overload ledger, in
+    /// `WorkoutIngestReceiptStore+OverloadCorrelation.swift`. `nonisolated` so
+    /// that extension can read it off the main actor — it is an immutable
+    /// `Sendable` value and touches no mutable state.
+    nonisolated let overloadCorrelationDirectory: URL?
 
     /// - Parameter directory: override for tests; defaults to the App Group's
     ///   WatchWorkoutSync/Receipts directory.
@@ -101,7 +106,11 @@ final class WorkoutIngestReceiptStore {
         self.hkIndexDirectory = base?.appendingPathComponent("HKIndex", isDirectory: true)
         self.sequenceDirectory = base?.appendingPathComponent("Sequences", isDirectory: true)
         self.readyRecoveryDirectory = base?.appendingPathComponent("ReadyRecovery", isDirectory: true)
-        for url in [base, indexDirectory, hkIndexDirectory, sequenceDirectory, readyRecoveryDirectory].compactMap({ $0 }) {
+        self.overloadCorrelationDirectory = base?.appendingPathComponent("OverloadCorrelation", isDirectory: true)
+        for url in [
+            base, indexDirectory, hkIndexDirectory, sequenceDirectory,
+            readyRecoveryDirectory, overloadCorrelationDirectory
+        ].compactMap({ $0 }) {
             try? FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
         }
     }

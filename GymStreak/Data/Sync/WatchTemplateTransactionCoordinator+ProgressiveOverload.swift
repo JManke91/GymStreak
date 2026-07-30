@@ -80,6 +80,7 @@ extension WatchTemplateTransactionCoordinator {
         ) {
         case .applied:
             outcome = .applied
+            recordSummaryCorrelation(intent)
         case .rejected:
             outcome = .rejected
         case .saveFailed:
@@ -116,5 +117,31 @@ extension WatchTemplateTransactionCoordinator {
 
         stageContextAndAcknowledge(entry, receipt: receipt)
         return .advancedSequence
+    }
+
+    /// Remembers that this increase came from a specific recorded workout, so
+    /// History stops offering the same one (ticket 05).
+    ///
+    /// Only the post-workout recap sends the correlation; a mid-workout apply
+    /// reports itself inside its own completed payload instead. Recorded after
+    /// the template mutation has committed and deliberately non-throwing — this
+    /// is a display hint, and no failure here may undo an applied transaction.
+    /// It writes no history and requires none: the workout may not have been
+    /// ingested yet, or ever.
+    private func recordSummaryCorrelation(_ intent: WatchProgressiveOverloadIntent) {
+        guard let workoutID = intent.sourceWorkoutID,
+              let routineExerciseID = intent.sourceRoutineExerciseID,
+              let first = intent.setChanges.first else { return }
+        // A pyramid or drop scheme has no single new weight. The Watch recap
+        // deliberately refuses to name one there, and History must not either,
+        // so the ambiguity is carried rather than collapsed to the first set.
+        // Shared helper, not a local loop: the two surfaces must agree, and the
+        // weight comparison is a non-transitive tolerance check.
+        let isUniform = WatchTemplateSetChange.haveUniformProposedWeights(intent.setChanges)
+        receipts.recordAppliedOverload(
+            workoutID: workoutID,
+            routineExerciseID: routineExerciseID,
+            newWeight: isUniform ? first.proposedWeight : nil
+        )
     }
 }

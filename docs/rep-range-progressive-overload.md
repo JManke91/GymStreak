@@ -14,7 +14,8 @@ Adds a **rep range goal** (e.g., 8-12 reps) to exercises within routines. When a
 4. **Progress**: Tap "Increase" to open the weight increase sheet, select an increment (1.25/2.5/5 kg), and apply
 5. **Reset**: All sets update to the new weight with reps reset to the lower limit
 6. **Second chance (completion screen)**: If the mid-workout banner was skipped or dismissed, the post-workout completion screen (`SaveWorkoutView`) shows an actionable "Ready for More Weight" card per qualifying exercise — same increment sheet, same apply path — with an Undo while the screen is still open
-7. **After the fact (history)**: Opening a past session in `WorkoutDetailView` re-surfaces the same card for any exercise that maxed its rep range. Applying here bumps the **live routine template only** for future workouts — it never rewrites the immutable history — so there is no Undo. If the routine/exercise no longer exists, the achievement still shows but the CTA becomes a muted no-op note
+7. **After the fact (history)**: Opening a past session in `WorkoutDetailView` re-surfaces the same card for any exercise that maxed its rep range. Applying here bumps the **live routine template only** for future workouts — it never rewrites the immutable history — so there is no Undo. If the routine/exercise no longer exists, the achievement still shows but the CTA becomes a muted no-op note. An increase already applied from the Watch recap shows as confirmed rather than actionable (see "Correlation" under ticket 05)
+8. **On Apple Watch**: the same two chances exist — a mid-workout suggestion (ticket 04) and an actionable prompt in the post-workout recap (ticket 05), both applying to the routine template only
 
 ## Architecture
 
@@ -109,7 +110,7 @@ The model computed properties (`RoutineExercise.allSetsAtUpperLimit`, `WorkoutEx
 
 | View | Integration |
 |------|-------------|
-| `WatchWorkoutSummaryView` | Trophy icon next to exercises that achieved rep goal |
+| `WatchWorkoutSummaryView` | Actionable per-exercise overload prompt (applied / superseded / actionable) — see "Post-workout summary progressive overload" below. The plain trophy icon remains only where no prompt applies |
 | `ActiveWorkoutView` | Mid-workout suggestion capsule, increment picker, and confirmation — see "Mid-workout progressive overload on Apple Watch" below |
 
 Between 2026-07-25 and ticket 04 below, `targetRepMin`/`targetRepMax` rode along
@@ -457,14 +458,215 @@ handover).
 
 ### Deliberate omissions
 
-Ticket 04 intentionally does **not** build the source-workout correlation
-machinery the ticket text described (`sourceWorkoutID`/`sourceWorkoutExerciseID`
-on the payload, correlation retained in the durable receipt, deferred marker
-application after history ingestion). Those exist only to serve ticket 05
-(applying from the post-workout summary after the payload was already frozen), and
-building them here would add a correlation state machine to
-`WorkoutIngestReceiptStore` for a caller that does not yet exist. Ticket 05 adds
-them when it has one.
+Ticket 04 intentionally did **not** build the source-workout correlation
+machinery its ticket text described, because it had no caller. Ticket 05 below
+adds it — in a different shape than that text assumed, for the reason recorded
+under "Why the history record is not marked".
+
+## Post-workout summary progressive overload on Apple Watch (ticket 05, 2026-07-30)
+
+The Watch recap (`WatchWorkoutSummaryView`) turns its passive rep-goal trophy into
+an actionable prompt. It is the last chance for an increase the user tapped
+"Later" on mid-workout, and the *only* chance when the qualifying exercise was not
+the last one performed.
+
+**One operation, two entry points.** The recap row calls
+`applyProgressiveOverload(slotID:increment:)` — ticket 04's single deep operation —
+through the same `ProgressiveOverloadSheet`, the same
+`WatchOverloadPresentation` owner, the same increment picker, the same math,
+transaction identity, atomic enqueue, per-routine FIFO, transport, receipts and
+acknowledgment. The recap adds no second path for any of those. The sheet is
+already attached to `ActiveWorkoutView`'s outer `ZStack` (a sibling of the summary
+branch), so it presents over the recap with no new presentation plumbing.
+
+### What the recap must not touch
+
+By the time the recap appears, `onFrozen` has already committed the completed
+payload to the durable queue, and it may be transferred or ingested. So the recap
+apply path branches on `isShowingWorkoutSummary` and, unlike mid-workout:
+
+- it does **not** swap the performed values into `planned*` — the recorded sets
+  stay exactly as performed;
+- it does **not** amend, rebuild or resend the frozen payload, and creates no
+  second history record;
+- it does **not** rewrite the active checkpoint — finalization owns the workout.
+
+Everything else is the mid-workout path unchanged. `qualifiesForProgressiveOverload`
+lifts only its `isEnding`/`isWorkoutFrozen` guards while a summary is showing
+(those exist to protect the *workout*, which the recap never mutates); every other
+rule — rep-range math, already-applied, minimum-assistance clamp, target
+resolution — is shared, so the recap is not a looser second eligibility definition.
+Mid-workout **Later** deliberately does not suppress the recap: `deferredOverloadSlotIDs`
+dismissed one interruption, it did not decline the increase.
+
+### Row state machine
+
+`WatchSummaryOverloadPolicy` is a **pure decision duplicated into both targets**
+(same arrangement as `WatchWorkoutInteractionPolicy` and
+`ProgressiveOverloadService`) — there is no watch unit-test target, so the iOS
+copy is what `WatchSummaryOverloadTests` exercises. **Keep the two copies in sync.**
+
+| State | When |
+|-------|------|
+| `.actionable` | qualified, unapplied, and the template target still resolves |
+| `.applied(newWeight:isAssistance:)` | applied from either surface; `newWeight` nil for a nonuniform scheme |
+| `.superseded` | the transaction left the queue and the effective routine no longer holds its value |
+| *(no row)* | never qualified, or the target was deleted on iPhone — the plain trophy stays |
+
+**An applied row never returns to an Apply button.** That is the invariant the
+policy exists to hold: silently restoring one after iOS overrode the change is how
+a user applies the same increase twice without being told the first did not stick.
+
+`.superseded` needs **no outcome ledger**. `WatchAppliedOverload` keeps a probe
+(the first affected template set + the weight this transaction proposed). While
+`syncState.hasPendingTransaction(id:)` is true there is no verdict yet, so a
+pending *offline* apply always reads as confirmed. Once the entry is gone — which
+only happens on a terminal ack whose routine generation also applied locally — the
+effective routine **is** the verdict. Rows re-derive on a `routineStore.$routines`
+publish, which is exactly when retirement happens, so a recap the user is still
+looking at updates in place.
+
+Rows are resolved once into `summaryOverloadRows` (slot-keyed) by
+`refreshSummaryOverloadRows`, never computed in a body: one row's state walks the
+routine, its slots and their alternatives.
+
+### Correlation: why iOS History stops re-offering it
+
+A recap increase is a template-only transaction, so the recorded workout carries
+no trace of it and `WorkoutDetailView`'s after-the-fact card would offer the same
+increase again — a second tap raising the template twice.
+
+The intent therefore carries optional `sourceWorkoutID` + `sourceRoutineExerciseID`
+(nil for mid-workout, which reports itself via `overloadAppliedExerciseIDs`).
+They live in the **payload, not the envelope**: `TemplateTransactionEnvelope`
+requires `workoutID == nil` without a workout, and a non-nil value there would
+collide with the workout-id matching the outgoing queue dedupes on (ticket 04
+deviation 1). Both are additive optionals — no schema bump — and `isWellFormed`
+rejects a half-filled pair.
+
+On `.applied`, `WatchTemplateTransactionCoordinator+ProgressiveOverload` writes
+`workoutID → [slotID: AppliedOverloadRecord]` into `WorkoutIngestReceiptStore`'s
+`OverloadCorrelation/` directory (`WorkoutIngestReceiptStore+OverloadCorrelation.swift`
+— the same durable ledger that already owns receipts, and the same indefinite
+retention policy). `WorkoutDetailView.loadAppliedOverloads` reads it through the
+`AppliedOverloadCorrelationReading` Domain protocol wired in `AppDependencies`,
+and seeds the confirmed state ticket 03 already had.
+
+`AppliedOverloadRecord.newWeight` is **optional and stays optional all the way to
+the card**: for a nonuniform scheme the Watch refuses to name one weight, so
+History must not either. `WorkoutDetailView` therefore tracks
+`appliedOverloadExerciseIDs` separately from `appliedTemplateWeights` — "applied"
+and "applied to X kg" are different facts — and `ProgressiveOverloadCard` gains
+`hasAmbiguousAppliedWeight`, which switches the confirmed row to
+`rep_range.overload_card.all_sets_adjusted`. Collapsing the two would have made
+iOS assert exactly the number the recap avoided.
+
+The read is `async` and hops off the main actor (`Task.detached`), with hoisted
+`static let` coders: it is a disk read on the History detail load path, and
+`.task` runs synchronously up to its first `await`.
+
+**Order-independent by construction.** It is written when the transaction applies
+and read when the workout is displayed, so it does not matter which arrived first,
+or whether the workout is ever ingested. This matters: a recap overload is
+transport-eligible immediately while a history-only workout is still awaiting
+HealthKit and is not FIFO-gated, so the overload genuinely can reach iOS first
+(`aRecapOverloadCanReachTheIPhoneBeforeItsOwnWorkout`).
+
+#### Why the history record is not marked
+
+The obvious alternative — set `WorkoutExercise.progressiveOverloadApplied` — was
+**rejected**. That flag redirects 8+ aggregators (volume, charts, records, AI
+Coach, history detail) to read `planned*`. On the mid-workout path that is correct
+because the watch swapped the performance *into* `planned*` before freezing. A
+recap apply performs no such swap, so `planned*` still holds the original template
+values: setting the flag would make history report the template, not the workout.
+Making iOS perform the swap at correlation time was also rejected — it mutates a
+recorded workout for a display concern, and the history set order and template set
+order are not guaranteed to correspond after in-workout set editing. The read-side
+correlation keeps the record byte-for-byte what was performed.
+
+### Ordering and recovery
+
+The completed workout is enqueued first (at `endWorkout`) and takes sequence N; a
+recap overload for the same routine takes N+1 in the same per-routine lane and
+cannot overtake it. A workout acknowledgment never retires the overload
+transaction — different entries, different identities. The recap may be dismissed
+immediately after Apply because the transaction and the optimistic overlay are
+already durable.
+
+**Recovery: the recap itself is not restored after process termination**, and that
+is deliberate — ticket 08 clears the checkpoint once finalization completes, so
+there is no live state to rebuild, and `resumeInterruptedFinalization` resumes the
+frozen workout without minting new ids. The *transaction* is durable in the
+sync-state owner and converges on its own; a killed process therefore loses the
+row, never the applied increase. It can never come back as a fresh actionable row
+because there is no row at all.
+
+### Nonuniform target schemes
+
+A pyramid or drop scheme has no single resulting weight, so `WatchOverloadDisplay`
+carries `hasUniformWeights` and the picker preview, the confirmation headline and
+the recap row all switch to copy stating that *all sets* were adjusted rather than
+naming a weight the other sets do not have.
+
+### Mixed versions (ticket 05 delta)
+
+New Watch + a ticket-04 iOS build: the correlation keys decode and are ignored, so
+the template still applies correctly and only the History re-offer suppression is
+missing. New Watch + pre-ticket-04 iOS is unchanged — the envelope cannot be
+decoded at all and the transaction is retained until iOS is upgraded.
+
+### Paired-hardware verification (ticket 05, 2026-07-30)
+
+**Passed with no defects.** Deliberately scoped to this ticket's *delta* rather
+than repeating ticket 04's matrix: the recap reuses that ticket's apply operation
+unchanged — same picker, crown, increments, enqueue, transport, FIFO and
+retirement — all verified on 2026-07-27.
+
+Two workouts on a physical iPhone + Watch pair. Test routine: one uniform-weight
+exercise (3 × 12 @ 60 kg) and one pyramid exercise (3 × 12 @ 50/55/60 kg), both
+with an 8–12 rep goal and **planned reps set to the maximum**, which is the
+shortcut that makes simply completing the sets qualify — otherwise every set
+needs its reps edited up on the Watch.
+
+*Workout A — the new surface.* After tapping mid-workout **Later** on both, the
+recap showed an actionable "Increase weight" row per qualifying exercise in place
+of the passive trophy. Applying the uniform exercise confirmed to "Increased to
+62.5 kg" / "Now 62.5 kg next workout" and left the pyramid row **actionable and
+unchanged**. Applying the pyramid exercise showed **"All sets increased"** with no
+number and **"All sets adjusted for your next workout"**, moving the template to
+52.5 / 57.5 / 62.5. On the iPhone: that workout's History still read **12 × 60 kg
+as performed**, both History cards rendered **confirmed** rather than actionable,
+and both routine templates carried the new values.
+
+*Workout B — mid-workout apply.* Applying during the workout produced a recap row
+already confirmed with **no button**, so no second transaction can be allocated.
+
+That exercises the four invariants this ticket rests on: the recorded workout is
+never mutated, an applied row is never actionable again, the same increase never
+applies twice, and a nonuniform scheme never names a single weight.
+
+**Still unexercised on hardware** for this surface — all have automated coverage,
+and all reuse ticket-04 paths verified 2026-07-27: offline apply from the recap,
+the `.superseded` row (its observation window needs an iPhone edit landing while
+the recap is still open), immediate dismissal after apply, force-quit before
+acknowledgment, assistance-direction and swapped-alternative targets *from the
+recap specifically*, mixed-version combinations, and largest Dynamic Type /
+VoiceOver on the new row.
+
+Unlike ticket 04, this run found nothing — the one defect of the same class
+(History naming a single weight for a pyramid scheme) was caught earlier, by the
+architecture review, and fixed before the device ever saw it.
+
+### Deliberate omission (ticket 05)
+
+There is **no durable rejection ledger**. `.superseded` is derived from the
+effective routine, which means it is only readable while the recap is open and the
+routine context has arrived. A conflict that resolves after the recap is dismissed
+is never surfaced as a message — the authoritative routine value simply stands,
+which is what the user sees next time they open the routine. Building a retained
+outcome store for a transient surface was judged not worth its weight; the hard
+requirement (never silently reverting to an Apply button) holds without it.
 
 ## Color Scheme
 

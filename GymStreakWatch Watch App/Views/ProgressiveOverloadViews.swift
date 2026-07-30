@@ -90,6 +90,7 @@ struct ProgressiveOverloadSheet: View {
                     exerciseName: display.exerciseName,
                     currentWeight: display.templateWeight,
                     isAssistance: display.isAssistance,
+                    hasUniformWeights: display.hasUniformWeights,
                     onApply: { increment in
                         viewModel.applyProgressiveOverload(slotID: slotID, increment: increment)
                     },
@@ -104,7 +105,8 @@ struct ProgressiveOverloadSheet: View {
                 newWeight: newWeight,
                 targetRepMin: targetRepMin,
                 // A slot that vanished falls back to the resistance wording.
-                isAssistance: viewModel.overloadDisplay?.isAssistance ?? false
+                isAssistance: viewModel.overloadDisplay?.isAssistance ?? false,
+                hasUniformWeights: viewModel.overloadDisplay?.hasUniformWeights ?? true
             ) {
                 viewModel.dismissOverloadConfirmation()
             }

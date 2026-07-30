@@ -42,30 +42,12 @@
       selectedDebuggerIdentifier = "Xcode.DebuggerFoundation.Debugger.LLDB"
       selectedLauncherIdentifier = "Xcode.DebuggerFoundation.Launcher.LLDB"
       shouldUseLaunchSchemeArgsEnv = "YES">
-      <Testables>
-         <TestableReference
-            skipped = "NO"
-            parallelizable = "NO">
-            <BuildableReference
-               BuildableIdentifier = "primary"
-               BlueprintIdentifier = "B9F0C0ABEEAD939A64666A2E"
-               BuildableName = "GymStreakTests.xctest"
-               BlueprintName = "GymStreakTests"
-               ReferencedContainer = "container:GymStreak.xcodeproj">
-            </BuildableReference>
-         </TestableReference>
-         <TestableReference
-            skipped = "NO"
-            parallelizable = "YES">
-            <BuildableReference
-               BuildableIdentifier = "primary"
-               BlueprintIdentifier = "A67A49282F129423002A3457"
-               BuildableName = "GymStreakUITests.xctest"
-               BlueprintName = "GymStreakUITests"
-               ReferencedContainer = "container:GymStreak.xcodeproj">
-            </BuildableReference>
-         </TestableReference>
-      </Testables>
+      <TestPlans>
+         <TestPlanReference
+            reference = "container:GymStreak.xctestplan"
+            default = "YES">
+         </TestPlanReference>
+      </TestPlans>
    </TestAction>
    <LaunchAction
       buildConfiguration = "Debug"

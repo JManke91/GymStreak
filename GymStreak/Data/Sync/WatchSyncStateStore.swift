@@ -221,6 +221,16 @@ final class WatchSyncStateStore {
         return headTransaction(forRoutine: routineID)?.id == entry.id
     }
 
+    /// Whether a template transaction is still queued — i.e. iOS has not yet
+    /// returned a terminal acknowledgment whose routine generation also applied
+    /// locally. Read by the post-workout recap (ticket 05) to tell "still
+    /// converging" from "iPhone has ruled on it"; it deliberately exposes only
+    /// presence, since the outcome itself is already legible from the effective
+    /// routine once the entry is gone.
+    func hasPendingTransaction(id transactionID: UUID) -> Bool {
+        entries.contains { $0.templateTransaction?.transactionID == transactionID }
+    }
+
     // MARK: - Routine authority + effective routines
 
     var routineChallengeContext: [String: String] {

@@ -38,6 +38,10 @@ struct ProgressiveOverloadIncrementPicker: View {
     let exerciseName: String
     let currentWeight: Double
     let isAssistance: Bool
+    /// False for a pyramid/drop scheme. The step applies to every set either
+    /// way, but only a uniform scheme has ONE resulting weight worth previewing
+    /// — naming the first set's result for the others would be wrong.
+    let hasUniformWeights: Bool
     let onApply: (Double) -> Void
     /// Returns to the suggestion step. Not a sheet dismissal: the user asked to
     /// change the value, so backing out should land where they came from.
@@ -57,6 +61,15 @@ struct ProgressiveOverloadIncrementPicker: View {
             increment: increment,
             loadBehavior: isAssistance ? .counterweightAssistance : .resistance
         )
+    }
+
+    private var resultingWeightPreview: Text {
+        hasUniformWeights
+            ? Text(
+                "→ \(ProgressiveOverloadFormat.weight(resultingWeight))",
+                comment: "Resulting weight preview in the increment picker"
+            )
+            : Text("all sets", comment: "Increment picker preview when the target's sets do not share one weight")
     }
 
     var body: some View {
@@ -101,10 +114,7 @@ struct ProgressiveOverloadIncrementPicker: View {
                         .lineLimit(1)
                         .minimumScaleFactor(0.6)
                         .foregroundStyle(OnyxWatch.Colors.warning)
-                    Text(
-                        "→ \(ProgressiveOverloadFormat.weight(resultingWeight))",
-                        comment: "Resulting weight preview in the increment picker"
-                    )
+                    resultingWeightPreview
                     .font(.system(size: 12, weight: .medium))
                     .lineLimit(1)
                     .minimumScaleFactor(0.7)
@@ -242,6 +252,10 @@ struct ProgressiveOverloadConfirmationView: View {
     /// must not claim the weight went up. Wording matches the iOS
     /// `ProgressiveOverloadCard` (`rep_range.overload_card.reduced_to`).
     let isAssistance: Bool
+    /// False for a pyramid/drop scheme, where `newWeight` is only the first
+    /// set's result. The headline then states that every set moved rather than
+    /// naming a weight the other sets do not have.
+    let hasUniformWeights: Bool
     let onDismiss: () -> Void
 
     var body: some View {
@@ -257,19 +271,30 @@ struct ProgressiveOverloadConfirmationView: View {
             .frame(width: 74, height: 74)
 
             VStack(spacing: 4) {
-                if isAssistance {
+                if !hasUniformWeights {
+                    // No single resulting weight exists for this scheme, so the
+                    // moment states what actually happened to all of them.
                     Text(
-                        "Assistance reduced to",
-                        comment: "Progressive-overload confirmation headline for counterweight-assistance exercises, where progressing means removing assistance"
+                        "All sets increased",
+                        comment: "Progressive-overload confirmation headline when the target's sets do not share one weight"
                     )
                     .font(.system(size: 18, weight: .heavy))
-                } else {
-                    Text("Increased to", comment: "Progressive-overload confirmation headline")
-                        .font(.system(size: 20, weight: .heavy))
-                }
-                Text(ProgressiveOverloadFormat.weight(newWeight))
-                    .font(.system(size: 22, weight: .heavy))
                     .foregroundStyle(OnyxWatch.Colors.accentGreen)
+                } else {
+                    if isAssistance {
+                        Text(
+                            "Assistance reduced to",
+                            comment: "Progressive-overload confirmation headline for counterweight-assistance exercises, where progressing means removing assistance"
+                        )
+                        .font(.system(size: 18, weight: .heavy))
+                    } else {
+                        Text("Increased to", comment: "Progressive-overload confirmation headline")
+                            .font(.system(size: 20, weight: .heavy))
+                    }
+                    Text(ProgressiveOverloadFormat.weight(newWeight))
+                        .font(.system(size: 22, weight: .heavy))
+                        .foregroundStyle(OnyxWatch.Colors.accentGreen)
+                }
             }
             .multilineTextAlignment(.center)
 

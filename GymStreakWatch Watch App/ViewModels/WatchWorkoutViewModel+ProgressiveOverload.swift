@@ -58,11 +58,22 @@ struct WatchOverloadDisplay: Equatable {
     /// First template set's weight — what the increase is previewed against.
     let templateWeight: Double
     let isAssistance: Bool
+    /// Whether every affected template set carries the SAME weight.
+    ///
+    /// A pyramid or drop scheme does not, and showing one concrete "increased
+    /// to 60 kg" for it would be a lie about the other sets — the preview and
+    /// the confirmation switch to copy that states all sets moved instead.
+    let hasUniformWeights: Bool
 }
 
 extension WatchWorkoutViewModel {
 
     // MARK: - Qualification
+
+    /// True once the workout is over and its recap is on screen. The terminal
+    /// state is frozen, so nothing here may mutate the workout — but the
+    /// TEMPLATE is still fair game, which is the whole of ticket 05.
+    var isShowingWorkoutSummary: Bool { workoutSummary != nil }
 
     /// Whether a target is currently eligible for a suggestion.
     ///
@@ -71,8 +82,14 @@ extension WatchWorkoutViewModel {
     /// must all invalidate the suggestion, and this is the one place that
     /// decides it. Newly added Watch exercises have no rep-range goal and
     /// therefore cannot qualify until they are configured on iPhone.
+    ///
+    /// The terminal-transition guards are lifted once the summary is showing:
+    /// they exist to stop the WORKOUT being mutated after finalization, and the
+    /// summary path never does that (see `performProgressiveOverloadApply`).
+    /// The rest of the rule is unchanged, so both surfaces qualify identically
+    /// — the summary is not a second, looser eligibility definition.
     func qualifiesForProgressiveOverload(slotID: UUID) -> Bool {
-        guard !isEnding, !isWorkoutFrozen else { return false }
+        guard isShowingWorkoutSummary || (!isEnding && !isWorkoutFrozen) else { return false }
         guard appliedOverloadSlots[slotID] == nil else { return false }
         guard let exercise = exercises.first(where: { $0.id == slotID }) else { return false }
         guard ProgressiveOverloadService.workoutQualifiesForIncrease(
@@ -166,7 +183,10 @@ extension WatchWorkoutViewModel {
             targetRepMax: exercise.targetRepMax,
             templateWeight: firstSet.weight,
             isAssistance: ExerciseLoadBehavior
-                .from(raw: exercise.loadBehaviorRaw).isCounterweightAssistance
+                .from(raw: exercise.loadBehaviorRaw).isCounterweightAssistance,
+            hasUniformWeights: target.sets.allSatisfy {
+                WatchTemplateSetChange.weightsMatch($0.weight, firstSet.weight)
+            }
         )
     }
 

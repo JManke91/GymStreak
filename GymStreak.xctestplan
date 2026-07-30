@@ -1,0 +1,41 @@
+{
+  "configurations" : [
+    {
+      "id" : "82A637D8-EDCA-4044-AC03-F543CABE5BFA",
+      "name" : "Default",
+      "options" : {
+
+      }
+    }
+  ],
+  "defaultOptions" : {
+    "targetForVariableExpansion" : {
+      "containerPath" : "container:GymStreak.xcodeproj",
+      "identifier" : "A6A3406A2E4E6F360017A4F7",
+      "name" : "GymStreak"
+    }
+  },
+  "testTargets" : [
+    {
+      "parallelizable" : false,
+      "target" : {
+        "containerPath" : "container:GymStreak.xcodeproj",
+        "identifier" : "B9F0C0ABEEAD939A64666A2E",
+        "name" : "GymStreakTests"
+      }
+    },
+    {
+      "parallelizable" : true,
+      "skippedTests" : [
+        "GymStreakUITests\/testGenerateScreenshots()",
+        "GymStreakUITests\/testGenerateScreenshotsDarkMode()"
+      ],
+      "target" : {
+        "containerPath" : "container:GymStreak.xcodeproj",
+        "identifier" : "A67A49282F129423002A3457",
+        "name" : "GymStreakUITests"
+      }
+    }
+  ],
+  "version" : 1
+}

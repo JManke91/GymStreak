@@ -49,9 +49,9 @@
             parallelizable = "YES">
             <BuildableReference
                BuildableIdentifier = "primary"
-               BlueprintIdentifier = "A67A49282F129423002A3457"
-               BuildableName = "GymStreakUITests.xctest"
-               BlueprintName = "GymStreakUITests"
+               BlueprintIdentifier = "95505618E47D13F5E82A6053"
+               BuildableName = "GymStreakWatchUITests.xctest"
+               BlueprintName = "GymStreakWatchUITests"
                ReferencedContainer = "container:GymStreak.xcodeproj">
             </BuildableReference>
          </TestableReference>

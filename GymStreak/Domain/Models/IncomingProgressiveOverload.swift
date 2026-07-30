@@ -48,6 +48,24 @@ struct IncomingProgressiveOverload {
     let targetRepMin: Int
     /// Every affected template set exactly once, in template order.
     let setChanges: [IncomingTemplateSetChange]
+    /// Set when the watch applied this from the post-workout summary of a
+    /// specific completed workout (ticket 05). Nil for a mid-workout apply,
+    /// which is reported through the completed payload instead.
+    let sourceWorkout: SourceWorkout?
+
+    /// Which recorded performance this overload was applied from.
+    ///
+    /// A display-state hint, NOT part of the template mutation: it lets the
+    /// receiver stop re-offering the same increase for that recorded exercise.
+    /// It never creates, alters, or requires history — the transaction applies
+    /// identically whether or not the workout was ever ingested.
+    struct SourceWorkout {
+        /// `WorkoutSession.id` (the watch-generated workout id).
+        let workoutID: UUID
+        /// The routine slot performed there — matched against
+        /// `WorkoutExercise.routineExerciseId`, never against a display name.
+        let routineExerciseID: UUID
+    }
 
     /// Invariants checked before any mutation. All set changes are one atomic
     /// intent — partial application is forbidden — so a malformed intent is

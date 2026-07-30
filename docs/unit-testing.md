@@ -8,8 +8,9 @@ existing UI-test targets (`GymStreakUITests`, `GymStreakWatchUITests`). It uses 
 
 - Target: `GymStreakTests` (product type `com.apple.product-type.bundle.unit-test`)
 - Scheme: `GymStreakTests` (shared, `GymStreak.xcodeproj/xcshareddata/xcschemes/GymStreakTests.xcscheme`)
-- Also wired into the main `GymStreak` scheme's `TestAction` (alongside `GymStreakUITests`), so
-  `xcodebuild test -scheme GymStreak -only-testing:GymStreakTests` works too.
+- Also part of the main `GymStreak` scheme's default test plan (`GymStreak.xctestplan`,
+  alongside `GymStreakUITests`), so `xcodebuild test -scheme GymStreak -only-testing:GymStreakTests`
+  works too. See `docs/test-execution.md` for how the plan selects tests.
 - Files live under `GymStreakTests/` at the repo root, picked up automatically via a
   `PBXFileSystemSynchronizedRootGroup` (same mechanism the app/watch targets use — no manual
   "Add Files" step needed for new test files dropped into that folder).
@@ -26,7 +27,12 @@ or, to run just the unit tests via the main scheme:
 xcodebuild test -scheme GymStreak -destination 'platform=iOS Simulator,name=<device>' -only-testing:GymStreakTests
 ```
 
-## Current coverage (14 tests, 3 suites)
+## Current coverage
+
+As of 2026-07-30 the target holds **383 tests across 40 suites** (8.0 s of actual execution
+time — see `docs/test-execution.md` for measured timings). The three suites below are the
+original ones the target launched with; the rest have grown organically alongside features
+and are named after the type under test.
 
 - `SwiftDataRoutineRepositoryTests` — `fetchAll` sort order, `fetch(id:)`, insert/delete
   round-trip, cascade-delete of child `RoutineExercise`/`ExerciseSet` records.

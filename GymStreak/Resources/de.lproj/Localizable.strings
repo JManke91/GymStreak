@@ -332,6 +332,8 @@
 "rep_range.overload_card.increased_to" = "Erhöht auf **%@**";
 "rep_range.overload_card.reduced_to" = "Unterstützung reduziert auf **%@**";
 "rep_range.overload_card.next_workout" = "Nächstes Training: %d × %d Wdh. · %@";
+"rep_range.overload_card.all_sets_adjusted" = "**Alle Sätze** angepasst";
+"rep_range.overload_card.next_workout_no_weight" = "Nächstes Training: %d × %d Wdh.";
 "rep_range.overload_card.routine_unavailable" = "Diese Routine ist nicht mehr verfügbar";
 
 // MARK: - Accessibility

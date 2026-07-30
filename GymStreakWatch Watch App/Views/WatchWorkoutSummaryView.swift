@@ -137,9 +137,22 @@ struct WatchWorkoutSummaryView: View {
                 .foregroundStyle(OnyxWatch.Colors.textSecondary)
                 .padding(.horizontal, OnyxWatch.Spacing.sm)
 
-            VStack(spacing: OnyxWatch.Spacing.sm) {
+            // Lazy: each row now also builds an overload prompt, and the list
+            // grows with the routine rather than being a fixed handful.
+            LazyVStack(spacing: OnyxWatch.Spacing.sm) {
                 ForEach(summary.exercises) { exercise in
-                    exerciseRow(exercise)
+                    // Resolved once into the view model, never looked up here:
+                    // one row's state walks the routine, its slots and their
+                    // alternatives.
+                    let overloadRow = viewModel.summaryOverloadRows[exercise.id]
+                    VStack(spacing: OnyxWatch.Spacing.sm) {
+                        exerciseRow(exercise, hasOverloadPrompt: overloadRow != nil)
+                        if let overloadRow {
+                            SummaryOverloadPromptView(state: overloadRow.state) {
+                                viewModel.presentSummaryOverload(slotID: exercise.id)
+                            }
+                        }
+                    }
                 }
             }
             .padding(OnyxWatch.Spacing.lg)
@@ -150,7 +163,10 @@ struct WatchWorkoutSummaryView: View {
         }
     }
 
-    private func exerciseRow(_ exercise: WatchWorkoutSummary.ExerciseSummary) -> some View {
+    private func exerciseRow(
+        _ exercise: WatchWorkoutSummary.ExerciseSummary,
+        hasOverloadPrompt: Bool
+    ) -> some View {
         HStack(spacing: OnyxWatch.Spacing.md) {
             Image(systemName: exercise.isComplete ? "checkmark.circle.fill" : "circle.badge.minus")
                 .font(.caption2)
@@ -161,8 +177,11 @@ struct WatchWorkoutSummaryView: View {
                 .foregroundStyle(OnyxWatch.Colors.textPrimary)
                 .lineLimit(1)
 
-            // Rep goal achieved trophy
-            if exercise.repGoalAchieved {
+            // Rep-goal trophy — the passive form of the achievement. Dropped
+            // when the prompt below says the same thing and offers to act on
+            // it; kept when there is nothing actionable (the routine slot was
+            // deleted on iPhone), so the accomplishment is still acknowledged.
+            if exercise.repGoalAchieved && !hasOverloadPrompt {
                 Image(systemName: "trophy.fill")
                     .font(.system(size: 10))
                     .foregroundStyle(.orange)

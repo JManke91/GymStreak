@@ -77,6 +77,30 @@ struct WatchProgressiveOverloadIntent: Codable, Equatable {
     /// Every affected template set exactly once, in template order.
     let setChanges: [WatchTemplateSetChange]
 
+    /// The completed workout this overload was applied FROM, when the user
+    /// applied it from the post-workout summary (ticket 05). Nil for a
+    /// mid-workout apply, which reports itself through the completed payload's
+    /// `overloadAppliedExerciseIDs` instead — by summary time that payload is
+    /// frozen and may already be transferred or ingested, so it can never be
+    /// amended.
+    ///
+    /// Purely a CORRELATION HINT for the receiver's display state. It is not
+    /// part of the template mutation, carries no history, and a receiver that
+    /// ignores it still applies the same template change. Deliberately in the
+    /// payload rather than on the envelope: `TemplateTransactionEnvelope`
+    /// requires `workoutID == nil` without a workout, and a non-nil value there
+    /// would collide with the workout-id matching the outgoing queue dedupes on
+    /// (see ticket 04's deviation 1).
+    ///
+    /// Both are optional and additive, so an older receiver decodes the payload
+    /// unchanged and no schema bump is required.
+    var sourceWorkoutID: UUID?
+    /// The routine slot (`RoutineExercise.id`) performed in that workout —
+    /// the same id as `routineExerciseID`, carried separately because the
+    /// receiver correlates history by the slot it recorded, not by the target
+    /// the template mutation resolved.
+    var sourceRoutineExerciseID: UUID?
+
     /// Wire invariants checked identically on both sides before any optimistic
     /// application or authoritative mutation. All set changes are one atomic
     /// intent — partial application is forbidden — so a malformed intent
@@ -87,6 +111,8 @@ struct WatchProgressiveOverloadIntent: Codable, Equatable {
         guard !setChanges.isEmpty else { return false }
         let ids = setChanges.map(\.setID)
         guard Set(ids).count == ids.count else { return false }
+        // Correlation is all-or-nothing: half of it identifies nothing.
+        guard (sourceWorkoutID == nil) == (sourceRoutineExerciseID == nil) else { return false }
         return setChanges.allSatisfy { change in
             // Applying an overload always resets reps to the range minimum, so
             // a change proposing anything else is an internally inconsistent
@@ -106,5 +132,19 @@ extension WatchTemplateSetChange {
     /// last-bit representation difference.
     static func weightsMatch(_ lhs: Double, _ rhs: Double) -> Bool {
         abs(lhs - rhs) < 0.0001
+    }
+
+    /// Whether every affected set ends up at the SAME weight — false for a
+    /// pyramid or drop scheme, where no single number is true of all of them.
+    ///
+    /// One definition because both surfaces must reach the same verdict on the
+    /// same intent: the Watch recap decides whether to show a weight, and iOS
+    /// History decides the same thing again from the delivered payload. Note
+    /// `weightsMatch` is a tolerance comparison and therefore NOT transitive —
+    /// anchoring every comparison on the first set is what makes the two sides
+    /// agree, so callers must not roll their own pairwise loop.
+    static func haveUniformProposedWeights(_ changes: [WatchTemplateSetChange]) -> Bool {
+        guard let first = changes.first else { return true }
+        return changes.allSatisfy { weightsMatch($0.proposedWeight, first.proposedWeight) }
     }
 }

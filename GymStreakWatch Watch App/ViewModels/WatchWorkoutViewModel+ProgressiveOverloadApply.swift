@@ -36,6 +36,14 @@ extension WatchWorkoutViewModel {
     }
 
     private func performProgressiveOverloadApply(slotID: UUID, increment: Double) {
+        // Which surface asked. The post-workout summary applies to the TEMPLATE
+        // exactly as mid-workout does — same resolution, math, transaction id,
+        // durable enqueue and transport — but it must not touch the workout:
+        // by now the payload is frozen and may already be transferred or
+        // ingested, so the performed values stay exactly as recorded and the
+        // recap's numbers never move under the user.
+        let isFromSummary = isShowingWorkoutSummary
+
         // 1. Re-resolve by stable UUID and reject once the terminal transition
         //    has begun. Everything below re-reads live state; nothing captured
         //    when the suggestion appeared is trusted.
@@ -86,12 +94,20 @@ extension WatchWorkoutViewModel {
                 proposedWeight: newWeight
             )
         }
-        let intent = WatchProgressiveOverloadIntent(
+        var intent = WatchProgressiveOverloadIntent(
             routineExerciseID: slotID,
             alternativeID: target.alternativeID,
             targetRepMin: targetRepMin,
             setChanges: setChanges
         )
+        if isFromSummary, let sourceWorkoutID = pendingCompletedWorkoutId {
+            // A hint only, and only for the summary: it lets iOS stop offering
+            // the same increase again on that recorded workout. The mid-workout
+            // path needs none — its completed payload already reports itself
+            // through `overloadAppliedExerciseIDs`.
+            intent.sourceWorkoutID = sourceWorkoutID
+            intent.sourceRoutineExerciseID = slotID
+        }
         guard intent.isWellFormed else {
             overloadErrorMessage = String(
                 localized: "The weight increase could not be prepared.",
@@ -129,29 +145,47 @@ extension WatchWorkoutViewModel {
             return
         }
 
-        // 6. Durable from here on. Mirror the iOS overload exactly: the
-        //    performance moves into the planned values and the next workout's
-        //    target into the actual ones. `overloadAppliedExerciseIDs` on the
-        //    completed payload is what tells iOS to set
-        //    `progressiveOverloadApplied`, which is what makes every aggregator
-        //    read the planned (i.e. performed) values back out.
-        let workoutIncrease = ProgressiveOverloadService.applyIncrease(
-            toWeights: exercises[exerciseIndex].sets.map(\.actualWeight),
-            increment: increment,
-            targetRepMin: targetRepMin,
-            loadBehavior: loadBehavior
-        )
-        for (setIndex, newWeight) in workoutIncrease.weights.enumerated() {
-            var set = exercises[exerciseIndex].sets[setIndex]
-            set.plannedReps = set.actualReps
-            set.plannedWeight = set.actualWeight
-            set.actualReps = workoutIncrease.reps
-            set.actualWeight = newWeight
-            exercises[exerciseIndex].sets[setIndex] = set
+        // 6. Durable from here on.
+        if isFromSummary {
+            // The workout is frozen. Its payload — including the values, the
+            // `overloadAppliedExerciseIDs` list, and the end time — is already
+            // committed and possibly already on the iPhone, so nothing about
+            // the performance is touched, no second history record is created,
+            // and no checkpoint is rewritten (finalization owns the workout
+            // from here). The template transaction alone carries this change,
+            // and iOS learns which recap it came from through the payload's
+            // source correlation.
+        } else {
+            // Mid-workout: mirror the iOS overload exactly — the performance
+            // moves into the planned values and the next workout's target into
+            // the actual ones. `overloadAppliedExerciseIDs` on the completed
+            // payload is what tells iOS to set `progressiveOverloadApplied`,
+            // which is what makes every aggregator read the planned (i.e.
+            // performed) values back out.
+            let workoutIncrease = ProgressiveOverloadService.applyIncrease(
+                toWeights: exercises[exerciseIndex].sets.map(\.actualWeight),
+                increment: increment,
+                targetRepMin: targetRepMin,
+                loadBehavior: loadBehavior
+            )
+            for (setIndex, newWeight) in workoutIncrease.weights.enumerated() {
+                var set = exercises[exerciseIndex].sets[setIndex]
+                set.plannedReps = set.actualReps
+                set.plannedWeight = set.actualWeight
+                set.actualReps = workoutIncrease.reps
+                set.actualWeight = newWeight
+                exercises[exerciseIndex].sets[setIndex] = set
+            }
         }
         appliedOverloadSlots[slotID] = transactionID
         deferredOverloadSlotIDs.remove(slotID)
-        persistActiveCheckpoint()
+        recordAppliedOverload(
+            slotID: slotID,
+            setChanges: setChanges,
+            targetRepMin: targetRepMin,
+            isAssistance: loadBehavior.isCounterweightAssistance
+        )
+        if !isFromSummary { persistActiveCheckpoint() }
 
         // 7. Transport is best-effort; the durable transaction is what
         //    guarantees delivery. A transient failure simply leaves it pending.
