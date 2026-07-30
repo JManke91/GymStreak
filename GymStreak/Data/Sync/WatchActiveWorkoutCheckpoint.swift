@@ -1,6 +1,6 @@
 //
 //  WatchActiveWorkoutCheckpoint.swift
-//  GymStreakWatch Watch App
+//  GymStreak
 //
 //  Ticket 08 (in-workout routine editing): the minimum app-owned snapshot of a
 //  live watch workout, persisted so the workout survives watchOS terminating
@@ -51,6 +51,22 @@ struct WatchActiveWorkoutCheckpoint: Codable, Equatable {
     /// Ticket 06 structural baseline, so add/remove membership intent survives
     /// relaunch and a later removal can still cancel a pending addition.
     var structuralBaseline: WatchWorkoutStructuralBaseline
+    /// Targets whose progressive overload was applied during this workout, with
+    /// the transaction that carries it (ticket 04). Persisted so recovery
+    /// re-derives a safe state without re-prompting, allocating a second
+    /// transaction, or applying twice. Whether that transaction is still pending
+    /// is NOT stored here — the shared sync-state owner is the only truth for
+    /// that. Defaulted so checkpoints written before this field stay decodable.
+    var appliedOverloads: [AppliedOverload] = []
+    /// Targets the user dismissed with "Later". Deferring is per-slot and never
+    /// marks overload applied, so the post-workout summary can still offer it.
+    var deferredOverloadSlotIDs: [UUID] = []
+
+    /// One applied overload's stable identity pair.
+    struct AppliedOverload: Codable, Equatable {
+        let slotID: UUID
+        let transactionID: UUID
+    }
 
     static let currentVersion = 1
 
@@ -63,8 +79,12 @@ struct WatchActiveWorkoutCheckpoint: Codable, Equatable {
         currentSetIndex: Int,
         startTime: Date,
         structuralBaseline: WatchWorkoutStructuralBaseline,
+        appliedOverloads: [AppliedOverload] = [],
+        deferredOverloadSlotIDs: [UUID] = [],
         version: Int = WatchActiveWorkoutCheckpoint.currentVersion
     ) {
+        self.appliedOverloads = appliedOverloads
+        self.deferredOverloadSlotIDs = deferredOverloadSlotIDs
         self.version = version
         self.workoutID = workoutID
         self.healthKitWorkoutID = healthKitWorkoutID

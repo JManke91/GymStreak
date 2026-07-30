@@ -33,6 +33,48 @@ struct ExerciseAvatarView: View {
     }
 }
 
+/// Overlapping row of small exercise avatars with a "+N" overflow marker —
+/// the compact stand-in for a list of exercises (a slot's alternatives, a
+/// routine's exercises). Takes prepared value pairs so no relationship is
+/// walked per avatar.
+struct ExerciseAvatarStack: View {
+    /// Muscle groups + equipment of each exercise, already resolved.
+    let exercises: [(muscleGroups: [String], equipmentType: EquipmentType)]
+    var size: CGFloat = 17
+    var radius: CGFloat = 5
+    var maxVisible: Int = 3
+    /// Card background the avatars are cut out of.
+    var borderColor: Color = Color(red: 23/255, green: 23/255, blue: 25/255)
+
+    var body: some View {
+        HStack(spacing: 0) {
+            ForEach(Array(exercises.prefix(maxVisible).enumerated()), id: \.offset) { index, exercise in
+                ExerciseAvatarView(
+                    muscleGroups: exercise.muscleGroups,
+                    equipmentType: exercise.equipmentType,
+                    size: size,
+                    radius: radius
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: radius + 1.5, style: .continuous)
+                        .stroke(borderColor, lineWidth: 1.5)
+                        .padding(-1.5)
+                )
+                .padding(.leading, index > 0 ? -6 : 0)
+                .zIndex(Double(maxVisible - index))
+            }
+
+            if exercises.count > maxVisible {
+                Text("+\(exercises.count - maxVisible)")
+                    .font(.system(size: 10.5, weight: .bold))
+                    .monospacedDigit()
+                    .foregroundStyle(Color.white.opacity(0.4))
+                    .padding(.leading, 4)
+            }
+        }
+    }
+}
+
 /// Pill chip showing a localized muscle-group name in its category color.
 struct MuscleChipView: View {
     let muscleGroup: String

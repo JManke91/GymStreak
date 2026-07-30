@@ -52,9 +52,20 @@ extension WatchTemplateTransactionService {
         }
 
         // Set-only reconcile for retained (non-added) slots.
+        //
+        // Targets already resolved by a progressive-overload transaction
+        // (ticket 04) are excluded. That transaction committed template values
+        // derived from the TEMPLATE scheme; this workout's performed values are
+        // a different thing, and writing them here would silently replace the
+        // next-workout target the user explicitly chose. The product rule is
+        // that once overload is applied for a target during a workout, later
+        // edits to those performed sets stay history-only. Structural intent
+        // for the same slot is unaffected.
         let addedIDs = Set(workout.addedRoutineExerciseIDs)
+        let overloadResolvedIDs = Set(workout.overloadAppliedExerciseIDs)
         var updates: [SetUpdate] = []
-        for completedExercise in workout.exercises where !addedIDs.contains(completedExercise.id) {
+        for completedExercise in workout.exercises
+        where !addedIDs.contains(completedExercise.id) && !overloadResolvedIDs.contains(completedExercise.id) {
             let modifiedSets = completedExercise.sets.filter {
                 $0.actualReps != $0.plannedReps || $0.actualWeight != $0.plannedWeight
             }

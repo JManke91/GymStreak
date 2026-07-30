@@ -23,6 +23,34 @@ struct ConfigureExerciseView: View {
     @State private var showingAlternativePicker = false
     @State private var expandedAlternativeId: UUID?
     @State private var hasLoadedInitialState = false
+    /// Shared across the pending alternatives' set rows so one Done bar dismisses
+    /// whichever value is being typed.
+    @FocusState private var isEditingAlternativeSetValue: Bool
+
+    /// Extracted from the row body — inline `Binding(get:set:)` closures over a
+    /// subscripted `@State` array push the type-checker past its budget.
+    private func repsBinding(at index: Int) -> Binding<Int> {
+        Binding(
+            get: { sets[index].reps },
+            set: { newValue in
+                sets[index].reps = newValue
+                // Force array update to trigger SwiftUI refresh
+                let temp = sets
+                sets = temp
+            }
+        )
+    }
+
+    private func weightBinding(at index: Int) -> Binding<Double> {
+        Binding(
+            get: { sets[index].weight },
+            set: { newValue in
+                sets[index].weight = newValue
+                let temp = sets
+                sets = temp
+            }
+        )
+    }
 
     init(
         exercise: Exercise,
@@ -105,29 +133,13 @@ struct ConfigureExerciseView: View {
                                     HStack {
                                         Text("set.reps_label".localized + ":")
                                         Spacer()
-                                        Stepper("\(sets[index].reps)", value: Binding(
-                                            get: { sets[index].reps },
-                                            set: { newValue in
-                                                sets[index].reps = newValue
-                                                // Force array update to trigger SwiftUI refresh
-                                                let temp = sets
-                                                sets = temp
-                                            }
-                                        ), in: 1...100)
+                                        Stepper("\(sets[index].reps)", value: repsBinding(at: index), in: 1...100)
                                     }
 
                                     HStack {
                                         Text("set.weight_label".localized + ":")
                                         Spacer()
-                                        TextField("0.0", value: Binding(
-                                            get: { sets[index].weight },
-                                            set: { newValue in
-                                                sets[index].weight = newValue
-                                                // Force array update to trigger SwiftUI refresh
-                                                let temp = sets
-                                                sets = temp
-                                            }
-                                        ), format: .number)
+                                        TextField("0.0", value: weightBinding(at: index), format: .number)
                                             .keyboardType(.decimalPad)
                                             .multilineTextAlignment(.trailing)
                                             .frame(width: 80)
@@ -189,9 +201,11 @@ struct ConfigureExerciseView: View {
                 primaryExercise: exercise,
                 alternatives: $alternatives,
                 showingPicker: $showingAlternativePicker,
-                expandedAlternativeId: $expandedAlternativeId
+                expandedAlternativeId: $expandedAlternativeId,
+                valueFocus: $isEditingAlternativeSetValue
             )
         }
+        .keyboardDoneBar(isFocused: $isEditingAlternativeSetValue)
         .navigationDestination(isPresented: $showingAlternativePicker) {
             AlternativeExercisePicker(
                 primaryExercise: exercise,

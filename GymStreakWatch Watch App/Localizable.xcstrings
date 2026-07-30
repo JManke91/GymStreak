@@ -16,6 +16,29 @@
     "%@" : {
 
     },
+    "%@ · all sets" : {
+      "comment" : "Mid-workout progressive-overload primary action; parameter is the signed weight step",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ · alle Sätze"
+          }
+        }
+      }
+    },
+    "%@ → new weight" : {
+      "comment" : "Increment picker subtitle; parameter is the current template weight",
+      "extractionState" : "stale",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ → neues Gewicht"
+          }
+        }
+      }
+    },
     "%@, %@, %lld of %lld sets completed" : {
       "localizations" : {
         "de" : {
@@ -62,6 +85,18 @@
                 }
               }
             }
+          }
+        }
+      }
+    },
+    "%@: ready for more. All sets reached %lld reps." : {
+      "comment" : "VoiceOver summary of the progressive-overload suggestion",
+      "extractionState" : "stale",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@: bereit für mehr. Alle Sätze haben %2$lld Wdh. erreicht."
           }
         }
       }
@@ -242,6 +277,17 @@
     "%lld%%" : {
 
     },
+    "→ %@" : {
+      "comment" : "Resulting weight preview in the increment picker",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "→ %@"
+          }
+        }
+      }
+    },
     "Abs" : {
       "localizations" : {
         "de" : {
@@ -295,6 +341,17 @@
         }
       }
     },
+    "All sets at %lld reps — range maxed." : {
+      "comment" : "Mid-workout progressive-overload suggestion subtitle; parameter is the rep-range maximum",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Alle Sätze bei %lld Wdh. — Bereich ausgereizt."
+          }
+        }
+      }
+    },
     "Already in workout" : {
       "localizations" : {
         "de" : {
@@ -311,6 +368,50 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Alternativen verfügbar"
+          }
+        }
+      }
+    },
+    "Applies from your next workout · starting at %lld reps" : {
+      "comment" : "Progressive-overload confirmation detail; parameter is the rep-range minimum",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gilt ab dem nächsten Training · Start bei %lld Wdh."
+          }
+        }
+      }
+    },
+    "Apply" : {
+      "comment" : "Confirms the chosen progressive-overload increment",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Übernehmen"
+          }
+        }
+      }
+    },
+    "Assistance reduced to" : {
+      "comment" : "Progressive-overload confirmation headline for counterweight-assistance exercises, where progressing means removing assistance",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Unterstützung reduziert auf"
+          }
+        }
+      }
+    },
+    "Back" : {
+      "comment" : "Returns from the increment picker to the suggestion",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Zurück"
           }
         }
       }
@@ -391,12 +492,34 @@
         }
       }
     },
+    "Change" : {
+      "comment" : "Opens the progressive-overload increment picker",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ändern"
+          }
+        }
+      }
+    },
     "Chest" : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "Brust"
+          }
+        }
+      }
+    },
+    "Close" : {
+      "comment" : "Dismisses the progressive-overload sheet",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Schließen"
           }
         }
       }
@@ -477,6 +600,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Weiter"
+          }
+        }
+      }
+    },
+    "Could not save the weight increase. Please try again." : {
+      "comment" : "Shown when the durable write for a mid-workout overload fails",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Die Gewichtserhöhung konnte nicht gespeichert werden. Bitte erneut versuchen."
           }
         }
       }
@@ -859,8 +993,30 @@
         }
       }
     },
+    "Increased to" : {
+      "comment" : "Progressive-overload confirmation headline",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Erhöht auf"
+          }
+        }
+      }
+    },
     "kCal" : {
 
+    },
+    "Later" : {
+      "comment" : "Dismisses the mid-workout progressive-overload suggestion",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Später"
+          }
+        }
+      }
     },
     "Lats" : {
       "localizations" : {
@@ -983,7 +1139,14 @@
       }
     },
     "OK" : {
-
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "OK"
+          }
+        }
+      }
     },
     "Open GymStreak on your iPhone to sync your exercise library." : {
       "localizations" : {
@@ -1044,6 +1207,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Quadrizeps"
+          }
+        }
+      }
+    },
+    "Ready for more" : {
+      "comment" : "Mid-workout progressive-overload suggestion title",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bereit für mehr"
           }
         }
       }
@@ -1500,6 +1674,17 @@
         }
       }
     },
+    "The weight increase could not be prepared." : {
+      "comment" : "Shown when a mid-workout overload intent fails its own validation",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Die Gewichtserhöhung konnte nicht vorbereitet werden."
+          }
+        }
+      }
+    },
     "The workout could not be saved because its exercise data is invalid." : {
       "localizations" : {
         "de" : {
@@ -1536,6 +1721,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Diese Übung ist in deiner iPhone-Bibliothek nicht mehr verfügbar."
+          }
+        }
+      }
+    },
+    "This exercise is no longer part of the routine on iPhone." : {
+      "comment" : "Shown when a mid-workout overload target cannot be resolved in the routine",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Diese Übung ist auf dem iPhone nicht mehr Teil der Routine."
+          }
+        }
+      }
+    },
+    "This exercise is no longer part of the workout." : {
+      "comment" : "Shown when a progressive-overload target disappears while its sheet is open",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Diese Übung ist nicht mehr Teil des Trainings."
           }
         }
       }
@@ -1658,6 +1865,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "GEWICHT"
+          }
+        }
+      }
+    },
+    "Weight increase" : {
+      "comment" : "VoiceOver label for the increment picker",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gewichtserhöhung"
           }
         }
       }

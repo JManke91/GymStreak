@@ -145,6 +145,9 @@ extension WatchWorkoutViewModel {
         if result != nil {
             assert(WatchWorkoutStructuralReducer.hasUniqueIdentities(exercises))
             WKInterfaceDevice.current().play(.success)
+            // Removing the slot a suggestion points at dismisses it without
+            // staging anything (ticket 04).
+            revalidateOverloadPresentation()
             persistActiveCheckpoint()
         }
         return result

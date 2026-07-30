@@ -113,4 +113,34 @@ struct ProgressiveOverloadServiceTests {
     func counterweightAssistanceClampsAtZero() {
         #expect(ProgressiveOverloadService.increasedWeight(1.0, increment: 2.5, loadBehavior: .counterweightAssistance) == 0)
     }
+
+    // MARK: - Increment scale (watch Digital Crown picker)
+
+    @Test
+    func normalizedClampsToTheSelectableRange() {
+        #expect(ProgressiveOverloadIncrement.normalized(0) == ProgressiveOverloadIncrement.minimum)
+        #expect(ProgressiveOverloadIncrement.normalized(-5) == ProgressiveOverloadIncrement.minimum)
+        #expect(ProgressiveOverloadIncrement.normalized(999) == ProgressiveOverloadIncrement.maximum)
+    }
+
+    @Test
+    func normalizedSnapsToTheNearestStride() {
+        #expect(ProgressiveOverloadIncrement.normalized(2.6) == 2.5)
+        #expect(ProgressiveOverloadIncrement.normalized(2.63) == 2.75)
+        // Float drift from repeated crown writes must not survive.
+        #expect(ProgressiveOverloadIncrement.normalized(1.2500000001) == 1.25)
+    }
+
+    @Test
+    func everyPresetLandsExactlyOnTheStrideGrid() {
+        // The presets are reachable by crown only if they sit on the grid —
+        // otherwise the picker could never highlight them.
+        for preset in ProgressiveOverloadIncrement.options {
+            #expect(ProgressiveOverloadIncrement.normalized(preset) == preset,
+                    "preset \(preset) is off the \(ProgressiveOverloadIncrement.step) grid")
+            #expect(preset >= ProgressiveOverloadIncrement.minimum)
+            #expect(preset <= ProgressiveOverloadIncrement.maximum)
+        }
+        #expect(ProgressiveOverloadIncrement.options.contains(ProgressiveOverloadIncrement.default))
+    }
 }

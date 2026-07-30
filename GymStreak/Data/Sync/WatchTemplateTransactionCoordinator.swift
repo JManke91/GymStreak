@@ -30,8 +30,11 @@ import Foundation
 @MainActor
 final class WatchTemplateTransactionCoordinator {
     private let inbox: WatchWorkoutInboxStore
-    private let receipts: WorkoutIngestReceiptStore
-    private let historyTransactions: WorkoutHistoryTransacting
+    // Internal (not private) so the progressive-overload kind in
+    // `+ProgressiveOverload.swift` uses the same ordering ledger and isolated
+    // transaction factory rather than acquiring its own.
+    let receipts: WorkoutIngestReceiptStore
+    let historyTransactions: WorkoutHistoryTransacting
     private let routineSnapshots: AuthoritativeRoutineSnapshotProviding
     private let routineSnapshotTransport: WatchRoutineSnapshotTransporting
     private let mainContextCache: MainContextRoutineCacheRefreshing
@@ -104,6 +107,12 @@ final class WatchTemplateTransactionCoordinator {
     }
 
     func process(_ entry: WatchWorkoutInboxStore.Entry) -> Result {
+        // Template-only kinds carry no workout. They share this coordinator's
+        // ordering ledger, receipt phases, and acknowledgment protocol; only
+        // the executor differs.
+        if let intent = entry.transaction?.payload.progressiveOverload {
+            return processProgressiveOverload(entry, intent: intent)
+        }
         guard let workout = entry.completedWorkout else {
             print("WatchTemplateTransaction: unsupported payload retained for a newer executor")
             return .unchanged
@@ -203,7 +212,10 @@ final class WatchTemplateTransactionCoordinator {
     /// `readyToAcknowledge` and sends the terminal acknowledgment. Until then
     /// (no watch challenge yet) the receipt stays `committedAwaitingContext`
     /// and the inbox entry is retained so a later drain completes it.
-    private func stageContextAndAcknowledge(_ entry: WatchWorkoutInboxStore.Entry?, receipt: WorkoutIngestReceipt) {
+    /// Internal (not private) so every transaction kind — including the
+    /// progressive-overload kind in `+ProgressiveOverload.swift` — reaches its
+    /// terminal receipt/acknowledgment through this one phase sequence.
+    func stageContextAndAcknowledge(_ entry: WatchWorkoutInboxStore.Entry?, receipt: WorkoutIngestReceipt) {
         let snapshot: [WatchRoutine]
         do {
             snapshot = try routineSnapshots.fetchSnapshot()

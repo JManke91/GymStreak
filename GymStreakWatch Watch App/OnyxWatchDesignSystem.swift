@@ -31,6 +31,9 @@ struct OnyxWatch {
         static let textSecondary = Color(white: 0.6)
         static let textTertiary = Color(white: 0.4)
         static let textOnTint = Color.black // Dark text for use on tint color background
+        // Dark text for use on the `warning` orange background (#231303). Same
+        // contrast rule as textOnTint: never white text on a filled accent.
+        static let textOnWarning = Color(red: 35/255, green: 19/255, blue: 3/255)
 
         // UI Elements
         static let divider = Color(white: 0.15)

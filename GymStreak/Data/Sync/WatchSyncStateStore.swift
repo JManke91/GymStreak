@@ -240,9 +240,14 @@ final class WatchSyncStateStore {
         for (key, anchor) in routineAnchors where !routines.contains(where: { $0.id.uuidString == key }) {
             routines.append(anchor)
         }
+        // Every unresolved template-mutating kind folds, in FIFO order, so the
+        // overlay always matches the order iOS will apply them in.
         for entry in entries where entry.hasTemplateIntent {
-            guard let workout = entry.completedWorkout else { continue }
-            routines = routines.map { WatchRoutineTemplateFold.apply(workout, to: $0) }
+            if let workout = entry.completedWorkout {
+                routines = routines.map { WatchRoutineTemplateFold.apply(workout, to: $0) }
+            } else if let intent = entry.templateTransaction?.payload.progressiveOverload {
+                routines = routines.map { WatchRoutineTemplateFold.apply(intent, to: $0) }
+            }
         }
         return routines
     }
@@ -366,6 +371,73 @@ final class WatchSyncStateStore {
             : .completedWorkout(payload)
         let newEntry = OutgoingSyncEntry(
             payload: syncPayload, phase: phase, enqueuedAt: Date(), quarantineReason: nil, heldAck: nil
+        )
+        entries.append(newEntry)
+        do {
+            try persist()
+        } catch {
+            entries.removeLast()
+            senderEpoch = previousEpoch
+            nextSequenceByRoutine = previousSequences
+            routineAnchors = previousAnchors
+            throw error
+        }
+        onEffectiveRoutinesChanged?()
+        return newEntry
+    }
+
+    /// Enqueues a TEMPLATE-ONLY transaction — one that carries no completed
+    /// workout (progressive overload, ticket 04). Same commit contract as the
+    /// workout enqueue: the exact payload bytes, the per-routine sequence, the
+    /// FIFO position, and the routine anchor all commit in ONE atomic
+    /// replacement, before transport and before any optimistic local mutation.
+    /// Throws when the write fails, in which case nothing was enqueued and no
+    /// counter was consumed — the caller must then neither transport nor show
+    /// success.
+    ///
+    /// `transactionID` is supplied by the caller and is the deduplication key:
+    /// a repeated attempt with the same id returns the existing entry rather
+    /// than allocating a second sequence, so repeated taps and post-crash
+    /// recovery can never apply twice. The envelope's `workoutID` is
+    /// deliberately nil — `TemplateTransactionEnvelope.isInternallyConsistent`
+    /// requires it for a payload without a workout, and a non-nil value would
+    /// additionally collide with the workout-id matching used by `entry(id:)`,
+    /// `advance`, `quarantine`, and `retire`.
+    @discardableResult
+    func enqueue(
+        progressiveOverload intent: WatchProgressiveOverloadIntent,
+        routineID: UUID,
+        transactionID: UUID,
+        routineAnchor: WatchRoutine? = nil
+    ) throws -> OutgoingSyncEntry {
+        if let existing = entries.first(where: { $0.templateTransaction?.transactionID == transactionID }) {
+            return existing
+        }
+
+        let previousEpoch = senderEpoch
+        let previousSequences = nextSequenceByRoutine
+        let previousAnchors = routineAnchors
+
+        let identity = allocateTransactionIdentity(for: routineID)
+        if let routineAnchor,
+           routineAnchors[routineID.uuidString] == nil,
+           headTransaction(forRoutine: routineID) == nil {
+            routineAnchors[routineID.uuidString] = routineAnchor
+        }
+
+        let envelope = TemplateTransactionEnvelope(
+            transactionID: transactionID,
+            senderEpoch: identity.epoch,
+            routineID: routineID,
+            sequence: identity.sequence,
+            workoutID: nil,
+            payload: .progressiveOverload(intent)
+        )
+        // A template-only transaction has no HealthKit finalization to wait
+        // for, so it is transport-eligible the moment it is durable.
+        let newEntry = OutgoingSyncEntry(
+            payload: .templateTransaction(envelope), phase: .transportEligible,
+            enqueuedAt: Date(), quarantineReason: nil, heldAck: nil
         )
         entries.append(newEntry)
         do {

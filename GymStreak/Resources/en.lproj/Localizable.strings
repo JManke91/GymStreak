@@ -30,10 +30,11 @@
 "routine.duplicate.name_format" = "%@ Copy";
 "routine.rename" = "Rename";
 "routine.section.sets" = "Sets";
-"routine.chip.pause" = "Pause %@";
-"routine.chip.goal" = "Goal %d–%d reps";
-"routine.drag_to_reorder" = "Drag exercises to reorder";
-"routine.edit_mode_announcement" = "Edit mode. Drag exercises to reorder them.";
+"routine.sort" = "Sort";
+"routine.sort_hint" = "Drag to reorder · Trash to remove";
+"routine.exercise_removed" = "Exercise removed";
+"routine.set_scheme.uniform" = "%d × %d reps · %@";
+"routine.set_scheme.mixed" = "%d sets · max %@";
 "routine.add_exercise" = "Add Exercise";
 "routine.start_workout" = "Start Workout";
 "routine.edit" = "Edit Routine";
@@ -118,6 +119,9 @@
 "set.number" = "Set %d";
 "set.reps" = "%d reps";
 "set.weight" = "%.2f kg";
+"set.weight_compact" = "%@ kg";
+"set.reps_unit" = "reps";
+"set.weight_unit" = "kg";
 "set.reps_label" = "Reps";
 "set.weight_label" = "Weight (kg)";
 "set.planned" = "Planned:";
@@ -133,8 +137,11 @@
 "rest_timer.minimize" = "Minimize";
 "rest_timer.skip" = "Skip Rest";
 "rest_timer.set" = "Set Rest Timer";
+"rest_timer.enable" = "Enable Rest Timer";
 "rest_timer.disable" = "Disable Rest Timer";
 "rest_timer.rest" = "Rest:";
+"rest_timer.rest_short" = "Rest";
+"rest_timer.off" = "off";
 "notification.rest_timer.title" = "Rest Complete";
 "notification.rest_timer.body" = "Time to start your next set!";
 "rest_timer.reminder.authorization_denied" = "Notifications are off. Keep GymStreak open for the rest-timer alert.";
@@ -306,10 +313,10 @@
 "rep_range.target" = "Target: %d-%d reps";
 "rep_range.min" = "Min Reps";
 "rep_range.max" = "Max Reps";
-"rep_range.clear" = "Remove Rep Goal";
-"rep_range.strength" = "Strength";
-"rep_range.hypertrophy" = "Hypertrophy";
-"rep_range.endurance" = "Endurance";
+"rep_range.goal_short" = "Goal";
+"rep_range.value" = "%d–%d reps";
+"rep_range.custom" = "Custom";
+"rep_range.no_goal" = "No goal";
 "rep_range.all_sets_maxed" = "All sets at %d reps! Increase weight?";
 "rep_range.increase" = "Increase";
 "rep_range.increase_weight" = "Increase Weight";
@@ -490,7 +497,6 @@
 // MARK: - Exercise Menu
 "exercise.menu.superset" = "Superset";
 "exercise.menu.edit_superset" = "Edit Superset";
-"exercise.menu.edit_sets" = "Edit Sets";
 
 // MARK: - Alternative Exercises
 "alternatives.menu.add" = "Add Alternatives";

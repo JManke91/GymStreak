@@ -41,6 +41,15 @@ struct IncomingWatchWorkout {
     var addedRoutineExerciseIDs: [UUID] = []
     var removedRoutineExerciseIDs: [UUID] = []
 
+    /// Slot IDs whose target had progressive overload applied on the watch
+    /// during this workout (ticket 04). The Data→Domain mapper normalizes an
+    /// absent wire array to empty, so an old-watch payload is simply "no
+    /// overload". These exercises are marked `progressiveOverloadApplied` on
+    /// ingest and are excluded from generic set-value writeback, so this
+    /// transaction cannot regress the template values the separate
+    /// progressive-overload transaction already committed.
+    var overloadAppliedExerciseIDs: [UUID] = []
+
     var modifiedSetsCount: Int {
         exercises.reduce(0) { total, exercise in
             total + exercise.sets.filter { $0.actualReps != $0.plannedReps || $0.actualWeight != $0.plannedWeight }.count

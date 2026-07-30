@@ -34,11 +34,19 @@ enum WatchRoutineTemplateFold {
 
         let removedIDs = Set(workout.removedRoutineExerciseIDs ?? [])
         let addedIDs = workout.addedRoutineExerciseIDs ?? []
+        // Targets already resolved by a progressive-overload transaction
+        // (ticket 04). Their template values were committed by that separate
+        // transaction from the TEMPLATE scheme; replaying this workout's
+        // performed values over them would regress the overload, so they are
+        // excluded from generic set-value writeback here exactly as they are in
+        // the authoritative iOS merge. Structural intent is unaffected.
+        let overloadResolvedIDs = Set(workout.overloadAppliedExerciseIDs ?? [])
 
         // Delete explicit removals (already-absent IDs are no-ops); fold set
         // values into every retained slot.
         var exercises = routine.exercises.compactMap { exercise -> WatchExercise? in
             guard !removedIDs.contains(exercise.id) else { return nil }
+            guard !overloadResolvedIDs.contains(exercise.id) else { return exercise }
             guard let completed = workout.exercises.first(where: { $0.id == exercise.id }) else {
                 return exercise
             }
@@ -79,6 +87,75 @@ enum WatchRoutineTemplateFold {
         return WatchRoutine(id: routine.id, name: routine.name, exercises: exercises)
     }
 
+    // MARK: - Progressive overload (template-only kind, ticket 04)
+
+    /// Folds a pending progressive-overload transaction over a routine — the
+    /// same optimistic-overlay contract as the completed-workout kind.
+    ///
+    /// Targets are resolved by stable ID only (slot, then the alternative's own
+    /// scheme when `alternativeID` is set), never by display name, so an
+    /// alternative's values can never land in the primary scheme. Application is
+    /// idempotent and value-absolute: a set already at the proposed values stays
+    /// unchanged, and a set the authoritative base has since moved to a third
+    /// value is left alone — iOS is the authority that resolves that conflict,
+    /// and its authoritative context retires this overlay either way.
+    static func apply(_ intent: WatchProgressiveOverloadIntent, to routine: WatchRoutine) -> WatchRoutine {
+        guard intent.isWellFormed else { return routine }
+        let changes = Dictionary(uniqueKeysWithValues: intent.setChanges.map { ($0.setID, $0) })
+
+        let exercises = routine.exercises.map { exercise -> WatchExercise in
+            guard exercise.id == intent.routineExerciseID else { return exercise }
+
+            guard let alternativeID = intent.alternativeID else {
+                return rebuilt(exercise, sets: overloaded(exercise.sets, with: changes),
+                               order: exercise.order, supersetId: exercise.supersetId,
+                               supersetOrder: exercise.supersetOrder,
+                               alternatives: exercise.alternatives)
+            }
+
+            let alternatives = exercise.alternatives?.map { alternative -> WatchExerciseAlternative in
+                guard alternative.id == alternativeID else { return alternative }
+                return WatchExerciseAlternative(
+                    id: alternative.id,
+                    exerciseId: alternative.exerciseId,
+                    name: alternative.name,
+                    muscleGroup: alternative.muscleGroup,
+                    sets: overloaded(alternative.sets, with: changes),
+                    order: alternative.order,
+                    loadBehaviorRaw: alternative.loadBehaviorRaw,
+                    targetRepMin: alternative.targetRepMin,
+                    targetRepMax: alternative.targetRepMax
+                )
+            }
+            return rebuilt(exercise, sets: exercise.sets, order: exercise.order,
+                           supersetId: exercise.supersetId, supersetOrder: exercise.supersetOrder,
+                           alternatives: alternatives)
+        }
+        return WatchRoutine(id: routine.id, name: routine.name, exercises: exercises)
+    }
+
+    private static func overloaded(
+        _ sets: [WatchSet],
+        with changes: [UUID: WatchTemplateSetChange]
+    ) -> [WatchSet] {
+        sets.map { set in
+            guard let change = changes[set.id] else { return set }
+            // Already at the proposed values (duplicate fold / re-entry), or
+            // moved to an unrelated third value by a newer authoritative base.
+            let matchesExpected = set.reps == change.expectedReps
+                && WatchTemplateSetChange.weightsMatch(set.weight, change.expectedWeight)
+            let matchesProposed = set.reps == change.proposedReps
+                && WatchTemplateSetChange.weightsMatch(set.weight, change.proposedWeight)
+            guard matchesExpected || matchesProposed else { return set }
+            return WatchSet(
+                id: set.id,
+                reps: change.proposedReps,
+                weight: change.proposedWeight,
+                restTime: set.restTime
+            )
+        }
+    }
+
     // MARK: - Set fold (retained slots)
 
     private static func foldingSets(
@@ -98,7 +175,9 @@ enum WatchRoutineTemplateFold {
                     muscleGroup: alternative.muscleGroup,
                     sets: folded(alternative.sets, with: completed.sets),
                     order: alternative.order,
-                    loadBehaviorRaw: alternative.loadBehaviorRaw
+                    loadBehaviorRaw: alternative.loadBehaviorRaw,
+                    targetRepMin: alternative.targetRepMin,
+                    targetRepMax: alternative.targetRepMax
                 )
             }
         } else {

@@ -1,4 +1,48 @@
+//
+//  ProgressiveOverloadService.swift
+//  GymStreakWatch Watch App
+//
+//  Watch copy of `GymStreak/Domain/Services/ProgressiveOverloadService.swift`
+//  (progressive-overload ticket 04).
+//
+//  WHY A COPY: the watch target must not import iOS `Domain/` — that layer owns
+//  SwiftData `@Model` types and the watch deliberately has no SwiftData (see
+//  docs/architecture.md). The repository's established convention for logic
+//  both targets need is a per-target copy, exactly as done for
+//  `WatchSyncStateStore`, `WatchRoutineTemplateFold`, and
+//  `WatchWorkoutStructuralReducer`. Keeping the qualify/apply rules identical is
+//  what guarantees a suggestion shown on the Watch and one shown on iPhone
+//  agree, and that the values the Watch proposes are the values iOS would have
+//  computed itself.
+//
+//  Everything below `MARK: - Shared logic` is character-identical to the iOS
+//  original; only the small `ExerciseLoadBehavior` copy above it is added,
+//  because the watch models carry load behavior as a raw string. Unit coverage
+//  lives against the iOS original (`GymStreakTests/ProgressiveOverloadServiceTests`)
+//  — there is no watch unit-test target.
+//
+
 import Foundation
+
+/// Watch copy of the iOS `ExerciseLoadBehavior` domain enum. The watch wire
+/// models carry `loadBehaviorRaw` strings; `from(raw:)` is the one place that
+/// converts, so an unknown/absent raw value degrades to `.resistance` rather
+/// than silently reversing the direction of a weight change.
+enum ExerciseLoadBehavior: String, Codable, CaseIterable, Hashable {
+    case resistance
+    case counterweightAssistance
+
+    var isCounterweightAssistance: Bool {
+        self == .counterweightAssistance
+    }
+
+    static func from(raw: String?) -> ExerciseLoadBehavior {
+        guard let raw, let behavior = ExerciseLoadBehavior(rawValue: raw) else { return .resistance }
+        return behavior
+    }
+}
+
+// MARK: - Shared logic
 
 /// Single source of truth for rep-range progressive-overload decisions:
 /// when an exercise qualifies for a weight-increase suggestion and what

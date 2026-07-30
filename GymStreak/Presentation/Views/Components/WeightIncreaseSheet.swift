@@ -14,9 +14,11 @@ struct WeightIncreaseSheet: View {
     let onApply: (Double) -> Void
     let onCancel: () -> Void
 
-    @State private var selectedIncrement: Double = 2.5
+    @State private var selectedIncrement: Double = ProgressiveOverloadIncrement.default
 
-    private let increments: [Double] = [1.25, 2.5, 5.0]
+    /// One shared list with the watch picker (`Domain/Services/ProgressiveOverloadService`),
+    /// so the two platforms cannot offer different steps again.
+    private let increments: [Double] = ProgressiveOverloadIncrement.options
 
     /// Routine-editor surface: current values come from the template sets.
     init(routineExercise: RoutineExercise, onApply: @escaping (Double) -> Void, onCancel: @escaping () -> Void) {
@@ -72,7 +74,10 @@ struct WeightIncreaseSheet: View {
                                 Image(systemName: selectedIncrement == increment ? "circle.inset.filled" : "circle")
                                     .foregroundStyle(selectedIncrement == increment ? .orange : .secondary)
 
-                                Text("\(isAssistance ? "−" : "+")\(String(format: "%.2g", increment)) kg")
+                                // Two fraction digits, not `%.2g`: at two
+                                // SIGNIFICANT digits a 1.25 kg step rendered as
+                                // a misleading "1.2".
+                                Text("\(isAssistance ? "−" : "+")\(increment.formatted(.number.precision(.fractionLength(0...2)))) kg")
                                     .font(.body.weight(.medium))
 
                                 Spacer()

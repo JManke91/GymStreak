@@ -310,12 +310,66 @@ class RoutinesViewModel: ObservableObject {
         fetchRoutines()
     }
 
-    func removeRoutineExercise(_ routineExercise: RoutineExercise, from routine: Routine) {
-        if let index = routine.routineExercisesList.firstIndex(where: { $0.id == routineExercise.id }) {
-            routine.routineExercises?.remove(at: index)
-            routineRepository.delete(routineExercise)
-            updateRoutine(routine)
+    /// Removes an exercise from a routine and hands back everything needed to
+    /// put it back — the sorting mode deletes immediately and offers an undo
+    /// toast instead of a confirmation alert, and SwiftData deletion is final.
+    @discardableResult
+    func removeRoutineExercise(
+        _ routineExercise: RoutineExercise,
+        from routine: Routine
+    ) -> RemovedRoutineExerciseSnapshot? {
+        guard let index = routine.routineExercisesList.firstIndex(where: { $0.id == routineExercise.id }) else {
+            return nil
         }
+        let snapshot = RemovedRoutineExerciseSnapshot(routineExercise)
+        routine.routineExercises?.remove(at: index)
+        routineRepository.delete(routineExercise)
+        updateRoutine(routine)
+        return snapshot
+    }
+
+    /// Re-creates a removed exercise (sets, rep range, superset membership and
+    /// alternatives with their own set schemes) at its original position.
+    func restoreRoutineExercise(_ snapshot: RemovedRoutineExerciseSnapshot, in routine: Routine) {
+        guard let exercise = snapshot.exercise else { return }
+        let restored = RoutineExercise(exercise: exercise, order: snapshot.order)
+        restored.routine = routine
+        restored.targetRepMin = snapshot.targetRepMin
+        restored.targetRepMax = snapshot.targetRepMax
+        restored.supersetId = snapshot.supersetId
+        restored.supersetOrder = snapshot.supersetOrder
+
+        for set in snapshot.sets {
+            let copy = ExerciseSet(reps: set.reps, weight: set.weight, restTime: set.restTime, order: set.order)
+            copy.routineExercise = restored
+            restored.sets?.append(copy)
+        }
+
+        for alternative in snapshot.alternatives {
+            guard let alternativeExercise = alternative.exercise else { continue }
+            let restoredAlternative = RoutineExerciseAlternative(exercise: alternativeExercise, order: alternative.order)
+            restoredAlternative.routineExercise = restored
+            restoredAlternative.targetRepMin = alternative.targetRepMin
+            restoredAlternative.targetRepMax = alternative.targetRepMax
+            restoredAlternative.sets = alternative.sets.map { set in
+                let copy = AlternativeExerciseSet(reps: set.reps, weight: set.weight, restTime: set.restTime, order: set.order)
+                copy.alternative = restoredAlternative
+                return copy
+            }
+            if restored.alternatives == nil { restored.alternatives = [] }
+            restored.alternatives?.append(restoredAlternative)
+        }
+
+        routine.routineExercises?.append(restored)
+
+        // Reopen the gap the removal closed, then renumber.
+        let ordered = routine.routineExercisesList
+            .sorted { ($0.order, $0.id == restored.id ? 0 : 1) < ($1.order, $1.id == restored.id ? 0 : 1) }
+        for (index, entry) in ordered.enumerated() {
+            entry.order = index
+        }
+
+        updateRoutine(routine)
     }
 
     /// Appends a new set (seeded from the last set) and returns it so callers
@@ -360,13 +414,66 @@ class RoutinesViewModel: ObservableObject {
         }
     }
 
-    func moveExerciseSets(from source: IndexSet, to destination: Int, for routineExercise: RoutineExercise) {
-        var sortedSets = routineExercise.setsList.sorted(by: { $0.order < $1.order })
-        sortedSets.move(fromOffsets: source, toOffset: destination)
-        for (index, set) in sortedSets.enumerated() {
-            set.order = index
+    /// Applies a `List.onMove` reorder: renumber `order` to the new sequence and
+    /// persist once.
+    func moveRoutineExercises(from source: IndexSet, to destination: Int, in routine: Routine) {
+        var ordered = routine.routineExercisesList.sorted { $0.order < $1.order }
+        ordered.move(fromOffsets: source, toOffset: destination)
+        for (index, exercise) in ordered.enumerated() {
+            exercise.order = index
+        }
+        updateRoutine(routine)
+    }
+
+    // MARK: - Bulk set edits
+    //
+    // These write every affected set first and persist ONCE. `updateRoutine`
+    // saves, refetches all routines and re-derives last-performed dates, so a
+    // per-set save loop would run that cascade N times for a single tap — and
+    // the redesigned card puts these actions behind always-visible steppers.
+
+    /// Applies one rest time to every set of an exercise.
+    func updateRestTime(_ restTime: TimeInterval, for routineExercise: RoutineExercise) {
+        for set in routineExercise.setsList {
+            set.restTime = restTime
         }
         if let routine = routineExercise.routine {
+            updateRoutine(routine)
+        }
+    }
+
+    /// Applies one rest time to every set of an alternative.
+    func updateRestTime(_ restTime: TimeInterval, for alternative: RoutineExerciseAlternative) {
+        for set in alternative.setsList {
+            set.restTime = restTime
+        }
+        if let routine = alternative.routineExercise?.routine {
+            updateRoutine(routine)
+        }
+    }
+
+    /// Copies the reps or the weight of one set onto every set of the exercise.
+    func applyToAllSets(from source: ExerciseSet, field: ApplyToAllType, in routineExercise: RoutineExercise) {
+        for set in routineExercise.setsList {
+            switch field {
+            case .reps: set.reps = source.reps
+            case .weight: set.weight = source.weight
+            }
+        }
+        if let routine = routineExercise.routine {
+            updateRoutine(routine)
+        }
+    }
+
+    /// Copies the reps or the weight of one set onto every set of the alternative.
+    func applyToAllSets(from source: AlternativeExerciseSet, field: ApplyToAllType, in alternative: RoutineExerciseAlternative) {
+        for set in alternative.setsList {
+            switch field {
+            case .reps: set.reps = source.reps
+            case .weight: set.weight = source.weight
+            }
+        }
+        if let routine = alternative.routineExercise?.routine {
             updateRoutine(routine)
         }
     }

@@ -55,7 +55,6 @@ All superset management is in `RoutinesViewModel` (~lines 155-230):
 | **Remove** | `removeExerciseFromSuperset(_:in:)` | Clears fields. Auto-dissolves if only 1 exercise remains |
 | **Dissolve** | `dissolveSuperset(_:in:)` | Clears `supersetId`/`supersetOrder` on all exercises in the group |
 | **Reorder** | `reorderSuperset(_:in:)` | Reassigns sequential `supersetOrder` values |
-| **Move Sets** | `moveExerciseSets(from:to:for:)` | Reorders sets within a single exercise using `IndexSet` move pattern |
 
 **Auto-dissolution**: Removing an exercise from a 2-exercise superset automatically dissolves it (prevents single-exercise supersets).
 
@@ -162,7 +161,7 @@ Key details:
 - Expanded sets content renders as a separate list row for smooth animation
 - `.buttonStyle(.plain)` allows the nested `Menu` in the label to intercept its own taps
 - Expanded content is indented 28pt (`.padding(.leading, 28)`) to align past the chevron
-- The `isExpanded` binding setter already contains `withAnimation` and the `setEditExerciseId` guard
+- The `isExpanded` binding setter already contains `withAnimation`
 
 #### Three-Dot Menu (Ellipsis)
 
@@ -170,29 +169,15 @@ Each exercise row in normal mode displays a `Menu` (ellipsis icon) in `ExerciseH
 
 Menu options:
 - **Superset** / **Edit Superset** — Opens superset create or edit mode (only shown when routine has 2+ exercises)
-- **Edit Sets** — Enters inline set edit mode (always available)
+- **Alternatives** — Expands the card with the first alternative open, or opens the picker when there are none
 
-#### Set Edit Mode
+> **Removed 2026-07-29:** the **Edit Sets** entry (and the whole set-edit mode below) is gone. In routines-redesign v2 the expanded card's set rows are always editable (`RoutineSetsEditor`), so "Edit Sets" only swapped that editor for a strictly weaker reorder-only list — it read as the UI getting stuck. Set **reordering** was removed with it (see the note under "Set Edit Mode").
 
-Activated via the three-dot menu or context menu "Edit Sets" option. State tracked by `setEditExerciseId: UUID?`.
+#### Set Edit Mode — REMOVED (2026-07-29)
 
-Consolidates all set structural operations (add, delete, reorder) in one mode:
+Set add/delete now live permanently in the expanded card's `RoutineSetsEditor` rows (redesign v2), so the separate mode was deleted along with `setEditExerciseId`, `enterSetEditMode`/`exitSetEditMode`, `setReorderContent`, `moveSetUp`/`moveSetDown` and `RoutinesViewModel.moveExerciseSets(from:to:for:)`.
 
-- Shows simplified set rows with set number badge, reps × weight summary
-- **Delete button** (`minus.circle.fill`) on the leading edge of each row — removes the set immediately
-- **Up/down chevron buttons** on the trailing edge (only shown when 2+ sets) — calls `moveSetUp(at:for:)` / `moveSetDown(at:for:)` which delegate to `viewModel.moveExerciseSets(from:to:for:)`
-- First set's up button and last set's down button are disabled (dimmed to `.quaternary`)
-- **Add Set** button at the bottom — creates a new set with default values
-- **Done** button exits edit mode
-- Haptic feedback (`UIImpactFeedbackGenerator(.light)`) on reorder moves
-- DisclosureGroup collapse is prevented while edit mode is active
-- Mutually exclusive with exercise edit mode and superset edit mode
-
-Normal mode (collapsed DisclosureGroup content) only shows set value editors — no add/delete/reorder controls.
-
-**Why up/down buttons instead of drag handles:** `.onMove` only works on `ForEach` that are direct children of `List`/`Section`. The set `ForEach` is nested inside `DisclosureGroup > VStack`, so drag-based `.onMove` is non-functional. Up/down buttons work reliably regardless of nesting.
-
-**ViewModel method:** `RoutinesViewModel.moveExerciseSets(from:to:for:)` — reorders sets and persists via SwiftData.
+**Deliberate omission — set reordering.** It had no home outside that mode and was not reinstated: with always-editable rows, changing which set comes first is equivalent to retyping two values, and a routine has ~3–5 sets per exercise. If it is ever wanted back, restore `moveExerciseSets` from git history at 2026-07-29 and drive it from up/down buttons on `RoutineSetStepperRow` — note that `.onMove` is not an option, it only works on a `ForEach` that is a direct child of `List`/`Section` and these rows are nested in a card.
 
 #### Context Menu (Long Press)
 
@@ -207,10 +192,10 @@ For **standalone exercises** (not in any superset):
 - "Add to Superset A" / "Add to Superset B" → `viewModel.addExerciseToSuperset(_:supersetId:in:)`
 
 For **all exercises**:
-- "Edit Sets" → enters set edit mode (add, delete, reorder)
+- "Alternatives" → expands the card with the first alternative open (or opens the picker)
 
 For **deleting**:
-- "Delete Exercise" → confirms and removes
+- "Delete Exercise" → removes immediately and offers an Undo toast (the confirmation alert was dropped in redesign v2)
 
 **Visual styling:**
 - Each superset group gets a unique color from `SupersetLabelProvider`

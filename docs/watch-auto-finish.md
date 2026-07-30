@@ -25,6 +25,29 @@ checks `findNextIncompleteSet()`:
 - **Returns a set** → unchanged behavior: start the rest timer (superset-round-aware)
   and advance to the next incomplete set.
 
+**Progressive-overload interaction (ticket 04, 2026-07-27).** The same mutation now
+also decides whether the completed exercise qualifies for a mid-workout weight
+increase — computed *before* auto-advance, against the slot that was just
+completed, so navigation can never lose the slot identity:
+
+- **Final set AND qualifying** → the delayed auto-finish is cancelled
+  (`cancelAutoFinishForOverloadFlow()`) and the suggestion capsule opens instead of
+  the workout finishing underneath it. Apply or "Later" re-enters the one
+  `autoFinishWorkout()` path **exactly once**; no second, unretained finish task is
+  ever created.
+- **Non-final and qualifying** → the rest timer starts and the cursor advances as
+  usual, and the suggestion is raised *afterwards*. Order matters: `startRestTimer`
+  resets `isRestTimerMinimized`, so raising the suggestion first would let the
+  full-screen rest overlay cover it. The timer keeps running; only its overlay is
+  minimized.
+
+While any overload surface is up, the existing `isWorkoutInputSuspended` flag is
+set — so the Action Button and Double Tap cannot complete another set during the
+flow — and the delayed closure's existing suspension recheck already prevents an
+auto-finish from firing behind it. Entering the terminal transition (`isEnding`)
+dismisses the surface without staging anything. See
+`docs/rep-range-progressive-overload.md`.
+
 Because the trigger sits in `applyToggleSetCompletion`, it is **order-independent** and
 covers all three completion entry points, all of which funnel through
 `toggleSetCompletion` → `performToggleSetCompletion` → `applyToggleSetCompletion`:

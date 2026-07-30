@@ -30,10 +30,11 @@
 "routine.duplicate.name_format" = "%@ Kopie";
 "routine.rename" = "Umbenennen";
 "routine.section.sets" = "Sätze";
-"routine.chip.pause" = "Pause %@";
-"routine.chip.goal" = "Ziel %d–%d Wdh.";
-"routine.drag_to_reorder" = "Übungen zum Neu anordnen ziehen";
-"routine.edit_mode_announcement" = "Bearbeitungsmodus. Ziehe Übungen um sie neu anzuordnen.";
+"routine.sort" = "Sortieren";
+"routine.sort_hint" = "Ziehen zum Umsortieren · Papierkorb zum Entfernen";
+"routine.exercise_removed" = "Übung entfernt";
+"routine.set_scheme.uniform" = "%d × %d Wdh. · %@";
+"routine.set_scheme.mixed" = "%d Sätze · max %@";
 "routine.add_exercise" = "Übung hinzufügen";
 "routine.start_workout" = "Workout starten";
 "routine.edit" = "Routine bearbeiten";
@@ -118,6 +119,9 @@
 "set.number" = "Satz %d";
 "set.reps" = "%d Wdh.";
 "set.weight" = "%.2f kg";
+"set.weight_compact" = "%@ kg";
+"set.reps_unit" = "Wdh.";
+"set.weight_unit" = "kg";
 "set.reps_label" = "Wiederholungen";
 "set.weight_label" = "Gewicht (kg)";
 "set.planned" = "Geplant:";
@@ -133,8 +137,11 @@
 "rest_timer.minimize" = "Minimieren";
 "rest_timer.skip" = "Pause überspringen";
 "rest_timer.set" = "Pausentimer setzen";
+"rest_timer.enable" = "Pausentimer aktivieren";
 "rest_timer.disable" = "Pausentimer deaktivieren";
 "rest_timer.rest" = "Pause:";
+"rest_timer.rest_short" = "Pause";
+"rest_timer.off" = "aus";
 "notification.rest_timer.title" = "Pause beendet";
 "notification.rest_timer.body" = "Zeit für deinen nächsten Satz!";
 "rest_timer.reminder.authorization_denied" = "Mitteilungen sind deaktiviert. Lass GymStreak für den Pausentimer-Hinweis geöffnet.";
@@ -306,10 +313,10 @@
 "rep_range.target" = "Ziel: %d-%d Wdh.";
 "rep_range.min" = "Min. Wdh.";
 "rep_range.max" = "Max. Wdh.";
-"rep_range.clear" = "Wdh.-Ziel entfernen";
-"rep_range.strength" = "Kraft";
-"rep_range.hypertrophy" = "Hypertrophie";
-"rep_range.endurance" = "Ausdauer";
+"rep_range.goal_short" = "Ziel";
+"rep_range.value" = "%d–%d Wdh.";
+"rep_range.custom" = "Eigen";
+"rep_range.no_goal" = "Kein Ziel";
 "rep_range.all_sets_maxed" = "%d Wdh. erreicht! Gewicht erhöhen?";
 "rep_range.increase" = "Erhöhen";
 "rep_range.increase_weight" = "Gewicht erhöhen";
@@ -490,7 +497,6 @@
 // MARK: - Exercise Menu
 "exercise.menu.superset" = "Supersatz";
 "exercise.menu.edit_superset" = "Supersatz bearbeiten";
-"exercise.menu.edit_sets" = "Sätze bearbeiten";
 
 // MARK: - Alternative Exercises
 "alternatives.menu.add" = "Alternativen hinzufügen";

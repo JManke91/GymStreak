@@ -64,6 +64,33 @@ final class WatchWorkoutViewModel: ObservableObject {
     @Published var isWorkoutInputSuspended = false
     @Published var pendingExerciseSelection: WatchExerciseSelection?
 
+    // MARK: Progressive overload (ticket 04)
+
+    /// The single mid-workout overload surface. Mutated only through
+    /// `setOverloadPresentation`, which keeps input suspension and rest-overlay
+    /// minimization in lockstep with it.
+    @Published var overloadPresentation: WatchOverloadPresentation = .none
+    /// Display data for the current step, resolved once by
+    /// `setOverloadPresentation` so the sheet's `body` performs no lookups.
+    @Published var overloadDisplay: WatchOverloadDisplay?
+    /// Non-blocking failure feedback for the overload flow, kept separate from
+    /// `errorMessage` so a local write failure never looks like a workout error.
+    @Published var overloadErrorMessage: String?
+    /// slotID → the transaction that carries its applied overload. Per-slot, so
+    /// several qualifying exercises never overwrite one another.
+    ///
+    /// `@Published` because `hasModifiedSets`/`modifiedSetsCount` read it and
+    /// the finish dialog reads those. Every mutation today is paired with an
+    /// `overloadPresentation` write in the same turn, which would invalidate
+    /// anyway — publishing removes the dependency on that staying true.
+    @Published var appliedOverloadSlots: [UUID: UUID] = [:]
+    /// Slots dismissed with "Later" during this workout. Deferring suppresses
+    /// only this mid-workout surface; it never marks overload applied.
+    @Published var deferredOverloadSlotIDs: Set<UUID> = []
+    /// One stable transaction id per slot, so a retry after a failed write or
+    /// transport reuses the same transaction instead of allocating a second.
+    var pendingOverloadTransactionIDs: [UUID: UUID] = [:]
+
     // Error handling
     @Published var errorMessage: String?
 
@@ -233,15 +260,33 @@ final class WatchWorkoutViewModel: ObservableObject {
         return incompleteCount == 1
     }
 
+    /// The current effective routine — the authoritative base with every
+    /// pending template transaction folded over it. Overload resolves its
+    /// template scheme from here, so consecutive overloads in one workout build
+    /// on each other instead of both proposing from the same stale base.
+    func effectiveRoutine(for routineID: UUID) -> WatchRoutine? {
+        routineStore.routine(for: routineID)
+    }
+
+    // Applying an overload deliberately moves the performance into the planned
+    // values, which would otherwise read as "modified sets". Those sets are
+    // excluded from generic template writeback on both platforms, so counting
+    // them here would prompt the user to persist a change that is already
+    // committed by its own transaction.
+    private func isOverloadResolved(_ exercise: ActiveWorkoutExercise) -> Bool {
+        appliedOverloadSlots[exercise.id] != nil
+    }
+
     var hasModifiedSets: Bool {
         exercises.contains { exercise in
-            exercise.sets.contains(where: \.wasModified)
+            !isOverloadResolved(exercise) && exercise.sets.contains(where: \.wasModified)
         }
     }
 
     var modifiedSetsCount: Int {
         exercises.reduce(0) { total, exercise in
-            total + exercise.sets.filter(\.wasModified).count
+            guard !isOverloadResolved(exercise) else { return total }
+            return total + exercise.sets.filter(\.wasModified).count
         }
     }
 
@@ -364,6 +409,9 @@ final class WatchWorkoutViewModel: ObservableObject {
         isEnding = true
         isWorkoutInputSuspended = false
         pendingExerciseSelection = nil
+        // The terminal transition owns the screen from here; any overload
+        // surface is dismissed without staging a transaction.
+        overloadPresentation = .none
         defer { isEnding = false }
 
         // Entering the terminal state revokes the delayed auto-finish (a
@@ -408,7 +456,15 @@ final class WatchWorkoutViewModel: ObservableObject {
                 shouldUpdateTemplate: updateTemplate,
                 healthKitWorkoutId: healthKitWorkoutId,
                 addedRoutineExerciseIDs: outgoingAddedSlotIDs,
-                removedRoutineExerciseIDs: outgoingRemovedSlotIDs
+                removedRoutineExerciseIDs: outgoingRemovedSlotIDs,
+                // Emitted in stable exercise order regardless of
+                // `updateTemplate`: iOS needs it to set
+                // `progressiveOverloadApplied` (so history/volume/charts read
+                // the performed values back out of the planned fields), and to
+                // keep this workout's set writeback off those targets.
+                overloadAppliedExerciseIDs: exercises
+                    .map(\.id)
+                    .filter { appliedOverloadSlots[$0] != nil }
             )
         }
 
@@ -474,7 +530,9 @@ final class WatchWorkoutViewModel: ObservableObject {
     /// finish directly via endWorkout(). The delayed task revalidates before
     /// firing: a manual End, a discard, or an un-completed set in the meantime
     /// cancels or invalidates it.
-    private func autoFinishWorkout() {
+    /// Internal (not private) so the overload flow can resume this ONE delayed
+    /// finish path after Apply/Later, instead of creating a second task.
+    func autoFinishWorkout() {
         autoFinishTask?.cancel()
         autoFinishTask = Task { @MainActor in
             try? await Task.sleep(for: .milliseconds(800))
@@ -561,7 +619,23 @@ final class WatchWorkoutViewModel: ObservableObject {
             // this lives in the shared completion path, all three entry points
             // — on-screen Complete button, Ultra Action Button, Double Tap —
             // finish identically.
+            // Decide the overload suggestion inside THIS serialized mutation,
+            // before auto-advance or navigation can change the current slot —
+            // the decision is made against the slot that was just completed.
+            let completedSlotID = exercises[exerciseIndex].id
+            let opensOverloadSuggestion = qualifiesForProgressiveOverload(slotID: completedSlotID)
+                && !deferredOverloadSlotIDs.contains(completedSlotID)
+
             if findNextIncompleteSet() == nil {
+                if opensOverloadSuggestion {
+                    // The completing set is both the workout's final set and a
+                    // qualifying one. Revoke the delayed auto-finish so it can
+                    // never fire underneath the suggestion; Apply or Later
+                    // resumes the check exactly once.
+                    cancelAutoFinishForOverloadFlow()
+                    presentOverloadSuggestionIfQualified(slotID: completedSlotID)
+                    return
+                }
                 autoFinishWorkout()
                 return
             }
@@ -587,10 +661,19 @@ final class WatchWorkoutViewModel: ObservableObject {
                 // Advance to next set in same exercise or next exercise
                 advanceToNextSetAfterCompletion(fromExerciseIndex: exerciseIndex, setIndex: setIndex)
             }
+
+            // Presented after any rest timer has started, so minimizing its
+            // full-screen overlay sticks (startRestTimer resets that flag).
+            // The timer keeps running underneath.
+            if opensOverloadSuggestion {
+                presentOverloadSuggestionIfQualified(slotID: completedSlotID)
+            }
         } else {
             exercises[exerciseIndex].sets[setIndex].completedAt = nil
             WKInterfaceDevice.current().play(.directionDown)
             persistActiveCheckpoint()
+            // Undoing a completion can invalidate a suggestion that is on screen.
+            revalidateOverloadPresentation()
         }
     }
 
@@ -694,7 +777,12 @@ final class WatchWorkoutViewModel: ObservableObject {
                     muscleGroup: exercise.originalMuscleGroup ?? exercise.muscleGroup,
                     sets: exercise.originalSets ?? [],
                     order: -1,
-                    loadBehaviorRaw: exercise.originalLoadBehaviorRaw ?? exercise.loadBehaviorRaw
+                    loadBehaviorRaw: exercise.originalLoadBehaviorRaw ?? exercise.loadBehaviorRaw,
+                    // Carrying the captured primary range here means reverting
+                    // restores it through the SAME code path that adopts an
+                    // alternative's range — no separate revert branch to drift.
+                    targetRepMin: exercise.originalTargetRepMin,
+                    targetRepMax: exercise.originalTargetRepMax
                 )
             )
         }
@@ -718,6 +806,8 @@ final class WatchWorkoutViewModel: ObservableObject {
             exercise.plannedExerciseName = exercise.name
             exercise.originalMuscleGroup = exercise.muscleGroup
             exercise.originalLoadBehaviorRaw = exercise.loadBehaviorRaw
+            exercise.originalTargetRepMin = exercise.targetRepMin
+            exercise.originalTargetRepMax = exercise.targetRepMax
             exercise.originalSets = exercise.sets.map { set in
                 WatchSet(id: set.id, reps: set.plannedReps, weight: set.plannedWeight, restTime: set.restTime)
             }
@@ -729,6 +819,11 @@ final class WatchWorkoutViewModel: ObservableObject {
         exercise.exerciseId = alternative.exerciseId
         exercise.exerciseSeedKey = nil
         exercise.loadBehaviorRaw = alternative.loadBehaviorRaw ?? "resistance"
+        // Adopt the target's own rep-range goal. A swapped exercise is judged
+        // against the range it is actually performed under, and a revert carries
+        // the captured primary range back in (see `swapTargets`).
+        exercise.targetRepMin = alternative.targetRepMin
+        exercise.targetRepMax = alternative.targetRepMax
         exercise.sets = alternative.sets.enumerated().map { setIndex, set in
             ActiveWorkoutSet(
                 id: set.id,
@@ -749,9 +844,15 @@ final class WatchWorkoutViewModel: ObservableObject {
             exercise.originalMuscleGroup = nil
             exercise.originalLoadBehaviorRaw = nil
             exercise.originalSets = nil
+            exercise.originalTargetRepMin = nil
+            exercise.originalTargetRepMax = nil
         }
 
         exercises[index] = exercise
+
+        // Replacing the performed target invalidates any suggestion for it: the
+        // rep range and set scheme it was computed against are gone.
+        revalidateOverloadPresentation()
 
         // The set scheme was rebuilt — restart the current exercise at its first
         // set so the set index can't point past the new scheme's bounds.
@@ -1296,6 +1397,15 @@ final class WatchWorkoutViewModel: ObservableObject {
         templateWasUpdated = false
         isEnding = false
         resumedWorkoutRoutineID = nil
+        // Overload state is per-workout. Pending transactions are NOT dropped
+        // here — they live in the durable sync-state owner and converge on
+        // their own; only this workout's presentation/bookkeeping is cleared.
+        overloadPresentation = .none
+        overloadDisplay = nil
+        overloadErrorMessage = nil
+        appliedOverloadSlots = [:]
+        deferredOverloadSlotIDs = []
+        pendingOverloadTransactionIDs = [:]
         // The live workout is over (discarded or summary dismissed); drop its
         // durable recovery checkpoint (ticket 08).
         checkpointStore.clear()

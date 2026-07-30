@@ -8,6 +8,8 @@ struct PendingAlternativesSection: View {
     @Binding var alternatives: [PendingAlternative]
     @Binding var showingPicker: Bool
     @Binding var expandedAlternativeId: UUID?
+    /// Shared "a set value is being typed" flag driving the screen's Done bar.
+    var valueFocus: FocusState<Bool>.Binding
 
     var body: some View {
         Section {
@@ -61,8 +63,9 @@ struct PendingAlternativesSection: View {
                     .buttonStyle(.plain)
 
                     if isExpanded {
-                        AlternativeSetsInlineEditor(
+                        RoutineSetsEditor(
                             sets: alternative.sets,
+                            valueFocus: valueFocus,
                             onAddSet: {
                                 let last = alternative.sets.max(by: { $0.order < $1.order })
                                 let newSet = ExerciseSet(
@@ -72,7 +75,6 @@ struct PendingAlternativesSection: View {
                                     order: (last?.order ?? -1) + 1
                                 )
                                 alternative.sets.append(newSet)
-                                return newSet
                             },
                             onRemoveSet: { set in
                                 alternative.sets.removeAll { $0.id == set.id }
@@ -80,7 +82,15 @@ struct PendingAlternativesSection: View {
                                     remaining.order = order
                                 }
                             },
-                            onSetChanged: { _ in }
+                            onSetChanged: { _ in },
+                            onApplyToAll: { source, field in
+                                for set in alternative.sets {
+                                    switch field {
+                                    case .reps: set.reps = source.reps
+                                    case .weight: set.weight = source.weight
+                                    }
+                                }
+                            }
                         )
                         .padding(.top, 6)
                         .padding(.bottom, 4)

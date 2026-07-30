@@ -86,6 +86,23 @@ struct ActiveWorkoutView: View {
                 WorkoutRestTimerOverlay()
             }
         }
+        // The whole progressive-overload flow, as ONE modal sheet. On watchOS a
+        // sheet is always modal, so it blocks taps reaching the live set
+        // controls underneath — the floating card this replaced did not.
+        // Dismissing it (swipe / crown) means "Later": the user is mid-workout
+        // and must never be trapped, and deferring is already a first-class
+        // outcome that preserves the post-workout summary opportunity.
+        .sheet(
+            isPresented: Binding(
+                get: { viewModel.overloadPresentation.isActive },
+                set: { isPresented in
+                    guard !isPresented, let slotID = viewModel.overloadPresentation.slotID else { return }
+                    viewModel.deferProgressiveOverloadIfPresenting(slotID: slotID)
+                }
+            )
+        ) {
+            ProgressiveOverloadSheet()
+        }
         .toolbar(.hidden, for: .navigationBar)
         .task {
             await viewModel.startWorkout(routineID: routineID)

@@ -112,6 +112,15 @@ final class WatchWorkoutIngestionService {
         workoutSession.routineName = workout.routineName
         workoutSession.healthKitWorkoutId = workout.healthKitWorkoutId
 
+        // Targets the watch applied progressive overload to during this workout
+        // (ticket 04). The watch mirrors `WorkoutViewModel.applyProgressiveOverload`
+        // before freezing: the performance is stored in the `planned*` values and
+        // the next workout's target in `actual*`. This flag is what tells every
+        // aggregator (volume, charts, records, AI Coach) to read `planned*`, so
+        // it must be set for exactly those exercises or history would report the
+        // new target as the performed work.
+        let overloadAppliedIDs = Set(workout.overloadAppliedExerciseIDs)
+
         for completedExercise in workout.exercises {
             let workoutExercise = WorkoutExercise(
                 exerciseName: completedExercise.name,
@@ -129,6 +138,7 @@ final class WatchWorkoutIngestionService {
             // Alternative-swap metadata (name/exerciseId already reflect what was performed)
             workoutExercise.plannedExerciseId = completedExercise.plannedExerciseId
             workoutExercise.plannedExerciseName = completedExercise.plannedExerciseName
+            workoutExercise.progressiveOverloadApplied = overloadAppliedIDs.contains(completedExercise.id)
 
             for completedSet in completedExercise.sets {
                 let workoutSet = WorkoutSet(

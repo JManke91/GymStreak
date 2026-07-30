@@ -181,7 +181,10 @@ final class WatchTemplateTransactionService {
 
     // MARK: - Mutation + commit
 
-    private func apply(_ updates: [SetUpdate]) {
+    /// Internal (not private) so the progressive-overload kind in
+    /// `+ProgressiveOverload.swift` stages through this exact code path rather
+    /// than growing a second mutation routine.
+    func apply(_ updates: [SetUpdate]) {
         for update in updates {
             switch update.target {
             case .routineSet(let set):
@@ -220,7 +223,9 @@ final class WatchTemplateTransactionService {
     }
 
     /// The single `save()`. Returns a failure outcome, or nil on success.
-    private func commit(routine: Routine?) -> Outcome? {
+    /// Internal (not private) so every transaction kind, including the
+    /// progressive-overload extension, commits through this one boundary.
+    func commit(routine: Routine?) -> Outcome? {
         routine?.updatedAt = Date()
         do {
             try workoutSessionRepository.save()

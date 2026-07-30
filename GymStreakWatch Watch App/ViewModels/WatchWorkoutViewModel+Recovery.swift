@@ -33,7 +33,15 @@ extension WatchWorkoutViewModel {
             currentExerciseIndex: currentExerciseIndex,
             currentSetIndex: currentSetIndex,
             startTime: startTime,
-            structuralBaseline: baseline
+            structuralBaseline: baseline,
+            // Ticket 04: enough to rederive a safe overload state after
+            // relaunch without re-prompting or applying twice. Transient
+            // presentation (picker position, confirmation animation) is
+            // deliberately not checkpointed.
+            appliedOverloads: appliedOverloadSlots.map {
+                WatchActiveWorkoutCheckpoint.AppliedOverload(slotID: $0.key, transactionID: $0.value)
+            },
+            deferredOverloadSlotIDs: Array(deferredOverloadSlotIDs)
         )
         do {
             try checkpointStore.save(checkpoint)
@@ -70,6 +78,19 @@ extension WatchWorkoutViewModel {
         isWorkoutInputSuspended = false
         pendingExerciseSelection = nil
         workoutSummary = nil
+
+        // Ticket 04: restore applied/deferred overload bookkeeping so recovery
+        // never re-prompts for a target that was already handled, and never
+        // allocates a second transaction for one already applied. The surface
+        // itself comes back as `.none` — a suggestion is re-derived from live
+        // state if the target still qualifies, and a confirmation is transient.
+        appliedOverloadSlots = Dictionary(
+            uniqueKeysWithValues: checkpoint.appliedOverloads.map { ($0.slotID, $0.transactionID) }
+        )
+        pendingOverloadTransactionIDs = appliedOverloadSlots
+        deferredOverloadSlotIDs = Set(checkpoint.deferredOverloadSlotIDs)
+        overloadPresentation = .none
+        overloadErrorMessage = nil
         isWorkoutActive = true
         workoutState = hasLiveSession ? .running : .started
 

@@ -39,10 +39,22 @@ enum TemplateTransactionOutcomeWire: String, Codable {
 
 enum TemplateTransactionPayload: Codable {
     case completedWorkoutUpdate(CompletedWatchWorkout)
+    /// Template-only kind (progressive-overload ticket 04). Carries no history
+    /// and no workout correlation — see `isInternallyConsistent`, which
+    /// requires `workoutID == nil` for every payload without a workout.
+    case progressiveOverload(WatchProgressiveOverloadIntent)
 
     var completedWorkout: CompletedWatchWorkout? {
         switch self {
         case .completedWorkoutUpdate(let workout): workout
+        case .progressiveOverload: nil
+        }
+    }
+
+    var progressiveOverload: WatchProgressiveOverloadIntent? {
+        switch self {
+        case .progressiveOverload(let intent): intent
+        case .completedWorkoutUpdate: nil
         }
     }
 }

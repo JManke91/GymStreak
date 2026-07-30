@@ -52,6 +52,14 @@ struct WatchExerciseAlternative: Codable, Identifiable, Hashable {
     let sets: [WatchSet]
     let order: Int
     var loadBehaviorRaw: String? = nil
+    /// The alternative's OWN rep-range goal, independent of the primary slot's
+    /// (progressive-overload ticket 04). Optional so cached snapshots produced
+    /// before this field existed stay decodable; the watch captures/restores the
+    /// primary range on swap and adopts these values while the swap is active,
+    /// so a swapped exercise qualifies against the range it was actually
+    /// performed under.
+    var targetRepMin: Int? = nil
+    var targetRepMax: Int? = nil
 }
 
 // MARK: - Active workout structural state
@@ -79,6 +87,12 @@ struct ActiveWorkoutExercise: Identifiable, Equatable, Codable {
     var originalMuscleGroup: String? = nil
     var originalLoadBehaviorRaw: String? = nil
     var originalSets: [WatchSet]? = nil
+    // Captured on first swap alongside the other original identity, so reverting
+    // restores the primary slot's own rep-range goal (ticket 04). While a swap
+    // is active the exercise adopts the ALTERNATIVE's range, which is what the
+    // overload suggestion must qualify against — the user performed that range.
+    var originalTargetRepMin: Int? = nil
+    var originalTargetRepMax: Int? = nil
 
     var completedSetsCount: Int { sets.filter(\.isCompleted).count }
     var isComplete: Bool { sets.allSatisfy(\.isCompleted) }
@@ -143,6 +157,20 @@ struct CompletedWatchWorkout: Codable {
     // never mutate a routine.
     var addedRoutineExerciseIDs: [UUID]? = nil
     var removedRoutineExerciseIDs: [UUID]? = nil
+
+    /// Slot IDs whose target had progressive overload applied during this
+    /// workout (ticket 04). Optional (nil default) keeps old payloads
+    /// decodable. Two jobs, both required for correctness:
+    ///
+    /// 1. iOS sets `WorkoutExercise.progressiveOverloadApplied` for these, which
+    ///    switches every aggregator (volume, charts, records, AI Coach) to read
+    ///    the `planned*` values — where the watch has stored the true
+    ///    performance, mirroring `WorkoutViewModel.applyProgressiveOverload`.
+    /// 2. Both the watch fold and the iOS merge exclude these exercises from
+    ///    generic set-value writeback, so this completed-workout transaction
+    ///    cannot overwrite the template weights the overload transaction
+    ///    already committed. Structural intent is unaffected.
+    var overloadAppliedExerciseIDs: [UUID]? = nil
 
     var duration: TimeInterval {
         endTime.timeIntervalSince(startTime)
@@ -221,7 +249,8 @@ extension CompletedWatchWorkout {
             templateSenderEpoch: templateSenderEpoch,
             templateSequence: templateSequence,
             addedRoutineExerciseIDs: addedRoutineExerciseIDs ?? [],
-            removedRoutineExerciseIDs: removedRoutineExerciseIDs ?? []
+            removedRoutineExerciseIDs: removedRoutineExerciseIDs ?? [],
+            overloadAppliedExerciseIDs: overloadAppliedExerciseIDs ?? []
         )
     }
 }
@@ -310,7 +339,9 @@ extension Routine {
                                 )
                             },
                             order: alternative.order,
-                            loadBehaviorRaw: exercise.loadBehavior.rawValue
+                            loadBehaviorRaw: exercise.loadBehavior.rawValue,
+                            targetRepMin: alternative.targetRepMin,
+                            targetRepMax: alternative.targetRepMax
                         )
                     }
                 )

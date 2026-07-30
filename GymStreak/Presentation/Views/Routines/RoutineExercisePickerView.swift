@@ -228,6 +228,9 @@ struct ConfigureExerciseSetsView: View {
     @State private var pendingAlternatives: [PendingAlternative] = []
     @State private var showingAlternativePicker = false
     @State private var expandedAlternativeId: UUID?
+    /// Shared across the pending alternatives' set rows so one Done bar dismisses
+    /// whichever value is being typed.
+    @FocusState private var isEditingAlternativeSetValue: Bool
 
     // Computed property to check if values have changed
     private var hasChanges: Bool {
@@ -412,10 +415,12 @@ struct ConfigureExerciseSetsView: View {
                     primaryExercise: exercise,
                     alternatives: $pendingAlternatives,
                     showingPicker: $showingAlternativePicker,
-                    expandedAlternativeId: $expandedAlternativeId
+                    expandedAlternativeId: $expandedAlternativeId,
+                    valueFocus: $isEditingAlternativeSetValue
                 )
             }
         }
+        .keyboardDoneBar(isFocused: $isEditingAlternativeSetValue)
         .navigationDestination(isPresented: $showingAlternativePicker) {
             AlternativeExercisePicker(
                 primaryExercise: exercise,

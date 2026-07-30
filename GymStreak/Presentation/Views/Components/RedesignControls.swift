@@ -120,28 +120,34 @@ struct FilterPillButton: View {
     }
 }
 
-/// Dashed rounded button used for "create new" tiles.
+/// Dashed rounded button used for "create new" tiles. `compact` is the in-card
+/// variant (add set / add alternative), sized to sit between list rows.
 struct DashedCreateButton: View {
     let title: String
     var tinted: Bool = false
+    var compact: Bool = false
     let action: () -> Void
+
+    private var cornerRadius: CGFloat { compact ? 12 : 20 }
 
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 8) {
+            HStack(spacing: 6) {
                 Image(systemName: "plus")
-                    .font(.system(size: 13, weight: .bold))
+                    .font(.system(size: compact ? 12 : 13, weight: .bold))
                 Text(title)
-                    .font(.system(size: 13.5, weight: tinted ? .bold : .semibold))
+                    .font(.system(size: compact ? 12.5 : 13.5, weight: tinted ? .bold : .semibold))
             }
             .foregroundStyle(tinted ? DesignSystem.Colors.tint : Color.white.opacity(0.55))
             .frame(maxWidth: .infinity)
-            .padding(.vertical, 15)
+            .padding(.vertical, compact ? 9 : 15)
+            .background(tinted && compact ? DesignSystem.Colors.tint.opacity(0.08) : Color.clear)
             .overlay(
-                RoundedRectangle(cornerRadius: 20, style: .continuous)
-                    .stroke(style: StrokeStyle(lineWidth: 1.5, dash: [6, 5]))
+                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                    .stroke(style: StrokeStyle(lineWidth: compact ? 1 : 1.5, dash: compact ? [5, 4] : [6, 5]))
                     .foregroundStyle(tinted ? DesignSystem.Colors.tint.opacity(0.5) : Color.white.opacity(0.14))
             )
+            .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
