@@ -204,6 +204,27 @@ struct WatchTemplateTransactionSyncTests {
         #expect(store.transportEligibleEntries().map(\.id) == [second.id])
     }
 
+    /// A quarantined entry is terminal: its exact bytes can never transport and
+    /// no acknowledgment will ever retire it. Letting it keep the per-routine
+    /// FIFO head would therefore block every later transaction for that routine
+    /// permanently — including a completed workout carrying real history.
+    @Test
+    func aQuarantinedPredecessorDoesNotBlockTheNextRoutineTransaction() throws {
+        let store = WatchSyncStateStore(directory: try Fixtures.makeTempDirectory(), legacyDefaults: nil)
+        let routineID = UUID()
+        let doomed = try store.enqueue(
+            Fixtures.makeWorkout(routineId: routineID, shouldUpdateTemplate: true), phase: .transportEligible
+        )
+        let workout = try store.enqueue(
+            Fixtures.makeWorkout(routineId: routineID, shouldUpdateTemplate: true), phase: .transportEligible
+        )
+        #expect(store.transportEligibleEntries().map(\.id) == [doomed.id])
+
+        store.quarantine(id: doomed.id, reason: "payload permanently untransportable")
+
+        #expect(store.transportEligibleEntries().map(\.id) == [workout.id])
+    }
+
     // MARK: - Acknowledgment + routine context convergence
 
     /// Establishes an authoritative base on a fresh store. An unknown epoch is
@@ -668,6 +689,9 @@ struct WatchTemplateTransactionSyncTests {
     private final class RecordingRoutineTransport: RoutineContextTransporting {
         private(set) var sent: [[String: Any]] = []
         var failNext = false
+        /// Stands in for WatchConnectivity's cached watch → iOS context, so a
+        /// test can exercise challenge recovery without a delegate delivery.
+        var receivedWatchContext: [String: Any] = [:]
 
         func sendRoutineContext(_ context: [String: Any]) throws {
             if failNext {
@@ -711,6 +735,50 @@ struct WatchTemplateTransactionSyncTests {
         let next = try #require(authority.sendAuthoritative(routines))
         #expect(next.epoch == staged.epoch)
         #expect(next.generation > staged.generation)
+    }
+
+    /// Regression: `WCSession.activate()` is asynchronous, so the composition
+    /// root's launch drain runs before `activationDidCompleteWith` — which used
+    /// to be the only place the cached watch context was read. A template
+    /// transaction committed in that window could not stage an authoritative
+    /// snapshot, parked at `committedAwaitingContext`, never sent its terminal
+    /// acknowledgment, and so pinned the watch's per-routine FIFO head forever;
+    /// every later workout for that routine was silently never transmitted.
+    @Test
+    func authorityStagesFromTheCachedContextWhenNoDeliveryHasHappenedYet() throws {
+        let transport = RecordingRoutineTransport()
+        let watch = WatchSyncStateStore(directory: try Fixtures.makeTempDirectory(), legacyDefaults: nil)
+        // WatchConnectivity holds the watch's challenge, but this process has
+        // received no delegate callback and has no persisted state.
+        transport.receivedWatchContext = challengeContext(from: watch)
+        let authority = RoutineSyncAuthority(transport: transport, directory: try Fixtures.makeTempDirectory())
+
+        let staged = try #require(
+            authority.sendAuthoritative([Fixtures.makeWatchRoutine()]),
+            "the cached application context must be enough to stage an authority"
+        )
+        #expect(staged.generation == 1)
+        #expect(authority.publishedChallenge != nil)
+    }
+
+    /// Second layer of the same fix: once any process has seen the challenge it
+    /// is persisted, so a later launch can stage even before WatchConnectivity
+    /// reports anything at all.
+    @Test
+    func authorityRestoresThePersistedChallengeInANewProcess() throws {
+        let directory = try Fixtures.makeTempDirectory()
+        let watch = WatchSyncStateStore(directory: try Fixtures.makeTempDirectory(), legacyDefaults: nil)
+
+        let first = RoutineSyncAuthority(transport: RecordingRoutineTransport(), directory: directory)
+        first.updateChallenge(fromApplicationContext: challengeContext(from: watch))
+
+        // A fresh process: no delegate delivery, and WatchConnectivity reports
+        // nothing cached either.
+        let transport = RecordingRoutineTransport()
+        let restored = RoutineSyncAuthority(transport: transport, directory: directory)
+        #expect(restored.publishedChallenge != nil)
+        #expect(restored.sendAuthoritative([Fixtures.makeWatchRoutine()]) != nil)
+        #expect(transport.sent.count == 1)
     }
 
     @Test

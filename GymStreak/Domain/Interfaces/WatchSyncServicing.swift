@@ -53,8 +53,10 @@ protocol WatchSyncServicing: AnyObject {
     /// Sends the versioned terminal acknowledgment for a template transaction.
     func acknowledgeTemplateTransaction(_ ack: WatchTemplateTransactionAck)
     /// The watch's last published routine authority challenge: its accepted
-    /// epoch (nil before bootstrap) and generation high-water. nil when no
-    /// challenge has been received at all.
+    /// epoch (nil before bootstrap) and generation high-water. Restored from
+    /// persisted state at launch, so it may be non-nil before this process has
+    /// received any context — and may be stale until the watch republishes.
+    /// nil only when no challenge has ever been received on this install.
     var watchRoutineChallenge: (epoch: UUID?, generation: UInt64)? { get }
     /// Stages a full snapshot of the exercise library for transfer to the
     /// watch. Safe to call anytime — content is staged durably and sent when

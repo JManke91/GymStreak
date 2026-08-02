@@ -65,6 +65,10 @@ struct RoutineSyncAuthorityState: Codable {
     /// Next generation to allocate within `activeAuthorityEpoch`.
     var nextGeneration: UInt64 = 1
     var proposedAuthority: ProposedAuthority?
+    /// The last challenge the watch published, persisted so a new process can
+    /// stage an authoritative snapshot before WCSession activation completes.
+    /// Optional so state written before this field remains decodable.
+    var lastChallenge: WatchRoutineChallenge?
 }
 
 /// What the authority needs from WCSession. Implemented by
@@ -74,6 +78,11 @@ protocol RoutineContextTransporting: AnyObject {
     /// Hands a fully built context dictionary to
     /// `updateApplicationContext`. Throws exactly what WCSession throws.
     func sendRoutineContext(_ context: [String: Any]) throws
+    /// WatchConnectivity's cached watch → iOS applicationContext. The daemon
+    /// holds this across launches, so it is the authority's second source for
+    /// the watch challenge when no delegate delivery has happened yet in this
+    /// process. Empty when nothing has ever been received.
+    var receivedWatchContext: [String: Any] { get }
 }
 
 @MainActor
@@ -101,10 +110,18 @@ final class RoutineSyncAuthority {
         } else {
             self.state = RoutineSyncAuthorityState()
         }
+        // A challenge seen by an earlier process is valid until the watch
+        // publishes a different one: the watch re-validates every context
+        // against its own epoch/generation/nonce rules, so a stale value can
+        // at worst cause a rejected context or a fresh proposal — never a
+        // wrong apply. Without it, everything that needs an authority fails
+        // for the whole process whenever activation has not completed yet.
+        self.challenge = state.lastChallenge
     }
 
-    /// The watch's last published challenge, for callers that must know
-    /// whether an authority exists at all.
+    /// The watch's last known challenge, for callers that must know whether an
+    /// authority exists at all. Pure: resolution (which can persist state) is
+    /// the sending path's job, never a getter's side effect.
     var publishedChallenge: (epoch: UUID?, generation: UInt64)? {
         challenge.map { ($0.currentEpoch, $0.currentGeneration) }
     }
@@ -117,6 +134,7 @@ final class RoutineSyncAuthority {
         let previous = challenge
         challenge = received
         let previousState = state
+        state.lastChallenge = received
 
         if let proposal = state.proposedAuthority, received.currentEpoch == proposal.epoch {
             state.activeAuthorityEpoch = proposal.epoch
@@ -126,7 +144,7 @@ final class RoutineSyncAuthority {
             let receiverNext = received.currentGeneration == UInt64.max
                 ? UInt64.max : received.currentGeneration + 1
             state.nextGeneration = max(state.nextGeneration, receiverNext)
-            print("RoutineSync: watch accepted authority \(proposal.epoch) at generation \(received.currentGeneration)")
+            WatchSyncDiagnostics.info("authority: watch accepted authority \(WatchSyncDiagnostics.shortID(proposal.epoch)) at generation \(received.currentGeneration)")
         } else if let active = state.activeAuthorityEpoch, received.currentEpoch == active,
                   received.currentGeneration >= state.nextGeneration {
             // Restored iOS backup: the watch is ahead of our counter.
@@ -144,10 +162,33 @@ final class RoutineSyncAuthority {
                 try persist()
             } catch {
                 state = previousState
-                print("RoutineSync: failed to persist challenge state — \(error.localizedDescription)")
+                WatchSyncDiagnostics.error("authority: failed to persist challenge state — \(error.localizedDescription)")
             }
         }
-        if previous != received { print("RoutineSync: routine challenge updated") }
+        if previous != received { WatchSyncDiagnostics.info("authority: routine challenge updated") }
+    }
+
+    /// The challenge to bind an authority to, resolved from the cheapest
+    /// available source: this process's delegate deliveries, then the value a
+    /// previous process persisted, then WatchConnectivity's own cached
+    /// watch → iOS context.
+    ///
+    /// The last fallback is what makes staging survive startup ordering.
+    /// `WCSession.activate()` is asynchronous, so the composition root's launch
+    /// drain runs before `activationDidCompleteWith` — the only place that used
+    /// to read the cached context. Every template transaction committed in that
+    /// window used to park at `committedAwaitingContext` and never send its
+    /// terminal acknowledgment, which froze the watch's per-routine FIFO head
+    /// and, behind it, every later workout for that routine.
+    private func resolvedChallenge() -> WatchRoutineChallenge? {
+        if let challenge { return challenge }
+        let cached = transport.receivedWatchContext
+        guard !cached.isEmpty else { return nil }
+        updateChallenge(fromApplicationContext: cached)
+        if challenge != nil {
+            WatchSyncDiagnostics.notice("authority: recovered watch challenge from the cached application context")
+        }
+        return challenge
     }
 
     /// Sends an ordinary routine snapshot, suppressing identical repeats.
@@ -155,18 +196,18 @@ final class RoutineSyncAuthority {
     @discardableResult
     func sendOrdinary(_ routines: [WatchRoutine]) -> (epoch: UUID, generation: UInt64)? {
         guard let payload = Self.encode(routines) else {
-            print("RoutineSync: failed to encode routines")
+            WatchSyncDiagnostics.error("authority: failed to encode routines")
             return nil
         }
         guard payload != lastSentRoutinesPayload else { return nil }
-        guard challenge != nil else {
+        guard resolvedChallenge() != nil else {
             // Mixed-version compatibility: an old watch never publishes the
             // ticket-05 challenge, but still understands the routines payload.
             do {
                 try transport.sendRoutineContext([WatchRoutineSync.contextRoutinesKey: payload])
                 lastSentRoutinesPayload = payload
             } catch {
-                print("RoutineSync: failed to send legacy routine context — \(error.localizedDescription)")
+                WatchSyncDiagnostics.error("authority: failed to send legacy routine context — \(error.localizedDescription)")
             }
             return nil
         }
@@ -181,7 +222,7 @@ final class RoutineSyncAuthority {
     @discardableResult
     func sendAuthoritative(_ routines: [WatchRoutine]) -> (epoch: UUID, generation: UInt64)? {
         guard let payload = Self.encode(routines) else {
-            print("RoutineSync: failed to encode authoritative routines")
+            WatchSyncDiagnostics.error("authority: failed to encode authoritative routines")
             return nil
         }
         return send(payload: payload)
@@ -198,8 +239,8 @@ final class RoutineSyncAuthority {
     private func send(payload: Data) -> (epoch: UUID, generation: UInt64)? {
         // No challenge means no authority can be established yet: the watch
         // has never told us who it is, so a proposal could not be bound to it.
-        guard let challenge else {
-            print("RoutineSync: no watch challenge yet — routine context withheld")
+        guard let challenge = resolvedChallenge() else {
+            WatchSyncDiagnostics.fault("authority: no watch challenge — routine context withheld; any template transaction committed now cannot be acknowledged and will pin the watch FIFO head")
             return nil
         }
 
@@ -232,7 +273,7 @@ final class RoutineSyncAuthority {
             try persist()
         } catch {
             state = previousState
-            print("RoutineSync: failed to persist generation — \(error.localizedDescription)")
+            WatchSyncDiagnostics.error("authority: failed to persist generation — \(error.localizedDescription)")
             return nil
         }
         do {
@@ -241,7 +282,7 @@ final class RoutineSyncAuthority {
             // The transport may have accepted the context before surfacing an
             // error. Keep the generation consumed so relaunch/retry can never
             // reuse an authority version already handed across the boundary.
-            print("RoutineSync: failed to send routine context — \(error.localizedDescription)")
+            WatchSyncDiagnostics.error("authority: failed to send routine context — \(error.localizedDescription)")
             return nil
         }
         lastSentRoutinesPayload = payload
@@ -278,7 +319,7 @@ final class RoutineSyncAuthority {
             try persist()
         } catch {
             state.proposedAuthority = previous
-            print("RoutineSync: failed to persist authority proposal — \(error.localizedDescription)")
+            WatchSyncDiagnostics.error("authority: failed to persist authority proposal — \(error.localizedDescription)")
             return nil
         }
         do {
@@ -287,13 +328,13 @@ final class RoutineSyncAuthority {
             // Keep the challenge-bound proposal durable. Retrying the same
             // proposal/generation is idempotent; a changed challenge replaces
             // it in `updateChallenge`.
-            print("RoutineSync: failed to send handover context — \(error.localizedDescription)")
+            WatchSyncDiagnostics.error("authority: failed to send handover context — \(error.localizedDescription)")
             return nil
         }
         if let payload = context[WatchRoutineSync.contextRoutinesKey] as? Data {
             lastSentRoutinesPayload = payload
         }
-        print("RoutineSync: proposed authority \(proposal.epoch) to watch \(challenge.watchInstanceID)")
+        WatchSyncDiagnostics.info("authority: proposed authority \(WatchSyncDiagnostics.shortID(proposal.epoch)) to watch \(WatchSyncDiagnostics.shortID(challenge.watchInstanceID))")
         return (proposal.epoch, generation)
     }
 
@@ -315,5 +356,6 @@ final class RoutineSyncAuthority {
         state.activeAuthorityEpoch != other.activeAuthorityEpoch
             || state.nextGeneration != other.nextGeneration
             || state.proposedAuthority != other.proposedAuthority
+            || state.lastChallenge != other.lastChallenge
     }
 }

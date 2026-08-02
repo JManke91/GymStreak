@@ -65,7 +65,10 @@ final class WatchConnectivityManager: NSObject, ObservableObject, WatchSyncServi
     /// the sendMessage fast-path (when reachable) and transferUserInfo (guaranteed),
     /// and re-sent whenever a duplicate arrives, so delivery is self-healing.
     func acknowledgeWorkoutSaved(id: UUID) {
-        sendAck([WatchWorkoutWire.ackKey: id.uuidString], description: "save-ack for workout \(id)")
+        sendAck(
+            [WatchWorkoutWire.ackKey: id.uuidString],
+            description: "save-ack for workout \(WatchSyncDiagnostics.shortID(id))"
+        )
     }
 
     /// Sends the versioned terminal acknowledgment for a template transaction
@@ -86,7 +89,11 @@ final class WatchConnectivityManager: NSObject, ObservableObject, WatchSyncServi
         if let workoutId = ack.workoutId {
             payload[WatchWorkoutWire.ackKey] = workoutId.uuidString
         }
-        sendAck(payload, description: "\(ack.outcome.rawValue) template ack for transaction \(ack.transactionID)")
+        sendAck(
+            payload,
+            description: "\(ack.outcome.rawValue) template ack for transaction "
+                + "\(WatchSyncDiagnostics.shortID(ack.transactionID)) at routine generation \(ack.routineGeneration)"
+        )
     }
 
     private func sendAck(_ payload: [String: Any], description: String) {
@@ -95,11 +102,11 @@ final class WatchConnectivityManager: NSObject, ObservableObject, WatchSyncServi
         }
         if session.isReachable {
             session.sendMessage(payload, replyHandler: nil) { error in
-                print("WatchConnectivity: ack sendMessage failed — \(error.localizedDescription) (transferUserInfo will still deliver)")
+                WatchSyncDiagnostics.notice("phone: ack sendMessage failed — \(error.localizedDescription) (transferUserInfo will still deliver)")
             }
         }
         session.transferUserInfo(payload)
-        print("WatchConnectivity: sent \(description)")
+        WatchSyncDiagnostics.info("phone: sent \(description)")
     }
 
     var watchRoutineChallenge: (epoch: UUID?, generation: UInt64)? {
@@ -157,13 +164,13 @@ final class WatchConnectivityManager: NSObject, ObservableObject, WatchSyncServi
 
     private var canSyncRoutines: Bool {
         guard let session = session, session.activationState == .activated else {
-            print("WatchConnectivity: Cannot sync - session not activated")
+            WatchSyncDiagnostics.notice("phone: cannot sync routines — session not activated")
             return false
         }
         // On simulator, isWatchAppInstalled is always false even when Watch app is running
         #if !targetEnvironment(simulator)
         guard session.isWatchAppInstalled else {
-            print("WatchConnectivity: Cannot sync - Watch app not installed")
+            WatchSyncDiagnostics.notice("phone: cannot sync routines — Watch app not installed")
             return false
         }
         #endif
@@ -207,7 +214,7 @@ extension WatchConnectivityManager: WatchWorkoutQueueDrainRequestTransporting {
 
     func sendWorkoutQueueDrainMessage(_ payload: [String: Any]) {
         session?.sendMessage(payload, replyHandler: nil) { [weak self] error in
-            print("WatchConnectivity: workout queue-drain fast path failed — \(error.localizedDescription)")
+            WatchSyncDiagnostics.notice("phone: workout queue-drain fast path failed — \(error.localizedDescription)")
             Task { @MainActor in
                 self?.workoutQueueDrainRequester.messageSendFailed()
             }
@@ -216,7 +223,7 @@ extension WatchConnectivityManager: WatchWorkoutQueueDrainRequestTransporting {
 
     func enqueueWorkoutQueueDrainUserInfo(_ payload: [String: Any]) {
         session?.transferUserInfo(payload)
-        print("WatchConnectivity: requested workout queue drain from Watch")
+        WatchSyncDiagnostics.info("phone: requested workout queue drain from Watch")
     }
 }
 
@@ -226,6 +233,18 @@ extension WatchConnectivityManager: RoutineContextTransporting {
     func sendRoutineContext(_ context: [String: Any]) throws {
         guard let session else { throw WCError(.sessionNotActivated) }
         try session.updateApplicationContext(context)
+    }
+
+    /// Defence in depth for the authority's challenge lookup, NOT the primary
+    /// path — `canSyncRoutines` refuses to send before activation anyway, so
+    /// the pre-activation window is handled by ordering the challenge update
+    /// ahead of the inbox drain in `activationDidCompleteWith`. This covers the
+    /// cases where the challenge only ever arrived via `didReceiveApplicationContext`.
+    /// Deliberately not gated on `activationState`: it is a plain property read
+    /// with no documented activation precondition, and an empty dictionary is
+    /// the correct "nothing known yet" answer.
+    var receivedWatchContext: [String: Any] {
+        session?.receivedApplicationContext ?? [:]
     }
 }
 
@@ -264,11 +283,11 @@ extension WatchConnectivityManager: WCSessionDelegate {
     nonisolated func session(_ session: WCSession, activationDidCompleteWith activationState: WCSessionActivationState, error: Error?) {
         Task { @MainActor in
             if let error = error {
-                print("WatchConnectivity: Activation failed - \(error.localizedDescription)")
+                WatchSyncDiagnostics.error("phone: WCSession activation failed — \(error.localizedDescription)")
                 return
             }
             guard activationState == .activated else {
-                print("WatchConnectivity: Activation completed in non-active state \(activationState.rawValue)")
+                WatchSyncDiagnostics.error("phone: WCSession activation completed in non-active state \(activationState.rawValue)")
                 return
             }
 
@@ -276,21 +295,32 @@ extension WatchConnectivityManager: WCSessionDelegate {
             self.isWatchAppInstalled = session.isWatchAppInstalled
             self.isReachable = session.isReachable
 
-            print("WatchConnectivity: Activated - paired: \(session.isPaired), installed: \(session.isWatchAppInstalled)")
-
-            // Drain the durable inbox (e.g. entries left by a previous launch
-            // that crashed before the SwiftData save committed).
-            self.onWorkoutInboxUpdated?()
+            WatchSyncDiagnostics.info("phone: WCSession activated — paired: \(session.isPaired), installed: \(session.isWatchAppInstalled)")
 
             // Catalogue sync lifecycle: recover the watch's challenge (WC
             // re-delivers receivedApplicationContext across launches), drop
             // staging files no outstanding transfer references anymore, and
             // re-enqueue the latest staged snapshot.
+            //
+            // ORDER IS LOAD-BEARING: this must run BEFORE the inbox drain
+            // below. `canSyncRoutines` refuses to send until activation, so
+            // the drain in `AppDependencies.init` can never stage an
+            // authoritative routine snapshot — this callback is the first
+            // moment it becomes possible. Draining first meant a template
+            // transaction committed here found no challenge, parked its
+            // receipt at `committedAwaitingContext`, never sent its terminal
+            // acknowledgment, and permanently pinned the watch's per-routine
+            // FIFO head — silently blocking every later workout for that
+            // routine from being transmitted at all.
             if !session.receivedApplicationContext.isEmpty {
                 self.catalogSender.updateChallenge(fromApplicationContext: session.receivedApplicationContext)
                 self.routineAuthority.updateChallenge(fromApplicationContext: session.receivedApplicationContext)
                 self.onRoutineChallengeUpdated?()
             }
+
+            // Drain the durable inbox (e.g. entries left by a previous launch
+            // that crashed before the SwiftData save committed).
+            self.onWorkoutInboxUpdated?()
             self.catalogSender.cleanUpOrphanedStagingFiles(
                 keeping: session.outstandingFileTransfers.map { $0.file.fileURL }
             )
@@ -304,11 +334,11 @@ extension WatchConnectivityManager: WCSessionDelegate {
     }
 
     nonisolated func sessionDidBecomeInactive(_ session: WCSession) {
-        print("WatchConnectivity: Session became inactive")
+        WatchSyncDiagnostics.info("phone: WCSession became inactive")
     }
 
     nonisolated func sessionDidDeactivate(_ session: WCSession) {
-        print("WatchConnectivity: Session deactivated")
+        WatchSyncDiagnostics.info("phone: WCSession deactivated — reactivating for watch switch")
         // Reactivate session for switching watches
         session.activate()
         Task { @MainActor in
@@ -321,7 +351,7 @@ extension WatchConnectivityManager: WCSessionDelegate {
     nonisolated func sessionReachabilityDidChange(_ session: WCSession) {
         Task { @MainActor in
             self.isReachable = session.isReachable
-            print("WatchConnectivity: Reachability changed - \(session.isReachable)")
+            WatchSyncDiagnostics.info("phone: reachability changed — \(session.isReachable)")
             if session.isReachable {
                 self.requestWorkoutQueueDrain()
             }
@@ -332,7 +362,7 @@ extension WatchConnectivityManager: WCSessionDelegate {
         Task { @MainActor in
             self.isPaired = session.isPaired
             self.isWatchAppInstalled = session.isWatchAppInstalled
-            print("WatchConnectivity: Watch state changed - paired: \(session.isPaired), installed: \(session.isWatchAppInstalled)")
+            WatchSyncDiagnostics.info("phone: watch state changed — paired: \(session.isPaired), installed: \(session.isWatchAppInstalled)")
 
             // Notify so RoutinesViewModel can trigger sync
             if session.isWatchAppInstalled {
@@ -383,9 +413,9 @@ extension WatchConnectivityManager: WCSessionDelegate {
     ) {
         guard WatchWorkoutWire.isQueueDrainRequest(userInfoTransfer.userInfo) else { return }
         if let error {
-            print("WatchConnectivity: workout queue-drain transfer failed — \(error.localizedDescription)")
+            WatchSyncDiagnostics.notice("phone: workout queue-drain transfer failed — \(error.localizedDescription)")
         } else {
-            print("WatchConnectivity: workout queue-drain transfer completed")
+            WatchSyncDiagnostics.info("phone: workout queue-drain transfer completed")
         }
     }
 
@@ -412,10 +442,10 @@ extension WatchConnectivityManager: WCSessionDelegate {
             do {
                 try workoutInbox.store(transactionData: transactionData, transactionID: transactionID)
             } catch {
-                print("WatchConnectivity: failed to persist template transaction (\(source)) — \(error.localizedDescription)")
+                WatchSyncDiagnostics.error("inbox: failed to persist template transaction via \(source) — \(error.localizedDescription); not acknowledged, watch will redeliver")
                 return
             }
-            print("WatchConnectivity: received template transaction \(transactionID) (\(source))")
+            WatchSyncDiagnostics.info("inbox: received template transaction \(WatchSyncDiagnostics.shortID(transactionID)) via \(source)")
             onWorkoutInboxUpdated?()
             return
         }
@@ -426,7 +456,7 @@ extension WatchConnectivityManager: WCSessionDelegate {
         }
         guard let idString = payload[WatchWorkoutWire.workoutIdKey] as? String,
               let workoutId = UUID(uuidString: idString) else {
-            print("WatchConnectivity: workout payload without valid id (\(source)) — ignored")
+            WatchSyncDiagnostics.error("inbox: workout payload without valid id via \(source) — ignored")
             return
         }
         do {
@@ -436,10 +466,10 @@ extension WatchConnectivityManager: WCSessionDelegate {
         } catch {
             // No ack is ever sent for this delivery, so the watch's durable
             // queue keeps the workout replayable.
-            print("WatchConnectivity: failed to persist incoming workout (\(source)) — \(error.localizedDescription)")
+            WatchSyncDiagnostics.error("inbox: failed to persist incoming workout via \(source) — \(error.localizedDescription); not acknowledged, watch will redeliver")
             return
         }
-        print("WatchConnectivity: Received completed workout from Watch (\(source)) - \(workoutId)")
+        WatchSyncDiagnostics.info("inbox: received completed workout \(WatchSyncDiagnostics.shortID(workoutId)) from Watch via \(source)")
         onWorkoutInboxUpdated?()
     }
 }

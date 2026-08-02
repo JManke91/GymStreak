@@ -4,3 +4,4 @@
 - Progress in the header now shows one segment per set, grouped by exercise, so you can see where you are in the workout at a glance.
 - Rest no longer takes over the screen. A rest bar sits above the workout buttons with +30s and Continue; tap it if you want the large timer.
 - Each set has a new menu with Duplicate set and Delete set.
+- Fixed a bug where a workout finished on the Apple Watch with "Save & update template" could stay stuck on the watch and never appear on the iPhone, even though it was saved to Apple Health. Affected workouts are sent automatically the next time you open the app.

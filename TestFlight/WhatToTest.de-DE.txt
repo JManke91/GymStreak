@@ -4,3 +4,4 @@
 - Der Fortschritt im Kopfbereich zeigt jetzt ein Segment pro Satz, nach Übung gruppiert – du siehst auf einen Blick, wo im Workout du stehst.
 - Die Pause übernimmt nicht mehr den ganzen Bildschirm. Eine Pausen-Leiste sitzt über den Workout-Buttons, mit +30s und Weiter; für den großen Timer tippst du sie einfach an.
 - Jeder Satz hat ein neues Menü mit „Satz duplizieren“ und „Satz löschen“.
+- Fehler behoben, durch den ein auf der Apple Watch mit „Speichern & Vorlage aktualisieren“ beendetes Training auf der Uhr hängen bleiben und nie auf dem iPhone ankommen konnte, obwohl es in Apple Health gespeichert war. Betroffene Trainings werden beim nächsten Öffnen der App automatisch übertragen.

@@ -88,13 +88,25 @@ final class WatchTemplateTransactionCoordinator {
         }
     }
 
-    /// Repairs/updates retained ready receipts when the watch publishes a new
-    /// challenge after their inbox entries were removed. This is the crash- and
-    /// rejected-proposal recovery path required by the authority protocol.
+    /// Drives every durable-but-unacknowledged template outcome forward,
+    /// independently of whether its inbox entry still exists. This is the
+    /// crash- and rejected-proposal recovery path required by the authority
+    /// protocol, and it is also the only retry for a transaction that parked at
+    /// `committedAwaitingContext` because no authoritative snapshot could be
+    /// staged when it committed.
     func recoverReadyReceipts() {
-        for receipt in receipts.readyTemplateReceipts() {
+        for receipt in receipts.unresolvedTemplateReceipts() {
             guard repairDurableOrdering(for: receipt) else { continue }
-            resumeReadyReceipt(receipt, entry: nil)
+            switch receipt.phase {
+            case .readyToAcknowledge:
+                resumeReadyReceipt(receipt, entry: nil)
+            case .committedAwaitingContext:
+                // The mutation is already committed; this only stages the
+                // authoritative snapshot and sends the terminal ack.
+                stageContextAndAcknowledge(nil, receipt: receipt)
+            case .readyToAcknowledgeNotRequested:
+                continue
+            }
         }
     }
 
@@ -114,7 +126,7 @@ final class WatchTemplateTransactionCoordinator {
             return processProgressiveOverload(entry, intent: intent)
         }
         guard let workout = entry.completedWorkout else {
-            print("WatchTemplateTransaction: unsupported payload retained for a newer executor")
+            WatchSyncDiagnostics.notice("ingest: unsupported payload retained for a newer executor")
             return .unchanged
         }
 
@@ -130,7 +142,7 @@ final class WatchTemplateTransactionCoordinator {
         // receipt even when the workout correlation differs.
         if let receipt = receipts.receipt(for: key) {
             guard receiptMatchesEntry(receipt, entry: entry) else {
-                print("WatchTemplateTransaction: receipt key collision with mismatched semantic identity — retained")
+                WatchSyncDiagnostics.error("ingest: receipt key collision with mismatched semantic identity — retained")
                 return .unchanged
             }
             resume(entry, receipt: receipt)
@@ -142,14 +154,14 @@ final class WatchTemplateTransactionCoordinator {
                 // A later transaction overtook its predecessor (cross-channel
                 // delivery is not causally ordered). Stay durably inboxed
                 // without mutating anything; the head's arrival releases it.
-                print("WatchTemplateTransaction: sequence \(key.sequence) > expected \(expected) — buffered")
+                WatchSyncDiagnostics.notice("ingest: sequence \(key.sequence) > expected \(expected) — buffered awaiting predecessor")
                 return .unchanged
             }
             if key.sequence < expected {
                 // Below expected without a receipt is a consistency error we
                 // must surface rather than guess at: acknowledging it would
                 // claim an outcome that never happened.
-                print("WatchTemplateTransaction: sequence \(key.sequence) < expected \(expected) with no receipt — inconsistent, retained")
+                WatchSyncDiagnostics.fault("ingest: sequence \(key.sequence) < expected \(expected) with no receipt — inconsistent, retained")
                 return .unchanged
             }
         }
@@ -197,7 +209,7 @@ final class WatchTemplateTransactionCoordinator {
             // entry: the next drain discovers the committed result
             // idempotently (the executor re-applies identical values and
             // dedupes history) and retries the receipt.
-            print("WatchTemplateTransaction: receipt write failed — \(error.localizedDescription)")
+            WatchSyncDiagnostics.error("ingest: receipt write failed — \(error.localizedDescription)")
             return .unchanged
         }
 
@@ -220,7 +232,7 @@ final class WatchTemplateTransactionCoordinator {
         do {
             snapshot = try routineSnapshots.fetchSnapshot()
         } catch {
-            print("WatchTemplateTransaction: authoritative snapshot read failed — \(error.localizedDescription)")
+            WatchSyncDiagnostics.error("ingest: authoritative snapshot read failed — \(error.localizedDescription)")
             return
         }
 
@@ -231,7 +243,7 @@ final class WatchTemplateTransactionCoordinator {
         refreshMainContextCaches()
 
         guard let version = routineSnapshotTransport.stageAuthoritativeRoutineSnapshot(snapshot) else {
-            print("WatchTemplateTransaction: no routine authority yet — transaction stays awaiting context")
+            WatchSyncDiagnostics.fault("ingest: no routine authority — transaction \(WatchSyncDiagnostics.shortID(receipt.transactionID)) stays at committedAwaitingContext and is NOT acknowledged; the watch FIFO head for this routine stays pinned")
             return
         }
 
@@ -252,7 +264,7 @@ final class WatchTemplateTransactionCoordinator {
         do {
             try receipts.record(staged)
         } catch {
-            print("WatchTemplateTransaction: readyToAcknowledge write failed — \(error.localizedDescription)")
+            WatchSyncDiagnostics.error("ingest: readyToAcknowledge write failed — \(error.localizedDescription)")
             return
         }
         if let entry { inbox.remove(entry) }
@@ -293,7 +305,7 @@ final class WatchTemplateTransactionCoordinator {
             try receipts.advanceExpectedSequence(for: key)
             return true
         } catch {
-            print("WatchTemplateTransaction: ordering repair failed — \(error.localizedDescription)")
+            WatchSyncDiagnostics.error("ingest: ordering repair failed — \(error.localizedDescription)")
             return false
         }
     }
@@ -306,7 +318,7 @@ final class WatchTemplateTransactionCoordinator {
               let routineGeneration = receipt.routineGeneration else {
             // Never downgrade a template outcome to a plain acknowledgment:
             // a plain ack cannot prove template intent was processed.
-            print("WatchTemplateTransaction: malformed terminal receipt retained")
+            WatchSyncDiagnostics.error("ingest: malformed terminal receipt retained")
             return
         }
         watchSync.acknowledgeTemplateTransaction(WatchTemplateTransactionAck(
@@ -344,7 +356,7 @@ final class WatchTemplateTransactionCoordinator {
                 transaction.rollback()
                 return
             }
-            print("WatchTemplateTransaction: unsequenced legacy template intent rejected — newer sequenced state exists")
+            WatchSyncDiagnostics.notice("ingest: unsequenced legacy template intent rejected — newer sequenced state exists (history preserved)")
         } else {
             let service = WatchTemplateTransactionService(
                 routineRepository: transaction.routineRepository,
@@ -368,13 +380,13 @@ final class WatchTemplateTransactionCoordinator {
                 recordedAt: Date()
             ))
         } catch {
-            print("WatchTemplateTransaction: legacy receipt write failed — \(error.localizedDescription)")
+            WatchSyncDiagnostics.error("ingest: legacy receipt write failed — \(error.localizedDescription)")
             return
         }
         // Old-watch payloads have no transaction generation to correlate, but
         // they still receive fresh committed state before the plain ack.
         guard let snapshot = try? routineSnapshots.fetchSnapshot() else {
-            print("WatchTemplateTransaction: legacy authoritative snapshot read failed — retained")
+            WatchSyncDiagnostics.error("ingest: legacy authoritative snapshot read failed — retained")
             return
         }
         mainContextCache.refreshCache(from: snapshot)

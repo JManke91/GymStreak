@@ -14,12 +14,16 @@ protocol WatchWorkoutTransporting: AnyObject {
 }
 
 /// Reconciles GymStreak's durable outgoing workout queue with WatchConnectivity's
-/// system queue. This file has an identical watch-target copy; the iOS copy
-/// exists so the policy can be unit-tested without a watch unit-test target.
+/// system queue. IDENTICAL COPY in both targets — `GymStreak/Data/Sync/` and
+/// `GymStreakWatch Watch App/Managers/` — keep them in sync. The watch target
+/// runs it; the iOS copy exists so the policy can be unit-tested (there is no
+/// watch unit-test target).
 @MainActor
 final class WatchWorkoutTransportCoordinator {
     private let syncState: WatchSyncStateStore
     private weak var transport: WatchWorkoutTransporting?
+    private var isReconciling = false
+    private var needsAnotherReconcile = false
 
     init(syncState: WatchSyncStateStore, transport: WatchWorkoutTransporting) {
         self.syncState = syncState
@@ -36,7 +40,26 @@ final class WatchWorkoutTransportCoordinator {
         return true
     }
 
+    /// Reentrant calls coalesce into one follow-up pass (same contract as the
+    /// iOS ingestion drain). `quarantine` below fires the sync state's
+    /// eligibility callback — quarantining releases a per-routine FIFO head —
+    /// which re-enters here; without coalescing the outer loop would continue
+    /// over a stale entry snapshot and a stale `outstandingIDs` set and could
+    /// enqueue the released successor twice.
     func reconcile() {
+        guard !isReconciling else {
+            needsAnotherReconcile = true
+            return
+        }
+        isReconciling = true
+        defer {
+            isReconciling = false
+            if needsAnotherReconcile {
+                needsAnotherReconcile = false
+                reconcile()
+            }
+        }
+
         guard let transport, transport.isWorkoutTransportActivated else { return }
         let outstandingIDs = transport.outstandingWorkoutSemanticIDs
 
@@ -57,11 +80,11 @@ final class WatchWorkoutTransportCoordinator {
                 transport.sendWorkoutMessage(payload)
             }
             guard !outstandingIDs.contains(entry.id) else {
-                print("WatchConnectivity: sync entry \(entry.id) already outstanding — not re-enqueueing")
+                WatchSyncDiagnostics.notice("transport: entry \(WatchSyncDiagnostics.shortID(entry.id)) already outstanding — not re-enqueueing")
                 continue
             }
             transport.enqueueWorkoutUserInfo(payload)
-            print("WatchConnectivity: queued sync entry \(entry.id)")
+            WatchSyncDiagnostics.info("transport: queued entry \(WatchSyncDiagnostics.shortID(entry.id))")
         }
     }
 

@@ -163,7 +163,7 @@ final class WatchWorkoutIngestionCoordinator {
                 recordedAt: Date()
             ))
         } catch {
-            print("WatchWorkoutIngestionCoordinator: receipt write failed — keeping inbox entry for retry (\(error.localizedDescription))")
+            WatchSyncDiagnostics.error("ingest: receipt write failed — keeping inbox entry for retry (\(error.localizedDescription))")
             return
         }
 

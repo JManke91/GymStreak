@@ -146,10 +146,18 @@ final class WorkoutIngestReceiptStore: AppliedOverloadCorrelationReading {
         return decode(directory?.appendingPathComponent(fileName))
     }
 
-    /// Ready template outcomes retained after inbox removal. Used to recover
-    /// when a later watch challenge proves the staged authority proposal was
-    /// not accepted.
-    func readyTemplateReceipts() -> [WorkoutIngestReceipt] {
+    /// Template outcomes that are durable but not yet acknowledged, retained
+    /// independently of their inbox entry. Two phases qualify:
+    ///
+    /// - `readyToAcknowledge` — staged, but a later watch challenge may prove
+    ///   the staged authority proposal was never accepted.
+    /// - `committedAwaitingContext` — committed locally, but no authoritative
+    ///   snapshot could be staged yet (typically because no watch challenge
+    ///   was resolvable at the time). Without this, such a receipt was only
+    ///   ever retried by an inbox drain, so removing its inbox entry left it
+    ///   permanently unacknowledgeable — and the watch's per-routine FIFO head
+    ///   permanently unretired.
+    func unresolvedTemplateReceipts() -> [WorkoutIngestReceipt] {
         guard let directory, let readyRecoveryDirectory,
               let urls = try? FileManager.default.contentsOfDirectory(
                 at: readyRecoveryDirectory, includingPropertiesForKeys: nil
@@ -158,7 +166,7 @@ final class WorkoutIngestReceiptStore: AppliedOverloadCorrelationReading {
             .compactMap { try? Data(contentsOf: $0) }
             .compactMap { String(data: $0, encoding: .utf8) }
             .compactMap { decode(directory.appendingPathComponent($0)) }
-            .filter { $0.phase == .readyToAcknowledge }
+            .filter { $0.phase == .readyToAcknowledge || $0.phase == .committedAwaitingContext }
     }
 
     /// Removes a receipt from authority-change recovery after the watch has
@@ -173,7 +181,7 @@ final class WorkoutIngestReceiptStore: AppliedOverloadCorrelationReading {
         } catch {
             if (error as NSError).code != NSFileNoSuchFileError {
                 // A stale marker causes only another idempotent recovery pass.
-                print("WorkoutIngestReceiptStore: ready-recovery marker removal failed — \(error.localizedDescription)")
+                WatchSyncDiagnostics.error("receipts: ready-recovery marker removal failed — \(error.localizedDescription)")
             }
         }
     }
@@ -233,7 +241,10 @@ final class WorkoutIngestReceiptStore: AppliedOverloadCorrelationReading {
         // Retained receipts are append-only, but authority recovery must stay
         // proportional to unresolved work rather than scanning all history.
         // This tiny marker is removed once the watch proves the generation.
-        if receipt.phase == .readyToAcknowledge,
+        // `committedAwaitingContext` carries one too: it is unresolved work by
+        // definition, and it is the phase a transaction parks in when no
+        // authoritative snapshot could be staged.
+        if receipt.phase == .readyToAcknowledge || receipt.phase == .committedAwaitingContext,
            receipt.transactionKey != nil,
            let readyRecoveryDirectory {
             try Data(fileName.utf8).write(

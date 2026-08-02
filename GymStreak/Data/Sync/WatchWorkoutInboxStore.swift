@@ -72,7 +72,7 @@ final class WatchWorkoutInboxStore {
         do {
             try Data().write(to: migrationMarker, options: .atomic)
         } catch {
-            print("WatchWorkoutInboxStore: could not record completed legacy migration — will retry")
+            WatchSyncDiagnostics.error("inbox: could not record completed legacy migration — will retry")
         }
     }
 
@@ -122,7 +122,7 @@ final class WatchWorkoutInboxStore {
     func entries() -> [Entry] {
         fileURLs().compactMap { url in
             guard let data = try? Data(contentsOf: url) else {
-                print("WatchWorkoutInboxStore: could not read \(url.lastPathComponent) — will retry")
+                WatchSyncDiagnostics.error("inbox: could not read a queued payload file — will retry")
                 return nil
             }
             do {
@@ -147,7 +147,7 @@ final class WatchWorkoutInboxStore {
     }
 
     private func quarantine(_ url: URL, error: Error) {
-        print("WatchWorkoutInboxStore: malformed payload \(url.lastPathComponent) — \(error.localizedDescription). Quarantined.")
+        WatchSyncDiagnostics.fault("inbox: malformed payload quarantined — \(error.localizedDescription). It is never replayed and never acknowledged.")
         guard let quarantineDirectory else {
             try? FileManager.default.removeItem(at: url)
             return
@@ -174,7 +174,7 @@ final class WatchWorkoutInboxStore {
         guard let defaults else { return false }
         guard let data = defaults.data(forKey: Self.legacyDefaultsKey) else { return true }
         guard let legacy = try? JSONDecoder().decode([CompletedWatchWorkout].self, from: data) else {
-            print("WatchWorkoutInboxStore: legacy migration data is malformed — keeping legacy blob")
+            WatchSyncDiagnostics.error("inbox: legacy migration data is malformed — keeping legacy blob")
             return false
         }
         guard let inboxDirectory else { return false }
@@ -187,11 +187,11 @@ final class WatchWorkoutInboxStore {
             }
             defaults.removeObject(forKey: Self.legacyDefaultsKey)
             if !legacy.isEmpty {
-                print("WatchWorkoutInboxStore: migrated \(legacy.count) legacy buffered workout(s)")
+                WatchSyncDiagnostics.info("inbox: migrated \(legacy.count) legacy buffered workout(s)")
             }
             return true
         } catch {
-            print("WatchWorkoutInboxStore: legacy migration failed — \(error.localizedDescription); keeping legacy blob")
+            WatchSyncDiagnostics.error("inbox: legacy migration failed — \(error.localizedDescription); keeping legacy blob")
             return false
         }
     }

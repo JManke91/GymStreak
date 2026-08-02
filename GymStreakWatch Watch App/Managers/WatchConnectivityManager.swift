@@ -78,7 +78,7 @@ final class WatchConnectivityManager: NSObject, ObservableObject {
         do {
             try session.updateApplicationContext(context)
         } catch {
-            print("WatchConnectivity: failed to publish challenge context — \(error.localizedDescription)")
+            WatchSyncDiagnostics.error("watch: failed to publish challenge context — \(error.localizedDescription)")
         }
     }
 
@@ -177,16 +177,16 @@ extension WatchConnectivityManager: WCSessionDelegate {
         Task { @MainActor in
             defer { self.delegateWorkTracker.endWork() }
             if let error = error {
-                print("WatchConnectivity: Activation failed - \(error.localizedDescription)")
+                WatchSyncDiagnostics.error("watch: WCSession activation failed — \(error.localizedDescription)")
                 return
             }
             guard activationState == .activated else {
-                print("WatchConnectivity: Activation completed in non-active state \(activationState.rawValue)")
+                WatchSyncDiagnostics.error("watch: WCSession activation completed in non-active state \(activationState.rawValue)")
                 return
             }
 
             self.isReachable = session.isReachable
-            print("WatchConnectivity: Activated on Watch")
+            WatchSyncDiagnostics.info("watch: WCSession activated")
 
             // Bootstrap exactly once after activation. The delegate handles
             // new arrivals; this read recovers the latest context that a
@@ -216,7 +216,7 @@ extension WatchConnectivityManager: WCSessionDelegate {
     nonisolated func session(_ session: WCSession, didReceive file: WCSessionFile) {
         guard file.metadata?[WatchExerciseCatalogSync.metadataTypeKey] as? String
             == WatchExerciseCatalogSync.metadataTypeValue else {
-            print("WatchConnectivity: ignoring file transfer without catalogue tag")
+            WatchSyncDiagnostics.notice("watch: ignoring file transfer without catalogue tag")
             return
         }
         delegateWorkTracker.beginWork()
@@ -235,7 +235,7 @@ extension WatchConnectivityManager: WCSessionDelegate {
         Task { @MainActor in
             defer { self.delegateWorkTracker.endWork() }
             self.isReachable = session.isReachable
-            print("WatchConnectivity: Reachability changed - \(session.isReachable)")
+            WatchSyncDiagnostics.info("watch: reachability changed — \(session.isReachable)")
 
             // Reconcile on every connectivity transition. The durable path
             // does not require reachability; reachability only enables the
@@ -286,7 +286,7 @@ extension WatchConnectivityManager: WCSessionDelegate {
         Task { @MainActor in
             defer { self.delegateWorkTracker.endWork() }
             guard let error = error else {
-                print("WatchConnectivity: transferUserInfo delivered to system — awaiting iPhone save ack before clearing")
+                WatchSyncDiagnostics.info("transport: transferUserInfo delivered to system — awaiting iPhone save ack before retiring")
                 return
             }
             if let semanticIdString, let semanticID = UUID(uuidString: semanticIdString),
@@ -294,7 +294,7 @@ extension WatchConnectivityManager: WCSessionDelegate {
                 self.syncState.quarantine(id: semanticID, reason: "transfer failed permanently: \(error.localizedDescription)")
                 return
             }
-            print("WatchConnectivity: transferUserInfo failed (scheduling bounded retry) — \(error.localizedDescription)")
+            WatchSyncDiagnostics.error("transport: transferUserInfo failed (scheduling bounded retry) — \(error.localizedDescription)")
             self.scheduleWorkoutTransportRetry()
         }
     }
@@ -313,17 +313,17 @@ extension WatchConnectivityManager: WCSessionDelegate {
     @MainActor
     private func handleIncoming(_ payload: [String: Any]) {
         if workoutTransport.handleIncoming(payload) {
-            print("WatchConnectivity: received workout queue-drain request from iPhone")
+            WatchSyncDiagnostics.info("watch: received workout queue-drain request from iPhone")
             return
         }
         if let record = TemplateAckRecord.from(payload: payload) {
             syncState.acknowledgeTemplateTransaction(record)
-            print("WatchConnectivity: transaction \(record.transactionID) acknowledged (\(record.outcomeRaw)) at routine generation \(record.routineGeneration)")
+            WatchSyncDiagnostics.info("watch: transaction \(WatchSyncDiagnostics.shortID(record.transactionID)) acknowledged (\(record.outcomeRaw)) at routine generation \(record.routineGeneration)")
             return
         }
         if let ackString = payload[WatchWorkoutWire.ackKey] as? String, let id = UUID(uuidString: ackString) {
             syncState.acknowledgePlain(workoutId: id)
-            print("WatchConnectivity: workout \(id) acknowledged saved by iPhone (plain ack)")
+            WatchSyncDiagnostics.info("watch: workout \(WatchSyncDiagnostics.shortID(id)) acknowledged saved by iPhone (plain ack)")
             return
         }
         processApplicationContext(payload)
@@ -346,17 +346,17 @@ extension WatchConnectivityManager: WCSessionDelegate {
             switch RoutineSnapshotHeader.parse(context: context) {
             case .legacy:
                 if syncState.applyRoutineContext(routines, header: nil) {
-                    print("WatchConnectivity: Applied \(routines.count) legacy routines from iPhone")
+                    WatchSyncDiagnostics.info("watch: applied \(routines.count) legacy routines from iPhone")
                 }
             case .versioned(let header):
                 if syncState.applyRoutineContext(routines, header: header) {
-                    print("WatchConnectivity: Applied \(routines.count) routines from iPhone (generation \(header.generation))")
+                    WatchSyncDiagnostics.info("watch: applied \(routines.count) routines from iPhone (generation \(header.generation))")
                 }
             case .malformed:
-                print("WatchConnectivity: Rejected malformed versioned routine context")
+                WatchSyncDiagnostics.error("watch: rejected malformed versioned routine context")
             }
         } catch {
-            print("WatchConnectivity: Failed to decode routines - \(error.localizedDescription)")
+            WatchSyncDiagnostics.error("watch: failed to decode routines — \(error.localizedDescription)")
         }
     }
 }
@@ -383,7 +383,7 @@ extension WatchConnectivityManager: WatchWorkoutTransporting {
 
     func sendWorkoutMessage(_ payload: [String: Any]) {
         session?.sendMessage(payload, replyHandler: nil) { error in
-            print("WatchConnectivity: sendMessage fast-path failed — \(error.localizedDescription) (transferUserInfo will still deliver)")
+            WatchSyncDiagnostics.notice("transport: sendMessage fast path failed — \(error.localizedDescription) (transferUserInfo will still deliver)")
         }
     }
 

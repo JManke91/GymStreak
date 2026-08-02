@@ -36,7 +36,7 @@ extension WatchTemplateTransactionCoordinator {
         guard let transaction = entry.transaction, let key = entry.transactionKey else {
             // A progressive payload can only exist inside an envelope, so this
             // is unreachable in practice; retaining is the safe response.
-            print("WatchTemplateTransaction: progressive overload without transaction identity — retained")
+            WatchSyncDiagnostics.error("ingest: progressive overload without transaction identity — retained")
             return .unchanged
         }
 
@@ -44,7 +44,7 @@ extension WatchTemplateTransactionCoordinator {
         // receipt without re-running the mutation.
         if let receipt = receipts.receipt(for: key) {
             guard receipt.transactionID == transaction.transactionID else {
-                print("WatchTemplateTransaction: receipt key collision with mismatched transaction id — retained")
+                WatchSyncDiagnostics.error("ingest: overload receipt key collision with mismatched transaction id — retained")
                 return .unchanged
             }
             resume(entry, receipt: receipt)
@@ -56,11 +56,11 @@ extension WatchTemplateTransactionCoordinator {
                 // Its predecessor has not been ingested yet (cross-channel
                 // delivery is not causally ordered). Stay durably inboxed
                 // without mutating anything.
-                print("WatchTemplateTransaction: overload sequence \(key.sequence) > expected \(expected) — buffered")
+                WatchSyncDiagnostics.notice("ingest: overload sequence \(key.sequence) > expected \(expected) — buffered awaiting predecessor")
                 return .unchanged
             }
             if key.sequence < expected {
-                print("WatchTemplateTransaction: overload sequence \(key.sequence) < expected \(expected) with no receipt — inconsistent, retained")
+                WatchSyncDiagnostics.fault("ingest: overload sequence \(key.sequence) < expected \(expected) with no receipt — inconsistent, retained")
                 return .unchanged
             }
         }
@@ -111,7 +111,7 @@ extension WatchTemplateTransactionCoordinator {
             // The mutation committed but the receipt did not. Keep the inbox
             // entry: the next drain re-applies the same absolute values
             // idempotently and retries the receipt.
-            print("WatchTemplateTransaction: overload receipt write failed — \(error.localizedDescription)")
+            WatchSyncDiagnostics.error("ingest: overload receipt write failed — \(error.localizedDescription)")
             return .unchanged
         }
 

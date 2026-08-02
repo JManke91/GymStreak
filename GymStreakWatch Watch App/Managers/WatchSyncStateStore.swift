@@ -122,7 +122,7 @@ final class WatchSyncStateStore {
                 // An undecodable state file is preserved for diagnostics
                 // instead of being silently overwritten.
                 try? FileManager.default.moveItem(at: fileURL, to: fileURL.appendingPathExtension("corrupt"))
-                print("WatchSyncStateStore: state file undecodable — quarantined as .corrupt")
+                WatchSyncDiagnostics.fault("queue: state file undecodable — quarantined as .corrupt, starting empty")
             }
         }
 
@@ -173,7 +173,7 @@ final class WatchSyncStateStore {
                 nextSequenceByRoutine = originalSequences
                 authoritativeRoutines = originalRoutines
                 hasCompletedLegacyDefaultsMigration = originalMigrationCompletion
-                print("WatchSyncStateStore: migration/state write failed — \(error.localizedDescription)")
+                WatchSyncDiagnostics.error("queue: migration/state write failed — \(error.localizedDescription)")
             }
         }
     }
@@ -193,13 +193,54 @@ final class WatchSyncStateStore {
     /// generation), never merely when its transfer completes.
     func transportEligibleEntries() -> [OutgoingSyncEntry] {
         guard isStateDurable else { return [] }
-        return entries.filter { entry in
+        let eligible = entries.filter { entry in
             guard entry.phase == .transportEligible else { return false }
             guard entry.hasTemplateIntent else { return true }
             guard entry.hasDurableTemplateIdentity else { return false }
             return isHeadTransaction(entry)
         }
+        logWithheldEntries(eligible: eligible)
+        return eligible
     }
+
+    /// One bounded line naming what the per-routine FIFO head gate is holding
+    /// back, and for how long. Without it a stalled head is completely silent —
+    /// the blocked entries are simply never handed to WatchConnectivity, so
+    /// there is nothing to observe in either app or in any transport log, and a
+    /// finalized workout can sit undelivered indefinitely with no signal.
+    private func logWithheldEntries(eligible: [OutgoingSyncEntry]) {
+        let eligibleIDs = Set(eligible.map(\.id))
+        let withheld = entries.filter {
+            $0.phase == .transportEligible && !eligibleIDs.contains($0.id)
+        }
+        guard !withheld.isEmpty else { return }
+        let blockingHead = withheld
+            .compactMap { $0.routineID }
+            .compactMap { liveHeadTransaction(forRoutine: $0) }
+            .min { $0.enqueuedAt < $1.enqueuedAt }
+        let minutes = blockingHead.map { Int(Date().timeIntervalSince($0.enqueuedAt) / 60) } ?? -1
+        let message = """
+            queue: \(withheld.count) finalized entr\(withheld.count == 1 ? "y" : "ies") withheld behind \
+            unretired transaction \(WatchSyncDiagnostics.shortID(blockingHead?.id)) \
+            (queued \(minutes) min ago)
+            """
+        // A head unretired for hours is no longer ordinary back-pressure: the
+        // acknowledgment that would release it is not coming, and the workouts
+        // behind it are being silently withheld from transport. Escalate so it
+        // is findable in a support log without a debugger.
+        if minutes >= Self.stalledHeadFaultMinutes {
+            WatchSyncDiagnostics.fault(message + " — head appears stalled")
+        } else {
+            WatchSyncDiagnostics.notice(message)
+        }
+    }
+
+    /// How long a per-routine FIFO head may stay unretired before the withheld
+    /// entries behind it are logged as a fault rather than back-pressure. Two
+    /// hours is far beyond any legitimate offline/unreachable window (transport
+    /// reconciles on every activation, reachability change, foreground and
+    /// background wake) while staying clear of a genuinely long unpaired trip.
+    private static let stalledHeadFaultMinutes = 120
 
     /// Workout IDs of entries a previous process left mid-HealthKit
     /// finalization (`awaitingHealthKitMetadata`/`awaitingHealthKitFinish`),
@@ -216,9 +257,22 @@ final class WatchSyncStateStore {
         entries.first { $0.hasTemplateIntent && $0.routineID == routineId }
     }
 
+    /// A quarantined entry is terminal: its exact bytes can never transport and
+    /// no acknowledgment will ever retire it. It must therefore gate nothing —
+    /// not transport ordering, not retirement, not the optimistic fold. This is
+    /// the single definition all three sites share; `headTransaction(forRoutine:)`
+    /// deliberately keeps the broader "oldest unretired" meaning for anchoring.
+    private func isLiveTemplateIntent(_ entry: OutgoingSyncEntry) -> Bool {
+        entry.hasTemplateIntent && entry.phase != .quarantined
+    }
+
+    private func liveHeadTransaction(forRoutine routineID: UUID) -> OutgoingSyncEntry? {
+        entries.first { isLiveTemplateIntent($0) && $0.routineID == routineID }
+    }
+
     private func isHeadTransaction(_ entry: OutgoingSyncEntry) -> Bool {
         guard let routineID = entry.routineID else { return false }
-        return headTransaction(forRoutine: routineID)?.id == entry.id
+        return liveHeadTransaction(forRoutine: routineID)?.id == entry.id
     }
 
     /// Whether a template transaction is still queued — i.e. iOS has not yet
@@ -251,8 +305,12 @@ final class WatchSyncStateStore {
             routines.append(anchor)
         }
         // Every unresolved template-mutating kind folds, in FIFO order, so the
-        // overlay always matches the order iOS will apply them in.
-        for entry in entries where entry.hasTemplateIntent {
+        // overlay always matches the order iOS will apply them in. A
+        // quarantined entry is excluded by the same terminal-entry rule as the
+        // transport/retirement gates: iOS will never apply it, so folding it
+        // would overlay values on an authoritative base that has moved past it
+        // and then prescribe them for the next workout.
+        for entry in entries where isLiveTemplateIntent(entry) {
             if let workout = entry.completedWorkout {
                 routines = routines.map { WatchRoutineTemplateFold.apply(workout, to: $0) }
             } else if let intent = entry.templateTransaction?.payload.progressiveOverload {
@@ -280,7 +338,7 @@ final class WatchSyncStateStore {
                     try persist()
                 } catch {
                     lastRoutineSyncDate = previousSyncDate
-                    print("WatchSyncStateStore: legacy routine freshness write failed — \(error.localizedDescription)")
+                    WatchSyncDiagnostics.error("queue: legacy routine freshness write failed — \(error.localizedDescription)")
                     return false
                 }
                 onEffectiveRoutinesChanged?()
@@ -295,7 +353,7 @@ final class WatchSyncStateStore {
             } catch {
                 authoritativeRoutines = previousRoutines
                 lastRoutineSyncDate = previousSyncDate
-                print("WatchSyncStateStore: legacy routine context write failed — \(error.localizedDescription)")
+                WatchSyncDiagnostics.error("queue: legacy routine context write failed — \(error.localizedDescription)")
                 return false
             }
             onEffectiveRoutinesChanged?()
@@ -304,7 +362,7 @@ final class WatchSyncStateStore {
 
         switch routineAuthority.decision(for: header) {
         case .reject(let reason):
-            print("WatchSyncStateStore: rejected routine context (\(reason))")
+            WatchSyncDiagnostics.notice("queue: rejected routine context (\(reason))")
             return false
         case .duplicate:
             // Same epoch/generation already applied. Still re-evaluate held
@@ -324,7 +382,7 @@ final class WatchSyncStateStore {
                 routineAuthority = previous
                 authoritativeRoutines = previousBase
                 lastRoutineSyncDate = previousSyncDate
-                print("WatchSyncStateStore: routine context write failed — \(error.localizedDescription)")
+                WatchSyncDiagnostics.error("queue: routine context write failed — \(error.localizedDescription)")
                 return false
             }
             if isHandover { onChallengeStateChanged?() }
@@ -492,10 +550,15 @@ final class WatchSyncStateStore {
         } catch {
             entries[index].phase = previousPhase
             entries[index].quarantineReason = previousReason
-            print("WatchSyncStateStore: quarantine write failed — \(error.localizedDescription)")
+            WatchSyncDiagnostics.error("queue: quarantine write failed — \(error.localizedDescription)")
             return
         }
-        print("WatchSyncStateStore: quarantined workout \(id) — \(reason)")
+        WatchSyncDiagnostics.fault("queue: quarantined entry \(WatchSyncDiagnostics.shortID(id)) — \(reason). These exact bytes can never transport.")
+        // Quarantining is head-releasing (a terminal entry no longer gates its
+        // routine), so the successor must be reconciled now rather than waiting
+        // for an unrelated lifecycle trigger.
+        onEffectiveRoutinesChanged?()
+        onTransportEligibilityChanged?()
     }
 
     /// Promotes entries stranded in a HealthKit phase by a previous process
@@ -520,14 +583,14 @@ final class WatchSyncStateStore {
         where entries[index].phase == .awaitingHealthKitMetadata || entries[index].phase == .awaitingHealthKitFinish {
             entries[index].phase = .transportEligible
             promoted = true
-            print("WatchSyncStateStore: promoted interrupted finalization \(entries[index].id) to transportEligible")
+            WatchSyncDiagnostics.notice("queue: promoted interrupted finalization \(WatchSyncDiagnostics.shortID(entries[index].id)) to transportEligible")
         }
         guard promoted else { return }
         do {
             try persist()
         } catch {
             entries = previousEntries
-            print("WatchSyncStateStore: interrupted-finalization promotion failed — \(error.localizedDescription)")
+            WatchSyncDiagnostics.error("queue: interrupted-finalization promotion failed — \(error.localizedDescription)")
         }
     }
 
@@ -541,7 +604,7 @@ final class WatchSyncStateStore {
     func acknowledgePlain(workoutId: UUID) {
         guard let entry = entry(id: workoutId) else { return }
         guard !entry.hasTemplateIntent else {
-            print("WatchSyncStateStore: plain ack for template transaction \(workoutId) — retained (old iOS build)")
+            WatchSyncDiagnostics.notice("queue: plain ack for template transaction \(WatchSyncDiagnostics.shortID(workoutId)) — retained (old iOS build)")
             return
         }
         retire(id: workoutId)
@@ -561,7 +624,7 @@ final class WatchSyncStateStore {
         guard transaction.senderEpoch == ack.senderEpoch,
               transaction.sequence == ack.sequence,
               TemplateTransactionOutcomeWire(rawValue: ack.outcomeRaw) != nil else {
-            print("WatchSyncStateStore: template ack identity mismatch for transaction \(ack.transactionID) — ignored")
+            WatchSyncDiagnostics.error("queue: template ack identity mismatch for transaction \(WatchSyncDiagnostics.shortID(ack.transactionID)) — ignored")
             return
         }
         let previous = entries[index].heldAck
@@ -570,7 +633,7 @@ final class WatchSyncStateStore {
             try persist()
         } catch {
             entries[index].heldAck = previous
-            print("WatchSyncStateStore: failed to persist template ack — \(error.localizedDescription)")
+            WatchSyncDiagnostics.error("queue: failed to persist template ack — \(error.localizedDescription)")
             return
         }
         retireSatisfiedAcknowledgments()
@@ -586,7 +649,9 @@ final class WatchSyncStateStore {
         // fold older A over B's authoritative base and visibly regress state.
         var blockedRoutines: Set<UUID> = []
         var satisfied: [OutgoingSyncEntry] = []
-        for entry in entries where entry.hasTemplateIntent {
+        // A quarantined entry can never be acknowledged, so it must not block
+        // its routine's prefix (same terminal-entry rule as `isHeadTransaction`).
+        for entry in entries where isLiveTemplateIntent(entry) {
             guard let routineID = entry.routineID, !blockedRoutines.contains(routineID) else { continue }
             guard let ack = entry.heldAck,
                   routineAuthority.hasApplied(
@@ -599,7 +664,7 @@ final class WatchSyncStateStore {
         }
         guard !satisfied.isEmpty else { return }
         for entry in satisfied {
-            print("WatchSyncStateStore: retiring template transaction \(entry.id) — ack + routine generation applied")
+            WatchSyncDiagnostics.info("queue: retiring template transaction \(WatchSyncDiagnostics.shortID(entry.id)) — ack + routine generation applied")
         }
         retire(ids: satisfied.map(\.id))
     }
@@ -628,7 +693,7 @@ final class WatchSyncStateStore {
         } catch {
             entries = previousEntries
             routineAnchors = previousAnchors
-            print("WatchSyncStateStore: failed to retire durable entry — \(error.localizedDescription)")
+            WatchSyncDiagnostics.error("queue: failed to retire durable entry — \(error.localizedDescription)")
             return
         }
         onEffectiveRoutinesChanged?()
@@ -674,7 +739,7 @@ final class WatchSyncStateStore {
                 TemplateTransactionEnvelope(completedWorkout: workout)
             )
         }
-        print("WatchSyncStateStore: prepared transaction identity for \(pending.count) pre-ticket-05 template transaction(s)")
+        WatchSyncDiagnostics.info("queue: prepared transaction identity for \(pending.count) pre-ticket-05 template transaction(s)")
         return true
     }
 
@@ -710,7 +775,7 @@ final class WatchSyncStateStore {
             return (false, true)
         }
         guard let legacy = try? JSONDecoder().decode([CompletedWatchWorkout].self, from: data) else {
-            print("WatchSyncStateStore: legacy workout queue is undecodable — migration will retry")
+            WatchSyncDiagnostics.error("queue: legacy workout queue is undecodable — migration will retry")
             return (false, false)
         }
         guard !legacy.isEmpty else { return (false, true) }
@@ -738,12 +803,12 @@ final class WatchSyncStateStore {
             return (false, true)
         }
         guard let legacy = try? JSONDecoder().decode([WatchRoutine].self, from: data) else {
-            print("WatchSyncStateStore: legacy routine cache is undecodable — migration will retry")
+            WatchSyncDiagnostics.error("queue: legacy routine cache is undecodable — migration will retry")
             return (false, false)
         }
         guard !legacy.isEmpty else { return (false, true) }
         authoritativeRoutines = legacy
-        print("WatchSyncStateStore: adopted \(legacy.count) cached routine(s) as the initial authoritative base")
+        WatchSyncDiagnostics.info("queue: adopted \(legacy.count) cached routine(s) as the initial authoritative base")
         return (true, true)
     }
 }

@@ -242,7 +242,33 @@ struct WatchWorkoutInboxStoreTests {
         try receipts.record(receipt)
 
         #expect(receipts.receipt(for: key) == receipt)
-        #expect(receipts.readyTemplateReceipts() == [receipt])
+        #expect(receipts.unresolvedTemplateReceipts() == [receipt])
+    }
+
+    /// A transaction that committed but could not stage an authoritative
+    /// snapshot must stay discoverable independently of its inbox entry —
+    /// otherwise removing that entry leaves it permanently unacknowledgeable,
+    /// which pins the watch's per-routine FIFO head and every entry behind it.
+    @Test
+    func awaitingContextReceiptsAreRecoverableWithoutTheirInboxEntry() throws {
+        let receipts = WorkoutIngestReceiptStore(directory: try Fixtures.makeTempDirectory())
+        let key = TemplateTransactionKey(senderEpoch: UUID(), routineID: UUID(), sequence: 3)
+        let receipt = WorkoutIngestReceipt(
+            workoutId: nil,
+            healthKitWorkoutId: nil,
+            phase: .committedAwaitingContext,
+            recordedAt: Date(),
+            transactionID: UUID(),
+            senderEpoch: key.senderEpoch,
+            routineID: key.routineID,
+            sequence: key.sequence,
+            outcomeRaw: TemplateTransactionOutcome.applied.rawValue,
+            protocolVersion: WatchRoutineSync.templateUpdateVersion
+        )
+
+        try receipts.record(receipt)
+
+        #expect(receipts.unresolvedTemplateReceipts() == [receipt])
     }
 
     /// Recorded performance budget for indefinite receipt retention: the

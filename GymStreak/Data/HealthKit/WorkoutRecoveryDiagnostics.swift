@@ -23,16 +23,12 @@ enum WorkoutRecoveryDiagnostics {
     private static let logger = Logger(subsystem: "com.shotat24fps.GymStreak", category: "WorkoutRecovery")
 
     /// Deterministic, one-way 8-hex-char token for a UUID. Stable across app
-    /// launches so multi-session support logs correlate.
+    /// launches so multi-session support logs correlate. Shared with
+    /// `WatchSyncDiagnostics` so a token means the same object under either
+    /// category — the two pipelines hand work to each other, and support logs
+    /// have to be readable across the seam.
     static func shortID(_ uuid: UUID) -> String {
-        var hash: UInt64 = 0xcbf2_9ce4_8422_2325
-        withUnsafeBytes(of: uuid.uuid) { bytes in
-            for byte in bytes {
-                hash ^= UInt64(byte)
-                hash = hash &* 0x0000_0100_0000_01b3
-            }
-        }
-        return String(format: "%08x", UInt32(truncatingIfNeeded: hash))
+        WatchSyncDiagnostics.shortID(uuid)
     }
 
     // MARK: - Pipeline events

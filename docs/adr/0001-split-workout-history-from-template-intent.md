@@ -1,0 +1,25 @@
+---
+status: accepted
+---
+
+# Split workout history from template intent on the watch → iOS wire
+
+A finished watch workout carries two things with very different value: the **workout history**, which must never be lost, and the **template intent** (the routine changes the user accepted during the workout), which is ordered per routine, mergeable, and genuinely losable. Until now both travelled as one transaction, so history inherited the template's ordering and acknowledgment constraints — and on 2026-08-01 a template acknowledgment that could not be sent silently withheld a completed 49-minute workout from transport for hours (see `docs/watch-sync.md`, "Head-of-line liveness"). We are splitting them: the watch enqueues **two** durable entries per template-carrying workout — an ungated workout payload for history, and a gated template-only transaction — so that a stalled template acknowledgment costs a template update and never a workout.
+
+## Considered Options
+
+**Where the split lives.** We rejected keeping one payload and merely relaxing the watch-side transport gate: iOS would then receive a template transaction out of order and have to ingest its history while buffering the template half, which means a new partial-processing state and receipt phase per inbox entry. The two-payload shape instead reuses two paths that already exist and are already tested — `processNoTemplate` for history and `executeTemplateOnly` for a template-only kind — because `TemplateTransactionPayload` was deliberately built as an extensible enum (progressive overload is already such a kind).
+
+**What the template half carries.** It wraps the existing `CompletedWatchWorkout` and correlates via a `sourceWorkoutID` field, rather than carrying watch-derived compare-and-set updates. This duplicates the workout bytes on the wire (two transfers of a few KB), which we accept deliberately: it leaves `validateMerge`/`apply`/`applyStructural` completely untouched, keeping all the merge-correctness risk in code that is already exercised. The alternative — deriving the intent on the watch — would have duplicated the merge semantics across targets, including the subtle rule that concurrent iPhone edits win unless the watch explicitly changed that exact slot.
+
+**Why a new payload kind is forced, not chosen.** The template envelope's `workoutID` *must* be nil, because `WatchSyncStateStore.entry(id:)` matches on `workoutID` as well as the entry id: with a non-nil value the second `enqueue` for a workout would silently return the history entry instead of creating the template entry. But `TemplateTransactionEnvelope.isInternallyConsistent` requires `workoutID == workout.id` for any payload that carries a workout, so `.completedWorkoutUpdate` cannot be reused.
+
+## Consequences
+
+**Template failure becomes less visible, not more.** Previously a stalled template acknowledgment meant nothing arrived at all, so the user noticed via the missing workout — that is how the incident was found. Now the workout arrives normally and the template update silently does not. We therefore surface **terminal** template outcomes (rejected, quarantined) to the user with their reason; pending stays silent, because pending is the normal state for every offline workout.
+
+**Version skew degrades to a stall, never to loss.** `TemplateTransactionPayload` uses synthesized `Codable`, which throws on an unknown case, so an iOS build predating the new kind rejects the template half and the watch retries it indefinitely, pinning that routine's queue head until iOS updates — at which point it decodes and drains on its own. History is unaffected in every skew combination, since it travels as an ordinary workout payload old builds already understand. We accepted this over version negotiation or a capability flag, both of which would keep a second wire path alive permanently — and the fallback path in either case is precisely the fused form this decision exists to retire.
+
+**Nothing is migrated.** The split happens at enqueue time, so entries frozen by an earlier build stay fused and drain through the `.completedWorkoutUpdate` handling that must remain anyway for older watches. Rewriting queued frozen payloads would violate the rule the durable-queue design rests on — that a finalized payload is never reconstructed — in the most safety-critical file in the sync path.
+
+**The quarantine sequence-ledger gap is knowingly left open.** A quarantined template transaction still leaves a hole in the iOS per-`(senderEpoch, routineID)` ledger, so its successor buffers indefinitely. After this split that can only stall later template updates for one routine and can never touch history, which downgrades it from data loss to a degraded feature. It is also speculative: quarantine requires a `payloadTooLarge` / `payloadUnsupportedTypes` / `invalidParameter` transfer failure or a local encode failure, none of which we have ever observed. Revisit with field evidence; the candidate fixes are an abandoned-sequence marker or fail-forward on quarantine.
