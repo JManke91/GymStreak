@@ -1,0 +1,6 @@
+- Der Bildschirm für das aktive Workout wurde neu gestaltet. Nur die Übung, bei der du gerade bist, ist aufgeklappt; alle anderen Übungen werden zu einer kompakten Zeile, die du zum Öffnen antippst.
+- Abhaken und Werte ändern sind jetzt getrennte Flächen: Die linke Spalte einer Satzzeile hakt den Satz ab, die Wdh.- und kg-Chips öffnen die Eingabe. Keine Fehltreffer mehr.
+- Ein Tipp auf einen Wdh.- oder kg-Wert öffnet ein Keypad mit Schnellschritten (+/- 2,5 und 5 kg), dem geplanten Wert als Referenz und der Option, die Änderung für alle folgenden Sätze zu übernehmen. Die Satzliste springt beim Bearbeiten nicht mehr.
+- Der Fortschritt im Kopfbereich zeigt jetzt ein Segment pro Satz, nach Übung gruppiert – du siehst auf einen Blick, wo im Workout du stehst.
+- Die Pause übernimmt nicht mehr den ganzen Bildschirm. Eine Pausen-Leiste sitzt über den Workout-Buttons, mit +30s und Weiter; für den großen Timer tippst du sie einfach an.
+- Jeder Satz hat ein neues Menü mit „Satz duplizieren“ und „Satz löschen“.

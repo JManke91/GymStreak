@@ -2,7 +2,7 @@ import SwiftUI
 
 struct RestTimerView: View {
     @ObservedObject var viewModel: WorkoutViewModel
-    /// Shared namespace with `CompactRestTimer` — carries the shrink/grow morph.
+    /// Shared namespace with `WorkoutRestBar` — carries the shrink/grow morph.
     let namespace: Namespace.ID
     let onDismiss: () -> Void
 
@@ -13,8 +13,8 @@ struct RestTimerView: View {
                 .foregroundStyle(.secondary)
 
             // Circular Progress Ring + time label — both shared with the compact
-            // banner via matchedGeometryEffect, so they shrink and travel into
-            // the top banner on minimize (and grow back on expand).
+            // bar via matchedGeometryEffect, so they shrink and travel into
+            // the bottom rest bar on minimize (and grow back on expand).
             ZStack {
                 // The effect must sit *inside* the frame: it overrides the size
                 // proposal handed to the ring, which is what makes the diameter

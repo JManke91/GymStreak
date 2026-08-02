@@ -210,7 +210,7 @@ For **deleting**:
 | Component | Purpose |
 |-----------|---------|
 | `SupersetWorkoutGroupView` | Groups superset exercises in a card with header "Superset A (3)", per-group colored connecting line, rest time indicator |
-| `ExerciseCard` | Shows `SupersetBadge` (e.g., "1/3") with per-group color when part of superset. Hides individual rest timer config. Highlighted border when current exercise |
+| `WorkoutExerciseCardView` / `WorkoutExerciseCollapsedRow` | Show `SupersetBadge` (e.g., "1/3") with per-group color when part of a superset. The card hides its own Pause chip for superset members (the group owns the round's rest). Only the exercise holding the next set is expanded — see `active-workout-redesign.md`. |
 
 Workout labels are computed from `WorkoutSession.workoutExercisesList` using `SupersetLabelProvider.labels(for:)`.
 
@@ -351,7 +351,7 @@ Key strings in `GymStreak/Resources/en.lproj/Localizable.strings`:
 | File | Contains |
 |------|----------|
 | `GymStreak/RoutineDetailView.swift` | Context menu-based superset management, per-group visual indicators, `ExerciseHeaderView` with position/total badges |
-| `GymStreak/ActiveWorkoutView.swift` | `SupersetWorkoutGroupView` with letter/color, `ExerciseCard` with position/total badges |
+| `GymStreak/Presentation/Views/Workout/ActiveWorkoutView.swift` | `SupersetWorkoutGroupView` with letter/color; `WorkoutExerciseCardView` / `WorkoutExerciseCollapsedRow` with position/total badges |
 
 ### watchOS Views
 | File | Contains |

@@ -13,7 +13,7 @@ enum RestTimerMorph {
 }
 
 /// Shared circular countdown ring used by both rest-timer states (the large
-/// overlay and the compact top banner).
+/// overlay and the compact bottom rest bar).
 ///
 /// It deliberately has **no intrinsic size**: it fills whatever size its
 /// container proposes, and the stroke width scales with the diameter. That is

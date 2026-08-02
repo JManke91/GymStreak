@@ -770,13 +770,6 @@ class WorkoutViewModel: ObservableObject {
         save()
     }
 
-    func updateSet(_ set: WorkoutSet, reps: Int, weight: Double) {
-        objectWillChange.send()
-        set.actualReps = reps
-        set.actualWeight = weight
-        save()
-    }
-
     func updateBodyWeight(_ bodyWeightKg: Double?) {
         guard let session = currentSession else { return }
         objectWillChange.send()
@@ -1126,6 +1119,72 @@ class WorkoutViewModel: ObservableObject {
             workoutSessionRepository.delete(set)
             save()
         }
+    }
+
+    /// Inserts a copy of `set` directly after it, renumbering the sets behind it.
+    /// The copy always starts incomplete — duplicating is a planning action, not
+    /// a way to log a set that was never performed.
+    func duplicateSet(_ set: WorkoutSet, in workoutExercise: WorkoutExercise) {
+        guard currentSession != nil else { return }
+
+        objectWillChange.send()
+
+        let copy = WorkoutSet(
+            plannedReps: set.plannedReps,
+            actualReps: set.actualReps,
+            plannedWeight: set.plannedWeight,
+            actualWeight: set.actualWeight,
+            restTime: set.restTime,
+            order: set.order + 1
+        )
+        copy.workoutExercise = workoutExercise
+
+        for existing in workoutExercise.setsList where existing.order > set.order {
+            existing.order += 1
+        }
+
+        workoutExercise.sets?.append(copy)
+        workoutSessionRepository.insert(copy)
+        save()
+    }
+
+    /// Writes `reps`/`weight` to `set` and, when `propagating` names a field, copies
+    /// only that field to every later set of the same exercise that is still
+    /// incomplete.
+    ///
+    /// Propagating one field at a time is deliberate: a ramp-up scheme keeps its own
+    /// per-set weights when the user only fixes the rep count, and vice versa.
+    /// Already-logged sets are never rewritten — they record what actually happened.
+    func updateSet(
+        _ set: WorkoutSet,
+        in workoutExercise: WorkoutExercise,
+        reps: Int,
+        weight: Double,
+        propagating field: WorkoutSetField?
+    ) {
+        objectWillChange.send()
+        set.actualReps = reps
+        set.actualWeight = weight
+
+        if let field {
+            for following in workoutExercise.setsList
+            where following.order > set.order && !following.isCompleted {
+                switch field {
+                case .reps: following.actualReps = reps
+                case .weight: following.actualWeight = weight
+                }
+            }
+        }
+
+        save()
+    }
+
+    /// Pushes the running rest back by `interval`. Restarting through
+    /// `startRestTimer` is what keeps the notification, the Live Activity and the
+    /// persisted deadline in sync with the new end time.
+    func extendRestTimer(by interval: TimeInterval) {
+        guard isRestTimerActive else { return }
+        startRestTimer(duration: restTimeRemaining + interval)
     }
 
     // MARK: - Alternative Exercise Swapping

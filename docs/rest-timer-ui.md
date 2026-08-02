@@ -4,10 +4,13 @@
 
 During an active workout the iOS app shows a rest countdown in two states:
 
+- **Compact** (`WorkoutRestBar`) — **the default state.** A bar pinned above the
+  workout's action buttons with a small progress ring, the remaining time, a
+  fill that grows as the rest runs down, and **+30s** / **Continue** buttons.
+  Tapping the bar itself expands.
 - **Large** (`RestTimerView`) — a centered circular countdown ring, the remaining
   time, an optional reminder-warning banner, and **Minimize** / **Skip** buttons.
-- **Compact** (`CompactRestTimer`) — a slim top-banner row with a small progress
-  ring, the remaining time, and **Skip** / **Expand** buttons.
+  **Opt-in since the 2026-07-31 active-workout redesign** — see below.
 
 Both states live inside `ActiveWorkoutView` and are driven by the same
 `WorkoutViewModel` timer state (`isRestTimerActive`, `restTimeRemaining`,
@@ -22,22 +25,29 @@ local-notification side (scheduling, authorization, deadline handling) see
 
 ## Behavior
 
-- When a rest starts (`viewModel.isRestTimerActive` flips to `true`), the large
-  timer opens automatically.
-- **Minimize** collapses the large timer back to the compact top banner — the
-  countdown ring and time label *shrink and travel* into the banner position in
-  one continuous morph (see "The large↔compact morph" below).
-- **Tapping Expand** on the compact banner reverses the morph and reopens the
-  large timer.
-- **Skip** (in either state) stops the timer; the large timer then closes.
-- The compact banner is shown **only** while a rest is active *and* the large
-  timer is not shown (`isRestTimerActive && !showingRestTimerSheet`).
+- When a rest starts (`viewModel.isRestTimerActive` flips to `true`), the **bar**
+  appears. **The large timer no longer opens automatically** (changed
+  2026-07-31 with the active-workout redesign — see
+  `active-workout-redesign.md`): rest used to take over the screen the moment a
+  set was checked off, which blocked logging and correcting values while
+  resting. The bar is now the resting state and the large timer is opt-in.
+- **Tapping the bar** reverses the morph and opens the large timer.
+- **Minimize** collapses the large timer back to the bar — the countdown ring
+  and time label *shrink and travel* into the bar position in one continuous
+  morph (see "The large↔compact morph" below).
+- **+30s** on the bar calls `WorkoutViewModel.extendRestTimer(by: 30)`, which
+  restarts the timer at `restTimeRemaining + 30`. Restarting (rather than
+  mutating the deadline in place) is what keeps the local notification, the Live
+  Activity and the persisted deadline consistent with the new end time.
+- **Continue** on the bar and **Skip** in the large timer both call
+  `stopRestTimer()`; the large timer then closes.
+- The bar is shown **only** while a rest is active *and* the large timer is not
+  shown (`isRestTimerActive && !showingRestTimerOverlay`).
 - The countdown keeps running and updating throughout the morph — both states
   read the same view-model values, and both are briefly mounted during the
   transition.
 
-The large↔compact switch is a single `@State showingRestTimerSheet` toggle. (The
-name is historical — see below; it no longer drives a `.sheet`.) Every switch
+The large↔compact switch is a single `@State showingRestTimerOverlay` toggle. Every switch
 goes through `ActiveWorkoutView.setRestTimerExpanded(_:force:)`.
 
 ## Structure / architecture
@@ -45,14 +55,15 @@ goes through `ActiveWorkoutView.setRestTimerExpanded(_:force:)`.
 Both states are rendered inside `ActiveWorkoutView`'s own view tree (the same
 coordinate space), not in a separate presentation context:
 
-- The **compact** banner sits in a `.safeAreaInset(edge: .top)` above the
-  scrolling exercise list.
-- The **large** timer is an `if showingRestTimerSheet { … }` **full-screen
+- The **compact** bar sits in the `.safeAreaInset(edge: .bottom)` stack, directly
+  above `WorkoutFooterActions`. (Before 2026-07-31 it was a top-inset banner,
+  `CompactRestTimer`, now deleted.)
+- The **large** timer is an `if showingRestTimerOverlay { … }` **full-screen
   overlay** — the last child of the top-level `ZStack`, with an opaque
   `DesignSystem.Colors.background` behind it, `.transition(.opacity)`, and
   `.zIndex(1)` so it layers above the workout content.
 
-State transitions (auto-open on rest start, `onExpand`, `onDismiss`) all funnel
+State transitions (`onExpand`, `onDismiss`, the force-close when the timer stops) all funnel
 through `setRestTimerExpanded(_:force:)`, which runs a single
 `withAnimation(RestTimerMorph.animation)` transaction so exactly one variant is
 mounted at a time.
@@ -87,7 +98,7 @@ These are the non-obvious constraints; changing any of them breaks the morph:
    The first implementation matched `.frame`, and the countdown digits visibly
    **wiggled and snapped as the spring settled**: frame matching forces each
    label to render inside the *other* state's box — a largeTitle string squeezed
-   into the ~40pt banner box and vice versa — so the text re-laid out on every
+   into the ~40pt bar box and vice versa — so the text re-laid out on every
    animation step, and the parent `VStack`/`HStack` re-laid out with it.
    Position-only matching moves the label without ever touching its size
    proposal; `.fixedSize()` guarantees the intrinsic size regardless of what the
@@ -97,10 +108,10 @@ These are the non-obvious constraints; changing any of them breaks the morph:
    size; that was judged not worth the complexity for a 0.45s spring on a digit
    string.
 4. **`.geometryGroup()` on each state's container** (the large `ZStack` holding
-   ring + label, and the compact banner's root). It makes each subtree resolve
+   ring + label, and the rest bar's root). It makes each subtree resolve
    its geometry as one unit before the parent pushes changes down, which is
    Apple's prescribed fix for matched-geometry jank next to a scrolling
-   container — relevant here because the compact banner lives in a
+   container — relevant here because the rest bar lives in a
    `.safeAreaInset` above a `ScrollView`, whose content offset can otherwise be
    misread mid-animation.
 5. **Rapid re-toggles are guarded.** `setRestTimerExpanded(_:force:)` sets
@@ -137,7 +148,7 @@ The iOS 18+ zoom transition (`matchedTransitionSource` +
 only applies to a **presented** destination (full-screen cover or navigation
 push), which reintroduces exactly the presentation boundary that ticket 01
 removed, and it morphs the whole presented container rather than letting the
-shared ring and label fly independently into an in-tree banner. It also gives no
+shared ring and label fly independently into an in-tree bar. It also gives no
 control over the non-shared chrome. `matchedGeometryEffect` inside one hierarchy
 was chosen instead.
 
@@ -172,23 +183,23 @@ It closes itself solely through its injected `onDismiss` closure (which routes t
 `setRestTimerExpanded(false)` in `ActiveWorkoutView`).
 
 `ActiveWorkoutView` alone owns the open/close lifecycle: its
-`onChange(of: viewModel.isRestTimerActive)` opens the large timer when a rest
-starts and force-closes it when the timer stops, so an externally-stopped timer
-(e.g. Skip from elsewhere) still closes the large view. `RestTimerView`
+`onChange(of: viewModel.isRestTimerActive)` force-closes the large timer when the
+timer stops, so an externally-stopped timer (e.g. Skip from elsewhere) still
+closes the large view. It no longer opens it — that is now user-initiated only. `RestTimerView`
 deliberately has **no** `onChange` of its own — two handlers reacting to the same
 state change would race.
 
 A sheet also used to make the content behind it inert for VoiceOver; an in-tree
-overlay does not, so the workout list and the bottom `ActionBar` carry
-`.accessibilityHidden(showingRestTimerSheet)`.
+overlay does not, so the workout content (list, header inset and footer inset,
+including the rest bar) carries `.accessibilityHidden(showingRestTimerOverlay)`.
 
 ## Components
 
 | Component | File | Role |
 |-----------|------|------|
-| `ActiveWorkoutView` | `Presentation/Views/Workout/ActiveWorkoutView.swift` | Owns `showingRestTimerSheet`, the `@Namespace`, the `isRestTimerMorphing` guard and `setRestTimerExpanded(_:force:)`; hosts the compact banner (top safe-area inset) and the large overlay (ZStack child). |
+| `ActiveWorkoutView` | `Presentation/Views/Workout/ActiveWorkoutView.swift` | Owns `showingRestTimerOverlay`, the `@Namespace`, the `isRestTimerMorphing` guard and `setRestTimerExpanded(_:force:)`; hosts the bar (bottom safe-area inset) and the large overlay (ZStack child). |
 | `RestTimerView` | `Presentation/Views/Workout/RestTimerView.swift` | Large state: 160pt ring, time label, reminder warning, Minimize/Skip. |
-| `CompactRestTimer` | `Presentation/Views/Workout/CompactRestTimer.swift` | Compact state: 32pt ring, time label, Skip/Expand. (Extracted out of `ActiveWorkoutView.swift`, which is far over the file-size guideline.) |
+| `WorkoutRestBar` | `Presentation/Views/Workout/WorkoutRestBar.swift` | Compact state: 32pt ring, time label, elapsed fill, +30s/Continue, tap-to-expand. Replaced `CompactRestTimer` (deleted 2026-07-31). |
 | `RestTimerRing` | `Presentation/Views/Workout/RestTimerRing.swift` | The shared, size-agnostic countdown ring rendered by both states. |
 | `RestTimerMorph` | `Presentation/Views/Workout/RestTimerRing.swift` | Constants shared by both states: matched-geometry ids, the two diameters, and the spring animation. |
 | `WorkoutViewModel` | `Presentation/ViewModels/` | Source of truth for timer state and actions (`stopRestTimer`, `formatTime`, `restDuration`, …). |

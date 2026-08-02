@@ -982,3 +982,28 @@
 "seed.exercise.standing_calf_raise" = "Standing Calf Raise";
 "seed.exercise.seated_calf_raise" = "Seated Calf Raise";
 "seed.exercise.leg_press_calf_raise" = "Leg Press Calf Raise";
+
+// MARK: - Active Workout Redesign (2026-07-31)
+"workout.sets_progress" = "%d of %d sets";
+"workout.finish_with_progress" = "Finish · %d/%d";
+"workout.exercise.set_count" = "%d sets";
+"workout.exercise.sets_done" = "%d/%d sets";
+"workout.exercise.rep_goal" = "%@ reps";
+"workout.exercise.open_hint" = "Tap to open this exercise";
+"workout.exercise.actions" = "Actions for %@";
+"set.edit.context" = "%@ · Set %d";
+"set.edit.weight_title" = "Weight";
+"set.apply_to_following" = "Apply to all following sets";
+"set.duplicate" = "Duplicate Set";
+"set.actions" = "Actions for set %d";
+"set.outside_rep_goal" = "Outside the rep goal";
+"action.apply" = "Apply";
+"accessibility.set.complete" = "Complete set %d";
+"accessibility.set.uncomplete" = "Undo set %d";
+"accessibility.set.edit_reps" = "Edit reps of set %d";
+"accessibility.set.edit_weight" = "Edit weight of set %d";
+"rest_timer.extend" = "+30s";
+"rest_timer.next" = "Continue";
+"rest_timer.expand_hint" = "Tap to open the large timer";
+"superset.label" = "Superset %@";
+"superset.exercise_count" = "(%d exercises)";
