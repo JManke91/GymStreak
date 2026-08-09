@@ -274,6 +274,11 @@ struct WorkoutDetailView: View {
             .sheet(item: $overloadSheetExercise) { exercise in
                 WeightIncreaseSheet(
                     workoutExercise: exercise,
+                    // The apply raises the LIVE template, so preview that —
+                    // not what this historical workout happened to perform.
+                    templateFirstSet: viewModel.overloadTemplateFirstSet(
+                        from: workout, for: exercise
+                    ),
                     onApply: { increment in
                         if let newWeight = viewModel.applyProgressiveOverloadFromHistory(
                             from: workout, for: exercise, weightIncrement: increment
@@ -302,14 +307,18 @@ struct WorkoutDetailView: View {
             && !exercise.progressiveOverloadApplied
             && !viewModel.hasResolvableOverloadTemplate(from: workout, for: exercise)
 
+        let templateFirstSet = viewModel.overloadTemplateFirstSet(from: workout, for: exercise)
         return ProgressiveOverloadCard(
             exercise: exercise,
             libraryExercise: viewModel.performedExercise(in: workout, for: exercise),
             canUndo: false,
             appliedOverride: isApplied,
             appliedWeight: appliedNow,
-            hasAmbiguousAppliedWeight: appliedNow == nil
-                && appliedOverloadExerciseIDs.contains(exercise.id),
+            // An increase applied on iPhone during the workout leaves no
+            // correlation record and no bumped set to read a weight off, so its
+            // confirmed row states that all sets moved rather than a number.
+            hasAmbiguousAppliedWeight: appliedNow == nil,
+            templateWeight: templateFirstSet?.weight,
             isTemplateUnavailable: unavailable,
             onIncrease: { overloadSheetExercise = exercise },
             onUndo: {}

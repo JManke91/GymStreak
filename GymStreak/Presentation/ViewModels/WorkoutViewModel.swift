@@ -116,6 +116,11 @@ class WorkoutViewModel: ObservableObject {
         let templateSetValues: [UUID: TemplateValues]
     }
     private var overloadSnapshots: [UUID: OverloadSnapshot] = [:]
+    /// workoutExercise.id → the new uniform template weight an applied increase
+    /// produced, or nil for a nonuniform (pyramid/drop) scheme. The workout's
+    /// own sets keep the performance, so the confirmed card reads the announced
+    /// weight from here instead of off them.
+    private var appliedOverloadWeights: [UUID: Double?] = [:]
 
     private var isUITesting: Bool {
         ProcessInfo.processInfo.arguments.contains("-UI_TESTING")
@@ -602,6 +607,7 @@ class WorkoutViewModel: ObservableObject {
         currentSetIndex = 0
         healthKitSyncStatus = .idle
         overloadSnapshots.removeAll()
+        appliedOverloadWeights.removeAll()
     }
 
     func pauseForCompletion() {
@@ -634,6 +640,7 @@ class WorkoutViewModel: ObservableObject {
         currentSession = nil
         elapsedTime = 0
         overloadSnapshots.removeAll()
+        appliedOverloadWeights.removeAll()
     }
 
     private func saveWorkoutToHealthKit(session: WorkoutSession) {
@@ -785,9 +792,18 @@ class WorkoutViewModel: ObservableObject {
         save()
     }
 
-    /// Apply progressive overload: updates both the active workout sets (for immediate UI feedback)
-    /// and the routine template (for future workouts).
-    /// plannedWeight/plannedReps are preserved as the actual pre-overload performance for history/comparison.
+    /// Apply progressive overload: raises the routine template (for future workouts).
+    ///
+    /// It deliberately does NOT touch the sets of the workout in progress. The
+    /// suggestion only appears once every set of the exercise is completed at
+    /// the rep max, so there is nothing left to perform at the new weight —
+    /// writing the proposal into the live sets rewrote work the user had
+    /// already done and displayed numbers they never lifted. The Watch applies
+    /// the same rule (`WatchWorkoutViewModel+ProgressiveOverloadApply`).
+    ///
+    /// plannedWeight/plannedReps still take the performance, because
+    /// `progressiveOverloadApplied` makes every aggregator read the planned
+    /// fields back out as the performed values.
     func applyProgressiveOverload(for workoutExercise: WorkoutExercise, weightIncrement: Double) {
         let minReps = workoutExercise.targetRepMin ?? 1
 
@@ -796,24 +812,14 @@ class WorkoutViewModel: ObservableObject {
         var workoutSetValues: [UUID: OverloadSnapshot.SetValues] = [:]
         var templateSetValues: [UUID: OverloadSnapshot.TemplateValues] = [:]
 
-        // Snapshot current actual performance into planned values (for comparison/history accuracy),
-        // then update actual values with overloaded values for UI display
         let workoutSets = workoutExercise.setsList
-        let increase = ProgressiveOverloadService.applyIncrease(
-            toWeights: workoutSets.map(\.actualWeight),
-            increment: weightIncrement,
-            targetRepMin: minReps,
-            loadBehavior: workoutExercise.loadBehavior
-        )
-        for (set, newWeight) in zip(workoutSets, increase.weights) {
+        for set in workoutSets {
             workoutSetValues[set.id] = OverloadSnapshot.SetValues(
                 plannedReps: set.plannedReps, actualReps: set.actualReps,
                 plannedWeight: set.plannedWeight, actualWeight: set.actualWeight
             )
             set.plannedReps = set.actualReps
             set.plannedWeight = set.actualWeight
-            set.actualWeight = newWeight
-            set.actualReps = increase.reps
         }
 
         // Mark that progressive overload was applied
@@ -822,6 +828,7 @@ class WorkoutViewModel: ObservableObject {
         // Update routine template (so it persists for future workouts). A swapped
         // exercise writes into the performed alternative's own set scheme — the
         // primary slot's sets stay untouched.
+        var newTemplateWeights: [Double] = []
         if workoutExercise.wasSwapped {
             if let alternative = alternativeEntry(for: workoutExercise) {
                 let templateSets = alternative.setsList
@@ -836,6 +843,7 @@ class WorkoutViewModel: ObservableObject {
                     set.weight = newWeight
                     set.reps = templateIncrease.reps
                 }
+                newTemplateWeights = templateIncrease.weights
             }
         } else if let routineExercise = routineExercise(for: workoutExercise) {
             let templateSets = routineExercise.setsList
@@ -850,6 +858,22 @@ class WorkoutViewModel: ObservableObject {
                 set.weight = newWeight
                 set.reps = templateIncrease.reps
             }
+            newTemplateWeights = templateIncrease.weights
+        }
+
+        // The confirmed card can no longer read the new weight off the workout's
+        // sets (they keep the performance), so the value it announces is
+        // recorded here. Nil means the target's sets don't share one weight —
+        // a pyramid or drop scheme — and the card then says "all sets adjusted"
+        // instead of naming a weight that is wrong for every set but the first.
+        // This mirrors what the History card reads out of the durable
+        // correlation ledger for a Watch-applied increase.
+        // No entry at all when nothing was written (unresolvable slot, swapped
+        // exercise with no matching alternative, empty scheme) — recording one
+        // would make the card announce an adjustment that never happened.
+        if let first = newTemplateWeights.first {
+            let isUniform = newTemplateWeights.dropFirst().allSatisfy { $0 == first }
+            appliedOverloadWeights[workoutExercise.id] = isUniform ? first : nil
         }
 
         overloadSnapshots[workoutExercise.id] = OverloadSnapshot(
@@ -928,6 +952,53 @@ class WorkoutViewModel: ObservableObject {
         overloadSnapshots[workoutExercise.id] != nil
     }
 
+    /// The weight an applied increase raised the template to, for the confirmed
+    /// card. Nil when the increase came from a nonuniform scheme (or from a
+    /// session this view model no longer holds a snapshot for).
+    func appliedOverloadWeight(for workoutExercise: WorkoutExercise) -> Double? {
+        appliedOverloadWeights[workoutExercise.id] ?? nil
+    }
+
+    /// An increase was applied, but its target's sets do not share one weight,
+    /// so no single number is true of the whole exercise.
+    func hasNonUniformAppliedOverload(for workoutExercise: WorkoutExercise) -> Bool {
+        appliedOverloadWeights[workoutExercise.id] == .some(nil)
+    }
+
+    /// The template values an increase would start from — what the apply
+    /// actually raises. The performed values can differ (the user lifted more
+    /// or less than planned), and previewing those would announce a different
+    /// number than the confirmation. Nil when the template target can't be
+    /// resolved, in which case the caller keeps its performed-value preview.
+    func overloadTemplateFirstSet(for workoutExercise: WorkoutExercise) -> (weight: Double, reps: Int)? {
+        guard let routine = currentSession?.routine else { return nil }
+        return overloadTemplateFirstSet(in: routine, for: workoutExercise)
+    }
+
+    /// Same resolution against a completed session's routine, for the History
+    /// surfaces (which apply to the live template, not to the recorded workout).
+    func overloadTemplateFirstSet(
+        from session: WorkoutSession, for workoutExercise: WorkoutExercise
+    ) -> (weight: Double, reps: Int)? {
+        guard let routine = session.routine else { return nil }
+        return overloadTemplateFirstSet(in: routine, for: workoutExercise)
+    }
+
+    private func overloadTemplateFirstSet(
+        in routine: Routine, for workoutExercise: WorkoutExercise
+    ) -> (weight: Double, reps: Int)? {
+        let sets: [(weight: Double, reps: Int, order: Int)]
+        if workoutExercise.wasSwapped {
+            guard let alternative = alternativeEntry(in: routine, for: workoutExercise) else { return nil }
+            sets = alternative.setsList.map { ($0.weight, $0.reps, $0.order) }
+        } else {
+            guard let slot = routineExercise(in: routine, for: workoutExercise) else { return nil }
+            sets = slot.setsList.map { ($0.weight, $0.reps, $0.order) }
+        }
+        guard let first = sets.sorted(by: { $0.order < $1.order }).first else { return nil }
+        return (first.weight, first.reps)
+    }
+
     /// Reverts an overload applied during this session: restores the sets'
     /// pre-apply planned/actual values and the routine template's set scheme.
     func undoProgressiveOverload(for workoutExercise: WorkoutExercise) {
@@ -943,6 +1014,7 @@ class WorkoutViewModel: ObservableObject {
             set.actualWeight = values.actualWeight
         }
         workoutExercise.progressiveOverloadApplied = false
+        appliedOverloadWeights.removeValue(forKey: workoutExercise.id)
 
         if workoutExercise.wasSwapped {
             if let alternative = alternativeEntry(for: workoutExercise) {
@@ -1900,6 +1972,18 @@ class WorkoutViewModel: ObservableObject {
         workoutExercise.routineExerciseId = routineExercise.id
     }
 
+    /// An exercise whose progressive-overload apply owns the template scheme is
+    /// excluded from generic set-value writeback: its performed values are by
+    /// definition the weights from BEFORE the increase, so writing them back at
+    /// Save would silently undo the increase and immediately re-qualify the
+    /// exercise. (Until the increase stopped rewriting the live sets this was
+    /// harmless only by accident — the performed values had been overwritten
+    /// with the overload target.) Both Watch paths already apply this rule via
+    /// `overloadAppliedExerciseIDs` — `WatchRoutineTemplateFold` and
+    /// `WatchTemplateTransactionService+Validation`. Set count, order and rest
+    /// time still reconcile; a set ADDED during such a workout still seeds its
+    /// new template set from the performance, since it has no counterpart the
+    /// increase could have raised.
     private func updatePrimaryTemplateSets(
         _ routineExercise: RoutineExercise,
         from workoutExercise: WorkoutExercise
@@ -1907,6 +1991,7 @@ class WorkoutViewModel: ObservableObject {
         let exerciseRestTime = workoutExercise.setsList.first?.restTime ?? 60.0
         let workoutSets = workoutExercise.setsList.sorted(by: { $0.order < $1.order })
         var routineSets = routineExercise.setsList.sorted(by: { $0.order < $1.order })
+        let writesSetValues = !workoutExercise.progressiveOverloadApplied
 
         if routineSets.count > workoutSets.count {
             for routineSet in routineSets[workoutSets.count...] {
@@ -1920,18 +2005,24 @@ class WorkoutViewModel: ObservableObject {
             routineSet.order = index
             routineSet.restTime = exerciseRestTime
             let workoutSet = workoutSets[index]
-            if workoutSet.isCompleted {
+            if workoutSet.isCompleted && writesSetValues {
                 routineSet.reps = workoutSet.actualReps
                 routineSet.weight = workoutSet.actualWeight
             }
         }
 
         if workoutSets.count > routineSets.count {
+            // A set added during the workout has no template counterpart the
+            // increase could have raised, so for an overload-applied exercise
+            // it inherits the raised scheme (last template set) instead of the
+            // pre-increase performance — otherwise the template ends up mixing
+            // raised and unraised sets.
+            let raised = writesSetValues ? nil : routineSets.last
             for index in routineSets.count..<workoutSets.count {
                 let workoutSet = workoutSets[index]
                 let newRoutineSet = ExerciseSet(
-                    reps: workoutSet.actualReps,
-                    weight: workoutSet.actualWeight,
+                    reps: raised?.reps ?? workoutSet.actualReps,
+                    weight: raised?.weight ?? workoutSet.actualWeight,
                     restTime: exerciseRestTime,
                     order: index
                 )
@@ -1946,11 +2037,13 @@ class WorkoutViewModel: ObservableObject {
 
     /// Mirrors the primary-set template update for a performed alternative:
     /// reps/weight from completed sets, rest time from the exercise, and the
-    /// alternative's set count reconciled to the session's.
+    /// alternative's set count reconciled to the session's. The same
+    /// overload-applied exclusion as `updatePrimaryTemplateSets` applies.
     private func updateAlternativeTemplateSets(_ alternative: RoutineExerciseAlternative, from workoutExercise: WorkoutExercise) {
         let exerciseRestTime = workoutExercise.setsList.first?.restTime ?? 60.0
         let workoutSets = workoutExercise.setsList.sorted(by: { $0.order < $1.order })
         var alternativeSets = alternative.setsList
+        let writesSetValues = !workoutExercise.progressiveOverloadApplied
 
         // Remove surplus template sets beyond the session's set count
         if alternativeSets.count > workoutSets.count {
@@ -1966,19 +2059,22 @@ class WorkoutViewModel: ObservableObject {
             alternativeSet.order = index
             alternativeSet.restTime = exerciseRestTime
             let workoutSet = workoutSets[index]
-            if workoutSet.isCompleted {
+            if workoutSet.isCompleted && writesSetValues {
                 alternativeSet.reps = workoutSet.actualReps
                 alternativeSet.weight = workoutSet.actualWeight
             }
         }
 
-        // Append new template sets for extra session sets
+        // Append new template sets for extra session sets. Same rule as the
+        // primary path: an overload-applied exercise seeds them from the raised
+        // scheme, not from the pre-increase performance.
         if workoutSets.count > alternativeSets.count {
+            let raised = writesSetValues ? nil : alternativeSets.last
             for index in alternativeSets.count..<workoutSets.count {
                 let workoutSet = workoutSets[index]
                 let newSet = AlternativeExerciseSet(
-                    reps: workoutSet.actualReps,
-                    weight: workoutSet.actualWeight,
+                    reps: raised?.reps ?? workoutSet.actualReps,
+                    weight: raised?.weight ?? workoutSet.actualWeight,
                     restTime: exerciseRestTime,
                     order: index
                 )

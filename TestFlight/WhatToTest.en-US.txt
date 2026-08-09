@@ -5,3 +5,6 @@
 - Rest no longer takes over the screen. A rest bar sits above the workout buttons with +30s and Continue; tap it if you want the large timer.
 - Each set has a new menu with Duplicate set and Delete set.
 - Fixed a bug where a workout finished on the Apple Watch with "Save & update template" could stay stuck on the watch and never appear on the iPhone, even though it was saved to Apple Health. Affected workouts are sent automatically the next time you open the app.
+- Building on that fix: a watch workout and the routine update it requests are now sent to the iPhone as two separate items, so a routine update that cannot be confirmed can never hold back the workout itself.
+- If a routine change you accepted on your watch can never be applied, the watch now tells you: a notice appears on the routine list with the reason, and stays until you dismiss it. Changes that are simply still on their way to your iPhone stay silent, as before.
+- A weight increase after hitting your rep goal now only applies to your next workout. The sets you just completed keep the values you actually lifted, on both iPhone and Apple Watch.

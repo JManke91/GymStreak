@@ -143,12 +143,15 @@ struct WatchSummaryOverloadWireTests {
             routineID: routineID, transactionID: overloadID
         )
 
-        let workoutEntry = try #require(store.entry(id: workout.id))
-        #expect(workoutEntry.templateTransaction?.sequence == 0)
+        let workoutTemplate = try #require(Fixtures.templateEntry(in: store, forWorkout: workout.id))
+        #expect(workoutTemplate.templateTransaction?.sequence == 0)
         let overloadEntry = try #require(store.all.first { $0.id == overloadID })
         #expect(overloadEntry.templateTransaction?.sequence == 1)
-        // FIFO: the workout owns the earlier sequence and transports first.
-        #expect(store.transportEligibleEntries().isEmpty, "the workout is still awaiting HealthKit")
+        // FIFO: the workout's template transaction owns the earlier sequence and
+        // is the only eligible one. Since the history/template split it no longer
+        // waits on HealthKit — only the workout's history half does.
+        #expect(store.transportEligibleEntries().map(\.id) == [workoutTemplate.id])
+        #expect(store.entry(id: workout.id)?.phase == .awaitingHealthKitFinish)
     }
 
     /// The reason the correlation cannot assume the workout arrives first: a

@@ -60,7 +60,7 @@ The model computed properties (`RoutineExercise.allSetsAtUpperLimit`, `WorkoutEx
 - Optional `Int?` fields with nil defaults for seamless CloudKit/SwiftData lightweight migration
 - Rep range on `RoutineExercise` (not `Exercise`) so different routines can use different ranges
 - Denormalized to `WorkoutExercise` so history shows the range active at workout time
-- When progressive overload is applied, `plannedWeight`/`plannedReps` on `WorkoutSet` are snapshotted from the current `actualWeight`/`actualReps` to preserve the user's actual performance. `actualWeight`/`actualReps` are then updated to the new overloaded values (for UI). All comparison/history/chart logic uses planned values when this flag is set.
+- When progressive overload is applied, `plannedWeight`/`plannedReps` on `WorkoutSet` are snapshotted from the current `actualWeight`/`actualReps` to preserve the user's actual performance, and `progressiveOverloadApplied` switches all comparison/history/chart logic to read the planned values. **`actualWeight`/`actualReps` are left at the performance** — the increase belongs to the next workout, not this one (see "The increase never touches the workout in progress" below).
 
 ### Watch Models
 
@@ -77,7 +77,7 @@ The model computed properties (`RoutineExercise.allSetsAtUpperLimit`, `WorkoutEx
 - `applyProgressiveOverload(for:weightIncrement:)` - Increases weight and resets reps to min for all sets, via `ProgressiveOverloadService.applyIncrease`
 
 **`WorkoutViewModel`**:
-- `applyProgressiveOverload(for:weightIncrement:)` - Gets the new weights/reps from `ProgressiveOverloadService.applyIncrease` (for both the live workout sets and the routine template), and owns the persistence workflow around it: planned-value snapshotting, setting `progressiveOverloadApplied`, and saving. Also captures an in-memory pre-apply snapshot (per-set planned/actual values + template set values) keyed by `WorkoutExercise.id` to power Undo
+- `applyProgressiveOverload(for:weightIncrement:)` - Gets the new weights/reps from `ProgressiveOverloadService.applyIncrease` **for the routine template only** (the workout in progress is never rewritten — see "The increase never touches the workout in progress"), and owns the persistence workflow around it: planned-value snapshotting, setting `progressiveOverloadApplied`, recording the announced new weight for the confirmed card, and saving. Also captures an in-memory pre-apply snapshot (per-set planned/actual values + template set values) keyed by `WorkoutExercise.id` to power Undo
 - `routineExercise(for:)` - Resolves the routine-template slot a `WorkoutExercise` originated from, swapped or not: matches by `routineExerciseId` (stable slot identity) first, falls back to the originally-planned exercise id/name for legacy data (mirroring `updateRoutineTemplate`)
 - `performedExercise(for:)` / private `alternativeEntry(for:)` - For a swapped exercise, resolve the performed alternative's library `Exercise` and its `RoutineExerciseAlternative` entry. **Swap rule (2026-07 fix):** applying overload on a swapped exercise writes into the *alternative's own set scheme* (`AlternativeExerciseSet`), never the primary slot's sets — the same rule `updateRoutineTemplate` follows. Before this fix the whole overload path was dead for swaps: the mid-workout banner resolved the slot by performed-exercise name, which never matches the primary, so "Increase" was a silent no-op
 - `overloadSuggestionExercises` - The completion screen's eligibility list: rep goal maxed AND (already applied OR a persistable template target exists — the slot's sets, or the alternative's set scheme for swaps)
@@ -257,16 +257,16 @@ never did.
 
 ### Why the completed workout can't regress the overload
 
-This is the subtle part. The established iOS invariant
-(`WorkoutViewModel.applyProgressiveOverload`) is that the flag and a value swap
-are **one unit**: applying moves the performance into `plannedReps/plannedWeight`,
-writes the next workout's target into `actualReps/actualWeight`, and sets
-`progressiveOverloadApplied` — which switches every aggregator
-(`WorkoutSession.aggregates`, charts, personal records, all four AI Coach
-aggregators) to read the planned values. Setting one without the other corrupts
-volume, charts, and records.
+This is the subtle part. The iOS invariant
+(`WorkoutViewModel.applyProgressiveOverload`) is that the flag and the planned
+snapshot are **one unit**: applying mirrors the performance into
+`plannedReps/plannedWeight` and sets `progressiveOverloadApplied` — which
+switches every aggregator (`WorkoutSession.aggregates`, charts, personal
+records, all four AI Coach aggregators) to read the planned values. Setting one
+without the other corrupts volume, charts, and records: the flag alone makes
+them report the original *template* numbers as if they had been performed.
 
-The Watch mirrors that swap exactly and reports the affected slots in
+The Watch mirrors that snapshot exactly and reports the affected slots in
 `overloadAppliedExerciseIDs`. On ingest, `WatchWorkoutIngestionService` sets
 `progressiveOverloadApplied` for exactly those exercises, so history reads the
 performed values back out of the planned fields.
@@ -689,7 +689,7 @@ requirement (never silently reverting to an Apply button) holds without it.
 When `applyProgressiveOverload` is called during a workout:
 
 1. **`WorkoutSet.plannedWeight/plannedReps`** are snapshotted from `actualWeight/actualReps` — preserving the user's actual performance before overload
-2. **`WorkoutSet.actualWeight/actualReps`** are then updated to the new overloaded values (higher weight, min reps) for UI display
+2. **`WorkoutSet.actualWeight/actualReps`** are left untouched: they are the performance, and the increase is for the next workout (see "The increase never touches the workout in progress")
 3. **`WorkoutExercise.progressiveOverloadApplied`** is set to `true`
 4. **Routine template** (`ExerciseSet`) is updated with the new weight/reps for future workouts
 
@@ -702,6 +702,71 @@ The following services check `progressiveOverloadApplied` and use planned values
 This ensures the summary screen, workout detail view, and progress charts all show the user's actual performance rather than the overloaded values.
 
 The completion screen's apply path is the **same** `applyProgressiveOverload` call, so applying there never rewrites the session's history either — the just-performed reps/weights survive in `plannedReps`/`plannedWeight` via the identical snapshot. Undo (completion screen only) restores both the session sets' pre-apply planned/actual values and the template's set scheme (the alternative's for swapped exercises) from the in-memory snapshot; it is intentionally unavailable after the session ends.
+
+### The increase never touches the workout in progress (fixed 2026-08-07)
+
+Applying an increase used to also write the proposal into the live sets:
+`actualWeight = newWeight`, `actualReps = targetRepMin`, on both platforms
+(`WorkoutViewModel.applyProgressiveOverload`,
+`WatchWorkoutViewModel+ProgressiveOverloadApply`). That was wrong on its own
+terms: the suggestion only appears once **every set of the exercise is completed**
+at the rep max (`ProgressiveOverloadService.qualifies`), so there is nothing left
+to perform at the new weight. The user saw sets they had just finished re-labelled
+with a weight they never lifted, and the recap/summary reported those numbers back
+to them.
+
+Both platforms now raise only the template. What stayed is the planned snapshot —
+`plannedX = actualX` — because `progressiveOverloadApplied` redirects every
+aggregator to the planned fields; dropping it would make history, volume, charts
+and records report the original template values as the performance.
+
+Two consequences worth knowing:
+
+- **No surface may read the announced weight off the workout's sets any more** —
+  they hold the performance, which is exactly the weight the increase moved
+  *away from*. `ProgressiveOverloadCard.confirmedWeight` therefore uses only what
+  the caller supplies: the completion screen passes
+  `WorkoutViewModel.appliedOverloadWeight(for:)` /
+  `hasNonUniformAppliedOverload(for:)`, and History passes the weight from the
+  Watch correlation ledger. When nobody knows it — a nonuniform pyramid/drop
+  scheme, or an increase applied on iPhone during a workout, which leaves no
+  correlation record — the row says "all sets adjusted" instead of naming a
+  number that would be wrong. The actionable CTA's struck-through weight and the
+  `WeightIncreaseSheet` preview likewise show the **template** value
+  (`WorkoutViewModel.overloadTemplateFirstSet(for:)`, and its
+  `from:session:` variant for History), so the picker can never preview one
+  number and the confirmation announce another. On the Watch the confirmation
+  already announced the template-derived weight and needed no change.
+
+- **A set added during an overloaded workout joins the raised scheme.** It has no
+  template counterpart the increase could have raised, so `updatePrimary/
+  AlternativeTemplateSets` seeds it from the last raised template set rather than
+  from the performance — otherwise Save left the template mixing raised and
+  unraised sets.
+- **iOS's end-of-workout template writeback needed an exclusion.**
+  `updateRoutineTemplate` → `updatePrimary/AlternativeTemplateSets` writes each
+  completed set's `actual*` back into the template, and the default-on "Update
+  routine template" toggle means it runs on nearly every save. It only ever
+  agreed with an applied increase by accident — `actual*` had been overwritten
+  with the overload target. With the performance left in place it would write the
+  *pre-increase* weight back and silently undo the increase, re-qualifying the
+  exercise immediately. Exercises with `progressiveOverloadApplied` are now
+  skipped for set VALUES (count, order and rest time still reconcile; a set added
+  during such a workout still seeds from the performance, having no counterpart
+  the increase could have raised). Both Watch paths already had this rule via
+  `overloadAppliedExerciseIDs` — `WatchRoutineTemplateFold` and
+  `WatchTemplateTransactionService+Validation`; only the iOS-native path was
+  unprotected.
+
+- **What it does NOT change: the Watch's End-workout template prompt.** An
+  exercise with an applied increase never counts as "modified" — the planned
+  snapshot equalises planned and actual, and
+  `WatchWorkoutViewModel.isOverloadResolved` excludes it regardless. That is
+  deliberate and unchanged: the completed workout's writeback skips those slots,
+  so offering "Update your routine template?" for them would promise a change
+  that is never written. If every exercise the user edited also received an
+  increase, the End dialog therefore still shows no template question — the
+  increase *is* that exercise's template update.
 
 **Root cause fixed (2026-07, swapped exercises):** every overload surface used to resolve the template slot by comparing the *performed* exercise name against slot primaries (`exercise?.name == workoutExercise.exerciseName`). For a swapped exercise the names never match, so the mid-workout banner's "Increase" silently did nothing (nil sheet item) and the mid-workout template write no-opped. Resolution now goes through `WorkoutViewModel.routineExercise(for:)` (stable `routineExerciseId`, then planned-exercise fallback) and swapped exercises persist into the alternative's own set scheme. Do not reintroduce name-based slot matching against performed names.
 

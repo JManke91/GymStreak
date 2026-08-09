@@ -114,11 +114,12 @@ final class WatchWorkoutIngestionService {
 
         // Targets the watch applied progressive overload to during this workout
         // (ticket 04). The watch mirrors `WorkoutViewModel.applyProgressiveOverload`
-        // before freezing: the performance is stored in the `planned*` values and
-        // the next workout's target in `actual*`. This flag is what tells every
-        // aggregator (volume, charts, records, AI Coach) to read `planned*`, so
-        // it must be set for exactly those exercises or history would report the
-        // new target as the performed work.
+        // before freezing: the performance is stored in the `planned*` values —
+        // and left in `actual*`, since the increase belongs to the NEXT workout
+        // and never rewrites the one just performed. This flag is what tells
+        // every aggregator (volume, charts, records, AI Coach) to read
+        // `planned*`, so it must be set for exactly those exercises or history
+        // would report the routine's old template values as the performed work.
         let overloadAppliedIDs = Set(workout.overloadAppliedExerciseIDs)
 
         for completedExercise in workout.exercises {

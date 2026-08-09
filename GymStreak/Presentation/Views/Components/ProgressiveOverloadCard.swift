@@ -22,15 +22,19 @@ struct ProgressiveOverloadCard: View {
     /// live template. The historical `WorkoutExercise` is never mutated, so its
     /// own `progressiveOverloadApplied` flag stays false.
     var appliedOverride: Bool = false
-    /// History surface only: the new template weight to show in the confirmed
-    /// row — the historical workout sets aren't bumped, so it can't be read
-    /// off them (as it can on the live completion screen).
+    /// The new template weight for the confirmed row. Required on EVERY surface:
+    /// an applied increase raises the template and leaves the workout's sets at
+    /// the performance, so this can no longer be read off them anywhere. Nil
+    /// falls back to the weight-free confirmation.
     var appliedWeight: Double? = nil
-    /// History surface only: the increase was applied (from the Watch recap),
-    /// but the target's sets do not all share one weight — a pyramid or drop
-    /// scheme. The confirmed row then states that all sets moved instead of
-    /// naming a weight that is wrong for every set but the first.
+    /// The increase was applied, but the target's sets do not all share one
+    /// weight — a pyramid or drop scheme. The confirmed row then states that all
+    /// sets moved instead of naming a weight that is wrong for every set but
+    /// the first.
     var hasAmbiguousAppliedWeight: Bool = false
+    /// The live template's current first-set weight, struck through in the
+    /// actionable CTA. Nil falls back to the performed weight.
+    var templateWeight: Double? = nil
     /// History surface only: the source routine/exercise no longer exists, so
     /// the increase can't be applied. Replaces the CTA with a muted note.
     var isTemplateUnavailable: Bool = false
@@ -42,7 +46,18 @@ struct ProgressiveOverloadCard: View {
     private var isApplied: Bool { exercise.progressiveOverloadApplied || appliedOverride }
     private var isAssistance: Bool { exercise.loadBehavior.isCounterweightAssistance }
     private var sortedSets: [WorkoutSet] { exercise.setsList.sorted { $0.order < $1.order } }
-    private var currentWeight: Double { appliedWeight ?? (sortedSets.first?.actualWeight ?? 0) }
+
+    /// The weight the confirmed row may announce. An applied increase raises
+    /// the TEMPLATE and leaves the workout's sets at the performance, so it can
+    /// never be read off `exercise` — only a caller that knows what was written
+    /// can supply it. Nil (unknown, or a nonuniform pyramid/drop scheme) renders
+    /// "all sets adjusted" rather than a number that would be wrong.
+    private var confirmedWeight: Double? { hasAmbiguousAppliedWeight ? nil : appliedWeight }
+
+    /// The weight the actionable CTA strikes through: what an increase would
+    /// start from, i.e. the live template. Falls back to the performance only
+    /// when the caller could not resolve the template.
+    private var actionableCurrentWeight: Double { templateWeight ?? sortedSets.first?.actualWeight ?? 0 }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -171,7 +186,7 @@ struct ProgressiveOverloadCard: View {
                     .font(.system(size: 14, weight: .bold))
                 Text((isAssistance ? "exercise.reduce_assistance" : "rep_range.increase_weight").localized)
                     .font(.system(size: 15.5, weight: .bold))
-                Text(formattedWeight(currentWeight))
+                Text(formattedWeight(actionableCurrentWeight))
                     .font(.system(size: 15.5, weight: .semibold))
                     .strikethrough()
                     .opacity(0.55)
@@ -209,7 +224,7 @@ struct ProgressiveOverloadCard: View {
                 .background(DesignSystem.Colors.tint, in: Circle())
 
             VStack(alignment: .leading, spacing: 2) {
-                if hasAmbiguousAppliedWeight {
+                if confirmedWeight == nil {
                     Text(accentedText(
                         "rep_range.overload_card.all_sets_adjusted".localized,
                         accent: DesignSystem.Colors.tint
@@ -225,7 +240,7 @@ struct ProgressiveOverloadCard: View {
                 } else {
                     Text(accentedText(
                         (isAssistance ? "rep_range.overload_card.reduced_to" : "rep_range.overload_card.increased_to")
-                            .localized(formattedWeight(currentWeight)),
+                            .localized(formattedWeight(confirmedWeight ?? 0)),
                         accent: DesignSystem.Colors.tint
                     ))
                     .font(.system(size: 14.5, weight: .bold))
@@ -234,7 +249,7 @@ struct ProgressiveOverloadCard: View {
                     Text("rep_range.overload_card.next_workout".localized(
                         sortedSets.count,
                         exercise.targetRepMin ?? 0,
-                        formattedWeight(currentWeight)
+                        formattedWeight(confirmedWeight ?? 0)
                     ))
                     .font(.system(size: 12, weight: .medium))
                     .foregroundStyle(DesignSystem.Colors.textSecondary)

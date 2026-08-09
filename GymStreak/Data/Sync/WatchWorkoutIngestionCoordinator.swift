@@ -95,8 +95,10 @@ final class WatchWorkoutIngestionCoordinator {
 
     private func process(_ entry: WatchWorkoutInboxStore.Entry) {
         guard let workout = entry.completedWorkout else {
-            // A template-only kind (progressive overload) can advance the
-            // per-routine sequence too, which releases a successor that was
+            // A template-only kind — progressive overload, or the split
+            // template intent of a workout whose history travels as its own
+            // entry — can advance the per-routine sequence too, which releases
+            // a successor that was
             // visited earlier in this same pass and buffered because its
             // predecessor had not arrived yet. Same handling as the
             // completed-workout branch below — dropping the result here would

@@ -607,6 +607,184 @@ struct WorkoutViewModelTests {
         #expect(viewModel.healthKitDeleteFailed == false)
     }
 
+    /// The mid-workout increase belongs to the NEXT workout. It is only offered
+    /// once every set of the exercise is completed at the rep max, so writing
+    /// the proposal into the live sets would rewrite work already done and show
+    /// the user numbers they never lifted.
+    @Test
+    func applyingOverloadMidWorkoutRaisesTheTemplateWithoutRewritingThePerformance() throws {
+        let context = ModelContext(InMemoryModelContainer.make())
+        let sessionRepository = SwiftDataWorkoutSessionRepository(modelContext: context)
+        let routineRepository = SwiftDataRoutineRepository(modelContext: context)
+        let scenario = try makeHistoryScenario(
+            context: context, routineRepository: routineRepository, sessionRepository: sessionRepository
+        )
+        let viewModel = makeViewModel(
+            sessionRepository: sessionRepository, routineRepository: routineRepository,
+            exerciseRepository: SwiftDataExerciseRepository(modelContext: context)
+        )
+        viewModel.currentSession = scenario.session
+        let performedSet = try #require(scenario.workoutExercise.setsList.first)
+
+        viewModel.applyProgressiveOverload(for: scenario.workoutExercise, weightIncrement: 2.5)
+
+        // The template — and only the template — moves.
+        let templateSet = try #require(scenario.slot.setsList.first)
+        #expect(templateSet.weight == 52.5)
+        #expect(templateSet.reps == 8)
+        #expect(viewModel.appliedOverloadWeight(for: scenario.workoutExercise) == 52.5)
+        #expect(viewModel.hasNonUniformAppliedOverload(for: scenario.workoutExercise) == false)
+
+        // What the user actually lifted stays on the workout, in BOTH fields:
+        // `progressiveOverloadApplied` makes every aggregator read the planned
+        // ones back out, so they have to carry the performance too.
+        #expect(performedSet.actualWeight == 50)
+        #expect(performedSet.actualReps == 12)
+        #expect(performedSet.plannedWeight == 50)
+        #expect(performedSet.plannedReps == 12)
+        #expect(scenario.workoutExercise.progressiveOverloadApplied)
+    }
+
+    /// The default-on "Update routine template" toggle writes every completed
+    /// set's performed values back into the template. Those values are, for an
+    /// overloaded exercise, the weights from BEFORE the increase — writing them
+    /// back would silently undo it (and re-qualify the exercise at once).
+    @Test
+    func savingWithTemplateUpdateDoesNotWriteThePerformanceOverAnAppliedIncrease() throws {
+        let context = ModelContext(InMemoryModelContainer.make())
+        let sessionRepository = SwiftDataWorkoutSessionRepository(modelContext: context)
+        let routineRepository = SwiftDataRoutineRepository(modelContext: context)
+        let scenario = try makeHistoryScenario(
+            context: context, routineRepository: routineRepository, sessionRepository: sessionRepository
+        )
+        let viewModel = makeViewModel(
+            sessionRepository: sessionRepository, routineRepository: routineRepository,
+            exerciseRepository: SwiftDataExerciseRepository(modelContext: context)
+        )
+        viewModel.currentSession = scenario.session
+        viewModel.applyProgressiveOverload(for: scenario.workoutExercise, weightIncrement: 2.5)
+
+        viewModel.completeWorkout(updateTemplate: true, notes: "")
+
+        let templateSet = try #require(scenario.slot.setsList.first)
+        #expect(templateSet.weight == 52.5)
+        #expect(templateSet.reps == 8)
+    }
+
+    /// The same writeback must still work for an ordinary exercise — the
+    /// exclusion above is scoped to overload-applied ones only.
+    @Test
+    func savingWithTemplateUpdateStillWritesThePerformanceForAnOrdinaryExercise() throws {
+        let context = ModelContext(InMemoryModelContainer.make())
+        let sessionRepository = SwiftDataWorkoutSessionRepository(modelContext: context)
+        let routineRepository = SwiftDataRoutineRepository(modelContext: context)
+        let scenario = try makeHistoryScenario(
+            context: context, routineRepository: routineRepository, sessionRepository: sessionRepository
+        )
+        let viewModel = makeViewModel(
+            sessionRepository: sessionRepository, routineRepository: routineRepository,
+            exerciseRepository: SwiftDataExerciseRepository(modelContext: context)
+        )
+        viewModel.currentSession = scenario.session
+        let performedSet = try #require(scenario.workoutExercise.setsList.first)
+        performedSet.actualWeight = 55
+
+        viewModel.completeWorkout(updateTemplate: true, notes: "")
+
+        let templateSet = try #require(scenario.slot.setsList.first)
+        #expect(templateSet.weight == 55)
+        #expect(templateSet.reps == 12)
+    }
+
+    /// A set added during the workout has no template counterpart the increase
+    /// could have raised, so it must join the RAISED scheme — otherwise Save
+    /// leaves the template mixing raised and unraised sets.
+    @Test
+    func aSetAddedDuringAnOverloadedWorkoutJoinsTheRaisedTemplateScheme() throws {
+        let context = ModelContext(InMemoryModelContainer.make())
+        let sessionRepository = SwiftDataWorkoutSessionRepository(modelContext: context)
+        let routineRepository = SwiftDataRoutineRepository(modelContext: context)
+        let scenario = try makeHistoryScenario(
+            context: context, routineRepository: routineRepository, sessionRepository: sessionRepository
+        )
+        let viewModel = makeViewModel(
+            sessionRepository: sessionRepository, routineRepository: routineRepository,
+            exerciseRepository: SwiftDataExerciseRepository(modelContext: context)
+        )
+        viewModel.currentSession = scenario.session
+        viewModel.applyProgressiveOverload(for: scenario.workoutExercise, weightIncrement: 2.5)
+
+        // A second, extra set performed at the old weight.
+        let extra = WorkoutSet(
+            plannedReps: 12, actualReps: 12, plannedWeight: 50, actualWeight: 50,
+            restTime: 60, order: 1
+        )
+        extra.isCompleted = true
+        extra.workoutExercise = scenario.workoutExercise
+        scenario.workoutExercise.sets?.append(extra)
+        context.insert(extra)
+
+        viewModel.completeWorkout(updateTemplate: true, notes: "")
+
+        let templateSets = scenario.slot.setsList.sorted { $0.order < $1.order }
+        #expect(templateSets.count == 2)
+        #expect(templateSets.allSatisfy { $0.weight == 52.5 })
+        #expect(templateSets.allSatisfy { $0.reps == 8 })
+    }
+
+    /// A nonuniform (pyramid) target has no single weight that is true of the
+    /// exercise, so the card must be told to say "all sets adjusted" instead.
+    @Test
+    func anOverloadOnANonuniformSchemeReportsNoSingleAppliedWeight() throws {
+        let context = ModelContext(InMemoryModelContainer.make())
+        let sessionRepository = SwiftDataWorkoutSessionRepository(modelContext: context)
+        let routineRepository = SwiftDataRoutineRepository(modelContext: context)
+        let scenario = try makeHistoryScenario(
+            context: context, routineRepository: routineRepository, sessionRepository: sessionRepository
+        )
+        // Second template set at a different weight — a pyramid scheme.
+        let heavier = ExerciseSet(reps: 12, weight: 60, restTime: 60, order: 1)
+        heavier.routineExercise = scenario.slot
+        scenario.slot.sets?.append(heavier)
+        context.insert(heavier)
+        let viewModel = makeViewModel(
+            sessionRepository: sessionRepository, routineRepository: routineRepository,
+            exerciseRepository: SwiftDataExerciseRepository(modelContext: context)
+        )
+        viewModel.currentSession = scenario.session
+
+        viewModel.applyProgressiveOverload(for: scenario.workoutExercise, weightIncrement: 2.5)
+
+        #expect(viewModel.hasNonUniformAppliedOverload(for: scenario.workoutExercise))
+        #expect(viewModel.appliedOverloadWeight(for: scenario.workoutExercise) == nil)
+        #expect(scenario.slot.setsList.sorted { $0.order < $1.order }.map(\.weight) == [52.5, 62.5])
+    }
+
+    @Test
+    func undoingAMidWorkoutOverloadRestoresTheTemplateAndClearsTheAppliedWeight() throws {
+        let context = ModelContext(InMemoryModelContainer.make())
+        let sessionRepository = SwiftDataWorkoutSessionRepository(modelContext: context)
+        let routineRepository = SwiftDataRoutineRepository(modelContext: context)
+        let scenario = try makeHistoryScenario(
+            context: context, routineRepository: routineRepository, sessionRepository: sessionRepository
+        )
+        let viewModel = makeViewModel(
+            sessionRepository: sessionRepository, routineRepository: routineRepository,
+            exerciseRepository: SwiftDataExerciseRepository(modelContext: context)
+        )
+        viewModel.currentSession = scenario.session
+        viewModel.applyProgressiveOverload(for: scenario.workoutExercise, weightIncrement: 2.5)
+
+        viewModel.undoProgressiveOverload(for: scenario.workoutExercise)
+
+        let templateSet = try #require(scenario.slot.setsList.first)
+        #expect(templateSet.weight == 50)
+        #expect(templateSet.reps == 12)
+        #expect(scenario.workoutExercise.progressiveOverloadApplied == false)
+        #expect(viewModel.appliedOverloadWeight(for: scenario.workoutExercise) == nil)
+        #expect(viewModel.hasNonUniformAppliedOverload(for: scenario.workoutExercise) == false)
+    }
+
     @Test
     func applyingOverloadFromHistoryBumpsLiveTemplateAndLeavesHistoryUnchanged() throws {
         let context = ModelContext(InMemoryModelContainer.make())

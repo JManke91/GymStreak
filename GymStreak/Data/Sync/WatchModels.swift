@@ -164,8 +164,10 @@ struct CompletedWatchWorkout: Codable {
     ///
     /// 1. iOS sets `WorkoutExercise.progressiveOverloadApplied` for these, which
     ///    switches every aggregator (volume, charts, records, AI Coach) to read
-    ///    the `planned*` values — where the watch has stored the true
-    ///    performance, mirroring `WorkoutViewModel.applyProgressiveOverload`.
+    ///    the `planned*` values — where the watch has mirrored the true
+    ///    performance, exactly as `WorkoutViewModel.applyProgressiveOverload`
+    ///    does. Neither platform writes the increase into `actual*`: it is the
+    ///    next workout's target, not this workout's work.
     /// 2. Both the watch fold and the iOS merge exclude these exercises from
     ///    generic set-value writeback, so this completed-workout transaction
     ///    cannot overwrite the template weights the overload transaction
@@ -190,6 +192,32 @@ struct CompletedWatchWorkout: Codable {
                 set.actualReps != set.plannedReps || set.actualWeight != set.plannedWeight
             }.count
         }
+    }
+
+    /// The history half of a split workout (ADR 0001): the same performance
+    /// record with the template intent and its ordering identity removed, so it
+    /// travels as an ordinary workout payload — ungated by the routine's
+    /// transaction queue, retired by the plain acknowledgment, and understood by
+    /// iOS builds that predate the split. Keeping the intent here would make iOS
+    /// route it back into the template path and consume the same sequence twice.
+    ///
+    /// Structural and applied-overload slot IDs are retained: with
+    /// `shouldUpdateTemplate == false` they are historical metadata that never
+    /// mutates a routine, and iOS needs them to record the workout correctly.
+    func withoutTemplateIntent() -> CompletedWatchWorkout {
+        CompletedWatchWorkout(
+            id: id,
+            routineId: routineId,
+            routineName: routineName,
+            startTime: startTime,
+            endTime: endTime,
+            exercises: exercises,
+            shouldUpdateTemplate: false,
+            healthKitWorkoutId: healthKitWorkoutId,
+            addedRoutineExerciseIDs: addedRoutineExerciseIDs,
+            removedRoutineExerciseIDs: removedRoutineExerciseIDs,
+            overloadAppliedExerciseIDs: overloadAppliedExerciseIDs
+        )
     }
 }
 

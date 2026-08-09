@@ -5,3 +5,6 @@
 - Die Pause übernimmt nicht mehr den ganzen Bildschirm. Eine Pausen-Leiste sitzt über den Workout-Buttons, mit +30s und Weiter; für den großen Timer tippst du sie einfach an.
 - Jeder Satz hat ein neues Menü mit „Satz duplizieren“ und „Satz löschen“.
 - Fehler behoben, durch den ein auf der Apple Watch mit „Speichern & Vorlage aktualisieren“ beendetes Training auf der Uhr hängen bleiben und nie auf dem iPhone ankommen konnte, obwohl es in Apple Health gespeichert war. Betroffene Trainings werden beim nächsten Öffnen der App automatisch übertragen.
+- Aufbauend darauf: Ein Watch-Training und das dabei angeforderte Routinen-Update werden jetzt als zwei getrennte Sendungen ans iPhone übertragen. Ein Routinen-Update, das nicht bestätigt werden kann, hält das Training selbst damit nie mehr zurück.
+- Wenn eine Routinen-Änderung, die du auf der Uhr bestätigt hast, endgültig nicht übernommen werden kann, sagt die Uhr dir das jetzt: Auf der Routinen-Liste erscheint ein Hinweis mit dem Grund, der bleibt, bis du ihn wegtippst. Änderungen, die noch unterwegs zum iPhone sind, bleiben wie gewohnt still.
+- Die Gewichtserhöhung nach einem erreichten Wiederholungsziel gilt jetzt nur noch für das nächste Training. Die Sätze, die du gerade abgeschlossen hast, behalten die Werte, die du wirklich gemacht hast – auf iPhone und Apple Watch.

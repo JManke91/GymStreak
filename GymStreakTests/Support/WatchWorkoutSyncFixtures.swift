@@ -107,6 +107,17 @@ enum WatchWorkoutSyncFixtures {
         )
     }
 
+    /// The template half a template-carrying workout's enqueue produced
+    /// (ADR 0001). It is not reachable through `entry(id:)`, whose match is the
+    /// workout id the history half owns, so tests look it up by the workout
+    /// wrapped inside the transaction.
+    @MainActor
+    static func templateEntry(
+        in store: WatchSyncStateStore, forWorkout workoutID: UUID
+    ) -> OutgoingSyncEntry? {
+        store.all.first { $0.templateTransaction?.templateIntentWorkout?.id == workoutID }
+    }
+
     /// Fresh temp directory per test.
     static func makeTempDirectory() throws -> URL {
         let url = FileManager.default.temporaryDirectory

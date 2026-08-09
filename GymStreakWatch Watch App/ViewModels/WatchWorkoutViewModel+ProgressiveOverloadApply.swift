@@ -156,24 +156,26 @@ extension WatchWorkoutViewModel {
             // and iOS learns which recap it came from through the payload's
             // source correlation.
         } else {
-            // Mid-workout: mirror the iOS overload exactly — the performance
-            // moves into the planned values and the next workout's target into
-            // the actual ones. `overloadAppliedExerciseIDs` on the completed
-            // payload is what tells iOS to set `progressiveOverloadApplied`,
-            // which is what makes every aggregator read the planned (i.e.
-            // performed) values back out.
-            let workoutIncrease = ProgressiveOverloadService.applyIncrease(
-                toWeights: exercises[exerciseIndex].sets.map(\.actualWeight),
-                increment: increment,
-                targetRepMin: targetRepMin,
-                loadBehavior: loadBehavior
-            )
-            for (setIndex, newWeight) in workoutIncrease.weights.enumerated() {
+            // Mid-workout: the increase belongs to the TEMPLATE — the NEXT
+            // workout — and never to this one. The suggestion only appears once
+            // every set of the exercise is completed at the rep max
+            // (`ProgressiveOverloadService.qualifies`), so there is nothing left
+            // to perform at the new weight; writing the proposal into the live
+            // sets rewrote work the user had already done and showed them
+            // numbers they never lifted. The recap path has always behaved this
+            // way; mid-workout now matches it.
+            //
+            // The performance is still mirrored into the planned fields, and
+            // that part is load-bearing: `overloadAppliedExerciseIDs` on the
+            // completed payload makes iOS set
+            // `WorkoutExercise.progressiveOverloadApplied`, and every aggregator
+            // reads the PLANNED values back out of such a row. Leaving planned
+            // at the original template values would make history, volume,
+            // charts and records report the template instead of the workout.
+            for setIndex in exercises[exerciseIndex].sets.indices {
                 var set = exercises[exerciseIndex].sets[setIndex]
                 set.plannedReps = set.actualReps
                 set.plannedWeight = set.actualWeight
-                set.actualReps = workoutIncrease.reps
-                set.actualWeight = newWeight
                 exercises[exerciseIndex].sets[setIndex] = set
             }
         }

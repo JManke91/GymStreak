@@ -129,6 +129,9 @@ struct ActiveWorkoutView: View {
         .sheet(item: $overloadSheetExercise) { exercise in
             WeightIncreaseSheet(
                 workoutExercise: exercise,
+                // Preview what the apply raises — the template — not what was
+                // lifted; the two differ whenever the user went off-plan.
+                templateFirstSet: viewModel.overloadTemplateFirstSet(for: exercise),
                 onApply: { increment in applyOverload(to: exercise, increment: increment) },
                 onCancel: { overloadSheetExercise = nil }
             )
@@ -338,7 +341,9 @@ struct ActiveWorkoutView: View {
                     .font(.caption)
                     .foregroundStyle(DesignSystem.Colors.success)
 
-                Text("rep_range.routine_updated".localized(String(format: "%.1f", applied.weight), applied.reps))
+                Text(applied.weight.map {
+                    "rep_range.routine_updated".localized(String(format: "%.1f", $0), applied.reps)
+                } ?? "rep_range.overload_card.next_workout_no_weight".localized(applied.setCount, applied.reps))
                     .font(.caption.weight(.medium))
                     .foregroundStyle(.primary)
                     .lineLimit(2)
@@ -490,20 +495,21 @@ struct ActiveWorkoutView: View {
     }
 
     private func applyOverload(to exercise: WorkoutExercise, increment: Double) {
-        // Compute the confirmation values from the performed weight BEFORE
-        // applying — apply rewrites the actual values.
-        let currentWeight = exercise.setsList.sorted { $0.order < $1.order }.first?.actualWeight ?? 0
-        let newWeight = ProgressiveOverloadService.increasedWeight(
-            currentWeight,
-            increment: increment,
-            loadBehavior: exercise.loadBehavior
-        )
         let minReps = exercise.targetRepMin ?? 0
+        let setCount = exercise.setsList.count
         viewModel.applyProgressiveOverload(for: exercise, weightIncrement: increment)
         overloadSheetExercise = nil
         withAnimation(DesignSystem.Animation.spring) {
             _ = dismissedOverloadBanners.insert(exercise.id)
-            appliedOverloads[exercise.id] = AppliedOverload(weight: newWeight, reps: minReps)
+            // The announced weight is the one the TEMPLATE moved to, which the
+            // apply owns — the workout's sets keep the performance and can
+            // differ from it whenever the user went off-plan. Nil means the
+            // scheme is nonuniform (pyramid/drop), so no single weight is true.
+            appliedOverloads[exercise.id] = AppliedOverload(
+                weight: viewModel.appliedOverloadWeight(for: exercise),
+                reps: minReps,
+                setCount: setCount
+            )
         }
     }
 
@@ -530,8 +536,11 @@ struct ActiveWorkoutView: View {
     // MARK: - Screen state
 
     private struct AppliedOverload {
-        let weight: Double
+        /// Nil for a nonuniform (pyramid/drop) scheme — applied, but with no
+        /// single weight that is true of every set.
+        let weight: Double?
         let reps: Int
+        let setCount: Int
     }
 
     /// `fileprivate` so `ActiveWorkoutAlerts` below can bind to it.

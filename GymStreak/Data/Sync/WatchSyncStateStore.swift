@@ -56,6 +56,9 @@ private struct WatchSyncStateFile: Codable {
     /// Once true, the pre-file UserDefaults stores never need to be opened
     /// again. Optional so state written before this marker remains decodable.
     var hasCompletedLegacyDefaultsMigration: Bool?
+    /// Terminally failed template updates the user has not dismissed yet.
+    /// Optional so state written before this field remains decodable.
+    var templateFailureNotices: [WatchTemplateFailureNotice]?
 }
 
 @MainActor
@@ -74,6 +77,7 @@ final class WatchSyncStateStore {
     private var routineAnchors: [String: WatchRoutine] = [:]
     private(set) var lastRoutineSyncDate: Date?
     private var hasCompletedLegacyDefaultsMigration = false
+    private var failureNotices: [WatchTemplateFailureNotice] = []
     private var isStateDurable = false
 
     private let fileURL: URL?
@@ -88,6 +92,10 @@ final class WatchSyncStateStore {
     /// head. The transport coordinator uses this to continue draining without
     /// waiting for another Watch lifecycle event.
     var onTransportEligibilityChanged: (() -> Void)?
+    /// Invoked when a template update failed terminally (or its notice was
+    /// dismissed). `RoutineStore` republishes on it so the watch UI can tell
+    /// the user their accepted change was not applied.
+    var onTemplateFailureNoticesChanged: (() -> Void)?
 
     /// - Parameters:
     ///   - directory: override for tests; defaults to the App Group's
@@ -116,6 +124,7 @@ final class WatchSyncStateStore {
                 lastRoutineSyncDate = decoded.lastRoutineSyncDate
                 hasCompletedLegacyDefaultsMigration =
                     decoded.hasCompletedLegacyDefaultsMigration ?? false
+                failureNotices = decoded.templateFailureNotices ?? []
                 hadState = true
                 isStateDurable = true
             } else {
@@ -285,6 +294,14 @@ final class WatchSyncStateStore {
         entries.contains { $0.templateTransaction?.transactionID == transactionID }
     }
 
+    /// Template updates that terminally failed and the user has not dismissed,
+    /// newest first. A transaction still in flight is deliberately absent — see
+    /// `WatchTemplateFailureNotice`.
+    var templateFailureNotices: [WatchTemplateFailureNotice] {
+        // Stored oldest-first (recording order); the UI shows newest first.
+        failureNotices.reversed()
+    }
+
     // MARK: - Routine authority + effective routines
 
     var routineChallengeContext: [String: String] {
@@ -311,7 +328,11 @@ final class WatchSyncStateStore {
         // would overlay values on an authoritative base that has moved past it
         // and then prescribe them for the next workout.
         for entry in entries where isLiveTemplateIntent(entry) {
-            if let workout = entry.completedWorkout {
+            // Split template intent wraps its workout without carrying its
+            // history, so it is reached through `templateIntentWorkout` — the
+            // overlay it prescribes is identical to the fused kind's.
+            if let workout = entry.completedWorkout
+                ?? entry.templateTransaction?.templateIntentWorkout {
                 routines = routines.map { WatchRoutineTemplateFold.apply(workout, to: $0) }
             } else if let intent = entry.templateTransaction?.payload.progressiveOverload {
                 routines = routines.map { WatchRoutineTemplateFold.apply(intent, to: $0) }
@@ -400,12 +421,22 @@ final class WatchSyncStateStore {
     /// fails, in which case nothing was enqueued and no identity was
     /// allocated.
     ///
-    /// A workout carrying template intent is assigned its transaction identity
-    /// (stable transaction ID, the persistent sender epoch, and the next
-    /// per-routine sequence) here, and `routineAnchor` is retained for the
-    /// routine's first pending transaction — payload, identity, counter, FIFO
-    /// position, and anchor all commit in one replacement, before transport or
-    /// any optimistic local mutation.
+    /// A workout carrying template intent is SPLIT into two entries (ADR 0001):
+    /// the workout history as an ordinary ungated workout payload, and the
+    /// template intent as a gated template-only transaction. History therefore
+    /// no longer inherits the template's ordering and acknowledgment
+    /// constraints — a template transaction that can never be acknowledged
+    /// costs a template update and never a workout. A workout without template
+    /// intent still produces exactly one entry.
+    ///
+    /// Both entries commit in ONE atomic write, together with the transaction
+    /// identity (stable transaction ID, the persistent sender epoch, the next
+    /// per-routine sequence) and the routine anchor retained for the routine's
+    /// first pending transaction. A failed write enqueues neither half and
+    /// consumes no sequence number, so the caller may still return to editing.
+    ///
+    /// Returns the HISTORY entry: it is the one carrying the frozen workout
+    /// bytes and the HealthKit finalization phase the finalizer sequences.
     @discardableResult
     func enqueue(
         _ workout: CompletedWatchWorkout,
@@ -415,6 +446,7 @@ final class WatchSyncStateStore {
         if let existing = entry(id: workout.id) { return existing }
 
         var payload = workout
+        let previousEntries = entries
         let previousEpoch = senderEpoch
         let previousSequences = nextSequenceByRoutine
         let previousAnchors = routineAnchors
@@ -434,24 +466,33 @@ final class WatchSyncStateStore {
             routineAnchors[payload.routineId.uuidString] = routineAnchor
         }
 
-        let syncPayload: OutgoingSyncPayload = payload.shouldUpdateTemplate
-            ? .templateTransaction(TemplateTransactionEnvelope(completedWorkout: payload))
-            : .completedWorkout(payload)
-        let newEntry = OutgoingSyncEntry(
-            payload: syncPayload, phase: phase, enqueuedAt: Date(), quarantineReason: nil, heldAck: nil
+        let historyEntry = OutgoingSyncEntry(
+            payload: .completedWorkout(payload.withoutTemplateIntent()),
+            phase: phase, enqueuedAt: Date(), quarantineReason: nil, heldAck: nil
         )
-        entries.append(newEntry)
+        entries.append(historyEntry)
+        if payload.shouldUpdateTemplate {
+            // The template half has no HealthKit finalization to wait for (the
+            // frozen bytes are complete), so it is transport-eligible the moment
+            // it is durable — like every other template-only kind. It is also
+            // unreachable from `advance(id: workoutId)`, whose match is the
+            // history entry's workout id.
+            entries.append(OutgoingSyncEntry(
+                payload: .templateTransaction(TemplateTransactionEnvelope(templateIntentFor: payload)),
+                phase: .transportEligible, enqueuedAt: Date(), quarantineReason: nil, heldAck: nil
+            ))
+        }
         do {
             try persist()
         } catch {
-            entries.removeLast()
+            entries = previousEntries
             senderEpoch = previousEpoch
             nextSequenceByRoutine = previousSequences
             routineAnchors = previousAnchors
             throw error
         }
         onEffectiveRoutinesChanged?()
-        return newEntry
+        return historyEntry
     }
 
     /// Enqueues a TEMPLATE-ONLY transaction — one that carries no completed
@@ -543,16 +584,29 @@ final class WatchSyncStateStore {
         guard let index = entries.firstIndex(where: { $0.workoutID == id || $0.id == id }) else { return }
         let previousPhase = entries[index].phase
         let previousReason = entries[index].quarantineReason
+        let previousNotices = failureNotices
         entries[index].phase = .quarantined
         entries[index].quarantineReason = reason
+        // Quarantine is terminal for a template update the user accepted: the
+        // bytes can never transport and no acknowledgment will ever arrive.
+        // The diagnostic `reason` is internal, so the user is told only what it
+        // means for them. Recorded in the SAME write as the phase change, and
+        // only on the transition — a second terminal transfer failure for bytes
+        // already quarantined must not resurrect a dismissed notice.
+        let didRecordNotice = entries[index].hasTemplateIntent && previousPhase != .quarantined
+        if didRecordNotice {
+            recordFailureNotice(for: entries[index], reason: .couldNotSend)
+        }
         do {
             try persist()
         } catch {
             entries[index].phase = previousPhase
             entries[index].quarantineReason = previousReason
+            failureNotices = previousNotices
             WatchSyncDiagnostics.error("queue: quarantine write failed — \(error.localizedDescription)")
             return
         }
+        if didRecordNotice { onTemplateFailureNoticesChanged?() }
         WatchSyncDiagnostics.fault("queue: quarantined entry \(WatchSyncDiagnostics.shortID(id)) — \(reason). These exact bytes can never transport.")
         // Quarantining is head-releasing (a terminal entry no longer gates its
         // routine), so the successor must be reconciled now rather than waiting
@@ -666,24 +720,40 @@ final class WatchSyncStateStore {
         for entry in satisfied {
             WatchSyncDiagnostics.info("queue: retiring template transaction \(WatchSyncDiagnostics.shortID(entry.id)) — ack + routine generation applied")
         }
-        retire(ids: satisfied.map(\.id))
+        // A `rejected` outcome is terminal: iOS deliberately left the routine
+        // untouched, so the change the user accepted on the watch is gone the
+        // moment this entry retires and its optimistic overlay disappears.
+        // Tell them. `applied` needs no notice — the change is simply there.
+        let rejected = satisfied.filter {
+            $0.heldAck?.outcomeRaw == TemplateTransactionOutcomeWire.rejected.rawValue
+        }
+        retire(ids: satisfied.map(\.id), rejected: rejected)
     }
 
     /// Removes an acknowledged workout. Best effort: if the write fails the
     /// entry stays queued and iOS re-acks the redelivered duplicate, so
     /// retirement converges.
     func retire(id: UUID) {
-        retire(ids: [id])
+        retire(ids: [id], rejected: [])
     }
 
-    private func retire(ids: [UUID]) {
+    /// - Parameter rejected: entries whose terminal outcome was `rejected`. A
+    ///   user-visible notice is recorded for each in the SAME write that
+    ///   retires them, so the notice can neither outlive its cause nor be lost
+    ///   with it.
+    private func retire(ids: [UUID], rejected: [OutgoingSyncEntry]) {
         let removed = Set(ids)
         let previousEntries = entries
         let previousAnchors = routineAnchors
+        let previousNotices = failureNotices
         entries.removeAll { removed.contains($0.id) || $0.workoutID.map(removed.contains) == true }
         let before = previousEntries.count
         guard entries.count != before else { return }
         // An anchor exists only to protect unresolved intent for its routine.
+        // Read the reason (and the routine name) BEFORE the anchors go.
+        for entry in rejected {
+            recordFailureNotice(for: entry, reason: rejectionReason(for: entry))
+        }
         for key in routineAnchors.keys
         where !entries.contains(where: { $0.hasTemplateIntent && $0.routineID?.uuidString == key }) {
             routineAnchors.removeValue(forKey: key)
@@ -693,11 +763,68 @@ final class WatchSyncStateStore {
         } catch {
             entries = previousEntries
             routineAnchors = previousAnchors
+            failureNotices = previousNotices
             WatchSyncDiagnostics.error("queue: failed to retire durable entry — \(error.localizedDescription)")
             return
         }
         onEffectiveRoutinesChanged?()
         onTransportEligibilityChanged?()
+        if !rejected.isEmpty { onTemplateFailureNoticesChanged?() }
+    }
+
+    // MARK: - Template failure notices
+
+    /// Removes a notice the user acknowledged. Best effort: a failed write
+    /// leaves it on screen, which is the safe direction.
+    func dismissTemplateFailureNotice(id: UUID) {
+        let previous = failureNotices
+        failureNotices.removeAll { $0.id == id }
+        guard failureNotices.count != previous.count else { return }
+        do {
+            try persist()
+        } catch {
+            failureNotices = previous
+            WatchSyncDiagnostics.error("queue: failed to dismiss template failure notice — \(error.localizedDescription)")
+            return
+        }
+        onTemplateFailureNoticesChanged?()
+    }
+
+    /// The acknowledgment carries a machine outcome and no human-readable
+    /// reason, so the reason is reconstructed here from what the watch already
+    /// knows. By the time a rejection retires, its correlated authoritative
+    /// generation has applied — so the base is current enough to distinguish a
+    /// routine that is gone from one that merely moved on. An absent base
+    /// (never synced) proves nothing and stays the generic reason.
+    private func rejectionReason(for entry: OutgoingSyncEntry) -> WatchTemplateFailureNotice.Reason {
+        guard let routineID = entry.routineID, let base = authoritativeRoutines else {
+            return .routineChangedOnPhone
+        }
+        return base.contains { $0.id == routineID } ? .routineChangedOnPhone : .routineDeleted
+    }
+
+    /// Appends a notice, superseding an older one for the same routine and
+    /// reason and keeping only the most recent few. Does not persist — every
+    /// caller commits it inside the write that makes its cause terminal.
+    private func recordFailureNotice(
+        for entry: OutgoingSyncEntry, reason: WatchTemplateFailureNotice.Reason
+    ) {
+        let notice = WatchTemplateFailureNotice(
+            routineID: entry.routineID,
+            routineName: routineName(for: entry),
+            reason: reason
+        )
+        failureNotices.removeAll { $0.isSameComplaint(as: notice) }
+        failureNotices.append(notice)
+        failureNotices = Array(failureNotices.suffix(WatchTemplateFailureNotice.maxRetained))
+        WatchSyncDiagnostics.notice("queue: template update for entry \(WatchSyncDiagnostics.shortID(entry.id)) will never apply (\(reason.rawValue)) — surfaced to the user")
+    }
+
+    private func routineName(for entry: OutgoingSyncEntry) -> String? {
+        guard let routineID = entry.routineID else { return nil }
+        if let base = authoritativeRoutines?.first(where: { $0.id == routineID }) { return base.name }
+        if let anchor = routineAnchors[routineID.uuidString] { return anchor.name }
+        return (entry.completedWorkout ?? entry.templateTransaction?.templateIntentWorkout)?.routineName
     }
 
     // MARK: - Persistence
@@ -713,7 +840,8 @@ final class WatchSyncStateStore {
             authoritativeRoutines: authoritativeRoutines,
             routineAnchors: routineAnchors,
             lastRoutineSyncDate: lastRoutineSyncDate,
-            hasCompletedLegacyDefaultsMigration: hasCompletedLegacyDefaultsMigration
+            hasCompletedLegacyDefaultsMigration: hasCompletedLegacyDefaultsMigration,
+            templateFailureNotices: failureNotices
         )
         let data = try JSONEncoder().encode(file)
         try data.write(to: fileURL, options: .atomic)

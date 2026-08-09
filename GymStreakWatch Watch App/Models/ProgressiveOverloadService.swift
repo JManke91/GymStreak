@@ -76,8 +76,10 @@ enum ProgressiveOverloadService {
 
     /// Workout: all sets completed AND actual reps ≥ target rep max.
     /// `overloadAlreadyApplied` short-circuits to true — the overload could only
-    /// have been applied because the goal was hit, and applying it resets the
-    /// actual reps to the range minimum, which would otherwise disqualify.
+    /// have been applied because the goal was hit. It is belt-and-braces since
+    /// applying stopped rewriting the performed reps (the sets still read at or
+    /// above the rep max on their own), and it keeps the already-applied state
+    /// stable for any surface that recomputes qualification.
     static func workoutQualifiesForIncrease(
         sets: [SetProgress],
         targetRepMax: Int?,

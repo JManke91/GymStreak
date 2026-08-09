@@ -22,6 +22,9 @@ final class RoutineStore: ObservableObject {
     @Published private(set) var routines: [WatchRoutine] = []
     @Published private(set) var isLoading = false
     @Published private(set) var lastSyncDate: Date?
+    /// Routine changes accepted on this watch that iOS will never apply. Only
+    /// terminal outcomes appear here; a transaction still in flight is silent.
+    @Published private(set) var templateFailureNotices: [WatchTemplateFailureNotice] = []
 
     private let syncState: WatchSyncStateStore
 
@@ -30,11 +33,19 @@ final class RoutineStore: ObservableObject {
         syncState.onEffectiveRoutinesChanged = { [weak self] in
             self?.refresh()
         }
+        syncState.onTemplateFailureNoticesChanged = { [weak self] in
+            self?.refreshFailureNotices()
+        }
         refresh()
     }
 
     func routine(for id: UUID) -> WatchRoutine? {
         routines.first { $0.id == id }
+    }
+
+    /// The user has seen it; it never comes back.
+    func dismissTemplateFailureNotice(id: UUID) {
+        syncState.dismissTemplateFailureNotice(id: id)
     }
 
     /// Seeds routines locally (watch UI testing / previews). A real routine
@@ -47,5 +58,10 @@ final class RoutineStore: ObservableObject {
     private func refresh() {
         routines = syncState.effectiveRoutines()
         lastSyncDate = syncState.lastRoutineSyncDate
+        refreshFailureNotices()
+    }
+
+    private func refreshFailureNotices() {
+        templateFailureNotices = syncState.templateFailureNotices
     }
 }

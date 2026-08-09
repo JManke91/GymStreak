@@ -7,6 +7,66 @@
     "..." : {
 
     },
+    "Got It" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Verstanden"
+          }
+        }
+      }
+    },
+    "Not Applied" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nicht übernommen"
+          }
+        }
+      }
+    },
+    "Routine" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Routine"
+          }
+        }
+      }
+    },
+    "Your change couldn't be sent to your iPhone. Adjust the routine there." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Deine Änderung konnte nicht an dein iPhone gesendet werden. Passe die Routine dort an."
+          }
+        }
+      }
+    },
+    "Your change wasn't applied — this routine had already changed on your iPhone. Adjust it there." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Deine Änderung wurde nicht übernommen – die Routine hatte sich auf deinem iPhone bereits geändert. Passe sie dort an."
+          }
+        }
+      }
+    },
+    "Your change wasn't applied — this routine no longer exists on your iPhone." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Deine Änderung wurde nicht übernommen – diese Routine gibt es auf deinem iPhone nicht mehr."
+          }
+        }
+      }
+    },
     "·" : {
 
     },

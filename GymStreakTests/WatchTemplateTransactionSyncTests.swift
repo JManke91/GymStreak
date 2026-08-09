@@ -10,6 +10,12 @@
 //  watch files are identical copies in both targets, so these tests stand in
 //  for the missing watch unit-test target.
 //
+//  Since the history/template split (ADR 0001), enqueuing a template-carrying
+//  workout produces TWO entries and returns the history one, so every
+//  transaction assertion here reaches for the template half explicitly
+//  (`Fixtures.templateEntry(in:forWorkout:)` / `pendingTemplateEntries`). The
+//  ungated history halves are covered in `WatchHistoryTemplateSplitTests`.
+//
 
 import Foundation
 import Testing
@@ -20,6 +26,13 @@ import Testing
 struct WatchTemplateTransactionSyncTests {
     private typealias Fixtures = WatchWorkoutSyncFixtures
 
+    /// The unretired template transactions, in FIFO order — what `store.all`
+    /// meant for these tests before the split added an ungated history entry
+    /// alongside every template-carrying workout.
+    private func pendingTemplateEntries(_ store: WatchSyncStateStore) -> [OutgoingSyncEntry] {
+        store.all.filter(\.hasTemplateIntent)
+    }
+
     // MARK: - Transaction identity
 
     @Test
@@ -27,32 +40,34 @@ struct WatchTemplateTransactionSyncTests {
         let dir = try Fixtures.makeTempDirectory()
         let store = WatchSyncStateStore(directory: dir, legacyDefaults: nil)
         let routineId = UUID()
+        let firstWorkout = Fixtures.makeWorkout(routineId: routineId, shouldUpdateTemplate: true)
+        let secondWorkout = Fixtures.makeWorkout(routineId: routineId, shouldUpdateTemplate: true)
 
-        let first = try store.enqueue(
-            Fixtures.makeWorkout(routineId: routineId, shouldUpdateTemplate: true),
-            phase: .transportEligible
-        )
-        let second = try store.enqueue(
-            Fixtures.makeWorkout(routineId: routineId, shouldUpdateTemplate: true),
-            phase: .transportEligible
-        )
+        try store.enqueue(firstWorkout, phase: .transportEligible)
+        try store.enqueue(secondWorkout, phase: .transportEligible)
 
-        #expect(first.templateTransaction?.transactionID != nil)
-        #expect(first.templateTransaction?.sequence == 0)
-        #expect(second.templateTransaction?.sequence == 1)
+        let first = try #require(
+            Fixtures.templateEntry(in: store, forWorkout: firstWorkout.id)?.templateTransaction
+        )
+        let second = try #require(
+            Fixtures.templateEntry(in: store, forWorkout: secondWorkout.id)?.templateTransaction
+        )
+        #expect(first.sequence == 0)
+        #expect(second.sequence == 1)
         // One persistent sender epoch is shared by every template transaction.
-        #expect(first.templateTransaction?.senderEpoch == second.templateTransaction?.senderEpoch)
+        #expect(first.senderEpoch == second.senderEpoch)
 
         // Identity survives relaunch, and the counter continues from the file.
         let reloaded = WatchSyncStateStore(directory: dir, legacyDefaults: nil)
-        #expect(reloaded.entry(id: first.workoutID!)?.templateTransaction?.transactionID
-            == first.templateTransaction?.transactionID)
-        let third = try reloaded.enqueue(
-            Fixtures.makeWorkout(routineId: routineId, shouldUpdateTemplate: true),
-            phase: .transportEligible
+        #expect(Fixtures.templateEntry(in: reloaded, forWorkout: firstWorkout.id)?
+            .templateTransaction?.transactionID == first.transactionID)
+        let thirdWorkout = Fixtures.makeWorkout(routineId: routineId, shouldUpdateTemplate: true)
+        try reloaded.enqueue(thirdWorkout, phase: .transportEligible)
+        let third = try #require(
+            Fixtures.templateEntry(in: reloaded, forWorkout: thirdWorkout.id)?.templateTransaction
         )
-        #expect(third.templateTransaction?.sequence == 2)
-        #expect(third.templateTransaction?.senderEpoch == first.templateTransaction?.senderEpoch)
+        #expect(third.sequence == 2)
+        #expect(third.senderEpoch == first.senderEpoch)
     }
 
     @Test
@@ -60,14 +75,20 @@ struct WatchTemplateTransactionSyncTests {
         let store = WatchSyncStateStore(directory: try Fixtures.makeTempDirectory(), legacyDefaults: nil)
         let routineA = UUID()
         let routineB = UUID()
+        let a0 = Fixtures.makeWorkout(routineId: routineA, shouldUpdateTemplate: true)
+        let b0 = Fixtures.makeWorkout(routineId: routineB, shouldUpdateTemplate: true)
+        let plain = Fixtures.makeWorkout(routineId: routineA)
 
-        let a0 = try store.enqueue(Fixtures.makeWorkout(routineId: routineA, shouldUpdateTemplate: true), phase: .transportEligible)
-        let b0 = try store.enqueue(Fixtures.makeWorkout(routineId: routineB, shouldUpdateTemplate: true), phase: .transportEligible)
-        let plain = try store.enqueue(Fixtures.makeWorkout(routineId: routineA), phase: .transportEligible)
+        try store.enqueue(a0, phase: .transportEligible)
+        try store.enqueue(b0, phase: .transportEligible)
+        let plainEntry = try store.enqueue(plain, phase: .transportEligible)
 
-        #expect(a0.templateTransaction?.sequence == 0)
-        #expect(b0.templateTransaction?.sequence == 0)
-        #expect(plain.templateTransaction == nil)
+        #expect(Fixtures.templateEntry(in: store, forWorkout: a0.id)?.templateTransaction?.sequence == 0)
+        #expect(Fixtures.templateEntry(in: store, forWorkout: b0.id)?.templateTransaction?.sequence == 0)
+        // A workout that requests no template update stays a single entry.
+        #expect(plainEntry.templateTransaction == nil)
+        #expect(Fixtures.templateEntry(in: store, forWorkout: plain.id) == nil)
+        #expect(store.all.count == 5)
     }
 
     @Test
@@ -80,15 +101,17 @@ struct WatchTemplateTransactionSyncTests {
         #expect(throws: Error.self) {
             try store.enqueue(Fixtures.makeWorkout(shouldUpdateTemplate: true), phase: .transportEligible)
         }
+        // Neither half of the split was enqueued — the two entries commit or
+        // fail together.
+        #expect(store.all.isEmpty)
         restore()
 
         // The failed attempt consumed no sequence: the next one still gets 0.
         let routineId = UUID()
-        let entry = try store.enqueue(
-            Fixtures.makeWorkout(routineId: routineId, shouldUpdateTemplate: true),
-            phase: .transportEligible
-        )
-        #expect(entry.templateTransaction?.sequence == 0)
+        let workout = Fixtures.makeWorkout(routineId: routineId, shouldUpdateTemplate: true)
+        try store.enqueue(workout, phase: .transportEligible)
+        #expect(Fixtures.templateEntry(in: store, forWorkout: workout.id)?
+            .templateTransaction?.sequence == 0)
     }
 
     @Test
@@ -150,13 +173,14 @@ struct WatchTemplateTransactionSyncTests {
         try JSONSerialization.data(withJSONObject: state).write(to: stateURL, options: .atomic)
 
         let reloaded = WatchSyncStateStore(directory: dir, legacyDefaults: nil)
-        let entry = try reloaded.enqueue(
-            Fixtures.makeWorkout(routineId: routineID, shouldUpdateTemplate: true),
-            phase: .transportEligible
-        )
+        let workout = Fixtures.makeWorkout(routineId: routineID, shouldUpdateTemplate: true)
+        try reloaded.enqueue(workout, phase: .transportEligible)
 
-        #expect(entry.templateTransaction?.sequence == 0)
-        #expect(entry.templateTransaction?.senderEpoch != oldEpoch)
+        let transaction = try #require(
+            Fixtures.templateEntry(in: reloaded, forWorkout: workout.id)?.templateTransaction
+        )
+        #expect(transaction.sequence == 0)
+        #expect(transaction.senderEpoch != oldEpoch)
     }
 
     // MARK: - Ordering gate
@@ -166,16 +190,27 @@ struct WatchTemplateTransactionSyncTests {
         let store = WatchSyncStateStore(directory: try Fixtures.makeTempDirectory(), legacyDefaults: nil)
         let routineA = UUID()
         let routineB = UUID()
-
-        let a0 = try store.enqueue(Fixtures.makeWorkout(routineId: routineA, shouldUpdateTemplate: true), phase: .transportEligible)
-        let a1 = try store.enqueue(Fixtures.makeWorkout(routineId: routineA, shouldUpdateTemplate: true), phase: .transportEligible)
-        let b0 = try store.enqueue(Fixtures.makeWorkout(routineId: routineB, shouldUpdateTemplate: true), phase: .transportEligible)
+        let a0Workout = Fixtures.makeWorkout(routineId: routineA, shouldUpdateTemplate: true)
+        let a1Workout = Fixtures.makeWorkout(routineId: routineA, shouldUpdateTemplate: true)
+        let b0Workout = Fixtures.makeWorkout(routineId: routineB, shouldUpdateTemplate: true)
         // A no-template workout is independent — it cannot mutate a routine.
-        let plain = try store.enqueue(Fixtures.makeWorkout(routineId: routineA), phase: .transportEligible)
+        let plainWorkout = Fixtures.makeWorkout(routineId: routineA)
 
-        let eligible = Set(store.transportEligibleEntries().compactMap(\.workoutID))
-        #expect(eligible == [a0.workoutID!, b0.workoutID!, plain.workoutID!])
-        #expect(!eligible.contains(a1.workoutID!))
+        try store.enqueue(a0Workout, phase: .transportEligible)
+        try store.enqueue(a1Workout, phase: .transportEligible)
+        try store.enqueue(b0Workout, phase: .transportEligible)
+        try store.enqueue(plainWorkout, phase: .transportEligible)
+        let a0 = try #require(Fixtures.templateEntry(in: store, forWorkout: a0Workout.id))
+        let a1 = try #require(Fixtures.templateEntry(in: store, forWorkout: a1Workout.id))
+        let b0 = try #require(Fixtures.templateEntry(in: store, forWorkout: b0Workout.id))
+
+        // Every workout's history is eligible immediately, whatever its
+        // routine's transaction queue is doing.
+        let eligible = store.transportEligibleEntries()
+        #expect(Set(eligible.compactMap(\.workoutID))
+            == [a0Workout.id, a1Workout.id, b0Workout.id, plainWorkout.id])
+        // Only the head transaction per routine.
+        #expect(Set(eligible.filter(\.hasTemplateIntent).map(\.id)) == [a0.id, b0.id])
 
         // Retiring the head releases exactly the next transaction.
         store.retire(id: a0.id)
@@ -187,21 +222,21 @@ struct WatchTemplateTransactionSyncTests {
         let dir = try Fixtures.makeTempDirectory()
         let store = WatchSyncStateStore(directory: dir, legacyDefaults: nil)
         let routineID = UUID()
-        let first = try store.enqueue(
-            Fixtures.makeWorkout(routineId: routineID, shouldUpdateTemplate: true), phase: .transportEligible
-        )
-        let second = try store.enqueue(
-            Fixtures.makeWorkout(routineId: routineID, shouldUpdateTemplate: true), phase: .transportEligible
-        )
+        let firstWorkout = Fixtures.makeWorkout(routineId: routineID, shouldUpdateTemplate: true)
+        let secondWorkout = Fixtures.makeWorkout(routineId: routineID, shouldUpdateTemplate: true)
+        try store.enqueue(firstWorkout, phase: .transportEligible)
+        try store.enqueue(secondWorkout, phase: .transportEligible)
+        let first = try #require(Fixtures.templateEntry(in: store, forWorkout: firstWorkout.id))
+        let second = try #require(Fixtures.templateEntry(in: store, forWorkout: secondWorkout.id))
         let restore = try Fixtures.makeReadOnly(dir)
 
         store.retire(id: first.id)
-        #expect(store.all.count == 2)
-        #expect(store.transportEligibleEntries().map(\.id) == [first.id])
+        #expect(pendingTemplateEntries(store).count == 2)
+        #expect(store.transportEligibleEntries().filter(\.hasTemplateIntent).map(\.id) == [first.id])
 
         restore()
         store.retire(id: first.id)
-        #expect(store.transportEligibleEntries().map(\.id) == [second.id])
+        #expect(store.transportEligibleEntries().filter(\.hasTemplateIntent).map(\.id) == [second.id])
     }
 
     /// A quarantined entry is terminal: its exact bytes can never transport and
@@ -212,17 +247,17 @@ struct WatchTemplateTransactionSyncTests {
     func aQuarantinedPredecessorDoesNotBlockTheNextRoutineTransaction() throws {
         let store = WatchSyncStateStore(directory: try Fixtures.makeTempDirectory(), legacyDefaults: nil)
         let routineID = UUID()
-        let doomed = try store.enqueue(
-            Fixtures.makeWorkout(routineId: routineID, shouldUpdateTemplate: true), phase: .transportEligible
-        )
-        let workout = try store.enqueue(
-            Fixtures.makeWorkout(routineId: routineID, shouldUpdateTemplate: true), phase: .transportEligible
-        )
-        #expect(store.transportEligibleEntries().map(\.id) == [doomed.id])
+        let doomedWorkout = Fixtures.makeWorkout(routineId: routineID, shouldUpdateTemplate: true)
+        let laterWorkout = Fixtures.makeWorkout(routineId: routineID, shouldUpdateTemplate: true)
+        try store.enqueue(doomedWorkout, phase: .transportEligible)
+        try store.enqueue(laterWorkout, phase: .transportEligible)
+        let doomed = try #require(Fixtures.templateEntry(in: store, forWorkout: doomedWorkout.id))
+        let later = try #require(Fixtures.templateEntry(in: store, forWorkout: laterWorkout.id))
+        #expect(store.transportEligibleEntries().filter(\.hasTemplateIntent).map(\.id) == [doomed.id])
 
         store.quarantine(id: doomed.id, reason: "payload permanently untransportable")
 
-        #expect(store.transportEligibleEntries().map(\.id) == [workout.id])
+        #expect(store.transportEligibleEntries().filter(\.hasTemplateIntent).map(\.id) == [later.id])
     }
 
     // MARK: - Acknowledgment + routine context convergence
@@ -248,14 +283,16 @@ struct WatchTemplateTransactionSyncTests {
     }
 
     /// Builds a store holding one pending template transaction whose routine
-    /// base was established at `generation`.
+    /// base was established at `generation`. Returns the TEMPLATE half of the
+    /// enqueue plus the workout it was accepted in (the folds below need the
+    /// workout, which the template entry wraps rather than owns).
     private func makeStoreWithPendingTransaction(
         directory: URL,
         routine: WatchRoutine,
         epoch: UUID,
         generation: UInt64 = 1,
         actualWeight: Double = 80
-    ) throws -> (store: WatchSyncStateStore, entry: OutgoingSyncEntry) {
+    ) throws -> (store: WatchSyncStateStore, entry: OutgoingSyncEntry, workout: CompletedWatchWorkout) {
         let store = WatchSyncStateStore(directory: directory, legacyDefaults: nil)
         bootstrap(store, routines: [routine], epoch: epoch, generation: generation)
         let setId = routine.exercises[0].sets[0].id
@@ -267,8 +304,9 @@ struct WatchTemplateTransactionSyncTests {
                 sets: [Fixtures.makeSet(id: setId, plannedReps: 10, actualReps: 12, plannedWeight: 60, actualWeight: actualWeight)]
             )]
         )
-        let entry = try store.enqueue(workout, phase: .transportEligible, routineAnchor: routine)
-        return (store, entry)
+        try store.enqueue(workout, phase: .transportEligible, routineAnchor: routine)
+        let entry = try #require(Fixtures.templateEntry(in: store, forWorkout: workout.id))
+        return (store, entry, workout)
     }
 
     private func ack(for entry: OutgoingSyncEntry, routineEpoch: UUID, generation: UInt64) -> TemplateAckRecord {
@@ -286,7 +324,7 @@ struct WatchTemplateTransactionSyncTests {
     func pendingTransactionIsFoldedOverTheBaseUntilAckAndContextBothArrive() throws {
         let routine = Fixtures.makeWatchRoutine()
         let epoch = UUID()
-        let (store, entry) = try makeStoreWithPendingTransaction(
+        let (store, entry, workout) = try makeStoreWithPendingTransaction(
             directory: try Fixtures.makeTempDirectory(), routine: routine, epoch: epoch
         )
 
@@ -298,19 +336,18 @@ struct WatchTemplateTransactionSyncTests {
             epoch: epoch, generation: 2, targetWatchInstanceID: nil, fromEpoch: nil, handoverNonce: nil
         ))
         #expect(store.effectiveRoutines()[0].exercises[0].sets[0].weight == 80)
-        #expect(store.all.count == 1)
+        #expect(pendingTemplateEntries(store).count == 1)
 
         // Ack arrives first, naming generation 3: held until that applies.
         store.acknowledgeTemplateTransaction(ack(for: entry, routineEpoch: epoch, generation: 3))
-        #expect(store.all.count == 1)
+        #expect(pendingTemplateEntries(store).count == 1)
 
         // The correlated context applies → the head retires and the base wins.
-        var applied = routine
-        applied = WatchRoutineTemplateFold.apply(entry.completedWorkout!, to: routine)
+        let applied = WatchRoutineTemplateFold.apply(workout, to: routine)
         store.applyRoutineContext([applied], header: RoutineSnapshotHeader(
             epoch: epoch, generation: 3, targetWatchInstanceID: nil, fromEpoch: nil, handoverNonce: nil
         ))
-        #expect(store.all.isEmpty)
+        #expect(pendingTemplateEntries(store).isEmpty)
         #expect(store.effectiveRoutines()[0].exercises[0].sets[0].weight == 80)
     }
 
@@ -348,21 +385,20 @@ struct WatchTemplateTransactionSyncTests {
             )]
         )
 
-        let entry = try store.enqueue(
+        try store.enqueue(
             workout,
             phase: .transportEligible,
             routineAnchor: routine
         )
+        let entry = try #require(Fixtures.templateEntry(in: store, forWorkout: workout.id))
 
         // The already-running watch process must publish the optimistic fold
         // immediately; relaunching from the durable state file is not part of
-        // the update path.
+        // the update path. The split enqueue publishes once for the whole
+        // commit, not once per entry.
         #expect(publishedWeights == [80])
 
-        let authoritative = WatchRoutineTemplateFold.apply(
-            entry.completedWorkout!,
-            to: routine
-        )
+        let authoritative = WatchRoutineTemplateFold.apply(workout, to: routine)
         store.acknowledgeTemplateTransaction(
             ack(for: entry, routineEpoch: epoch, generation: 2)
         )
@@ -374,7 +410,7 @@ struct WatchTemplateTransactionSyncTests {
             handoverNonce: nil
         ))
 
-        #expect(store.all.isEmpty)
+        #expect(pendingTemplateEntries(store).isEmpty)
         #expect(publishedWeights.last == 80)
         #expect(store.effectiveRoutines()[0].exercises[0].sets[0].weight == 80)
     }
@@ -383,18 +419,18 @@ struct WatchTemplateTransactionSyncTests {
     func contextFirstThenAckConvergesIdentically() throws {
         let routine = Fixtures.makeWatchRoutine()
         let epoch = UUID()
-        let (store, entry) = try makeStoreWithPendingTransaction(
+        let (store, entry, workout) = try makeStoreWithPendingTransaction(
             directory: try Fixtures.makeTempDirectory(), routine: routine, epoch: epoch
         )
 
-        let applied = WatchRoutineTemplateFold.apply(entry.completedWorkout!, to: routine)
+        let applied = WatchRoutineTemplateFold.apply(workout, to: routine)
         store.applyRoutineContext([applied], header: RoutineSnapshotHeader(
             epoch: epoch, generation: 3, targetWatchInstanceID: nil, fromEpoch: nil, handoverNonce: nil
         ))
-        #expect(store.all.count == 1)  // no ack yet
+        #expect(pendingTemplateEntries(store).count == 1)  // no ack yet
 
         store.acknowledgeTemplateTransaction(ack(for: entry, routineEpoch: epoch, generation: 3))
-        #expect(store.all.isEmpty)
+        #expect(pendingTemplateEntries(store).isEmpty)
         #expect(store.effectiveRoutines()[0].exercises[0].sets[0].weight == 80)
     }
 
@@ -403,7 +439,7 @@ struct WatchTemplateTransactionSyncTests {
         let routine = Fixtures.makeWatchRoutine()
         let epoch = UUID()
         let dir = try Fixtures.makeTempDirectory()
-        let (store, first) = try makeStoreWithPendingTransaction(
+        let (store, first, firstWorkout) = try makeStoreWithPendingTransaction(
             directory: dir, routine: routine, epoch: epoch, actualWeight: 65
         )
         let secondWorkout = Fixtures.makeWorkout(
@@ -418,12 +454,11 @@ struct WatchTemplateTransactionSyncTests {
                 )]
             )]
         )
-        let second = try store.enqueue(
-            secondWorkout, phase: .transportEligible, routineAnchor: routine
-        )
+        try store.enqueue(secondWorkout, phase: .transportEligible, routineAnchor: routine)
+        let second = try #require(Fixtures.templateEntry(in: store, forWorkout: secondWorkout.id))
         let authoritative = WatchRoutineTemplateFold.apply(
-            second.completedWorkout!,
-            to: WatchRoutineTemplateFold.apply(first.completedWorkout!, to: routine)
+            secondWorkout,
+            to: WatchRoutineTemplateFold.apply(firstWorkout, to: routine)
         )
 
         // Models a migrated queue whose successor transfer was already in
@@ -436,7 +471,7 @@ struct WatchTemplateTransactionSyncTests {
             targetWatchInstanceID: nil, fromEpoch: nil, handoverNonce: nil
         ))
 
-        #expect(store.all.map(\.id) == [first.id, second.id])
+        #expect(pendingTemplateEntries(store).map(\.id) == [first.id, second.id])
         #expect(store.effectiveRoutines()[0].exercises[0].sets[0].weight == 75)
 
         // Once A is also satisfied, the per-routine satisfied prefix A,B can
@@ -444,7 +479,7 @@ struct WatchTemplateTransactionSyncTests {
         store.acknowledgeTemplateTransaction(
             ack(for: first, routineEpoch: epoch, generation: 2)
         )
-        #expect(store.all.isEmpty)
+        #expect(pendingTemplateEntries(store).isEmpty)
         #expect(store.effectiveRoutines()[0].exercises[0].sets[0].weight == 75)
     }
 
@@ -453,19 +488,19 @@ struct WatchTemplateTransactionSyncTests {
         let dir = try Fixtures.makeTempDirectory()
         let routine = Fixtures.makeWatchRoutine()
         let epoch = UUID()
-        let (store, entry) = try makeStoreWithPendingTransaction(
+        let (store, entry, _) = try makeStoreWithPendingTransaction(
             directory: dir, routine: routine, epoch: epoch
         )
         store.acknowledgeTemplateTransaction(ack(for: entry, routineEpoch: epoch, generation: 5))
-        #expect(store.all.count == 1)
+        #expect(pendingTemplateEntries(store).count == 1)
 
         let reloaded = WatchSyncStateStore(directory: dir, legacyDefaults: nil)
-        #expect(reloaded.all.count == 1)
+        #expect(pendingTemplateEntries(reloaded).count == 1)
         // The context arrives after relaunch: the persisted ack still retires it.
         reloaded.applyRoutineContext([routine], header: RoutineSnapshotHeader(
             epoch: epoch, generation: 5, targetWatchInstanceID: nil, fromEpoch: nil, handoverNonce: nil
         ))
-        #expect(reloaded.all.isEmpty)
+        #expect(pendingTemplateEntries(reloaded).isEmpty)
     }
 
     @Test
@@ -473,7 +508,7 @@ struct WatchTemplateTransactionSyncTests {
         let dir = try Fixtures.makeTempDirectory()
         let routine = Fixtures.makeWatchRoutine()
         let epoch = UUID()
-        let (store, entry) = try makeStoreWithPendingTransaction(
+        let (store, entry, _) = try makeStoreWithPendingTransaction(
             directory: dir, routine: routine, epoch: epoch
         )
         store.applyRoutineContext([routine], header: RoutineSnapshotHeader(
@@ -483,34 +518,48 @@ struct WatchTemplateTransactionSyncTests {
         let restore = try Fixtures.makeReadOnly(dir)
 
         store.acknowledgeTemplateTransaction(terminalAck)
-        #expect(store.all.count == 1)
-        #expect(store.all[0].heldAck == nil)
+        #expect(pendingTemplateEntries(store).count == 1)
+        #expect(pendingTemplateEntries(store)[0].heldAck == nil)
 
         restore()
         store.acknowledgeTemplateTransaction(terminalAck)
-        #expect(store.all.isEmpty)
+        #expect(pendingTemplateEntries(store).isEmpty)
     }
 
+    /// A plain ack retires history — including the history half of a split
+    /// template-carrying workout, which is an ordinary workout payload — but
+    /// never a legacy fused entry, whose single payload still carries the
+    /// user's template intent an old iOS build never processed.
     @Test
-    func plainAckNeverClearsTemplateIntentButClearsNoTemplateWorkouts() throws {
-        let store = WatchSyncStateStore(directory: try Fixtures.makeTempDirectory(), legacyDefaults: nil)
-        let templateEntry = try store.enqueue(
-            Fixtures.makeWorkout(shouldUpdateTemplate: true), phase: .transportEligible
+    func plainAckRetiresHistoryButNeverALegacyFusedTransaction() throws {
+        let (defaults, suiteName) = Fixtures.makeDefaultsSuite()
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let fused = Fixtures.makeWorkout(shouldUpdateTemplate: true)
+        defaults.set(try JSONEncoder().encode([fused]), forKey: WatchSyncStateStore.legacyDefaultsKey)
+        let store = WatchSyncStateStore(
+            directory: try Fixtures.makeTempDirectory(), legacyDefaults: defaults
         )
-        let plainEntry = try store.enqueue(Fixtures.makeWorkout(), phase: .transportEligible)
+        let split = Fixtures.makeWorkout(shouldUpdateTemplate: true)
+        let plain = Fixtures.makeWorkout()
+        try store.enqueue(split, phase: .transportEligible)
+        try store.enqueue(plain, phase: .transportEligible)
 
-        store.acknowledgePlain(workoutId: templateEntry.workoutID!)
-        store.acknowledgePlain(workoutId: plainEntry.workoutID!)
+        store.acknowledgePlain(workoutId: fused.id)
+        store.acknowledgePlain(workoutId: split.id)
+        store.acknowledgePlain(workoutId: plain.id)
 
-        #expect(store.entry(id: templateEntry.id) != nil)
-        #expect(store.entry(id: plainEntry.workoutID!) == nil)
+        #expect(store.entry(id: fused.id)?.hasTemplateIntent == true)
+        #expect(store.entry(id: split.id) == nil)
+        // The split's template transaction is untouched by the workout's ack.
+        #expect(Fixtures.templateEntry(in: store, forWorkout: split.id) != nil)
+        #expect(store.entry(id: plain.id) == nil)
     }
 
     @Test
     func acknowledgmentWithMismatchedTransactionIDIsIgnored() throws {
         let routine = Fixtures.makeWatchRoutine()
         let epoch = UUID()
-        let (store, entry) = try makeStoreWithPendingTransaction(
+        let (store, entry, _) = try makeStoreWithPendingTransaction(
             directory: try Fixtures.makeTempDirectory(), routine: routine, epoch: epoch
         )
         var wrong = ack(for: entry, routineEpoch: epoch, generation: 3)
@@ -524,14 +573,14 @@ struct WatchTemplateTransactionSyncTests {
         store.applyRoutineContext([routine], header: RoutineSnapshotHeader(
             epoch: epoch, generation: 3, targetWatchInstanceID: nil, fromEpoch: nil, handoverNonce: nil
         ))
-        #expect(store.all.count == 1)
+        #expect(pendingTemplateEntries(store).count == 1)
     }
 
     @Test
     func acknowledgmentWithMismatchedEpochOrSequenceIsIgnored() throws {
         let routine = Fixtures.makeWatchRoutine()
         let epoch = UUID()
-        let (store, entry) = try makeStoreWithPendingTransaction(
+        let (store, entry, _) = try makeStoreWithPendingTransaction(
             directory: try Fixtures.makeTempDirectory(), routine: routine, epoch: epoch
         )
         let valid = ack(for: entry, routineEpoch: epoch, generation: 3)
@@ -547,7 +596,7 @@ struct WatchTemplateTransactionSyncTests {
             epoch: epoch, generation: 3, targetWatchInstanceID: nil, fromEpoch: nil, handoverNonce: nil
         ))
         store.acknowledgeTemplateTransaction(malformed)
-        #expect(store.all.count == 1)
+        #expect(pendingTemplateEntries(store).count == 1)
     }
 
     @Test

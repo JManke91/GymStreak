@@ -19,6 +19,18 @@ private final class SuccessorDrainRecordingTransport: WatchWorkoutTransporting {
             outstandingWorkoutSemanticIDs.insert(id)
         }
     }
+
+    /// Since the history/template split a template-carrying workout produces
+    /// two transfers, so the successor-release assertions count the gated half.
+    var templateTransfers: [[String: Any]] {
+        transfers.filter { $0[WatchWorkoutWire.templateTransactionKey] != nil }
+    }
+
+    var historyWorkoutIDs: Set<UUID> {
+        Set(transfers.compactMap {
+            ($0[WatchWorkoutWire.workoutIdKey] as? String).flatMap(UUID.init(uuidString:))
+        })
+    }
 }
 
 @Suite(.serialized)
@@ -35,15 +47,14 @@ struct WatchWorkoutSuccessorDrainTests {
         )
         #expect(bootstrap(store, routine: routine, epoch: epoch))
 
-        let entries = try (0..<3).map { _ in
-            try store.enqueue(
-                Fixtures.makeWorkout(
-                    routineId: routine.id,
-                    shouldUpdateTemplate: true
-                ),
-                phase: .transportEligible,
-                routineAnchor: routine
-            )
+        let workouts = (0..<3).map { _ in
+            Fixtures.makeWorkout(routineId: routine.id, shouldUpdateTemplate: true)
+        }
+        for workout in workouts {
+            try store.enqueue(workout, phase: .transportEligible, routineAnchor: routine)
+        }
+        let entries = try workouts.map {
+            try #require(Fixtures.templateEntry(in: store, forWorkout: $0.id))
         }
         let transport = SuccessorDrainRecordingTransport()
         let coordinator = WatchWorkoutTransportCoordinator(
@@ -51,10 +62,12 @@ struct WatchWorkoutSuccessorDrainTests {
         )
 
         coordinator.reconcile()
-        #expect(transport.transfers.count == 1)
+        // All three histories go immediately; only the head transaction does.
+        #expect(transport.historyWorkoutIDs == Set(workouts.map(\.id)))
+        #expect(transport.templateTransfers.count == 1)
 
         store.acknowledgeTemplateTransaction(ack(for: entries[0], epoch: epoch, generation: 2))
-        #expect(transport.transfers.count == 1)
+        #expect(transport.templateTransfers.count == 1)
         #expect(store.applyRoutineContext(
             [routine],
             header: RoutineSnapshotHeader(
@@ -65,7 +78,7 @@ struct WatchWorkoutSuccessorDrainTests {
                 handoverNonce: nil
             )
         ))
-        #expect(transport.transfers.count == 2)
+        #expect(transport.templateTransfers.count == 2)
 
         store.acknowledgeTemplateTransaction(ack(for: entries[1], epoch: epoch, generation: 3))
         #expect(store.applyRoutineContext(
@@ -78,7 +91,7 @@ struct WatchWorkoutSuccessorDrainTests {
                 handoverNonce: nil
             )
         ))
-        #expect(transport.transfers.count == 3)
+        #expect(transport.templateTransfers.count == 3)
     }
 
     @Test
@@ -90,23 +103,21 @@ struct WatchWorkoutSuccessorDrainTests {
         )
         #expect(bootstrap(store, routine: routine, epoch: epoch))
 
-        let first = try store.enqueue(
+        let firstWorkout = Fixtures.makeWorkout(routineId: routine.id, shouldUpdateTemplate: true)
+        try store.enqueue(firstWorkout, phase: .transportEligible, routineAnchor: routine)
+        try store.enqueue(
             Fixtures.makeWorkout(routineId: routine.id, shouldUpdateTemplate: true),
             phase: .transportEligible,
             routineAnchor: routine
         )
-        _ = try store.enqueue(
-            Fixtures.makeWorkout(routineId: routine.id, shouldUpdateTemplate: true),
-            phase: .transportEligible,
-            routineAnchor: routine
-        )
+        let first = try #require(Fixtures.templateEntry(in: store, forWorkout: firstWorkout.id))
         let transport = SuccessorDrainRecordingTransport()
         let coordinator = WatchWorkoutTransportCoordinator(
             syncState: store, transport: transport
         )
 
         coordinator.reconcile()
-        #expect(transport.transfers.count == 1)
+        #expect(transport.templateTransfers.count == 1)
 
         #expect(store.applyRoutineContext(
             [routine],
@@ -118,10 +129,10 @@ struct WatchWorkoutSuccessorDrainTests {
                 handoverNonce: nil
             )
         ))
-        #expect(transport.transfers.count == 1)
+        #expect(transport.templateTransfers.count == 1)
         store.acknowledgeTemplateTransaction(ack(for: first, epoch: epoch, generation: 2))
 
-        #expect(transport.transfers.count == 2)
+        #expect(transport.templateTransfers.count == 2)
     }
 
     private func bootstrap(

@@ -20,9 +20,12 @@ struct RoutineListView: View {
         Group {
             if routineStore.isLoading {
                 loadingView
-            } else if routineStore.routines.isEmpty {
+            } else if routineStore.routines.isEmpty && routineStore.templateFailureNotices.isEmpty {
                 emptyView
             } else {
+                // A failed template update still has to be told even when the
+                // routine it belonged to is gone, so the list wins over the
+                // empty state whenever a notice is outstanding.
                 routineList
             }
         }
@@ -72,6 +75,18 @@ struct RoutineListView: View {
         // RoutinesViewModel.syncRoutinesToWatch(). The first routine is
         // therefore surfaced as the "Up Next" hero with a quick-start button.
         List {
+            if !routineStore.templateFailureNotices.isEmpty {
+                Section {
+                    ForEach(routineStore.templateFailureNotices) { notice in
+                        TemplateFailureNoticeRow(notice: notice) {
+                            routineStore.dismissTemplateFailureNotice(id: notice.id)
+                        }
+                    }
+                } header: {
+                    Text("Not Applied")
+                }
+            }
+
             if let upNext = routineStore.routines.first {
                 Section {
                     NavigationLink(value: RoutineDestination(routineID: upNext.id)) {

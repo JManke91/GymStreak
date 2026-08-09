@@ -37,6 +37,27 @@ enum TemplateTransactionOutcomeWire: String, Codable {
     case rejected
 }
 
+/// The template intent a user accepted during a workout, travelling on its own
+/// (ADR 0001). The workout history it belongs to rides as an ordinary, ungated
+/// workout payload with the same workout id, so a template transaction that
+/// cannot be acknowledged can never withhold the workout itself.
+///
+/// It wraps the WHOLE completed workout deliberately: the iOS merge and the
+/// history dedupe stay the already-exercised `execute` path, at the cost of a
+/// few duplicated KB on the wire.
+struct WatchWorkoutTemplateIntent: Codable {
+    let workout: CompletedWatchWorkout
+    /// The workout whose history travels as its own sync entry. Always
+    /// `workout.id`; carried here because the ENVELOPE's `workoutID` must stay
+    /// nil for this kind (see `isInternallyConsistent`).
+    let sourceWorkoutID: UUID
+
+    init(workout: CompletedWatchWorkout) {
+        self.workout = workout
+        self.sourceWorkoutID = workout.id
+    }
+}
+
 /// The extensible payload carried by the shared per-routine transaction
 /// protocol. Ticket 05 implements only the completed-workout kind; later kinds
 /// extend this enum and automatically reuse the same queue and authority.
@@ -46,18 +67,38 @@ enum TemplateTransactionPayload: Codable {
     /// and no workout correlation — see `isInternallyConsistent`, which
     /// requires `workoutID == nil` for every payload without a workout.
     case progressiveOverload(WatchProgressiveOverloadIntent)
+    /// Template-only kind carrying a copy of the workout it was accepted in
+    /// (ADR 0001). History for that workout travels separately, so this kind
+    /// deliberately does NOT surface through `completedWorkout`.
+    case workoutTemplateIntent(WatchWorkoutTemplateIntent)
 
+    /// Non-nil only when this payload CARRIES the workout history. Split
+    /// template intent wraps a workout without owning its history, so it stays
+    /// nil here: `OutgoingSyncEntry.workoutID` derives from this accessor, and
+    /// a non-nil value would make the watch's `entry(id:)` collapse a workout's
+    /// two sync entries into one.
     var completedWorkout: CompletedWatchWorkout? {
         switch self {
         case .completedWorkoutUpdate(let workout): workout
-        case .progressiveOverload: nil
+        case .progressiveOverload, .workoutTemplateIntent: nil
+        }
+    }
+
+    /// The workout a split template intent was accepted in, for the only two
+    /// consumers that legitimately need it: the routine merge on iOS and the
+    /// optimistic fold on the watch. Never a claim that this entry carries
+    /// history — use `completedWorkout` for that.
+    var templateIntentWorkout: CompletedWatchWorkout? {
+        switch self {
+        case .workoutTemplateIntent(let intent): intent.workout
+        case .completedWorkoutUpdate, .progressiveOverload: nil
         }
     }
 
     var progressiveOverload: WatchProgressiveOverloadIntent? {
         switch self {
         case .progressiveOverload(let intent): intent
-        case .completedWorkoutUpdate: nil
+        case .completedWorkoutUpdate, .workoutTemplateIntent: nil
         }
     }
 }
@@ -86,6 +127,22 @@ struct TemplateTransactionEnvelope: Codable {
         self.payload = .completedWorkoutUpdate(completedWorkout)
     }
 
+    /// The template half of a split workout (ADR 0001): the same ordering
+    /// identity the fused kind would have used, but with `workoutID` nil so the
+    /// history entry enqueued for the same workout stays a separate sync entry.
+    init(templateIntentFor workout: CompletedWatchWorkout) {
+        precondition(workout.shouldUpdateTemplate)
+        precondition(workout.templateTransactionID != nil)
+        precondition(workout.templateSenderEpoch != nil)
+        precondition(workout.templateSequence != nil)
+        self.transactionID = workout.templateTransactionID!
+        self.senderEpoch = workout.templateSenderEpoch!
+        self.routineID = workout.routineId
+        self.sequence = workout.templateSequence!
+        self.workoutID = nil
+        self.payload = .workoutTemplateIntent(WatchWorkoutTemplateIntent(workout: workout))
+    }
+
     init(
         transactionID: UUID,
         senderEpoch: UUID,
@@ -108,10 +165,24 @@ struct TemplateTransactionEnvelope: Codable {
 
     var completedWorkout: CompletedWatchWorkout? { payload.completedWorkout }
 
+    var templateIntentWorkout: CompletedWatchWorkout? { payload.templateIntentWorkout }
+
     var isInternallyConsistent: Bool {
+        // Split template intent: the envelope must carry NO workout
+        // correlation (the history for that workout is its own sync entry),
+        // but its ordering identity must still match the workout it was
+        // accepted in — that identity is the witness the iOS merge writes.
+        if case .workoutTemplateIntent(let intent) = payload {
+            return workoutID == nil
+                && intent.sourceWorkoutID == intent.workout.id
+                && matchesTemplateIdentity(of: intent.workout)
+        }
         guard let workout = completedWorkout else { return workoutID == nil }
-        return workout.shouldUpdateTemplate
-            && workoutID == workout.id
+        return workoutID == workout.id && matchesTemplateIdentity(of: workout)
+    }
+
+    private func matchesTemplateIdentity(of workout: CompletedWatchWorkout) -> Bool {
+        workout.shouldUpdateTemplate
             && routineID == workout.routineId
             && transactionID == workout.templateTransactionID
             && senderEpoch == workout.templateSenderEpoch
@@ -156,6 +227,11 @@ struct OutgoingSyncEntry: Codable {
         templateTransaction?.transactionID ?? completedWorkout!.id
     }
 
+    /// The workout whose history this entry carries — nil for every
+    /// template-only kind, including split template intent (which wraps a copy
+    /// of a workout it does not own). `entry(id:)`, `advance`, `quarantine` and
+    /// `retire` all match on this, so a non-nil value for a template-only kind
+    /// would silently collapse a split workout's two entries into one.
     var workoutID: UUID? { templateTransaction?.workoutID ?? completedWorkout?.id }
     var routineID: UUID? { templateTransaction?.routineID ?? completedWorkout?.routineId }
 

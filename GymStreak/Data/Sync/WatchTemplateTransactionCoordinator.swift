@@ -30,9 +30,10 @@ import Foundation
 @MainActor
 final class WatchTemplateTransactionCoordinator {
     private let inbox: WatchWorkoutInboxStore
-    // Internal (not private) so the progressive-overload kind in
-    // `+ProgressiveOverload.swift` uses the same ordering ledger and isolated
-    // transaction factory rather than acquiring its own.
+    // Internal (not private) so every transaction kind — including those in
+    // `+ProgressiveOverload.swift` and `+WorkoutTemplateIntent.swift` — uses
+    // the same ordering ledger and isolated transaction factory rather than
+    // acquiring its own.
     let receipts: WorkoutIngestReceiptStore
     let historyTransactions: WorkoutHistoryTransacting
     private let routineSnapshots: AuthoritativeRoutineSnapshotProviding
@@ -124,6 +125,12 @@ final class WatchTemplateTransactionCoordinator {
         // the executor differs.
         if let intent = entry.transaction?.payload.progressiveOverload {
             return processProgressiveOverload(entry, intent: intent)
+        }
+        // Split template intent wraps the workout it was accepted in without
+        // carrying its history, so it is reached through a separate accessor
+        // (ADR 0001) — `completedWorkout` must stay nil for it.
+        if let wrapped = entry.transaction?.templateIntentWorkout {
+            return processWorkoutTemplateIntent(entry, workout: wrapped)
         }
         guard let workout = entry.completedWorkout else {
             WatchSyncDiagnostics.notice("ingest: unsupported payload retained for a newer executor")

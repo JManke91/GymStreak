@@ -428,7 +428,7 @@ struct WatchProgressiveOverloadQueueTests {
     }
 
     @Test
-    func overloadIsFIFOHeadAndBlocksALaterCompletedWorkoutTransaction() throws {
+    func overloadIsFIFOHeadAndBlocksALaterWorkoutsTemplateButNotItsHistory() throws {
         let directory = try Fixtures.makeTempDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
         let store = WatchSyncStateStore(directory: directory)
@@ -441,12 +441,16 @@ struct WatchProgressiveOverloadQueueTests {
         let workout = Fixtures.makeWorkout(routineId: routineID, shouldUpdateTemplate: true)
         try store.enqueue(workout, phase: .transportEligible)
 
-        // Both are durable, but only the oldest may transport.
-        #expect(store.all.count == 2)
-        #expect(store.transportEligibleEntries().map(\.id) == [overloadID])
-        // The completed workout took the next sequence — it can never overtake.
-        let workoutEntry = try #require(store.entry(id: workout.id))
-        #expect(workoutEntry.templateTransaction?.sequence == 1)
+        // Three durable entries: the overload, and the workout's history and
+        // template halves. Only the oldest TRANSACTION may transport — the
+        // history rides alongside it, ungated (ADR 0001).
+        #expect(store.all.count == 3)
+        #expect(store.transportEligibleEntries().map(\.id) == [overloadID, workout.id])
+        // The workout's template intent took the next sequence — it can never
+        // overtake, and it is withheld until the overload retires.
+        let templateEntry = try #require(Fixtures.templateEntry(in: store, forWorkout: workout.id))
+        #expect(templateEntry.templateTransaction?.sequence == 1)
+        #expect(!store.transportEligibleEntries().contains { $0.id == templateEntry.id })
     }
 
     @Test

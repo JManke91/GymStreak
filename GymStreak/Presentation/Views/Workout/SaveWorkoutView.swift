@@ -154,6 +154,14 @@ struct SaveWorkoutView: View {
                         exercise: exercise,
                         libraryExercise: viewModel.performedExercise(for: exercise),
                         canUndo: viewModel.canUndoProgressiveOverload(for: exercise),
+                        // An applied increase no longer bumps the workout's own
+                        // sets, so the confirmed row is told the new template
+                        // weight rather than reading it off them.
+                        appliedWeight: viewModel.appliedOverloadWeight(for: exercise),
+                        hasAmbiguousAppliedWeight: viewModel.hasNonUniformAppliedOverload(for: exercise),
+                        // The CTA strikes through what an increase starts from:
+                        // the template, which the picker also previews.
+                        templateWeight: viewModel.overloadTemplateFirstSet(for: exercise)?.weight,
                         onIncrease: { overloadSheetExercise = exercise },
                         onUndo: {
                             withAnimation(DesignSystem.Animation.spring) {
@@ -171,6 +179,8 @@ struct SaveWorkoutView: View {
             .sheet(item: $overloadSheetExercise) { exercise in
                 WeightIncreaseSheet(
                     workoutExercise: exercise,
+                    // Preview the template values the apply actually raises.
+                    templateFirstSet: viewModel.overloadTemplateFirstSet(for: exercise),
                     onApply: { increment in
                         withAnimation(DesignSystem.Animation.spring) {
                             viewModel.applyProgressiveOverload(for: exercise, weightIncrement: increment)

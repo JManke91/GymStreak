@@ -31,13 +31,23 @@ struct WeightIncreaseSheet: View {
         self.onCancel = onCancel
     }
 
-    /// Workout surfaces (active workout, completion screen): current values are
-    /// what the user actually lifted — correct for swapped exercises too, whose
-    /// performed weights never live on the primary template sets.
-    init(workoutExercise: WorkoutExercise, onApply: @escaping (Double) -> Void, onCancel: @escaping () -> Void) {
+    /// Workout surfaces (active workout, completion screen). `templateFirstSet`
+    /// is what the apply actually raises — pass it (via
+    /// `WorkoutViewModel.overloadTemplateFirstSet(for:)`) so the preview can't
+    /// promise a different number than the confirmation announces when the user
+    /// lifted more or less than planned. Falls back to the performed values
+    /// when the template target can't be resolved — correct for swapped
+    /// exercises too, whose performed weights never live on the primary
+    /// template sets.
+    init(
+        workoutExercise: WorkoutExercise,
+        templateFirstSet: (weight: Double, reps: Int)? = nil,
+        onApply: @escaping (Double) -> Void,
+        onCancel: @escaping () -> Void
+    ) {
         let firstSet = workoutExercise.setsList.sorted { $0.order < $1.order }.first
-        self.currentWeight = firstSet?.actualWeight ?? 0
-        self.currentReps = firstSet?.actualReps ?? 0
+        self.currentWeight = templateFirstSet?.weight ?? firstSet?.actualWeight ?? 0
+        self.currentReps = templateFirstSet?.reps ?? firstSet?.actualReps ?? 0
         self.setCount = workoutExercise.setsList.count
         self.targetMin = workoutExercise.targetRepMin ?? 0
         self.isAssistance = workoutExercise.loadBehavior.isCounterweightAssistance
