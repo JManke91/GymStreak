@@ -1146,7 +1146,12 @@ class WorkoutViewModel: ObservableObject {
         save()
     }
 
-    func addExerciseToWorkout(exercise: Exercise, configuredSets: [ExerciseSet]) {
+    func addExerciseToWorkout(
+        exercise: Exercise,
+        configuredSets: [ExerciseSet],
+        targetRepMin: Int? = nil,
+        targetRepMax: Int? = nil
+    ) {
         guard let session = currentSession else { return }
 
         objectWillChange.send()
@@ -1167,6 +1172,8 @@ class WorkoutViewModel: ObservableObject {
             loadBehavior: exercise.loadBehavior
         )
         workoutExercise.workoutSession = session
+        workoutExercise.targetRepMin = targetRepMin
+        workoutExercise.targetRepMax = targetRepMax
 
         for set in workoutSets {
             set.workoutExercise = workoutExercise

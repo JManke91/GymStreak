@@ -149,8 +149,16 @@ struct RoutineDetailView: View {
             RoutineExercisePickerView(
                 alreadyAddedExercises: routine.routineExercisesList.compactMap(\.exercise),
                 exercisesViewModel: exercisesViewModel,
-                onExerciseConfigured: { exercise, sets, alternatives in
-                    viewModel.addConfiguredExercise(exercise, to: routine, sets: sets, alternatives: alternatives)
+                routineName: routine.name,
+                onExerciseConfigured: { exercise, sets, alternatives, repMin, repMax in
+                    viewModel.addConfiguredExercise(
+                        exercise,
+                        to: routine,
+                        sets: sets,
+                        alternatives: alternatives,
+                        targetRepMin: repMin,
+                        targetRepMax: repMax
+                    )
                 }
             )
         }

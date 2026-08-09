@@ -57,8 +57,12 @@ struct CompactStepper: View {
 
 // MARK: - Editor shell
 
-/// Tinted container the chip editors open into.
+/// Container the parameter editors live in. Tinted when it opened from a chip
+/// (a transient panel that must stand out), neutral when it is a permanent
+/// section of a screen — the configure screen stacks two of them and a tinted
+/// summary, which reads far too loud all in the accent color.
 struct ParameterEditorPanel<Content: View>: View {
+    var isProminent: Bool = true
     @ViewBuilder let content: Content
 
     var body: some View {
@@ -66,10 +70,13 @@ struct ParameterEditorPanel<Content: View>: View {
             .padding(.horizontal, 12)
             .padding(.vertical, 11)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(DesignSystem.Colors.tint.opacity(0.07))
+            .background(isProminent ? DesignSystem.Colors.tint.opacity(0.07) : Color.white.opacity(0.035))
             .overlay(
                 RoundedRectangle(cornerRadius: 14, style: .continuous)
-                    .stroke(DesignSystem.Colors.tint.opacity(0.2), lineWidth: 1)
+                    .stroke(
+                        isProminent ? DesignSystem.Colors.tint.opacity(0.2) : Color.white.opacity(0.06),
+                        lineWidth: 1
+                    )
             )
             .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
     }
@@ -81,13 +88,15 @@ struct ParameterEditorPanel<Content: View>: View {
 /// A rest time of 0 means the timer is off.
 struct RestTimeInlineEditor: View {
     let restTime: TimeInterval
+    /// False when the editor is a permanent section rather than a chip panel.
+    var isProminent: Bool = true
     let onChange: (TimeInterval) -> Void
 
     private static let presets: [TimeInterval] = [60, 90, 120, 150]
     private var isEnabled: Bool { restTime > 0 }
 
     var body: some View {
-        ParameterEditorPanel {
+        ParameterEditorPanel(isProminent: isProminent) {
             VStack(spacing: 10) {
                 HStack(spacing: 10) {
                     HStack(spacing: 4) {
@@ -160,6 +169,8 @@ struct RestTimeInlineEditor: View {
 struct RepRangeInlineEditor: View {
     let targetRepMin: Int?
     let targetRepMax: Int?
+    /// False when the editor is a permanent section rather than a chip panel.
+    var isProminent: Bool = true
     /// New (min, max), or (nil, nil) to clear the goal.
     let onChange: (Int?, Int?) -> Void
 
@@ -177,7 +188,7 @@ struct RepRangeInlineEditor: View {
     }
 
     var body: some View {
-        ParameterEditorPanel {
+        ParameterEditorPanel(isProminent: isProminent) {
             VStack(spacing: 0) {
                 HStack(spacing: 8) {
                     HStack(spacing: 4) {

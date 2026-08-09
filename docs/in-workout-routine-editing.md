@@ -10,9 +10,9 @@ In-workout routine editing lets a user change the exercise plan while an iOS wor
 
 1. Selecting an available library exercise pushes `ConfigureExerciseSetsView`.
 2. Creating a custom exercise through `AddExerciseView` returns the new library exercise, then routes it through the same configuration step.
-3. The configuration screen uses the established routine set editor and shared controls from `SetInputComponents.swift`. Its alternatives section is hidden for the live-workout flow because alternatives belong to routine-template configuration.
+3. The configuration screen is the shared `ConfigureExerciseSetsView` (redesigned 2026-08-09 — see [routines-exercises-redesign.md](./routines-exercises-redesign.md)): exercise header, live summary, `RoutineSetsEditor`, rep-goal and rest-timer panels, and a sticky CTA. Its alternatives section is hidden for the live-workout flow because alternatives belong to routine-template configuration, and with no `destinationName` the CTA falls back to "add_to_workout.add".
 4. On save, the finalized `[ExerciseSet]` scheme is passed to `WorkoutViewModel`, which translates it into `[WorkoutSet]` with `WorkoutSet(from:order:)`. That initializer copies each configured value into both planned and actual reps/weight.
-5. `WorkoutViewModel.addExerciseToWorkout(exercise:configuredSets:)` attaches the workout exercise and every converted set to the current `WorkoutSession`, inserts them through `WorkoutSessionRepository`, and saves.
+5. `WorkoutViewModel.addExerciseToWorkout(exercise:configuredSets:targetRepMin:targetRepMax:)` attaches the workout exercise and every converted set to the current `WorkoutSession`, inserts them through `WorkoutSessionRepository`, and saves. The rep-range goal is copied onto the `WorkoutExercise`, so an exercise added mid-workout gets the same rep-progress badges and overload prompts as one that came from the routine.
 6. Removing an exercise continues to affect only the live session until workout completion.
 7. On completion, leaving **Update Routine Template** disabled preserves the original routine. Enabling it reconciles the routine against the completed session:
    - Existing slots are matched by `WorkoutExercise.routineExerciseId`. The exercise identifier/name fallback is retained only for historical workout edits, where routine membership is deliberately not reconciled.

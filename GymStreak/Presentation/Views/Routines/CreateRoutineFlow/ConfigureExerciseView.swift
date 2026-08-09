@@ -197,13 +197,17 @@ struct ConfigureExerciseView: View {
                     }
             }
 
-            PendingAlternativesSection(
-                primaryExercise: exercise,
-                alternatives: $alternatives,
-                showingPicker: $showingAlternativePicker,
-                expandedAlternativeId: $expandedAlternativeId,
-                valueFocus: $isEditingAlternativeSetValue
-            )
+            // This screen is still the legacy Form; the alternatives block was
+            // restyled for the redesigned configure screen and now renders plain
+            // content, so it needs its own Section wrapper here.
+            Section("configure_exercise.alternatives.header".localized) {
+                PendingAlternativesSection(
+                    alternatives: $alternatives,
+                    showingPicker: $showingAlternativePicker,
+                    expandedAlternativeId: $expandedAlternativeId,
+                    valueFocus: $isEditingAlternativeSetValue
+                )
+            }
         }
         .keyboardDoneBar(isFocused: $isEditingAlternativeSetValue)
         .navigationDestination(isPresented: $showingAlternativePicker) {

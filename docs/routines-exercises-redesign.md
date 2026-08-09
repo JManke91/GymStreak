@@ -80,7 +80,27 @@ Rewritten from a `List(.insetGrouped)` with a nav-bar Edit button into a **`Scro
 - **Decoupled from `Routine` (2026-07-11, unified-picker ticket 01):** the picker no longer takes `routine:`/`viewModel:`; it takes `alreadyAddedExercises: [Exercise]` plus `onExerciseConfigured: (Exercise, [ExerciseSet], [PendingAlternative]) -> Void` and owns no persistence. `ConfigureExerciseSetsView` finalizes set restTime/order and hands the result to that callback instead of writing to the routine. Persistence for the existing-routine flow lives in `RoutinesViewModel.addConfiguredExercise(_:to:sets:alternatives:)`, invoked from `RoutineDetailView`'s sheet closure.
 - **Unified across both flows (2026-07-11, unified-picker ticket 02):** renamed `AddExerciseToRoutineView` → `RoutineExercisePickerView` (file moved to `Presentation/Views/Routines/RoutineExercisePickerView.swift`; the plain name `ExercisePickerView` is already taken by the single-select swap picker in `Views/Exercises/`, used by `ActiveWorkoutView`). The create-routine flow now presents the same picker as a sheet from `CreateRoutineView` (`onExerciseConfigured` appends a `PendingRoutineExercise`; save still goes through `RoutinesViewModel.createRoutine`). The old `CreateRoutineFlow/ExerciseSelectionView.swift` (SwiftData `@Query` in a View — architecture smell) was deleted along with its `exercise_selection.*` localization keys. Dismiss behavior is deliberately one-exercise-per-sheet-visit in both flows (the old create-flow multi-add-per-visit was dropped for consistency).
 - **Muscle-group filter (2026-07-11, unified-picker ticket 03):** the same `FilterPillButton` row as the Exercises tab ("Alle" + one pill per category present in the library, colored via `MuscleGroups.categoryColor(for:)`) sits below the search bar. Because the picker is shared, both flows get it. Filtering fully reuses `ExercisesViewModel`: the picker dropped its private repository fetch + inline search filter and instead flattens `ExercisesViewModel.sections(searchText:categoryKey:equipment:)` (equipment always `nil` — the equipment filter was deliberately not requested for the picker), then applies its own Available / Already-in-Routine partition on top. Side effects: the picker list is now ordered by anatomical category then name (previously repository order), and search matches localized muscle names (previously raw English keys). The formerly `ExercisesView`-private `categoryColor(for:)` helper moved to `MuscleGroups.categoryColor(for:)` in `DomainColorStyling.swift` so both pill rows share it. No new localization keys were needed (`filter.all`, `muscle_category.*` already exist in en+de).
-- **Deliberate omission — set-config screens NOT unified:** `ConfigureExerciseView` (in `CreateRoutineView`'s flow) still duplicates set-configuration UI with the picker's `ConfigureExerciseSetsView`; it remains solely for EDITING an already-added pending exercise in the create-routine draft. The user chose a 3-slice scope for the unified-picker feature (decouple → unify entry → filter + polish), and merging the two config screens was out of scope. To pick it up later: fold `ConfigureExerciseView`'s edit-existing-pending-exercise case into `ConfigureExerciseSetsView` (which already handles sets, rest time, and pending alternatives) and delete `ConfigureExerciseView`; the original tickets live under `.scratch/unified-exercise-picker/issues/`.
+### Configure screen (`ConfigureExerciseSetsView`) — redesign 2026-08-09
+
+The screen reached after picking an exercise ("Übung hinzufügen" → tap an exercise). Source of truth: the Claude Design project file *"Uebung Hinzufuegen Redesign.html"* (+ `gs-uebung-hinzufuegen.jsx`, `gs-shared.jsx`, `gs-data.jsx`), imported 2026-08-09. It replaced the last legacy `List` form in the routine flow. **Moved out of `RoutineExercisePickerView.swift` into its own file** (`Presentation/Views/Routines/ConfigureExerciseSetsView.swift`), which also brought the picker file back under the 300-line guideline.
+
+Layout, top to bottom:
+- **Exercise identity header** — 56 pt `ExerciseAvatarView`, 26 pt rounded name, `MuscleChipView` + `EquipmentTagView`. Replaces the old "Exercise Info" name/muscle-group rows.
+- **Live summary strip** — Sätze · Volumen · Pause in a tint-washed capsule, recomputed as the sets are edited. Volume is Σ(reps × weight), shown as "—" while every set is bodyweight.
+- **Sätze** — `RoutineSetsEditor` (the same editor as the routine detail and the alternatives), or an **empty state** with three quick schemes (3×8, 3×10, 4×12) and a dashed "single set" button. The screen starts with zero sets, so the empty state is the normal entry point.
+- **Wiederholungsziel** — `RepRangeInlineEditor` (see below; new on this screen).
+- **Pausentimer** — `RestTimeInlineEditor`, replacing the old 0–300 s `Slider`. Changing it writes through to every set immediately, so the summary strip stays truthful.
+- **Alternativübungen** — the restyled `PendingAlternativesSection` (only when `includesAlternatives`).
+- **Sticky CTA** — a full-width tinted "Zu \<Routine\> hinzufügen" button in a `safeAreaInset(edge:.bottom)` over a fade, disabled while there are no sets. Replaces the toolbar Save button; the routine name comes from the new `RoutineExercisePickerView.routineName` (nil → the generic `saveButtonKey`, used by the workout flow).
+
+Decisions taken while adapting the mock (all confirmed with the user):
+- **Rep goal is now settable at add time** (the mock has it; the app previously only offered it afterwards on the routine card). This is the one behavioral addition: `onExerciseConfigured` / `onSave` gained `Int?, Int?`, `RoutinesViewModel.addConfiguredExercise` and `createRoutine` write them onto the `RoutineExercise`, and `PendingRoutineExercise` carries them through the create-routine draft. The workout flow passes them to `WorkoutViewModel.addExerciseToWorkout`, which sets them on the `WorkoutExercise` so mid-workout rep-progress badges work for exercises added on the fly.
+- **Sets keep `RoutineSetsEditor` rather than the mock's set table.** The mock has a "Satz 1 auf alle" header link and ±-only steppers; the shipped editor has typable values and a per-field apply-to-all banner under the last-edited row — strictly more capable, and it keeps this screen identical to the routine detail.
+- **The mock's custom top bar ("ZUR ROUTINE / \<name\>") was not adopted.** The system navigation bar is kept so the back swipe and the back button behave natively; the routine name surfaces in the CTA instead.
+- **Two old controls disappeared without losing capability:** the "Duplicate Last Set" button (adding a set in `RoutineSetsEditor` already seeds reps/weight from the last one) and swipe-to-delete on set rows (each row has a minus button). The "Exercise Info" name/muscle-group rows are covered by the new header.
+- **`ParameterEditorPanel` gained `isProminent`.** `RestTimeInlineEditor`/`RepRangeInlineEditor` were built as transient tinted panels opened from a chip. As permanent sections here, three accent-washed blocks in a row (summary + goal + pause) read far too loud, so both editors take `isProminent: false` and render on the neutral card background. The routine detail is unchanged (default `true`).
+
+- **Deliberate omission — set-config screens still NOT unified:** `ConfigureExerciseView` (in `CreateRoutineView`'s flow) still duplicates set-configuration UI with the picker's `ConfigureExerciseSetsView`; it remains solely for EDITING an already-added pending exercise in the create-routine draft, and it is still the legacy `Form`. The 2026-08-09 redesign therefore makes the create-routine flow visually inconsistent between *adding* an exercise (new screen) and *editing* one (old form) — accepted, because unifying them was out of the requested scope. `PendingAlternativesSection` is shared by both, so it now renders plain content and `ConfigureExerciseView` wraps it in its own `Section`. The user chose a 3-slice scope for the unified-picker feature (decouple → unify entry → filter + polish), and merging the two config screens was out of scope. To pick it up later: fold `ConfigureExerciseView`'s edit-existing-pending-exercise case into `ConfigureExerciseSetsView` (which already handles sets, rest time, and pending alternatives) and delete `ConfigureExerciseView`; the original tickets live under `.scratch/unified-exercise-picker/issues/`.
 
 ## Architecture
 
@@ -103,6 +123,9 @@ GymStreak/Presentation/ViewModels/RemovedRoutineExerciseSnapshot.swift  Value co
 GymStreak/Presentation/Helpers/RoutineExerciseCardDisplay.swift      Per-card display values, resolved once
 GymStreak/Presentation/Helpers/WeightFormatting.swift                Locale-aware, trailing-zero-free weight strings
 GymStreak/Presentation/Helpers/SetSummaryFormatting.swift            "3 × 6 Wdh. · 90 kg" / "3 Sätze · max 90 kg"
+
+# configure-screen redesign (2026-08-09)
+GymStreak/Presentation/Views/Routines/ConfigureExerciseSetsView.swift  Extracted from RoutineExercisePickerView.swift and rewritten
 ```
 
 ### Modified files
@@ -121,6 +144,16 @@ ExercisesViewModel.swift      + routineUsageCount(for:)
 DomainColorStyling.swift      + MuscleGroups.color(for:) and categoryColor(for:) — muscle category → color mapping (Presentation)
 TimeFormatting.swift          + lastTrainedLabel(for:) relative date
 Resources/{en,de}.lproj/Localizable.strings  New keys (see below)
+
+# configure-screen redesign (2026-08-09)
+RoutineExercisePickerView.swift   ConfigureExerciseSetsView extracted out; + routineName; onExerciseConfigured gained (Int?, Int?)
+PendingAlternativesSection.swift  No longer a Form Section — plain card content, redesigned rows; dropped the unused primaryExercise
+RoutineParameterEditors.swift     ParameterEditorPanel / RestTimeInlineEditor / RepRangeInlineEditor gained isProminent
+ConfigureExerciseView.swift       Wraps PendingAlternativesSection in its own Section (otherwise untouched legacy Form)
+CreateRoutineView.swift / PendingRoutineExercise.swift  Carry the rep-range goal through the create-routine draft
+RoutinesViewModel.swift           addConfiguredExercise + createRoutine write targetRepMin/Max
+WorkoutViewModel.swift / AddExerciseToWorkoutView.swift  addExerciseToWorkout takes the rep-range goal
+Resources/{en,de}.lproj/Localizable.strings  + configure_exercise.{add_to_named, summary.volume, sets_planned, optional, rep_goal, empty.hint, quick_scheme, single_set}
 ```
 
 ### Deleted files

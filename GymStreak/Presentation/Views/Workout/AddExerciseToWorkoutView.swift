@@ -176,8 +176,13 @@ struct AddExerciseToWorkoutView: View {
                         navigationTitleKey: "add_to_workout.title",
                         saveButtonKey: "add_to_workout.add",
                         includesAlternatives: false,
-                        onSave: { exercise, configuredSets, _ in
-                            addExercise(exercise, configuredSets: configuredSets)
+                        onSave: { exercise, configuredSets, _, repMin, repMax in
+                            addExercise(
+                                exercise,
+                                configuredSets: configuredSets,
+                                targetRepMin: repMin,
+                                targetRepMax: repMax
+                            )
                         }
                     )
                 }
@@ -189,8 +194,18 @@ struct AddExerciseToWorkoutView: View {
         exercises = dependencies.exerciseRepository.fetchAll()
     }
 
-    private func addExercise(_ exercise: Exercise, configuredSets: [ExerciseSet]) {
-        workoutViewModel.addExerciseToWorkout(exercise: exercise, configuredSets: configuredSets)
+    private func addExercise(
+        _ exercise: Exercise,
+        configuredSets: [ExerciseSet],
+        targetRepMin: Int?,
+        targetRepMax: Int?
+    ) {
+        workoutViewModel.addExerciseToWorkout(
+            exercise: exercise,
+            configuredSets: configuredSets,
+            targetRepMin: targetRepMin,
+            targetRepMax: targetRepMax
+        )
         UIImpactFeedbackGenerator(style: .medium).impactOccurred()
         dismiss()
     }

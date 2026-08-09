@@ -16,12 +16,25 @@ struct PendingRoutineExercise: Identifiable {
     /// Alternative exercises picked during configuration (each with its own set
     /// scheme); materialized into RoutineExerciseAlternative models at routine save.
     var alternatives: [PendingAlternative]
+    /// Rep-range goal picked during configuration; copied onto the RoutineExercise
+    /// at routine save. Nil/nil means no goal.
+    var targetRepMin: Int?
+    var targetRepMax: Int?
 
-    init(exercise: Exercise, sets: [ExerciseSet], order: Int, alternatives: [PendingAlternative] = []) {
+    init(
+        exercise: Exercise,
+        sets: [ExerciseSet],
+        order: Int,
+        alternatives: [PendingAlternative] = [],
+        targetRepMin: Int? = nil,
+        targetRepMax: Int? = nil
+    ) {
         self.exercise = exercise
         self.sets = sets
         self.order = order
         self.alternatives = alternatives
+        self.targetRepMin = targetRepMin
+        self.targetRepMax = targetRepMax
     }
 
     /// Summary of sets for display (e.g., "3 sets • 8-12 reps • 45kg")

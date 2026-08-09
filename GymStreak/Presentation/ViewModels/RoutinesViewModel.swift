@@ -182,6 +182,8 @@ class RoutinesViewModel: ObservableObject {
         for pending in pendingExercises {
             let routineExercise = RoutineExercise(exercise: pending.exercise, order: pending.order)
             routineExercise.routine = routine
+            routineExercise.targetRepMin = pending.targetRepMin
+            routineExercise.targetRepMax = pending.targetRepMax
 
             for (index, set) in pending.sets.enumerated() {
                 let newSet = ExerciseSet(
@@ -233,10 +235,14 @@ class RoutinesViewModel: ObservableObject {
         _ exercise: Exercise,
         to routine: Routine,
         sets: [ExerciseSet],
-        alternatives: [PendingAlternative]
+        alternatives: [PendingAlternative],
+        targetRepMin: Int? = nil,
+        targetRepMax: Int? = nil
     ) {
         let routineExercise = RoutineExercise(exercise: exercise, order: routine.routineExercisesList.count)
         routineExercise.routine = routine
+        routineExercise.targetRepMin = targetRepMin
+        routineExercise.targetRepMax = targetRepMax
 
         for set in sets {
             set.routineExercise = routineExercise

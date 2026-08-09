@@ -8,7 +8,7 @@ Adds a **rep range goal** (e.g., 8-12 reps) to exercises within routines. When a
 
 ## User Flow
 
-1. **Configure**: In routine editor, tap "Set Rep Goal" on any exercise to set a min/max range (e.g., 8-12)
+1. **Configure**: Either **while adding the exercise** — the "Wiederholungsziel" section of `ConfigureExerciseSetsView` (added with the configure-screen redesign, 2026-08-09; the goal travels through `onExerciseConfigured` → `RoutinesViewModel.addConfiguredExercise` / `PendingRoutineExercise` → `createRoutine`, and through `WorkoutViewModel.addExerciseToWorkout` for exercises added mid-workout) — or afterwards in the routine editor via the "Ziel" chip on any exercise card
 2. **Train**: During workouts, rep progress badges show how close each set is to the upper limit
 3. **Achieve**: When all sets reach the upper limit, a gold banner appears suggesting a weight increase
 4. **Progress**: Tap "Increase" to open the weight increase sheet, select an increment (1.25/2.5/5 kg), and apply

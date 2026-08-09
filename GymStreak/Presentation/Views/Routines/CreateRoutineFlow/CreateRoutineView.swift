@@ -115,8 +115,15 @@ struct CreateRoutineView: View {
             RoutineExercisePickerView(
                 alreadyAddedExercises: pendingExercises.map { $0.exercise },
                 exercisesViewModel: exercisesViewModel,
-                onExerciseConfigured: { exercise, sets, alternatives in
-                    addExercise(exercise: exercise, sets: sets, alternatives: alternatives)
+                routineName: trimmedRoutineName.isEmpty ? nil : trimmedRoutineName,
+                onExerciseConfigured: { exercise, sets, alternatives, repMin, repMax in
+                    addExercise(
+                        exercise: exercise,
+                        sets: sets,
+                        alternatives: alternatives,
+                        targetRepMin: repMin,
+                        targetRepMax: repMax
+                    )
                 }
             )
         }
@@ -132,8 +139,12 @@ struct CreateRoutineView: View {
 
     // MARK: - Computed Properties
 
+    private var trimmedRoutineName: String {
+        routineName.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
     private var canSave: Bool {
-        !routineName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        !trimmedRoutineName.isEmpty
     }
 
     private var hasUnsavedChanges: Bool {
@@ -142,9 +153,22 @@ struct CreateRoutineView: View {
 
     // MARK: - Helper Methods
 
-    private func addExercise(exercise: Exercise, sets: [ExerciseSet], alternatives: [PendingAlternative]) {
+    private func addExercise(
+        exercise: Exercise,
+        sets: [ExerciseSet],
+        alternatives: [PendingAlternative],
+        targetRepMin: Int?,
+        targetRepMax: Int?
+    ) {
         let order = pendingExercises.count
-        let pending = PendingRoutineExercise(exercise: exercise, sets: sets, order: order, alternatives: alternatives)
+        let pending = PendingRoutineExercise(
+            exercise: exercise,
+            sets: sets,
+            order: order,
+            alternatives: alternatives,
+            targetRepMin: targetRepMin,
+            targetRepMax: targetRepMax
+        )
         pendingExercises.append(pending)
     }
 

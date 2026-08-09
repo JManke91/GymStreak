@@ -365,6 +365,14 @@
 "configure_exercise.rest_timer" = "Pausentimer";
 "configure_exercise.rest_time_between_sets" = "Pausenzeit zwischen Sätzen";
 "configure_exercise.add_to_routine" = "Zur Routine hinzufügen";
+"configure_exercise.add_to_named" = "Zu %@ hinzufügen";
+"configure_exercise.summary.volume" = "Volumen";
+"configure_exercise.sets_planned" = "%d geplant";
+"configure_exercise.optional" = "optional";
+"configure_exercise.rep_goal" = "Wiederholungsziel";
+"configure_exercise.empty.hint" = "Noch keine Sätze. Starte mit einem Schema — Gewichte passt du danach an.";
+"configure_exercise.quick_scheme" = "%d × %d";
+"configure_exercise.single_set" = "Einzelnen Satz anlegen";
 
 // MARK: - Save Workout View
 "save_workout.duration_label" = "Dauer";
