@@ -324,6 +324,9 @@ class RoutinesViewModel: ObservableObject {
         let snapshot = RemovedRoutineExerciseSnapshot(routineExercise)
         routine.routineExercises?.remove(at: index)
         routineRepository.delete(routineExercise)
+        // Closes the gap the deletion left and keeps any superset it belonged to
+        // contiguous.
+        SupersetOrderingService.normalizeOrdering(in: routine)
         updateRoutine(routine)
         return snapshot
     }
@@ -368,6 +371,8 @@ class RoutinesViewModel: ObservableObject {
         for (index, entry) in ordered.enumerated() {
             entry.order = index
         }
+        // A restored superset member rejoins its group's block.
+        SupersetOrderingService.normalizeOrdering(in: routine)
 
         updateRoutine(routine)
     }
@@ -414,14 +419,13 @@ class RoutinesViewModel: ObservableObject {
         }
     }
 
-    /// Applies a `List.onMove` reorder: renumber `order` to the new sequence and
-    /// persist once.
-    func moveRoutineExercises(from source: IndexSet, to destination: Int, in routine: Routine) {
-        var ordered = routine.routineExercisesList.sorted { $0.order < $1.order }
-        ordered.move(fromOffsets: source, toOffset: destination)
-        for (index, exercise) in ordered.enumerated() {
-            exercise.order = index
-        }
+    /// Applies a `List.onMove` reorder and persists once. Sorting mode drags
+    /// whole units — a standalone exercise, or a superset as a block — so the
+    /// offsets are unit offsets over `SupersetOrderingService.units(for:)`, not
+    /// exercise offsets. Moving units is what makes a drag unable to split a
+    /// superset or wedge an exercise between its members.
+    func moveRoutineExerciseUnits(from source: IndexSet, to destination: Int, in routine: Routine) {
+        SupersetOrderingService.moveUnits(from: source, to: destination, in: routine)
         updateRoutine(routine)
     }
 
@@ -546,33 +550,33 @@ class RoutinesViewModel: ObservableObject {
     }
 
     // MARK: - Superset Management
+    //
+    // These methods only change MEMBERSHIP. Positions — both `order` in the
+    // routine and `supersetOrder` inside the group — are owned by
+    // `SupersetOrderingService.normalizeOrdering`, which every method runs
+    // before its single `updateRoutine`: a superset is always a contiguous
+    // block anchored at its earliest member (see docs/superset-feature.md).
 
-    /// Creates a superset from 2+ selected exercises
+    /// Creates a superset from 2+ selected exercises, pulling them together into
+    /// one contiguous block at the earliest member's position.
     func createSuperset(from exercises: [RoutineExercise], in routine: Routine) {
         guard exercises.count >= 2 else { return }
 
         let supersetId = UUID()
-
-        // Assign superset ID and order within superset
-        for (index, exercise) in exercises.enumerated() {
+        for exercise in exercises {
             exercise.supersetId = supersetId
-            exercise.supersetOrder = index
         }
 
+        SupersetOrderingService.normalizeOrdering(in: routine)
         updateRoutine(routine)
     }
 
-    /// Adds an exercise to an existing superset
+    /// Adds an exercise to an existing superset, moving it into the group's
+    /// contiguous block.
     func addExerciseToSuperset(_ exercise: RoutineExercise, supersetId: UUID, in routine: Routine) {
-        // Find highest supersetOrder in this superset
-        let existingMaxOrder = routine.routineExercisesList
-            .filter { $0.supersetId == supersetId }
-            .map(\.supersetOrder)
-            .max() ?? -1
-
         exercise.supersetId = supersetId
-        exercise.supersetOrder = existingMaxOrder + 1
 
+        SupersetOrderingService.normalizeOrdering(in: routine)
         updateRoutine(routine)
     }
 
@@ -584,20 +588,52 @@ class RoutinesViewModel: ObservableObject {
         exercise.supersetId = nil
         exercise.supersetOrder = 0
 
-        // Find remaining exercises in this superset
+        // A lone survivor is not a superset — unlink it too.
         let remaining = routine.routineExercisesList.filter { $0.supersetId == supersetId }
-
-        // If only 1 exercise remains, auto-dissolve the superset
         if remaining.count == 1 {
             remaining.first?.supersetId = nil
             remaining.first?.supersetOrder = 0
+        }
+
+        SupersetOrderingService.normalizeOrdering(in: routine)
+        updateRoutine(routine)
+    }
+
+    /// Breaks a superset apart at the seam below `exercise`: the members up to
+    /// and including it keep the group, the members after it become a new one.
+    /// A side left with a single exercise becomes standalone — the same rule
+    /// `removeExerciseFromSuperset` applies to a lone survivor, so a two-member
+    /// superset dissolves entirely.
+    func splitSuperset(after exercise: RoutineExercise, in routine: Routine) {
+        guard let supersetId = exercise.supersetId else { return }
+
+        let members = routine.routineExercisesList
+            .filter { $0.supersetId == supersetId }
+            .sorted { $0.supersetOrder < $1.supersetOrder }
+        guard let seamIndex = members.firstIndex(where: { $0.id == exercise.id }),
+              seamIndex < members.count - 1 else { return }
+
+        func unlink(_ member: RoutineExercise) {
+            member.supersetId = nil
+            member.supersetOrder = 0
+        }
+
+        let above = Array(members[...seamIndex])
+        let below = Array(members[(seamIndex + 1)...])
+
+        if above.count < 2 {
+            above.forEach(unlink)
+        }
+        if below.count < 2 {
+            below.forEach(unlink)
         } else {
-            // Reorder remaining exercises
-            for (index, ex) in remaining.sorted(by: { $0.supersetOrder < $1.supersetOrder }).enumerated() {
-                ex.supersetOrder = index
+            let newSupersetId = UUID()
+            for member in below {
+                member.supersetId = newSupersetId
             }
         }
 
+        SupersetOrderingService.normalizeOrdering(in: routine)
         updateRoutine(routine)
     }
 
@@ -610,15 +646,15 @@ class RoutinesViewModel: ObservableObject {
             exercise.supersetOrder = 0
         }
 
+        SupersetOrderingService.normalizeOrdering(in: routine)
         updateRoutine(routine)
     }
 
-    /// Reorders exercises within a superset
-    func reorderSuperset(_ exercises: [RoutineExercise], in routine: Routine) {
-        for (index, exercise) in exercises.enumerated() {
-            exercise.supersetOrder = index
-        }
-
+    /// Restores the superset contiguity invariant on a routine that was stored
+    /// before it existed (or edited on the watch), and persists only if
+    /// something actually moved. Called when the routine detail appears.
+    func normalizeSupersetOrdering(in routine: Routine) {
+        guard SupersetOrderingService.normalizeOrdering(in: routine) else { return }
         updateRoutine(routine)
     }
 

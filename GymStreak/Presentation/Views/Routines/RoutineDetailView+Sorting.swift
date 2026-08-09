@@ -19,29 +19,62 @@ extension RoutineDetailView {
     /// height-snap reason for avoiding `List` does not apply here: these rows
     /// are fixed-height and nothing expands in this mode.
     var sortingModeContent: some View {
-        VStack(alignment: .leading, spacing: 0) {
+        // Unit grouping and label assignment both walk the whole routine, so
+        // they run once for the list here — never inside a row body, and off a
+        // single sort. Deriving them per render rather than caching them in
+        // `@State` is deliberate: `List.onMove` offsets must match the rendered
+        // row set exactly, and a cached copy that drifts by one render would be
+        // a real reorder bug.
+        let ordered = sortedExercises
+        let units = SupersetOrderingService.units(for: ordered)
+        let labels = SupersetLabelProvider.labels(for: ordered)
+
+        return VStack(alignment: .leading, spacing: 0) {
             topBar
             titleBlock
                 .frame(maxWidth: .infinity, alignment: .leading)
             sortingHint
 
             List {
-                ForEach(sortedExercises) { routineExercise in
-                    RoutineSortingRow(
-                        display: RoutineExerciseCardDisplay(routineExercise),
-                        onRemove: { removeExercise(routineExercise) }
-                    )
-                    .listRowInsets(EdgeInsets(top: 3, leading: 0, bottom: 3, trailing: 0))
-                    .listRowBackground(Color.clear)
-                    .listRowSeparator(.hidden)
+                ForEach(units) { unit in
+                    sortingRow(for: unit, labels: labels)
+                        .listRowInsets(EdgeInsets(top: 3, leading: 0, bottom: 3, trailing: 0))
+                        .listRowBackground(Color.clear)
+                        .listRowSeparator(.hidden)
                 }
-                .onMove(perform: moveExercises)
+                .onMove(perform: moveExerciseUnits)
             }
             .listStyle(.plain)
             .scrollContentBackground(.hidden)
             .environment(\.defaultMinListRowHeight, 0)
         }
         .padding(.horizontal, 16)
+    }
+
+    /// A superset renders as one framed block, everything else as a plain row.
+    /// Either way it is a single `List` row, so a drag can only ever move the
+    /// whole unit.
+    @ViewBuilder
+    func sortingRow(for unit: SupersetOrderingService.OrderingUnit, labels: [UUID: String]) -> some View {
+        if let supersetId = unit.supersetId {
+            let letter = labels[supersetId] ?? "?"
+            RoutineSortingGroupRow(
+                label: letter,
+                color: SupersetLabelProvider.color(for: letter),
+                members: unit.exercises.map { routineExercise in
+                    RoutineSortingMemberDisplay(
+                        id: routineExercise.id,
+                        display: RoutineExerciseCardDisplay(routineExercise),
+                        onRemove: { removeExercise(routineExercise) }
+                    )
+                }
+            )
+        } else if let routineExercise = unit.exercises.first {
+            RoutineSortingRow(
+                display: RoutineExerciseCardDisplay(routineExercise),
+                onRemove: { removeExercise(routineExercise) }
+            )
+        }
     }
 
     /// Persistent while sorting — it explains both affordances of the mode.
@@ -61,10 +94,11 @@ extension RoutineDetailView {
             .padding(.bottom, 10)
     }
 
-    /// `List.onMove` hands back offsets; the reorder transaction itself lives in
-    /// the ViewModel, like every other multi-object edit on this screen.
-    func moveExercises(from source: IndexSet, to destination: Int) {
+    /// `List.onMove` hands back offsets into the row set — units, not single
+    /// exercises. The reorder transaction itself lives in the ViewModel, like
+    /// every other multi-object edit on this screen.
+    func moveExerciseUnits(from source: IndexSet, to destination: Int) {
         HapticManager.shared.light()
-        viewModel.moveRoutineExercises(from: source, to: destination, in: routine)
+        viewModel.moveRoutineExerciseUnits(from: source, to: destination, in: routine)
     }
 }

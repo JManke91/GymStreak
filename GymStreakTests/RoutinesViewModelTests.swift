@@ -100,4 +100,84 @@ struct RoutinesViewModelTests {
         viewModel.addRoutine(name: "Pull Day")
         #expect(watchSync.syncRoutinesCalls.last?.map(\.name) == ["Pull Day"])
     }
+
+    // MARK: - Unlink at a seam (splitSuperset)
+
+    /// A routine of `count` exercises whose first `supersetSize` members form
+    /// one superset, in routine order.
+    private func makeSupersetRoutine(
+        exerciseCount: Int,
+        supersetSize: Int,
+        viewModel: RoutinesViewModel
+    ) throws -> (routine: Routine, members: [RoutineExercise]) {
+        let pending = (0..<exerciseCount).map { index in
+            PendingRoutineExercise(
+                exercise: Exercise(name: "Exercise \(index)"),
+                sets: [ExerciseSet(reps: 8, weight: 50, restTime: 90, order: 0)],
+                order: index,
+                alternatives: []
+            )
+        }
+        viewModel.createRoutine(name: "Superset Day", pendingExercises: pending)
+        let routine = try #require(viewModel.routines.first)
+        let ordered = routine.routineExercisesList.sorted { $0.order < $1.order }
+        viewModel.createSuperset(from: Array(ordered.prefix(supersetSize)), in: routine)
+        return (routine, ordered)
+    }
+
+    @Test
+    func splitSupersetDissolvesATwoMemberGroup() throws {
+        let (viewModel, _, _) = makeViewModel()
+        let (routine, members) = try makeSupersetRoutine(exerciseCount: 3, supersetSize: 2, viewModel: viewModel)
+
+        viewModel.splitSuperset(after: members[0], in: routine)
+
+        #expect(routine.routineExercisesList.allSatisfy { $0.supersetId == nil })
+    }
+
+    @Test
+    func splitSupersetLeavesASingleTrailingMemberStandalone() throws {
+        let (viewModel, _, _) = makeViewModel()
+        let (routine, members) = try makeSupersetRoutine(exerciseCount: 4, supersetSize: 3, viewModel: viewModel)
+
+        // Seam below the second member: [0,1] stay a superset, [2] goes solo.
+        viewModel.splitSuperset(after: members[1], in: routine)
+
+        #expect(members[0].supersetId != nil)
+        #expect(members[0].supersetId == members[1].supersetId)
+        #expect(members[2].supersetId == nil)
+    }
+
+    @Test
+    func splitSupersetProducesTwoIndependentGroups() throws {
+        let (viewModel, _, _) = makeViewModel()
+        let (routine, members) = try makeSupersetRoutine(exerciseCount: 4, supersetSize: 4, viewModel: viewModel)
+
+        viewModel.splitSuperset(after: members[1], in: routine)
+
+        let upper = try #require(members[0].supersetId)
+        let lower = try #require(members[2].supersetId)
+        #expect(members[1].supersetId == upper)
+        #expect(members[3].supersetId == lower)
+        #expect(upper != lower)
+        // Both groups stay contiguous blocks in routine order.
+        #expect(routine.routineExercisesList.sorted { $0.order < $1.order }.map(\.supersetId)
+                == [upper, upper, lower, lower])
+    }
+
+    @Test
+    func splitSupersetIgnoresTheLastMemberAndStandaloneExercises() throws {
+        let (viewModel, _, _) = makeViewModel()
+        let (routine, members) = try makeSupersetRoutine(exerciseCount: 3, supersetSize: 2, viewModel: viewModel)
+        let supersetId = try #require(members[0].supersetId)
+
+        // No seam below the last member, and none below a standalone exercise.
+        viewModel.splitSuperset(after: members[1], in: routine)
+        viewModel.splitSuperset(after: members[2], in: routine)
+
+        #expect(members[0].supersetId == supersetId)
+        #expect(members[1].supersetId == supersetId)
+        #expect(members[2].supersetId == nil)
+        _ = routine
+    }
 }

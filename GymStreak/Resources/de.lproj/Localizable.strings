@@ -31,7 +31,7 @@
 "routine.rename" = "Umbenennen";
 "routine.section.sets" = "Sätze";
 "routine.sort" = "Sortieren";
-"routine.sort_hint" = "Ziehen zum Umsortieren · Papierkorb zum Entfernen";
+"routine.sort_hint" = "Ziehen zum Umsortieren · Supersets bleiben zusammen · Papierkorb zum Entfernen";
 "routine.exercise_removed" = "Übung entfernt";
 "routine.set_scheme.uniform" = "%d × %d Wdh. · %@";
 "routine.set_scheme.mixed" = "%d Sätze · max %@";
@@ -491,6 +491,8 @@
 "superset.create_with" = "Supersatz erstellen mit...";
 "superset.add_to" = "Zu Supersatz %@ hinzufügen";
 "superset.link_exercises" = "Übungen als Supersatz verknüpfen";
+"superset.link_action" = "Verknüpfen";
+"superset.unlink_between" = "Supersatz zwischen %1$@ und %2$@ trennen";
 "superset.selected_count" = "%d ausgewählt";
 "superset.edit" = "Supersatz bearbeiten";
 "superset.create_new" = "Supersatz erstellen";

@@ -8,3 +8,8 @@
 - Building on that fix: a watch workout and the routine update it requests are now sent to the iPhone as two separate items, so a routine update that cannot be confirmed can never hold back the workout itself.
 - If a routine change you accepted on your watch can never be applied, the watch now tells you: a notice appears on the routine list with the reason, and stays until you dismiss it. Changes that are simply still on their way to your iPhone stay silent, as before.
 - A weight increase after hitting your rep goal now only applies to your next workout. The sets you just completed keep the values you actually lifted, on both iPhone and Apple Watch.
+- Exercises in a superset now always sit next to each other in the routine. Linking exercises that are far apart pulls them together at the position of the first one, and existing routines are tidied up the next time you open them.
+- In sorting mode a superset now moves as one block: it is shown as a single grouped row, dragging it takes all its exercises along, and nothing can be dropped between them.
+- In a routine, a superset now connects its exercises with one continuous line in the group colour, running from the first dot to the last across the gaps between cards. The line stays connected when you expand or collapse a card.
+- Breaking up a superset is now as quick as creating one: a scissors button sits on the connecting line between two linked exercises. Tap it to split the group at that point — a pair is dissolved, a longer superset splits into two, and an exercise left on its own becomes a normal exercise again.
+- The "Link superset" control between two exercises now carries a label and a much larger tap area, so it is easier to see and to hit.

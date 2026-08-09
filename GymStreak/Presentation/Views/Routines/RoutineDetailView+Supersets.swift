@@ -17,9 +17,26 @@ struct SupersetCardStyling {
     let color: Color?
     let position: Int?
     let total: Int?
-    let linePosition: SupersetPosition?
+    /// The group's shared rest time (owned by its last member). Resolved here so
+    /// no card body has to walk the routine to find that member.
+    let restTime: TimeInterval?
 
-    static let none = SupersetCardStyling(color: nil, position: nil, total: nil, linePosition: nil)
+    var isMember: Bool { position != nil }
+
+    static let none = SupersetCardStyling(color: nil, position: nil, total: nil, restTime: nil)
+}
+
+/// One row of the browsing list: either a standalone exercise or a whole
+/// superset. A superset renders inside `SupersetGroupContainer` as ONE row of
+/// the outer lazy stack, which is what lets its connecting line span the gaps
+/// between the member cards (a child of one card can never draw into a sibling).
+struct RoutineExerciseGroup: Identifiable {
+    var members: [RoutineExercise]
+    let supersetId: UUID?
+
+    /// The first member's id — stable as long as the block is, and the block is
+    /// contiguous by invariant (see SupersetOrderingService).
+    var id: UUID { members[0].id }
 }
 
 extension RoutineDetailView {
@@ -40,45 +57,48 @@ extension RoutineDetailView {
         for (supersetId, group) in members {
             let sorted = group.sorted { $0.supersetOrder < $1.supersetOrder }
             let color = labels[supersetId].map { SupersetLabelProvider.color(for: $0) }
+            // Rest triggers after the last exercise of a round, so the group's
+            // rest time is that member's — read once per group, not per card.
+            let restTime = sorted.last?.setsList.first?.restTime ?? 60.0
             for (index, exercise) in sorted.enumerated() {
-                let position = index + 1
-                let linePosition: SupersetPosition
-                if sorted.count == 1 {
-                    linePosition = .only
-                } else if position == 1 {
-                    linePosition = .first
-                } else if position == sorted.count {
-                    linePosition = .last
-                } else {
-                    linePosition = .middle
-                }
                 styling[exercise.id] = SupersetCardStyling(
                     color: color,
-                    position: position,
+                    position: index + 1,
                     total: sorted.count,
-                    linePosition: linePosition
+                    restTime: restTime
                 )
             }
         }
         return styling
     }
 
+    /// Folds the ordered exercises into list rows in ONE linear pass: consecutive
+    /// members of the same superset collapse into a single group. Members are
+    /// contiguous by invariant, so no lookahead over the routine is needed.
+    func supersetRowGroups(for ordered: [RoutineExercise]) -> [RoutineExerciseGroup] {
+        var groups: [RoutineExerciseGroup] = []
+        for exercise in ordered {
+            if let supersetId = exercise.supersetId,
+               groups.last?.supersetId == supersetId {
+                groups[groups.count - 1].members.append(exercise)
+            } else {
+                groups.append(RoutineExerciseGroup(members: [exercise], supersetId: exercise.supersetId))
+            }
+        }
+        return groups
+    }
+
     // MARK: - Membership lookups
 
-    /// The last exercise in a superset owns the group's rest time.
+    /// The last exercise in a superset owns the group's rest time. Walks the
+    /// routine, so this is a write-path helper only — cards read the group's
+    /// rest time from the pre-resolved `SupersetCardStyling`.
     func lastExerciseInSuperset(for exercise: RoutineExercise) -> RoutineExercise? {
         guard let supersetId = exercise.supersetId else { return nil }
         return routine.routineExercisesList
             .filter { $0.supersetId == supersetId }
             .sorted { $0.supersetOrder < $1.supersetOrder }
             .last
-    }
-
-    func supersetRestTime(for exercise: RoutineExercise) -> TimeInterval {
-        guard let lastExercise = lastExerciseInSuperset(for: exercise) else {
-            return restTime(for: exercise)
-        }
-        return lastExercise.setsList.first?.restTime ?? 60.0
     }
 
     func updateSupersetRestTime(for exercise: RoutineExercise, restTime: TimeInterval) {
@@ -112,6 +132,19 @@ extension RoutineDetailView {
             viewModel.addExerciseToSuperset(exercise1, supersetId: supersetId, in: routine)
         } else {
             viewModel.createSuperset(from: [exercise1, exercise2], in: routine)
+        }
+        HapticManager.shared.success()
+    }
+
+    // MARK: - Unlink on the connecting line
+
+    /// Breaks the group at the seam below the given member — the counterpart of
+    /// `linkExercises`, down to the same haptic. The split algebra itself lives
+    /// in `RoutinesViewModel.splitSuperset`.
+    func unlinkSuperset(after memberId: UUID) {
+        guard let exercise = routine.routineExercisesList.first(where: { $0.id == memberId }) else { return }
+        withAnimation(DesignSystem.Animation.spring) {
+            viewModel.splitSuperset(after: exercise, in: routine)
         }
         HapticManager.shared.success()
     }
@@ -222,9 +255,11 @@ extension RoutineDetailView {
             Button {
                 viewModel.removeExerciseFromSuperset(routineExercise, in: routine)
             } label: {
+                // `link.badge.minus`/`link.badge.xmark` do not exist as SF
+                // Symbols — they rendered as empty menu icons until 2026-08.
                 Label(
                     String(format: "superset.remove_from_named".localized, letter),
-                    systemImage: "link.badge.minus"
+                    systemImage: "scissors"
                 )
             }
 
@@ -234,7 +269,7 @@ extension RoutineDetailView {
                 } label: {
                     Label(
                         String(format: "superset.dissolve_named".localized, letter),
-                        systemImage: "link.badge.xmark"
+                        systemImage: "xmark.circle"
                     )
                 }
             }

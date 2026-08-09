@@ -31,7 +31,7 @@
 "routine.rename" = "Rename";
 "routine.section.sets" = "Sets";
 "routine.sort" = "Sort";
-"routine.sort_hint" = "Drag to reorder · Trash to remove";
+"routine.sort_hint" = "Drag to reorder · Supersets move as one · Trash to remove";
 "routine.exercise_removed" = "Exercise removed";
 "routine.set_scheme.uniform" = "%d × %d reps · %@";
 "routine.set_scheme.mixed" = "%d sets · max %@";
@@ -491,6 +491,8 @@
 "superset.create_with" = "Create Superset With...";
 "superset.add_to" = "Add to Superset %@";
 "superset.link_exercises" = "Link exercises as superset";
+"superset.link_action" = "Link superset";
+"superset.unlink_between" = "Break superset between %1$@ and %2$@";
 "superset.selected_count" = "%d selected";
 "superset.edit" = "Edit Superset";
 "superset.create_new" = "Create Superset";

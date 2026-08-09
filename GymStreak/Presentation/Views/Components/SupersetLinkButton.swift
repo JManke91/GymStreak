@@ -1,24 +1,45 @@
 import SwiftUI
 
-/// A thin button that appears between adjacent exercise rows to link them as a superset.
-/// Visual design: dashed line with a chain-link icon centered.
+/// The affordance between two adjacent, unlinked exercise cards that joins them
+/// into a superset. Counterpart of the unlink control on the connecting line
+/// (`SupersetGroupContainer`): same chain-link symbol family, same group-colour
+/// language, and the same 44pt minimum hit region — here the whole row is
+/// tappable while the pill itself stays visually compact.
 struct SupersetLinkButton: View {
     let onLink: () -> Void
+
+    private let minimumTapHeight: CGFloat = 44
 
     var body: some View {
         Button(action: onLink) {
             HStack(spacing: 8) {
                 dashedLine
-                Image(systemName: "link.badge.plus")
-                    .font(.caption.weight(.medium))
-                    .foregroundStyle(.secondary)
+                label
                 dashedLine
             }
-            .padding(.vertical, 4)
+            .frame(maxWidth: .infinity, minHeight: minimumTapHeight)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .accessibilityLabel("superset.link_exercises".localized)
+    }
+
+    /// Labelled, so the control explains itself instead of asking the user to
+    /// decode a bare icon.
+    private var label: some View {
+        HStack(spacing: 5) {
+            Image(systemName: "link.badge.plus")
+                .font(.system(size: 11, weight: .bold))
+            Text("superset.link_action".localized)
+                .font(.system(size: 11.5, weight: .semibold))
+                .lineLimit(1)
+                .fixedSize()
+        }
+        .foregroundStyle(Color.white.opacity(0.55))
+        .padding(.horizontal, 10)
+        .padding(.vertical, 5)
+        .background(Capsule().fill(Color.white.opacity(0.05)))
+        .overlay(Capsule().stroke(Color.white.opacity(0.1), lineWidth: 1))
     }
 
     private var dashedLine: some View {
@@ -39,18 +60,14 @@ private struct DashedLine: Shape {
 }
 
 #Preview {
-    List {
+    VStack(spacing: 0) {
         Text("Exercise 1")
         SupersetLinkButton { }
-            .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 0, trailing: 16))
-            .listRowBackground(Color.clear)
-            .listRowSeparator(.hidden)
         Text("Exercise 2")
         SupersetLinkButton { }
-            .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 0, trailing: 16))
-            .listRowBackground(Color.clear)
-            .listRowSeparator(.hidden)
         Text("Exercise 3")
     }
-    .listStyle(.insetGrouped)
+    .padding(.horizontal, 16)
+    .frame(maxWidth: .infinity, maxHeight: .infinity)
+    .background(DesignSystem.Colors.background)
 }

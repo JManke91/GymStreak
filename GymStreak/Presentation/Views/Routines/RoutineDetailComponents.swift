@@ -3,7 +3,8 @@
 //  GymStreak
 //
 //  Supporting views of the redesigned RoutineDetailView: section labels, the
-//  exercise card header and the sorting-mode row.
+//  exercise card header and the undo toast. The sorting-mode rows live in
+//  RoutineSortingRows.swift.
 //
 
 import SwiftUI
@@ -42,24 +43,28 @@ struct ExerciseHeaderView: View {
     var supersetPosition: Int? = nil
     var supersetTotal: Int? = nil
     var supersetColor: Color? = nil
-    var supersetLinePosition: SupersetPosition? = nil
+    /// Publishes this header's dot position to the enclosing
+    /// `SupersetGroupContainer`, which draws the line for the whole group.
+    var isSupersetMember: Bool = false
     var onSupersetAction: (() -> Void)? = nil
     var onEditAlternatives: (() -> Void)? = nil
 
-    // Fixed width for the superset indicator area — keeps every card's avatar
-    // on the same x position whether or not it belongs to a superset.
-    private let indicatorAreaWidth: CGFloat = 16
+    /// The lane every card keeps free at its leading edge. It keeps all avatars
+    /// on the same x whether or not the card is in a superset, and it is the
+    /// channel the group's connecting line runs down — so a member card must
+    /// indent everything below its header by this much too, or the line crosses
+    /// the chip strip and the set list.
+    static let connectorLaneWidth: CGFloat = 24
+
     private let indicatorTrailingSpacing: CGFloat = 8
+    private var indicatorAreaWidth: CGFloat { Self.connectorLaneWidth - indicatorTrailingSpacing }
 
     var body: some View {
         HStack(spacing: 0) {
-            ZStack {
-                if let linePosition = supersetLinePosition {
-                    SupersetLineIndicator(position: linePosition, color: supersetColor ?? DesignSystem.Colors.tint)
-                }
-            }
-            .frame(width: indicatorAreaWidth)
-            .padding(.trailing, indicatorTrailingSpacing)
+            Color.clear
+                .frame(width: indicatorAreaWidth)
+                .supersetConnectorAnchor(id: routineExercise.id, isActive: isSupersetMember)
+                .padding(.trailing, indicatorTrailingSpacing)
 
             HStack(spacing: 12) {
                 if let avatar = display.avatar {
@@ -165,70 +170,6 @@ struct ExerciseHeaderView: View {
                 .accessibilityLabel("alternatives.count".localized(display.alternativeAvatars.count))
             }
         }
-    }
-}
-
-// MARK: - Sorting mode row
-
-/// Compact row shown while the routine is in sorting mode: drag affordance,
-/// avatar, name + set summary, and an immediate remove (undo is offered by a
-/// toast). Reordering itself is owned by the enclosing `List`'s `.onMove`, so
-/// this row holds no drag state — the handle is a long-press-to-drag hint.
-struct RoutineSortingRow: View {
-    let display: RoutineExerciseCardDisplay
-    let onRemove: () -> Void
-
-    var body: some View {
-        HStack(spacing: 12) {
-            Image(systemName: "line.3.horizontal")
-                .font(.system(size: 14, weight: .semibold))
-                .foregroundStyle(Color.white.opacity(0.35))
-
-            if let avatar = display.avatar {
-                ExerciseAvatarView(
-                    muscleGroups: avatar.muscleGroups,
-                    equipmentType: avatar.equipmentType,
-                    size: 36,
-                    radius: 11
-                )
-            }
-
-            VStack(alignment: .leading, spacing: 1) {
-                Text(display.name)
-                    .font(.system(size: 14.5, weight: .bold, design: .rounded))
-                    .kerning(-0.2)
-                    .foregroundStyle(.white)
-                    .lineLimit(1)
-
-                Text(display.setSummary)
-                    .font(.system(size: 11.5))
-                    .monospacedDigit()
-                    .foregroundStyle(Color.white.opacity(0.45))
-                    .lineLimit(1)
-            }
-
-            Spacer(minLength: 4)
-
-            Button(action: onRemove) {
-                Image(systemName: "trash")
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(DesignSystem.Colors.destructive)
-                    .frame(width: 34, height: 34)
-                    .background(DesignSystem.Colors.destructive.opacity(0.1))
-                    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel("exercise.delete".localized)
-        }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 9)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color.white.opacity(0.035))
-        .overlay(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .stroke(Color.white.opacity(0.06), lineWidth: 1)
-        )
-        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
     }
 }
 

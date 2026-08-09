@@ -202,6 +202,12 @@ struct RoutineDetailView: View {
         .fullScreenCover(isPresented: $showingActiveWorkout) {
             ActiveWorkoutView(viewModel: workoutViewModel, exercisesViewModel: exercisesViewModel)
         }
+        .onAppear {
+            // Routines stored before supersets had to be contiguous (or edited
+            // on the watch) can hold scattered members — pull them back into
+            // their blocks before the first read of `sortedExercises` matters.
+            viewModel.normalizeSupersetOrdering(in: routine)
+        }
         .onDisappear {
             undoDismissTask?.cancel()
         }
@@ -385,29 +391,77 @@ struct RoutineDetailView: View {
     // MARK: - Exercise rows
 
     private var exerciseRows: some View {
-        // Sort once and resolve every card's superset styling in a single pass —
-        // `supersetStyling` filters + sorts the routine, so calling it per card
-        // in the ForEach body would be O(n²) per render.
+        // Sort once and resolve every card's superset styling + the grouping in
+        // a single pass each — `supersetStyling` filters + sorts the routine, so
+        // calling it per card in the ForEach body would be O(n²) per render.
         let ordered = sortedExercises
         let styling = supersetStyling(for: ordered)
-        return ForEach(Array(ordered.enumerated()), id: \.element.id) { index, routineExercise in
+        let groups = supersetRowGroups(for: ordered)
+        return ForEach(Array(groups.enumerated()), id: \.element.id) { index, group in
+            groupRow(group, styling: styling)
+
+            // Link affordance between this row and the next one. Two members of
+            // one superset never face each other here — they live inside the
+            // same group.
+            if supersetEditMode == nil,
+               index < groups.count - 1,
+               let current = group.members.last,
+               let next = groups[index + 1].members.first,
+               shouldShowLinkButton(between: current, and: next) {
+                SupersetLinkButton {
+                    linkExercises(current, next)
+                }
+            }
+        }
+    }
+
+    /// A standalone exercise, or a whole superset wrapped in the group container
+    /// that owns the connecting line.
+    @ViewBuilder
+    private func groupRow(_ group: RoutineExerciseGroup, styling: [UUID: SupersetCardStyling]) -> some View {
+        if group.supersetId != nil, supersetEditMode == nil {
+            SupersetGroupContainer(
+                // Names feed the unlink controls' VoiceOver labels; same
+                // fallback as RoutineExerciseCardDisplay so a missing exercise
+                // never produces an empty announcement.
+                members: group.members.map {
+                    SupersetGroupContainer.Member(id: $0.id, name: $0.exercise?.name ?? "Unknown")
+                },
+                color: styling[group.id]?.color ?? DesignSystem.Colors.tint,
+                onUnlink: { unlinkSuperset(after: $0) }
+            ) {
+                memberCards(group, styling: styling, showsSeams: true)
+            }
+        } else {
+            memberCards(group, styling: styling, showsSeams: false)
+        }
+    }
+
+    private func memberCards(
+        _ group: RoutineExerciseGroup,
+        styling: [UUID: SupersetCardStyling],
+        showsSeams: Bool
+    ) -> some View {
+        ForEach(Array(group.members.enumerated()), id: \.element.id) { index, routineExercise in
             exerciseRow(
-                index: index,
                 routineExercise: routineExercise,
-                ordered: ordered,
                 display: RoutineExerciseCardDisplay(routineExercise),
                 styling: styling[routineExercise.id] ?? .none
             )
             // Scroll anchor for the alternatives jump (scrollTo(exerciseId)).
             .id(routineExercise.id)
+
+            // Room on the connector for the unlink control between this member
+            // and the next one — the container draws the control itself.
+            if showsSeams, index < group.members.count - 1 {
+                SupersetSeamSpacer(memberAboveId: routineExercise.id)
+            }
         }
     }
 
     @ViewBuilder
     private func exerciseRow(
-        index: Int,
         routineExercise: RoutineExercise,
-        ordered: [RoutineExercise],
         display: RoutineExerciseCardDisplay,
         styling: SupersetCardStyling
     ) -> some View {
@@ -417,14 +471,6 @@ struct RoutineDetailView: View {
         } else {
             normalExerciseCard(routineExercise, display: display, styling: styling)
                 .padding(.vertical, 4)
-
-            // Link button between this exercise and the next
-            if index < ordered.count - 1,
-               shouldShowLinkButton(between: routineExercise, and: ordered[index + 1]) {
-                SupersetLinkButton {
-                    linkExercises(routineExercise, ordered[index + 1])
-                }
-            }
         }
     }
 
@@ -451,6 +497,13 @@ struct RoutineDetailView: View {
     ) -> some View {
         let isExerciseExpanded = expandedExerciseId == routineExercise.id
         let openParameter = openParameters[routineExercise.id]
+        // Superset members share one rest time, pre-resolved with the styling —
+        // finding the owning member here would walk the whole routine per card.
+        let displayedRestTime = styling.restTime ?? restTime(for: routineExercise)
+        // The header already reserves the connector lane; everything below it
+        // has to clear the same channel, otherwise the group's line runs
+        // straight through the chip strip and the set list.
+        let laneInset = styling.isMember ? ExerciseHeaderView.connectorLaneWidth : 0
 
         return VStack(alignment: .leading, spacing: 0) {
             Button {
@@ -466,7 +519,7 @@ struct RoutineDetailView: View {
                         supersetPosition: styling.position,
                         supersetTotal: styling.total,
                         supersetColor: styling.color,
-                        supersetLinePosition: styling.linePosition,
+                        isSupersetMember: styling.isMember,
                         onSupersetAction: routine.routineExercisesList.count >= 2 ? {
                             if let supersetId = routineExercise.supersetId {
                                 enterSupersetEdit(for: supersetId)
@@ -491,7 +544,7 @@ struct RoutineDetailView: View {
             // Chip strip — always visible, so pause and rep goal stay editable
             // without expanding the card.
             ExerciseParameterChips(
-                restTime: displayedRestTime(for: routineExercise),
+                restTime: displayedRestTime,
                 targetRepMin: routineExercise.targetRepMin,
                 targetRepMax: routineExercise.targetRepMax,
                 openParameter: Binding(
@@ -500,10 +553,12 @@ struct RoutineDetailView: View {
                 )
             )
             .padding(.top, 10)
+            .padding(.leading, laneInset)
 
             if let openParameter {
-                parameterEditor(openParameter, for: routineExercise)
+                parameterEditor(openParameter, for: routineExercise, restTime: displayedRestTime)
                     .padding(.top, 8)
+                    .padding(.leading, laneInset)
                     .transition(.opacity.combined(with: .move(edge: .top)))
             }
 
@@ -515,6 +570,7 @@ struct RoutineDetailView: View {
 
                     expandedCardBody(for: routineExercise)
                 }
+                .padding(.leading, laneInset)
                 // Reveal the body as the card grows in height (fluid in LazyVStack,
                 // unlike List's row-height snap). Clipped by the card's .clipShape.
                 .transition(.opacity.combined(with: .move(edge: .top)))
@@ -533,16 +589,15 @@ struct RoutineDetailView: View {
         }
     }
 
-    /// Superset members share one rest time (owned by the group's last exercise).
-    private func displayedRestTime(for routineExercise: RoutineExercise) -> TimeInterval {
-        routineExercise.isInSuperset ? supersetRestTime(for: routineExercise) : restTime(for: routineExercise)
-    }
-
     @ViewBuilder
-    private func parameterEditor(_ parameter: ExerciseCardParameter, for routineExercise: RoutineExercise) -> some View {
+    private func parameterEditor(
+        _ parameter: ExerciseCardParameter,
+        for routineExercise: RoutineExercise,
+        restTime displayedRestTime: TimeInterval
+    ) -> some View {
         switch parameter {
         case .rest:
-            RestTimeInlineEditor(restTime: displayedRestTime(for: routineExercise)) { newValue in
+            RestTimeInlineEditor(restTime: displayedRestTime) { newValue in
                 if routineExercise.isInSuperset {
                     updateSupersetRestTime(for: routineExercise, restTime: newValue)
                 } else {
