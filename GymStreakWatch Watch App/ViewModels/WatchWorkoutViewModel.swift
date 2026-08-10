@@ -28,6 +28,15 @@ final class WatchWorkoutViewModel: ObservableObject {
     @Published var restDuration: TimeInterval = 0
     @Published var restTimerState: RestTimerState = .running
 
+    /// Exercises a Digital Crown adjustment of the RUNNING rest writes to.
+    ///
+    /// For a standard rest that is just the exercise that started it. For a
+    /// superset round it is **every member of the group**, because
+    /// `supersetRoundRestTime` reads the round rest off the *last* member —
+    /// writing only to the exercise whose set was completed would leave the
+    /// next round running on the stale value.
+    @Published private(set) var restAdjustmentExerciseIDs: [UUID] = []
+
     @Published var workoutState: WorkoutState = .idle
 
 
@@ -676,7 +685,10 @@ final class WatchWorkoutViewModel: ObservableObject {
                 if isEndOfSupersetRound(exerciseIndex: exerciseIndex, setIndex: setIndex) {
                     let restTime = supersetRoundRestTime(exerciseIndex: exerciseIndex, setIndex: setIndex)
                     if restTime > 0 {
-                        startRestTimer(duration: restTime)
+                        startRestTimer(
+                            duration: restTime,
+                            ownedBy: restOwnerExerciseIDs(forExerciseIndex: exerciseIndex)
+                        )
                     }
                 }
                 // Advance to next exercise in superset (or next incomplete set)
@@ -685,7 +697,10 @@ final class WatchWorkoutViewModel: ObservableObject {
                 // Standard behavior for non-superset exercises
                 let restTime = exercise.sets[setIndex].restTime
                 if restTime > 0 {
-                    startRestTimer(duration: restTime)
+                    startRestTimer(
+                        duration: restTime,
+                        ownedBy: restOwnerExerciseIDs(forExerciseIndex: exerciseIndex)
+                    )
                 }
                 // Advance to next set in same exercise or next exercise
                 advanceToNextSetAfterCompletion(fromExerciseIndex: exerciseIndex, setIndex: setIndex)
@@ -773,20 +788,22 @@ final class WatchWorkoutViewModel: ObservableObject {
         persistActiveCheckpoint()
     }
 
-    func updateRestTime(for exerciseId: UUID, newRestTime: TimeInterval) {
+    /// The single write path for a rest-duration change made during a workout:
+    /// writes `newRestTime` to **every** set of the given exercises, completed
+    /// ones included, so the rest of the workout uses it.
+    ///
+    /// Deliberately silent (no haptic) and not checkpointed: the Crown plays its
+    /// own per-detent click and would fire this many times a second — the caller
+    /// checkpoints once the rotation settles.
+    func updateRestTime(for exerciseIDs: [UUID], newRestTime: TimeInterval) {
         guard canMutateWorkout else { return }
-        guard let exerciseIndex = exercises.firstIndex(where: { $0.id == exerciseId }) else {
-            return
-        }
 
-        // Update all sets in the exercise with the new rest time
-        for setIndex in exercises[exerciseIndex].sets.indices {
-            exercises[exerciseIndex].sets[setIndex].restTime = newRestTime
+        for exerciseID in exerciseIDs {
+            guard let exerciseIndex = exercises.firstIndex(where: { $0.id == exerciseID }) else { continue }
+            for setIndex in exercises[exerciseIndex].sets.indices {
+                exercises[exerciseIndex].sets[setIndex].restTime = newRestTime
+            }
         }
-
-        WKInterfaceDevice.current().play(.success)
-        persistActiveCheckpoint()
-        print("Updated rest time for exercise \(exercises[exerciseIndex].name) to \(newRestTime)s")
     }
 
     // MARK: - Alternative Exercise Swapping
@@ -909,7 +926,10 @@ final class WatchWorkoutViewModel: ObservableObject {
         // Check if we should start rest timer
         let restTime = exercise.sets[currentSetIndex].restTime
         if restTime > 0 && !isLastSet {
-            startRestTimer(duration: restTime)
+            startRestTimer(
+                duration: restTime,
+                ownedBy: restOwnerExerciseIDs(forExerciseIndex: currentExerciseIndex)
+            )
         }
 
         // Advance to next set
@@ -1172,6 +1192,16 @@ final class WatchWorkoutViewModel: ObservableObject {
         return true
     }
 
+    /// The exercises a rest started by `exerciseIndex` belongs to — see
+    /// `restAdjustmentExerciseIDs` for why a superset round owns the whole group.
+    private func restOwnerExerciseIDs(forExerciseIndex exerciseIndex: Int) -> [UUID] {
+        let exercise = exercises[exerciseIndex]
+        guard let supersetId = exercise.supersetId else { return [exercise.id] }
+
+        let groupIDs = exercises.filter { $0.supersetId == supersetId }.map(\.id)
+        return groupIDs.isEmpty ? [exercise.id] : groupIDs
+    }
+
     /// Gets the rest time to use for a superset round.
     /// Returns the rest time from the last exercise's set at the completed set's level.
     private func supersetRoundRestTime(exerciseIndex: Int, setIndex: Int) -> TimeInterval {
@@ -1273,7 +1303,7 @@ final class WatchWorkoutViewModel: ObservableObject {
 
     // MARK: - Rest Timer
 
-    private func startRestTimer(duration: TimeInterval) {
+    private func startRestTimer(duration: TimeInterval, ownedBy exerciseIDs: [UUID]) {
         print("▶️ startRestTimer called - duration: \(duration)s")
 
         // Cancel any existing timer first
@@ -1285,6 +1315,7 @@ final class WatchWorkoutViewModel: ObservableObject {
         isResting = true
         restTimeRemaining = duration
         restDuration = duration
+        restAdjustmentExerciseIDs = exerciseIDs
         isRestTimerMinimized = false
         restTimerState = .running
         WKInterfaceDevice.current().play(.start)
@@ -1319,10 +1350,12 @@ final class WatchWorkoutViewModel: ObservableObject {
                     // Auto-dismiss after 2 seconds
                     Task {
                         try? await Task.sleep(for: .seconds(2))
+                        self.commitRestDurationAdjustment()
                         self.isResting = false
                         self.restTimerState = .running
                         self.restTimeRemaining = 0
                         self.restDuration = 0
+                        self.restAdjustmentExerciseIDs = []
                     }
                 }
             }
@@ -1345,12 +1378,84 @@ final class WatchWorkoutViewModel: ObservableObject {
     private func stopRestTimer() {
         print("⏹️ stopRestTimer called - remaining: \(restTimeRemaining)s of \(restDuration)s")
 
+        // Before the owners are dropped: a rest skipped right after a Crown
+        // rotation would otherwise lose the adjustment, since the unmounted
+        // timer never delivers its `onIdle`.
+        commitRestDurationAdjustment()
+
         restTimer?.invalidate()
         restTimer = nil
         restTimeRemaining = 0
         restDuration = 0
+        restAdjustmentExerciseIDs = []
         isRestTimerMinimized = false
         restTimerState = .running
+    }
+
+    // MARK: - Rest Duration Adjustment (Digital Crown)
+
+    /// Bounds of a rest duration the user can dial in. `isContinuous: false` on
+    /// the Crown clamps at both ends instead of wrapping 10:00 back to 0:05.
+    static let restDurationRange: ClosedRange<TimeInterval> = 5...600
+
+    /// One Crown detent.
+    static let restDurationStep: TimeInterval = 5
+
+    /// Whether the running rest can be adjusted right now. False once it has
+    /// elapsed (`.completed`), while the workout is frozen or input suspended,
+    /// and whenever no owning exercise is known.
+    var canAdjustRestDuration: Bool {
+        isResting
+            && restTimerState == .running
+            && canMutateWorkout
+            && !restAdjustmentExerciseIDs.isEmpty
+    }
+
+    /// A dialed-in duration that has not been written to the sets yet.
+    /// See `adjustRestDuration(to:)` for why the write is buffered.
+    private var pendingRestDuration: TimeInterval?
+
+    /// Sets the duration of the running rest and moves the countdown by the same
+    /// delta.
+    ///
+    /// There is no deadline `Date` behind the countdown — it is a repeating
+    /// timer decrementing `restTimeRemaining` — so both values have to be moved
+    /// explicitly.
+    ///
+    /// The new duration is **not** written into `exercises` here. That array is
+    /// `@Published` and the whole active-workout tree observes this view model,
+    /// so writing it once per detent (5–10×/s) would republish the entire
+    /// workout state and re-render the exercise list and the pushed set editor
+    /// throughout the rotation. The write is buffered and flushed by
+    /// `commitRestDurationAdjustment()` — on `onIdle`, and whenever the rest
+    /// ends, so it can never be dropped.
+    func adjustRestDuration(to newDuration: TimeInterval) {
+        guard canAdjustRestDuration else { return }
+
+        let clamped = newDuration.clamped(to: Self.restDurationRange)
+        let delta = clamped - restDuration
+        guard delta != 0 else { return }
+
+        restDuration = clamped
+        // Flooring at zero lets a big reduction end the rest on the next tick
+        // rather than leaving a negative countdown on screen.
+        restTimeRemaining = max(0, restTimeRemaining + delta)
+        pendingRestDuration = clamped
+    }
+
+    /// Writes a buffered adjustment to every set of the owning exercise(s) and
+    /// checkpoints it, so the next rest of that exercise starts at the new
+    /// duration and a mid-workout relaunch restores it.
+    ///
+    /// Called when the Crown settles and again when the rest ends — skipping or
+    /// elapsing a rest immediately after a rotation unmounts the timer, and its
+    /// `onIdle` would then never arrive.
+    func commitRestDurationAdjustment() {
+        guard let duration = pendingRestDuration else { return }
+        pendingRestDuration = nil
+
+        updateRestTime(for: restAdjustmentExerciseIDs, newRestTime: duration)
+        persistActiveCheckpoint()
     }
 
     // MARK: - HealthKit Observation
@@ -1422,6 +1527,8 @@ final class WatchWorkoutViewModel: ObservableObject {
         pendingExerciseSelection = nil
         isResting = false
         restTimeRemaining = 0
+        restAdjustmentExerciseIDs = []
+        pendingRestDuration = nil
         isPaused = false
         templateWasUpdated = false
         isEnding = false

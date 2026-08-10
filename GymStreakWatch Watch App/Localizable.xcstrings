@@ -7,66 +7,6 @@
     "..." : {
 
     },
-    "Got It" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Verstanden"
-          }
-        }
-      }
-    },
-    "Not Applied" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Nicht übernommen"
-          }
-        }
-      }
-    },
-    "Routine" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Routine"
-          }
-        }
-      }
-    },
-    "Your change couldn't be sent to your iPhone. Adjust the routine there." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Deine Änderung konnte nicht an dein iPhone gesendet werden. Passe die Routine dort an."
-          }
-        }
-      }
-    },
-    "Your change wasn't applied — this routine had already changed on your iPhone. Adjust it there." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Deine Änderung wurde nicht übernommen – die Routine hatte sich auf deinem iPhone bereits geändert. Passe sie dort an."
-          }
-        }
-      }
-    },
-    "Your change wasn't applied — this routine no longer exists on your iPhone." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Deine Änderung wurde nicht übernommen – diese Routine gibt es auf deinem iPhone nicht mehr."
-          }
-        }
-      }
-    },
     "·" : {
 
     },
@@ -83,6 +23,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%@ · alle Sätze"
+          }
+        }
+      }
+    },
+    "%@ → %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@ → %2$@"
           }
         }
       }
@@ -347,6 +297,12 @@
           }
         }
       }
+    },
+    "+%lld s" : {
+
+    },
+    "−%lld s" : {
+
     },
     "Abs" : {
       "localizations" : {
@@ -1047,6 +1003,16 @@
         }
       }
     },
+    "Got It" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Verstanden"
+          }
+        }
+      }
+    },
     "Hamstrings" : {
       "localizations" : {
         "de" : {
@@ -1219,6 +1185,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Keine Routinen"
+          }
+        }
+      }
+    },
+    "Not Applied" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nicht übernommen"
           }
         }
       }
@@ -1521,6 +1497,16 @@
         }
       }
     },
+    "Rest duration %@" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pausendauer %@"
+          }
+        }
+      }
+    },
     "Rest timer, %@ remaining" : {
       "localizations" : {
         "de" : {
@@ -1537,6 +1523,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Fortsetzen"
+          }
+        }
+      }
+    },
+    "Routine" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Routine"
           }
         }
       }
@@ -1926,6 +1922,16 @@
         }
       }
     },
+    "Turn the Digital Crown to change the rest duration" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Drehe die Digital Crown, um die Pausendauer zu ändern"
+          }
+        }
+      }
+    },
     "Undo" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -2117,6 +2123,36 @@
                 }
               }
             }
+          }
+        }
+      }
+    },
+    "Your change couldn't be sent to your iPhone. Adjust the routine there." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Deine Änderung konnte nicht an dein iPhone gesendet werden. Passe die Routine dort an."
+          }
+        }
+      }
+    },
+    "Your change wasn't applied — this routine had already changed on your iPhone. Adjust it there." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Deine Änderung wurde nicht übernommen – die Routine hatte sich auf deinem iPhone bereits geändert. Passe sie dort an."
+          }
+        }
+      }
+    },
+    "Your change wasn't applied — this routine no longer exists on your iPhone." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Deine Änderung wurde nicht übernommen – diese Routine gibt es auf deinem iPhone nicht mehr."
           }
         }
       }

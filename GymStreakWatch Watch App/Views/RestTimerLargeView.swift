@@ -19,12 +19,21 @@ struct RestTimerLargeView: View {
     /// Shared with the minimized pill so the progress surface and the digits
     /// morph between the two states — see `WatchRestTimerMorph`.
     let namespace: Namespace.ID
+    /// False while the large↔pill morph runs. Gates Crown ownership and the
+    /// digits' `.numericText()` transition — see `WorkoutRestTimerOverlay`.
+    let isMorphSettled: Bool
     let onSkip: () -> Void
     let onMinimize: () -> Void
 
     @State private var lastHapticTriggerTime: Int? = nil
     @State private var pulse = false
     @State private var backgroundPulse: CGFloat = 1.0
+
+    /// The duration the current adjustment started from — and the flag for
+    /// "an adjustment is on screen". `nil` means the idle presentation.
+    /// Owned here because the chrome reads it; everything else about the Crown
+    /// lives in `RestDurationCrownAdjustment`.
+    @State private var adjustmentBaseline: TimeInterval?
 
     var body: some View {
         ZStack {
@@ -34,6 +43,7 @@ struct RestTimerLargeView: View {
         // No opaque background out here: the screen is covered by the progress
         // surface below, which SHRINKS into the pill during the morph and
         // reveals the workout underneath as it goes.
+        .restDurationCrownAdjustment(isEnabled: canAdjust, baseline: $adjustmentBaseline)
         .onAppear { pulse = true }
         .onChange(of: shouldPulse) { isPulsing in
             if isPulsing {
@@ -140,11 +150,7 @@ struct RestTimerLargeView: View {
 
             // MARK: - Center: Primary Timer (Label + Countdown)
             VStack(spacing: 6) {
-                Text("Rest")
-                    .font(.system(.footnote, design: .rounded).weight(.semibold))
-                    .foregroundStyle(.secondary)
-                    .textCase(.uppercase)
-                    .tracking(1.5)
+                RestAdjustmentCaption(isAdjusting: isAdjusting, delta: adjustmentDelta)
 
                 // The shared countdown. Matched on POSITION only: the two states
                 // use different fonts, and matchedGeometryEffect interpolates
@@ -156,12 +162,17 @@ struct RestTimerLargeView: View {
                 // landing mid-morph from being animated by the spring.
                 Text(formattedTime)
                     .font(.system(size: 44, weight: .bold, design: .rounded).monospacedDigit())
-                    .foregroundStyle(shouldPulse ? .red : .white)
-                    .shadow(color: (shouldPulse ? Color.red : Color.white).opacity(0.5), radius: shouldPulse ? 8 : 4)
+                    .foregroundStyle(digitColor)
+                    .shadow(color: digitColor.opacity(0.5), radius: shouldPulse || isAdjusting ? 8 : 4)
                     .scaleEffect(shouldPulse ? (pulse ? 1.15 : 1.0) : 1.0)
                     .animation(.easeInOut(duration: 0.3), value: shouldPulse)
+                    .animation(.easeInOut(duration: RestAdjustmentChrome.crossfade), value: isAdjusting)
                     .fixedSize()
-                    .contentTransition(.identity)
+                    // `.numericText()` only once the morph has settled: a Text
+                    // has one active content transition, and a glyph-replacing
+                    // one would override the `.identity` the shared digits need
+                    // while they are mid-matchedGeometry interpolation.
+                    .contentTransition(isMorphSettled ? .numericText() : .identity)
                     .matchedGeometryEffect(
                         id: WatchRestTimerMorph.digitsID,
                         in: namespace,
@@ -171,10 +182,29 @@ struct RestTimerLargeView: View {
             }
             .accessibilityElement(children: .combine)
             .accessibilityLabel("Rest timer, \(formattedTime) remaining")
+            .accessibilityValue(Text("Rest duration \(RestAdjustmentChrome.durationText(totalDuration))"))
+            .accessibilityHint(Text("Turn the Digital Crown to change the rest duration"))
+            // VoiceOver reaches the countdown, not the Crown binding: it steps
+            // the duration directly and commits at once (no editing chrome —
+            // the spoken value is the feedback).
+            .accessibilityAdjustableAction { direction in
+                guard canAdjust else { return }
+                let step = WatchWorkoutViewModel.restDurationStep
+                switch direction {
+                case .increment: viewModel.adjustRestDuration(to: viewModel.restDuration + step)
+                case .decrement: viewModel.adjustRestDuration(to: viewModel.restDuration - step)
+                @unknown default: break
+                }
+                viewModel.commitRestDurationAdjustment()
+            }
 
             Spacer()
 
-            // MARK: - Bottom Row: Actions
+            // MARK: - Bottom Row: Actions, or the adjustment footer
+            //
+            // The two share this slot: there is no vertical room on this screen
+            // for a slot of the footer's own, and the buttons are the one thing
+            // the user is definitely not reaching for while turning the Crown.
             HStack(spacing: 10) {
                 Button(action: onMinimize) {
                     Image(systemName: "rectangle.compress.vertical")
@@ -190,10 +220,34 @@ struct RestTimerLargeView: View {
                 .tint(OnyxWatch.Colors.warning)
             }
             .buttonBorderShape(.capsule)
+            .restAdjustmentFooter(
+                RestAdjustmentFooter(
+                    isAdjusting: isAdjusting,
+                    baseline: adjustmentBaseline ?? totalDuration,
+                    current: totalDuration,
+                    step: WatchWorkoutViewModel.restDurationStep
+                ),
+                isAdjusting: isAdjusting
+            )
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 12)
         .opacity(state == .running ? 1 : 0)
+    }
+
+    // MARK: ─── Crown Handling
+
+    private var isAdjusting: Bool { adjustmentBaseline != nil }
+
+    private var adjustmentDelta: TimeInterval {
+        guard let baseline = adjustmentBaseline else { return 0 }
+        return totalDuration - baseline
+    }
+
+    /// The Crown is inert unless the rest is genuinely adjustable AND the morph
+    /// has settled.
+    private var canAdjust: Bool {
+        viewModel.canAdjustRestDuration && isMorphSettled && state == .running
     }
 
     // MARK: ─── Computed Properties
@@ -206,5 +260,17 @@ struct RestTimerLargeView: View {
     /// Pulse for last 3 seconds
     private var shouldPulse: Bool {
         timeRemaining <= 3 && state == .running
+    }
+
+    /// The digits' editing treatment: while the Crown is changing them they
+    /// take the delta badge's tint, so the number itself reads as the thing
+    /// being edited rather than a countdown that happens to be moving.
+    ///
+    /// A colour change only — the digits carry `matchedGeometryEffect` and
+    /// `.fixedSize()`, so nothing here may touch their size or position. The
+    /// last-3-seconds red always wins: urgency outranks editing.
+    private var digitColor: Color {
+        if shouldPulse { return .red }
+        return isAdjusting ? OnyxWatch.Colors.tint : .white
     }
 }

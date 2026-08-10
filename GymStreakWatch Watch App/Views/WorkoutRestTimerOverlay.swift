@@ -57,6 +57,15 @@ struct WorkoutRestTimerOverlay: View {
     /// duration of it are dropped. See `setMinimized(_:)`.
     @State private var lastMorphStart: Date = .distantPast
 
+    /// False while a large↔pill morph is in flight. Handed to the large state,
+    /// which owns the Digital Crown only while it is true: crown-driven resizing
+    /// of a view mid-`matchedGeometryEffect`, and a glyph-replacing
+    /// `.contentTransition` on the shared digits while they interpolate, are both
+    /// undocumented territory. Driven off the flag rather than off `setMinimized`
+    /// so state-driven switches (a rest elapsing while minimized) count too.
+    @State private var isMorphSettled = true
+    @State private var morphSettleTask: Task<Void, Never>?
+
     /// Distance from the screen's trailing edge to the pill's visible edge.
     /// Matches the set editor's content inset (8pt screen padding + 2pt top-zone
     /// padding), which is where the pill used to sit.
@@ -77,6 +86,20 @@ struct WorkoutRestTimerOverlay: View {
             // state-driven expand the view model performs when a rest elapses
             // naturally, which no explicit transaction of ours would cover.
             .animation(WatchRestTimerMorph.animation, value: viewModel.isRestTimerMinimized)
+            .onChange(of: viewModel.isRestTimerMinimized) { _, _ in markMorphInFlight() }
+    }
+
+    /// Marks a morph as running and clears the flag one morph duration later.
+    /// Wall-clock like the re-toggle guard, and for the same reason: a flag
+    /// released by an animation-completion callback stuck on watchOS.
+    private func markMorphInFlight() {
+        isMorphSettled = false
+        morphSettleTask?.cancel()
+        morphSettleTask = Task {
+            try? await Task.sleep(for: .seconds(WatchRestTimerMorph.response))
+            guard !Task.isCancelled else { return }
+            isMorphSettled = true
+        }
     }
 
     @ViewBuilder
@@ -119,6 +142,7 @@ struct WorkoutRestTimerOverlay: View {
                     formattedTime: viewModel.formattedRestTime,
                     state: viewModel.restTimerState,
                     namespace: morphNamespace,
+                    isMorphSettled: isMorphSettled,
                     onSkip: viewModel.skipRest,
                     onMinimize: { setMinimized(true) }
                 )

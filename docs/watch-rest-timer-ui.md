@@ -23,6 +23,11 @@ NavigationStack**. State comes from `WatchWorkoutViewModel`
 > implementation with its own morph and constraints — see `rest-timer-ui.md`.
 > For the notification side see `rest-timer-notifications.md`.
 
+Design reference for the Crown adjustment:
+[Watch Pause Anpassen](https://claude.ai/design/p/0d4ac3f4-2c40-43cc-b80e-84bd411c334a?file=Watch+Pause+Anpassen.html)
+(frames A1/A2 = idle vs. editing, C1 = 41 mm space probe). Frame B3 — long-press
+on the training-time chip when no rest runs — is deliberately **not** built.
+
 ## Behavior
 
 - A rest starts when a set is completed and that set's `restTime > 0` and it is
@@ -40,6 +45,198 @@ NavigationStack**. State comes from `WatchWorkoutViewModel`
   elapsed-time label) is hidden, so the two never stack.
 - The countdown keeps running across tab switches and navigation pushes/pops —
   there is only ever one timer view reading one view-model.
+
+## Adjusting the rest duration with the Digital Crown
+
+Turning the Crown during a running rest changes the **rest duration**, not just
+the countdown. The countdown moves by the same delta, and the new duration is
+written to every set of the owning exercise(s) so the *next* rest of that
+exercise starts at it.
+
+- **Step and bounds:** 5 s per detent, clamped to **0:05–10:00**
+  (`WatchWorkoutViewModel.restDurationRange` / `.restDurationStep`).
+  `isContinuous: false` clamps at the ends; `true` would wrap 10:00 back to 0:05.
+- **The digits take the badge's tint** while the Crown is changing them, so the
+  number reads as the thing being edited. Colour and glow only — they carry
+  `matchedGeometryEffect` and `.fixedSize()`, so their size and position are
+  off limits. The last-3-seconds red always wins over it: urgency outranks
+  editing.
+- **The digits never move.** Only the chrome changes: the "REST" caption
+  cross-fades (120 ms) into a `+15 s` delta badge, and a tick track plus a
+  `1:30 → 1:45` line appear. Neither piece takes layout space of its own — the
+  badge is an **overlay on the caption**, and the footer **borrows the
+  Minimize/Skip slot**, cross-fading with the buttons for as long as the
+  adjustment is on screen (`.restAdjustmentFooter(_:isAdjusting:)`). The
+  buttons stop hit-testing while invisible, so a tap during a rotation cannot
+  skip the rest by accident, and they are back 1.2 s after the Crown settles.
+
+### The vertical budget, and two layouts that failed
+
+This screen has **no spare vertical space**, and that is the single fact that
+shaped the editing state. On a 46 mm watch (208×248 pt) the metrics row, the
+caption, the 44 pt digits, the button row and 12 pt of vertical padding leave
+roughly **29 pt in each `Spacer`** — enough for the tick track, not for the
+tick track *and* a text line. 41/42 mm is tighter still.
+
+The design (frames A1/A2) stacks badge → digits → ruler → `old → new` around
+the countdown; that arrangement assumes room this screen does not have, which
+is presumably why the designer added the C1 "41 mm space probe" frame. All
+three elements survive here, but the last one had to move into a borrowed slot
+rather than get one of its own.
+
+Both earlier attempts were tried on device and failed:
+
+1. ⚠️ **Fixed-height reserved slots.** Caption and footer as always-present
+   frames. Stable in isolation, but ~36 pt added to a column between two
+   `Spacer`s pushed the content past the safe area **at both ends** — the
+   metrics row rose into the system clock and the Minimize/Skip buttons were
+   cut off at the bottom edge.
+2. ⚠️ **Footer hung below the digits via an alignment guide**
+   (`.alignmentGuide(.bottom) { $0[.top] - spacing }` inside
+   `.overlay(alignment: .bottom)`). Genuinely layout-neutral, and the technique
+   itself is sound and Apple-documented — but with only 29 pt of gap it drew
+   the ruler and the `old → new` line straight over the buttons.
+3. ⚠️ **`safeAreaInset(edge: .bottom)`** was never built: its documented
+   contract is to inset the modified view to make room, i.e. attempt 1 under a
+   different name.
+
+The surviving rule: **anything added to this column must be layout-neutral
+*and* fit in space something else is not using.**
+
+Notes on the overlay technique, confirmed against Apple's docs (2026-08-10)
+since attempt 2's machinery is still what places the badge:
+
+- An overlay's **base view keeps providing the layout characteristics of the
+  combined view**, which is what guarantees the slot never changes size.
+- Overriding a child's alignment guide to place it outside its host is the
+  documented use of `alignmentGuide(_:computeValue:)` — Apple's own "Aligning
+  views within a stack" sample does the same move. Reading the child's own
+  `ViewDimensions` (rather than an `.offset(y:)` with a hardcoded height) is
+  what makes it survive Dynamic Type and translation.
+- Plain stacks do not clip, so drawing outside the bounds is safe **here**; a
+  `List`, `ScrollView` or paged `TabView` would clip it.
+- SwiftUI hit-tests at rendered position, not at the declared layout box, so
+  decorative content drawn outside its host needs `.allowsHitTesting(false)`.
+- **After the rotation settles** (`onIdle`) the change is checkpointed and the
+  chrome fades back to the idle presentation 1.6 s later.
+- Skip, Minimize, the large↔pill morph and the re-toggle guard are untouched.
+
+### What gets written, and why supersets are different
+
+`WatchWorkoutViewModel.updateRestTime(for:newRestTime:)` is the **single write
+path**: it takes a list of exercise ids and writes the duration to every set of
+each, completed ones included. The list comes from
+`restAdjustmentExerciseIDs`, captured when the rest starts:
+
+| Rest started by | Owners |
+|-----------------|--------|
+| a normal exercise | that exercise |
+| a superset round | **every member of the group** |
+
+The superset case is not defensive coding. `supersetRoundRestTime` resolves a
+round's rest from the **last** exercise of the group at that set level, so
+writing only to the exercise whose set was completed would leave the next round
+running on the stale value.
+
+**The write is buffered, not per detent.** `adjustRestDuration(to:)` moves only
+`restDuration` / `restTimeRemaining` and parks the new value in
+`pendingRestDuration`; `commitRestDurationAdjustment()` is what writes it into
+`exercises` and checkpoints it. That is a hard requirement, not a nicety:
+`exercises` is `@Published` and the whole active-workout tree observes this view
+model, so writing it 5–10×/s would republish the entire workout state and
+re-render the exercise list (whose progress header reduces over every set) and
+the pushed set editor for the length of the rotation — during a live
+`HKWorkoutSession`.
+
+The commit runs at **three** points, so a buffered value can never be dropped:
+`onIdle` (rotation settled), and `stopRestTimer()` / the natural-completion
+dismissal — skipping or elapsing a rest right after a rotation unmounts the
+timer, and its `onIdle` would then never arrive.
+
+### Crown ownership
+
+The **large** state owns the Crown while it is up (it covers the whole display);
+the **minimized pill** deliberately does not, so the list underneath keeps its
+Crown scrolling. Ownership is additionally gated on `isMorphSettled` — Crown
+input is inert while a large↔pill morph is in flight.
+
+That flag lives on `WorkoutRestTimerOverlay` and is driven off
+`viewModel.isRestTimerMinimized` changing (not off `setMinimized`), so
+state-driven switches — a rest elapsing while minimized — count as a morph too.
+Like the re-toggle guard it is released by the **wall clock**, never by an
+animation-completion callback (see rule 8 below for what happened the one time
+that was tried).
+
+### Implementation rules
+
+1. **`.focusable()` must precede `.digitalCrownRotation(...)`** in the modifier
+   chain, or Crown input silently does nothing.
+2. **The per-detent click is automatic** (`isHapticFeedbackEnabled: true`). Do
+   **not** also play `WKInterfaceDevice.current().play(.click)` — it doubles up.
+3. **There is no built-in limit haptic.** The bound is detected in the change
+   handler and `.directionDown` / `.directionUp` is played manually, once per
+   arrival at the bound rather than once per detent.
+4. **`sensitivity:` is passed explicitly.** Apple's overview page documents the
+   default as `.medium` and the `detent:` overload's own page as `.high` — the
+   docs contradict each other, so nothing is inherited. Sensitivity changes
+   rotation-per-detent, not step size; `by:` is what makes the 5 s feel.
+5. **`.contentTransition(.numericText())` only in the settled state, and
+   throttled.** A `Text` has one active content transition, and a
+   glyph-replacing one would override the `.contentTransition(.identity)` the
+   shared digits carry to survive `matchedGeometryEffect` — so the digits stay
+   on `.identity` while a morph runs. Raw detents arrive 5–10×/s at this
+   sensitivity, so the *value* is committed on every detent (the model never
+   lags the Crown) but only every 150 ms inside an animated transaction.
+6. **`onIdle` is the "rotation ended" signal** — no hand-rolled debounce. It
+   covers Crown input only, not taps.
+7. **Neither the set write nor the checkpoint runs per detent** (see above).
+   `updateRestTime` is deliberately silent and non-persisting;
+   `commitRestDurationAdjustment()` is what makes the change survive a
+   mid-workout relaunch (see `watch-workout-recovery.md` — the checkpoint
+   carries `exercises`, so the adjusted `restTime` rides along).
+8. **The editing chrome is built only while adjusting.** The 25-capsule tick
+   track, its gradient mask and the `old → new` formatting sit behind
+   `if isAdjusting` — this body re-evaluates once a second from the countdown
+   alone, so none of it may be constructed just to be hidden.
+
+### API research (2026-08-10)
+
+- The real modifier is
+  [`digitalCrownRotation(detent:from:through:by:sensitivity:isContinuous:isHapticFeedbackEnabled:onChange:onIdle:)`](https://developer.apple.com/documentation/swiftui/view/digitalcrownrotation(detent:from:through:by:sensitivity:iscontinuous:ishapticfeedbackenabled:onchange:onidle:)-17066)
+  (watchOS 9.0+). Its generic parameter is `BinaryFloatingPoint`, so the binding
+  is a `Double`/`TimeInterval` — **there is no `Int` overload**. The
+  `digitalCrownRotation(detent: .by(5))` shorthand in the design mock is not
+  real API.
+- Haptics during an active `HKWorkoutSession` carry no documented restriction,
+  and the target's existing Crown users already play them mid-workout.
+- Sources: [`contentTransition.numericText`](https://developer.apple.com/documentation/swiftui/contenttransition/numerictext(countsdown:)),
+  [`WKInterfaceDevice.play`](https://developer.apple.com/documentation/watchkit/wkinterfacedevice/1628128-playhaptic?language=objc),
+  [crown haptic defaults (forum 115562)](https://developer.apple.com/forums/thread/115562).
+
+### Deliberately not built (this slice)
+
+- **No scope choice.** The adjustment always applies to *all* sets of the
+  owning exercise(s); the one-time escape hatch is a follow-up ticket.
+- **No adjustment from the pill**, and none when no rest is running.
+- **VoiceOver gets no editing chrome.** The countdown element carries an
+  `accessibilityAdjustableAction` that steps the duration and commits
+  immediately — the spoken value is the feedback, so the badge/ticks/`old → new`
+  block (and its linger timer) is skipped on that path.
+
+### Verification state
+
+The Digital Crown cannot be driven by XCUITest, so this is a manual-pass
+feature. **Fully verified on device 2026-08-10** at 46 mm and 41/42 mm and at
+the largest watch text size: the 5 s step and the countdown delta, the clamp
+and limit haptic at both bounds, no flicker under fast rotation, Crown
+inertness mid-morph, the button↔footer cross-fade, the superset fan-out, the
+next rest starting at the new duration, and kill/relaunch recovery. Those runs
+are also what surfaced both rejected layouts above.
+
+⚠️ **None of it has automated coverage.** The write path
+(`adjustRestDuration` → `commitRestDurationAdjustment` → `updateRestTime`,
+including the superset fan-out) is verified by hand only — the watch view model
+is not in the `GymStreakTests` target, so a regression here would be silent.
 
 ## Architecture: one owner, not one per screen
 
@@ -273,7 +470,9 @@ Researched before implementing, because watchOS availability differs from iOS:
 | `WatchRestTimerMorph` | same file | Constants shared by both states and by screens that make room: the two matched-geometry ids, the surface corner radius, the morph spring, `presenceAnimation`, `reservedSlotHeight`. |
 | `ActiveWorkoutView` | `GymStreakWatch Watch App/Views/ActiveWorkoutView.swift` | Mounts the overlay as a sibling of the `NavigationStack` in its root `ZStack`. |
 | `ExerciseListView` | `GymStreakWatch Watch App/Views/ExerciseListView.swift` | Reserves the pill's slot via `safeAreaInset(edge: .top)` (`WatchRestTimerMorph.reservedSlotHeight`) while resting; declares no timer. |
-| `RestTimerLargeView` | `GymStreakWatch Watch App/Views/RestTimerLargeView.swift` | Large state; takes the morph namespace and tags the panel + digits. |
+| `RestTimerLargeView` | `GymStreakWatch Watch App/Views/RestTimerLargeView.swift` | Large state; takes the morph namespace and tags the panel + digits. Owns `adjustmentBaseline` (the flag for "an adjustment is on screen") and nothing else about the Crown. |
+| `RestDurationCrownAdjustment` | `GymStreakWatch Watch App/Views/RestDurationCrownAdjustment.swift` | `ViewModifier` carrying the whole Crown state machine: detent binding, focus, limit haptic, animation throttle, the linger before the chrome fades. Applied by the large state via `.restDurationCrownAdjustment(isEnabled:baseline:)`. |
+| `RestAdjustmentCaption` / `RestAdjustmentFooter` / `RestAdjustmentChrome` | `GymStreakWatch Watch App/Views/RestDurationAdjustmentChrome.swift` | The editing treatment — delta badge over the caption, tick track + `old → new` line cross-faded into the Minimize/Skip slot. Nothing here has a slot of its own; see "The vertical budget". |
 | `RestTimerMinimizedPill` | `GymStreakWatch Watch App/Views/RestTimerMinimizedPill.swift` | Minimized pill; takes the morph namespace and tags its card + digits. |
 | `WatchWorkoutViewModel` | `GymStreakWatch Watch App/ViewModels/` | Timer state and actions (`startRestTimer`, `skipRest`, `minimizeRestTimer`, `expandRestTimer`). |
 
@@ -288,6 +487,11 @@ Three files, split along the state seam — one per state plus the owner:
 
 The two state views know nothing about each other; everything they share travels
 through `WatchRestTimerMorph` and the namespace the overlay passes down.
+
+The Crown adjustment adds two more files rather than growing the large state
+past the file-size cap: `RestDurationCrownAdjustment.swift` (input) and
+`RestDurationAdjustmentChrome.swift` (presentation). They meet only at
+`adjustmentBaseline`, which the large state owns and hands to both.
 
 ### Deleted variants (2026-07-25)
 
