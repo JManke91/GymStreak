@@ -36,6 +36,10 @@ For a clearly atomic task, `/to-tickets` should still create a single `01` local
 
 **Closing the loop:** when the last local ticket of a feature's `.scratch/<feature-slug>/issues/` set is completed — i.e., every implementation ticket derived from the parent Things task is done — proactively ask the user (via AskUserQuestion) whether the feature is finished and tested. Only on an explicit yes, mark the parent Things to-do as completed via the Things MCP (`update_todo` with `completed: true`). On a no or an unclear answer, leave the Things task untouched. This confirmed prompt is the one sanctioned path for completing the parent task; it does not authorize any other edits to it.
 
+That same yes also closes out the local tickets, in this order: **harvest → mark → archive.** Confirm the feature's `docs/<feature>.md` carries the ticket bodies' durable knowledge (root causes, discarded approaches, verification records, and any follow-up work found but not applied) and port what's missing; set each ticket to `**Status:** done`; then **move** `.scratch/<feature-slug>/` to `.scratch/_done/<feature-slug>/`. The top level of `.scratch/` is the live work queue and shows open features only.
+
+**Never delete anything under `.scratch/` on your own initiative.** It is gitignored, so removal is permanent and unrecoverable — archival is always a move, and deletion needs an explicit, specific instruction from the user. If a ticket records follow-up work that was never applied, surface it before archiving rather than burying it. See `docs/agents/issue-tracker.md` for the full procedure and `docs/agents/triage-labels.md` for the status vocabulary.
+
 ## Working Style
 
 Principles for how to work in this repo. They apply to every model; they matter most on the capable, long-running models (Fable 5 / Opus) that can otherwise over-plan or over-build.
