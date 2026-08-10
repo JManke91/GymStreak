@@ -4,6 +4,36 @@ All notable changes to GymStreak are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.1.7] - 2026-08-10
+
+### Added
+
+- Tapping a reps or kg value opens a keypad with quick steps (+/- 2.5 and 5 kg), the planned value for reference, and an option to apply the change to all following sets. The set list no longer jumps around while you edit.
+- Each set has a new menu with Duplicate set and Delete set.
+- If a routine change you accepted on your watch can never be applied, the watch now tells you: a notice appears on the routine list with the reason, and stays until you dismiss it. Changes that are simply still on their way to your iPhone stay silent, as before.
+- Breaking up a superset is now as quick as creating one: a scissors button sits on the connecting line between two linked exercises. Tap it to split the group at that point — a pair is dissolved, a longer superset splits into two, and an exercise left on its own becomes a normal exercise again.
+- The rest timer now offers presets and fine steps instead of a slider, and you can set a rep goal (e.g. 8-12) while adding the exercise instead of afterwards. Exercises added during a running workout can get a rep goal too.
+
+### Improved
+
+- The active workout screen has been redesigned. Only the exercise you are currently on is expanded; every other exercise collapses to a compact row you can tap to open.
+- Checking off a set and editing its values are now separate targets: the left column of a set row logs the set, the reps and kg chips open an editor. No more mistaps.
+- Progress in the header now shows one segment per set, grouped by exercise, so you can see where you are in the workout at a glance.
+- Rest no longer takes over the screen. A rest bar sits above the workout buttons with +30s and Continue; tap it if you want the large timer.
+- Exercises in a superset now always sit next to each other in the routine. Linking exercises that are far apart pulls them together at the position of the first one, and existing routines are tidied up the next time you open them.
+- In sorting mode a superset now moves as one block: it is shown as a single grouped row, dragging it takes all its exercises along, and nothing can be dropped between them.
+- In a routine, a superset now connects its exercises with one continuous line in the group colour, running from the first dot to the last across the gaps between cards. The line stays connected when you expand or collapse a card.
+- The "Link superset" control between two exercises now carries a label and a much larger tap area, so it is easier to see and to hit.
+- The screen for adding an exercise to a routine has been redesigned. It opens with the exercise itself — avatar, muscle group and equipment — and a live summary of sets, volume and rest that updates as you configure.
+- Sets are now edited right in the list with the same steppers as the routine screen, and you can still tap any number to type an exact value. Starting from scratch, three quick schemes (3x8, 3x10, 4x12) get you set up in one tap.
+- Adding is now one clear button at the bottom that names the routine you are adding to.
+- A watch workout and the routine update it requests are now sent to the iPhone as two separate items, so a routine update that cannot be confirmed can never hold back the workout itself.
+
+### Fixed
+
+- Fixed a bug where a workout finished on the Apple Watch with "Save & update template" could stay stuck on the watch and never appear on the iPhone, even though it was saved to Apple Health. Affected workouts are sent automatically the next time you open the app.
+- A weight increase after hitting your rep goal now only applies to your next workout. The sets you just completed keep the values you actually lifted, on both iPhone and Apple Watch.
+
 ## [1.1.6] - 2026-07-30
 
 ### Added
