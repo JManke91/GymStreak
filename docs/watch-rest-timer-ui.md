@@ -77,9 +77,20 @@ This screen has **no spare vertical space**, and that is the single fact that
 shaped the editing state. On a 46 mm watch (208×248 pt) the metrics row, the
 caption, the 44 pt digits, the button row and 12 pt of vertical padding leave
 roughly **29 pt in each `Spacer`** — enough for the tick track, not for the
-tick track *and* a text line. 41/42 mm is tighter still, and **≤ 40 mm does not
-really work yet** (see "Verification state") — the budget below is written for
-41 mm and up.
+tick track *and* a text line. 41/42 mm is tighter still.
+
+**Below 41 mm every fixed value on this screen has to come down** (added
+2026-08-11). A 40 mm watch is 162 × 197 pt — 18 pt shorter than the 41 mm frame
+the design was drawn on — and with the 46 mm constants the column ran ~40 pt
+past the display: the Minimize/Skip row was laid out off the bottom edge. Five
+of this view's constants are now `WorkoutScreenMetrics` tiers (49/45 · 41 · 40 mm):
+`restCountdownSize` (44/42/34), `restVerticalPadding` (12/10/4),
+`restStackSpacing` (6/6/3), `restCenterSpacing` (6/6/2) and
+`restMinimizeIconSize` (24/22/18). The compact HR/kCal readout in the top row
+(`WorkoutMetricsView(size: .small)`) is tiered too — it was the tallest single
+element here at ~39 pt and is ~31 pt on 40 mm. See
+`watch-set-completion-button.md` § "Sizing per Case" for the full table and the
+two-axis tier rule.
 
 The design (frames A1/A2) stacks badge → digits → ruler → `old → new` around
 the countdown; that arrangement assumes room this screen does not have, which
@@ -356,12 +367,20 @@ next rest's value), the superset revert, re-arming by a second rotation,
 Skip/Minimize staying reachable through it, and the German labels. The watch
 target builds and the 438-test `GymStreakTests` suite passes.
 
-⚠️ **Small cases (≤ 40 mm) are a known gap, and not this row's fault.** The same
-pass found the rest-timer screen as a whole too cramped there — the metrics row,
-the caption, the 44 pt digits and the button row already fill it before any
-editing chrome arrives. The fix is a rethink of this screen's vertical design,
-not a tweak to the scope row, and is tracked as separate follow-up work. Assume
-nothing here has been tuned below 41 mm.
+**Small cases (40 mm) — fixed 2026-08-11.** That pass had found the rest-timer
+screen as a whole too cramped below 41 mm: the metrics row, the caption, the
+44 pt digits and the button row filled it before any editing chrome arrived, and
+the Minimize/Skip row was laid out off the bottom edge. The cause was not this
+row — it was that the whole screen used one set of fixed point values authored
+for 41 mm and up, with no tier below it. Resolved by adding the `xSmall`
+(40/38 mm) column to `WorkoutScreenMetrics` and reading this view's five
+constants from it (see "The vertical budget"), plus `lineLimit(1)` +
+`minimumScaleFactor(0.6)` on the Skip label — German "Überspringen" is more than
+twice the length of "Skip" and only has half the row to live in, so it wrapped
+to two lines and grew the row into the adjustment footer drawn over the same
+slot. Verified on the 40 mm simulator in de-DE, and guarded by
+`GymStreakWatchUITests.testControlsStayOnScreenOnSmallestCase`, which asserts
+the Skip button's frame is fully inside `app.frame`.
 
 ## Architecture: one owner, not one per screen
 

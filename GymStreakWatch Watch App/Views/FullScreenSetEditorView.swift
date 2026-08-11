@@ -125,7 +125,7 @@ struct FullScreenSetEditorView: View {
                     }
                     .padding(.horizontal, 2)
 
-                    Spacer(minLength: 4)
+                    Spacer(minLength: metrics.editorTopGap)
 
                     // Steppers (adjust the focused value) + live metrics.
                     // The +/- cluster stays on the same side as the focused value
@@ -145,10 +145,10 @@ struct FullScreenSetEditorView: View {
                         }
                     }
                     .animation(reduceMotion ? nil : .snappy(duration: 0.22, extraBounce: 0.05), value: clusterOrder)
-                    .padding(.bottom, 7)
+                    .padding(.bottom, metrics.clusterBottomGap)
 
                     // Weight / reps value cards
-                    HStack(spacing: 6.5) {
+                    HStack(spacing: metrics.valueCardGap) {
                         CompactValueEditor(
                             label: String(localized: "WEIGHT"),
                             value: currentSet.actualWeight,
@@ -177,7 +177,7 @@ struct FullScreenSetEditorView: View {
                         )
                     }
 
-                    Spacer(minLength: 8)
+                    Spacer(minLength: metrics.editorBottomGap)
 
                     // Fused action row (chevrons + glass Complete button)
                     CompactActionBar(

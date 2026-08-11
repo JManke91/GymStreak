@@ -330,55 +330,69 @@ struct WorkoutMetricsView: View {
     let calories: Int
     var size: WorkoutMetricsSize = .medium
 
+    private let metrics = WorkoutScreenMetrics.current
+
+    /// `.medium` is the scrollable list header and keeps its fixed sizes.
+    /// `.small` is the compact readout used inside the two screens that have no
+    /// scroll at all — the set editor's middle band and the rest timer's top
+    /// row — where it is the tallest element, so it follows the case-size tier.
+    private var isCompact: Bool { size == .small }
+
+    private var iconSide: CGFloat { isCompact ? metrics.metricIconSize : 15 }
+    private var valueSize: CGFloat { isCompact ? metrics.metricValueSize : 18 }
+    private var unitSize: CGFloat { isCompact ? metrics.metricUnitSize : 12 }
+    private var rowSpacing: CGFloat { isCompact ? metrics.metricRowSpacing : 5 }
+
     var body: some View {
-        VStack(spacing: 5) {
-            if size == .medium {
+        VStack(spacing: rowSpacing) {
+            if !isCompact {
                 Image(systemName: "heart.fill")
                     .resizable()
                     .foregroundColor(.red)
-                    .frame(width: size == .medium ? 15 : 10, height: size == .medium ? 15 : 10)
+                    .frame(width: iconSide, height: iconSide)
                     .symbolEffect(.breathe)
             }
 
 
             HStack(spacing: 3) {
-                if size == .small {
+                if isCompact {
                     Image(systemName: "heart.fill")
                         .resizable()
                         .foregroundColor(.red)
-                        .frame(width: size == .medium ? 15 : 10, height: size == .medium ? 15 : 10)
+                        .frame(width: iconSide, height: iconSide)
                         .symbolEffect(.breathe)
                 }
                 Text("\(heartRate)")
-                    .font(.system(size: size == .medium ? 18 : 14, weight: .bold, design: .rounded).monospacedDigit())
+                    .font(.system(size: valueSize, weight: .bold, design: .rounded).monospacedDigit())
                 Text("BPM")
-                    .font(.system(size: size == .medium ? 12 : 11, weight: size == .medium ? .light : .medium))
+                    .font(.system(size: unitSize, weight: isCompact ? .medium : .light))
                     .foregroundStyle(.secondary)
             }
 
-            if size == .medium {
+            if !isCompact {
                 Image(systemName: "flame")
                     .resizable()
                     .foregroundColor(.orange)
-                    .frame(width: size == .medium ? 15 : 10, height: size == .medium ? 15 : 10)
+                    .frame(width: iconSide, height: iconSide)
                     .symbolEffect(.breathe)
             }
 
             HStack(spacing: 3) {
-                if size == .small {
+                if isCompact {
                     Image(systemName: "flame")
                         .resizable()
                         .foregroundColor(.orange)
-                        .frame(width: size == .medium ? 15 : 10, height: size == .medium ? 15 : 10)
+                        .frame(width: iconSide, height: iconSide)
                         .symbolEffect(.breathe)
                 }
                 Text("\(calories)")
-                    .font(.system(size: size == .medium ? 18 : 14, weight: .bold, design: .rounded).monospacedDigit())
+                    .font(.system(size: valueSize, weight: .bold, design: .rounded).monospacedDigit())
                 Text("kCal")
-                    .font(.system(size: size == .medium ? 12 : 11, weight: size == .medium ? .light : .medium))
+                    .font(.system(size: unitSize, weight: isCompact ? .medium : .light))
                     .foregroundStyle(.secondary)
             }
         }
+        .lineLimit(1)
     }
 }
 

@@ -25,6 +25,11 @@ struct RestTimerLargeView: View {
     let onSkip: () -> Void
     let onMinimize: () -> Void
 
+    /// Case-size tier. This screen has no scroll and no slack, so every fixed
+    /// point value on it (countdown, paddings, the two action buttons) has to
+    /// come down on a 40 mm watch — see `WorkoutScreenMetrics`.
+    private let metrics = WorkoutScreenMetrics.current
+
     @State private var lastHapticTriggerTime: Int? = nil
     @State private var pulse = false
     @State private var backgroundPulse: CGFloat = 1.0
@@ -131,7 +136,7 @@ struct RestTimerLargeView: View {
 
     // MARK: ─── Running UI
     private var runningContent: some View {
-        VStack(spacing: 6) {
+        VStack(spacing: metrics.restStackSpacing) {
             // MARK: - Top Row: Secondary Metrics
             HStack {
                 if let heartRate = viewModel.heartRate, let calories = viewModel.activeCalories {
@@ -157,7 +162,7 @@ struct RestTimerLargeView: View {
             Spacer()
 
             // MARK: - Center: Primary Timer (Label + Countdown)
-            VStack(spacing: 6) {
+            VStack(spacing: metrics.restCenterSpacing) {
                 // The caption yields its slot to the scope row (see "The
                 // vertical budget"). COLLAPSED, not removed: a removal
                 // transition keeps its slot until it finishes, so an `if` would
@@ -179,7 +184,7 @@ struct RestTimerLargeView: View {
                 // proposes; `.contentTransition(.identity)` keeps a digit change
                 // landing mid-morph from being animated by the spring.
                 Text(formattedTime)
-                    .font(.system(size: 44, weight: .bold, design: .rounded).monospacedDigit())
+                    .font(.system(size: metrics.restCountdownSize, weight: .bold, design: .rounded).monospacedDigit())
                     .foregroundStyle(digitColor)
                     .shadow(color: digitColor.opacity(0.5), radius: shouldPulse || isAdjusting ? 8 : 4)
                     .scaleEffect(shouldPulse ? (pulse ? 1.15 : 1.0) : 1.0)
@@ -220,14 +225,20 @@ struct RestTimerLargeView: View {
             HStack(spacing: 10) {
                 Button(action: onMinimize) {
                     Image(systemName: "rectangle.compress.vertical")
-                        .font(.system(size: 24, weight: .semibold))
+                        .font(.system(size: metrics.restMinimizeIconSize, weight: .semibold))
                         .padding(2)
                 }
                 .tint(.gray)
 
                 Button(action: onSkip) {
+                    // German "Überspringen" is more than twice the length of
+                    // "Skip" and only has half the row to live in. Without this
+                    // it wrapped to two lines, which grew the row and pushed it
+                    // into the adjustment footer drawn over the same slot.
                     Text("Skip")
                         .font(.footnote.weight(.semibold))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.6)
                 }
                 .tint(OnyxWatch.Colors.warning)
             }
@@ -243,7 +254,7 @@ struct RestTimerLargeView: View {
             )
         }
         .padding(.horizontal, 10)
-        .padding(.vertical, 12)
+        .padding(.vertical, metrics.restVerticalPadding)
         .opacity(state == .running ? 1 : 0)
     }
 

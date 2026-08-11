@@ -21,8 +21,15 @@ private enum LocalizedStrings {
 
     static var pushDay: String { isGerman ? "Drücken-Tag" : "Push Day" }
     static var benchPress: String { isGerman ? "Bankdrücken" : "Bench Press" }
-    static var startWorkout: String { "Start Workout" }
-    static var endWorkout: String { "End Workout" }
+    // XCUITest matches on the rendered accessibility label, so these have to be
+    // the localized strings — the English literals never matched in de-DE and
+    // silently stalled the German run after the routine-detail screen.
+    static var startWorkout: String { isGerman ? "Workout starten" : "Start Workout" }
+    static var endWorkout: String { isGerman ? "Workout beenden" : "End Workout" }
+    static var skip: String { isGerman ? "Überspringen" : "Skip" }
+    /// The invariant part of the Complete button's "Complete set 1 of 4" /
+    /// "Satz 1 von 4 abschließen" accessibility label.
+    static var completeSet: String { isGerman ? "abschließen" : "Complete set" }
 }
 
 @MainActor
@@ -61,6 +68,52 @@ final class GymStreakWatchUITests: XCTestCase {
 
         // 04: Set Editor
         captureSetEditorScreen()
+    }
+
+    // MARK: - Small-Screen Layout
+
+    /// Regression guard for the 40 mm overflow: the set editor's Complete
+    /// button and the rest timer's Skip button used to be laid out below the
+    /// bottom edge on the smallest case, because the size tier was picked from
+    /// the screen WIDTH and its smallest column was the design's 41 mm frame.
+    /// Run this on `Apple Watch SE 3 (40mm)` — on a larger case it passes
+    /// trivially.
+    ///
+    /// Not part of `testGenerateWatchScreenshotsDarkMode`: the App Store
+    /// screenshot set must stay exactly the four release screens.
+    func testControlsStayOnScreenOnSmallestCase() throws {
+        captureRoutineDetailScreen()
+        captureActiveWorkoutScreen()
+        captureSetEditorScreen()
+
+        let screen = app.frame
+
+        let completeButton = app.buttons
+            .matching(NSPredicate(format: "label CONTAINS[c] %@", LocalizedStrings.completeSet))
+            .firstMatch
+        XCTAssertTrue(completeButton.waitForExistence(timeout: 5), "Complete button should exist in the set editor")
+        assertOnScreen(completeButton, in: screen, name: "Complete button")
+
+        snapshot("90-Watch-Set-Editor-small")
+
+        // Completing a set starts the rest timer (the seeded sets all carry a
+        // restTime), which is the second screen that overflowed.
+        completeButton.tap()
+        sleep(2)
+
+        let skipButton = app.buttons[LocalizedStrings.skip]
+        XCTAssertTrue(skipButton.waitForExistence(timeout: 5), "Rest timer Skip button should exist")
+        assertOnScreen(skipButton, in: screen, name: "Rest timer Skip button")
+
+        snapshot("91-Watch-Rest-Timer-small")
+    }
+
+    private func assertOnScreen(_ element: XCUIElement, in screen: CGRect, name: String) {
+        let frame = element.frame
+        XCTAssertTrue(
+            screen.contains(frame),
+            "\(name) is not fully on screen — frame \(frame) exceeds \(screen)"
+        )
     }
 
     // MARK: - Screenshot Capture Methods

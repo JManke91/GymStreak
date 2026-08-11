@@ -117,7 +117,10 @@ struct CompactActionBar: View {
             .contentShape(Capsule())
         }
         .buttonStyle(PressScaleStyle())
-        .frame(height: OnyxWatch.Dimensions.minTouchTarget)
+        // Tiered, not a flat 44 pt: this frame — not the capsule — is what the
+        // footer row costs in the vertical budget, and a 40 mm screen cannot
+        // spend an Ultra's worth of it (see WorkoutScreenMetrics).
+        .frame(height: metrics.actionRowHeight)
         .handGestureShortcut(.primaryAction, isEnabled: isInputEnabled)
         .accessibilityLabel(completionAccessibilityLabel)
     }
@@ -238,7 +241,10 @@ struct CompactActionBar: View {
                 .font(.system(size: metrics.chevronIconSize, weight: .bold))
                 .foregroundStyle(isEnabled ? OnyxWatch.Colors.chipText : OnyxWatch.Colors.textTertiary)
         }
-        .buttonStyle(ChevronCircleStyle(diameter: metrics.chevronDiameter))
+        .buttonStyle(ChevronCircleStyle(
+            diameter: metrics.chevronDiameter,
+            rowHeight: metrics.actionRowHeight
+        ))
         .disabled(!isEnabled)
         .accessibilityLabel(Text(accessibilityLabel))
         .accessibilityValue(Text("Set \(currentSetIndex + 1) of \(totalSets)"))
