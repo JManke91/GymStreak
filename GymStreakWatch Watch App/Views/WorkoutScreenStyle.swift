@@ -92,6 +92,11 @@ struct WorkoutScreenMetrics {
     let restCenterSpacing: CGFloat
     let restVerticalPadding: CGFloat
     let restMinimizeIconSize: CGFloat
+    /// Drawn width of the minimized pill grown into its inline ± stepper
+    /// (`RestPillStepper`). It grows LEFTWARD from the pill's trailing edge, so
+    /// this is also how far into the screen it reaches — it has to leave the
+    /// narrowest case a margin at the leading edge.
+    let restPillStepperWidth: CGFloat
 
     /// Ordered smallest → largest so the two axis rankings can be compared.
     private enum Tier: Int, Comparable {
@@ -144,7 +149,7 @@ struct WorkoutScreenMetrics {
         editorTopGap: 4, editorBottomGap: 8, clusterBottomGap: 7,
         metricValueSize: 14, metricUnitSize: 11, metricIconSize: 10, metricRowSpacing: 5,
         restCountdownSize: 44, restStackSpacing: 6, restCenterSpacing: 6,
-        restVerticalPadding: 12, restMinimizeIconSize: 24
+        restVerticalPadding: 12, restMinimizeIconSize: 24, restPillStepperWidth: 136
     )
 
     private static let mid = WorkoutScreenMetrics(
@@ -158,7 +163,7 @@ struct WorkoutScreenMetrics {
         editorTopGap: 4, editorBottomGap: 8, clusterBottomGap: 7,
         metricValueSize: 14, metricUnitSize: 11, metricIconSize: 10, metricRowSpacing: 5,
         restCountdownSize: 44, restStackSpacing: 6, restCenterSpacing: 6,
-        restVerticalPadding: 12, restMinimizeIconSize: 24
+        restVerticalPadding: 12, restMinimizeIconSize: 24, restPillStepperWidth: 132
     )
 
     /// The design's 41 mm column, unchanged — it also covers 42 mm and 44 mm,
@@ -174,7 +179,7 @@ struct WorkoutScreenMetrics {
         editorTopGap: 4, editorBottomGap: 8, clusterBottomGap: 7,
         metricValueSize: 14, metricUnitSize: 11, metricIconSize: 10, metricRowSpacing: 5,
         restCountdownSize: 42, restStackSpacing: 6, restCenterSpacing: 6,
-        restVerticalPadding: 10, restMinimizeIconSize: 22
+        restVerticalPadding: 10, restMinimizeIconSize: 22, restPillStepperWidth: 126
     )
 
     /// 40 mm (162 × 197) and 38 mm — below the design's smallest frame. The
@@ -193,7 +198,7 @@ struct WorkoutScreenMetrics {
         editorTopGap: 2, editorBottomGap: 4, clusterBottomGap: 4,
         metricValueSize: 12, metricUnitSize: 9, metricIconSize: 8, metricRowSpacing: 2,
         restCountdownSize: 34, restStackSpacing: 3, restCenterSpacing: 2,
-        restVerticalPadding: 4, restMinimizeIconSize: 18
+        restVerticalPadding: 4, restMinimizeIconSize: 18, restPillStepperWidth: 116
     )
 }
 

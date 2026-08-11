@@ -46,8 +46,42 @@ enum WatchRestTimerMorph {
     static let reservedSlotHeight: CGFloat = 16
 }
 
+/// Who owns the Digital Crown while a rest runs.
+///
+/// Crown routing is effectively single-owner and there is no focus-restoration
+/// stack, so ownership is modelled explicitly instead of being left to two views
+/// both declaring `.focusable(true)`: every candidate declares
+/// `.focusable(crownOwner == .<itself>)` and `WorkoutRestTimerOverlay` derives
+/// the value. `.none` leaves the Crown to whatever is underneath — the exercise
+/// list's scroll, or a pushed destination.
+enum WatchRestCrownOwner {
+    case none
+    case largeTimer
+    case pillStepper
+}
+
+private struct RestPillStepperOpenKey: EnvironmentKey {
+    static let defaultValue = false
+}
+
+extension EnvironmentValues {
+    /// True while the minimized pill is grown into its inline ± stepper. Read by
+    /// the workout screens whose top-trailing content the grown pill covers —
+    /// see `WorkoutTopProgressView`. Published by `ActiveWorkoutView`, which owns
+    /// the flag because the overlay is a *sibling* of the screens that read it.
+    var isRestPillStepperOpen: Bool {
+        get { self[RestPillStepperOpenKey.self] }
+        set { self[RestPillStepperOpenKey.self] = newValue }
+    }
+}
+
 struct WorkoutRestTimerOverlay: View {
     @EnvironmentObject var viewModel: WatchWorkoutViewModel
+
+    /// Whether the minimized pill is grown into its inline stepper. Owned by
+    /// `ActiveWorkoutView` so the screens under the pill can fade the content it
+    /// covers; the pill itself opens and closes it.
+    @Binding var isStepperOpen: Bool
 
     /// Namespace for the large↔minimized morph. Owned here because this view is
     /// never itself removed while a rest runs — both states are its children.
@@ -86,7 +120,41 @@ struct WorkoutRestTimerOverlay: View {
             // state-driven expand the view model performs when a rest elapses
             // naturally, which no explicit transaction of ours would cover.
             .animation(WatchRestTimerMorph.animation, value: viewModel.isRestTimerMinimized)
-            .onChange(of: viewModel.isRestTimerMinimized) { _, _ in markMorphInFlight() }
+            .onChange(of: viewModel.isRestTimerMinimized) { _, _ in
+                markMorphInFlight()
+                closeStepper()
+            }
+            .onChange(of: viewModel.isResting) { _, _ in closeStepper() }
+    }
+
+    /// Exactly one view is Crown-focusable at a time, by construction: both
+    /// candidates declare `.focusable(crownOwner == .<itself>)` against this one
+    /// value. It is derived, never stored, so no path can leave two owners set.
+    ///
+    /// Ownership is additionally gated on the morph having settled — Crown input
+    /// is inert while a large↔pill transition is in flight.
+    private var crownOwner: WatchRestCrownOwner {
+        guard viewModel.isResting, isMorphSettled else { return .none }
+        if viewModel.isRestTimerMinimized {
+            // The pill takes the Crown only while its stepper is open, so the
+            // list underneath keeps Crown scrolling the rest of the time.
+            return isStepperOpen ? .pillStepper : .none
+        }
+        return .largeTimer
+    }
+
+    /// The stepper belongs to the minimized state only, so expanding — or a rest
+    /// ending while it is open — takes it down. The pill's own `onDisappear`
+    /// flushes whatever it had buffered.
+    ///
+    /// **In a transaction**, and only when it is actually open: this runs in the
+    /// same frame the pill starts being removed by its `.transition(.opacity)`,
+    /// and an unanimated flip would snap the pill's chrome from `opacity(0)` back
+    /// to 1 — a hard flash of the pill's own digits exactly while the shared
+    /// digits are interpolating into the large timer.
+    private func closeStepper() {
+        guard isStepperOpen else { return }
+        withAnimation(WatchRestPillStepper.spring) { isStepperOpen = false }
     }
 
     /// Marks a morph as running and clears the flag one morph duration later.
@@ -113,8 +181,9 @@ struct WorkoutRestTimerOverlay: View {
                     timeRemaining: viewModel.restTimeRemaining,
                     totalDuration: viewModel.restDuration,
                     namespace: morphNamespace,
-                    onExpand: { setMinimized(false) },
-                    onSkip: viewModel.skipRest
+                    crownOwner: crownOwner,
+                    isStepperOpen: $isStepperOpen,
+                    onExpand: { setMinimized(false) }
                 )
                 // Resolve this state's geometry as one unit before the parent
                 // pushes changes down — the sibling NavigationStack pushing or
@@ -123,7 +192,10 @@ struct WorkoutRestTimerOverlay: View {
                 .geometryGroup()
                 // The pill's own visible box, unchanged from the set editor's
                 // 2026-07-24 design (the +2×touchInset is the transparent touch
-                // margin the pill adds around itself).
+                // margin the pill adds around itself). The inline stepper is an
+                // OVERLAY on the pill's card, so it grows leftward out of this
+                // box without changing it — which is what keeps the drawn pill's
+                // height and position identical whether it is open or not.
                 .frame(
                     maxWidth: 96 + 2 * RestTimerMinimizedPill.touchInset,
                     maxHeight: 22 + 2 * RestTimerMinimizedPill.touchInset
@@ -143,6 +215,7 @@ struct WorkoutRestTimerOverlay: View {
                     state: viewModel.restTimerState,
                     namespace: morphNamespace,
                     isMorphSettled: isMorphSettled,
+                    crownOwner: crownOwner,
                     onSkip: viewModel.skipRest,
                     onMinimize: { setMinimized(true) }
                 )

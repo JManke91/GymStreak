@@ -25,6 +25,11 @@ struct ActiveWorkoutView: View {
     @State private var showEndConfirmation = false
     @State private var exercisePath: [WorkoutRoute] = []
     @State private var pendingRemoval: PendingExerciseRemoval?
+    /// The minimized rest pill grown into its inline ± stepper. Owned here, not
+    /// by the overlay, because the grown pill reaches across the top of whatever
+    /// screen is below it — the workout screens read it from the environment and
+    /// fade the content it covers.
+    @State private var isRestStepperOpen = false
 
     var body: some View {
         ZStack {
@@ -75,6 +80,7 @@ struct ActiveWorkoutView: View {
                             }
                         }
                 }
+                .environment(\.isRestPillStepperOpen, isRestStepperOpen)
 
                 // The one and only rest timer of the active workout, in BOTH of
                 // its states. Owned here — a sibling of the NavigationStack —
@@ -83,7 +89,7 @@ struct ActiveWorkoutView: View {
                 // mounted simultaneously) and so the minimized pill layers above
                 // a pushed set editor. Large and minimized therefore share one
                 // coordinate space, which is what the morph needs.
-                WorkoutRestTimerOverlay()
+                WorkoutRestTimerOverlay(isStepperOpen: $isRestStepperOpen)
             }
         }
         // The whole progressive-overload flow, as ONE modal sheet. On watchOS a

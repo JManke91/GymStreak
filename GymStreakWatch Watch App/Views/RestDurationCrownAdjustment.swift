@@ -39,6 +39,27 @@ extension View {
     }
 }
 
+/// The bound feedback shared by both adjustment paths (the large timer's Crown
+/// and the pill's inline stepper).
+///
+/// There is no built-in limit haptic — the bound has to be detected and played
+/// manually, once per *arrival* rather than once per detent, which is what the
+/// caller's `hasPlayed` flag tracks.
+enum RestLimitHaptic {
+    static func play(reaching duration: TimeInterval, hasPlayed: inout Bool) {
+        let range = WatchWorkoutViewModel.restDurationRange
+        if duration <= range.lowerBound {
+            if !hasPlayed { WKInterfaceDevice.current().play(.directionDown) }
+            hasPlayed = true
+        } else if duration >= range.upperBound {
+            if !hasPlayed { WKInterfaceDevice.current().play(.directionUp) }
+            hasPlayed = true
+        } else {
+            hasPlayed = false
+        }
+    }
+}
+
 private struct RestDurationVoiceOverAdjustment: ViewModifier {
     @EnvironmentObject private var viewModel: WatchWorkoutViewModel
 
@@ -174,7 +195,7 @@ struct RestDurationCrownAdjustment: ViewModifier {
             }
             baseline = viewModel.restDuration
         }
-        playLimitHapticIfNeeded(for: clamped)
+        RestLimitHaptic.play(reaching: clamped, hasPlayed: &limitHapticPlayed)
 
         // Throttle the ANIMATED commits only — the value itself is always
         // applied immediately, so the model never lags the Crown.
@@ -226,21 +247,6 @@ struct RestDurationCrownAdjustment: ViewModifier {
         withAnimation(RestScopeRow.spring) {
             scope = nil
             baseline = nil
-        }
-    }
-
-    /// There is no built-in limit haptic — the bound has to be detected and
-    /// played manually, once per arrival rather than once per detent.
-    private func playLimitHapticIfNeeded(for duration: TimeInterval) {
-        let range = WatchWorkoutViewModel.restDurationRange
-        if duration <= range.lowerBound {
-            if !limitHapticPlayed { WKInterfaceDevice.current().play(.directionDown) }
-            limitHapticPlayed = true
-        } else if duration >= range.upperBound {
-            if !limitHapticPlayed { WKInterfaceDevice.current().play(.directionUp) }
-            limitHapticPlayed = true
-        } else {
-            limitHapticPlayed = false
         }
     }
 

@@ -1,3 +1,4 @@
 - Apple Watch: turn the Digital Crown during a rest to change the rest duration in 5-second steps; the new duration applies to the rest of that exercise.
 - Apple Watch: after adjusting a rest with the Crown, a short "This rest / All sets" prompt lets you keep the change for the running rest only.
+- Apple Watch: long-press the small rest pill to adjust the rest right there — it grows into a -15 / +15 stepper (the Crown still works too) and shrinks back after 3 seconds. Note: long-pressing the pill no longer skips the rest; tap it to open the timer and use Skip.
 - Apple Watch: fixed the workout and rest-timer screens being cut off on the smallest watches (40 mm, e.g. Apple Watch SE) — the Complete button, the set chevrons and the Skip button now stay fully on screen.

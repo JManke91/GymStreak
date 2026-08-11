@@ -11,7 +11,8 @@ During an active watch workout the rest countdown has two states:
   success haptic at 0.
 - **Minimized** (`RestTimerMinimizedPill`) — a small pill (≤96×22 pt) with a
   draining capsule bar behind the remaining seconds and a chevron. **Tap** to
-  expand, **long-press (0.5 s)** to skip.
+  expand, **long-press (0.5 s)** to grow it into the inline `−15 · 1:45 · +15`
+  stepper (`RestPillStepper`).
 
 Both are mounted by a single component, `WorkoutRestTimerOverlay`, which
 `ActiveWorkoutView` places in its root `ZStack` as a **sibling of the
@@ -35,8 +36,8 @@ deliberately **not** built.
   not the last set (`WatchWorkoutViewModel.startRestTimer`). The large timer
   opens automatically (`isRestTimerMinimized` is reset to `false`).
 - **Minimize** collapses to the pill; **tapping** the pill expands again;
-  **long-pressing** the pill skips the rest (same as **Skip** on the large
-  timer). Both pill gestures play a haptic. Minimize and expand are a
+  **long-pressing** the pill opens its inline stepper (see "Adjusting from the
+  minimized pill"). Both pill gestures play a haptic. Minimize and expand are a
   continuous **morph**, not a cross-fade — see "The large↔minimized morph".
 - The pill sits at the **top-trailing corner of the safe area** and stays there
   on every screen of the workout: exercise list, metrics page, controls page and
@@ -272,19 +273,168 @@ The commit runs at **three** points, so a buffered value can never be dropped:
 dismissal — skipping or elapsing a rest right after a rotation unmounts the
 timer, and its `onIdle` would then never arrive.
 
+### Adjusting from the minimized pill
+
+A rest can also be fixed **without pulling the large timer back up**:
+long-pressing the pill grows it into an inline stepper — `−15 · 1:45 · +15` —
+and hands it the Digital Crown for as long as it is open. The taps make the
+capability discoverable; the Crown keeps working in parallel at its usual 5 s
+detent for anyone who expects it. Three seconds after the last input the pill
+shrinks back to the plain countdown and the change is committed.
+
+- **Both inputs, one write path.** ± taps and Crown detents both go through
+  `adjustRestDuration(to:)`, and the collapse calls
+  `commitRestDurationAdjustment()` — ticket 01's buffered write, including the
+  superset fan-out and the checkpoint. There is no second write path, and the
+  pill never writes per detent.
+- **± is 15 s, the Crown is 5 s.** A tap is a decision ("this rest is too
+  short"), a detent is a nudge — and the pill has room for two targets, not
+  twelve. Same 0:05–10:00 clamp and the same once-per-arrival limit haptic
+  (`RestLimitHaptic`, shared with the large timer's path).
+- **The 3 s collapse restarts on every input.** `onIdle` covers Crown idleness
+  only, so the cancellable `Task.sleep` is restarted from the tap handlers *and*
+  from every detent — a rotation longer than 3 s would otherwise collapse the
+  stepper mid-turn.
+- **No scope prompt here.** The pill writes to all sets, full stop. The
+  "This rest / All sets" row (ticket 02) needs ~27 pt of column that the pill
+  does not have, and it is armed from the large timer's `onIdle`. Reaching for
+  the one-time escape hatch means expanding the timer.
+- **Long-press-to-skip is gone** (deliberately — see below). Skipping runs
+  through tap-to-expand → **Skip**.
+
+#### Why it is an overlay, not a wider pill
+
+The stepper is drawn as an **`.overlay(alignment: .trailing)` on the pill's
+card**, extending leftward, and the pill's own chrome is faded to `opacity(0)`
+underneath it. Nothing about the pill's layout changes when it opens.
+
+That is what makes "grows in place" exact rather than approximate. The pill's
+drawn position is the product of three tuned constants —
+`WorkoutRestTimerOverlay.trailingInset`, `.baselineLift` and the pill's
+`touchInset` — inside a `.frame(maxWidth:maxHeight:)` box that **centers** the
+pill in it. Widening that box would therefore move the drawn pill horizontally,
+and any compensation would have to hardcode the collapsed pill's intrinsic
+width. An overlay takes no layout space, so it sidesteps all of it: same box,
+same height, same vertical position, guaranteed by construction rather than by
+arithmetic.
+
+Consequences worth knowing:
+
+- The stepper is proposed the pill **card's** size, so it inherits the card's
+  height and only overrides its width — hence the overlay sits *before* the
+  `.padding(touchInset)`, not after it.
+- It draws far outside its host's bounds. That is safe here (plain stacks do not
+  clip, and neither does `geometryGroup()`), and SwiftUI hit-tests at rendered
+  position, so the ± halves outside the pill's box still receive taps —
+  **confirmed on device 2026-08-11**, including the `−15` half, which lies
+  wholly outside the box and under an ancestor `.contentShape(Rectangle())`.
+- The pill's surface and digits keep their `matchedGeometryEffect` ids while
+  hidden — opacity does not affect layout — so a tap-to-expand *while the
+  stepper is open* still morphs from the right frame. The flip back to
+  `opacity(1)` must run **inside a transaction**
+  (`WorkoutRestTimerOverlay.closeStepper()`): it happens in the same frame the
+  pill starts being removed, and unanimated it flashes the pill's own digits
+  over the shared ones mid-morph.
+- **The pill's tap gesture yields while the stepper is open.** Its hit region
+  sits under the stepper's right half and part of the duration readout — which
+  is not a Button — so a tap there buys another 3 s instead of expanding. Tapping
+  to expand works again the moment the stepper collapses.
+- The stepper is built only inside `if isStepperOpen`. This body re-evaluates
+  once a second from the countdown alone.
+
+**Width is tiered** (`WorkoutScreenMetrics.restPillStepperWidth`, 136/132/126/116)
+because the stepper grows *into* the screen: at 40 mm the pill's card has ~120 pt
+of room to its left before the display edge.
+
+**Hit targets: 40 × 40 pt per half, not 44.** The ticket asked for ≥ 44 pt, which
+is the **iOS** figure; this project's watch design handoff §6 puts the watchOS
+floor at 24 pt, which is what `ChevronCircleStyle` enforces on the set editor's
+own controls. 40 pt clears that comfortably while leaving the grown pill inside a
+40 mm display; two 44 pt halves plus the duration would not fit there. The region
+is a `contentShape`, so it does not depend on glyph size, and it overflows the
+drawn card vertically instead of making it taller.
+
+#### The gesture reassignment (long press no longer skips)
+
+Long-pressing the pill used to **skip the rest**. The design reassigns it to the
+stepper, and both cannot coexist: the pill has exactly two gestures' worth of
+room, and tap-to-expand is not negotiable. Skipping is still one tap away
+(expand → Skip), whereas *fixing* a rest previously had no path from the pill at
+all — that trade is the point of the feature.
+
+Two notes for future work:
+
+- **Long press as a "more options" gesture is not a HIG-backed watchOS idiom** —
+  on watchOS the system associates it with Home Screen / complication editing.
+  It is a deliberate design choice, not an Apple pattern.
+- **Stacked `.onTapGesture` + `.onLongPressGesture` is a documented-fragile
+  combination** (reports of the tap never firing, e.g.
+  [forum 760062](https://developer.apple.com/forums/thread/760062)). Both
+  modifiers are the ones the pill already carried — only the long press's action
+  changed — so this is low risk, but if tap-to-expand ever stops firing the
+  fallback is explicit `.gesture(LongPressGesture()…)` +
+  `.simultaneousGesture(TapGesture()…)` composition.
+
 ### Crown ownership
 
-The **large** state owns the Crown while it is up (it covers the whole display);
-the **minimized pill** deliberately does not, so the list underneath keeps its
-Crown scrolling. Ownership is additionally gated on `isMorphSettled` — Crown
-input is inert while a large↔pill morph is in flight.
+Crown routing is effectively **single-owner** and watchOS has **no
+focus-restoration stack**, so ownership is modelled explicitly rather than left
+to two views each declaring `.focusable(true)`:
 
-That flag lives on `WorkoutRestTimerOverlay` and is driven off
-`viewModel.isRestTimerMinimized` changing (not off `setMinimized`), so
-state-driven switches — a rest elapsing while minimized — count as a morph too.
-Like the re-toggle guard it is released by the **wall clock**, never by an
-animation-completion callback (see rule 8 below for what happened the one time
-that was tried).
+```swift
+enum WatchRestCrownOwner { case none, largeTimer, pillStepper }
+```
+
+`WorkoutRestTimerOverlay` **derives** it — it is a computed property, never
+stored, so no code path can leave two owners set — and each candidate declares
+`.focusable(crownOwner == .<itself>)`:
+
+| Situation | Owner | Effect |
+|-----------|-------|--------|
+| Large timer up | `.largeTimer` | it covers the whole display, so it takes the Crown |
+| Pill, stepper closed | `.none` | the exercise list underneath keeps Crown scrolling |
+| Pill, stepper open | `.pillStepper` | the pill takes it for the stepper's 3 s |
+| Morph in flight, or no rest | `.none` | Crown input is inert |
+
+One gap, accepted: opening the stepper within one `WatchRestTimerMorph.response`
+(0.42 s) of a minimize leaves it open with the owner still `.none`, so the Crown
+scrolls the list underneath for that window. It self-heals when `isMorphSettled`
+flips, and the ± taps work throughout — no path can strand the stepper with
+nobody able to reach it.
+
+Hand-back is the same flip in reverse: collapsing the stepper returns the owner
+to `.none`, and the views under the overlay (the carousel list's scroll, a
+pushed destination) get the Crown back immediately. Both candidates also mirror
+the value into a `@FocusState` and toggle it on change — there are forum reports
+of crown focus not moving reliably across pushed views without an explicit state
+toggle ([683806](https://developer.apple.com/forums/thread/683806)).
+
+Focus is **not** scoped by navigation depth, which is why an overlay that is a
+sibling of the `NavigationStack` can take the Crown from a `List` or from a
+pushed destination in the first place. That configuration is not covered by
+Apple's documentation — it follows from the single-owner model — so it needs
+device verification.
+
+Ownership is additionally gated on `isMorphSettled` — Crown input is inert while
+a large↔pill morph is in flight. That flag lives on `WorkoutRestTimerOverlay`
+and is driven off `viewModel.isRestTimerMinimized` changing (not off
+`setMinimized`), so state-driven switches — a rest elapsing while minimized —
+count as a morph too. Like the re-toggle guard it is released by the **wall
+clock**, never by an animation-completion callback (see rule 8 below for what
+happened the one time that was tried).
+
+### The screens make room, again
+
+The grown pill reaches across the top of whatever screen is below it, so the set
+editor's **"Exercise 1 / 7" label fades out** while the stepper is up and returns
+when it collapses. It is faded, not removed: the row's height must not change
+under the pill, and the segment bar below it stays.
+
+The flag travels as an **environment value** (`\.isRestPillStepperOpen`), owned
+by `ActiveWorkoutView` — the overlay is a *sibling* of the screens that read it,
+so the state has to live in their common parent. `WorkoutRestTimerOverlay` takes
+it as a `@Binding`; only views that actually read the key re-render when it
+changes, which is why it is not another `@Published` on the view model.
 
 ### Implementation rules
 
@@ -334,7 +484,9 @@ that was tried).
 
 ### Deliberately not built (this slice)
 
-- **No adjustment from the pill**, and none when no rest is running.
+- **No adjustment when no rest is running.** (Adjusting *from the pill* was out
+  of scope for ticket 01 and built by ticket 03 — see "Adjusting from the
+  minimized pill".)
 - **The scope prompt is Crown-only.** It is armed from `onIdle`, which covers
   Crown input and nothing else — the VoiceOver `accessibilityAdjustableAction`
   commits to all sets with no prompt, for the same reason it gets no editing
@@ -366,6 +518,20 @@ The scope prompt's revert (`applyRestAdjustmentScope` →
 next rest's value), the superset revert, re-arming by a second rotation,
 Skip/Minimize staying reachable through it, and the German labels. The watch
 target builds and the 438-test `GymStreakTests` suite passes.
+
+**Pill stepper (ticket 03) — verified by manual pass 2026-08-11.** The long press
+opens it and tap-to-expand still fires next to it (the documented-fragile
+gesture pair held), the drawn pill does not move as it grows, and the ± halves
+respond **even though `−15` is drawn entirely outside its host's layout box** —
+which settles the hit-testing question that section raised. The watch target
+builds and `GymStreakTests` (438) passes.
+
+Two things the pass did not report on, so treat them as open: which case sizes
+were exercised (the width is tiered 136/132/126/116 across 49/45 · 41 · 40 mm)
+and the German accessibility labels. As with the rest of this feature there is
+**no automated coverage** — XCUITest cannot rotate the Crown, and the pill still
+has no accessibility identifier, so a UI test would have to reach it by
+coordinate.
 
 **Small cases (40 mm) — fixed 2026-08-11.** That pass had found the rest-timer
 screen as a whole too cramped below 41 mm: the metrics row, the caption, the
@@ -617,7 +783,9 @@ Researched before implementing, because watchOS availability differs from iOS:
 | `RestTimerLargeView` | `GymStreakWatch Watch App/Views/RestTimerLargeView.swift` | Large state; takes the morph namespace and tags the panel + digits. Owns `adjustmentBaseline` (the flag for "an adjustment is on screen") and `adjustmentScope` (the scope prompt's selection, `nil` while the row is off screen), and nothing else about the Crown. |
 | `RestDurationCrownAdjustment` | `GymStreakWatch Watch App/Views/RestDurationCrownAdjustment.swift` | `ViewModifier` carrying the whole Crown state machine: detent binding, focus, limit haptic, animation throttle, and the single task that runs the tail (chrome out → scope prompt in → out). Applied by the large state via `.restDurationCrownAdjustment(isEnabled:baseline:scope:)`. |
 | `RestAdjustmentCaption` / `RestAdjustmentFooter` / `RestAdjustmentChrome` / `RestScopeRow` | `GymStreakWatch Watch App/Views/RestDurationAdjustmentChrome.swift` | The editing treatment — delta badge over the caption, tick track + `old → new` line cross-faded into the Minimize/Skip slot, and the "This rest / All sets" prompt that follows. Nothing here has a slot of its own; see "The vertical budget". |
-| `RestTimerMinimizedPill` | `GymStreakWatch Watch App/Views/RestTimerMinimizedPill.swift` | Minimized pill; takes the morph namespace and tags its card + digits. |
+| `RestTimerMinimizedPill` | `GymStreakWatch Watch App/Views/RestTimerMinimizedPill.swift` | Minimized pill; takes the morph namespace and tags its card + digits. Owns the pill's two gestures and, while its stepper is open, the Crown state machine (detent binding, limit haptic, the 3 s collapse, the commit). |
+| `RestPillStepper` / `WatchRestPillStepper` | `GymStreakWatch Watch App/Views/RestPillStepper.swift` | The grown pill's presentation (`−15 · 1:45 · +15`) and its constants: tap step, life, spring, hit side. No state of its own. |
+| `RestLimitHaptic` | `…/RestDurationCrownAdjustment.swift` | The once-per-arrival bound haptic, shared by both adjustment paths. |
 | `WatchWorkoutViewModel` | `GymStreakWatch Watch App/ViewModels/` | Timer state and actions (`startRestTimer`, `skipRest`, `minimizeRestTimer`, `expandRestTimer`). |
 
 ### File layout
@@ -637,6 +805,12 @@ past the file-size cap: `RestDurationCrownAdjustment.swift` (input and timing)
 and `RestDurationAdjustmentChrome.swift` (presentation). They meet only at
 `adjustmentBaseline` and `adjustmentScope`, which the large state owns and hands
 to both.
+
+The pill's stepper follows the same split for the same reason:
+`RestPillStepper.swift` is presentation plus constants, and the input/timing
+state machine stays in `RestTimerMinimizedPill.swift`. It is **not** a
+`ViewModifier` like the large state's — the ± buttons have to call into the same
+functions the Crown does, which a modifier cannot hand out.
 
 ### Deleted variants (2026-07-25)
 
@@ -666,7 +840,8 @@ throwaway XCUITest driving a real workout (test since deleted):
 - tap-to-expand works from the pill's **body** (over the digits, not just the
   chevron), from a tab page **and** while the set editor is pushed (proving the
   overlay hit-tests above the pushed destination);
-- long-press-to-skip removes the timer entirely;
+- long-press-to-skip removed the timer entirely (that gesture was reassigned to
+  the inline stepper on 2026-08-11 — see "The gesture reassignment");
 - the countdown decremented continuously across navigation (115 → 103 → …).
 
 Note for future work: the pill is a plain `HStack` with no accessibility label or
@@ -734,6 +909,12 @@ device-only, so check them first if jank ever appears.
   two survivors lost their now-meaningless `New…` prefixes, and
   `ExerciseListView`'s reserved-slot constants moved onto `WatchRestTimerMorph`.
   No behaviour change.
+- **2026-08-11** — the minimized pill gained the inline `−15 · 1:45 · +15`
+  stepper on long press (ticket `.scratch/watch-rest-adjust/issues/03`), which
+  cost the pill its long-press-to-skip and introduced the explicit
+  `WatchRestCrownOwner` hand-over. Also the first use of
+  `\.isRestPillStepperOpen` — the workout screens now know when the pill has
+  grown across their top row.
 - **2026-08-10** — the Digital Crown became able to change a running rest's
   duration (ticket `.scratch/watch-rest-adjust/issues/01`), followed by the
   "This rest / All sets" scope prompt (ticket `…/02`, verified on device

@@ -19,9 +19,13 @@ struct RestTimerLargeView: View {
     /// Shared with the minimized pill so the progress surface and the digits
     /// morph between the two states — see `WatchRestTimerMorph`.
     let namespace: Namespace.ID
-    /// False while the large↔pill morph runs. Gates Crown ownership and the
-    /// digits' `.numericText()` transition — see `WorkoutRestTimerOverlay`.
+    /// False while the large↔pill morph runs. Gates the digits'
+    /// `.numericText()` transition — see `WorkoutRestTimerOverlay`.
     let isMorphSettled: Bool
+    /// Who owns the Digital Crown. This state adjusts only as `.largeTimer`; the
+    /// overlay derives the value, so it can never be focusable at the same time
+    /// as the pill's inline stepper.
+    let crownOwner: WatchRestCrownOwner
     let onSkip: () -> Void
     let onMinimize: () -> Void
 
@@ -280,10 +284,10 @@ struct RestTimerLargeView: View {
         WKInterfaceDevice.current().play(.click)
     }
 
-    /// The Crown is inert unless the rest is genuinely adjustable AND the morph
-    /// has settled.
+    /// The Crown is inert unless the rest is genuinely adjustable AND this state
+    /// owns the Crown (which the overlay withholds while a morph is in flight).
     private var canAdjust: Bool {
-        viewModel.canAdjustRestDuration && isMorphSettled && state == .running
+        viewModel.canAdjustRestDuration && crownOwner == .largeTimer && state == .running
     }
 
     // MARK: ─── Computed Properties

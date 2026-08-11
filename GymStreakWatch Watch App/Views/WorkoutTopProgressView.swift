@@ -37,6 +37,9 @@ struct WorkoutTopProgressView<Trailing: View>: View {
     @ViewBuilder let trailingAccessory: Trailing
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    /// The minimized rest pill grown into its inline ± stepper reaches across
+    /// this row, so the routine label yields to it for the few seconds it is up.
+    @Environment(\.isRestPillStepperOpen) private var isRestPillStepperOpen
 
     private let metrics = WorkoutScreenMetrics.current
     private let accent = OnyxWatch.Colors.accentGreen
@@ -74,6 +77,10 @@ struct WorkoutTopProgressView<Trailing: View>: View {
                         .foregroundStyle(OnyxWatch.Colors.textMuted)
                         .lineLimit(1)
                         .accessibilityLabel(Text("Exercise \(exerciseIndex + 1) of \(exerciseCount)"))
+                        // Faded, not removed: the row's height must not change
+                        // under the pill, and the segment bar below it stays.
+                        .opacity(isRestPillStepperOpen ? 0 : 1)
+                        .animation(WatchRestPillStepper.spring, value: isRestPillStepperOpen)
 
                     Spacer(minLength: 8)
                 }

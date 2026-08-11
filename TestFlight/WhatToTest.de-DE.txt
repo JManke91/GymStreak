@@ -1,3 +1,4 @@
 - Apple Watch: Drehe während einer Pause die Digital Crown, um die Pausendauer in 5-Sekunden-Schritten zu ändern; die neue Dauer gilt für die restlichen Sätze der Übung.
 - Apple Watch: Nach dem Anpassen einer Pause mit der Crown erscheint kurz die Auswahl „Nur jetzt / Alle Sätze“ – damit gilt die Änderung auf Wunsch nur für die laufende Pause.
+- Apple Watch: Halte die kleine Pausen-Pille gedrückt, um die Pause direkt dort anzupassen – sie wächst zu einem -15 / +15 Regler (die Crown funktioniert weiterhin) und schrumpft nach 3 Sekunden zurück. Hinweis: Langes Drücken der Pille überspringt die Pause nicht mehr; tippe sie an und nutze „Überspringen“.
 - Apple Watch: Auf den kleinsten Uhren (40 mm, z. B. Apple Watch SE) wurden Trainings- und Pausen-Bildschirm abgeschnitten – der Abschließen-Button, die Satz-Pfeile und „Überspringen“ sind jetzt vollständig sichtbar.

@@ -716,6 +716,17 @@
         }
       }
     },
+    "Decrease rest by 15 seconds" : {
+      "comment" : "Accessibility label of the − half of the minimized rest pill's inline stepper",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pause um 15 Sekunden verkürzen"
+          }
+        }
+      }
+    },
     "Decrease weight" : {
       "localizations" : {
         "de" : {
@@ -1060,6 +1071,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Erhöhen"
+          }
+        }
+      }
+    },
+    "Increase rest by 15 seconds" : {
+      "comment" : "Accessibility label of the + half of the minimized rest pill's inline stepper",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pause um 15 Sekunden verlängern"
           }
         }
       }
