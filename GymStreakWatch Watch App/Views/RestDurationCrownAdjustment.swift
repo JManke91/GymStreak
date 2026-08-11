@@ -19,9 +19,42 @@ extension View {
     /// is up. `isEnabled` must be false while a morph is in flight.
     func restDurationCrownAdjustment(
         isEnabled: Bool,
-        baseline: Binding<TimeInterval?>
+        baseline: Binding<TimeInterval?>,
+        scope: Binding<WatchWorkoutViewModel.RestAdjustmentScope?>
     ) -> some View {
-        modifier(RestDurationCrownAdjustment(isEnabled: isEnabled, baseline: baseline))
+        modifier(
+            RestDurationCrownAdjustment(isEnabled: isEnabled, baseline: baseline, scope: scope)
+        )
+    }
+}
+
+extension View {
+    /// The VoiceOver path to the same adjustment. It reaches the countdown
+    /// element rather than the Crown binding: it steps the duration directly
+    /// and commits at once, with no editing chrome and no scope prompt — the
+    /// spoken value is the feedback, and `onIdle` (which arms the prompt)
+    /// covers Crown input only.
+    func restDurationVoiceOverAdjustment(isEnabled: Bool) -> some View {
+        modifier(RestDurationVoiceOverAdjustment(isEnabled: isEnabled))
+    }
+}
+
+private struct RestDurationVoiceOverAdjustment: ViewModifier {
+    @EnvironmentObject private var viewModel: WatchWorkoutViewModel
+
+    let isEnabled: Bool
+
+    func body(content: Content) -> some View {
+        content.accessibilityAdjustableAction { direction in
+            guard isEnabled else { return }
+            let step = WatchWorkoutViewModel.restDurationStep
+            switch direction {
+            case .increment: viewModel.adjustRestDuration(to: viewModel.restDuration + step)
+            case .decrement: viewModel.adjustRestDuration(to: viewModel.restDuration - step)
+            @unknown default: break
+            }
+            viewModel.commitRestDurationAdjustment()
+        }
     }
 }
 
@@ -30,13 +63,19 @@ struct RestDurationCrownAdjustment: ViewModifier {
 
     let isEnabled: Bool
     @Binding var baseline: TimeInterval?
+    /// The scope prompt's state: `nil` means the row is not on screen, otherwise
+    /// the option it currently shows as selected. Written here (arming and
+    /// auto-dismissal), read and — on a tap — written by the large state.
+    @Binding var scope: WatchWorkoutViewModel.RestAdjustmentScope?
 
     /// The detent-snapped value the Crown writes. Kept in step with
     /// `viewModel.restDuration` whenever no adjustment is in progress.
     @State private var crownDuration: Double = 0
     @FocusState private var isCrownFocused: Bool
 
-    /// Fades the editing chrome back out a moment after rotation settles.
+    /// Fades the editing chrome back out a moment after rotation settles, then
+    /// runs the scope prompt's whole life cycle. One task, so the two can never
+    /// race or overlap.
     @State private var chromeLingerTask: Task<Void, Never>?
     /// Last time a digit change was committed inside an animated transaction.
     @State private var lastAnimatedCommit: Date = .distantPast
@@ -52,6 +91,11 @@ struct RestDurationCrownAdjustment: ViewModifier {
     /// How long the delta badge, tick track and old→new line stay up after the
     /// Crown stops turning. Kept short because the footer borrows the
     /// Minimize/Skip slot: this is also how long those buttons stay away.
+    ///
+    /// It doubles as the scope prompt's arming delay — the "~1 s after the last
+    /// detent" of the design. Deliberately the *same* number: the editing chrome
+    /// leaving and the scope row arriving are one hand-off, and the two states
+    /// must never be on screen together (there is no vertical room for both).
     private static let chromeLinger: TimeInterval = 1.2
 
     func body(content: Content) -> some View {
@@ -85,6 +129,12 @@ struct RestDurationCrownAdjustment: ViewModifier {
             .onChange(of: isEnabled) { _, enabled in
                 resyncCrownIfIdle()
                 isCrownFocused = enabled
+                // Only when the rest itself is gone — NOT on the morph half of
+                // `isEnabled`. Tearing the chrome down as a morph starts would
+                // change this column's layout in the same frame the shared
+                // digits begin interpolating; minimizing unmounts the large
+                // state anyway, so the row cross-fades out with everything else.
+                if !viewModel.canAdjustRestDuration { dismissScopePrompt() }
             }
             .onAppear {
                 resyncCrownIfIdle()
@@ -113,7 +163,15 @@ struct RestDurationCrownAdjustment: ViewModifier {
         guard clamped != viewModel.restDuration else { return }
 
         if baseline == nil {
+            // Cancels whatever stage the previous adjustment's tail was in — the
+            // chrome linger, the prompt's arming delay, or its 3 s life. A
+            // rotation while the row is up therefore RE-ARMS the one row rather
+            // than stacking a second: it leaves now and comes back with the
+            // fresh commit preselected.
             chromeLingerTask?.cancel()
+            if scope != nil {
+                withAnimation(RestScopeRow.spring) { scope = nil }
+            }
             baseline = viewModel.restDuration
         }
         playLimitHapticIfNeeded(for: clamped)
@@ -131,8 +189,8 @@ struct RestDurationCrownAdjustment: ViewModifier {
         }
     }
 
-    /// Fires when Crown rotation settles: makes the change durable and starts
-    /// the countdown back to the idle presentation.
+    /// Fires when Crown rotation settles: makes the change durable, then runs
+    /// the tail — editing chrome out, scope prompt in, scope prompt out.
     private func endAdjustment() {
         guard baseline != nil else { return }
         viewModel.commitRestDurationAdjustment()
@@ -141,11 +199,33 @@ struct RestDurationCrownAdjustment: ViewModifier {
         chromeLingerTask = Task {
             try? await Task.sleep(for: .seconds(Self.chromeLinger))
             guard !Task.isCancelled else { return }
-            baseline = nil
+            // One transaction: the badge and footer hand their space straight to
+            // the scope row. `.allSets` is preselected because that is exactly
+            // what the commit above just wrote.
+            withAnimation(RestScopeRow.spring) {
+                baseline = nil
+                scope = .allSets
+            }
             // Covers the VoiceOver path, which changes the duration without
             // going through the Crown binding. Same seeding path as everywhere
             // else, so the echo guard and the clamp both apply.
             resyncCrownIfIdle()
+
+            try? await Task.sleep(for: .seconds(RestScopeRow.life))
+            guard !Task.isCancelled else { return }
+            withAnimation(RestScopeRow.spring) { scope = nil }
+        }
+    }
+
+    /// Tears the whole tail down at once. Cancelling the task alone would strand
+    /// whichever stage it had not reached yet — a half-faded editing chrome or a
+    /// row that never dismisses.
+    private func dismissScopePrompt() {
+        chromeLingerTask?.cancel()
+        guard scope != nil || baseline != nil else { return }
+        withAnimation(RestScopeRow.spring) {
+            scope = nil
+            baseline = nil
         }
     }
 

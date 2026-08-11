@@ -141,6 +141,76 @@ struct RestAdjustmentFooter: View {
     }
 }
 
+/// The "This rest / All sets" confirmation that springs in below the countdown
+/// a moment after the Crown settles.
+///
+/// It is a **confirmation, never a blocker**: it preselects what already
+/// happened (`allSets` — ticket 01 wrote the new duration to every set), lives
+/// for `life` seconds and slides away leaving the choice in effect. The user can
+/// ignore it, skip the rest or minimize the timer straight through it.
+///
+/// It is mutually exclusive with the editing chrome above — see
+/// `RestDurationCrownAdjustment` for why (this screen cannot afford both).
+struct RestScopeRow: View {
+    let selection: WatchWorkoutViewModel.RestAdjustmentScope
+    let onSelect: (WatchWorkoutViewModel.RestAdjustmentScope) -> Void
+
+    /// The spring the row arrives and leaves on.
+    static let spring = Animation.spring(response: 0.3, dampingFraction: 0.8)
+    /// How long it stays up with no input.
+    static let life: TimeInterval = 3
+
+    var body: some View {
+        HStack(spacing: 2) {
+            option(.thisRestOnly, title: "This rest")
+            option(.allSets, title: "All sets")
+        }
+        .padding(2)
+        .background(OnyxWatch.Colors.chipBackground, in: Capsule())
+        // Asymmetric on purpose. A removal transition holds the view's layout
+        // slot until it finishes, so an animated exit would leave the row's
+        // ~27 pt in the column while the caption reclaims its own — the two
+        // overlapping is exactly what this screen has no room for. Springing in
+        // is free (the caption's slot is already gone by then); going out is an
+        // instant swap back. The design's "slides away" loses to the budget.
+        .transition(
+            .asymmetric(
+                insertion: .opacity.combined(with: .scale(scale: 0.9, anchor: .top)),
+                removal: .identity
+            )
+        )
+    }
+
+    private func option(
+        _ scope: WatchWorkoutViewModel.RestAdjustmentScope,
+        title: LocalizedStringKey
+    ) -> some View {
+        let isSelected = selection == scope
+        return Button {
+            onSelect(scope)
+        } label: {
+            Text(title)
+                .font(.system(.caption2, design: .rounded).weight(.semibold))
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+                .foregroundStyle(
+                    // Never white on tint — see the contrast rule in CLAUDE.md.
+                    isSelected ? OnyxWatch.Colors.textOnTint : OnyxWatch.Colors.chipText
+                )
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 5)
+                .background {
+                    if isSelected {
+                        Capsule().fill(OnyxWatch.Colors.tint)
+                    }
+                }
+                .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(isSelected ? [.isSelected] : [])
+    }
+}
+
 extension View {
     /// Cross-fades this row with the adjustment footer **in the row's own
     /// slot**. Apply it to the Minimize/Skip row: while the Crown is turning,

@@ -25,8 +25,9 @@ NavigationStack**. State comes from `WatchWorkoutViewModel`
 
 Design reference for the Crown adjustment:
 [Watch Pause Anpassen](https://claude.ai/design/p/0d4ac3f4-2c40-43cc-b80e-84bd411c334a?file=Watch+Pause+Anpassen.html)
-(frames A1/A2 = idle vs. editing, C1 = 41 mm space probe). Frame B3 — long-press
-on the training-time chip when no rest runs — is deliberately **not** built.
+(frames A1/A2 = idle vs. editing, A3 = the scope prompt, C1 = 41 mm space
+probe). Frame B3 — long-press on the training-time chip when no rest runs — is
+deliberately **not** built.
 
 ## Behavior
 
@@ -76,7 +77,9 @@ This screen has **no spare vertical space**, and that is the single fact that
 shaped the editing state. On a 46 mm watch (208×248 pt) the metrics row, the
 caption, the 44 pt digits, the button row and 12 pt of vertical padding leave
 roughly **29 pt in each `Spacer`** — enough for the tick track, not for the
-tick track *and* a text line. 41/42 mm is tighter still.
+tick track *and* a text line. 41/42 mm is tighter still, and **≤ 40 mm does not
+really work yet** (see "Verification state") — the budget below is written for
+41 mm and up.
 
 The design (frames A1/A2) stacks badge → digits → ruler → `old → new` around
 the countdown; that arrangement assumes room this screen does not have, which
@@ -121,12 +124,117 @@ since attempt 2's machinery is still what places the badge:
   chrome fades back to the idle presentation 1.6 s later.
 - Skip, Minimize, the large↔pill morph and the re-toggle guard are untouched.
 
+### The scope prompt ("This rest" / "All sets")
+
+Writing to every set is the *right default* — the usual reason to turn the Crown
+is that the configured duration is generally wrong — but it is not always what
+the user meant. A moment after the Crown settles, a flat two-option row springs
+in below the countdown with **All sets** already selected:
+
+- It is a **confirmation, never a blocker.** Ignoring it leaves the all-sets
+  write in place. Skip, Minimize and the pill morph stay reachable straight
+  through it.
+- **"This rest"** demotes the change to the running countdown: `restDuration` /
+  `restTimeRemaining` keep the dialed-in value, and the owning exercises' sets go
+  back to what they were. It is a **revert of a write that already happened**,
+  not a deferred commit — ticket 01 writes on `onIdle`, which is *before* the
+  prompt appears.
+- **"All sets"** re-asserts the current duration rather than doing literally
+  nothing: after a "This rest" the sets hold the old value again, so changing
+  one's mind inside the prompt's lifetime has to write it back. In the normal
+  case the write is a no-op by value.
+- The row lives **3 s** (`RestScopeRow.life`) and slides away, leaving the choice
+  in effect. Selecting does not extend or shorten that.
+
+**What "the previous duration" means.** `preAdjustmentRestTimes` is a snapshot of
+the owning exercises' set rest times, keyed by set id, captured by the *first*
+commit of the rest (before the first write) and held until the rest ends. A
+snapshot rather than one `TimeInterval` because nothing guarantees a group's sets
+started on the same value — only the write path flattens them. It survives a
+second rotation on purpose, so a later "This rest" reverts all the way to the
+original rather than to the previous adjustment. The owners are
+`restAdjustmentExerciseIDs`, so a superset round reverts the **whole group**,
+exactly as it was written.
+
+Nothing about the running countdown is checkpointed (the recovery payload
+carries `exercises` only), so "This rest" is also the correct state after a
+mid-workout relaunch: the reverted sets are what persists.
+
+Known edge, accepted: swapping an exercise *while its rest runs* replaces the
+sets, so the snapshot's set ids no longer match and `restoreRestTimes` silently
+skips them — the swapped-in exercise keeps the adjusted rest. Reverting to a set
+that no longer exists has no better answer, and the window is a few seconds wide.
+
+### Timing, and why the prompt and the editing chrome never coexist
+
+One task (`chromeLingerTask`) drives the whole tail of an adjustment, so the two
+stages cannot race:
+
+```
+onIdle → commit → 1.2 s → editing chrome out + row in (All sets) → 3 s → row out
+```
+
+The 1.2 s is `chromeLinger`, reused as the prompt's arming delay — the design's
+"~1 s after the last detent". The two states are deliberately **mutually
+exclusive**: the badge/ruler/`old → new` block leaves in the same transaction the
+row arrives in.
+
+That is a layout requirement, not a stylistic one. The row costs about 27 pt and
+this column has ~29 pt of slack at 46 mm and roughly half that at 41 mm (see "The
+vertical budget"), so it is paid for by **collapsing the "REST" caption while the
+row is up** — the one line that says nothing while a choice is on screen. Net
+change against the idle layout is ≈ +10 pt. Having the ruler, the row and the
+caption up at once would not fit at 41 mm.
+
+**Neither half of that exchange may use a removal transition**, and both sides of
+the code say so:
+
+- The caption is **collapsed** (`.frame(height: 0)` + `.opacity(0)`), not removed
+  by an `if`. A view removed by a transition keeps its layout slot until the
+  transition finishes, so an `if` would hold caption *and* row in the column for
+  the length of the spring — attempt 1's overflow, on a timer.
+- The row's transition is **asymmetric**: it springs in (`.scale` + `.opacity`,
+  `response: .3, damping: .8`) but leaves with `.identity`, i.e. instantly. Its
+  slot is free by the time it appears, but an animated exit would hold ~27 pt
+  while the caption reclaims its own. The design's "slides away" loses to the
+  budget; the arrival, which is the part the user is reading, keeps its spring.
+- The caption's opacity runs on the 0.12 s `crossfade`, **not** the row's spring.
+  A zero-height frame does not clip, and it must not — the delta badge overflows
+  the caption on purpose — so a 0.3 s fade would ghost the caption over the
+  digits on its way out.
+
+"Never on screen together" is exact for **layout** and approximate for pixels:
+the footer's 0.12 s fade-out runs while the row springs in, so a ruler at low
+opacity can be drawn behind the arriving row for that long. It occupies no space
+and does not hit-test, so it costs nothing but a soft handover.
+
+A rotation while the row is visible therefore **re-arms the one row** instead of
+stacking a second: the new adjustment cancels the task, the row leaves, and the
+chain restarts from `onIdle` with "All sets" preselected again — which is
+accurate, because the fresh commit did write to all sets.
+
+Both stages are torn down together when the **rest** ends
+(`canAdjustRestDuration` going false). Cancelling the task alone would strand
+whichever stage it had not reached — a half-faded chrome, or a row that never
+dismisses.
+
+Deliberately **not** on the morph half of `isEnabled`: tearing the chrome down as
+a minimize starts would change this column's layout in the same frame the shared
+digits begin interpolating. Minimizing unmounts the large state anyway, so the
+row cross-fades out with the rest of its chrome.
+
 ### What gets written, and why supersets are different
 
-`WatchWorkoutViewModel.updateRestTime(for:newRestTime:)` is the **single write
-path**: it takes a list of exercise ids and writes the duration to every set of
-each, completed ones included. The list comes from
-`restAdjustmentExerciseIDs`, captured when the rest starts:
+`WatchWorkoutViewModel.updateRestTime(for:newRestTime:)` is the write path for
+**setting** a rest duration: it takes a list of exercise ids and writes the
+duration to every set of each, completed ones included. Its only counterpart is
+`restoreRestTimes(_:)`, which puts the pre-adjustment snapshot back for "This
+rest"; it writes `set.restTime` directly rather than through `updateRestTime`
+because it restores a *per-set* value instead of one duration, and its
+`canMutateWorkout` guard therefore sits on its caller,
+`applyRestAdjustmentScope(_:)`. Nothing else may write `restTime` during a
+workout. Both take their exercise list from `restAdjustmentExerciseIDs`,
+captured when the rest starts:
 
 | Rest started by | Owners |
 |-----------------|--------|
@@ -215,9 +323,11 @@ that was tried).
 
 ### Deliberately not built (this slice)
 
-- **No scope choice.** The adjustment always applies to *all* sets of the
-  owning exercise(s); the one-time escape hatch is a follow-up ticket.
 - **No adjustment from the pill**, and none when no rest is running.
+- **The scope prompt is Crown-only.** It is armed from `onIdle`, which covers
+  Crown input and nothing else — the VoiceOver `accessibilityAdjustableAction`
+  commits to all sets with no prompt, for the same reason it gets no editing
+  chrome (the spoken value is the feedback).
 - **VoiceOver gets no editing chrome.** The countdown element carries an
   `accessibilityAdjustableAction` that steps the duration and commits
   immediately — the spoken value is the feedback, so the badge/ticks/`old → new`
@@ -237,6 +347,21 @@ are also what surfaced both rejected layouts above.
 (`adjustRestDuration` → `commitRestDurationAdjustment` → `updateRestTime`,
 including the superset fan-out) is verified by hand only — the watch view model
 is not in the `GymStreakTests` target, so a regression here would be silent.
+The scope prompt's revert (`applyRestAdjustmentScope` →
+`preAdjustmentRestTimes`) sits on the same path and has the same gap.
+
+**Scope prompt — fully verified on device 2026-08-11** at 41 mm and 46 mm: the
+1.2 s arming and 3 s life, the caption↔row hand-off, both scopes (including the
+next rest's value), the superset revert, re-arming by a second rotation,
+Skip/Minimize staying reachable through it, and the German labels. The watch
+target builds and the 438-test `GymStreakTests` suite passes.
+
+⚠️ **Small cases (≤ 40 mm) are a known gap, and not this row's fault.** The same
+pass found the rest-timer screen as a whole too cramped there — the metrics row,
+the caption, the 44 pt digits and the button row already fill it before any
+editing chrome arrives. The fix is a rethink of this screen's vertical design,
+not a tweak to the scope row, and is tracked as separate follow-up work. Assume
+nothing here has been tuned below 41 mm.
 
 ## Architecture: one owner, not one per screen
 
@@ -470,9 +595,9 @@ Researched before implementing, because watchOS availability differs from iOS:
 | `WatchRestTimerMorph` | same file | Constants shared by both states and by screens that make room: the two matched-geometry ids, the surface corner radius, the morph spring, `presenceAnimation`, `reservedSlotHeight`. |
 | `ActiveWorkoutView` | `GymStreakWatch Watch App/Views/ActiveWorkoutView.swift` | Mounts the overlay as a sibling of the `NavigationStack` in its root `ZStack`. |
 | `ExerciseListView` | `GymStreakWatch Watch App/Views/ExerciseListView.swift` | Reserves the pill's slot via `safeAreaInset(edge: .top)` (`WatchRestTimerMorph.reservedSlotHeight`) while resting; declares no timer. |
-| `RestTimerLargeView` | `GymStreakWatch Watch App/Views/RestTimerLargeView.swift` | Large state; takes the morph namespace and tags the panel + digits. Owns `adjustmentBaseline` (the flag for "an adjustment is on screen") and nothing else about the Crown. |
-| `RestDurationCrownAdjustment` | `GymStreakWatch Watch App/Views/RestDurationCrownAdjustment.swift` | `ViewModifier` carrying the whole Crown state machine: detent binding, focus, limit haptic, animation throttle, the linger before the chrome fades. Applied by the large state via `.restDurationCrownAdjustment(isEnabled:baseline:)`. |
-| `RestAdjustmentCaption` / `RestAdjustmentFooter` / `RestAdjustmentChrome` | `GymStreakWatch Watch App/Views/RestDurationAdjustmentChrome.swift` | The editing treatment — delta badge over the caption, tick track + `old → new` line cross-faded into the Minimize/Skip slot. Nothing here has a slot of its own; see "The vertical budget". |
+| `RestTimerLargeView` | `GymStreakWatch Watch App/Views/RestTimerLargeView.swift` | Large state; takes the morph namespace and tags the panel + digits. Owns `adjustmentBaseline` (the flag for "an adjustment is on screen") and `adjustmentScope` (the scope prompt's selection, `nil` while the row is off screen), and nothing else about the Crown. |
+| `RestDurationCrownAdjustment` | `GymStreakWatch Watch App/Views/RestDurationCrownAdjustment.swift` | `ViewModifier` carrying the whole Crown state machine: detent binding, focus, limit haptic, animation throttle, and the single task that runs the tail (chrome out → scope prompt in → out). Applied by the large state via `.restDurationCrownAdjustment(isEnabled:baseline:scope:)`. |
+| `RestAdjustmentCaption` / `RestAdjustmentFooter` / `RestAdjustmentChrome` / `RestScopeRow` | `GymStreakWatch Watch App/Views/RestDurationAdjustmentChrome.swift` | The editing treatment — delta badge over the caption, tick track + `old → new` line cross-faded into the Minimize/Skip slot, and the "This rest / All sets" prompt that follows. Nothing here has a slot of its own; see "The vertical budget". |
 | `RestTimerMinimizedPill` | `GymStreakWatch Watch App/Views/RestTimerMinimizedPill.swift` | Minimized pill; takes the morph namespace and tags its card + digits. |
 | `WatchWorkoutViewModel` | `GymStreakWatch Watch App/ViewModels/` | Timer state and actions (`startRestTimer`, `skipRest`, `minimizeRestTimer`, `expandRestTimer`). |
 
@@ -489,9 +614,10 @@ The two state views know nothing about each other; everything they share travels
 through `WatchRestTimerMorph` and the namespace the overlay passes down.
 
 The Crown adjustment adds two more files rather than growing the large state
-past the file-size cap: `RestDurationCrownAdjustment.swift` (input) and
-`RestDurationAdjustmentChrome.swift` (presentation). They meet only at
-`adjustmentBaseline`, which the large state owns and hands to both.
+past the file-size cap: `RestDurationCrownAdjustment.swift` (input and timing)
+and `RestDurationAdjustmentChrome.swift` (presentation). They meet only at
+`adjustmentBaseline` and `adjustmentScope`, which the large state owns and hands
+to both.
 
 ### Deleted variants (2026-07-25)
 
@@ -589,3 +715,9 @@ device-only, so check them first if jank ever appears.
   two survivors lost their now-meaningless `New…` prefixes, and
   `ExerciseListView`'s reserved-slot constants moved onto `WatchRestTimerMorph`.
   No behaviour change.
+- **2026-08-10** — the Digital Crown became able to change a running rest's
+  duration (ticket `.scratch/watch-rest-adjust/issues/01`), followed by the
+  "This rest / All sets" scope prompt (ticket `…/02`, verified on device
+  2026-08-11), which turned the all-sets write from the only behaviour into the
+  confirmed default. That pass also established that this screen does not yet
+  work at ≤ 40 mm — a pre-existing design gap, now recorded above.

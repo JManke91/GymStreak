@@ -368,6 +368,17 @@
         }
       }
     },
+    "All sets" : {
+      "comment" : "Rest-duration scope prompt: apply the adjusted rest to every set of the exercise",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Alle Sätze"
+          }
+        }
+      }
+    },
     "All sets adjusted for your next workout" : {
       "comment" : "Recap confirmation when a target's sets do not share one weight",
       "localizations" : {
@@ -1877,6 +1888,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Diese Übung ist nicht mehr Teil des Trainings."
+          }
+        }
+      }
+    },
+    "This rest" : {
+      "comment" : "Rest-duration scope prompt: apply the adjusted rest to the running countdown only",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nur jetzt"
           }
         }
       }

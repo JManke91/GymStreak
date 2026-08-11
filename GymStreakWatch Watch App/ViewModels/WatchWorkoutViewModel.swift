@@ -45,6 +45,17 @@ final class WatchWorkoutViewModel: ObservableObject {
         case completed
     }
 
+    /// Which sets a Digital Crown adjustment of the running rest applies to.
+    ///
+    /// `allSets` is the default and what ticket 01 always did: the common reason
+    /// to turn the Crown is that the configured duration is generally wrong.
+    /// `thisRestOnly` demotes it to the running countdown by putting the owning
+    /// exercises' sets back the way they were.
+    enum RestAdjustmentScope {
+        case allSets
+        case thisRestOnly
+    }
+
     // HealthKit Metrics
     @Published var heartRate: Int? = nil
 //    @Published var currentHeartRate: Int? = nil
@@ -1316,6 +1327,9 @@ final class WatchWorkoutViewModel: ObservableObject {
         restTimeRemaining = duration
         restDuration = duration
         restAdjustmentExerciseIDs = exerciseIDs
+        // One snapshot per rest. The teardown paths clear it too; doing it here
+        // as well keeps the invariant local to where a rest begins.
+        preAdjustmentRestTimes = nil
         isRestTimerMinimized = false
         restTimerState = .running
         WKInterfaceDevice.current().play(.start)
@@ -1356,6 +1370,7 @@ final class WatchWorkoutViewModel: ObservableObject {
                         self.restTimeRemaining = 0
                         self.restDuration = 0
                         self.restAdjustmentExerciseIDs = []
+                        self.preAdjustmentRestTimes = nil
                     }
                 }
             }
@@ -1388,6 +1403,7 @@ final class WatchWorkoutViewModel: ObservableObject {
         restTimeRemaining = 0
         restDuration = 0
         restAdjustmentExerciseIDs = []
+        preAdjustmentRestTimes = nil
         isRestTimerMinimized = false
         restTimerState = .running
     }
@@ -1414,6 +1430,17 @@ final class WatchWorkoutViewModel: ObservableObject {
     /// A dialed-in duration that has not been written to the sets yet.
     /// See `adjustRestDuration(to:)` for why the write is buffered.
     private var pendingRestDuration: TimeInterval?
+
+    /// The owning exercises' set rest times as they stood **before this rest's
+    /// first adjustment**, keyed by set id. Captured lazily by the first commit
+    /// and kept for the length of the rest — it is what `.thisRestOnly` puts
+    /// back, and it has to survive a second rotation so a later "just this rest"
+    /// still reverts all the way to the original value.
+    ///
+    /// A snapshot rather than a single `TimeInterval` because nothing guarantees
+    /// the group's sets all started on the same rest time; only the *write* path
+    /// flattens them.
+    private var preAdjustmentRestTimes: [UUID: TimeInterval]?
 
     /// Sets the duration of the running rest and moves the countdown by the same
     /// delta.
@@ -1454,8 +1481,58 @@ final class WatchWorkoutViewModel: ObservableObject {
         guard let duration = pendingRestDuration else { return }
         pendingRestDuration = nil
 
+        captureRestTimesIfNeeded()
         updateRestTime(for: restAdjustmentExerciseIDs, newRestTime: duration)
         persistActiveCheckpoint()
+    }
+
+    /// Applies the user's answer to the scope prompt that follows an adjustment.
+    ///
+    /// The running countdown is never touched — `restDuration` /
+    /// `restTimeRemaining` keep the dialed-in value either way. Only what the
+    /// *following* sets rest for changes.
+    ///
+    /// `.allSets` re-asserts the current duration instead of doing nothing:
+    /// after a `.thisRestOnly` the sets hold the old value again, so changing
+    /// one's mind inside the prompt's lifetime has to write it back. In the
+    /// normal case (nothing reverted) the write is a no-op by value.
+    func applyRestAdjustmentScope(_ scope: RestAdjustmentScope) {
+        guard canMutateWorkout, !restAdjustmentExerciseIDs.isEmpty else { return }
+
+        switch scope {
+        case .allSets:
+            captureRestTimesIfNeeded()
+            updateRestTime(for: restAdjustmentExerciseIDs, newRestTime: restDuration)
+        case .thisRestOnly:
+            guard let snapshot = preAdjustmentRestTimes else { return }
+            restoreRestTimes(snapshot)
+        }
+        persistActiveCheckpoint()
+    }
+
+    /// Remembers the owning exercises' rest times the first time this rest's
+    /// adjustment is written, so `.thisRestOnly` has something to restore.
+    private func captureRestTimesIfNeeded() {
+        guard preAdjustmentRestTimes == nil else { return }
+
+        var snapshot: [UUID: TimeInterval] = [:]
+        for exerciseID in restAdjustmentExerciseIDs {
+            guard let exerciseIndex = exercises.firstIndex(where: { $0.id == exerciseID }) else { continue }
+            for set in exercises[exerciseIndex].sets {
+                snapshot[set.id] = set.restTime
+            }
+        }
+        preAdjustmentRestTimes = snapshot
+    }
+
+    private func restoreRestTimes(_ snapshot: [UUID: TimeInterval]) {
+        for exerciseID in restAdjustmentExerciseIDs {
+            guard let exerciseIndex = exercises.firstIndex(where: { $0.id == exerciseID }) else { continue }
+            for setIndex in exercises[exerciseIndex].sets.indices {
+                guard let previous = snapshot[exercises[exerciseIndex].sets[setIndex].id] else { continue }
+                exercises[exerciseIndex].sets[setIndex].restTime = previous
+            }
+        }
     }
 
     // MARK: - HealthKit Observation
@@ -1529,6 +1606,7 @@ final class WatchWorkoutViewModel: ObservableObject {
         restTimeRemaining = 0
         restAdjustmentExerciseIDs = []
         pendingRestDuration = nil
+        preAdjustmentRestTimes = nil
         isPaused = false
         templateWasUpdated = false
         isEnding = false

@@ -35,6 +35,10 @@ struct RestTimerLargeView: View {
     /// lives in `RestDurationCrownAdjustment`.
     @State private var adjustmentBaseline: TimeInterval?
 
+    /// The scope prompt: `nil` while the row is off screen, otherwise the option
+    /// it shows as selected. Armed and auto-dismissed by the same modifier.
+    @State private var adjustmentScope: WatchWorkoutViewModel.RestAdjustmentScope?
+
     var body: some View {
         ZStack {
             backgroundProgressLayer
@@ -43,7 +47,11 @@ struct RestTimerLargeView: View {
         // No opaque background out here: the screen is covered by the progress
         // surface below, which SHRINKS into the pill during the morph and
         // reveals the workout underneath as it goes.
-        .restDurationCrownAdjustment(isEnabled: canAdjust, baseline: $adjustmentBaseline)
+        .restDurationCrownAdjustment(
+            isEnabled: canAdjust,
+            baseline: $adjustmentBaseline,
+            scope: $adjustmentScope
+        )
         .onAppear { pulse = true }
         .onChange(of: shouldPulse) { isPulsing in
             if isPulsing {
@@ -150,7 +158,17 @@ struct RestTimerLargeView: View {
 
             // MARK: - Center: Primary Timer (Label + Countdown)
             VStack(spacing: 6) {
+                // The caption yields its slot to the scope row (see "The
+                // vertical budget"). COLLAPSED, not removed: a removal
+                // transition keeps its slot until it finishes, so an `if` would
+                // put caption and row in the column together for the spring.
                 RestAdjustmentCaption(isAdjusting: isAdjusting, delta: adjustmentDelta)
+                    .frame(height: captionHeight)
+                    .opacity(isScopePromptUp ? 0 : 1)
+                    // Its own fast crossfade, not the row's spring: a zero-height
+                    // frame does not clip (and must not — the delta badge
+                    // overflows it by design), so a slow fade would ghost.
+                    .animation(.easeInOut(duration: RestAdjustmentChrome.crossfade), value: isScopePromptUp)
 
                 // The shared countdown. Matched on POSITION only: the two states
                 // use different fonts, and matchedGeometryEffect interpolates
@@ -184,18 +202,12 @@ struct RestTimerLargeView: View {
             .accessibilityLabel("Rest timer, \(formattedTime) remaining")
             .accessibilityValue(Text("Rest duration \(RestAdjustmentChrome.durationText(totalDuration))"))
             .accessibilityHint(Text("Turn the Digital Crown to change the rest duration"))
-            // VoiceOver reaches the countdown, not the Crown binding: it steps
-            // the duration directly and commits at once (no editing chrome —
-            // the spoken value is the feedback).
-            .accessibilityAdjustableAction { direction in
-                guard canAdjust else { return }
-                let step = WatchWorkoutViewModel.restDurationStep
-                switch direction {
-                case .increment: viewModel.adjustRestDuration(to: viewModel.restDuration + step)
-                case .decrement: viewModel.adjustRestDuration(to: viewModel.restDuration - step)
-                @unknown default: break
-                }
-                viewModel.commitRestDurationAdjustment()
+            .restDurationVoiceOverAdjustment(isEnabled: canAdjust)
+
+            // Outside the countdown's combined accessibility element: these are
+            // two real buttons, not part of the timer's spoken value.
+            if let adjustmentScope {
+                RestScopeRow(selection: adjustmentScope, onSelect: selectScope)
             }
 
             Spacer()
@@ -239,9 +251,22 @@ struct RestTimerLargeView: View {
 
     private var isAdjusting: Bool { adjustmentBaseline != nil }
 
+    private var isScopePromptUp: Bool { adjustmentScope != nil }
+
+    /// `nil` is the caption's intrinsic height; `0` hands its slot to the row.
+    private var captionHeight: CGFloat? { isScopePromptUp ? 0 : nil }
+
     private var adjustmentDelta: TimeInterval {
         guard let baseline = adjustmentBaseline else { return 0 }
         return totalDuration - baseline
+    }
+
+    /// Answers the scope prompt. The running countdown is untouched either way —
+    /// only what the *following* sets rest for changes.
+    private func selectScope(_ scope: WatchWorkoutViewModel.RestAdjustmentScope) {
+        withAnimation(RestScopeRow.spring) { adjustmentScope = scope }
+        viewModel.applyRestAdjustmentScope(scope)
+        WKInterfaceDevice.current().play(.click)
     }
 
     /// The Crown is inert unless the rest is genuinely adjustable AND the morph
