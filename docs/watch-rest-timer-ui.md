@@ -273,6 +273,119 @@ The commit runs at **three** points, so a buffered value can never be dropped:
 dismissal — skipping or elapsing a rest right after a rotation unmounts the
 timer, and its `onIdle` would then never arrive.
 
+### Reaching the routine template ("Save & Update Template")
+
+Everything above changes the **running workout**. Whether the new duration also
+changes the *routine* is decided by the existing finish dialog — the same toggle
+that already governs set values and structural edits. There is deliberately no
+second prompt: iOS behaves this way for an iPhone workout, so the two platforms
+end up identical. Declining leaves the change session/history-only and the
+routine byte-for-byte untouched.
+
+**The baseline is what makes it detectable.** `restTime` is mutated in place by
+an adjustment, so a rest-only change would otherwise be invisible. Each
+`ActiveWorkoutSet` therefore carries `plannedRestTime` — what the set started the
+workout with, taken from the routine (or from the alternative's scheme on a
+swap, or the draft on a watch-added exercise) — and `wasRestModified` is simply
+`restTime != plannedRestTime`. It is optional: a checkpoint or payload written
+before the field existed decodes as *no rest intent*, never as a change.
+
+`wasRestModified` is **not** part of `wasModified`. A rest change is one change
+per exercise, not per set, so folding it in would inflate the dialog's "you
+modified N sets". It surfaces as `hasRestChanges` → `hasTemplateChanges`, and
+as its own `WatchWorkoutFinishDialogState.restOnly` message ("You changed the
+rest time. Update your routine template?"), which is reached only when nothing
+else changed — any set or structural change already offers the update and the
+rest rides along with it.
+
+Two consequences of the "one rest per exercise" model, both intentional:
+
+- The exercise's **first** set's rest is what reaches the template, and it is
+  written to *every* template set of that exercise, performed or not. The write
+  path here always sets all sets uniformly, so the two agree.
+- "This rest" (the scope prompt) reverts the sets, which also clears the intent
+  — with nothing differing from the baseline there is nothing to carry.
+
+Rest is **not** subject to the progressive-overload exclusion. An exercise whose
+overload was applied keeps its committed reps/weight, but its rest is still
+written — the overload transaction commits values only, so no rest value of its
+own can be regressed. Same rule on iOS, where `updatePrimaryTemplateSets`
+assigns `restTime` outside its value-writeback guard.
+
+The protocol side — the `restTime`/`plannedRestTime` wire pair, the optimistic
+fold, and the all-or-nothing iOS merge — is documented in `docs/watch-sync.md`,
+"Rest duration intent".
+
+#### The buffered write vs. the finalization freeze (root cause, 2026-08-11)
+
+A device pass found the whole path silently dropping the change, and the cause
+was **the buffer, not the sync**. `endWorkout` sets `isEnding = true` — which
+makes `isWorkoutFrozen`, and therefore `!canMutateWorkout`, true — *before* it
+calls `stopRestTimer()`. That call is one of the three commit points, so the
+sequence was:
+
+```
+isEnding = true            → canMutateWorkout == false
+stopRestTimer()
+  → commitRestDurationAdjustment()
+      pendingRestDuration = nil        ← buffer cleared…
+      updateRestTime(…)                ← …by a write that then no-ops
+```
+
+An adjustment that had not yet been flushed by `onIdle` (or by the pill's
+collapse) was therefore **cleared without ever being written** — it never
+reached `exercises`, so it never reached the payload, the template, or even the
+workout's own remaining sets. Two fixes, both load-bearing:
+
+1. `endWorkout` commits **before** it freezes (and after it clears input
+   suspension, so the flush depends on that function rather than on every
+   caller), so the flush still passes the mutation guard.
+2. `commitRestDurationAdjustment()` checks `canMutateWorkout` *before* clearing
+   `pendingRestDuration`, so a blocked write defers the value to the next commit
+   point instead of discarding it. This is what makes every surface safe — the
+   large timer, the pill, and any interruption in between.
+3. …but the deferral has a boundary, and it is load-bearing: **the buffer holds
+   a duration, not its owners.** `commitRestDurationAdjustment` resolves the
+   target exercises from `restAdjustmentExerciseIDs` *at commit time*, and both
+   rest teardowns (`stopRestTimer()` and the natural-completion dismissal) clear
+   those owners. A value they could not write must therefore die with the rest
+   that owned it — otherwise a later rest's commit would write it to a
+   **different exercise** with no user rotation behind it. Both teardowns clear
+   `pendingRestDuration` after their flush attempt for exactly that reason.
+
+**No automated coverage**: `WatchWorkoutViewModel` is not in the `GymStreakTests`
+target, so this class of bug stays device-only. The two diagnostics below exist
+because of it.
+
+#### Diagnosing a "my rest did not sync" report
+
+Two log lines answer it without a debugger, one per device:
+
+**The failure this section was written for turned out to be downstream of both.**
+The watch sent the intent, the iPhone received it, the merge resolved and
+committed it — and the routine still did not change, because the isolated
+transaction's write lost a row-version conflict and the main-context mirror that
+would have re-established it did not copy `restTime`. That is documented in
+`docs/watch-sync.md` ("The main-context mirror is load-bearing, not a cache");
+the table below stays because it is what localized the failure to that hop.
+
+| Device | Line | Reading it |
+|--------|------|------------|
+| Watch, at finalization | `finalize: template intent — N modified set(s), rest changed on M exercise(s)` | `M == 0` ⇒ the watch never recorded the change (buffer dropped, or the watch app predates `plannedRestTime`). The iPhone cannot fix that. |
+| iPhone, on ingest | `ingest: split template applied — rest intent on M exercise(s)` | `M == 0` with a non-zero watch count ⇒ the payload lost it in transit, or **the iPhone build predates the field**. An outcome of `rejected` means the whole transaction was refused, rest included. |
+| iPhone, on merge (Xcode only) | `Template transaction applied: … rest intent on M exercise(s) → K set(s)` | `M > 0, K == 0` ⇒ the template already held that value, so there was nothing to write. |
+
+Both go through `WatchSyncDiagnostics` (the unified log, readable from a device
+in Console.app). The merge lines reach it via a closure the coordinator injects
+into the service, since Domain may not import the Data-layer logger; a third line,
+`merge: committed N update(s), K with rest; rest now […]`, states what the routine
+holds immediately after the commit, which is what distinguishes "never written"
+from "written and then lost".
+
+Both apps must be built from the same revision: `plannedRestTime` is additive and
+optional, so a mixed pair decodes fine and simply behaves as "no rest intent" —
+it fails silently, exactly like the bug above.
+
 ### Adjusting from the minimized pill
 
 A rest can also be fixed **without pulling the large timer back up**:
@@ -827,6 +940,42 @@ needed:
 
 The `New…` prefixes on the two survivors existed purely to distinguish them from
 those variants, so they were dropped in the same pass.
+
+## Open follow-ups (carried out of the ticket set, none blocking)
+
+The `.scratch/watch-rest-adjust/` tickets are archived; these are the items they
+recorded that were never applied, kept here so they are not lost with them.
+
+- **The watch write path has no automated coverage.** `WatchWorkoutViewModel` is
+  not in the `GymStreakTests` target, so `adjustRestDuration` →
+  `commitRestDurationAdjustment` → `updateRestTime` / `restoreRestTimes`,
+  including the superset fan-out and the two buffer fixes above, are verified by
+  hand only. A regression there would be silent. This is also why the
+  finalization-freeze bug reached a device.
+- **`RestTimerMinimizedPill` observes the whole workout view model.** Ticket 03
+  gave it an `@EnvironmentObject` on `WatchWorkoutViewModel` — which owns the
+  rest timer *and* the `@Published var exercises` tree — so every unrelated
+  publish (set completion, structural edit, HealthKit metric) re-evaluates a view
+  that sits above every workout screen for the length of a rest. Fix: keep it
+  value-driven like `onExpand` already is — have `WorkoutRestTimerOverlay`, which
+  already observes the model, pass `restDuration` / `canAdjust` in and hand the
+  two mutations down as closures.
+- **Three files are over the 300-line convention:** `RestTimerMinimizedPill`
+  (347, the crown seeding/echo suppression, clamping, haptics and collapse task
+  all landed in the view struct — extract them into a `ViewModifier` beside
+  `RestDurationCrownAdjustment`), `RestTimerLargeView` (316) and
+  `WatchWorkoutViewModel` (1682). The view model's rest cluster cannot move to a
+  `+RestAdjustment` extension: `pendingRestDuration` and `preAdjustmentRestTimes`
+  are stored properties, and splitting the methods from them would force both to
+  `internal`.
+- **Never individually confirmed for the pill stepper (ticket 03):** which case
+  sizes were exercised (the width is tiered 136/132/126/116 across 49/45 · 41 ·
+  40 mm) and the German accessibility labels.
+- **Exercise-level fields are not mirrored into the main context.** `order`,
+  `supersetId` and `supersetOrder` are written on retained rows by the structural
+  merge and are exposed to the same conflict-loss mechanism that swallowed rest
+  (see `docs/watch-sync.md`). Not observed in the field; left to the structural
+  feature rather than bolted on here.
 
 ## Verification
 

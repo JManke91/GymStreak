@@ -23,6 +23,24 @@ protocol WatchRoutineSnapshotTransporting: AnyObject {
 /// Mirrors a committed value snapshot into the app's long-lived main context
 /// for immediate UI convergence. It never saves or rolls back pre-existing
 /// dirty work.
+///
+/// It is **not** only a cache refresh, and that is why every field `WatchSet`
+/// carries must be mirrored. A watch transaction commits in a sibling context;
+/// once the app has been running long enough for the main context to have saved
+/// those same `ExerciseSet` rows, the sibling's attribute writes lose the
+/// row-version conflict at save and are silently discarded (the session rows and
+/// `Routine.updatedAt` still persist, so the transaction looks applied). What
+/// actually establishes the committed values in the store is this mirror's own
+/// save. A field omitted here therefore reverts to whatever the main context
+/// last held — which is exactly how rest time was lost while reps and weight,
+/// mirrored since day one, survived.
+///
+/// ⚠️ Known gap, not yet observed in the field: the mirror covers set VALUES
+/// only. The structural merge also writes exercise-level attributes on retained
+/// rows (`order`, `supersetId`, `supersetOrder`), which are exposed to the same
+/// conflict-loss mechanism and are not mirrored here. Reaching for them means
+/// reconciling membership as well as values, so it is deliberately left to the
+/// structural feature rather than bolted on with rest.
 @MainActor
 protocol MainContextRoutineCacheRefreshing: AnyObject {
     func refreshCache(from routines: [WatchRoutine])
@@ -80,6 +98,7 @@ final class SwiftDataMainContextRoutineCacheRefresher: MainContextRoutineCacheRe
                     ) else { continue }
                     cachedSet.reps = setSnapshot.reps
                     cachedSet.weight = setSnapshot.weight
+                    cachedSet.restTime = setSnapshot.restTime
                 }
 
                 for alternativeSnapshot in exerciseSnapshot.alternatives ?? [] {
@@ -92,6 +111,7 @@ final class SwiftDataMainContextRoutineCacheRefresher: MainContextRoutineCacheRe
                         ) else { continue }
                         cachedSet.reps = setSnapshot.reps
                         cachedSet.weight = setSnapshot.weight
+                        cachedSet.restTime = setSnapshot.restTime
                     }
                 }
             }

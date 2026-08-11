@@ -31,6 +31,16 @@
 import Foundation
 
 extension WatchTemplateTransactionCoordinator {
+    /// The one merge-diagnostic sink every `WatchTemplateTransactionService`
+    /// is constructed with. It owns the `merge:` prefix and the identifier
+    /// shortening — Domain hands over a raw `UUID?` because turning identifiers
+    /// into one-way tokens is this layer's privacy boundary.
+    static let mergeDiagnosticSink: WatchTemplateTransactionService.MergeDiagnostic = { slotID, message in
+        WatchSyncDiagnostics.notice(
+            "merge: " + (slotID.map { "slot \(WatchSyncDiagnostics.shortID($0)) " } ?? "") + message
+        )
+    }
+
     /// Ingests one split template transaction: the routine update, plus the
     /// wrapped workout's history if its own entry has not been committed yet.
     func processWorkoutTemplateIntent(
@@ -73,7 +83,8 @@ extension WatchTemplateTransactionCoordinator {
         let service = WatchTemplateTransactionService(
             routineRepository: isolated.routineRepository,
             workoutSessionRepository: isolated.workoutSessionRepository,
-            exerciseRepository: isolated.exerciseRepository
+            exerciseRepository: isolated.exerciseRepository,
+            diagnostics: Self.mergeDiagnosticSink
         )
         let outcome: TemplateTransactionOutcome
         switch service.execute(workout.toIncomingWatchWorkout()) {
@@ -87,6 +98,16 @@ extension WatchTemplateTransactionCoordinator {
             isolated.rollback()
             return .unchanged
         }
+
+        // The receiving half of the rest-intent diagnostic pair (the watch logs
+        // what it sent at finalization). It belongs here rather than in the
+        // service: only this layer may use `WatchSyncDiagnostics`, and only the
+        // unified log is readable from a device without a debugger attached.
+        WatchSyncDiagnostics.notice(
+            "ingest: split template \(outcome.rawValue) — rest intent on "
+            + "\(workout.restAdjustedExerciseIDs.count) exercise(s) "
+            + "[\(WatchSyncDiagnostics.restSummary(of: workout))]"
+        )
 
         // The local commit is final from here on; failures below resume from
         // the persisted phase and never re-run the mutation.

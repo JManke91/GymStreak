@@ -92,7 +92,9 @@ enum WatchWorkoutSyncFixtures {
         actualReps: Int = 10,
         plannedWeight: Double = 60,
         actualWeight: Double = 60,
-        order: Int = 0
+        order: Int = 0,
+        restTime: TimeInterval = 60,
+        plannedRestTime: TimeInterval? = nil
     ) -> CompletedWatchSet {
         CompletedWatchSet(
             id: id,
@@ -100,10 +102,11 @@ enum WatchWorkoutSyncFixtures {
             actualReps: actualReps,
             plannedWeight: plannedWeight,
             actualWeight: actualWeight,
-            restTime: 60,
+            restTime: restTime,
             isCompleted: true,
             completedAt: Date(timeIntervalSince1970: 1_700_000_300),
-            order: order
+            order: order,
+            plannedRestTime: plannedRestTime
         )
     }
 

@@ -148,6 +148,7 @@ enum WatchWorkoutStructuralReducer {
                 plannedWeight: draft.weight,
                 actualWeight: draft.weight,
                 restTime: TimeInterval(draft.restSeconds),
+                plannedRestTime: TimeInterval(draft.restSeconds),
                 completedAt: nil,
                 order: index
             )

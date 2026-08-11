@@ -140,6 +140,7 @@ protocol TemplateSetRow: AnyObject {
     var id: UUID { get }
     var reps: Int { get set }
     var weight: Double { get set }
+    var restTime: TimeInterval { get set }
 }
 
 extension ExerciseSet: TemplateSetRow {}

@@ -16,11 +16,12 @@ extension WatchWorkoutViewModel {
     var outgoingAddedSlotIDs: [UUID] { structuralChanges.outgoingAddedSlotIDs }
     var outgoingRemovedSlotIDs: [UUID] { structuralChanges.outgoingRemovedSlotIDs }
     var hasStructuralChanges: Bool { structuralChanges.hasStructuralChanges }
-    var hasTemplateChanges: Bool { hasModifiedSets || hasStructuralChanges }
+    var hasTemplateChanges: Bool { hasModifiedSets || hasStructuralChanges || hasRestChanges }
     var finishDialogState: WatchWorkoutFinishDialogState {
         WatchWorkoutInteractionPolicy.finishDialogState(
             modifiedSetCount: modifiedSetsCount,
-            hasStructuralChanges: hasStructuralChanges
+            hasStructuralChanges: hasStructuralChanges,
+            hasRestChanges: hasRestChanges
         )
     }
 

@@ -34,6 +34,18 @@ final class WatchTemplateTransactionService {
         case saveFailed(Error)
     }
 
+    /// Optional sink for one-line merge diagnostics, so a field report can be
+    /// answered from a support log without attaching a debugger.
+    ///
+    /// A plain closure because Domain must not import the Data layer's
+    /// `WatchSyncDiagnostics`, and it takes the slot **UUID** rather than a
+    /// formatted string: shortening identifiers into one-way tokens is that
+    /// module's privacy boundary, and a raw UUID logged from here would both
+    /// breach it and print under a different token than the watch and ingest
+    /// lines, making the three impossible to correlate.
+    typealias MergeDiagnostic = (_ slotID: UUID?, _ message: String) -> Void
+
+    let diagnostics: MergeDiagnostic?
     let routineRepository: RoutineRepository
     let workoutSessionRepository: WorkoutSessionRepository
     /// Library used to resolve a Watch-added exercise (ticket 07). Bound to the
@@ -45,8 +57,10 @@ final class WatchTemplateTransactionService {
     init(
         routineRepository: RoutineRepository,
         workoutSessionRepository: WorkoutSessionRepository,
-        exerciseRepository: ExerciseRepository
+        exerciseRepository: ExerciseRepository,
+        diagnostics: MergeDiagnostic? = nil
     ) {
+        self.diagnostics = diagnostics
         self.routineRepository = routineRepository
         self.workoutSessionRepository = workoutSessionRepository
         self.exerciseRepository = exerciseRepository
@@ -120,7 +134,14 @@ final class WatchTemplateTransactionService {
 
         // One save for both halves. On a rejection the routine was never
         // mutated, so it is not touched by the commit either.
+        let restWriteCount = plan.setUpdates.filter { $0.restTime != nil }.count
         if let failure = commit(routine: rejection == nil ? routine : nil) { return failure }
+        // Only when rest was actually written: a line saying "0 with rest" on
+        // every transaction answers nothing and just costs log volume. The
+        // sink owns the "merge:" prefix — do not repeat it here.
+        if restWriteCount > 0 {
+            diagnostics?(nil, "committed \(plan.setUpdates.count) update(s), \(restWriteCount) with rest")
+        }
         NotificationCenter.default.post(name: .workoutHistoryDidChange, object: nil)
 
         if let rejection {
@@ -169,14 +190,23 @@ final class WatchTemplateTransactionService {
 
     /// One validated set mutation. Resolved before any mutation happens so the
     /// whole request can be rejected atomically.
+    ///
+    /// Every field is optional and only non-nil fields are written, because the
+    /// two kinds of intent do not cover the same rows: performed values reach
+    /// the sets the watch actually performed, while a rest change reaches every
+    /// set of the exercise (including template sets that were never performed
+    /// and the sets of an overload-resolved exercise).
     struct SetUpdate {
         enum Target {
             case routineSet(ExerciseSet)
             case alternativeSet(AlternativeExerciseSet)
         }
         let target: Target
-        let reps: Int
-        let weight: Double
+        let reps: Int?
+        let weight: Double?
+        /// The exercise's new rest duration, uniform across its sets — the app
+        /// models one rest time per exercise, never per set.
+        var restTime: TimeInterval? = nil
     }
 
     // MARK: - Mutation + commit
@@ -188,11 +218,13 @@ final class WatchTemplateTransactionService {
         for update in updates {
             switch update.target {
             case .routineSet(let set):
-                set.reps = update.reps
-                set.weight = update.weight
+                if let reps = update.reps { set.reps = reps }
+                if let weight = update.weight { set.weight = weight }
+                if let restTime = update.restTime { set.restTime = restTime }
             case .alternativeSet(let set):
-                set.reps = update.reps
-                set.weight = update.weight
+                if let reps = update.reps { set.reps = reps }
+                if let weight = update.weight { set.weight = weight }
+                if let restTime = update.restTime { set.restTime = restTime }
             }
         }
     }

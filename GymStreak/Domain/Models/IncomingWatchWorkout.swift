@@ -89,4 +89,18 @@ struct IncomingWatchSet {
     let isCompleted: Bool
     let completedAt: Date?
     let order: Int
+    /// The rest time this set started the workout with, when the watch build
+    /// records one. `restTime != plannedRestTime` is the watch's explicit intent
+    /// to change the exercise's rest in the template; nil is "no rest intent"
+    /// (pre-rest-adjustment watch builds and fixtures). Defaulted so existing
+    /// constructions stay source-compatible.
+    var plannedRestTime: TimeInterval? = nil
+
+    /// The watch explicitly changed this set's rest during the workout — the
+    /// single definition of rest intent on this side of the boundary (its wire
+    /// twin `CompletedWatchSet.wasRestAdjusted` states the same rule).
+    var wasRestAdjusted: Bool {
+        guard let plannedRestTime else { return false }
+        return restTime != plannedRestTime
+    }
 }

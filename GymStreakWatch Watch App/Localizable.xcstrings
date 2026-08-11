@@ -2091,6 +2091,17 @@
         }
       }
     },
+    "You changed the rest time. Update your routine template?" : {
+      "comment" : "Finish-workout dialog message when only the rest duration was adjusted",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Du hast die Pausenzeit geändert. Trainingsvorlage aktualisieren?"
+          }
+        }
+      }
+    },
     "You modified %lld sets and changed exercises. Update your routine template?" : {
       "localizations" : {
         "de" : {

@@ -180,6 +180,8 @@ struct ActiveWorkoutView: View {
                 Text("You changed the exercises in this workout. Update your routine template?")
             case .setsOnly(let count):
                 Text("You modified \(count) sets. Update your routine template?")
+            case .restOnly:
+                Text("You changed the rest time. Update your routine template?")
             case .unchanged:
                 Text("Save your workout progress?")
             }

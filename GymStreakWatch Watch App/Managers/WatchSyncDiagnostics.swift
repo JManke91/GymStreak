@@ -14,7 +14,12 @@
 //  needed to reconstruct that failure now goes to unified logging instead.
 //
 //  Identifiers are logged as SHORTENED, one-way, launch-stable tokens — never
-//  raw UUIDs, and never exercise names, weights, reps, or payload bytes. The
+//  raw UUIDs, and never exercise names, weights, reps, or payload bytes. Rest
+//  DURATIONS are the one deliberate exception (`restSummary`, and the rest lines
+//  the merge emits): a template's rest time identifies nobody and reveals no
+//  performance, and a 2026-08-11 failure — rest silently not persisting — could
+//  not be localized to the watch, the transport or the merge without seeing the
+//  performed/baseline pair at each hop. Values of any other kind stay out. The
 //  token algorithm is deliberately identical to `WorkoutRecoveryDiagnostics`
 //  (which delegates here), so a token seen under `WatchSync` and one seen under
 //  `WorkoutRecovery` refer to the same object and support logs correlate across
@@ -55,6 +60,20 @@ enum WatchSyncDiagnostics {
 
     static func shortID(_ uuid: UUID?) -> String {
         uuid.map(shortID) ?? "none"
+    }
+
+    /// Per-exercise `slot=performedRest/baselineRest` for a completed workout,
+    /// as `<first set by order>`. This is the exact pair the rest-in-template
+    /// intent is derived from on both sides of the wire, so logging it on the
+    /// sender and again on the receiver localizes a "my rest did not sync"
+    /// report to the watch, the transport, or the merge.
+    static func restSummary(of workout: CompletedWatchWorkout) -> String {
+        workout.exercises.map { exercise in
+            let first = exercise.sets.min { $0.order < $1.order }
+            let performed = first.map { String(Int($0.restTime)) } ?? "-"
+            let baseline = first?.plannedRestTime.map { String(Int($0)) } ?? "nil"
+            return "\(shortID(exercise.id))=\(performed)/\(baseline)"
+        }.joined(separator: " ")
     }
 
     /// Routine progress through the pipeline.

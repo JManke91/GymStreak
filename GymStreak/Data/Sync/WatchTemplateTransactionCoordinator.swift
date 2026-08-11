@@ -180,7 +180,8 @@ final class WatchTemplateTransactionCoordinator {
         let service = WatchTemplateTransactionService(
             routineRepository: transaction.routineRepository,
             workoutSessionRepository: transaction.workoutSessionRepository,
-            exerciseRepository: transaction.exerciseRepository
+            exerciseRepository: transaction.exerciseRepository,
+            diagnostics: Self.mergeDiagnosticSink
         )
         let outcome: TemplateTransactionOutcome
         switch service.execute(workout.toIncomingWatchWorkout()) {
@@ -355,7 +356,8 @@ final class WatchTemplateTransactionCoordinator {
             let service = WatchTemplateTransactionService(
                 routineRepository: transaction.routineRepository,
                 workoutSessionRepository: transaction.workoutSessionRepository,
-                exerciseRepository: transaction.exerciseRepository
+                exerciseRepository: transaction.exerciseRepository,
+                diagnostics: Self.mergeDiagnosticSink
             )
             guard case .rejected = service.executeHistoryOnlyRejection(
                 workout.toIncomingWatchWorkout()
@@ -368,7 +370,8 @@ final class WatchTemplateTransactionCoordinator {
             let service = WatchTemplateTransactionService(
                 routineRepository: transaction.routineRepository,
                 workoutSessionRepository: transaction.workoutSessionRepository,
-                exerciseRepository: transaction.exerciseRepository
+                exerciseRepository: transaction.exerciseRepository,
+                diagnostics: Self.mergeDiagnosticSink
             )
             switch service.execute(workout.toIncomingWatchWorkout()) {
             case .saveFailed:

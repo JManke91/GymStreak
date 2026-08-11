@@ -4,6 +4,12 @@ enum WatchWorkoutFinishDialogState: Equatable {
     case unchanged
     case setsOnly(count: Int)
     case structuralOnly
+    /// Only the rest duration was adjusted (ticket 04, rest in the template
+    /// transaction). Rest is one change per exercise rather than per set, so it
+    /// carries no count, and it is the weakest of the three signals: any set or
+    /// structural change already offers the template update and rest rides
+    /// along with it.
+    case restOnly
     case combined(modifiedSetCount: Int)
 }
 
@@ -15,13 +21,15 @@ struct WatchWorkoutSetLocation: Equatable {
 enum WatchWorkoutInteractionPolicy {
     static func finishDialogState(
         modifiedSetCount: Int,
-        hasStructuralChanges: Bool
+        hasStructuralChanges: Bool,
+        hasRestChanges: Bool = false
     ) -> WatchWorkoutFinishDialogState {
         if modifiedSetCount > 0 && hasStructuralChanges {
             return .combined(modifiedSetCount: modifiedSetCount)
         }
         if hasStructuralChanges { return .structuralOnly }
         if modifiedSetCount > 0 { return .setsOnly(count: modifiedSetCount) }
+        if hasRestChanges { return .restOnly }
         return .unchanged
     }
 

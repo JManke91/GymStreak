@@ -174,6 +174,14 @@ struct ActiveWorkoutSet: Identifiable, Equatable, Codable {
     var plannedWeight: Double
     var actualWeight: Double
     var restTime: TimeInterval
+    /// The rest time this set started the workout with (ticket 04, rest in the
+    /// template transaction). `restTime` is mutated in place by a Crown
+    /// adjustment, so without a baseline a rest-only change is invisible to the
+    /// template-change detection.
+    ///
+    /// Optional, and nil means "no baseline recorded" (never rest intent): a
+    /// checkpoint written before this field existed stays decodable.
+    var plannedRestTime: TimeInterval? = nil
     var isCompleted: Bool {
         return !(completedAt == nil)
     }
@@ -182,6 +190,14 @@ struct ActiveWorkoutSet: Identifiable, Equatable, Codable {
 
     var wasModified: Bool {
         actualReps != plannedReps || actualWeight != plannedWeight
+    }
+
+    /// Deliberately NOT part of `wasModified`: a rest change is one change per
+    /// exercise, not per set, and folding it in would inflate the "you modified
+    /// N sets" count on the finish dialog.
+    var wasRestAdjusted: Bool {
+        guard let plannedRestTime else { return false }
+        return restTime != plannedRestTime
     }
 }
 
@@ -288,6 +304,11 @@ struct CompletedWatchWorkout: Codable {
         }
     }
 
+    /// Slots whose rest duration the watch changed during this workout.
+    var restAdjustedExerciseIDs: [UUID] {
+        exercises.filter { $0.sets.contains(where: \.wasRestAdjusted) }.map(\.id)
+    }
+
     /// The history half of a split workout (ADR 0001): the same performance
     /// record with the template intent and its ordering identity removed, so it
     /// travels as an ordinary workout payload — ungated by the routine's
@@ -347,6 +368,23 @@ struct CompletedWatchSet: Codable {
     let isCompleted: Bool
     let completedAt: Date?
     let order: Int
+    /// The rest time the set started the workout with (ticket 04, rest in the
+    /// template transaction). `restTime` carries what was actually rested for;
+    /// the pair is what makes a rest change *explicit intent*, exactly as
+    /// `plannedReps`/`actualReps` do for values — without it iOS would have to
+    /// guess by diffing against the live template and would silently revert a
+    /// concurrent iPhone edit. Optional (nil default) keeps old payloads
+    /// decodable; nil is simply "no rest intent".
+    var plannedRestTime: TimeInterval? = nil
+
+    /// The watch explicitly changed this set's rest during the workout. The
+    /// single definition of rest intent on the wire — the optimistic fold and
+    /// the finalization diagnostics both read it, and the iOS merge applies the
+    /// same rule to its Domain twin.
+    var wasRestAdjusted: Bool {
+        guard let plannedRestTime else { return false }
+        return restTime != plannedRestTime
+    }
 }
 
 // MARK: - Conversion Extensions
@@ -368,6 +406,7 @@ extension WatchExercise {
                     plannedWeight: set.weight,
                     actualWeight: set.weight,
                     restTime: set.restTime,
+                    plannedRestTime: set.restTime,
 //                    isCompleted: false,
                     completedAt: nil,
                     order: index
@@ -403,7 +442,8 @@ extension ActiveWorkoutExercise {
                     restTime: set.restTime,
                     isCompleted: set.isCompleted,
                     completedAt: set.completedAt,
-                    order: set.order
+                    order: set.order,
+                    plannedRestTime: set.plannedRestTime
                 )
             },
             order: order,

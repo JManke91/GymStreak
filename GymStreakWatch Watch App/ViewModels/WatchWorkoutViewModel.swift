@@ -336,6 +336,19 @@ final class WatchWorkoutViewModel: ObservableObject {
         }
     }
 
+    /// True when a rest duration was adjusted during this workout and still
+    /// differs from what the exercise started with — the third template-change
+    /// signal alongside set values and structure.
+    ///
+    /// Not excluded for overload-resolved exercises: unlike reps/weight, the
+    /// rest time is not something the progressive-overload transaction commits,
+    /// so there is nothing it could regress. iOS's own
+    /// `WorkoutViewModel.updatePrimaryTemplateSets` reconciles rest outside its
+    /// overload exclusion for exactly this reason.
+    var hasRestChanges: Bool {
+        exercises.contains { $0.sets.contains(where: \.wasRestAdjusted) }
+    }
+
     // MARK: - Workout Lifecycle
 
     /// Resolves the newest effective template exactly once at the workout
@@ -452,9 +465,18 @@ final class WatchWorkoutViewModel: ObservableObject {
             errorMessage = String(localized: "The workout could not be saved because its exercise data is invalid.")
             return
         }
-        isEnding = true
         isWorkoutInputSuspended = false
         pendingExerciseSelection = nil
+        // BEFORE the freeze, not after: `isEnding` makes `isWorkoutFrozen` true,
+        // which makes `canMutateWorkout` false, which makes `updateRestTime` a
+        // no-op — so the `stopRestTimer()` below could no longer flush a rest
+        // adjustment that had not idled yet, and ending the workout straight
+        // after turning the Crown silently lost it (payload, template and all).
+        // Placed after the suspension is cleared so it depends on this function,
+        // not on every caller having cleared it first.
+        commitRestDurationAdjustment()
+
+        isEnding = true
         // The terminal transition owns the screen from here; any overload
         // surface is dismissed without staging a transaction.
         overloadPresentation = .none
@@ -511,6 +533,19 @@ final class WatchWorkoutViewModel: ObservableObject {
                 overloadAppliedExerciseIDs: exercises
                     .map(\.id)
                     .filter { appliedOverloadSlots[$0] != nil }
+            )
+        }
+
+        if payload.shouldUpdateTemplate {
+            // What the template half actually carries, at the moment it is
+            // frozen. The rest count is the answerable half of a "my rest did
+            // not sync" report: zero here means the watch never recorded the
+            // change, non-zero means the question moves to the iPhone's own
+            // "ingest: split template … rest intent on N exercise(s)" line.
+            WatchSyncDiagnostics.notice(
+                "finalize: template intent — \(payload.modifiedSetsCount) modified set(s), "
+                + "rest changed on \(payload.restAdjustedExerciseIDs.count) exercise(s) "
+                + "[\(WatchSyncDiagnostics.restSummary(of: payload))]"
             )
         }
 
@@ -889,6 +924,9 @@ final class WatchWorkoutViewModel: ObservableObject {
                 plannedWeight: set.weight,
                 actualWeight: set.weight,
                 restTime: set.restTime,
+                // The swapped-in scheme is this exercise's new baseline: a rest
+                // change is measured against what was actually performed under.
+                plannedRestTime: set.restTime,
                 completedAt: nil,
                 order: setIndex
             )
@@ -1371,6 +1409,9 @@ final class WatchWorkoutViewModel: ObservableObject {
                         self.restDuration = 0
                         self.restAdjustmentExerciseIDs = []
                         self.preAdjustmentRestTimes = nil
+                        // Same rule as `stopRestTimer`: an unwritten buffer must
+                        // not outlive the owners this line drops.
+                        self.pendingRestDuration = nil
                     }
                 }
             }
@@ -1404,6 +1445,13 @@ final class WatchWorkoutViewModel: ObservableObject {
         restDuration = 0
         restAdjustmentExerciseIDs = []
         preAdjustmentRestTimes = nil
+        // The buffer holds a duration but not its owners — `commitRestDurationAdjustment`
+        // resolves those from `restAdjustmentExerciseIDs` at commit time, which
+        // this line has just cleared. A value the commit above could not write
+        // (blocked by `canMutateWorkout`) must therefore die with the rest that
+        // owned it, or a later rest's commit would write it to a DIFFERENT
+        // exercise with no user rotation behind it.
+        pendingRestDuration = nil
         isRestTimerMinimized = false
         restTimerState = .running
     }
@@ -1479,6 +1527,11 @@ final class WatchWorkoutViewModel: ObservableObject {
     /// `onIdle` would then never arrive.
     func commitRestDurationAdjustment() {
         guard let duration = pendingRestDuration else { return }
+        // The write below is itself gated on `canMutateWorkout`, so clearing the
+        // buffer first would DISCARD the adjustment whenever the workout is
+        // frozen or input is suspended rather than defer it. Keep it buffered
+        // for the next commit point instead.
+        guard canMutateWorkout else { return }
         pendingRestDuration = nil
 
         captureRestTimesIfNeeded()

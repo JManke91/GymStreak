@@ -39,18 +39,23 @@ enum WatchRoutineTemplateFold {
         // transaction from the TEMPLATE scheme; replaying this workout's
         // performed values over them would regress the overload, so they are
         // excluded from generic set-value writeback here exactly as they are in
-        // the authoritative iOS merge. Structural intent is unaffected.
+        // the authoritative iOS merge. Structural intent is unaffected, and so
+        // is an adjusted rest time — the overload transaction commits reps and
+        // weight only, so there is no rest value of its own to regress.
         let overloadResolvedIDs = Set(workout.overloadAppliedExerciseIDs ?? [])
 
         // Delete explicit removals (already-absent IDs are no-ops); fold set
-        // values into every retained slot.
+        // values and rest time into every retained slot.
         var exercises = routine.exercises.compactMap { exercise -> WatchExercise? in
             guard !removedIDs.contains(exercise.id) else { return nil }
-            guard !overloadResolvedIDs.contains(exercise.id) else { return exercise }
             guard let completed = workout.exercises.first(where: { $0.id == exercise.id }) else {
                 return exercise
             }
-            return foldingSets(into: exercise, from: completed)
+            return foldingSets(
+                into: exercise,
+                from: completed,
+                writesSetValues: !overloadResolvedIDs.contains(exercise.id)
+            )
         }
 
         // No structural intent → preserve the exact set-only overlay (order and
@@ -160,7 +165,8 @@ enum WatchRoutineTemplateFold {
 
     private static func foldingSets(
         into exercise: WatchExercise,
-        from completed: CompletedWatchExercise
+        from completed: CompletedWatchExercise,
+        writesSetValues: Bool
     ) -> WatchExercise {
         var updatedSets = exercise.sets
         var updatedAlternatives = exercise.alternatives
@@ -173,7 +179,7 @@ enum WatchRoutineTemplateFold {
                     exerciseId: alternative.exerciseId,
                     name: alternative.name,
                     muscleGroup: alternative.muscleGroup,
-                    sets: folded(alternative.sets, with: completed.sets),
+                    sets: folded(alternative.sets, with: completed.sets, writesValues: writesSetValues),
                     order: alternative.order,
                     loadBehaviorRaw: alternative.loadBehaviorRaw,
                     targetRepMin: alternative.targetRepMin,
@@ -181,7 +187,7 @@ enum WatchRoutineTemplateFold {
                 )
             }
         } else {
-            updatedSets = folded(exercise.sets, with: completed.sets)
+            updatedSets = folded(exercise.sets, with: completed.sets, writesValues: writesSetValues)
         }
 
         return rebuilt(exercise, sets: updatedSets, order: exercise.order,
@@ -189,20 +195,36 @@ enum WatchRoutineTemplateFold {
                        alternatives: updatedAlternatives)
     }
 
-    private static func folded(_ sets: [WatchSet], with completedSets: [CompletedWatchSet]) -> [WatchSet] {
-        sets.map { set in
-            guard let completed = completedSets.first(where: { $0.id == set.id }),
-                  completed.actualReps != completed.plannedReps
-                    || completed.actualWeight != completed.plannedWeight else {
-                return set
-            }
+    private static func folded(
+        _ sets: [WatchSet],
+        with completedSets: [CompletedWatchSet],
+        writesValues: Bool
+    ) -> [WatchSet] {
+        let adjustedRest = adjustedRestTime(of: completedSets)
+        return sets.map { set in
+            let completed = completedSets.first(where: { $0.id == set.id })
+            let writesThisSet = writesValues && completed.map {
+                $0.actualReps != $0.plannedReps || $0.actualWeight != $0.plannedWeight
+            } == true
+            let restTime = adjustedRest ?? set.restTime
+            guard writesThisSet || restTime != set.restTime else { return set }
             return WatchSet(
                 id: set.id,
-                reps: completed.actualReps,
-                weight: completed.actualWeight,
-                restTime: set.restTime
+                reps: writesThisSet ? (completed?.actualReps ?? set.reps) : set.reps,
+                weight: writesThisSet ? (completed?.actualWeight ?? set.weight) : set.weight,
+                restTime: restTime
             )
         }
+    }
+
+    /// The rest duration the watch explicitly changed during the workout, or nil
+    /// when it carries no rest intent. Mirrors the authoritative iOS merge
+    /// (`WatchTemplateTransactionService+Validation`): intent is
+    /// `restTime != plannedRestTime`, and the value applies to the exercise's
+    /// whole scheme because rest is one value per exercise, never per set.
+    private static func adjustedRestTime(of completedSets: [CompletedWatchSet]) -> TimeInterval? {
+        guard completedSets.contains(where: \.wasRestAdjusted) else { return nil }
+        return completedSets.min(by: { $0.order < $1.order })?.restTime
     }
 
     // MARK: - Structural helpers
