@@ -72,6 +72,49 @@ exercise starts at it.
   buttons stop hit-testing while invisible, so a tap during a rotation cannot
   skip the rest by accident, and they are back 1.2 s after the Crown settles.
 
+### Making the Crown discoverable ("Turn = duration")
+
+Turning the Crown is an **invisible gesture** — nothing about a countdown says it
+is editable — so the caption slot spends the first **2 s** of every rest
+(`RestAdjustmentChrome.crownHintLife`) advertising it: a
+`digitalcrown.arrow.clockwise` glyph plus **"Turn = duration"** / *"Drehen =
+Dauer"*, tinted, then a 120 ms cross-fade back to "REST". This is the design's
+frame A1, including its "Crown-Hinweis nur in den ersten 2 s".
+
+- **It costs zero vertical space, by construction.** The hint is a third state of
+  `RestAdjustmentCaption`, drawn as an **overlay** on the "REST" text exactly
+  like the `+15 s` delta badge — the caption keeps providing the layout
+  characteristics, so a wider, differently-sized hint moves nothing. That is the
+  only reason this screen can afford a hint at all (see "The vertical budget"
+  below), and it is why the design's own placement — a *line under the digits* —
+  was not copied: that needs a slot, and at 40 mm there is none.
+- **The caption is the right slot to spend.** "REST" is the one line on this
+  screen that says nothing the big countdown and the Skip button have not already
+  said. It is the same slot the scope prompt borrows, for the same reason.
+- **Precedence is hint < delta badge < scope prompt.** Once the user is actually
+  turning, the delta is the more useful thing in that slot; once the scope prompt
+  is up the whole caption collapses to zero height.
+- **The window is derived, not timed.** `showsCrownHint` is
+  `canAdjust && totalDuration - timeRemaining < crownHintLife` — no task, no
+  `@State`. Three properties fall out of that: an adjustment moves duration and
+  remaining time by the *same* delta, so the elapsed value is stable while the
+  user edits; re-expanding the timer later in the same rest does **not**
+  re-advertise a gesture already on offer; and a mid-rest relaunch resumes with
+  the hint already spent. `canAdjust` keeps it from advertising an inert Crown
+  (frozen workout, morph in flight).
+- **Its Dynamic Type is clamped to `xxLarge`.** `fixedSize()` is required for an
+  overlay to exceed its base's width, and it means the hint can only *grow* — at
+  the accessibility sizes it would run off both display edges of a 40 mm case.
+  Clamping beats truncating for a two-second decoration, and VoiceOver never sees
+  it: it is `accessibilityHidden`, and the countdown already carries an
+  `accessibilityHint` that says the same thing in full.
+
+**The minimized pill's long press still has no affordance** (deliberate, 
+2026-08-11). The pill is ~96 × 22 pt with no room for a glyph or a word, and any
+one-time cue there is a second layout problem on the tightest element in the app.
+Users who want to change a rest expand the timer, where the Crown is now
+advertised; the pill's stepper stays a power-user shortcut.
+
 ### The vertical budget, and two layouts that failed
 
 This screen has **no spare vertical space**, and that is the single fact that
@@ -597,6 +640,7 @@ changes, which is why it is not another `@Published` on the view model.
 
 ### Deliberately not built (this slice)
 
+- **No affordance on the minimized pill.** See "Making the Crown discoverable".
 - **No adjustment when no rest is running.** (Adjusting *from the pill* was out
   of scope for ticket 01 and built by ticket 03 — see "Adjusting from the
   minimized pill".)
@@ -645,6 +689,14 @@ and the German accessibility labels. As with the rest of this feature there is
 **no automated coverage** — XCUITest cannot rotate the Crown, and the pill still
 has no accessibility identifier, so a UI test would have to reach it by
 coordinate.
+
+**Crown hint — build + 40 mm layout guard only, 2026-08-11.** The watch target
+builds and `testControlsStayOnScreenOnSmallestCase` passes on the 40 mm
+simulator, which is what proves the hint costs the column nothing. ⚠️ **Its
+appearance has not had a manual pass**: still to check on a real rest are the
+2 s window and the cross-fade back to "REST", the German string's width at 40 mm,
+and that a rotation inside the first 2 s hands the slot straight to the delta
+badge.
 
 **Small cases (40 mm) — fixed 2026-08-11.** That pass had found the rest-timer
 screen as a whole too cramped below 41 mm: the metrics row, the caption, the
@@ -895,7 +947,7 @@ Researched before implementing, because watchOS availability differs from iOS:
 | `ExerciseListView` | `GymStreakWatch Watch App/Views/ExerciseListView.swift` | Reserves the pill's slot via `safeAreaInset(edge: .top)` (`WatchRestTimerMorph.reservedSlotHeight`) while resting; declares no timer. |
 | `RestTimerLargeView` | `GymStreakWatch Watch App/Views/RestTimerLargeView.swift` | Large state; takes the morph namespace and tags the panel + digits. Owns `adjustmentBaseline` (the flag for "an adjustment is on screen") and `adjustmentScope` (the scope prompt's selection, `nil` while the row is off screen), and nothing else about the Crown. |
 | `RestDurationCrownAdjustment` | `GymStreakWatch Watch App/Views/RestDurationCrownAdjustment.swift` | `ViewModifier` carrying the whole Crown state machine: detent binding, focus, limit haptic, animation throttle, and the single task that runs the tail (chrome out → scope prompt in → out). Applied by the large state via `.restDurationCrownAdjustment(isEnabled:baseline:scope:)`. |
-| `RestAdjustmentCaption` / `RestAdjustmentFooter` / `RestAdjustmentChrome` / `RestScopeRow` | `GymStreakWatch Watch App/Views/RestDurationAdjustmentChrome.swift` | The editing treatment — delta badge over the caption, tick track + `old → new` line cross-faded into the Minimize/Skip slot, and the "This rest / All sets" prompt that follows. Nothing here has a slot of its own; see "The vertical budget". |
+| `RestAdjustmentCaption` / `RestAdjustmentFooter` / `RestAdjustmentChrome` / `RestScopeRow` | `GymStreakWatch Watch App/Views/RestDurationAdjustmentChrome.swift` | The editing treatment — the caption slot's three states (Crown hint → "REST" → delta badge), tick track + `old → new` line cross-faded into the Minimize/Skip slot, and the "This rest / All sets" prompt that follows. Nothing here has a slot of its own; see "The vertical budget". |
 | `RestTimerMinimizedPill` | `GymStreakWatch Watch App/Views/RestTimerMinimizedPill.swift` | Minimized pill; takes the morph namespace and tags its card + digits. Owns the pill's two gestures and, while its stepper is open, the Crown state machine (detent binding, limit haptic, the 3 s collapse, the commit). |
 | `RestPillStepper` / `WatchRestPillStepper` | `GymStreakWatch Watch App/Views/RestPillStepper.swift` | The grown pill's presentation (`−15 · 1:45 · +15`) and its constants: tap step, life, spring, hit side. No state of its own. |
 | `RestLimitHaptic` | `…/RestDurationCrownAdjustment.swift` | The once-per-arrival bound haptic, shared by both adjustment paths. |
@@ -1058,6 +1110,11 @@ device-only, so check them first if jank ever appears.
   two survivors lost their now-meaningless `New…` prefixes, and
   `ExerciseListView`'s reserved-slot constants moved onto `WatchRestTimerMorph`.
   No behaviour change.
+- **2026-08-11** — the caption slot gained the **Crown hint** as a third state
+  (see "Making the Crown discoverable"), closing the gap that both ways into this
+  feature were undiscoverable gestures. Layout-neutral by construction; the
+  40 mm guard `testControlsStayOnScreenOnSmallestCase` still passes. The pill's
+  long press was deliberately left without an affordance.
 - **2026-08-11** — the minimized pill gained the inline `−15 · 1:45 · +15`
   stepper on long press (ticket `.scratch/watch-rest-adjust/issues/03`), which
   cost the pill its long-press-to-skip and introduced the explicit

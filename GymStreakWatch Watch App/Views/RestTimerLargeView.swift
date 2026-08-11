@@ -171,7 +171,11 @@ struct RestTimerLargeView: View {
                 // vertical budget"). COLLAPSED, not removed: a removal
                 // transition keeps its slot until it finishes, so an `if` would
                 // put caption and row in the column together for the spring.
-                RestAdjustmentCaption(isAdjusting: isAdjusting, delta: adjustmentDelta)
+                RestAdjustmentCaption(
+                    isAdjusting: isAdjusting,
+                    delta: adjustmentDelta,
+                    showsCrownHint: showsCrownHint
+                )
                     .frame(height: captionHeight)
                     .opacity(isScopePromptUp ? 0 : 1)
                     // Its own fast crossfade, not the row's spring: a zero-height
@@ -267,6 +271,21 @@ struct RestTimerLargeView: View {
     private var isAdjusting: Bool { adjustmentBaseline != nil }
 
     private var isScopePromptUp: Bool { adjustmentScope != nil }
+
+    /// The Crown hint's window: the first `crownHintLife` seconds of a rest.
+    ///
+    /// Derived from the countdown rather than driven by a task, which gets three
+    /// properties for free. A rotation moves duration and remaining time by the
+    /// same delta, so this elapsed value is stable while the user edits;
+    /// re-expanding the timer later in the same rest correctly does *not*
+    /// re-advertise a gesture that was already on offer; and a mid-rest relaunch
+    /// resumes with the hint already spent.
+    ///
+    /// Gated on `canAdjust` so it never advertises an inert Crown — a frozen
+    /// workout, or a morph in flight.
+    private var showsCrownHint: Bool {
+        canAdjust && totalDuration - timeRemaining < RestAdjustmentChrome.crownHintLife
+    }
 
     /// `nil` is the caption's intrinsic height; `0` hands its slot to the row.
     private var captionHeight: CGFloat? { isScopePromptUp ? 0 : nil }

@@ -1956,6 +1956,17 @@
         }
       }
     },
+    "Turn = duration" : {
+      "comment" : "Rest timer hint: turning the Digital Crown changes the rest duration",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Drehen = Dauer"
+          }
+        }
+      }
+    },
     "Turn the Digital Crown or swipe up and down to adjust" : {
       "localizations" : {
         "de" : {

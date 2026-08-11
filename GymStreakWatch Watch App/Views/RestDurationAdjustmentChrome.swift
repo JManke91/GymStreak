@@ -19,19 +19,32 @@ import SwiftUI
 enum RestAdjustmentChrome {
     static let crossfade: TimeInterval = 0.12
 
+    /// How long the Crown hint owns the caption slot at the start of a rest.
+    /// The design's "Crown-Hinweis nur in den ersten 2 s" — long enough to be
+    /// read, short enough that it is gone before anyone looks for the label.
+    static let crownHintLife: TimeInterval = 2
+
     static func durationText(_ duration: TimeInterval) -> String {
         let total = max(0, Int(duration.rounded()))
         return String(format: "%d:%02d", total / 60, total % 60)
     }
 }
 
-/// "REST", or the `+15 s` badge while adjusting.
+/// "REST", the Crown hint in the first seconds of a rest, or the `+15 s` badge
+/// while adjusting.
 ///
-/// The caption is always the layout element — the badge is drawn over it, so it
-/// may be wider and taller without moving anything below.
+/// The caption is always the layout element — the other two are drawn over it,
+/// so they may be wider and taller without moving anything below. That is the
+/// whole reason this slot carries all three: it is the only place on this screen
+/// where something can appear for free (see `docs/watch-rest-timer-ui.md`,
+/// "The vertical budget"), and "REST" is the one line that says nothing the
+/// countdown below it has not already said.
 struct RestAdjustmentCaption: View {
     let isAdjusting: Bool
     let delta: TimeInterval
+    /// Advertise the Crown. Loses to `isAdjusting` — once the user is turning
+    /// it, the delta is the more useful thing to show in the same slot.
+    let showsCrownHint: Bool
 
     var body: some View {
         Text("Rest")
@@ -39,7 +52,7 @@ struct RestAdjustmentCaption: View {
             .foregroundStyle(.secondary)
             .textCase(.uppercase)
             .tracking(1.5)
-            .opacity(isAdjusting ? 0 : 1)
+            .opacity(isAdjusting || showsCrownHint ? 0 : 1)
             .overlay {
                 if isAdjusting {
                     deltaText
@@ -50,9 +63,37 @@ struct RestAdjustmentCaption: View {
                         .padding(.vertical, 2)
                         .background(OnyxWatch.Colors.tint, in: Capsule())
                         .transition(.opacity)
+                } else if showsCrownHint {
+                    crownHint
+                        .transition(.opacity)
                 }
             }
             .animation(.easeInOut(duration: RestAdjustmentChrome.crossfade), value: isAdjusting)
+            .animation(.easeInOut(duration: RestAdjustmentChrome.crossfade), value: showsCrownHint)
+    }
+
+    /// Turning the Crown here is a completely invisible gesture — nothing on the
+    /// screen suggests the countdown is editable — so the caption spends the
+    /// first `crownHintLife` seconds of every rest saying so. The design's
+    /// "Drehen = Dauer" (frame A1).
+    private var crownHint: some View {
+        HStack(spacing: 4) {
+            Image(systemName: "digitalcrown.arrow.clockwise")
+            Text("Turn = duration")
+        }
+        .font(.system(.caption2, design: .rounded).weight(.semibold))
+        .foregroundStyle(OnyxWatch.Colors.tint)
+        .lineLimit(1)
+        // An overlay is proposed its BASE view's size, so without this the hint
+        // would be squeezed into the width of "REST".
+        .fixedSize()
+        // …and `fixedSize` means it can only grow — at the accessibility text
+        // sizes it would run off both display edges. Clamping beats truncating
+        // for a two-second decoration, and VoiceOver never sees it: it is hidden
+        // here, and the countdown already carries an `accessibilityHint` saying
+        // the same thing.
+        .dynamicTypeSize(...DynamicTypeSize.xxLarge)
+        .accessibilityHidden(true)
     }
 
     private var deltaText: Text {
