@@ -29,7 +29,14 @@ struct GymStreakApp: App {
         ProcessInfo.processInfo.arguments.contains("-UI_TESTING")
     }
 
-    var sharedModelContainer: ModelContainer = {
+    /// The app's store plus whether it is actually CloudKit-backed — the Settings
+    /// sync row must report "off" when the local-only fallback was taken.
+    struct Store {
+        let container: ModelContainer
+        let isCloudKitEnabled: Bool
+    }
+
+    let store: Store = {
         let schema = Schema(GymStreakSchema.modelTypes)
         let isEphemeralUITest = ProcessInfo.processInfo.arguments.contains(
             "-UI_TEST_EPHEMERAL_STORE"
@@ -41,7 +48,10 @@ struct GymStreakApp: App {
                 cloudKitDatabase: .none
             )
             do {
-                return try ModelContainer(for: schema, configurations: [configuration])
+                return Store(
+                    container: try ModelContainer(for: schema, configurations: [configuration]),
+                    isCloudKitEnabled: false
+                )
             } catch {
                 fatalError("Could not create ephemeral UI-test ModelContainer: \(error)")
             }
@@ -54,7 +64,10 @@ struct GymStreakApp: App {
         )
 
         do {
-            return try ModelContainer(for: schema, configurations: [modelConfiguration])
+            return Store(
+                container: try ModelContainer(for: schema, configurations: [modelConfiguration]),
+                isCloudKitEnabled: true
+            )
         } catch {
             // If CloudKit container fails (e.g., no iCloud account), fall back to local-only storage
             print("Failed to create CloudKit container: \(error). Falling back to local storage.")
@@ -64,16 +77,26 @@ struct GymStreakApp: App {
                 cloudKitDatabase: .none
             )
             do {
-                return try ModelContainer(for: schema, configurations: [localConfig])
+                return Store(
+                    container: try ModelContainer(for: schema, configurations: [localConfig]),
+                    isCloudKitEnabled: false
+                )
             } catch {
                 fatalError("Could not create ModelContainer: \(error)")
             }
         }
     }()
 
+    var sharedModelContainer: ModelContainer { store.container }
+
     init() {
-        let mainContext = sharedModelContainer.mainContext
-        _dependencies = StateObject(wrappedValue: AppDependencies(modelContext: mainContext))
+        let store = self.store
+        _dependencies = StateObject(
+            wrappedValue: AppDependencies(
+                modelContext: store.container.mainContext,
+                isCloudKitStoreEnabled: store.isCloudKitEnabled
+            )
+        )
 
         #if DEBUG
         if CloudKitSchemaInitializer.isRequested {

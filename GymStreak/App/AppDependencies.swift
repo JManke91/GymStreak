@@ -65,7 +65,17 @@ final class AppDependencies: ObservableObject {
     /// Presentation, and it never mutates a recorded workout.
     let appliedOverloadCorrelation: AppliedOverloadCorrelationReading
 
-    init(modelContext: ModelContext) {
+    /// Live iCloud sync status for the Settings row. App-lifetime because it has
+    /// to be subscribed to CloudKit's mirroring events before the user opens
+    /// Settings — otherwise the first events of the session are missed.
+    /// Presentation only ever sees `CloudSyncStatusProviding`.
+    let cloudSyncStatus: CloudSyncStatusProviding
+
+    /// - Parameter isCloudKitStoreEnabled: whether the app is running on the
+    ///   CloudKit-backed store. `false` when `GymStreakApp` had to fall back to a
+    ///   local-only store (or in ephemeral UI-test runs), which the sync status
+    ///   must report as "off".
+    init(modelContext: ModelContext, isCloudKitStoreEnabled: Bool) {
         self.routineRepository = SwiftDataRoutineRepository(modelContext: modelContext)
         self.exerciseRepository = SwiftDataExerciseRepository(modelContext: modelContext)
         self.workoutSessionRepository = SwiftDataWorkoutSessionRepository(modelContext: modelContext)
@@ -76,6 +86,10 @@ final class AppDependencies: ObservableObject {
             container: modelContext.container
         )
         self.restTimerReminders = UserNotificationRestTimerScheduler()
+        self.cloudSyncStatus = CloudKitSyncStatusMonitor(
+            isCloudKitStoreEnabled: isCloudKitStoreEnabled,
+            containerIdentifier: GymStreakSchema.cloudKitContainerIdentifier
+        )
         let aiCoachPreferences = AICoachPreferences.shared
         let aiCoachAvailability = AICoachAvailability.shared
         self.aiCoachPreferences = aiCoachPreferences

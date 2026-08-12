@@ -151,7 +151,7 @@ GymStreak/
       CoachWorkoutAnalysisSurface.swift — expanded surface in WorkoutDetailView
     Settings/
       AICoachOptInView.swift          — first-run opt-in fullscreen cover
-      AICoachSettingsView.swift       — gear-icon settings screen from History toolbar
+      AICoachSettingsView.swift       — settings screen pushed from the Settings tab / chat toolbar
 ```
 
 ---
@@ -345,7 +345,10 @@ Never logged:
 
 ## Settings
 
-Accessed via gear icon in the History tab toolbar → pushes `AICoachSettingsView`.
+Accessed from the Settings tab: the "AI Coach" section's row (`SettingsRootView` →
+`SettingsDestination.aiCoach`) pushes `AICoachSettingsView`; the gear in the expanded chat's
+toolbar (`CoachChatView`) pushes the same screen. Until 2026-08 it was reached via a gear in
+the History header — that button is gone, see [Settings Tab](./settings-tab.md).
 
 Sections:
 - **Coach**: master toggle (enable/disable all AI features).

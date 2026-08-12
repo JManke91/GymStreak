@@ -69,7 +69,7 @@ GymStreak/
 | Data | `Data/History/` | `SwiftDataHistorySnapshotProvider` (detached off-main construction) + `SwiftDataHistorySnapshotStore` (`@ModelActor`; actor-owned History fetch and aggregation) |
 | Data | `Data/AICoach/` | `AICoachService` (FoundationModels), cache, preferences, telemetry, availability, aggregators, system prompts |
 | Presentation | `Presentation/ViewModels/` | `RoutinesViewModel`, `ExercisesViewModel`, `WorkoutViewModel`, `ExerciseProgressViewModel`, `AICoach/` VMs |
-| Presentation | `Presentation/Views/<FeatureArea>/` | `Routines/`, `Exercises/`, `Workout/`, `History/`, `Charts/`, `AICoach/`, `Components/`, `DesignSystem/` |
+| Presentation | `Presentation/Views/<FeatureArea>/` | `Routines/`, `Exercises/`, `Workout/`, `History/`, `Charts/`, `AICoach/`, `Settings/`, `Components/`, `DesignSystem/` |
 | Presentation | `Presentation/DesignSystem.swift` | Onyx theme tokens + `HapticManager` |
 | — | `Extensions/` | Cross-layer utilities (`String+Localization`, `Color+AccentColor`) |
 

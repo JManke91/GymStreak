@@ -4,3 +4,5 @@
 - Apple Watch: Auf den kleinsten Uhren (40 mm, z. B. Apple Watch SE) wurden Trainings- und Pausen-Bildschirm abgeschnitten – der Abschließen-Button, die Satz-Pfeile und „Überspringen“ sind jetzt vollständig sichtbar.
 - Apple Watch: Eine im Training geänderte Pausendauer lässt sich jetzt in die Routine übernehmen – beende das Training mit „Speichern & Vorlage aktualisieren“, und die neue Pausenzeit gilt auch auf dem iPhone für diese Übung; mit „Speichern (ohne Aktualisierung)“ bleibt sie nur für dieses Training.
 - Apple Watch: Der Pausen-Bildschirm weist jetzt darauf hin – „Drehen = Dauer“ erscheint in den ersten 2 Sekunden jeder Pause über dem Countdown, damit die Anpassung per Digital Crown nicht länger versteckt ist.
+- Neuer Tab „Einstellungen“: Die App hat jetzt einen vierten Tab mit Zahnrad-Symbol, in dem alle App-Einstellungen zusammenlaufen. Den Anfang machen die AI-Coach-Einstellungen, die bisher hinter dem Zahnrad im Verlauf-Tab lagen.
+- Einstellungen: Der neue Bereich „Daten“ zeigt auf einen Blick den iCloud-Status – aktuell, lädt, wartet auf Netzwerk oder aus – samt Zeitpunkt der letzten erfolgreichen Synchronisierung.

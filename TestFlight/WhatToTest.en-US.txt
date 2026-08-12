@@ -4,3 +4,5 @@
 - Apple Watch: fixed the workout and rest-timer screens being cut off on the smallest watches (40 mm, e.g. Apple Watch SE) — the Complete button, the set chevrons and the Skip button now stay fully on screen.
 - Apple Watch: a rest duration you changed during a workout can now be saved into the routine — finish with "Save & Update Template" and the new rest time applies to that exercise on your iPhone too; choose "Save (Don't Update)" to keep it for this workout only.
 - Apple Watch: the rest screen now says so — "Turn = duration" appears above the countdown for the first 2 seconds of every rest, so the Digital Crown adjustment is no longer a hidden gesture.
+- New "Settings" tab: the app now has a fourth tab with a gear icon where all app settings live. It starts with the AI Coach settings, which used to sit behind the gear icon in the History tab.
+- Settings: the new "Data" section shows your iCloud sync status at a glance — up to date, syncing, waiting for network, or off — with the time of the last successful sync.

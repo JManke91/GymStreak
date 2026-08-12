@@ -185,7 +185,9 @@ Navigation uses `UUID`-based destinations to avoid requiring `@Model` classes to
 - `.navigationDestination(for: UUID.self)` → `WorkoutDetailView`
 - `.navigationDestination(for: ExerciseWithHistory.self)` → `ExerciseProgressChartView`
 - `.navigationDestination(for: PeriodRecapDestination.self)` → `PeriodRecapView`
-- `.navigationDestination(for: AICoachSettingsDestination.self)` → `AICoachSettingsView`
+
+(The AI Coach settings destination was removed in 2026-08 together with the header's gear
+button — those settings now live in the Settings tab, see [Settings Tab](./settings-tab.md).)
 
 Cards use `NavigationLink(value: ...)` and lightweight values. Trainings rows navigate with `UUID`; `HistoryView` resolves the `WorkoutSession` at the destination boundary. This restores native navigation, focus and accessibility semantics and avoids the custom per-row swipe interaction that caused the post-1.1.5 responsiveness regression. The list keeps a long-press context-menu delete shortcut, while the workout detail screen provides the visible delete route. See [Delete a Recorded Workout](./delete-workout.md).
 

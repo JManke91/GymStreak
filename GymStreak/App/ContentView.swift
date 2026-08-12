@@ -70,6 +70,11 @@ private struct ContentViewInternal: View {
                 .tabItem {
                     Label("tab.history".localized, systemImage: "clock.fill")
                 }
+
+            SettingsRootView()
+                .tabItem {
+                    Label("tab.settings".localized, systemImage: "gearshape.fill")
+                }
         }
         .tint(DesignSystem.Colors.tint)
         .preferredColorScheme(.dark)

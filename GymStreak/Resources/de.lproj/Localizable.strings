@@ -7,6 +7,24 @@
 "tab.routines" = "Routinen";
 "tab.exercises" = "Übungen";
 "tab.history" = "Verlauf";
+"tab.settings" = "Einstellungen";
+
+// MARK: - Settings Tab
+"settings.title" = "Einstellungen";
+"settings.section.ai_coach" = "AI Coach";
+"settings.section.ai_coach.footer" = "Der AI Coach wertet deine Trainingsdaten mit Apple Intelligence direkt auf dem Gerät aus.";
+"settings.ai_coach.row.title" = "Coach-Einstellungen";
+"settings.ai_coach.row.subtitle" = "Rückblicke, Chat und Datenschutz";
+"settings.section.data" = "Daten";
+"settings.section.data.footer" = "Deine Trainingsdaten werden automatisch über iCloud auf allen deinen Geräten synchronisiert.";
+"settings.icloud.row.title" = "iCloud";
+"settings.icloud.row.subtitle.last" = "Zuletzt: %@";
+"settings.icloud.row.subtitle.never" = "Noch nicht synchronisiert";
+"settings.icloud.row.subtitle.off" = "Nicht synchronisiert";
+"settings.icloud.status.up_to_date" = "Aktuell";
+"settings.icloud.status.syncing" = "Lädt …";
+"settings.icloud.status.waiting" = "Wartet";
+"settings.icloud.status.off" = "Aus";
 
 // MARK: - Routines View
 "routines.title" = "Routinen";

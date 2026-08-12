@@ -5,9 +5,6 @@
 
 import SwiftUI
 
-/// Stack destination for the AI Coach settings screen.
-private struct AICoachSettingsDestination: Hashable {}
-
 /// New top-level History tab replacing WorkoutHistoryView.
 /// Hosts a segmented "Trainings / Fortschritt" control and drives navigation to detail views.
 struct HistoryView: View {
@@ -28,8 +25,8 @@ struct HistoryView: View {
     @State private var workoutToDelete: WorkoutSession?
     @State private var showingDeleteAlert = false
     @State private var isRecovering = false
-    /// Type-erased because the stack pushes workout ids, exercise models, period
-    /// destinations and the AI Coach settings destination.
+    /// Type-erased because the stack pushes workout ids, exercise models and
+    /// period destinations.
     @State private var path = NavigationPath()
 
     init(
@@ -89,9 +86,6 @@ struct HistoryView: View {
                     VStack(alignment: .leading, spacing: 14) {
                         HistoryHeaderView(
                             section: $section,
-                            onOpenSettings: {
-                                path.append(AICoachSettingsDestination())
-                            },
                             onInteractionStarted: {
 #if DEBUG
                                 stallProbe.reset()
@@ -181,12 +175,6 @@ struct HistoryView: View {
             }
             .navigationDestination(for: PeriodRecapDestination.self) { dest in
                 PeriodRecapView(initialRange: dest.range)
-            }
-            // Value-based like every other destination here: an isPresented push
-            // is not represented in `path`, and the two views of the same stack
-            // can then disagree (spurious pops, double pushes).
-            .navigationDestination(for: AICoachSettingsDestination.self) { _ in
-                AICoachSettingsView()
             }
             .onAppear {
 #if DEBUG

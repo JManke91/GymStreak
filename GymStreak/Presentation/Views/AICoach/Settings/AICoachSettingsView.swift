@@ -2,7 +2,7 @@
 //  AICoachSettingsView.swift
 //  GymStreak
 //
-//  AI Coach settings screen pushed from the History tab gear icon.
+//  AI Coach settings screen pushed from the Settings tab (and the chat toolbar gear).
 //  Custom list groups match the design reference (ScreenSettings) — not a stock SwiftUI Form.
 //
 
