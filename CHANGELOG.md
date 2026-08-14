@@ -4,6 +4,35 @@ All notable changes to GymStreak are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.1.8] - 2026-08-14
+
+### Added
+
+- Apple Watch: turn the Digital Crown during a rest to change the rest duration in 5-second steps; the new duration applies to the rest of that exercise.
+- Apple Watch: after adjusting a rest with the Crown, a short "This rest / All sets" prompt lets you keep the change for the running rest only.
+- Apple Watch: long-press the small rest pill to adjust the rest right there — it grows into a -15 / +15 stepper (the Crown still works too) and shrinks back after 3 seconds. Note: long-pressing the pill no longer skips the rest; tap it to open the timer and use Skip.
+- Apple Watch: a rest duration you changed during a workout can now be saved into the routine — finish with "Save & Update Template" and the new rest time applies to that exercise on your iPhone too; choose "Save (Don't Update)" to keep it for this workout only.
+- Apple Watch: the rest screen now says so — "Turn = duration" appears above the countdown for the first 2 seconds of every rest, so the Digital Crown adjustment is no longer a hidden gesture.
+- New "Settings" tab: the app now has a fourth tab with a gear icon where all app settings live. It starts with the AI Coach settings, which used to sit behind the gear icon in the History tab.
+- Settings: the new "Data" section shows your iCloud sync status at a glance — up to date, syncing, waiting for network, or off — with the time of the last successful sync.
+- Settings: a new "Support" section with a "Rate app" row that takes you straight to the App Store review page for Gym Streak.
+- Settings: a new "Contact support" row opens your mail app on a prepared message to support, with app version, iOS version, device model and language already filled in. No workout or health data is ever included, and nothing is sent until you send it yourself.
+
+### Improved
+
+- Progress charts: opening an exercise chart, switching the time range (1W/1M/3M/1Y/All) or picking another exercise no longer freezes the app while the data is gathered. The chart loads in the background and shows a spinner while it works — most noticeable if you have a long workout history.
+- AI Coach chat: the app no longer stutters while the coach looks up your data mid-answer. Questions about your next workout, a personal record or your history are now gathered in the background, so scrolling and typing stay smooth while the reply streams in — most noticeable if you have a long workout history.
+- Finishing a workout and opening a past workout no longer freeze while the "vs. last time" comparison is put together. The lookup now runs in the background — most noticeable if you have a long workout history.
+- During a workout, the "increase weight?" suggestion no longer disappears the moment you tick off the last set. It now sits above the rest bar, names the exercise it belongs to, and stays there until you increase the weight or dismiss it.
+
+### Fixed
+
+- Apple Watch: fixed the workout and rest-timer screens being cut off on the smallest watches (40 mm, e.g. Apple Watch SE) — the Complete button, the set chevrons and the Skip button now stay fully on screen.
+- Rest timer: reopening the app while a rest is still running no longer leaves two countdowns on the Lock Screen — the old one is cleared and only the live one remains.
+- Exercise library: fixed the built-in exercises staying missing on a device that once recorded them as installed but has an empty library (for example after a reinstall while iCloud data was unavailable). The app now restores the roughly 100 default exercises once it is sure iCloud has nothing left to deliver — libraries you have already set up are never touched.
+- Fixed the per-exercise comparison on the save screen when a routine trains the same exercise twice (for example heavy first, high-rep later): the two entries could share one row instead of showing separately.
+- AI Coach intro screen: the feature descriptions were cut off mid-sentence on the welcome screen (most visible in German). The text is now shown in full, and the screen scrolls if it does not fit.
+
 ## [1.1.7] - 2026-08-10
 
 ### Added
