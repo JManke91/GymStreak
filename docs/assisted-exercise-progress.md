@@ -23,9 +23,13 @@ entry, so these sessions use the safe assistance-only history fallback.
   is the immutable history snapshot.
 - `WorkoutSession.bodyWeightKg` is optional. `ExerciseLoadMetrics` calculates effective load as
   `bodyWeightKg - enteredAssistance`; it never invents a value when the snapshot is absent.
-- `ExerciseProgressService`, `FortschrittAggregator`, `PersonalRecordService`, total-volume
-  calculation, set deltas, and progressive overload use the behavior rather than assuming that
-  larger entered weight is always better.
+- `ExerciseComparisonBuilder` / `PreviousPerformanceResolver` (the vs-previous comparison),
+  `FortschrittAggregator`, `PersonalRecordService`, total-volume calculation, set deltas, and
+  progressive overload use the behavior rather than assuming that larger entered weight is
+  always better. Both halves of the comparison share one implementation,
+  `ExerciseLoadMetrics.effectiveVolume(from:usePlannedValues:behavior:bodyWeightKg:)` — they
+  run on different executors (audit P1.6), and duplicating it would let the current and
+  previous sides of one comparison disagree about assisted load.
 
 ## Migration and catalog behavior
 

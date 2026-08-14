@@ -9,17 +9,24 @@
 
 import Foundation
 
-/// Mirrors the subset of `ExerciseProgressService`'s API consumed by
-/// `WorkoutDetailView` and `SaveWorkoutView`. See `ExerciseProgressService` for full
-/// documentation.
+/// "How did this workout compare with last time?" for the save sheet, the workout detail
+/// screen and the AI Coach's workout analysis.
 ///
-/// `@MainActor` because `compareWithPrevious` takes a main-context `WorkoutSession` and
-/// walks its relationships. The exercise **chart** deliberately does not come through
-/// here — it reads `HistorySnapshotProviding`, whose model actor keeps that traversal
-/// off the main actor (audit P1.2).
+/// `@MainActor` and `async` (audit P1.6). The isolation is not the old one: the history
+/// scan behind this now runs inside `SwiftDataHistorySnapshotStore`'s model actor, and
+/// what stays on the main actor is only the bounded read of the workout the caller
+/// already holds. Conformers must keep it that way — a `@MainActor` implementation that
+/// fetches history itself would restore the hang this replaced.
+///
+/// The exercise **chart** deliberately does not come through here; it reads
+/// `HistorySnapshotProviding` directly (audit P1.2).
 @MainActor
-protocol ExerciseProgressProviding: AnyObject {
+protocol ExerciseProgressProviding {
 
-    /// Compares current workout exercises with their previous performances.
-    func compareWithPrevious(workout: WorkoutSession) -> [ExerciseComparisonResult]
+    /// Compares every exercise of `workout` with its previous performance, in `order`.
+    ///
+    /// - Returns: one row per exercise, or an **empty array** if the history lookup
+    ///   failed. Empty is deliberate: returning rows with no predecessor would badge
+    ///   every exercise "new", which is a wrong answer rather than a missing one.
+    func compareWithPrevious(workout: WorkoutSession) async -> [ExerciseComparisonResult]
 }

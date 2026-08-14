@@ -21,14 +21,24 @@ Workout summary screens provide users with a quick review of their completed wor
 - **Notes**: Optional workout notes
 
 ### How exercise progress works
-Uses `ExerciseProgressService.compareWithPrevious(workout:)` which:
+Uses `ExerciseProgressService.compareWithPrevious(workout:)` (`async`) which:
 1. Identifies the exercise by `exerciseId`, keeping same-name equipment variants separate
 2. Selects the same `routineExerciseId` programming slot so repeated uses do not cross-compare
 3. For legacy history without slot ids, matches the ordered occurrence only when the stable routine relationship proves the same routine; missing or ambiguous identity produces no comparison
 4. Computes `volumeDeltaPercentage` = `((currentVolume - previousVolume) / previousVolume) * 100`
-5. Returns `ExerciseComparisonResult` with comparison data
+5. Returns `ExerciseComparisonResult` with comparison data, each row carrying its `workoutExerciseId`
 
-The service requires `ModelContext` (SwiftData) and is loaded via `.task` modifier on the view.
+**Where each step runs (audit P1.6, 2026-08-14).** Steps 1–3 are the history scan and
+happen inside `SwiftDataHistorySnapshotStore`'s `@ModelActor` via
+`PreviousPerformanceResolver`, behind a `@concurrent` boundary; steps 4–5 read only the
+workout being saved and stay on the main actor via `ExerciseComparisonBuilder`. That split
+is deliberate: this screen appears before the user commits the workout, and a model actor
+cannot be trusted to see a session the main context has not saved. The service itself holds
+no `ModelContext` — see [progress-charts.md](./progress-charts.md) for the full rationale
+and the 213 ms measurement. It is loaded via the `.task` modifier on the view.
+
+Before that change it ran fully synchronously on the main actor, issuing one unbounded
+unprefetched fetch **per exercise**, so finishing a workout froze the app for the duration.
 
 ### Architecture
 - `SaveWorkoutView` uses `@Environment(\.modelContext)` to access SwiftData
@@ -93,8 +103,11 @@ Used by iOS `SaveWorkoutView` for exercise progress display. Contains `volumeDel
 |------|--------|------|
 | `SaveWorkoutView.swift` | iOS | Post-workout save form with summary |
 | `Views/Components/DeltaBadge.swift` | iOS | Reusable delta indicator component |
-| `Services/ExerciseProgressService.swift` | iOS | Computes exercise comparisons |
-| `Models/ExerciseProgressModels.swift` | iOS | Comparison result data structures |
+| `Data/Progress/ExerciseProgressService.swift` | iOS | The comparison seam: pure builders either side of one off-main history call |
+| `Domain/Services/ExerciseComparisonBuilder.swift` | iOS | Reduces the current workout to a lookup, then assembles the comparison rows (main actor) |
+| `Domain/Services/PreviousPerformanceResolver.swift` | iOS | Resolves each exercise against its previous session (model actor) |
+| `Domain/Models/PreviousPerformanceLookup.swift` | iOS | `Sendable` request carrying the workout across the actor boundary |
+| `Domain/Models/ExerciseProgressModels.swift` | iOS | Comparison result data structures |
 | `WatchWorkoutSummaryView.swift` | watchOS | Post-workout summary view |
 | `WatchModels.swift` | watchOS | WatchWorkoutSummary struct |
 | `WatchWorkoutViewModel.swift` | watchOS | Summary generation and state management |

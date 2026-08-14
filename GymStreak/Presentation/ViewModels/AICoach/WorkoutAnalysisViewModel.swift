@@ -88,7 +88,7 @@ struct WorkoutAnalysisContent: Equatable {
 /// 1. `checkCache(workout:)` is called on `.task` in `WorkoutDetailView`.
 ///    If a cached result exists, the state transitions directly to `.success`.
 /// 2. If no cache hit, the view renders `CoachWorkoutAnalysisButton`. Tapping it
-///    calls `generate(workout:locale:modelContext:)`, which immediately moves to
+///    calls `generate(workout:locale:modelContext:exerciseProgress:)`, which immediately moves to
 ///    `.preparing` so the surface (with skeleton) replaces the button without a gap.
 /// 3. `regenerate(...)` bypasses the cache and forces a fresh generation.
 @Observable
@@ -182,22 +182,44 @@ final class WorkoutAnalysisViewModel {
     /// Generates a workout analysis, using cache if available.
     /// Fire-and-forget: cancels any in-flight stream before starting a new one.
     /// Transitions to `.preparing` synchronously so the UI responds to the tap immediately.
-    func generate(workout: WorkoutSession, locale: Locale, modelContext: ModelContext) {
+    func generate(
+        workout: WorkoutSession,
+        locale: Locale,
+        modelContext: ModelContext,
+        exerciseProgress: any ExerciseProgressProviding
+    ) {
         streamTask?.cancel()
         state = .preparing
         streamTask = Task { [weak self] in
-            await self?.run(workout: workout, locale: locale, modelContext: modelContext, bypassCache: false)
+            await self?.run(
+                workout: workout,
+                locale: locale,
+                modelContext: modelContext,
+                exerciseProgress: exerciseProgress,
+                bypassCache: false
+            )
         }
     }
 
     /// Forces a fresh generation, ignoring any cached result.
     /// Fire-and-forget: cancels any in-flight stream before starting a new one.
-    func regenerate(workout: WorkoutSession, locale: Locale, modelContext: ModelContext) {
+    func regenerate(
+        workout: WorkoutSession,
+        locale: Locale,
+        modelContext: ModelContext,
+        exerciseProgress: any ExerciseProgressProviding
+    ) {
         streamTask?.cancel()
         state = .preparing
         cache.invalidateWorkoutAnalysis(workoutId: workout.id)
         streamTask = Task { [weak self] in
-            await self?.run(workout: workout, locale: locale, modelContext: modelContext, bypassCache: true)
+            await self?.run(
+                workout: workout,
+                locale: locale,
+                modelContext: modelContext,
+                exerciseProgress: exerciseProgress,
+                bypassCache: true
+            )
         }
     }
 
@@ -213,6 +235,7 @@ final class WorkoutAnalysisViewModel {
         workout: WorkoutSession,
         locale: Locale,
         modelContext: ModelContext,
+        exerciseProgress: any ExerciseProgressProviding,
         bypassCache: Bool
     ) async {
         // 1. Availability check
@@ -236,11 +259,21 @@ final class WorkoutAnalysisViewModel {
             }
         }
 
-        // 4. Aggregate input — returns nil when insufficient data
+        // 4. Aggregate input — returns nil when insufficient data.
+        // The vs-previous comparison is resolved first because its history scan runs on
+        // the model actor (audit P1.6); the aggregator itself stays main-actor.
+        //
+        // That means it is paid before `buildInput`'s own insufficient-data gates, where
+        // it used to sit behind them. Accepted: the gate that rejects most often — no
+        // previous same-routine session — has already been evaluated by
+        // `prepareCoachState`, so the button the user just tapped would not be visible
+        // without one, and the scan is off the main actor either way.
+        let comparisons = await exerciseProgress.compareWithPrevious(workout: workout)
         guard let input = aggregator.buildInput(
             session: workout,
             locale: locale,
-            modelContext: modelContext
+            modelContext: modelContext,
+            comparisons: comparisons
         ) else {
             logger.debug("Insufficient data for workout analysis \(workout.routineName, privacy: .private)")
             state = .insufficientData

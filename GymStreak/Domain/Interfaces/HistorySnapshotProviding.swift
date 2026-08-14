@@ -47,6 +47,24 @@ protocol HistorySnapshotProviding: Sendable {
         startDate: Date,
         recentSessionLimit: Int
     ) async throws -> ExerciseProgressSnapshot
+
+    /// "What did I lift last time?" for every exercise of one workout (audit P1.6).
+    ///
+    /// Here for the same reason as `fetchExerciseProgress`: it reads the identical
+    /// completed-session graph the snapshots above already fetch and prefetch, so a
+    /// separate boundary would mean a second `ModelContext` faulting the same rows.
+    ///
+    /// Takes values rather than the `WorkoutSession` being compared — see
+    /// `PreviousPerformanceLookup` for why re-fetching it by id would be unsound. The
+    /// caller keeps the bounded current-workout read and assembles the comparison rows
+    /// with `ExerciseComparisonBuilder`.
+    ///
+    /// - Returns: the predecessor keyed by `WorkoutExercise.id`. Exercises with no
+    ///   comparable history are absent, so an empty result means "first time for
+    ///   everything" — callers must not conflate it with a failed lookup.
+    func fetchPreviousPerformances(
+        _ lookup: PreviousPerformanceLookup
+    ) async throws -> [UUID: PreviousExercisePerformance]
 }
 
 extension Notification.Name {

@@ -42,11 +42,11 @@ final class AppDependencies: ObservableObject {
     /// (see `makeChatFactProvider`). Never handed to Presentation.
     private let modelContainer: ModelContainer
 
-    /// Shared across the app since it's bound to the container's stable mainContext —
-    /// no need to reconstruct it per screen the way the old modelContext-swap pattern did.
-    /// Exposed as `ExerciseProgressProviding` — Presentation depends on the protocol,
-    /// this composition root is the only place allowed to know the concrete type.
-    let exerciseProgressService: ExerciseProgressProviding
+    /// Shared across the app: it holds no context of its own, only the history read
+    /// boundary its off-main half calls (audit P1.6). Exposed as
+    /// `ExerciseProgressProviding` — Presentation depends on the protocol, this
+    /// composition root is the only place allowed to know the concrete type.
+    let exerciseProgressService: any ExerciseProgressProviding
 
     /// Launch-time seeder for the built-in starter exercise catalog — seeds the
     /// catalog for all users (skipping name collisions with user-created
@@ -97,9 +97,10 @@ final class AppDependencies: ObservableObject {
             routineRepository: routineRepository,
             exerciseRepository: exerciseRepository
         )
-        self.historySnapshotProvider = SwiftDataHistorySnapshotProvider(
+        let historySnapshotProvider = SwiftDataHistorySnapshotProvider(
             modelContainer: modelContext.container
         )
+        self.historySnapshotProvider = historySnapshotProvider
         self.workoutHistoryCorrelation = SwiftDataWorkoutHistoryCorrelationProvider(
             container: modelContext.container
         )
@@ -119,7 +120,9 @@ final class AppDependencies: ObservableObject {
         )
         let watchConnectivity = WatchConnectivityManager.shared
         self.watchSync = watchConnectivity
-        self.exerciseProgressService = ExerciseProgressService(modelContext: modelContext)
+        self.exerciseProgressService = ExerciseProgressService(
+            historyProvider: historySnapshotProvider
+        )
         self.defaultContentSeeder = DefaultContentSeeder(
             modelContext: modelContext,
             cloudSyncStatus: cloudSyncStatus

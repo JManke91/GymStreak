@@ -235,17 +235,40 @@ struct ExerciseProgressAggregator {
         exerciseName: String,
         nameIsUnique: Bool
     ) -> Bool {
+        matches(
+            candidateExerciseId: exercise.exerciseId,
+            candidateExerciseName: exercise.exerciseName,
+            exerciseId: exerciseId,
+            exerciseName: exerciseName,
+            nameIsUnique: nameIsUnique
+        )
+    }
+
+    /// The rule above, over values rather than a `WorkoutExercise`.
+    ///
+    /// `PreviousPerformanceResolver` also has to apply it to the *current* workout's
+    /// exercises, which reach it as `PreviousPerformanceLookup.Query` values because no
+    /// `@Model` may cross into the model actor (audit P1.6). One implementation, so the
+    /// two sides of a comparison can never disagree about what counts as the same
+    /// exercise.
+    static func matches(
+        candidateExerciseId: UUID?,
+        candidateExerciseName: String,
+        exerciseId: UUID?,
+        exerciseName: String,
+        nameIsUnique: Bool
+    ) -> Bool {
         if let exerciseId {
-            if exercise.exerciseId == exerciseId { return true }
+            if candidateExerciseId == exerciseId { return true }
             if nameIsUnique,
-               exercise.exerciseId == nil,
-               exercise.exerciseName.lowercased() == exerciseName.lowercased() {
+               candidateExerciseId == nil,
+               candidateExerciseName.lowercased() == exerciseName.lowercased() {
                 return true
             }
             return false
         }
         if nameIsUnique {
-            return exercise.exerciseName.lowercased() == exerciseName.lowercased()
+            return candidateExerciseName.lowercased() == exerciseName.lowercased()
         }
         return false
     }

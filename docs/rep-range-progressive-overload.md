@@ -695,8 +695,8 @@ When `applyProgressiveOverload` is called during a workout:
 
 The following services check `progressiveOverloadApplied` and use planned values when set:
 - `ExerciseProgressAggregator.buildProgress()` / `.buildRecentSessions()` — chart data points and the recent-session list (was `ExerciseProgressService.fetchProgressData()` before audit P1.2 moved it off the main actor)
-- `ExerciseProgressService.previousPerformance()` — historical lookup for comparison
-- `ExerciseProgressService.compareWithPrevious()` — summary/detail comparison
+- `PreviousPerformanceResolver.resolve()` — historical lookup for comparison, on the History model actor (was `ExerciseProgressService.previousPerformance()` before audit P1.6 moved it off the main actor)
+- `ExerciseProgressService.compareWithPrevious()` — summary/detail comparison, now `async` over that boundary
 - `WorkoutSession.totalVolume` — session volume calculation
 
 This ensures the summary screen, workout detail view, and progress charts all show the user's actual performance rather than the overloaded values.

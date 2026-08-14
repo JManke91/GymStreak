@@ -138,6 +138,85 @@ struct SwiftDataHistorySnapshotStoreTests {
         )
     }
 
+    /// The vs-previous comparison's read boundary joins the same tripwire suite.
+    ///
+    /// Audit P1.6: `ExerciseProgressService.compareWithPrevious` ran on the main actor and
+    /// issued one unbounded `FetchDescriptor<WorkoutSession>` with no
+    /// `relationshipKeyPathsForPrefetching` **per exercise** — plus two full `Exercise`
+    /// library scans per exercise — then faulted every session's exercises and sets one
+    /// row at a time. It fired on every workout finish and every past-workout open, with
+    /// no opt-in gate. This is the fourth boundary in the suite and the third on the
+    /// History actor.
+    @Test
+    func previousPerformanceLookupKeepsMainActorResponsive() async throws {
+        let container = InMemoryModelContainer.make()
+        let context = ModelContext(container)
+        // Routine-slot ids matter: without them the resolver falls back to occurrence
+        // matching inside a proven routine, which the routine-less seed cannot satisfy,
+        // and the case would assert on an empty result.
+        let slotIDs = (0..<5).map { _ in UUID() }
+        try seedHistory(sessionCount: 240, context: context, routineSlotIDs: slotIDs)
+
+        // Existential on purpose — see the note in the training-snapshot test above.
+        let provider: any HistorySnapshotProviding =
+            SwiftDataHistorySnapshotProvider(modelContainer: container)
+        // An eight-exercise workout: five the user has trained before, three added to the
+        // routine since. The three without history are not padding — they are the shape
+        // that costs most, because an exercise with no predecessor is only proven absent
+        // after every candidate session has been examined, and a real routine gains
+        // exercises all the time.
+        let trained = slotIDs.enumerated().map { index, slotID in
+            PreviousPerformanceLookup.Query(
+                workoutExerciseId: UUID(),
+                exerciseName: "Exercise \(index)",
+                exerciseId: nil,
+                loadBehavior: .resistance,
+                routineExerciseId: slotID
+            )
+        }
+        let untrained = (0..<3).map { index in
+            PreviousPerformanceLookup.Query(
+                workoutExerciseId: UUID(),
+                exerciseName: "New Exercise \(index)",
+                exerciseId: nil,
+                loadBehavior: .resistance,
+                routineExerciseId: UUID()
+            )
+        }
+        let lookup = PreviousPerformanceLookup(
+            // Every seeded session is a candidate; `Date()` here would depend on the
+            // wall-clock gap between seeding and asserting.
+            before: .distantFuture,
+            routineId: nil,
+            exercises: trained + untrained
+        )
+        let heartbeat = MainActorHeartbeat(interval: .milliseconds(10))
+        let heartbeatTask = Task { await heartbeat.run() }
+        await Task.yield()
+
+        let resolved = try await provider.fetchPreviousPerformances(lookup)
+
+        heartbeatTask.cancel()
+        await heartbeatTask.value
+
+        // Only the five trained exercises resolve; the three new ones are absent rather
+        // than present-with-no-sets, which is how callers tell "first time" apart.
+        #expect(resolved.count == 5)
+        // Seeded weight is `40 + exerciseIndex`, so a resolved row proves the scan
+        // reached real sets rather than returning an empty dictionary quickly.
+        let firstTrained = try #require(trained.first)
+        #expect(resolved[firstTrained.workoutExerciseId]?.sets.first?.weight == 40)
+        #expect(untrained.allSatisfy { resolved[$0.workoutExerciseId] == nil })
+        #expect(
+            heartbeat.sampleCount >= 1,
+            "the main actor should run while the model actor is resolving previous performances"
+        )
+        #expect(
+            heartbeat.maximumDelay < .milliseconds(100),
+            "Previous-performance lookup delayed MainActor by \(heartbeat.maximumDelay)"
+        )
+    }
+
     /// Cancellation must survive the `@concurrent` hop.
     ///
     /// `SwiftDataHistorySnapshotProvider`'s methods are `@concurrent` (SE-0461) so
@@ -169,7 +248,14 @@ struct SwiftDataHistorySnapshotStoreTests {
         }
     }
 
-    private func seedHistory(sessionCount: Int, context: ModelContext) throws {
+    /// - Parameter routineSlotIDs: when non-empty, stamps each exercise index with the
+    ///   corresponding routine-slot id. Only the previous-performance case needs it, so
+    ///   it defaults to off and the other cases keep their exact seeded shape.
+    private func seedHistory(
+        sessionCount: Int,
+        context: ModelContext,
+        routineSlotIDs: [UUID] = []
+    ) throws {
         let referenceDate = Date()
 
         for sessionIndex in 0..<sessionCount {
@@ -187,6 +273,9 @@ struct SwiftDataHistorySnapshotStoreTests {
                     order: exerciseIndex,
                     exerciseId: nil
                 )
+                workoutExercise.routineExerciseId = routineSlotIDs.indices.contains(exerciseIndex)
+                    ? routineSlotIDs[exerciseIndex]
+                    : nil
                 workoutExercise.workoutSession = session
                 context.insert(workoutExercise)
 

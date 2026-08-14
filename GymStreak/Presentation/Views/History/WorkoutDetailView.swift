@@ -407,7 +407,8 @@ struct WorkoutDetailView: View {
                         analysisVM.generate(
                             workout: workout,
                             locale: Locale.current,
-                            modelContext: modelContext
+                            modelContext: modelContext,
+                            exerciseProgress: dependencies.exerciseProgressService
                         )
                     }
                     .transition(.opacity)
@@ -420,7 +421,8 @@ struct WorkoutDetailView: View {
                             analysisVM.regenerate(
                                 workout: workout,
                                 locale: Locale.current,
-                                modelContext: modelContext
+                                modelContext: modelContext,
+                                exerciseProgress: dependencies.exerciseProgressService
                             )
                         }
                     )
@@ -520,14 +522,14 @@ struct WorkoutDetailView: View {
 
     @MainActor
     private func loadComparisons() async {
-        let service = dependencies.exerciseProgressService
-        let results = service.compareWithPrevious(workout: workout)
-        let sortedExercises = workout.workoutExercisesList.sorted(by: { $0.order < $1.order })
-        var dict: [UUID: ExerciseComparisonResult] = [:]
-        for (exercise, result) in zip(sortedExercises, results) {
-            dict[exercise.id] = result
-        }
-        comparisons = dict
+        // Each result carries the exercise it describes, so this no longer pairs the two
+        // arrays positionally — a `zip` that silently truncates or mispairs the moment
+        // the orderings diverge.
+        let results = await dependencies.exerciseProgressService.compareWithPrevious(workout: workout)
+        comparisons = Dictionary(
+            results.map { ($0.workoutExerciseId, $0) },
+            uniquingKeysWith: { first, _ in first }
+        )
     }
 
     @MainActor

@@ -125,7 +125,7 @@ Built as planned; implementation notes:
 
 **Goal:** answer more question classes. Expansion list: `getVolumeTrend`, `getRoutineDetails`. (`getStreakStatus` from the spike list is **dropped** — `workoutHistoryFacts` already appends the current streak line via `HistoryStatsService.streakWeeks`, so a dedicated tool would pay schema tokens on every turn for an already-reachable fact.)
 
-- Each new tool: terse `Tool` conformance in `Data/AICoach/Chat/Tools/`, backed by an existing service (`FortschrittAggregator`/`ExerciseProgressService` for volume trend; `RoutineRepository` for routine details) via a new `ChatFactProviding` method.
+- Each new tool: terse `Tool` conformance in `Data/AICoach/Chat/Tools/`, backed by an existing service (`FortschrittAggregator`/`ExerciseProgressAggregator` for volume trend; `RoutineRepository` for routine details) via a new `ChatFactProviding` method. **Not `ExerciseProgressService`**, as this plan originally said — audit P1.2 moved the chart aggregation into `ExerciseProgressAggregator` and P1.6 left that service as a `@MainActor` seam with no `ModelContext`, so a chat tool (which runs off-main, mid-stream) must go through the pure aggregator inside `ChatFactStore` instead.
 - **Budget guard:** measure `tokenCount(for: tools)` after each addition; if the tool set + instructions crowd the answer/transcript budget, curate (merge overlapping tools, trim descriptions). Add a test asserting each new fact method's output like `ChatFactProviderTests`.
 - **Done:** new question classes answered and grounded; tool-schema token cost measured and within budget.
 

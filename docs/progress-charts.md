@@ -75,14 +75,104 @@ contains no internal `await`, so each runs to completion before the next is dequ
 That invariant is written on the store — breaking it would open an interleaving window on
 the shared, non-`Sendable` `ModelContext`.
 
-**Still on the main actor, deliberately out of scope — tracked as P1.6 in
-`docs/architecture-audit-2026-08.md`, which is the entry point for doing it:**
-`ExerciseProgressService`'s
-`compareWithPrevious(workout:)` (used by `SaveWorkoutView`, `WorkoutDetailView` and
-`WorkoutAnalysisAggregator`) takes a caller-supplied main-context `WorkoutSession`, so it
-cannot cross an actor boundary unchanged. It performs one unbounded fetch *per exercise*
-via `previousPerformance` and is a stronger candidate than the chart ever was — but it is
-a different call shape and a different fix.
+### The vs-previous comparison (2026-08-14, audit P1.6)
+
+The other half of this file's surface — "how did this compare with last time?", shown on
+the save sheet, the workout detail screen and inside the AI Coach's workout analysis — was
+left on the main actor by P1.2 and is now off it too. It was the stronger candidate all
+along:
+
+```
+SaveWorkoutView / WorkoutDetailView / WorkoutAnalysisViewModel
+  → ExerciseProgressProviding (@MainActor)
+    → ExerciseComparisonBuilder.makeLookup(workout:)          ── main actor, bounded
+    → HistorySnapshotProviding  ── @concurrent hop ──▶  SwiftDataHistorySnapshotStore
+                                                          → PreviousPerformanceResolver
+    → ExerciseComparisonBuilder.build(workout:previousPerformances:)  ── main actor, bounded
+```
+
+What it was: `compareWithPrevious(workout:)` called `previousPerformance` **once per
+exercise**, and each call issued its own unbounded `FetchDescriptor<WorkoutSession>` with
+no `relationshipKeyPathsForPrefetching`, then walked every session's exercises and sets —
+faulting one row at a time. Each call *also* fetched the entire `Exercise` library to
+decide name uniqueness, and `compareWithPrevious` fetched it once more per exercise on top,
+so an eight-exercise workout meant 8 unbounded session fetches and 16 full library scans,
+synchronously on the main actor. Unlike the chart, nothing gated it: it ran every time a
+workout was finished and every time a past workout was opened.
+
+**Measured, not inferred:** with `@concurrent` removed from the new provider method,
+`previousPerformanceLookupKeepsMainActorResponsive` records a **213 ms** main-actor stall
+(240 sessions × 5 exercises × 4 sets, an eight-exercise lookup). With it, under the 100 ms
+budget. Build green either way. Fourth case in the shared tripwire suite, third on the
+History actor.
+
+**Why the workout crosses as values, not as an id to re-fetch.** This was the reason P1.2
+left the item alone: an `@ModelActor` cannot accept a main-context `@Model`, so the obvious
+port — pass `WorkoutSession.id`, re-fetch inside the actor — does not work here. It was
+investigated and rejected, not overlooked:
+
+- The save sheet compares a workout the user has **not saved yet** (it is presented
+  straight after `pauseForCompletion()`, and while that does call `save()` today, the
+  correctness of a user-visible screen must not rest on that ordering).
+- SwiftData does not document whether one `ModelContext` sees another's unsaved changes.
+  An Apple DTS engineer reproduced inconsistent behaviour on forum thread 763487 and
+  explicitly declined to say which is expected. `ModelContainer.mainContext` has
+  `autosaveEnabled == true` (documented) but the firing *timing* is unspecified — "key
+  lifecycle events" with no bound.
+- `PersistentIdentifier` is the documented cross-context handle and would be the right
+  tool for a saved object, but it carries the same trap from the other side:
+  `PersistentIdentifier.isTemporary` is `true` until the origin context saves, and Apple
+  documents that temporary ids "should not be used to create durable maps to a model".
+- The failure mode is the deciding factor. A miss returns *no predecessor*, which the UI
+  renders as "New exercise" — a confident false statement about the user's history, not a
+  visible error.
+
+So the split runs along the cost, not along the object: only the unbounded history scan
+crosses. `PreviousPerformanceLookup` carries the workout as `Sendable` values, and the
+bounded current-workout read stays with the caller, which already holds that graph faulted
+in and is about to render every set of it anyway.
+
+**Other things this closed:**
+
+- One fetch replaces N. `PreviousPerformanceResolver` filters and sorts the candidate
+  sessions once for the whole workout and counts library names once, over the shared
+  prefetch-correct `CompletedSessionFetch.withFullGraph`.
+- `withFullGraph` now prefetches `\.routine` as well. The resolver compares
+  `session.routine?.id` per candidate, and without it the N+1 would simply have moved to
+  the model actor instead of being removed.
+- `ExerciseProgressService` no longer owns a `ModelContext`; it is a thin `@MainActor`
+  seam over the boundary call between the two pure builders.
+- `ExerciseComparisonResult` gained `workoutExerciseId`. All three callers previously
+  paired results with exercises **positionally** — a `zip` in `WorkoutDetailView`, an
+  index in `WorkoutAnalysisAggregator`, and `ForEach(id: \.exerciseName)` in
+  `SaveWorkoutView`, which gave two rows the same identity whenever a routine trained the
+  same exercise twice. All three now key on the id.
+- `WorkoutAnalysisAggregator` no longer constructs `ExerciseProgressService` ad hoc,
+  bypassing `AppDependencies`; it takes the resolved comparisons as a parameter.
+- A failed lookup returns an **empty array**, not rows without a predecessor. The latter
+  would badge every exercise "new". Pinned by
+  `failedHistoryLookupYieldsNoRowsRatherThanFalseFirstTimeRows`.
+
+**Two tradeoffs taken knowingly, so they are not re-litigated as oversights:**
+
+- **The AI analysis resolves the comparison before its own gates.** `compareWithPrevious`
+  used to sit *inside* `WorkoutAnalysisAggregator.buildInput`, after its three
+  insufficient-data guards; it now runs first, in `WorkoutAnalysisViewModel`, because the
+  aggregator is `@MainActor` and this is the half that must not be. A gated-out analysis
+  therefore pays one off-main resolve. Acceptable: the guard that rejects most often — no
+  previous same-routine session — is already evaluated by `prepareCoachState`, so the
+  button the user tapped would not be visible without one.
+- **`WorkoutDetailView` resolves the comparison twice** — once in `.task` for the
+  per-exercise strips, once when "Ask the Coach" is tapped. Now that results are keyed by
+  `workoutExerciseId`, the second could reuse the first, but only by making the analysis
+  depend on a sibling `@State` load having succeeded: an empty dictionary is
+  indistinguishable from "no history", so a failed strip load would silently downgrade the
+  analysis to *insufficient data*. An independent resolve on an explicit tap is the safer
+  trade, and the old code scanned twice as well — on the main actor.
+
+**Deliberately not done.** `WorkoutAnalysisAggregator`'s own two unbounded main-actor
+fetches (`findPreviousSession`, `detectNewPRs`) are untouched — they are audit P2.1, which
+covers all four AI-coach aggregators together and is gated behind the AI opt-in.
 
 ### Components
 
@@ -104,7 +194,10 @@ a different call shape and a different fix.
 | ExerciseProgressModels | `Domain/Models/ExerciseProgressModels.swift` | Domain values: ChartTimeframe, ProgressMetric, ExerciseProgressDataPoint, ExerciseProgressData, **ExerciseRecentSession**, **ExerciseProgressSnapshot**, SelectedDataPoint. The four that cross the actor boundary are explicitly `Sendable`. |
 | ExerciseProgressAggregator | `Domain/Services/ExerciseProgressAggregator.swift` | **Pure, isolation-agnostic** chart + recent-session aggregation. `matches(_:exerciseId:exerciseName:nameIsUnique:)` resolves workout exercises to the chart target — an exact `exerciseId` match, OR a legacy row with `exerciseId == nil` whose name matches case-insensitively **and only when the name is unique in the live library**. Without the fallback, workouts logged before `WorkoutExercise.exerciseId` existed would be invisible and progress would look frozen; without the uniqueness gate, same-named equipment variants would double-count. |
 | SwiftDataHistorySnapshotStore | `Data/History/SwiftDataHistorySnapshotStore.swift` | `@ModelActor` that performs the fetch and calls the aggregator off the main actor. `SwiftDataHistorySnapshotProvider.fetchExerciseProgress` is the `@concurrent` entry point. |
-| ExerciseProgressService | `Data/Progress/ExerciseProgressService.swift` | No longer feeds the chart. Retains the main-actor comparison surface (`compareWithPrevious`, `previousPerformance`) used by the workout summary and detail screens. |
+| ExerciseProgressService | `Data/Progress/ExerciseProgressService.swift` | The vs-previous seam. Owns no `ModelContext`: `@MainActor` glue that runs `ExerciseComparisonBuilder` either side of one `@concurrent` boundary call. Does not feed the chart. |
+| ExerciseComparisonBuilder | `Domain/Services/ExerciseComparisonBuilder.swift` | **Pure, isolation-agnostic.** `makeLookup` reduces the current workout to `Sendable` values; `build` assembles the comparison rows from it plus the resolved predecessors. Runs on the main actor because the workout may be uncommitted. |
+| PreviousPerformanceResolver | `Domain/Services/PreviousPerformanceResolver.swift` | **Pure, isolation-agnostic.** Resolves every exercise of one workout against the most recent comparable session, in a single pass. Runs inside the model actor. |
+| PreviousPerformanceLookup | `Domain/Models/PreviousPerformanceLookup.swift` | The `Sendable` request: `before`, `routineId`, and one `Query` per exercise. Carries the workout's identity across the actor boundary without a `@Model` or a re-fetch. |
 
 #### watchOS Target
 

@@ -265,13 +265,18 @@ struct SelectedDataPoint {
 
 // MARK: - Previous Exercise Performance
 
-struct PreviousExercisePerformance {
+/// What the user did the last comparable time they performed one exercise.
+///
+/// `Sendable` because it is resolved inside `SwiftDataHistorySnapshotStore`'s model actor
+/// and crosses back to the main actor (audit P1.6) — no `PersistentModel` and no
+/// relationship walk may survive in it.
+struct PreviousExercisePerformance: Sendable {
     let date: Date
     let routineName: String
     let sets: [SetPerformance]
     let effectiveTotalVolume: Double?
 
-    struct SetPerformance {
+    struct SetPerformance: Sendable {
         let reps: Int
         let weight: Double
         let isCompleted: Bool
@@ -301,6 +306,13 @@ struct PreviousExercisePerformance {
 // MARK: - Exercise Comparison Result
 
 struct ExerciseComparisonResult {
+    /// The `WorkoutExercise.id` this row describes.
+    ///
+    /// Callers used to pair results with exercises **positionally** (a `zip`, or an
+    /// index into the results array), which silently mispairs the moment the two
+    /// orderings diverge, and cannot key a `ForEach` for a workout that contains the
+    /// same exercise twice. Carrying the id makes the pairing explicit.
+    let workoutExerciseId: UUID
     let exerciseName: String
     let loadBehavior: ExerciseLoadBehavior
     let currentPerformance: CurrentExercisePerformance

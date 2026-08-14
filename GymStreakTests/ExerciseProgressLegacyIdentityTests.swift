@@ -5,7 +5,7 @@ import Testing
 
 extension ExerciseProgressServiceTests {
     @Test
-    func duplicateRoutineNamesDoNotCrossCompare() throws {
+    func duplicateRoutineNamesDoNotCrossCompare() async throws {
         let context = ModelContext(InMemoryModelContainer.make())
         let exercise = Exercise(name: "Biceps Curls")
         let targetRoutine = Routine(name: "Pull")
@@ -33,13 +33,13 @@ extension ExerciseProgressServiceTests {
         addPerformance(exercise, weight: 21, reps: 5, order: 0, to: current, context: context)
         try context.save()
 
-        let result = ExerciseProgressService(modelContext: context)
+        let result = await makeService(context: context)
             .compareWithPrevious(workout: current)
         #expect(result.first?.previousPerformance?.sets.first?.weight == 20)
     }
 
     @Test
-    func routineRenameKeepsComparisonContinuity() throws {
+    func routineRenameKeepsComparisonContinuity() async throws {
         let context = ModelContext(InMemoryModelContainer.make())
         let exercise = Exercise(name: "Biceps Curls")
         let routine = Routine(name: "Old Pull")
@@ -60,13 +60,13 @@ extension ExerciseProgressServiceTests {
         addPerformance(exercise, weight: 21, reps: 5, order: 0, to: current, context: context)
         try context.save()
 
-        let result = ExerciseProgressService(modelContext: context)
+        let result = await makeService(context: context)
             .compareWithPrevious(workout: current)
         #expect(result.first?.previousPerformance?.sets.first?.weight == 20)
     }
 
     @Test
-    func ambiguousLegacyNameDoesNotChooseAnEquipmentVariant() throws {
+    func ambiguousLegacyNameDoesNotChooseAnEquipmentVariant() async throws {
         let context = ModelContext(InMemoryModelContainer.make())
         let barbell = Exercise(name: "Biceps Curls", equipmentType: .barbell)
         let dumbbell = Exercise(name: "Biceps Curls", equipmentType: .dumbbell)
@@ -105,13 +105,13 @@ extension ExerciseProgressServiceTests {
         addPerformance(barbell, weight: 21, reps: 5, order: 0, to: current, context: context)
         try context.save()
 
-        let result = ExerciseProgressService(modelContext: context)
+        let result = await makeService(context: context)
             .compareWithPrevious(workout: current)
         #expect(result.first?.previousPerformance == nil)
     }
 
     @Test
-    func missingRoutineIdentityDoesNotFallBackToDuplicateRoutineName() throws {
+    func missingRoutineIdentityDoesNotFallBackToDuplicateRoutineName() async throws {
         let context = ModelContext(InMemoryModelContainer.make())
         let exercise = Exercise(name: "Biceps Curls")
         let routine = Routine(name: "Pull")
@@ -133,7 +133,7 @@ extension ExerciseProgressServiceTests {
         addPerformance(exercise, weight: 20, reps: 5, order: 0, to: current, context: context)
         try context.save()
 
-        let result = ExerciseProgressService(modelContext: context)
+        let result = await makeService(context: context)
             .compareWithPrevious(workout: current)
         #expect(result.first?.previousPerformance == nil)
     }

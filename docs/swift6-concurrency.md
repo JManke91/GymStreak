@@ -165,6 +165,40 @@ that work to the caller or give it its own actor. Apple documents neither "one a
 feature" nor "one shared actor" as guidance (researched 2026-08-13) — the choice is ours,
 and this invariant is what makes the shared one defensible.
 
+### Getting a `@Model`'s identity into a model actor: send values, not an id to re-fetch
+
+Researched 2026-08-14 for audit P1.6, which had to move a read that takes a
+caller-supplied main-context `WorkoutSession`. An `@ModelActor` cannot accept a `@Model`
+from another context, so the obvious port is "pass the `id`, re-fetch inside". **That is
+only sound when the object is provably saved**, and three separate gaps say so:
+
+| Question | Status |
+|---|---|
+| Does a second `ModelContext` see the main context's **unsaved** changes? | **Undocumented.** Apple DTS reproduced inconsistent behaviour across OS versions on forum thread 763487 and explicitly declined to state the expected one. |
+| When does `mainContext` autosave fire? | Default `autosaveEnabled == true` for `mainContext` (and `false` for any context you construct, including the one `@ModelActor` synthesizes) **is** documented. The *timing* is not — "key lifecycle events", with no bound. |
+| Is `PersistentIdentifier` the safe handle instead? | It is the documented, `Sendable`, purpose-built one — but `PersistentIdentifier.isTemporary` is `true` until the origin context saves, and Apple documents that temporary ids "should not be persisted or used to create durable maps to a model". Same precondition, stated from the other side. |
+
+So the rule is about the *precondition*, not the mechanism: if the object is definitely
+saved (History reads over completed workouts), `PersistentIdentifier` is the better-supported
+handle than our own `id: UUID` + `#Predicate`. If it might not be — anything reading a
+workout the user is still in, e.g. the save sheet — **send `Sendable` values describing
+what you need instead** (`PreviousPerformanceLookup` is the worked example) and keep the
+bounded read of the live object on the caller's side.
+
+What makes this worth a rule rather than a judgement call is the failure mode: a re-fetch
+that finds nothing returns *empty*, not an error. In P1.6's case that would have rendered
+as "New exercise" on every row — a confident false statement about the user's history,
+with a green build and no warning.
+
+One related correction while here: prefetching cannot follow a key path *through* a to-many
+relationship (`\.workoutExercises.sets`) — that is a **Swift `KeyPath` limitation, not a
+SwiftData one**, since key-path composition needs each segment to resolve to a single
+value. `CompletedSessionFetch`'s two-step warm-up is the workaround, and its reliance on
+the context's identity map stays an inference from Core Data's documented uniquing, not a
+SwiftData guarantee. Note also that Apple DTS has confirmed (forum thread 772608,
+FB16858906) that `relationshipKeyPathsForPrefetching` **still triggers a fetch on attribute
+access in some cases** — treat it as a strong optimization, not a guarantee.
+
 ### `#Predicate`: keep optional-chained relationship comparisons out of it
 
 Also researched 2026-08-13, while considering date-bounding the exercise-chart fetch.
@@ -576,7 +610,11 @@ Recorded so nobody re-derives a confident answer from nothing (researched 2026-0
    than writing a one-off test elsewhere.
 7. **A new method on `SwiftDataHistorySnapshotStore` must contain no internal `await`**
    (§1). The shared-actor safety argument rests entirely on that.
-8. **Do not** "normalize" the build settings table in §1 — each deviation is measured.
+8. **Moving a read that takes a caller-supplied `@Model` off the main actor?** Do not
+   pass its id and re-fetch unless the object is provably saved (§1). Send `Sendable`
+   values and keep the bounded live-object read on the caller — a re-fetch miss is
+   silent, not an error.
+9. **Do not** "normalize" the build settings table in §1 — each deviation is measured.
 
 ## Sources
 

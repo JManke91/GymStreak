@@ -7,7 +7,7 @@
 > changed by the audit itself**; the `> DONE` blocks in §3 were added afterwards by
 > the changes that closed each item, and each links to its feature write-up.
 >
-> **What is open:** P1.1–P1.5 are done. **P1.6 is the only open P1**; all of §4's
+> **What is open:** **all of §3's P1 is done** (P1.6 closed 2026-08-14). All of §4's
 > P2 is open; §5's P3 is deliberately unscheduled. Start at
 > [§7 Sequencing](#7-sequencing) — and when you close an item, put its leftovers
 > into a numbered entry there, not only into its own DONE block. P1.6 spent a day
@@ -334,7 +334,71 @@ is *already* behind injected gateways:
   than rewrite.
 
 ### P1.6 `ExerciseProgressService.compareWithPrevious` — unbounded main-actor fetch *per exercise*
-**The only open P1. Added 2026-08-14** — it is not a new discovery: P1.2 surfaced it while
+> **DONE 2026-08-14** — the comparison is split along its cost. The history scan moved to a
+> fifth `@concurrent` provider method, `fetchPreviousPerformances(_:)`, backed by the
+> existing History `@ModelActor`; the pure logic is `Domain/Services/PreviousPerformanceResolver`
+> (previous side, on the actor) and `Domain/Services/ExerciseComparisonBuilder` (current
+> side, on main). `ExerciseProgressService` kept its name and its three callers but owns no
+> `ModelContext` any more. Full write-up in **`docs/progress-charts.md`**.
+>
+> **Measured, per §6:** `previousPerformanceLookupKeepsMainActorResponsive` joined
+> `SwiftDataHistorySnapshotStoreTests` — the shared tripwire suite — and records a **213 ms**
+> main-actor stall at 240 sessions × 5 exercises × 4 sets with `@concurrent` removed from the
+> new method, staying inside the 100 ms budget with it. The build was green either way. Fourth
+> such measurement (600 ms History, 307 ms progress charts, 319 ms chat facts, 213 ms here).
+>
+> **The call-shape question this item existed for, answered.** The finding offered two
+> options — "pass the session's `id` and re-fetch inside the actor, or return a value-type
+> comparison keyed by `WorkoutExercise.id`". The first was investigated and **rejected**: the
+> save sheet compares a workout that need not be committed, SwiftData does not document
+> whether a second `ModelContext` sees the main context's unsaved changes (Apple DTS
+> reproduced inconsistent behaviour on forum thread 763487 and declined to say which is
+> expected), and `PersistentIdentifier` — the documented cross-context handle — is
+> `isTemporary` until the origin saves, which Apple documents as unusable for durable
+> mapping. Critically the miss is **silent**: no predecessor renders as "New exercise", a
+> confident false claim about the user's history. So only the unbounded scan crosses, as
+> `Sendable` values; the bounded current-workout read stays on the main actor, where the
+> caller already holds that graph faulted in and is about to render every set of it.
+>
+> **Three things the finding did not have:**
+> 1. **The N+1 was worse than stated.** Beyond one unbounded session fetch per exercise,
+>    `previousPerformance` fetched the whole `Exercise` library to decide name uniqueness and
+>    `compareWithPrevious` fetched it *again* per exercise — 8 session fetches and 16 library
+>    scans for an eight-exercise workout. The resolver now filters candidates and counts
+>    names once for the whole workout.
+> 2. **A latent pairing bug in all three callers, fixed.** Results were matched to exercises
+>    **positionally**: a `zip` in `WorkoutDetailView`, an index in `WorkoutAnalysisAggregator`,
+>    and `ForEach(id: \.exerciseName)` in `SaveWorkoutView` — which hands two rows the same
+>    SwiftUI identity whenever a routine trains the same exercise twice (a shape this very
+>    feature supports, per `repeatedExerciseComparesEachRoutineOccurrenceWithItsPreviousCounterpart`).
+>    `ExerciseComparisonResult` now carries `workoutExerciseId` and all three key on it.
+> 3. **`CompletedSessionFetch.withFullGraph` had to grow `\.routine`.** The resolver compares
+>    `session.routine?.id` per candidate; without the prefetch the N+1 would have *moved* to
+>    the model actor rather than being removed. A to-one hop onto a small table that
+>    `fetchTrainingSnapshot` already fetches in full, so it is cheaper than a second variant
+>    of the shared fetch.
+>
+> Also closed on the way: `WorkoutAnalysisAggregator` no longer constructs
+> `ExerciseProgressService` ad hoc behind `AppDependencies`' back, and a failed lookup now
+> returns no rows instead of rows that would badge every exercise "new".
+>
+> **Architecture review: PASS**, no CRITICAL and no WARNING findings — the first item in
+> this audit to clear it outright. Three of its advisory notes were acted on rather than
+> filed: the candidate sort gained an `id` tie-break (`sorted(by:)` is not stable, and
+> HealthKit recovery and watch ingestion both take `startTime` from outside the app, so
+> tied timestamps could have produced a run-to-run different predecessor); the two
+> knowingly-taken tradeoffs it identified — the AI analysis resolving before its own gates,
+> and `WorkoutDetailView` resolving twice — are now recorded in `docs/progress-charts.md`
+> instead of living only in the diff; and a stale suggestion in
+> `docs/ai-coach-chat-plan.md` to back a future chat tool with `ExerciseProgressService`
+> (gone stale at P1.2, not here) was corrected to `ExerciseProgressAggregator`.
+>
+> **Deliberately not done → already tracked as P2.1:** `WorkoutAnalysisAggregator`'s *own*
+> two unbounded main-actor fetches (`findPreviousSession`, `detectNewPRs`) are untouched.
+> They are the same shape but belong to the four-aggregator item that owns them, and they
+> are gated behind the AI opt-in.
+
+**Added 2026-08-14** — it is not a new discovery: P1.2 surfaced it while
 fixing the charts and explicitly called it "worth a P1 of its own", but recorded it as prose
 inside a block marked DONE, where nothing scheduling work would ever look. Promoted here so
 §7 stops reading as "all P1 complete".
@@ -464,14 +528,18 @@ the same shared tripwire suite.
 4. ~~**P1.5**~~ — **done 2026-08-13**, see `docs/rest-timer-notifications.md`. The
    "template-sync leans on existing tests" half of that plan was only half right:
    the historical-edit path had no coverage at all and grew its own suite.
-5. **P1.6** (`compareWithPrevious`) — **open, and the next thing to do.** Added to §3 on
-   2026-08-14; it was surfaced by P1.2 but only recorded inside that item's DONE block,
-   so this list previously read as "every P1 is finished". It is not a port of the three
-   boundaries already moved — the caller-supplied main-context `WorkoutSession` means the
-   call shape has to change first. Tripwire case into
-   `SwiftDataHistorySnapshotStoreTests` before the fix.
-6. **P2** — independent cleanup, no particular order; P2.9 gated on P1.1. P2.11 was added
-   by P1.5 and is the lowest-value item in the table — read its risk note before starting.
+5. ~~**P1.6** (`compareWithPrevious`)~~ — **done 2026-08-14**, see `docs/progress-charts.md`.
+   Correctly predicted not to be a port of the three boundaries already moved: the call
+   shape changed first, and the re-fetch-by-id option the finding suggested turned out to
+   be unsound for the save sheet's uncommitted workout. The tripwire went in before the
+   fix and was verified to bite (213 ms). **This closes §3 — every P1 is now done, and
+   this time the list says so truthfully.**
+6. **P2** — now the whole remaining worklist; independent cleanup, no particular order.
+   P2.9 gated on P1.1 (satisfied). P2.11 was added by P1.5 and is the lowest-value item in
+   the table — read its risk note before starting. **P2.1 grew a concrete first step from
+   P1.6:** two of `WorkoutAnalysisAggregator`'s three main-actor fetches are gone, the
+   remaining two (`findPreviousSession`, `detectNewPRs`) are named, and
+   `PreviousPerformanceResolver` is the pattern to copy.
 7. **P3** — do not schedule.
 
 ### Anything still only in a DONE block?
@@ -484,6 +552,18 @@ missing `AICoachCaching` double. The `Activity.activities`-at-launch uncertainty
 `docs/rest-timer-notifications.md` on purpose — it is a documented unknown with a known
 remedy, not scheduled work. **When a future item closes, put its leftovers here, not only
 in its own write-up.**
+
+Re-audited 2026-08-14 after P1.6 closed. Its one leftover — `WorkoutAnalysisAggregator`'s
+own `findPreviousSession` / `detectNewPRs` main-actor fetches — needed no new number: it
+lands inside **P2.1**, which already names that aggregator, and §7 item 6 now records what
+P1.6 left it. Nothing else in that item's DONE block is unhomed.
+
+Also worth carrying forward, because it cost real research time twice: **`@ModelActor`
+re-fetch by id is not a free port.** Whether a second `ModelContext` sees the main
+context's unsaved changes is undocumented (Apple DTS declined to confirm on forum thread
+763487), `mainContext` autosave *timing* is unspecified, and `PersistentIdentifier` is
+`isTemporary` until the origin saves. Any future boundary that wants to take a `@Model`'s
+identity across must either prove the object is saved or do what P1.6 did — send values.
 
 The mandatory `architecture-reviewer` gate did not apply to this audit (no code
 changed). It applies to every item that lands from it — P1.2, P1.3, P1.4 and P1.5

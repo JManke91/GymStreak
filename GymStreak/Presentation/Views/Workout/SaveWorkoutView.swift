@@ -130,7 +130,9 @@ struct SaveWorkoutView: View {
     private var exerciseProgressSection: some View {
         if !isLoadingComparisons && !exerciseComparisons.isEmpty {
             Section {
-                ForEach(exerciseComparisons, id: \.exerciseName) { comparison in
+                // Keyed by the workout exercise, not its name: a routine that trains the
+                // same exercise twice would otherwise give two rows the same identity.
+                ForEach(exerciseComparisons, id: \.workoutExerciseId) { comparison in
                     ExerciseImprovementRow(comparison: comparison)
                 }
             } header: {
@@ -267,7 +269,8 @@ struct SaveWorkoutView: View {
 
     private func loadComparisons() async {
         if let session = viewModel.currentSession {
-            exerciseComparisons = dependencies.exerciseProgressService.compareWithPrevious(workout: session)
+            exerciseComparisons = await dependencies.exerciseProgressService
+                .compareWithPrevious(workout: session)
         }
         isLoadingComparisons = false
     }

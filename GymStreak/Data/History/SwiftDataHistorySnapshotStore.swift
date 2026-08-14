@@ -26,7 +26,7 @@ struct SwiftDataHistorySnapshotProvider: HistorySnapshotProviding {
 
     // MARK: - Off-main guarantee
     //
-    // `@concurrent` (SE-0461) on all four methods is LOAD-BEARING — it is the
+    // `@concurrent` (SE-0461) on all five methods is LOAD-BEARING — it is the
     // whole reason this type exists. `SWIFT_APPROACHABLE_CONCURRENCY` enables
     // `nonisolated(nonsending)` by default, which makes a plain `nonisolated async`
     // method run on the *caller's* actor. Called from a `@MainActor` ViewModel that
@@ -49,6 +49,11 @@ struct SwiftDataHistorySnapshotProvider: HistorySnapshotProviding {
     // method's `@concurrent` stalled the main actor **307 ms** in
     // `largeExerciseProgressBuildKeepsMainActorResponsive` (240 sessions × 5 exercises
     // × 4 sets); with it, under the 100 ms budget. The build was green either way.
+    //
+    // Re-measured again 2026-08-14 while adding `fetchPreviousPerformances`: dropping
+    // only that method's `@concurrent` stalled the main actor **213 ms** in
+    // `previousPerformanceLookupKeepsMainActorResponsive` (same seed, an eight-exercise
+    // lookup). Green build either way, again.
     @concurrent func fetchTrainingSnapshot(referenceDate: Date) async throws -> HistorySnapshot {
         let store = await storeTask.value
         return try await store.fetchTrainingSnapshot(referenceDate: referenceDate)
@@ -79,6 +84,13 @@ struct SwiftDataHistorySnapshotProvider: HistorySnapshotProviding {
             startDate: startDate,
             recentSessionLimit: recentSessionLimit
         )
+    }
+
+    @concurrent func fetchPreviousPerformances(
+        _ lookup: PreviousPerformanceLookup
+    ) async throws -> [UUID: PreviousExercisePerformance] {
+        let store = await storeTask.value
+        return try await store.fetchPreviousPerformances(lookup)
     }
 }
 
@@ -214,6 +226,40 @@ actor SwiftDataHistorySnapshotStore {
         }
         try Task.checkCancellation()
         return snapshot
+    }
+
+    /// Every exercise of one workout resolved against its predecessor (audit P1.6).
+    ///
+    /// The replaced `ExerciseProgressService.compareWithPrevious` ran on the main actor
+    /// and issued one unbounded, unprefetched fetch **per exercise**; this issues one
+    /// prefetch-correct fetch for the whole workout, on this executor.
+    ///
+    /// Only the previous side lives here. The workout being compared stays with the
+    /// caller as a main-context `@Model` — an `@ModelActor` cannot accept one, and
+    /// re-fetching it by id would bet on cross-context visibility of changes the main
+    /// context may not have saved (see `PreviousPerformanceLookup`). That bet would fail
+    /// silently, as an empty comparison rather than an error.
+    func fetchPreviousPerformances(
+        _ lookup: PreviousPerformanceLookup
+    ) async throws -> [UUID: PreviousExercisePerformance] {
+        try Task.checkCancellation()
+        let sessions = try measured("HistoryFetchSessions") {
+            try fetchCompletedSessions()
+        }
+        let exercises = try measured("HistoryFetchExercises") {
+            try modelContext.fetch(FetchDescriptor<Exercise>())
+        }
+
+        try Task.checkCancellation()
+        let resolved = measured("HistoryResolvePreviousPerformances") {
+            PreviousPerformanceResolver.resolve(
+                lookup: lookup,
+                sessions: sessions,
+                liveExercises: exercises
+            )
+        }
+        try Task.checkCancellation()
+        return resolved
     }
 
     /// The prefetch-correct completed-session fetch, shared with the AI-coach fact actor.

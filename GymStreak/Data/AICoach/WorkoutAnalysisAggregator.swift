@@ -33,11 +33,17 @@ struct WorkoutAnalysisAggregator {
     ///   - session: The workout session to analyse.
     ///   - locale: The user's current locale.
     ///   - modelContext: The SwiftData context to query history from.
+    ///   - comparisons: Per-exercise vs-previous comparisons, already resolved by
+    ///     `ExerciseProgressProviding`. Passed in rather than built here (audit P1.6):
+    ///     the caller is `async` and the scan behind them belongs on the model actor,
+    ///     whereas this type is `@MainActor`. It also removes the ad-hoc service
+    ///     construction that bypassed `AppDependencies`.
     /// - Returns: A `WorkoutAnalysisInput` or `nil` if insufficient data.
     func buildInput(
         session: WorkoutSession,
         locale: Locale,
-        modelContext: ModelContext
+        modelContext: ModelContext,
+        comparisons: [ExerciseComparisonResult]
     ) -> WorkoutAnalysisInput? {
         // Gate: minimum completed sets
         let completedSets = session.workoutExercisesList
@@ -56,16 +62,17 @@ struct WorkoutAnalysisAggregator {
             modelContext: modelContext
         ) else { return nil }
 
-        // Build per-exercise comparison data
-        let progressService = ExerciseProgressService(modelContext: modelContext)
-        let comparisonResults = progressService.compareWithPrevious(workout: session)
+        // Build per-exercise comparison data. Keyed by the exercise each comparison
+        // describes rather than by position, which mispairs as soon as the two orderings
+        // differ and drops the tail when the counts do.
+        let comparisonsByExercise = Dictionary(
+            comparisons.map { ($0.workoutExerciseId, $0) },
+            uniquingKeysWith: { first, _ in first }
+        )
         let sortedExercises = session.workoutExercisesList.sorted(by: { $0.order < $1.order })
 
-        var exerciseInputs: [WorkoutAnalysisExerciseInput] = []
-        for (index, exercise) in sortedExercises.enumerated() {
-            let comparison = index < comparisonResults.count ? comparisonResults[index] : nil
-            let input = buildExerciseInput(exercise: exercise, comparison: comparison)
-            exerciseInputs.append(input)
+        let exerciseInputs = sortedExercises.map { exercise in
+            buildExerciseInput(exercise: exercise, comparison: comparisonsByExercise[exercise.id])
         }
 
         // Gate: at least one exercise must have previous data to compare —

@@ -20,8 +20,14 @@ import SwiftData
 /// actor that is the ~600 ms hang in `docs/history-performance.md`.
 enum CompletedSessionFetch {
 
-    /// Every completed session, newest first, with `workoutExercises` and their `sets`
-    /// already registered in `context`.
+    /// Every completed session, newest first, with `workoutExercises`, their `sets` and
+    /// the owning `routine` already registered in `context`.
+    ///
+    /// `\.routine` joined the session prefetch for audit P1.6, whose resolver compares
+    /// `session.routine?.id` per candidate session. It is a to-one hop onto a small table
+    /// that `fetchTrainingSnapshot` fetches in full anyway, so it is cheaper than adding
+    /// a second variant of this fetch — and leaving it out would have reintroduced a
+    /// per-session fault, the thing this helper exists to prevent.
     static func withFullGraph(in context: ModelContext) throws -> [WorkoutSession] {
         // Fetching the child entity directly is the only way to prefetch the second to-many hop:
         // `WorkoutSession.workoutExercises` is a collection, so a key path cannot continue to
@@ -40,7 +46,7 @@ enum CompletedSessionFetch {
             },
             sortBy: [SortDescriptor(\.startTime, order: .reverse)]
         )
-        sessionDescriptor.relationshipKeyPathsForPrefetching = [\.workoutExercises]
+        sessionDescriptor.relationshipKeyPathsForPrefetching = [\.workoutExercises, \.routine]
         return try context.fetch(sessionDescriptor)
     }
 
