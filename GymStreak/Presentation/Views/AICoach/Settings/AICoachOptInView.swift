@@ -23,36 +23,61 @@ struct AICoachOptInView: View {
     // MARK: - Body
 
     var body: some View {
-        ZStack {
-            Color.black.ignoresSafeArea()
-
+        // The hero + headline + three feature rows outgrow a compact screen at
+        // longer localisations (German). In the previous fixed VStack that
+        // overflow was resolved by compressing the Text views — the feature
+        // descriptions silently collapsed to one truncated line. The content
+        // scrolls instead, with the CTAs pinned via safeAreaInset.
+        ScrollView {
             VStack(spacing: 0) {
-                Spacer().frame(height: 14)
+                Spacer().frame(height: 4)
 
                 // MARK: Hero sparkle
                 heroMark
 
-                Spacer().frame(height: 24)
+                Spacer().frame(height: 18)
 
                 // MARK: Headline group
                 headlineGroup
 
-                Spacer().frame(height: 28)
+                Spacer().frame(height: 20)
 
                 // MARK: Feature rows
                 featureRows
-
-                Spacer()
-
-                // MARK: CTAs
-                ctaStack
-
-                // MARK: Privacy footer
-                privacyFooter
-                    .padding(.top, 8)
-                    .padding(.bottom, 30)
             }
             .padding(.horizontal, 24)
+            .padding(.bottom, 12)
+        }
+        .scrollBounceBehavior(.basedOnSize)
+        .scrollIndicators(.hidden)
+        .background(Color.black.ignoresSafeArea())
+        .safeAreaInset(edge: .bottom, spacing: 0) { bottomBar }
+    }
+
+    // MARK: - Bottom Bar
+
+    /// CTAs + privacy footer, pinned below the scrolling content.
+    private var bottomBar: some View {
+        VStack(spacing: 0) {
+            ctaStack
+
+            privacyFooter
+                .padding(.top, 8)
+        }
+        .padding(.horizontal, 24)
+        .padding(.top, 10)
+        .padding(.bottom, 14)
+        .background(Color.black.ignoresSafeArea(edges: .bottom))
+        // Fade drawn above the bar so content that scrolls underneath it
+        // dissolves instead of being cut off mid-line.
+        .background(alignment: .top) {
+            LinearGradient(
+                colors: [Color.black.opacity(0), Color.black],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+            .frame(height: 32)
+            .offset(y: -32)
         }
     }
 
@@ -70,10 +95,10 @@ struct AICoachOptInView: View {
                 startRadius: 0,
                 endRadius: 80
             )
-            .frame(width: 160, height: 160)
+            .frame(width: 132, height: 132)
             .blur(radius: 12)
 
-            AISparkleView(size: 88, glow: true)
+            AISparkleView(size: 74, glow: true)
         }
         .accessibilityHidden(true)
     }
@@ -96,6 +121,7 @@ struct AICoachOptInView: View {
                 .multilineTextAlignment(.center)
                 .lineSpacing(2)
                 .kerning(-0.5)
+                .fixedSize(horizontal: false, vertical: true)
 
             Spacer().frame(height: 14)
 
@@ -104,6 +130,7 @@ struct AICoachOptInView: View {
                 .foregroundStyle(Color.white.opacity(0.6))
                 .multilineTextAlignment(.center)
                 .lineSpacing(3)
+                .fixedSize(horizontal: false, vertical: true)
         }
     }
 
@@ -220,16 +247,18 @@ private struct FeatureRow: View {
                     .font(.system(size: 15, weight: .semibold))
                     .foregroundStyle(Color.white)
                     .kerning(-0.2)
+                    .fixedSize(horizontal: false, vertical: true)
 
                 Text(description)
                     .font(.system(size: 13))
                     .foregroundStyle(Color.white.opacity(0.55))
                     .lineSpacing(2.5)
+                    .fixedSize(horizontal: false, vertical: true)
             }
 
             Spacer()
         }
-        .padding(.vertical, 14)
+        .padding(.vertical, 11)
         .padding(.horizontal, 4)
         .accessibilityElement(children: .combine)
     }
