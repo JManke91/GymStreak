@@ -25,6 +25,17 @@
 "settings.icloud.status.syncing" = "Lädt …";
 "settings.icloud.status.waiting" = "Wartet";
 "settings.icloud.status.off" = "Aus";
+"settings.section.support" = "Support";
+"settings.section.support.footer" = "Bewertungen helfen anderen, Gym Streak zu entdecken.";
+"settings.support.rate.row.title" = "App bewerten";
+"settings.support.rate.row.subtitle" = "Öffnet den App Store";
+"settings.support.contact.row.title" = "Support kontaktieren";
+"settings.support.contact.row.subtitle" = "Öffnet deine Mail-App";
+"settings.support.contact.mail.subject" = "Gym Streak Supportanfrage";
+"settings.support.contact.mail.intro" = "Mitgesendet, um die Fehlersuche zu erleichtern:";
+"settings.support.contact.fallback.title" = "Keine Mail-App";
+"settings.support.contact.fallback.message" = "Auf diesem Gerät ist keine Mail-App eingerichtet. Du erreichst den Support unter %@.";
+"settings.support.contact.fallback.copy" = "Adresse kopieren";
 
 // MARK: - Routines View
 "routines.title" = "Routinen";

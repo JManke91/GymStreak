@@ -1,9 +1,9 @@
 # Settings Tab
 
 Dedicated fourth tab ("Einstellungen" / "Settings") that collects app settings in an
-iOS-style grouped-inset list. It ships with a **Data** section (live iCloud sync status)
-and an **AI Coach** section; every further setting reuses the section/row blueprint
-documented here.
+iOS-style grouped-inset list. It ships with a **Data** section (live iCloud sync status),
+an **AI Coach** section and a **Support** section; every further setting reuses the
+section/row blueprint documented here.
 
 **Targets:** iOS only. The watch app has no settings surface and is untouched by this feature.
 
@@ -18,6 +18,9 @@ documented here.
   safe — state-tinted icon tile, "Last: \<timestamp\>" subtitle and a status dot (or spinner)
   with a short label. Footnote: "Your training data syncs automatically via iCloud …".
 - **AI Coach** section: its row pushes the **existing** `AICoachSettingsView` unchanged.
+- **Support** section: "App bewerten" / "Rate app" deep-links to the App Store's
+  write-a-review composer, and "Support kontaktieren" / "Contact support" hands a prefilled
+  support mail to the user's default mail app (§5).
 - The gear button that used to sit in the History header was removed together with its
   navigation destination — the AI Coach settings are now reachable from the Settings tab and
   from the coach chat toolbar (`CoachChatView`), not from History.
@@ -29,15 +32,22 @@ documented here.
 | `Presentation/Views/Settings/SettingsRootView.swift` | Tab root: `NavigationStack` + `ScrollView`, screen title, sections, `SettingsDestination` enum and its `navigationDestination` |
 | `Presentation/Views/Settings/Components/SettingsSectionView.swift` | Grouped section: header, card, footnote |
 | `Presentation/Views/Settings/Components/SettingsRowView.swift` | Shared row shape |
+| `Presentation/Views/Settings/Components/SettingsActionRowView.swift` | Tappable row: the row shape wrapped in a plain-styled `Button` |
+| `Presentation/Views/Settings/SupportLinks.swift` | App Store Apple ID, the write-a-review URL, the support mail address |
+| `Domain/Services/SupportMailComposer.swift` | Builds the support `mailto:` URL from a `DeviceDiagnostics` value |
+| `Domain/Interfaces/DeviceDiagnosticsProviding.swift` | `DeviceDiagnostics` + the provider protocol |
+| `Data/System/SystemDeviceDiagnosticsProvider.swift` | Reads bundle/OS/hardware metadata (`Bundle`, `ProcessInfo`, `sysctlbyname`) |
 | `Presentation/Views/Settings/Components/ICloudSyncRowView.swift` | iCloud row: subscribes to the status stream, maps state → icon/tint/label |
 | `Domain/Interfaces/CloudSyncStatusProviding.swift` | `CloudSyncState`, `CloudSyncStatus`, the provider protocol |
 | `Data/Sync/CloudKitSyncStatusMonitor.swift` | The status source (CloudKit account status + mirroring events + network path) |
-| `App/AppDependencies.swift` | Owns the monitor, exposes it as `cloudSyncStatus: CloudSyncStatusProviding` |
+| `App/AppDependencies.swift` | Owns the monitor (`cloudSyncStatus: CloudSyncStatusProviding`) and the diagnostics provider (`deviceDiagnostics: any DeviceDiagnosticsProviding`) |
+| `GymStreakTests/SupportMailComposerTests.swift` | URL-builder contract: recipient, subject, body layout, percent-encoding |
+| `GymStreakTests/SystemDeviceDiagnosticsProviderTests.swift` | Metadata gateway: bundle fields, OS version shape, and the simulator model-identifier trap |
 | `App/GymStreakApp.swift` | `Store` struct: container **plus** whether it is CloudKit-backed |
 | `App/ContentView.swift` | Tab wiring (`SettingsRootView` + `tab.settings` label) |
 | `Presentation/Views/History/Components/HistoryHeaderView.swift` | Gear button removed |
 | `Presentation/Views/History/HistoryView.swift` | `AICoachSettingsDestination` + its `navigationDestination` removed |
-| `GymStreakUITests/SettingsTabUITests.swift` | Regression test: tab → row → AI Coach settings pushes |
+| `GymStreakUITests/SettingsTabUITests.swift` | Regression tests: AI Coach push, iCloud "off" state, Support row presence, support-mail fallback alert |
 
 Architecture: the screen itself is stateless `Presentation/` work (`AICoachSettingsView` owns
 its own state). The only dependency is the sync-status source, which lives in `Data/` behind
@@ -71,6 +81,22 @@ call sites to pass every argument.
 
 Decorative overlays (the card border, the row separator) are marked
 `.allowsHitTesting(false)` so they never compete with the row's tap target.
+
+**Two row wrappers.** `SettingsRowView` is only the shape; what makes it interactive is
+decided by its wrapper, and there are exactly two:
+
+- **Navigation row** — `NavigationLink(value: SettingsDestination.…) { SettingsRowView(…) }`
+  with `.buttonStyle(.plain)`. Used by the AI Coach row.
+- **Action row** — `SettingsActionRowView(…, action:)`, which wraps the same shape in a
+  `Button` with `.buttonStyle(.plain)`. It mirrors `SettingsRowView`'s parameters
+  (`icon`, `iconTint`, `title`, `subtitle`, `showsChevron`, `isLast`) and defaults
+  `showsChevron` to `true`, so an action row is visually indistinguishable from a
+  navigation row. It exists so that rows which *do* something rather than push a
+  destination don't each re-implement the button and press handling. Used by the Support
+  section.
+
+A row that is neither (the iCloud status row) is placed in the card directly, with no
+wrapper, no chevron and no tap target.
 
 ## 4. iCloud sync status
 
@@ -199,19 +225,132 @@ with its type, end state and error.
   the Domain type carries only the aggregate `lastSuccessfulSync` this ticket needs; ticket 03
   widens it when it actually shows the two rows.
 
-## 5. Adding another setting
+## 5. Support section
+
+Two action rows: "App bewerten" / "Rate app" (`star.bubble`, §5.1) and "Support kontaktieren" /
+"Contact support" (`envelope`, §5.2), both in the app tint. Footnote: "Bewertungen helfen
+anderen, Gym Streak zu entdecken." Strings: `settings.section.support*`,
+`settings.support.rate.row.*`, `settings.support.contact.*`.
+
+### 5.1 Rate app
+
+**The link.** `https://apps.apple.com/app/id<appStoreAppID>?action=write-review`, opened with
+the SwiftUI `@Environment(\.openURL)` action. The Apple ID (`6756426105`, from App Store
+Connect → App Information → General) lives in exactly one place,
+`SupportLinks.appStoreAppID`, and the composed URL in `SupportLinks.writeReview` — nothing
+interpolates the ID at a call site. Because it is a universal link, on device it opens the
+App Store app straight on the review sheet instead of bouncing through Safari.
+
+**Why not the in-app rating prompt** (research, 2026-08-14 — decided, do not re-litigate).
+The obvious ask is an in-app rating "without leaving the app", and that is not permissible:
+`requestReview()` / `SKStoreReviewController.requestReview(in:)` is the only in-app review
+prompt, and Apple's documentation states outright that *"Because this method may not present
+an alert, don't call `requestReview()` or `requestReview(in:)` in response to a button tap or
+other user action."* It is additionally capped at three prompts per 365 days, never fires
+again for a user who already rated on that device, and exposes no API to detect whether the
+alert appeared — a settings button wired to it would silently do nothing for a large share of
+users. Apple's own documented alternative for exactly this case is a persistent settings link
+to the App Store product page, which is what this row is. **No `requestReview()` /
+`SKStoreReviewController` call exists anywhere in the app**, and none should be added here.
+
+Also deliberately absent: any gating of the row on a rating threshold or a pre-qualifying
+"do you like the app?" step. Filtering who gets shown the review link is an App Review
+rejection risk and is explicitly discouraged by Apple.
+
+Sources:
+[`requestReview()`](https://developer.apple.com/documentation/storekit/requestreviewaction),
+[`SKStoreReviewController`](https://developer.apple.com/documentation/storekit/skstorereviewcontroller),
+[Human Interface Guidelines — Ratings and reviews](https://developer.apple.com/design/human-interface-guidelines/ratings-and-reviews).
+
+**Verification limit:** the App Store app does not exist on the iOS simulator, so the deep
+link itself can only be confirmed on a device. The row's presence, label, icon and tap target
+are simulator-verifiable.
+
+### 5.2 Contact support
+
+Tapping the row opens the user's **default** mail app on a new message to
+`SupportLinks.supportEmail` (`julian.manke@googlemail.com`) with the subject prefilled and a
+short diagnostic block already in the body, so a bug report does not need a follow-up asking
+"which iOS version, which device". **Nothing is transmitted by the app** — the user reads the
+message and sends it themselves.
+
+**Handoff, not an in-app compose sheet.** The URL is a `mailto:` opened with the SwiftUI
+`@Environment(\.openURL)` action. `MFMailComposeViewController` was considered and **rejected**
+(2026-08-14, decided — do not re-litigate): it needs a `UIViewControllerRepresentable` wrapper
+plus a `nonisolated` delegate with a `@MainActor` hop (extra Swift 6 concurrency surface for no
+user-visible gain), needs a `canSendMail()` guard, always uses Apple Mail regardless of which
+mail app the user actually set as default, and does not exist on watchOS. The `mailto:` route is
+pure SwiftUI, respects Gmail/Outlook/Spark/… as the default client, and stays reusable if a
+support row is ever wanted on the watch.
+
+**The URL is built with `URLComponents` + `URLQueryItem`, never string interpolation**
+(`SupportMailComposer.mailtoURL(recipient:subject:intro:diagnostics:)`). RFC 6068 requires the
+`subject` and `body` values to be percent-encoded and the body contains newlines, so a
+hand-built string would corrupt or truncate it. Verified behaviour of Foundation's `queryItems`
+setter: it escapes newlines (`%0A`), `&`, `=` and `#` inside values, and leaves `+`, `?` and `/`
+raw — nothing in the block contains those, so no extra encoding pass is needed.
+`SupportMailComposerTests` pins this by decoding the finished URL back through
+`URLComponents(url:)`, which is what a mail client does.
+
+**Body layout** — two blank lines (so the user's cursor starts above the block), the localized
+intro line, then one `Label: value` per field. The field labels stay English and untranslated:
+they are triage keys, not prose. Only the intro line is localized, which is what makes the
+payload transparent before sending.
+
+```
+<blank>
+<blank>
+Sent along to help with troubleshooting:
+App: 1.4.0 (128)
+iOS: 26.5
+Device: iPhone17,1
+Locale: de_DE
+```
+
+**The four fields and the API each one needs** (`SystemDeviceDiagnosticsProvider`):
+
+| Field | Source | Note |
+| --- | --- | --- |
+| App version + build | `Bundle.main` `CFBundleShortVersionString` / `CFBundleVersion` | falls back to `unknown`, never an empty line |
+| iOS version | `ProcessInfo.processInfo.operatingSystemVersion` | the structured type, preferred over the free-form `UIDevice.current.systemVersion`; patch omitted when `0` |
+| Device model | `sysctlbyname("hw.machine")` → `iPhone17,1` | **`UIDevice.current.model` is unusable** — it returns only the generic `"iPhone"`. On the **simulator** `hw.machine` reports the *host Mac's* architecture (`arm64`), so `ProcessInfo.processInfo.environment["SIMULATOR_MODEL_IDENTIFIER"]` is read first — it carries the simulated device's real identifier |
+| Locale | `Locale.current.identifier` | e.g. `de_DE` |
+
+**Never auto-include** (privacy exclusion list — this is a hard boundary, not a default):
+HealthKit data of any kind, workout/routine/exercise content, the user's name or mail address,
+iCloud or Sign-in-with-Apple identifiers, device UDID or serial, location. None of it helps
+triage, and shipping health data out of the app outside its stated purpose is an App Review
+guideline 5.1.1 risk. `SupportMailComposerTests.bodyCarriesNoUserData` asserts the body is
+exactly the intro plus four lines, so an added field fails a test rather than shipping quietly.
+Because the payload is user-initiated, user-visible and never leaves the device under app
+control, it triggers **no App Store privacy-label disclosure**.
+
+**Fallback when no mail client exists.** `openURL`'s completion reports whether *any* app
+accepted the URL — `accepted == true` only means a mail client opened, never that a mail was
+sent. On `false` (no mail app configured: the default state on a fresh simulator, and real for
+users who deleted Mail) the row raises an alert that names the support address and offers
+"Adresse kopieren" / "Copy address" (`UIPasteboard.general.string`), so the row is never a dead
+tap. The same alert covers the — practically impossible — case of the composer returning `nil`.
+
+**Verification split:** the simulator ships no mail client, so it is the natural place to prove
+the *fallback* (`SettingsTabUITests.testContactSupportRowFallsBackToCopyableAddress`); the
+*primary* path needs a device run, done and confirmed on 2026-08-14 (§8).
+
+## 6. Adding another setting
 
 1. Add the strings to `en.lproj`/`de.lproj` (`settings.*`).
-2. Add a `case` to `SettingsDestination` in `SettingsRootView.swift` and handle it in the
-   `navigationDestination` switch.
-3. Add a `SettingsSectionView { … }` (or another `SettingsRowView` inside an existing
-   section) with a `NavigationLink(value:)` wrapping the row and `.buttonStyle(.plain)`.
-   Set `isLast: true` on the final row of each card.
+2. Add a `SettingsSectionView { … }`, or another row inside an existing section, and set
+   `isLast: true` on the final row of each card.
+3. Pick the wrapper (§3): a row that **pushes a screen** additionally needs a `case` on
+   `SettingsDestination` in `SettingsRootView.swift`, handled in the `navigationDestination`
+   switch, and is wrapped in a `NavigationLink(value:)` + `.buttonStyle(.plain)`. A row that
+   **runs code** uses `SettingsActionRowView(…, action:)` instead and needs no destination
+   case.
 
 Nothing else in the root screen has to change — layout, background and scroll behaviour are
 section-agnostic.
 
-## 6. Behaviour notes
+## 7. Behaviour notes
 
 - The root deliberately uses `.toolbar(.hidden, for: .navigationBar)`: pushed destinations
   (like `AICoachSettingsView`) keep their own navigation chrome and back button.
@@ -223,7 +362,7 @@ section-agnostic.
 - A trailing `Color.clear.frame(height: 100)` keeps the last section clear of the floating
   tab bar and coach accessory.
 
-## 7. Verification record
+## 8. Verification record
 
 - `xcodebuild … -scheme GymStreak build` → succeeded.
 - `SettingsTabUITests.testSettingsRowPushesAICoachSettings` → passed (tab appears, row pushes
@@ -235,6 +374,53 @@ section-agnostic.
   right without its gear, coach bar visible on the settings tab. Screenshot of the Data
   section in the `off` state confirms the design (red tile with warning triangle, red dot,
   "Aus", footnote below the card).
+
+**Support section (2026-08-14):**
+
+- `xcodebuild … -scheme GymStreak -destination 'iPhone 17' build` → succeeded.
+- Both pre-existing `SettingsTabUITests` cases re-run after the section was added → passed,
+  so the new section did not disturb the existing rows.
+- `SettingsTabUITests.testSupportSectionShowsRateAppRow` → passed: the row exists, is
+  hittable and carries the localized title.
+- ⏳ **Open, device-only:** tapping "App bewerten" landing on the App Store review composer.
+  The App Store app is absent from the simulator, so `openURL` has nothing to hand the
+  universal link to there.
+- Architecture review (`architecture-reviewer` on the diff): **PASS**, no critical or warning
+  findings — the change stays inside `Presentation/`, crosses no layer and touches no
+  isolation or rendering rule.
+
+**Contact support row (2026-08-14):**
+
+- `xcodebuild … -scheme GymStreak -destination 'iPhone 17' build` → succeeded.
+- `SupportMailComposerTests` (5 tests) → passed: recipient, subject, the exact body layout,
+  `%0A`-encoded newlines that survive decoding, an `&` in subject/intro that does not terminate
+  the value, and the "no extra field" privacy assertion.
+- `SystemDeviceDiagnosticsProviderTests` (4 tests) → passed in the app host: the bundle fields
+  are real, the OS version's major component matches `ProcessInfo`, and `deviceModel` resolves
+  to the *simulated* device rather than `arm64` — the automated guard for the `hw.machine` trap.
+- Full iOS unit suite (`-scheme GymStreakTests`) → passed, so the new `AppDependencies` member
+  disturbed nothing. The watch suite was not run: no watch code is touched.
+- All four `SettingsTabUITests` → passed, including the new
+  `testContactSupportRowFallsBackToCopyableAddress`: on the simulator no app accepts the
+  `mailto:` URL, the alert appears carrying `julian.manke@googlemail.com`, and its copy button
+  is hittable.
+- ✅ **Device run (2026-08-14) — the part the simulator cannot cover:** tapping the row opens the
+  default mail app on the prefilled message, and the four diagnostic values are correct for real
+  hardware (`hw.machine` returns the real model identifier; the simulator's environment-variable
+  branch is not taken there).
+- Architecture review (`architecture-reviewer` on the diff): **PASS WITH WARNINGS**, no critical
+  findings. Confirmed clean: dependency direction (`Sendable` value type + gateway protocol in
+  `Domain/Interfaces/`, a Foundation-only pure builder in `Domain/Services/`, the system reads
+  isolated in `Data/System/`, the concrete type wired once in `AppDependencies` with Presentation
+  seeing only `any DeviceDiagnosticsProviding`), concurrency surface, rendering rules
+  (`deviceDiagnostics.current` runs in the tap handler, never in `body`) and EN/DE parity.
+  **The one warning, acknowledged and deliberately not acted on:** `contactSupport()` in
+  `SettingsRootView` performs ViewModel-shaped orchestration (read provider → call the Domain
+  builder → drive the fallback state). It is tolerable because the computation is fully delegated
+  to a pure Domain service, no service is constructed in the view, and the settings root is a
+  deliberately stateless screen (§4.4). **Trigger for revisiting:** when a third support action
+  lands, extract an `@Observable @MainActor SettingsSupportViewModel` (`makeSupportMailURL()` +
+  `isShowingMailFallback`) rather than adding a fourth branch to the view.
 
 **Device run (2026-08-12), iPhone signed into iCloud — the part the simulator cannot cover:**
 
@@ -275,12 +461,42 @@ simulator window did not register on this screen (they do register mid-screen an
 bar), which first looked like a broken `NavigationLink`. It is a driver limitation, not an app
 bug — confirm interactions of this kind with an XCUITest instead of synthetic clicks.
 
-## 8. Deliberate omissions
+## 9. Known follow-ups (found, deliberately not applied)
+
+Carried over from the implementation tickets so they are not lost with them. None is a defect;
+each is a threshold to act on rather than work to schedule now.
+
+- **`SupportLinks` lives under `Presentation/Views/Settings/`** although it holds constants, not
+  a view. Flagged twice by the architecture reviewer (tickets 01 and 02) as advisory only — it
+  is presentation config for this feature area. Move it out of `Views/` if that folder's
+  view-only shape starts to matter.
+- **`SettingsActionRowView`'s parameter list is a hand-maintained mirror of `SettingsRowView`'s**
+  and will drift if the latter gains a parameter. Acceptable at two mirrored rows; revisit if
+  `SettingsRowView` grows.
+- **`contactSupport()` in `SettingsRootView` does ViewModel-shaped orchestration.** Acknowledged
+  in §8; extract an `@Observable @MainActor SettingsSupportViewModel` when a third support
+  action lands.
+- **The "App bewerten" deep link was never confirmed on a device** — only the row itself. The
+  App Store app is absent from the simulator, and the feature was closed out (2026-08-14) with
+  this gap known.
+
+## 10. Deliberate omissions
 
 - The design reference's **iCloud detail screen** (`ICloudDetail`: status hero, "Letzte
   Aktivität" upload/download rows, account row, "Jetzt synchronisieren") is **not** implemented
-  — it belongs to ticket 03. The row on the root therefore carries **no chevron and no tap
-  target** yet; the design shows both because it pushes that screen.
+  and **not planned** — dropped as a product decision on 2026-08-14 (its ticket 03 was closed
+  as won't-implement). The status the root row already shows was judged sufficient; a whole
+  screen behind it would mostly restate it. The row on the root therefore deliberately carries
+  **no chevron and no tap target**; the design shows both only because it pushes that screen.
+  To restore it, the sync-status source in `Data/` already exposes everything the hero and the
+  upload/download rows would need (state, last successful export date, last successful import
+  date, account status) — the work is the screen itself plus a `SettingsDestination` case.
+  Three parts of the design are **not** restorable and should not be attempted:
+  - a **device list** — CloudKit exposes no such API;
+  - the **iCloud account email** — user identity discovery was removed in iOS 17, so the
+    account row can only report signed in / not signed in / restricted;
+  - a **"Jetzt synchronisieren" button** — `NSPersistentCloudKitContainer` offers no public
+    manual sync trigger, and a button that only appears to act is worse than none.
 - The row does not show *what* is syncing (the design's "2 neue Trainings werden übertragen"):
   `NSPersistentCloudKitContainer.Event` carries no item count.
 - The AI Coach row shows a static subtitle; it does not reflect whether the coach is currently

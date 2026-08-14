@@ -84,6 +84,11 @@ final class AppDependencies: ObservableObject {
     /// Presentation only ever sees `CloudSyncStatusProviding`.
     let cloudSyncStatus: CloudSyncStatusProviding
 
+    /// Bundle/OS/hardware metadata prefilled into the Settings support mail.
+    /// Stateless, so it is cheap to hold for the app's lifetime; Presentation
+    /// only ever sees `DeviceDiagnosticsProviding`.
+    let deviceDiagnostics: any DeviceDiagnosticsProviding
+
     /// - Parameter isCloudKitStoreEnabled: whether the app is running on the
     ///   CloudKit-backed store. `false` when `GymStreakApp` had to fall back to a
     ///   local-only store (or in ephemeral UI-test runs), which the sync status
@@ -110,6 +115,7 @@ final class AppDependencies: ObservableObject {
             isCloudKitStoreEnabled: isCloudKitStoreEnabled,
             containerIdentifier: GymStreakSchema.cloudKitContainerIdentifier
         )
+        self.deviceDiagnostics = SystemDeviceDiagnosticsProvider()
         let aiCoachPreferences = AICoachPreferences.shared
         let aiCoachAvailability = AICoachAvailability.shared
         self.aiCoachPreferences = aiCoachPreferences

@@ -42,6 +42,67 @@ final class SettingsTabUITests: XCTestCase {
         )
     }
 
+    /// The Support section's "Rate app" row. Only its presence and tap target are
+    /// asserted — the App Store app does not exist on the simulator, so where the
+    /// deep link lands can only be verified on a device.
+    func testSupportSectionShowsRateAppRow() throws {
+        let app = XCUIApplication()
+        app.launchArguments = ["-UI_TESTING", "1", "-DISABLE_NOTIFICATIONS", "1"]
+        app.launch()
+
+        let maybeLater = app.buttons[isGerman ? "Vielleicht später" : "Maybe later"]
+        if maybeLater.waitForExistence(timeout: 8) {
+            maybeLater.tap()
+        }
+
+        let settingsTab = app.tabBars.buttons[isGerman ? "Einstellungen" : "Settings"]
+        XCTAssertTrue(settingsTab.waitForExistence(timeout: 10), "Settings tab missing")
+        settingsTab.tap()
+
+        let row = app.buttons["settings-row-rate-app"]
+        XCTAssertTrue(row.waitForExistence(timeout: 5), "Rate app row missing")
+        XCTAssertTrue(row.isHittable, "Rate app row is not tappable")
+
+        let title = isGerman ? "App bewerten" : "Rate app"
+        XCTAssertTrue(row.label.contains(title), "Unexpected row label: \(row.label)")
+    }
+
+    /// The "Contact support" row's fallback path. The simulator ships no mail
+    /// client, so `openURL` reports the `mailto:` URL as unaccepted — exactly the
+    /// state the alert exists for. The primary path (a mail app opening on the
+    /// prefilled message) can only be verified on a device.
+    func testContactSupportRowFallsBackToCopyableAddress() throws {
+        let app = XCUIApplication()
+        app.launchArguments = ["-UI_TESTING", "1", "-DISABLE_NOTIFICATIONS", "1"]
+        app.launch()
+
+        let maybeLater = app.buttons[isGerman ? "Vielleicht später" : "Maybe later"]
+        if maybeLater.waitForExistence(timeout: 8) {
+            maybeLater.tap()
+        }
+
+        let settingsTab = app.tabBars.buttons[isGerman ? "Einstellungen" : "Settings"]
+        XCTAssertTrue(settingsTab.waitForExistence(timeout: 10), "Settings tab missing")
+        settingsTab.tap()
+
+        let row = app.buttons["settings-row-contact-support"]
+        XCTAssertTrue(row.waitForExistence(timeout: 5), "Contact support row missing")
+        let title = isGerman ? "Support kontaktieren" : "Contact support"
+        XCTAssertTrue(row.label.contains(title), "Unexpected row label: \(row.label)")
+        row.tap()
+
+        let alert = app.alerts[isGerman ? "Keine Mail-App" : "No mail app"]
+        XCTAssertTrue(
+            alert.waitForExistence(timeout: 5),
+            "No mail client on the simulator should surface the fallback alert"
+        )
+        XCTAssertTrue(
+            alert.staticTexts.element(boundBy: 1).label.contains("julian.manke@googlemail.com"),
+            "Fallback alert should show the support address"
+        )
+        alert.buttons[isGerman ? "Adresse kopieren" : "Copy address"].tap()
+    }
+
     /// The simulator has no iCloud account (and the CloudKit store may fall back to
     /// local-only), so the Data section must report the "off" state rather than a
     /// stale "up to date".
