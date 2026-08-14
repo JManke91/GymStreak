@@ -49,7 +49,11 @@ deviation is recorded under "Deviations from the mock".
 `ScrollView` + `LazyVStack` on the pure-black canvas, with:
 
 - `.safeAreaInset(edge: .top)` → `WorkoutProgressHeader`
+- `.safeAreaInset(edge: .bottom)` → the progressive-overload prompt (when one is pending)
 - `.safeAreaInset(edge: .bottom)` → the rest bar (when resting) + `WorkoutFooterActions`
+  — applied **after** the prompt's inset on purpose: with chained insets the last one
+  applied sits closest to the screen edge, so the footer keeps the edge and the prompt
+  rides above the rest bar
 - a `ZStack` sibling for the large `RestTimerView` overlay
 
 Preserved wholesale from before the redesign: the cancel / finish / workout-complete
@@ -110,7 +114,11 @@ left; otherwise the card stays put.
 Card contents: avatar (muscle colour + equipment glyph, `ExerciseAvatarView`),
 name, a meta row (`done/total sets · rep goal`), the swap affordance, a "⋯" menu
 (remove exercise), the swapped-from indicator, a **Pause chip on its own row**,
-the progressive-overload banner, the set rows, and a dashed "Add set".
+the set rows, and a dashed "Add set". The progressive-overload banner is **not** in
+the card — it was, and that made it unreachable (the set completion that qualifies an
+exercise also collapses its card), so it moved to the screen-level
+`WorkoutOverloadPromptBar` above the rest bar; see
+[rep-range-progressive-overload.md](./rep-range-progressive-overload.md).
 
 The **Pause chip** (`ParameterChipButton` + `RestTimeInlineEditor`, both reused from
 the routines redesign) replaces the old always-visible `RestTimerConfigView` block.
@@ -208,7 +216,7 @@ migrating `WorkoutViewModel` to `@Observable`.
 |------|---------|-----|
 | Bare `arrow.triangle.2.circlepath` icon button for swap | **Labeled pill** ("Swap" + icon) | `alternative-exercises.md` records that a bare glyph was tested and read as refresh/sync. The documented finding beats the mock. |
 | No superset concept | `SupersetWorkoutGroupView` kept, wrapping collapsed rows / the open card | Supersets ship; the mock's data model simply has none. |
-| No delete-exercise, add-exercise, body weight, progressive overload | All kept — delete in the card's "⋯" menu, add-exercise as a dashed button below the list, body weight as a card at the top (only when the workout has a counterweight-assistance exercise), overload banner inside the open card | The mock is a smaller app. |
+| No delete-exercise, add-exercise, body weight, progressive overload | All kept — delete in the card's "⋯" menu, add-exercise as a dashed button below the list, body weight as a card at the top (only when the workout has a counterweight-assistance exercise), the overload prompt as a screen-level bar above the rest bar | The mock is a smaller app. |
 | Rest time shown as static text | Tappable Pause chip → `RestTimeInlineEditor` | Per-exercise rest config is a shipped feature. |
 | Planned values not shown | Shown in the keypad sheet | The old expanded editor showed them; they are the reference the logged value is judged against. |
 | "Mark as warm-up set" in the set menu | Not implemented | Schema change — see "Scope decisions". |
@@ -219,13 +227,14 @@ migrating `WorkoutViewModel` to `@Observable`.
 | Component | File | Role |
 |-----------|------|------|
 | `ActiveWorkoutView` | `Presentation/Views/Workout/ActiveWorkoutView.swift` | Screen shell, `WorkoutScreenData`, all sheets/alerts, superset group, body-weight card |
-| `WorkoutExerciseDisplay` / `WorkoutSetDisplay` / `WorkoutSetRowItem` / `WorkoutValueFormatting` | `.../ActiveWorkoutDisplay.swift` | Value structs + static formatting the rows render from |
+| `WorkoutExerciseDisplay` / `WorkoutSetDisplay` / `WorkoutSetRowItem` / `WorkoutValueFormatting` / `OverloadPromptPolicy` | `.../ActiveWorkoutDisplay.swift` | Value structs + static formatting the rows render from, and the pure rule deciding which exercise owns the overload prompt |
 | `WorkoutProgressHeader` | `.../WorkoutProgressHeader.swift` | Routine, elapsed time, per-set segment bar |
 | `WorkoutExerciseCardView` | `.../WorkoutExerciseCardView.swift` | The open exercise |
 | `WorkoutExerciseCollapsedRow` | `.../WorkoutExerciseCollapsedRow.swift` | Every other exercise |
 | `WorkoutSetRowView` | `.../WorkoutSetRowView.swift` | Completion zone / value chips / set menu |
 | `SetValueKeypadSheet` | `.../SetValueKeypadSheet.swift` | Value editor |
 | `WorkoutRestBar`, `WorkoutFooterActions` | `.../WorkoutRestBar.swift` | Rest bar and the cancel/finish footer |
+| `WorkoutOverloadPromptBar` | `.../WorkoutOverloadPromptBar.swift` | The screen-level progressive-overload prompt (suggestion or applied confirmation), named by exercise |
 
 **Deleted:** `CompactRestTimer.swift`, and the `TimerHeader`, `ExerciseCard`,
 `WorkoutSetRow` and `ActionBar` types that lived inside the old

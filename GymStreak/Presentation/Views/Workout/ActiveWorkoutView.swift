@@ -31,8 +31,8 @@ struct ActiveWorkoutView: View {
     /// The exercise the user opened by hand. `nil` means "follow the workout" —
     /// the card tracks whichever exercise holds the next incomplete set.
     @State private var openedExerciseId: UUID?
-    /// Per-exercise progressive-overload banner state, kept on the screen because
-    /// only one card is mounted at a time and the state must survive switching.
+    /// Per-exercise progressive-overload prompt state. Dismissal is one-way for
+    /// the session; the completion screen is the independent second chance.
     @State private var dismissedOverloadBanners: Set<UUID> = []
     @State private var appliedOverloads: [UUID: AppliedOverload] = [:]
 
@@ -65,6 +65,12 @@ struct ActiveWorkoutView: View {
                     openedExerciseId: openedExerciseId,
                     equipmentByExerciseId: equipmentByExerciseId
                 )
+                let prompt = OverloadPromptPolicy.prompt(
+                    orderedExerciseIds: data.orderedExerciseIds,
+                    candidates: data.overloadCandidates,
+                    dismissed: dismissedOverloadBanners,
+                    applied: appliedOverloads
+                )
                 content(session: session, data: data)
                     .safeAreaInset(edge: .top, spacing: 0) {
                         WorkoutProgressHeader(
@@ -74,6 +80,20 @@ struct ActiveWorkoutView: View {
                             totalSets: data.totalSets,
                             segments: data.segments
                         )
+                    }
+                    // Two chained bottom insets: the one applied LAST sits
+                    // closest to the screen edge, so the footer keeps the edge
+                    // and the overload prompt rides above it. Both modifiers
+                    // stay mounted unconditionally and their content does the
+                    // appearing — conditionally adding the modifier itself is
+                    // what makes safe-area insets animate badly (FB19768797).
+                    .safeAreaInset(edge: .bottom, spacing: 0) {
+                        overloadPrompt(prompt, data: data)
+                            // Bound to the prompt itself rather than left to the
+                            // ambient transaction: what makes an exercise
+                            // qualify is a view-model publish, which is not
+                            // inside the completion's `withAnimation`.
+                            .animation(DesignSystem.Animation.spring, value: prompt)
                     }
                     .safeAreaInset(edge: .bottom, spacing: 0) {
                         footer(data: data)
@@ -284,7 +304,6 @@ struct ActiveWorkoutView: View {
         WorkoutExerciseCardView(
             display: display,
             supersetBadge: data.supersetBadge(for: exercise),
-            banner: { overloadBanner(for: exercise, display: display) },
             setRows: { setRows(for: exercise, data: data) },
             onSwap: { exerciseToSwap = exercise },
             onSwapLockedInfo: { showingSwapLockedInfo = true },
@@ -331,62 +350,6 @@ struct ActiveWorkoutView: View {
         }
     }
 
-    /// The rep-goal nudge and its confirmation, unchanged in behaviour — only
-    /// its owner moved from the (now generic) card to the screen.
-    @ViewBuilder
-    private func overloadBanner(for exercise: WorkoutExercise, display: WorkoutExerciseDisplay) -> some View {
-        if let applied = appliedOverloads[exercise.id] {
-            HStack(spacing: 8) {
-                Image(systemName: "checkmark.circle.fill")
-                    .font(.caption)
-                    .foregroundStyle(DesignSystem.Colors.success)
-
-                Text(applied.weight.map {
-                    "rep_range.routine_updated".localized(String(format: "%.1f", $0), applied.reps)
-                } ?? "rep_range.overload_card.next_workout_no_weight".localized(applied.setCount, applied.reps))
-                    .font(.caption.weight(.medium))
-                    .foregroundStyle(.primary)
-                    .lineLimit(2)
-                    .minimumScaleFactor(0.75)
-
-                Spacer(minLength: 4)
-
-                Button {
-                    withAnimation(DesignSystem.Animation.spring) {
-                        appliedOverloads[exercise.id] = nil
-                    }
-                } label: {
-                    Image(systemName: "xmark.circle.fill")
-                        .font(.body)
-                        .symbolRenderingMode(.hierarchical)
-                        .foregroundStyle(.secondary)
-                }
-                .buttonStyle(.borderless)
-                .accessibilityLabel("action.dismiss".localized)
-            }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
-            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-            .overlay(
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .strokeBorder(DesignSystem.Colors.success.opacity(0.3), lineWidth: 1)
-            )
-            .transition(.move(edge: .top).combined(with: .opacity))
-        } else if display.allCompletedSetsAtUpperLimit && !dismissedOverloadBanners.contains(exercise.id) {
-            ProgressiveOverloadBanner(
-                targetRepMax: display.targetRepMax ?? 0,
-                isAssistance: display.isAssistance,
-                onIncrease: { overloadSheetExercise = exercise },
-                onDismiss: {
-                    withAnimation(DesignSystem.Animation.spring) {
-                        _ = dismissedOverloadBanners.insert(exercise.id)
-                    }
-                }
-            )
-            .transition(.move(edge: .top).combined(with: .opacity))
-        }
-    }
-
     private var addExerciseButton: some View {
         Button {
             HapticManager.shared.medium()
@@ -412,6 +375,40 @@ struct ActiveWorkoutView: View {
         .padding(.top, 6)
         .accessibilityLabel("accessibility.add_exercise".localized)
         .accessibilityHint("accessibility.add_exercise.hint".localized)
+    }
+
+    // MARK: - Overload prompt
+
+    /// The rep-goal nudge and its confirmation. It lives here, above the rest
+    /// bar, rather than in the exercise card: the set completion that qualifies
+    /// an exercise is the same event that collapses its card, so a card-owned
+    /// banner was only ever on screen for the length of one animation.
+    @ViewBuilder
+    private func overloadPrompt(_ prompt: OverloadPrompt?, data: WorkoutScreenData) -> some View {
+        if let prompt {
+            WorkoutOverloadPromptBar(
+                prompt: prompt,
+                onIncrease: { overloadSheetExercise = data.exercise(with: prompt.exerciseId) },
+                onDismiss: {
+                    withAnimation(DesignSystem.Animation.spring) {
+                        // Dismissing the confirmation must not bring the
+                        // suggestion back, so both states clear the same way:
+                        // the dismissal is one-way for the session.
+                        _ = dismissedOverloadBanners.insert(prompt.exerciseId)
+                        appliedOverloads[prompt.exerciseId] = nil
+                    }
+                }
+            )
+            .padding(.horizontal, 12)
+            .padding(.top, 8)
+            .padding(.bottom, 8)
+            .frame(maxWidth: .infinity)
+            // Opaque, like the footer below it: an inset's content is drawn
+            // over the scroll view, and a translucent one let the list show
+            // through — the reason the footer got a solid plate too.
+            .background(DesignSystem.Colors.background)
+            .transition(.move(edge: .bottom).combined(with: .opacity))
+        }
     }
 
     // MARK: - Footer
@@ -506,6 +503,7 @@ struct ActiveWorkoutView: View {
             // differ from it whenever the user went off-plan. Nil means the
             // scheme is nonuniform (pyramid/drop), so no single weight is true.
             appliedOverloads[exercise.id] = AppliedOverload(
+                exerciseName: exercise.exerciseName,
                 weight: viewModel.appliedOverloadWeight(for: exercise),
                 reps: minReps,
                 setCount: setCount
@@ -534,14 +532,6 @@ struct ActiveWorkoutView: View {
     }
 
     // MARK: - Screen state
-
-    private struct AppliedOverload {
-        /// Nil for a nonuniform (pyramid/drop) scheme — applied, but with no
-        /// single weight that is true of every set.
-        let weight: Double?
-        let reps: Int
-        let setCount: Int
-    }
 
     /// `fileprivate` so `ActiveWorkoutAlerts` below can bind to it.
     fileprivate struct PendingSetDeletion: Identifiable {
@@ -574,6 +564,14 @@ struct ActiveWorkoutView: View {
         let totalSets: Int
         let hasAssistanceExercise: Bool
         let activeExerciseId: UUID?
+        /// Workout order — the order the overload prompt surfaces candidates in,
+        /// and the list an exercise leaves when it is removed or swapped away.
+        let orderedExerciseIds: [UUID]
+        /// The exercises qualifying for a weight increase right now. Rebuilt
+        /// every pass, so a set un-completed or reps lowered below the goal
+        /// invalidate a standing prompt on its own.
+        let overloadCandidates: [UUID: OverloadPromptCandidate]
+        private let orderedExercises: [WorkoutExercise]
         private let supersetLetters: [UUID: String]
 
         init(
@@ -585,6 +583,8 @@ struct ActiveWorkoutView: View {
             let ordered = session.workoutExercisesList.sorted { $0.order < $1.order }
             groups = session.exercisesGroupedBySupersets
             supersetLetters = SupersetLabelProvider.labels(for: ordered)
+            orderedExercises = ordered
+            orderedExerciseIds = ordered.map(\.id)
 
             // The card follows the workout unless the user opened one by hand —
             // and a hand-opened exercise that has since been removed falls back
@@ -598,6 +598,7 @@ struct ActiveWorkoutView: View {
             activeExerciseId = active
 
             var displays: [UUID: WorkoutExerciseDisplay] = [:]
+            var candidates: [UUID: OverloadPromptCandidate] = [:]
             var setItems: [UUID: [WorkoutSetRowItem]] = [:]
             var segments: [[Bool]] = []
             var completed = 0
@@ -646,6 +647,22 @@ struct ActiveWorkoutView: View {
                         && !viewModel.swapTargets(for: exercise).isEmpty
                 }
 
+                // Computed from the already-materialised `sets` rather than the
+                // model's own property, which would walk `setsList` again.
+                let qualifiesForOverload = ProgressiveOverloadService.workoutQualifiesForIncrease(
+                    sets: sets.map { .init(reps: $0.actualReps, isCompleted: $0.isCompleted) },
+                    targetRepMax: exercise.targetRepMax,
+                    overloadAlreadyApplied: exercise.progressiveOverloadApplied
+                )
+                if qualifiesForOverload {
+                    candidates[exercise.id] = OverloadPromptCandidate(
+                        exerciseId: exercise.id,
+                        exerciseName: exercise.exerciseName,
+                        targetRepMax: exercise.targetRepMax ?? 0,
+                        isAssistance: isAssistance
+                    )
+                }
+
                 displays[exercise.id] = WorkoutExerciseDisplay(
                     id: exercise.id,
                     name: exercise.exerciseName,
@@ -661,14 +678,7 @@ struct ActiveWorkoutView: View {
                     swappedFromName: exercise.wasSwapped ? exercise.plannedExerciseName : nil,
                     canSwap: canSwap,
                     isSwapLocked: isSwapLocked,
-                    isInSuperset: exercise.isInSuperset,
-                    // Computed from the already-materialised `sets` rather than
-                    // the model's own property, which would walk `setsList` again.
-                    allCompletedSetsAtUpperLimit: ProgressiveOverloadService.workoutQualifiesForIncrease(
-                        sets: sets.map { .init(reps: $0.actualReps, isCompleted: $0.isCompleted) },
-                        targetRepMax: exercise.targetRepMax,
-                        overloadAlreadyApplied: exercise.progressiveOverloadApplied
-                    )
+                    isInSuperset: exercise.isInSuperset
                 )
 
                 segments.append(sets.map(\.isCompleted))
@@ -677,11 +687,18 @@ struct ActiveWorkoutView: View {
             }
 
             self.displays = displays
+            overloadCandidates = candidates
             self.setItems = setItems
             self.segments = segments
             completedSets = completed
             totalSets = total
             hasAssistanceExercise = hasAssistance
+        }
+
+        /// Resolves the model behind an id a callback carries. Called from
+        /// actions only — never from a `body`.
+        func exercise(with id: UUID) -> WorkoutExercise? {
+            orderedExercises.first { $0.id == id }
         }
 
         func supersetLetter(for exercise: WorkoutExercise) -> String? {

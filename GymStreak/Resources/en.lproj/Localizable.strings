@@ -354,6 +354,8 @@
 "rep_range.custom" = "Custom";
 "rep_range.no_goal" = "No goal";
 "rep_range.all_sets_maxed" = "All sets at %d reps! Increase weight?";
+// The mid-workout prompt lives at screen level, detached from the exercise card, so it names its exercise.
+"rep_range.prompt.for_exercise" = "For %@";
 "rep_range.increase" = "Increase";
 "rep_range.increase_weight" = "Increase Weight";
 "rep_range.current_state" = "Current: %@kg × %d reps (%d sets)";

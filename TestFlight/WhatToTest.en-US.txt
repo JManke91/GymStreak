@@ -15,3 +15,4 @@
 - Settings: a new "Support" section with a "Rate app" row that takes you straight to the App Store review page for Gym Streak.
 - Settings: a new "Contact support" row opens your mail app on a prepared message to support, with app version, iOS version, device model and language already filled in. No workout or health data is ever included, and nothing is sent until you send it yourself.
 - AI Coach intro screen: the feature descriptions were cut off mid-sentence on the welcome screen (most visible in German). The text is now shown in full, and the screen scrolls if it does not fit.
+- During a workout, the "increase weight?" suggestion no longer disappears the moment you tick off the last set. It now sits above the rest bar, names the exercise it belongs to, and stays there until you increase the weight or dismiss it.

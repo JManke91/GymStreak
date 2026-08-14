@@ -10,11 +10,9 @@ import SwiftUI
 
 /// The exercise you are on: header, its parameters, and the set rows.
 /// The card owns no persistence — every action is handed back to the screen.
-struct WorkoutExerciseCardView<SetRows: View, Banner: View>: View {
+struct WorkoutExerciseCardView<SetRows: View>: View {
     let display: WorkoutExerciseDisplay
     let supersetBadge: (position: Int, total: Int, color: Color)?
-    /// Progressive-overload banner / applied confirmation, injected by the screen.
-    let banner: Banner
     let setRows: SetRows
     let onSwap: () -> Void
     let onSwapLockedInfo: () -> Void
@@ -28,7 +26,6 @@ struct WorkoutExerciseCardView<SetRows: View, Banner: View>: View {
     init(
         display: WorkoutExerciseDisplay,
         supersetBadge: (position: Int, total: Int, color: Color)?,
-        @ViewBuilder banner: () -> Banner,
         @ViewBuilder setRows: () -> SetRows,
         onSwap: @escaping () -> Void,
         onSwapLockedInfo: @escaping () -> Void,
@@ -38,7 +35,6 @@ struct WorkoutExerciseCardView<SetRows: View, Banner: View>: View {
     ) {
         self.display = display
         self.supersetBadge = supersetBadge
-        self.banner = banner()
         self.setRows = setRows()
         self.onSwap = onSwap
         self.onSwapLockedInfo = onSwapLockedInfo
@@ -63,8 +59,6 @@ struct WorkoutExerciseCardView<SetRows: View, Banner: View>: View {
                 }
                 .transition(.opacity.combined(with: .move(edge: .top)))
             }
-
-            banner
 
             VStack(spacing: 8) {
                 setRows

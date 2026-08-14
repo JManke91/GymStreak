@@ -10,7 +10,7 @@ Adds a **rep range goal** (e.g., 8-12 reps) to exercises within routines. When a
 
 1. **Configure**: Either **while adding the exercise** — the "Wiederholungsziel" section of `ConfigureExerciseSetsView` (added with the configure-screen redesign, 2026-08-09; the goal travels through `onExerciseConfigured` → `RoutinesViewModel.addConfiguredExercise` / `PendingRoutineExercise` → `createRoutine`, and through `WorkoutViewModel.addExerciseToWorkout` for exercises added mid-workout) — or afterwards in the routine editor via the "Ziel" chip on any exercise card
 2. **Train**: During workouts, rep progress badges show how close each set is to the upper limit
-3. **Achieve**: When all sets reach the upper limit, a gold banner appears suggesting a weight increase
+3. **Achieve**: When all sets reach the upper limit, a gold banner appears suggesting a weight increase. On iPhone it is a **screen-level bar above the rest bar** that names its exercise and stays until acted on — see "Mid-workout prompt placement (iOS)" below
 4. **Progress**: Tap "Increase" to open the weight increase sheet, select an increment (1.25/2.5/5 kg), and apply
 5. **Reset**: All sets update to the new weight with reps reset to the lower limit
 6. **Second chance (completion screen)**: If the mid-workout banner was skipped or dismissed, the post-workout completion screen (`SaveWorkoutView`) shows an actionable "Ready for More Weight" card per qualifying exercise — same increment sheet, same apply path — with an Undo while the screen is still open
@@ -91,7 +91,9 @@ The model computed properties (`RoutineExercise.allSetsAtUpperLimit`, `WorkoutEx
 | Component | File | Description |
 |-----------|------|-------------|
 | `RepRangeInlineEditor` | Views/Routines/RoutineParameterEditors.swift | Chip-triggered inline editor: 4–6 / 8–12 / 12–15 preset segments + an "Eigen" mode with min/max `CompactStepper`s + "Kein Ziel". Replaced `RepRangeConfigView` (deleted) in redesign v2, 2026-07-28 |
-| `ProgressiveOverloadBanner` | Views/Components/ProgressiveOverloadBanner.swift | Gold/orange banner shown when all sets reach upper limit |
+| `ProgressiveOverloadBanner` | Views/Components/ProgressiveOverloadBanner.swift | Gold/orange banner shown when all sets reach upper limit. Stacks its message above its two controls at accessibility Dynamic Type sizes (side by side the label hits its `minimumScaleFactor` floor and still truncates) |
+| `WorkoutOverloadPromptBar` | Views/Workout/WorkoutOverloadPromptBar.swift | The active workout's screen-level prompt: the exercise name (`rep_range.prompt.for_exercise`) above either `ProgressiveOverloadBanner` or the applied confirmation |
+| `OverloadPromptPolicy` | Views/Workout/ActiveWorkoutDisplay.swift | Pure resolver deciding which exercise, if any, owns that prompt (`OverloadPromptCandidate` / `AppliedOverload` / `OverloadPrompt`). Tested by `GymStreakTests/OverloadPromptPolicyTests.swift` |
 | `WeightIncreaseSheet` | Views/Components/WeightIncreaseSheet.swift | Bottom sheet for selecting weight increment. Reads `ProgressiveOverloadIncrement.options` (+0.5/+1.25/+2.5/+5 kg) — the same list the watch picker uses. Value-based with two inits: `init(routineExercise:)` shows template values (routine editor), `init(workoutExercise:)` shows performed actual values (active workout + completion screen — correct for swapped exercises, whose weights never live on the primary template sets) |
 | `ProgressiveOverloadCard` | Views/Components/ProgressiveOverloadCard.swift | Achievement card (from the Claude Design "Progressive Overload" handoff, Surface 1): orange actionable state with per-set recap + full-width increase CTA, and a quiet confirmed state with the new weight and Undo. Reuses `ExerciseAvatarView` (muscle color + equipment glyph — the app's avatar idiom, deliberately not the mock's initials). Set recap hides at accessibility Dynamic Type sizes; title + action always stay visible. Shared by the completion screen and history: history-only params (`appliedOverride`/`appliedWeight` force the confirmed state and supply its weight because the immutable history can't be read for it; `isTemplateUnavailable` swaps the CTA for the muted no-op note) default to the completion-screen behavior |
 
@@ -102,9 +104,59 @@ The model computed properties (`RoutineExercise.allSetsAtUpperLimit`, `WorkoutEx
 | `RoutineDetailView` | "Ziel" chip → `RepRangeInlineEditor` (always visible, works on a collapsed card) + `ProgressiveOverloadBanner` at the top of the expanded body |
 | `ExerciseHeaderView` | Subtitle shows "3 sets \| 8-12 reps" when configured |
 | `RoutineSetStepperRow` | Rep value colored by range position (at/above max → warning orange, in range → tint, below → muted). The v1 "X/max" badge was dropped in redesign v2 — the row now carries two steppers and had no room for it |
-| `ActiveWorkoutView` | Rep progress badges on sets + ProgressiveOverloadBanner |
+| `ActiveWorkoutView` | Rep progress badges on sets + the screen-level `WorkoutOverloadPromptBar`, resolved by `OverloadPromptPolicy` and rendered in its own bottom `safeAreaInset` above the footer (**not** inside the exercise card — see "Mid-workout prompt placement (iOS)") |
 | `SaveWorkoutView` | "Ready for More Weight" section: one `ProgressiveOverloadCard` per exercise in `WorkoutViewModel.overloadSuggestionExercises` (replaced the passive trophy section 2026-07), section header shows a pending-suggestion counter (orange; turns green once one was applied). Applying opens `WeightIncreaseSheet(workoutExercise:)` and calls `WorkoutViewModel.applyProgressiveOverload`; exercises overloaded mid-workout appear in their confirmed state. No persistable template target (slot or alternative entry) → no CTA |
 | `WorkoutDetailView` | "Ready for More Weight" section (after the stat grid): one `ProgressiveOverloadCard` per exercise whose completed sets maxed the rep range — re-surfacing the achievement the history redesign dropped. Applying opens `WeightIncreaseSheet(workoutExercise:)` and calls `WorkoutViewModel.applyProgressiveOverloadFromHistory`, which bumps the **live routine template only** — the historical `WorkoutExercise`/`WorkoutSet` are never rewritten. Applied state (and the shown new weight) is tracked in view-local `@State` since the immutable history can't hold it; no Undo. Exercises overloaded during that workout show their confirmed state directly. If the source routine/exercise was edited/deleted, the card keeps the achievement but replaces the CTA with a muted "routine no longer available" note (`rep_range.overload_card.routine_unavailable`) |
+
+### Mid-workout prompt placement (iOS)
+
+**Root cause fixed (2026-08-14):** on iPhone the mid-workout half of this feature was
+dead UI. The banner was rendered by `ActiveWorkoutView` *inside the expanded exercise
+card*, and the exact event that qualifies an exercise — its last set completed at the
+rep maximum — is also the event that collapses that card: `toggleCompletion` clears
+`openedExerciseId`, `findNextIncompleteSet()` hands the open card to the next exercise
+and `onChange(of: data.activeExerciseId)` scrolls the viewport there. The banner
+mounted and unmounted inside one animation, so it flashed and was gone. Only the
+completion screen's second chance still worked.
+
+The prompt is now a **screen-level surface**:
+
+- `OverloadPromptPolicy.prompt(orderedExerciseIds:candidates:dismissed:applied:)`
+  (`Views/Workout/ActiveWorkoutDisplay.swift`) decides which exercise owns it —
+  the earliest still-pending one in workout order, **never more than one at a time**.
+  `WorkoutScreenData` builds the candidate map in the pass that already computes
+  `allCompletedSetsAtUpperLimit`, so eligibility is re-derived every body pass:
+  un-completing a set, lowering reps, swapping or removing the exercise invalidate a
+  standing prompt for free. Removing an exercise also drops a standing *confirmation*,
+  because the policy only considers ids still in workout order.
+- `WorkoutOverloadPromptBar` renders it, naming the exercise
+  (`rep_range.prompt.for_exercise`) — detached from the card the prompt has no
+  context otherwise. Both states moved: the suggestion **and** the applied
+  confirmation chip. Applying from a screen-level banner while the source card is
+  collapsed leaves the confirmation nowhere to live inside the card.
+- It sits in **its own bottom `safeAreaInset`, applied before the footer's**: with
+  chained insets the one applied last sits closest to the screen edge, so the footer
+  keeps the edge and the prompt rides above the rest bar without covering it. Both
+  modifiers stay mounted unconditionally and their *content* appears/disappears —
+  conditionally adding the modifier itself is what makes safe-area insets animate
+  badly on iOS 26 (Apple Developer Forums thread 800065, FB19768797). The full-screen
+  rest-timer overlay covers it like the rest of the screen; no extra gating needed.
+  Its plate is opaque (`DesignSystem.Colors.background`) for the same reason the footer's
+  is: an inset's content is drawn *over* the scroll view, and a translucent one lets the
+  list read through it.
+- The suggestion carries `.id(exerciseId)` so `ProgressiveOverloadBanner`'s `onAppear`
+  success haptic fires **once per prompt** while the container itself stays mounted
+  across hand-offs.
+- Dismissal stays one-way for the session, for both states: dismissing the
+  confirmation records the dismissal too, so the suggestion can never come back.
+  `overloadSuggestionExercises` (completion screen) does not read this state and
+  remains the independent second chance.
+
+**Rejected alternatives (do not re-try):** pinning `openedExerciseId` to the finished
+exercise so its card stays expanded — it fights the redesigned screen's "one card
+follows the workout" navigation and `findNextIncompleteSet()`'s ownership of superset
+round order (A1 → B1 → A2 → B2); and a modal sheet like the Watch's — too interruptive
+on iPhone, where the screen carries a persistent banner comfortably.
 
 ### Watch Integration
 

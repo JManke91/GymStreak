@@ -354,6 +354,8 @@
 "rep_range.custom" = "Eigen";
 "rep_range.no_goal" = "Kein Ziel";
 "rep_range.all_sets_maxed" = "%d Wdh. erreicht! Gewicht erhöhen?";
+// Der Hinweis während des Workouts steht auf Bildschirmebene, losgelöst von der Übungskarte, und nennt deshalb die Übung.
+"rep_range.prompt.for_exercise" = "Für %@";
 "rep_range.increase" = "Erhöhen";
 "rep_range.increase_weight" = "Gewicht erhöhen";
 "rep_range.current_state" = "Aktuell: %@kg × %d Wdh. (%d Sätze)";

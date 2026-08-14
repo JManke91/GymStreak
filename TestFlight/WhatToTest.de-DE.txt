@@ -15,3 +15,4 @@
 - Einstellungen: Neuer Bereich „Support“ mit der Zeile „App bewerten“, die direkt zur Bewertungsseite von Gym Streak im App Store führt.
 - Einstellungen: Neue Zeile „Support kontaktieren“ – sie öffnet deine Mail-App mit einer vorbereiteten Nachricht an den Support, inklusive App-Version, iOS-Version, Gerätemodell und Sprache. Trainings- und Gesundheitsdaten werden nie mitgeschickt, und die Mail wird erst versendet, wenn du sie selbst abschickst.
 - AI-Coach-Startbildschirm: Die Beschreibungstexte waren mitten im Satz abgeschnitten (besonders auf Deutsch). Sie werden jetzt vollständig angezeigt, und der Bildschirm lässt sich scrollen, falls der Platz nicht reicht.
+- Im Training verschwindet der Hinweis „Gewicht erhöhen?“ nicht mehr in dem Moment, in dem du den letzten Satz abhakst. Er steht jetzt über der Pausenleiste, nennt die zugehörige Übung und bleibt, bis du das Gewicht erhöhst oder ihn schließt.

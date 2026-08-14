@@ -39,15 +39,97 @@ struct WorkoutExerciseDisplay: Identifiable, Equatable {
     /// Alternatives exist but a logged set locked the swap — shows the lock affordance.
     let isSwapLocked: Bool
     let isInSuperset: Bool
-    /// Every logged set hit the rep goal's upper limit — the progressive-overload
-    /// nudge. Resolved here because the model's version walks `setsList`.
-    let allCompletedSetsAtUpperLimit: Bool
 
     var isComplete: Bool { totalSets > 0 && completedSets == totalSets }
 
     var repRangeText: String? {
         guard let min = targetRepMin, let max = targetRepMax else { return nil }
         return min == max ? "\(min)" : "\(min)–\(max)"
+    }
+}
+
+// MARK: - Progressive-overload prompt
+
+/// One exercise that currently qualifies for a mid-workout weight increase.
+struct OverloadPromptCandidate: Equatable {
+    let exerciseId: UUID
+    let exerciseName: String
+    let targetRepMax: Int
+    let isAssistance: Bool
+}
+
+/// What an applied increase moved the routine template to — the contents of the
+/// confirmation that replaces the suggestion.
+struct AppliedOverload: Equatable {
+    let exerciseName: String
+    /// Nil for a nonuniform (pyramid/drop) scheme — applied, but with no single
+    /// weight that is true of every set.
+    let weight: Double?
+    let reps: Int
+    let setCount: Int
+}
+
+/// The one progressive-overload prompt the active-workout screen shows.
+enum OverloadPrompt: Equatable {
+    case suggestion(OverloadPromptCandidate)
+    case applied(exerciseId: UUID, AppliedOverload)
+
+    var exerciseId: UUID {
+        switch self {
+        case .suggestion(let candidate): candidate.exerciseId
+        case .applied(let id, _): id
+        }
+    }
+
+    var exerciseName: String {
+        switch self {
+        case .suggestion(let candidate): candidate.exerciseName
+        case .applied(_, let applied): applied.exerciseName
+        }
+    }
+}
+
+/// Which exercise, if any, owns the screen-level overload prompt.
+///
+/// Pure so the *reachability* of the prompt is testable: it used to be decided
+/// inside the expanded exercise card's view tree, where the very event that
+/// qualified an exercise (its last set completed) also collapsed the card that
+/// carried the banner — the banner flashed for one animation and was gone. The
+/// rule now lives here and the screen renders whatever it returns.
+///
+/// `WatchSummaryOverloadPolicy` is the same arrangement on the Watch.
+enum OverloadPromptPolicy {
+
+    /// - Parameters:
+    ///   - orderedExerciseIds: this workout's exercises in workout order. Also
+    ///     the invalidation list: a removed exercise takes its prompt with it.
+    ///   - candidates: the exercises qualifying *right now*, keyed by id.
+    ///     Derived fresh every pass, so un-completing a set or lowering reps
+    ///     below the goal drops the prompt on its own.
+    ///   - dismissed: one-way for the session — dismissing is a decision, not a
+    ///     deferral.
+    ///   - applied: confirmations still on screen, keyed by exercise id.
+    /// - Returns: the earliest still-pending prompt in workout order, or nil.
+    ///   Never more than one: banners must not stack over a running workout.
+    static func prompt(
+        orderedExerciseIds: [UUID],
+        candidates: [UUID: OverloadPromptCandidate],
+        dismissed: Set<UUID>,
+        applied: [UUID: AppliedOverload]
+    ) -> OverloadPrompt? {
+        for id in orderedExerciseIds {
+            // An applied exercise still qualifies — `overloadAlreadyApplied`
+            // short-circuits `workoutQualifiesForIncrease` to `true` — so the
+            // `applied` check must come first, or the suggestion would come
+            // back alongside its own confirmation.
+            if let confirmation = applied[id] {
+                return .applied(exerciseId: id, confirmation)
+            }
+            if let candidate = candidates[id], !dismissed.contains(id) {
+                return .suggestion(candidate)
+            }
+        }
+        return nil
     }
 }
 
