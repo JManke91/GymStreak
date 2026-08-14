@@ -11,7 +11,12 @@ import XCTest
 final class HistoryResponsivenessUITests: XCTestCase {
     private var app: XCUIApplication!
 
-    override func setUpWithError() throws {
+    // `setUp() async throws` rather than `setUpWithError() throws`: the throwing
+    // synchronous variant overrides a `nonisolated` XCTest method, and an override
+    // must match its superclass's isolation — which strips this class's `@MainActor`
+    // and makes every `XCUIApplication` touch a cross-actor reference. The `async`
+    // variant inherits the class isolation correctly.
+    override func setUp() async throws {
         continueAfterFailure = false
         app = XCUIApplication()
         app.launchArguments = [
@@ -27,7 +32,7 @@ final class HistoryResponsivenessUITests: XCTestCase {
         dismissCoachOptIn()
     }
 
-    override func tearDownWithError() throws {
+    override func tearDown() async throws {
         app = nil
     }
 

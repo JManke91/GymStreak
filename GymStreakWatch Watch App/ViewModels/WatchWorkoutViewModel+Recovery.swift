@@ -84,11 +84,15 @@ extension WatchWorkoutViewModel {
         // allocates a second transaction for one already applied. The surface
         // itself comes back as `.none` — a suggestion is re-derived from live
         // state if the target still qualifies, and a confirmation is transient.
+        // Both are Optional on the wire so a checkpoint predating them decodes
+        // rather than throwing (which would discard the whole live workout).
+        // Absent and empty mean the same thing here.
         appliedOverloadSlots = Dictionary(
-            uniqueKeysWithValues: checkpoint.appliedOverloads.map { ($0.slotID, $0.transactionID) }
+            uniqueKeysWithValues: (checkpoint.appliedOverloads ?? [])
+                .map { ($0.slotID, $0.transactionID) }
         )
         pendingOverloadTransactionIDs = appliedOverloadSlots
-        deferredOverloadSlotIDs = Set(checkpoint.deferredOverloadSlotIDs)
+        deferredOverloadSlotIDs = Set(checkpoint.deferredOverloadSlotIDs ?? [])
         overloadPresentation = .none
         overloadErrorMessage = nil
         isWorkoutActive = true

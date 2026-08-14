@@ -113,7 +113,18 @@ result through `AsyncStream`; there is no polling and no timer anywhere in the f
    to be queued. When the path comes back, the state recomputes immediately, and CloudKit's
    own retry produces a fresh successful export event ⇒ back to `.upToDate` without a restart.
 
-Precedence: `off` → `syncing` → `waiting` → `upToDate`.
+Precedence: `off` → **no network** → `syncing` → queued changes → `upToDate`.
+
+**Why "no network" outranks `syncing`, and not the other way round** (device-measured bug,
+2026-08-12). CloudKit opens a mirroring event and then simply *never ends it* while the device
+is offline — there is no failure callback, the event just stays in flight for the whole outage.
+The original order tested `eventsInFlight` first, so that stalled event masked the offline
+state and pinned the row at "Lädt …" until connectivity returned: the log read
+`state=waiting hasNetwork=false inFlight=0` for one instant and then
+`state=syncing hasNetwork=false inFlight=1` for the rest of the outage. A transfer that cannot
+reach the network is queued, not progressing, so `!hasNetwork` is now checked before
+`eventsInFlight`. Note this is a genuinely different case from a *failed* export, which is what
+`hasQueuedChanges` covers — offline produces no event failure at all.
 
 **The local-only fallback counts as `.off`.** `GymStreakApp` silently falls back to a
 `cloudKitDatabase: .none` store when the CloudKit container cannot be built (and UI-test runs
@@ -142,8 +153,10 @@ row on every launch.
   documents it for SwiftData: a DTS reply in
   [forum thread 756775](https://developer.apple.com/forums/thread/756775) points at
   `.NSPersistentStoreRemoteChange` instead, because SwiftData does not hand out its
-  `NSPersistentCloudKitContainer` instance. We rely on the notification and accept that it is
-  an implementation detail — see the fallback below.
+  `NSPersistentCloudKitContainer` instance. **Confirmed on a real device signed into iCloud
+  (2026-08-12): the events do arrive for this app's SwiftData container**, and the row tracks
+  them. We rely on the notification and accept that it is an undocumented implementation
+  detail — see the fallback below, which is now a contingency rather than a live option.
 - **Observation must stay closure-based.** `Notification` and
   `NSPersistentCloudKitContainer.Event` are not `Sendable`; the `notifications(named:)` async
   sequence would carry a non-`Sendable` `Notification` across an `await`. `addObserver(forName:
@@ -159,7 +172,9 @@ row on every launch.
   [`CKAccountStatus`](https://developer.apple.com/documentation/cloudkit/ckaccountstatus),
   [`ModelConfiguration.CloudKitDatabase`](https://developer.apple.com/documentation/swiftdata/modelconfiguration/cloudkitdatabase-swift.struct).
 
-**Fallback if the events ever stop arriving** (the risk flagged in ticket 02): swap signal 2
+**Fallback if the events ever stop arriving** (the risk flagged in ticket 02, now retired —
+the events were seen on device, so this is only insurance against a future OS regression):
+swap signal 2
 for `.NSPersistentStoreRemoteChange` — the notification DTS endorses, already observed by
 `CloudSyncObserver` — and keep signals 1 and 3. That still supports all four states
 (`.syncing` = a debounce window after a remote change), but loses the `succeeded`/`error`
@@ -221,14 +236,39 @@ section-agnostic.
   section in the `off` state confirms the design (red tile with warning triangle, red dot,
   "Aus", footnote below the card).
 
-**Still open — needs a device (cannot be done from the simulator):** confirming that the
-SwiftData-created container really emits `eventChangedNotification`, and with it the
-`syncing` / `waiting` / `upToDate` states. Run a Debug build on a device signed into iCloud,
-watch the console for `☁️ [CloudKitSyncStatusMonitor]` lines while saving a workout, then
-toggle Airplane Mode (row must go amber "Wartet") and back (row must return to green
-"Aktuell" without relaunching). If no such line ever appears, take the
-`.NSPersistentStoreRemoteChange` fallback in §4.3 — and tell ticket 03 before it builds the
-"Letzte Aktivität" section on the upload/download split.
+**Device run (2026-08-12), iPhone signed into iCloud — the part the simulator cannot cover:**
+
+- ✅ The SwiftData-created container **does** emit `eventChangedNotification`; the row reports
+  the real sync status, and the `syncing` → `upToDate` transition is observable. The
+  `.NSPersistentStoreRemoteChange` fallback in §4.3 is therefore not needed, and ticket 03 may
+  build its "Letzte Aktivität" upload/download split on the event stream.
+- ✅ **`waiting` verified on device, after the run that exposed the precedence bug** (§4.2).
+  Before the fix, the offline log went `path status=unsatisfied …` → `state=waiting
+  hasNetwork=false`, then an import event opened and never ended, flipping the row to a
+  permanent "Lädt …". Restoring the network produced `requiresConnection` → `satisfied`
+  (cellular first, then Wi-Fi), the pending import ended `succeeded=true`, and the row returned
+  to `upToDate` **without a relaunch**. After the fix, the offline state holds for the whole
+  outage: amber tile with the slashed-cloud glyph, amber dot, "Wartet", and the subtitle still
+  showing the last *real* sync ("Zuletzt: Heute, 15:30") rather than blanking — confirmed by
+  screenshot. **All four states are now confirmed on real hardware.**
+
+  **How to test it — "Airplane Mode" alone does not work** (it cost three runs before this was
+  understood). Airplane Mode drops *cellular only*: `interfaces` goes from
+  `["wifi", "wifi", "cellular"]` to `["wifi", "wifi"]`, `path status` stays `satisfied`, and
+  exports keep succeeding, because iOS keeps Wi-Fi connected inside Airplane Mode once it has
+  been re-enabled there. Turn Wi-Fi off in *Settings → Wi-Fi* (not Control Centre, which only
+  disconnects until the next day) **and** Airplane Mode on; `interfaces=[]` with
+  `status=unsatisfied` is what proves the device is genuinely offline. Note the trap: **if
+  Xcode is attached over Wi-Fi, disabling Wi-Fi kills the console you are reading it in** —
+  connect the device by cable first, or skip the console and just read the row in the UI.
+
+**DEBUG instrumentation** (kept, it is what made the above diagnosable): `publish()` logs the
+complete input vector — `☁️ [CloudKitSyncStatusMonitor] state= hasNetwork= inFlight= queued=
+account=` — and the `NWPathMonitor` handler logs `path status= satisfied= expensive=
+constrained= interfaces=`. Because `.waiting` has exactly two entry conditions
+(`!hasNetwork`, `hasQueuedChanges`), those two lines are enough to attribute any wrong state
+to its signal. Note that `hasQueuedChanges` is only ever set by a **failed `.export`** event;
+a failed `.setup` or `.import` leaves it false by design.
 
 **Dead end worth remembering:** synthetic `osascript` clicks in the *upper* area of the
 simulator window did not register on this screen (they do register mid-screen and on the tab

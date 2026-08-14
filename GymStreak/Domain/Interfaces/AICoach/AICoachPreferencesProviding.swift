@@ -15,6 +15,11 @@ import Foundation
 /// `PeriodRecapViewModel`, `ExerciseDeepDiveViewModel`, `PostWorkoutRecapViewModel`,
 /// and `WorkoutAnalysisViewModel`. See `AICoachPreferences` for the full
 /// persisted-settings surface and opt-in logic.
+/// `@MainActor` like the rest of the AI-coach protocol surface: the only
+/// conformer (`AICoachPreferences`) is main-actor-isolated, and every consumer
+/// is a `@MainActor` ViewModel or View. A nonisolated protocol here would make
+/// the conformance an isolation mismatch under strict concurrency.
+@MainActor
 protocol AICoachPreferencesProviding: AnyObject {
 
     /// Monthly period recap is active.

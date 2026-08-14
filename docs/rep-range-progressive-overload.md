@@ -78,8 +78,8 @@ The model computed properties (`RoutineExercise.allSetsAtUpperLimit`, `WorkoutEx
 
 **`WorkoutViewModel`**:
 - `applyProgressiveOverload(for:weightIncrement:)` - Gets the new weights/reps from `ProgressiveOverloadService.applyIncrease` **for the routine template only** (the workout in progress is never rewritten — see "The increase never touches the workout in progress"), and owns the persistence workflow around it: planned-value snapshotting, setting `progressiveOverloadApplied`, recording the announced new weight for the confirmed card, and saving. Also captures an in-memory pre-apply snapshot (per-set planned/actual values + template set values) keyed by `WorkoutExercise.id` to power Undo
-- `routineExercise(for:)` - Resolves the routine-template slot a `WorkoutExercise` originated from, swapped or not: matches by `routineExerciseId` (stable slot identity) first, falls back to the originally-planned exercise id/name for legacy data (mirroring `updateRoutineTemplate`)
-- `performedExercise(for:)` / private `alternativeEntry(for:)` - For a swapped exercise, resolve the performed alternative's library `Exercise` and its `RoutineExerciseAlternative` entry. **Swap rule (2026-07 fix):** applying overload on a swapped exercise writes into the *alternative's own set scheme* (`AlternativeExerciseSet`), never the primary slot's sets — the same rule `updateRoutineTemplate` follows. Before this fix the whole overload path was dead for swaps: the mid-workout banner resolved the slot by performed-exercise name, which never matches the primary, so "Increase" was a silent no-op
+- `routineExercise(for:)` - Resolves the routine-template slot a `WorkoutExercise` originated from, swapped or not: matches by `routineExerciseId` (stable slot identity) first, falls back to the originally-planned exercise id/name for legacy data (mirroring `RoutineTemplateSyncService.applyPerformedValues`)
+- `performedExercise(for:)` / private `alternativeEntry(for:)` - For a swapped exercise, resolve the performed alternative's library `Exercise` and its `RoutineExerciseAlternative` entry. **Swap rule (2026-07 fix):** applying overload on a swapped exercise writes into the *alternative's own set scheme* (`AlternativeExerciseSet`), never the primary slot's sets — the same rule `RoutineTemplateSyncService.applyPerformedValues` follows. Before this fix the whole overload path was dead for swaps: the mid-workout banner resolved the slot by performed-exercise name, which never matches the primary, so "Increase" was a silent no-op
 - `overloadSuggestionExercises` - The completion screen's eligibility list: rep goal maxed AND (already applied OR a persistable template target exists — the slot's sets, or the alternative's set scheme for swaps)
 - `undoProgressiveOverload(for:)` / `canUndoProgressiveOverload(for:)` - Reverts an overload applied during this session from the completion screen: restores the sets' pre-apply planned/actual values, clears `progressiveOverloadApplied`, and restores the template's set scheme. Snapshots are in-memory only and cleared when the session ends (save or discard), so undo is available exactly while the completion screen can still be shown
 - `applyProgressiveOverloadFromHistory(from:for:weightIncrement:)` - The **history (after-the-fact)** apply path. Resolves the live template from the *completed session's* `routine` (not `currentSession`) via the routine-parameterized `routineExercise(in:for:)`/`alternativeEntry(in:for:)`, bumps the slot's sets (or the swapped alternative's set scheme) through `ProgressiveOverloadService.applyIncrease`, and returns the new weight. **Never touches the historical `WorkoutExercise`/`WorkoutSet` or the `progressiveOverloadApplied` flag** — history is immutable. Returns `nil` (no-op) if the routine/exercise was edited/deleted. `hasResolvableOverloadTemplate(from:for:)` and `performedExercise(in:for:)` are its resolution/display companions. The generic `applyOverloadToTemplateSets(_:weightKey:repsKey:…)` bumps either template set type (`ExerciseSet`, `AlternativeExerciseSet`) via key paths, avoiding duplicated increment/reset math
@@ -694,7 +694,7 @@ When `applyProgressiveOverload` is called during a workout:
 4. **Routine template** (`ExerciseSet`) is updated with the new weight/reps for future workouts
 
 The following services check `progressiveOverloadApplied` and use planned values when set:
-- `ExerciseProgressService.fetchProgressData()` — chart data points
+- `ExerciseProgressAggregator.buildProgress()` / `.buildRecentSessions()` — chart data points and the recent-session list (was `ExerciseProgressService.fetchProgressData()` before audit P1.2 moved it off the main actor)
 - `ExerciseProgressService.previousPerformance()` — historical lookup for comparison
 - `ExerciseProgressService.compareWithPrevious()` — summary/detail comparison
 - `WorkoutSession.totalVolume` — session volume calculation
@@ -744,7 +744,7 @@ Two consequences worth knowing:
   from the performance — otherwise Save left the template mixing raised and
   unraised sets.
 - **iOS's end-of-workout template writeback needed an exclusion.**
-  `updateRoutineTemplate` → `updatePrimary/AlternativeTemplateSets` writes each
+  `RoutineTemplateSyncService.applyPerformedValues` → `updatePrimary/AlternativeTemplateSets` writes each
   completed set's `actual*` back into the template, and the default-on "Update
   routine template" toggle means it runs on nearly every save. It only ever
   agreed with an applied increase by accident — `actual*` had been overwritten

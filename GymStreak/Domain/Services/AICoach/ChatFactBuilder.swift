@@ -1,12 +1,19 @@
 //
-//  ChatFactService.swift
+//  ChatFactBuilder.swift
 //  GymStreak
 //
-//  Tool-backing data layer for the chat assistant. Queries SwiftData directly
-//  and delegates every computation to the existing domain services
-//  (`WorkoutPlanningService`, `PersonalRecordService`-style 1RM math,
-//  `HistoryStatsService`). Returns compact fact lines; the model only verbalizes
-//  them. See docs/ai-coach-chat-feasibility.md.
+//  Builds the compact fact lines the chat tools feed the on-device model. The
+//  model never sees raw sets and never performs arithmetic — it only verbalizes
+//  what these functions return (fact-resolution doctrine, see docs/ai-coach.md).
+//
+//  Extracted from `ChatFactService` (audit P1.3) so the whole-history traversal
+//  can run inside `ChatFactStore`'s model actor instead of on the main actor.
+//  Nothing here may become `@MainActor`: the actor calls it from its own executor
+//  (docs/swift6-concurrency.md §10 rule 3), which is also why it lives in
+//  `Domain/Services/` rather than next to the store.
+//
+//  Every entry point takes already-fetched models and returns a `String`, so it is
+//  directly testable without a `ModelContext` fetch.
 //
 //  Spike simplification: fact lines are emitted in compact canonical English and
 //  the model translates to the user's language (the Instructions carry a small
@@ -17,28 +24,28 @@
 import Foundation
 import SwiftData
 
-@MainActor
-final class ChatFactService: ChatFactProviding {
+enum ChatFactBuilder {
 
-    private let modelContext: ModelContext
-    private let nameResolver = ExerciseNameResolver()
-
-    init(modelContext: ModelContext) {
-        self.modelContext = modelContext
-    }
+    private static let nameResolver = ExerciseNameResolver()
 
     // MARK: - Next workout
 
-    func nextWorkoutFacts() -> String {
-        let routines = (try? modelContext.fetch(FetchDescriptor<Routine>())) ?? []
-        let completed = completedSessions()
-
+    /// Next-due date per scheduled routine, or a "nothing scheduled" line.
+    ///
+    /// - Parameters:
+    ///   - routines: the full routine library; unscheduled/inactive ones are skipped here.
+    ///   - completedSessions: completed sessions in any order — only `startTime` and the
+    ///     `routine` relationship are read, to date each routine's last completion.
+    static func nextWorkoutFacts(
+        routines: [Routine],
+        completedSessions: [WorkoutSession]
+    ) -> String {
         struct Due { let name: String; let date: Date }
         var dues: [Due] = []
 
         for routine in routines {
             guard let schedule = routine.schedule, schedule.isActive else { continue }
-            let lastCompleted = completed
+            let lastCompleted = completedSessions
                 .filter { $0.routine?.id == routine.id }
                 .map(\.startTime)
                 .max()
@@ -63,9 +70,14 @@ final class ChatFactService: ChatFactProviding {
 
     // MARK: - Exercise PR
 
-    func exercisePRFacts(exerciseName: String) -> String {
-        let library = (try? modelContext.fetch(FetchDescriptor<Exercise>())) ?? []
-
+    /// The all-time PR for a free-form exercise name: best set, estimated 1RM and
+    /// date — or disambiguation candidates / a not-found payload with the closest
+    /// known names. Name resolution happens here, not in the tool schema.
+    static func exercisePRFacts(
+        exerciseName: String,
+        library: [Exercise],
+        completedSessions: [WorkoutSession]
+    ) -> String {
         switch nameResolver.resolve(exerciseName, in: library) {
         case .noMatch:
             return noMatchPayload(library: library)
@@ -74,7 +86,7 @@ final class ChatFactService: ChatFactProviding {
             return "\"\(exerciseName)\" is ambiguous. Candidates: \(names.joined(separator: ", ")). Ask the user which one they mean."
 
         case .resolved(let exercises):
-            return personalRecordLine(for: exercises)
+            return personalRecordLine(for: exercises, sessions: completedSessions)
         }
     }
 
@@ -85,7 +97,7 @@ final class ChatFactService: ChatFactProviding {
     /// tells the model to re-call `getExercisePR` with the matching listed name
     /// (cross-language mapping) and never reveal this text. Bounded to the real
     /// library so the model can map but never invent. See docs.
-    private func noMatchPayload(library: [Exercise]) -> String {
+    private static func noMatchPayload(library: [Exercise]) -> String {
         let names = nameResolver.sortedUniqueNames(library)
         guard !names.isEmpty else { return "__NO_MATCH__ exercises: (none)" }
         let capped = names.prefix(60)
@@ -97,12 +109,19 @@ final class ChatFactService: ChatFactProviding {
     /// user has several library entries with the same name (e.g. barbell + dumbbell
     /// "Biceps Curls"), `exercises` holds all of them and the record is taken across
     /// all — they are one exercise to the user and can't be told apart by name.
-    private func personalRecordLine(for exercises: [Exercise]) -> String {
-        let sessions = completedSessions()
+    private static func personalRecordLine(
+        for exercises: [Exercise],
+        sessions: [WorkoutSession]
+    ) -> String {
         let displayName = exercises.first?.name ?? ""
         var best: (weight: Double, reps: Int, est: Double, date: Date)?
 
-        for session in sessions {
+        // Oldest first, and explicitly so rather than by trusting the caller's fetch
+        // order: the comparison below is strictly-greater, so on a tied estimated 1RM
+        // the *first* session visited wins and "achieved on" reports when the record was
+        // first set. The pre-P1.3 fetch sorted ascending and this preserves that; the
+        // shared `CompletedSessionFetch` sorts newest-first for the History screens.
+        for session in sessions.sorted(by: { $0.startTime < $1.startTime }) {
             for workoutExercise in session.workoutExercisesList
             where exercises.contains(where: { nameResolver.matches(workoutExercise, $0) }) {
                 let usePlanned = workoutExercise.progressiveOverloadApplied
@@ -127,8 +146,13 @@ final class ChatFactService: ChatFactProviding {
 
     // MARK: - Workout history
 
-    func workoutHistoryFacts(timeframe: ChatHistoryTimeframe) -> String {
-        let sessions = completedSessions()
+    /// Workout count, volume, last workout and current streak for a timeframe.
+    /// The streak is deliberately computed over *all* sessions, not the windowed
+    /// ones — "current streak" is not a property of the requested period.
+    static func workoutHistoryFacts(
+        timeframe: ChatHistoryTimeframe,
+        completedSessions sessions: [WorkoutSession]
+    ) -> String {
         let range = interval(for: timeframe)
         let inRange = sessions.filter { range.contains($0.startTime) }
 
@@ -148,19 +172,9 @@ final class ChatFactService: ChatFactProviding {
         return parts.joined(separator: " ")
     }
 
-    // MARK: - Fetch helpers
-
-    private func completedSessions() -> [WorkoutSession] {
-        let descriptor = FetchDescriptor<WorkoutSession>(
-            predicate: #Predicate { $0.endTime != nil },
-            sortBy: [SortDescriptor(\.startTime, order: .forward)]
-        )
-        return (try? modelContext.fetch(descriptor)) ?? []
-    }
-
     // MARK: - Timeframe
 
-    private func interval(for timeframe: ChatHistoryTimeframe) -> DateInterval {
+    private static func interval(for timeframe: ChatHistoryTimeframe) -> DateInterval {
         let calendar = HistoryStatsService.isoGermanCalendar()
         let now = Date()
         switch timeframe {
@@ -181,7 +195,7 @@ final class ChatFactService: ChatFactProviding {
         }
     }
 
-    private func timeframeLabel(_ timeframe: ChatHistoryTimeframe) -> String {
+    private static func timeframeLabel(_ timeframe: ChatHistoryTimeframe) -> String {
         switch timeframe {
         case .thisWeek: return "This week"
         case .lastWeek: return "Last week"
@@ -195,7 +209,7 @@ final class ChatFactService: ChatFactProviding {
 
     /// Human phrase for a due date relative to today (weekday + signed day gap).
     /// Kept in compact canonical form; the model phrases it in the user's language.
-    private func describeDue(_ date: Date) -> String {
+    private static func describeDue(_ date: Date) -> String {
         let calendar = HistoryStatsService.isoGermanCalendar()
         let today = calendar.startOfDay(for: Date())
         let day = calendar.startOfDay(for: date)
@@ -214,23 +228,29 @@ final class ChatFactService: ChatFactProviding {
     // in the device locale (that caused "…due Samstag, in 2 days" in an English reply).
     private static let factLocale = Locale(identifier: "en_US")
 
-    private func weekday(_ date: Date) -> String {
+    // `DateFormatter` is constructed per call rather than hoisted to a `static let`:
+    // it is not `Sendable`, and this type is deliberately isolation-agnostic so the
+    // model actor can call it (a `static let DateFormatter` here would not compile
+    // under Swift 6). The rendering rule against per-call formatters targets view
+    // bodies — these run at most a handful of times per tool call, on the actor's
+    // executor, never on the main one.
+    private static func weekday(_ date: Date) -> String {
         let formatter = DateFormatter()
-        formatter.locale = Self.factLocale
+        formatter.locale = factLocale
         formatter.setLocalizedDateFormatFromTemplate("EEEE")
         return formatter.string(from: date)
     }
 
-    private func mediumDate(_ date: Date) -> String {
+    private static func mediumDate(_ date: Date) -> String {
         let formatter = DateFormatter()
-        formatter.locale = Self.factLocale
+        formatter.locale = factLocale
         formatter.dateStyle = .medium
         formatter.timeStyle = .none
         return formatter.string(from: date)
     }
 
     /// Trims a trailing `.0` so "37.5" and "40" both read cleanly.
-    private func fmt(_ value: Double) -> String {
+    private static func fmt(_ value: Double) -> String {
         if value == value.rounded() { return String(Int(value.rounded())) }
         return String(format: "%.1f", value)
     }

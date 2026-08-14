@@ -43,7 +43,11 @@ final class CloudSyncObserver: ObservableObject {
         NotificationCenter.default.post(name: .cloudKitDataDidChange, object: nil)
     }
 
-    deinit {
+    /// `isolated deinit` (SE-0371): `notificationObserver` is a non-`Sendable`
+    /// `NSObjectProtocol`, which a nonisolated `deinit` may not touch under strict
+    /// concurrency. Isolating the deinit to this class's main actor lets it read
+    /// its own stored state, which is what the teardown actually needs.
+    isolated deinit {
         if let observer = notificationObserver {
             NotificationCenter.default.removeObserver(observer)
         }

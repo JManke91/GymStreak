@@ -126,12 +126,12 @@ Built as planned; implementation notes:
 **Goal:** answer more question classes. Expansion list: `getVolumeTrend`, `getRoutineDetails`. (`getStreakStatus` from the spike list is **dropped** — `workoutHistoryFacts` already appends the current streak line via `HistoryStatsService.streakWeeks`, so a dedicated tool would pay schema tokens on every turn for an already-reachable fact.)
 
 - Each new tool: terse `Tool` conformance in `Data/AICoach/Chat/Tools/`, backed by an existing service (`FortschrittAggregator`/`ExerciseProgressService` for volume trend; `RoutineRepository` for routine details) via a new `ChatFactProviding` method.
-- **Budget guard:** measure `tokenCount(for: tools)` after each addition; if the tool set + instructions crowd the answer/transcript budget, curate (merge overlapping tools, trim descriptions). Add a test asserting each new fact method's output like `ChatFactServiceTests`.
+- **Budget guard:** measure `tokenCount(for: tools)` after each addition; if the tool set + instructions crowd the answer/transcript budget, curate (merge overlapping tools, trim descriptions). Add a test asserting each new fact method's output like `ChatFactProviderTests`.
 - **Done:** new question classes answered and grounded; tool-schema token cost measured and within budget.
 
 ## Phase 5 — Fact-line localization (optional, measure first)
 
-Today fact lines are canonical English translated on-device (a DE glossary is in the instructions). If Phase 0/build testing shows term leakage or mistranslation, localize the fact lines in `ChatFactService` (via `.localized` keys, embedding the user's locale) instead of relying on the model. Decision driven by observed quality, not upfront.
+Today fact lines are canonical English translated on-device (a DE glossary is in the instructions). If Phase 0/build testing shows term leakage or mistranslation, localize the fact lines in `ChatFactBuilder` (via `.localized` keys, embedding the user's locale) instead of relying on the model. Decision driven by observed quality, not upfront.
 
 ## Phase 6 — Telemetry, accessibility, polish
 

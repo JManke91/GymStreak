@@ -17,7 +17,12 @@ import Observation
 /// `AICoachAvailabilityState` lives in `Domain/Models/AICoach/AICoachAvailabilityState.swift`
 /// so it can be shared with the `AICoachAvailabilityProviding` Domain protocol
 /// this class conforms to.
+/// `@MainActor`: `state` is mutable state read directly by SwiftUI views, and a
+/// `static let shared` of a non-`Sendable` type is global shared mutable state
+/// under strict concurrency. Main-actor isolation makes the class implicitly
+/// `Sendable` and matches its sibling AI-coach services.
 @Observable
+@MainActor
 final class AICoachAvailability: AICoachAvailabilityProviding {
 
     // MARK: - Singleton
@@ -54,6 +59,6 @@ final class AICoachAvailability: AICoachAvailabilityProviding {
             // Forward-compatibility bucket for future unavailability reasons.
             mapped = .modelNotReady
         }
-        await MainActor.run { self.state = mapped }
+        state = mapped
     }
 }

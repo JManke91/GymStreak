@@ -107,6 +107,56 @@ struct ActiveWorkoutExercise: Identifiable, Equatable, Codable {
     }
 }
 
+/// Hand-written so a `WatchActiveWorkoutCheckpoint` persisted by an older build
+/// stays decodable. Synthesized `Decodable` emits a plain `decode` for the three
+/// non-optional post-v1 fields below and throws `keyNotFound` when an older
+/// checkpoint lacks them — a stored property's default value is NOT a
+/// decode-time fallback (`docs/watch-sync.md`, "Wire schema evolution rule").
+/// This is the alternative to widening those fields to Optional, which would
+/// have rippled through every read site in `WatchWorkoutViewModel`.
+///
+/// Deliberately in an EXTENSION: an `init` in the struct body would suppress the
+/// memberwise initializer every construction site uses. `CodingKeys` and
+/// `encode(to:)` stay synthesized, so a newly added property can never be
+/// silently dropped from the encoded form.
+///
+/// MAINTENANCE: a new stored property must be decoded here too. One with a
+/// default value compiles without it and then silently never restores, and the
+/// compiler cannot flag that. `checkpointExerciseRoundTripPreservesEveryField`
+/// is the guard: it pins the encoded key set and the stored-property count, so
+/// adding a property fails it whether or not the property has a default.
+extension ActiveWorkoutExercise {
+    init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(UUID.self, forKey: .id)
+        name = try container.decode(String.self, forKey: .name)
+        muscleGroup = try container.decode(String.self, forKey: .muscleGroup)
+        sets = try container.decode([ActiveWorkoutSet].self, forKey: .sets)
+        order = try container.decode(Int.self, forKey: .order)
+        supersetId = try container.decodeIfPresent(UUID.self, forKey: .supersetId)
+        supersetOrder = try container.decode(Int.self, forKey: .supersetOrder)
+        targetRepMin = try container.decodeIfPresent(Int.self, forKey: .targetRepMin)
+        targetRepMax = try container.decodeIfPresent(Int.self, forKey: .targetRepMax)
+        exerciseId = try container.decodeIfPresent(UUID.self, forKey: .exerciseId)
+        exerciseSeedKey = try container.decodeIfPresent(String.self, forKey: .exerciseSeedKey)
+        // Post-v1 and non-optional: absent means the checkpoint predates the field.
+        isPendingWatchAddition =
+            try container.decodeIfPresent(Bool.self, forKey: .isPendingWatchAddition) ?? false
+        loadBehaviorRaw =
+            try container.decodeIfPresent(String.self, forKey: .loadBehaviorRaw) ?? "resistance"
+        alternatives =
+            try container.decodeIfPresent([WatchExerciseAlternative].self, forKey: .alternatives) ?? []
+        plannedExerciseId = try container.decodeIfPresent(UUID.self, forKey: .plannedExerciseId)
+        plannedExerciseName = try container.decodeIfPresent(String.self, forKey: .plannedExerciseName)
+        originalMuscleGroup = try container.decodeIfPresent(String.self, forKey: .originalMuscleGroup)
+        originalLoadBehaviorRaw =
+            try container.decodeIfPresent(String.self, forKey: .originalLoadBehaviorRaw)
+        originalSets = try container.decodeIfPresent([WatchSet].self, forKey: .originalSets)
+        originalTargetRepMin = try container.decodeIfPresent(Int.self, forKey: .originalTargetRepMin)
+        originalTargetRepMax = try container.decodeIfPresent(Int.self, forKey: .originalTargetRepMax)
+    }
+}
+
 struct ActiveWorkoutSet: Identifiable, Equatable, Codable {
     let id: UUID
     var plannedReps: Int
@@ -257,6 +307,11 @@ struct CompletedWatchExercise: Codable {
     /// resolve a Watch-added exercise by seed key when its `exerciseId` no
     /// longer resolves (e.g. seed-dedup changed the surviving row's UUID).
     var exerciseSeedKey: String? = nil
+    /// Optional (nil default) keeps payloads that predate the field decodable.
+    /// Synthesized `Decodable` does NOT fall back to a stored property's default
+    /// value — an absent key throws `keyNotFound` and takes the whole payload
+    /// (on the watch, the whole persisted queue) with it. Absent means "unknown";
+    /// both sides resolve that to `.resistance` at the point of use.
     var loadBehaviorRaw: String? = nil
     // Set only when the exercise was swapped for an alternative during the workout.
     // name/muscleGroup/exerciseId describe what was actually performed.

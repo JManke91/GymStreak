@@ -281,9 +281,22 @@ extension WatchConnectivityManager: ExerciseCatalogTransporting {
 
 extension WatchConnectivityManager: WCSessionDelegate {
     nonisolated func session(_ session: WCSession, activationDidCompleteWith activationState: WCSessionActivationState, error: Error?) {
+        // `WCSession` is a non-`Sendable` class and must not cross to the main
+        // actor. Read the flags here, synchronously, and send only the `Bool`s.
+        let isPaired = session.isPaired
+        let isWatchAppInstalled = session.isWatchAppInstalled
+        let isReachable = session.isReachable
+        let errorDescription = error?.localizedDescription
+        // The session's *mutable* snapshot state (`receivedApplicationContext`,
+        // `outstandingFileTransfers`) is deliberately NOT hoisted here. It is read
+        // inside the hop from the stored `self.session`, so it is still sampled on
+        // the main actor at the moment it is used. Hoisting it would open a window
+        // between this callback and the hop in which a newly started catalogue
+        // transfer would be missing from `keeping:` and its staging file deleted
+        // as an orphan mid-flight.
         Task { @MainActor in
-            if let error = error {
-                WatchSyncDiagnostics.error("phone: WCSession activation failed — \(error.localizedDescription)")
+            if let errorDescription {
+                WatchSyncDiagnostics.error("phone: WCSession activation failed — \(errorDescription)")
                 return
             }
             guard activationState == .activated else {
@@ -291,11 +304,11 @@ extension WatchConnectivityManager: WCSessionDelegate {
                 return
             }
 
-            self.isPaired = session.isPaired
-            self.isWatchAppInstalled = session.isWatchAppInstalled
-            self.isReachable = session.isReachable
+            self.isPaired = isPaired
+            self.isWatchAppInstalled = isWatchAppInstalled
+            self.isReachable = isReachable
 
-            WatchSyncDiagnostics.info("phone: WCSession activated — paired: \(session.isPaired), installed: \(session.isWatchAppInstalled)")
+            WatchSyncDiagnostics.info("phone: WCSession activated — paired: \(isPaired), installed: \(isWatchAppInstalled)")
 
             // Catalogue sync lifecycle: recover the watch's challenge (WC
             // re-delivers receivedApplicationContext across launches), drop
@@ -312,9 +325,10 @@ extension WatchConnectivityManager: WCSessionDelegate {
             // acknowledgment, and permanently pinned the watch's per-routine
             // FIFO head — silently blocking every later workout for that
             // routine from being transmitted at all.
-            if !session.receivedApplicationContext.isEmpty {
-                self.catalogSender.updateChallenge(fromApplicationContext: session.receivedApplicationContext)
-                self.routineAuthority.updateChallenge(fromApplicationContext: session.receivedApplicationContext)
+            let receivedContext = self.session?.receivedApplicationContext ?? [:]
+            if !receivedContext.isEmpty {
+                self.catalogSender.updateChallenge(fromApplicationContext: receivedContext)
+                self.routineAuthority.updateChallenge(fromApplicationContext: receivedContext)
                 self.onRoutineChallengeUpdated?()
             }
 
@@ -322,7 +336,7 @@ extension WatchConnectivityManager: WCSessionDelegate {
             // that crashed before the SwiftData save committed).
             self.onWorkoutInboxUpdated?()
             self.catalogSender.cleanUpOrphanedStagingFiles(
-                keeping: session.outstandingFileTransfers.map { $0.file.fileURL }
+                keeping: self.session?.outstandingFileTransfers.map { $0.file.fileURL } ?? []
             )
             self.catalogSender.sessionDidBecomeReady()
 
@@ -349,23 +363,26 @@ extension WatchConnectivityManager: WCSessionDelegate {
     }
 
     nonisolated func sessionReachabilityDidChange(_ session: WCSession) {
+        let isReachable = session.isReachable
         Task { @MainActor in
-            self.isReachable = session.isReachable
-            WatchSyncDiagnostics.info("phone: reachability changed — \(session.isReachable)")
-            if session.isReachable {
+            self.isReachable = isReachable
+            WatchSyncDiagnostics.info("phone: reachability changed — \(isReachable)")
+            if isReachable {
                 self.requestWorkoutQueueDrain()
             }
         }
     }
 
     nonisolated func sessionWatchStateDidChange(_ session: WCSession) {
+        let isPaired = session.isPaired
+        let isWatchAppInstalled = session.isWatchAppInstalled
         Task { @MainActor in
-            self.isPaired = session.isPaired
-            self.isWatchAppInstalled = session.isWatchAppInstalled
-            WatchSyncDiagnostics.info("phone: watch state changed — paired: \(session.isPaired), installed: \(session.isWatchAppInstalled)")
+            self.isPaired = isPaired
+            self.isWatchAppInstalled = isWatchAppInstalled
+            WatchSyncDiagnostics.info("phone: watch state changed — paired: \(isPaired), installed: \(isWatchAppInstalled)")
 
             // Notify so RoutinesViewModel can trigger sync
-            if session.isWatchAppInstalled {
+            if isWatchAppInstalled {
                 // A newly installed/switched watch app must receive the
                 // current routines even if the content hasn't changed.
                 self.routineAuthority.resetSuppression()
@@ -383,11 +400,11 @@ extension WatchConnectivityManager: WCSessionDelegate {
     /// catalogue's (ticket 03) and the routine authority's (ticket 05) — in
     /// one merged dictionary. Reachability-independent.
     nonisolated func session(_ session: WCSession, didReceiveApplicationContext applicationContext: [String: Any]) {
-        // Extract the plist values we need before hopping actors.
-        let context = applicationContext
+        // `[String: Any]` is not `Sendable`; box it for the hop (see WatchWirePayload).
+        let context = WatchWirePayload(applicationContext)
         Task { @MainActor in
-            self.catalogSender.updateChallenge(fromApplicationContext: context)
-            self.routineAuthority.updateChallenge(fromApplicationContext: context)
+            self.catalogSender.updateChallenge(fromApplicationContext: context.payload)
+            self.routineAuthority.updateChallenge(fromApplicationContext: context.payload)
             self.onRoutineChallengeUpdated?()
         }
     }
@@ -420,8 +437,9 @@ extension WatchConnectivityManager: WCSessionDelegate {
     }
 
     nonisolated func session(_ session: WCSession, didReceiveUserInfo userInfo: [String: Any] = [:]) {
+        let boxed = WatchWirePayload(userInfo)
         Task { @MainActor in
-            self.handleIncomingPayload(userInfo, source: "userInfo")
+            self.handleIncomingPayload(boxed.payload, source: "userInfo")
         }
     }
 
@@ -429,8 +447,9 @@ extension WatchConnectivityManager: WCSessionDelegate {
     /// reachable, so we must accept them on this delegate too. transferUserInfo
     /// always also fires for the same workout — iOS-side dedupe handles duplicates.
     nonisolated func session(_ session: WCSession, didReceiveMessage message: [String: Any]) {
+        let boxed = WatchWirePayload(message)
         Task { @MainActor in
-            self.handleIncomingPayload(message, source: "message")
+            self.handleIncomingPayload(boxed.payload, source: "message")
         }
     }
 

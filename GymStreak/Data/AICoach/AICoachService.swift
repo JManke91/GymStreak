@@ -3,7 +3,16 @@
 //  GymStreak
 //
 //  Central façade for all AI Coach generation requests.
-//  Coordinates availability, preferences, session creation, and error mapping.
+//  Coordinates availability, preferences and session creation.
+//
+//  NOTE ON ERRORS: `LanguageModelSession.streamResponse` does not throw — a
+//  generation failure surfaces when the returned stream is *iterated*, not when
+//  it is created. Error classification and telemetry therefore live in the
+//  consuming ViewModels' `for try await` catch blocks (they already call
+//  `AICoachTelemetry.recordError`), which is where the error actually arrives.
+//  A creation-time `do`/`catch` + `mapError` used to sit here; it became
+//  unreachable dead code and was removed (see git history if per-`GenerationError`
+//  case logging is ever wanted — it belongs at the iteration sites now).
 //
 
 import Foundation
@@ -56,7 +65,7 @@ final class AICoachService: AICoachServicing {
         input: PostWorkoutRecapInput
     ) async throws -> LanguageModelSession.ResponseStream<PostWorkoutRecapOutput>? {
         guard preferences.isPostWorkoutEffectivelyEnabled, availability.isAvailable else { return nil }
-        return try await stream(
+        return await stream(
             instructions: PostWorkoutRecapInstructions.systemPrompt,
             promptText: input.toPromptText(),
             outputType: PostWorkoutRecapOutput.self,
@@ -94,7 +103,7 @@ final class AICoachService: AICoachServicing {
             if remaining < reservedForOutput {
                 logger.notice("period recap falling back to compact input (remaining=\(remaining))")
                 let compact = buildCompactInput()
-                return try await stream(
+                return await stream(
                     instructions: instructions,
                     promptText: compact.toPromptText(),
                     outputType: PeriodRecapOutput.self,
@@ -104,7 +113,7 @@ final class AICoachService: AICoachServicing {
             }
         }
 
-        return try await stream(
+        return await stream(
             instructions: instructions,
             promptText: promptText,
             outputType: PeriodRecapOutput.self,
@@ -120,7 +129,7 @@ final class AICoachService: AICoachServicing {
         input: ExerciseDeepDiveInput
     ) async throws -> LanguageModelSession.ResponseStream<ExerciseDeepDiveOutput>? {
         guard preferences.exerciseDeepDiveEnabled, preferences.isEffectivelyEnabled, availability.isAvailable else { return nil }
-        return try await stream(
+        return await stream(
             instructions: ExerciseDeepDiveInstructions.systemPrompt,
             promptText: input.toPromptText(),
             outputType: ExerciseDeepDiveOutput.self,
@@ -136,7 +145,7 @@ final class AICoachService: AICoachServicing {
         input: WorkoutAnalysisInput
     ) async throws -> LanguageModelSession.ResponseStream<WorkoutAnalysisOutput>? {
         guard preferences.isWorkoutDetailEffectivelyEnabled, availability.isAvailable else { return nil }
-        return try await stream(
+        return await stream(
             instructions: WorkoutAnalysisInstructions.systemPrompt,
             promptText: input.toPromptText(),
             outputType: WorkoutAnalysisOutput.self,
@@ -153,9 +162,26 @@ final class AICoachService: AICoachServicing {
     /// AI Coach settings screen appears, or just before a workout save completes).
     /// Safe to call multiple times — the system deduplicates concurrent warms.
     func prewarm() {
+        // `prewarm()` is synchronous and non-throwing in the current SDK, so the
+        // previous `await` was removed. The `Task` is retained to keep behaviour
+        // identical to before that change.
+        //
+        // ⚠️ This DEFERS, it does not OFFLOAD. Per the Swift migration guide, "a
+        // newly-created task will inherit the isolation of its enclosing scope unless
+        // an explicit global actor is written" — this type is `@MainActor`, so the body
+        // runs on the main actor, just a turn later.
+        //
+        // Deliberately NOT changed to offload. SE-0461's mechanism for that would be a
+        // `@concurrent` helper, but whether `LanguageModelSession.init()` /
+        // `prewarm(promptPrefix:)` are safe off the main actor — and whether
+        // `LanguageModelSession` is `Sendable` — is NOT DOCUMENTED by Apple (researched
+        // 2026-08-13, FoundationModels doc pages unretrievable). Moving an Apple API
+        // call off the main actor without its threading contract would be a guess, and
+        // this is the pre-existing behaviour, not a regression. Revisit if that contract
+        // gets documented. See docs/swift6-concurrency.md §9.
         Task {
             let session = LanguageModelSession()
-            await session.prewarm()
+            session.prewarm()
         }
     }
 
@@ -167,53 +193,21 @@ final class AICoachService: AICoachServicing {
         outputType: Output.Type,
         useCase: String,
         maximumResponseTokens: Int? = nil
-    ) async throws -> LanguageModelSession.ResponseStream<Output> {
+    ) async -> LanguageModelSession.ResponseStream<Output> {
         let session = LanguageModelSession(instructions: Instructions(instructions))
         let start = ContinuousClock.now
 
-        do {
-            let options = maximumResponseTokens.map { GenerationOptions(maximumResponseTokens: $0) }
-            let responseStream: LanguageModelSession.ResponseStream<Output>
-            if let options {
-                responseStream = try session.streamResponse(to: promptText, generating: outputType, options: options)
-            } else {
-                responseStream = try session.streamResponse(to: promptText, generating: outputType)
-            }
-            let elapsed = ContinuousClock.now - start
-            let ms = Int(Double(elapsed.components.seconds) * 1_000 + Double(elapsed.components.attoseconds) / 1e15)
-            logger.debug("streamResponse created for \(useCase, privacy: .public) in \(ms)ms")
-            return responseStream
-        } catch {
-            let elapsed = ContinuousClock.now - start
-            let ms = Int(Double(elapsed.components.seconds) * 1_000 + Double(elapsed.components.attoseconds) / 1e15)
-            logger.error("streamResponse threw for \(useCase, privacy: .public) after \(ms)ms")
-            AICoachTelemetry.recordError(useCase: useCase, errorTypeName: String(describing: type(of: error)))
-            throw mapError(error, useCase: useCase)
+        let options = maximumResponseTokens.map { GenerationOptions(maximumResponseTokens: $0) }
+        let responseStream: LanguageModelSession.ResponseStream<Output>
+        if let options {
+            responseStream = session.streamResponse(to: promptText, generating: outputType, options: options)
+        } else {
+            responseStream = session.streamResponse(to: promptText, generating: outputType)
         }
-    }
 
-    // MARK: - Error mapping
-
-    private func mapError(_ error: Error, useCase: String) -> Error {
-        guard let gen = error as? LanguageModelSession.GenerationError else { return error }
-        switch gen {
-        case .guardrailViolation(_):
-            logger.warning("guardrail violation in \(useCase, privacy: .public)")
-        case .exceededContextWindowSize(_):
-            logger.error("context window exceeded in \(useCase, privacy: .public) — input may be too large")
-        case .assetsUnavailable(_):
-            logger.notice("assets unavailable in \(useCase, privacy: .public)")
-        case .rateLimited(_):
-            logger.notice("rate limited in \(useCase, privacy: .public)")
-        case .unsupportedLanguageOrLocale(_):
-            logger.error("unsupported locale in \(useCase, privacy: .public)")
-        case .decodingFailure(_):
-            logger.error("decoding failure in \(useCase, privacy: .public)")
-        case .unsupportedGuide(_):
-            logger.error("unsupported @Guide in \(useCase, privacy: .public)")
-        @unknown default:
-            logger.error("unknown GenerationError in \(useCase, privacy: .public)")
-        }
-        return error
+        let elapsed = ContinuousClock.now - start
+        let ms = Int(Double(elapsed.components.seconds) * 1_000 + Double(elapsed.components.attoseconds) / 1e15)
+        logger.debug("streamResponse created for \(useCase, privacy: .public) in \(ms)ms")
+        return responseStream
     }
 }

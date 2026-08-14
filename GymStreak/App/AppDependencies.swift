@@ -20,6 +20,15 @@ final class AppDependencies: ObservableObject {
     let historySnapshotProvider: HistorySnapshotProviding
     let workoutHistoryCorrelation: WorkoutHistoryCorrelationProviding
     let restTimerReminders: RestTimerReminderScheduling
+    /// The rest timer's Lock Screen / Dynamic Island surface. One instance for
+    /// the whole app, like the reminder scheduler: there is only ever one
+    /// rest-timer Live Activity, and identity-keyed calls keep the two
+    /// `WorkoutViewModel`s from ending each other's countdown.
+    let restTimerLiveActivity: RestTimerLiveActivityPresenting
+    /// Writes a session's performed values back onto its routine template
+    /// ("Update routine"). Stateless domain logic over the shared main-context
+    /// repositories, so one instance serves both `WorkoutViewModel`s.
+    let routineTemplateSync: RoutineTemplateSyncService
     let aiCoachPreferences: AICoachPreferencesProviding
     let aiCoachAvailability: AICoachAvailabilityProviding
     let proactivePromptCoordinator: ProactivePromptCoordinating
@@ -28,6 +37,10 @@ final class AppDependencies: ObservableObject {
     /// instance everywhere so its WCSession delegate (registered at app launch) is the
     /// one that receives deliveries.
     let watchSync: WatchSyncServicing
+
+    /// Retained so model-actor-backed dependencies can be built lazily by factory
+    /// (see `makeChatFactProvider`). Never handed to Presentation.
+    private let modelContainer: ModelContainer
 
     /// Shared across the app since it's bound to the container's stable mainContext —
     /// no need to reconstruct it per screen the way the old modelContext-swap pattern did.
@@ -76,9 +89,14 @@ final class AppDependencies: ObservableObject {
     ///   local-only store (or in ephemeral UI-test runs), which the sync status
     ///   must report as "off".
     init(modelContext: ModelContext, isCloudKitStoreEnabled: Bool) {
+        self.modelContainer = modelContext.container
         self.routineRepository = SwiftDataRoutineRepository(modelContext: modelContext)
         self.exerciseRepository = SwiftDataExerciseRepository(modelContext: modelContext)
         self.workoutSessionRepository = SwiftDataWorkoutSessionRepository(modelContext: modelContext)
+        self.routineTemplateSync = RoutineTemplateSyncService(
+            routineRepository: routineRepository,
+            exerciseRepository: exerciseRepository
+        )
         self.historySnapshotProvider = SwiftDataHistorySnapshotProvider(
             modelContainer: modelContext.container
         )
@@ -86,6 +104,7 @@ final class AppDependencies: ObservableObject {
             container: modelContext.container
         )
         self.restTimerReminders = UserNotificationRestTimerScheduler()
+        self.restTimerLiveActivity = ActivityKitRestTimerPresenter()
         self.cloudSyncStatus = CloudKitSyncStatusMonitor(
             isCloudKitStoreEnabled: isCloudKitStoreEnabled,
             containerIdentifier: GymStreakSchema.cloudKitContainerIdentifier
@@ -101,7 +120,10 @@ final class AppDependencies: ObservableObject {
         let watchConnectivity = WatchConnectivityManager.shared
         self.watchSync = watchConnectivity
         self.exerciseProgressService = ExerciseProgressService(modelContext: modelContext)
-        self.defaultContentSeeder = DefaultContentSeeder(modelContext: modelContext)
+        self.defaultContentSeeder = DefaultContentSeeder(
+            modelContext: modelContext,
+            cloudSyncStatus: cloudSyncStatus
+        )
         self.exerciseCatalogSync = ExerciseCatalogSyncCoordinator(
             exerciseRepository: exerciseRepository,
             watchSync: watchSync
@@ -163,5 +185,14 @@ final class AppDependencies: ObservableObject {
     /// History tab). A factory preserves that instead of collapsing them into one.
     func makeHealthKitWorkoutService() -> HealthKitWorkoutServicing {
         HealthKitWorkoutManager()
+    }
+
+    /// The AI-coach chat's tool-backing read boundary. A factory rather than a stored
+    /// property because building it spins up a `@ModelActor` and a second, read-only
+    /// `ModelContext` (audit P1.3) — most users never open the chat, and the AI coach is
+    /// opt-in and hardware-gated, so nobody should pay for that at launch.
+    /// `CoachChatService.isConfigured` is what keeps this to one call per process.
+    func makeChatFactProvider() -> ChatFactProviding {
+        ChatFactProvider(modelContainer: modelContainer)
     }
 }

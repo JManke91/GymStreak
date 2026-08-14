@@ -24,21 +24,61 @@ struct SwiftDataHistorySnapshotProvider: HistorySnapshotProviding {
         }
     }
 
-    func fetchTrainingSnapshot(referenceDate: Date) async throws -> HistorySnapshot {
+    // MARK: - Off-main guarantee
+    //
+    // `@concurrent` (SE-0461) on all four methods is LOAD-BEARING — it is the
+    // whole reason this type exists. `SWIFT_APPROACHABLE_CONCURRENCY` enables
+    // `nonisolated(nonsending)` by default, which makes a plain `nonisolated async`
+    // method run on the *caller's* actor. Called from a `@MainActor` ViewModel that
+    // ran the entire unbounded fetch + aggregation ON the main actor, reproducing
+    // the hang documented in `docs/history-performance.md` (measured ~600 ms by
+    // `largeSnapshotBuildKeepsMainActorResponsive`). `@concurrent` restores the
+    // unconditional "always leave the caller's actor" contract.
+    //
+    // Put it on these CONCRETE methods. Whether annotating the
+    // `HistorySnapshotProviding` *requirements* would also work is NOT DOCUMENTED —
+    // SE-0461 never discusses protocol witnesses — so it is not relied on. (An earlier
+    // version of this comment claimed the requirement spelling was measured not to
+    // work; that claim was retracted, because the measurement in question called the
+    // concrete provider directly and so could not have exercised the protocol path.
+    // See `docs/swift6-concurrency.md` §1 and §9b — do not reinstate it.)
+    // Do not remove these annotations; if you think they are redundant, run the
+    // regression test first.
+    //
+    // Re-measured 2026-08-13 while adding `fetchExerciseProgress`: dropping only that
+    // method's `@concurrent` stalled the main actor **307 ms** in
+    // `largeExerciseProgressBuildKeepsMainActorResponsive` (240 sessions × 5 exercises
+    // × 4 sets); with it, under the 100 ms budget. The build was green either way.
+    @concurrent func fetchTrainingSnapshot(referenceDate: Date) async throws -> HistorySnapshot {
         let store = await storeTask.value
         return try await store.fetchTrainingSnapshot(referenceDate: referenceDate)
     }
 
-    func fetchFortschrittSnapshot() async throws -> [FortschrittExerciseModel] {
+    @concurrent func fetchFortschrittSnapshot() async throws -> [FortschrittExerciseModel] {
         let store = await storeTask.value
         return try await store.fetchFortschrittSnapshot()
     }
 
-    func fetchPRDetails(
+    @concurrent func fetchPRDetails(
         sessionID: UUID
     ) async throws -> [UUID: PersonalRecordService.PRDetail] {
         let store = await storeTask.value
         return try await store.fetchPRDetails(sessionID: sessionID)
+    }
+
+    @concurrent func fetchExerciseProgress(
+        exerciseName: String,
+        exerciseId: UUID?,
+        startDate: Date,
+        recentSessionLimit: Int
+    ) async throws -> ExerciseProgressSnapshot {
+        let store = await storeTask.value
+        return try await store.fetchExerciseProgress(
+            exerciseName: exerciseName,
+            exerciseId: exerciseId,
+            startDate: startDate,
+            recentSessionLimit: recentSessionLimit
+        )
     }
 }
 
@@ -47,8 +87,30 @@ struct SwiftDataHistorySnapshotProvider: HistorySnapshotProviding {
 /// Every unbounded fetch, relationship fault and whole-history aggregation happens on this
 /// SwiftData executor. No `PersistentModel` crosses the boundary; callers receive immutable,
 /// `Sendable` snapshots and resolve a single main-context model by UUID only for detail/delete.
+/// Deliberately does **not** conform to `HistorySnapshotProviding`, despite having
+/// matching methods. `SwiftDataHistorySnapshotProvider` above is the only boundary
+/// type, and nothing ever injected the actor as the protocol.
+///
+/// The conformance was a live hazard rather than merely vestigial: it made the actor
+/// an injectable `any HistorySnapshotProviding` whose methods carry no `@concurrent`,
+/// so wiring it into `AppDependencies` instead of the provider would have restored
+/// the ~600 ms main-actor hang with a green build and no warning. Removing it means
+/// every route into this store goes through the provider's `@concurrent` hop.
+/// Do not re-add it.
+///
+/// ## Every method body must stay free of internal `await`
+///
+/// This one actor serves several screens (Trainings, Fortschritt, a workout's PR
+/// details, the exercise detail chart), so two calls can legitimately be in flight at
+/// once — e.g. the History tab reloading while the pushed chart loads. Swift actors are
+/// reentrant **only at suspension points**: a method that never `await`s internally is
+/// guaranteed to run to completion before the next enqueued call is dequeued, which is
+/// what makes sharing this actor safe with a single non-`Sendable` `ModelContext`.
+/// Every fetch below is synchronous, so that holds today. **Adding an `await` inside any
+/// of these methods would open an interleaving window on the shared context** — split it
+/// into a separate actor instead, or hoist the awaited work to the caller.
 @ModelActor
-actor SwiftDataHistorySnapshotStore: HistorySnapshotProviding {
+actor SwiftDataHistorySnapshotStore {
     private let signposter = OSSignposter(
         subsystem: "com.shotat24fps.GymStreak",
         category: "History"
@@ -115,26 +177,52 @@ actor SwiftDataHistorySnapshotStore: HistorySnapshotProviding {
         return prs.prDetailsBySession[sessionID] ?? [:]
     }
 
-    private func fetchCompletedSessions() throws -> [WorkoutSession] {
-        // Fetching the child entity directly is the only way to prefetch the second to-many hop:
-        // `WorkoutSession.workoutExercises` is a collection, so a key path cannot continue to
-        // `.sets`. Registering the graph in this context prevents a set fault per exercise later.
-        var exerciseDescriptor = FetchDescriptor<WorkoutExercise>(
-            predicate: #Predicate { exercise in
-                exercise.workoutSession?.endTime != nil
-            }
-        )
-        exerciseDescriptor.relationshipKeyPathsForPrefetching = [\.sets, \.workoutSession]
-        _ = try modelContext.fetch(exerciseDescriptor)
+    /// Chart series + recent sessions for one exercise (audit P1.2).
+    ///
+    /// Reuses the same prefetch-correct `fetchCompletedSessions()` as the two snapshots
+    /// above and windows by `startDate` **in Swift**, deliberately rather than in the
+    /// `FetchDescriptor`. Narrowing the fetch would need a comparison across the
+    /// optional `WorkoutExercise.workoutSession` relationship in the warm-up pass's
+    /// `#Predicate`; SwiftData does not document support for that shape, and the
+    /// reported failure mode is silently wrong results rather than a thrown
+    /// `unsupportedPredicate`. The cost this finding was about — an unbounded fetch plus
+    /// a full relationship traversal — is paid on this executor now, not on the main one.
+    func fetchExerciseProgress(
+        exerciseName: String,
+        exerciseId: UUID?,
+        startDate: Date,
+        recentSessionLimit: Int
+    ) async throws -> ExerciseProgressSnapshot {
+        try Task.checkCancellation()
+        let sessions = try measured("HistoryFetchSessions") {
+            try fetchCompletedSessions()
+        }
+        let exercises = try measured("HistoryFetchExercises") {
+            try modelContext.fetch(FetchDescriptor<Exercise>())
+        }
 
-        var sessionDescriptor = FetchDescriptor<WorkoutSession>(
-            predicate: #Predicate { session in
-                session.endTime != nil
-            },
-            sortBy: [SortDescriptor(\.startTime, order: .reverse)]
-        )
-        sessionDescriptor.relationshipKeyPathsForPrefetching = [\.workoutExercises]
-        return try modelContext.fetch(sessionDescriptor)
+        try Task.checkCancellation()
+        let snapshot = measured("HistoryBuildExerciseProgress") {
+            ExerciseProgressAggregator.buildSnapshot(
+                sessions: sessions,
+                liveExercises: exercises,
+                exerciseName: exerciseName,
+                exerciseId: exerciseId,
+                startDate: startDate,
+                recentSessionLimit: recentSessionLimit
+            )
+        }
+        try Task.checkCancellation()
+        return snapshot
+    }
+
+    /// The prefetch-correct completed-session fetch, shared with the AI-coach fact actor.
+    ///
+    /// The two-step warm-up it performs used to live here; audit P1.3 moved it to
+    /// `CompletedSessionFetch` when a second model actor needed the same graph, so the
+    /// undocumented identity-map bet it makes is written down in exactly one place.
+    private func fetchCompletedSessions() throws -> [WorkoutSession] {
+        try CompletedSessionFetch.withFullGraph(in: modelContext)
     }
 
     private func measured<Result>(

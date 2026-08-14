@@ -166,6 +166,12 @@
 "rest_timer.reminder.alerts_unavailable" = "Rest-timer alerts are not enabled in your notification settings.";
 "rest_timer.reminder.failed" = "GymStreak couldn't schedule the rest-timer notification.";
 
+// Live Activity (Lock Screen / Dynamic Island). Produced in the app process and
+// carried into RestTimerAttributes.ContentState, so the widget bundle renders
+// the already-localized string and needs no keys of its own.
+"live_activity.rest_timer.complete" = "Rest Complete! 💪";
+"live_activity.rest_timer.workout_fallback" = "Workout";
+
 // MARK: - Rest Timer Config
 "rest_timer.config.title" = "Rest Timer";
 "rest_timer.config.disabled" = "Rest timer disabled";
@@ -198,8 +204,9 @@
 
 // MARK: - Workout History View
 "history.title" = "History";
-"history.empty.title" = "No Workouts Yet";
-"history.empty.description" = "Start a routine to begin tracking your workouts";
+// history.empty.title / .description are defined once, further down with the
+// History-redesign wording. A duplicate pair lived here and was dead — in a
+// .strings file the LAST definition wins, so these never reached the UI.
 "history.pendingSync.title" = "Workouts pending sync (%d)";
 "history.pendingSync.earliest" = "Oldest unsynced: %@";
 "history.pendingSync.help" = "These workouts are saved in Apple Health but never reached this iPhone. Add them to your history and we'll rebuild them from your routine.";

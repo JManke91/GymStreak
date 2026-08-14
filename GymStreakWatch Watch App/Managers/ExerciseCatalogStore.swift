@@ -23,7 +23,7 @@ import Combine
 /// temporary file only survives until the callback returns — an in-memory copy
 /// could still be lost to suspension before persistence. This helper moves the
 /// file into our owned inbox synchronously, before the callback returns.
-enum ExerciseCatalogInbox {
+nonisolated enum ExerciseCatalogInbox {
     static let appGroupID = "group.com.gymstreak.shared"
 
     static func directory(in container: URL?) -> URL? {

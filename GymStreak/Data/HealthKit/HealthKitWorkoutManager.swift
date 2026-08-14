@@ -172,7 +172,7 @@ class HealthKitWorkoutManager: NSObject, ObservableObject, HealthKitWorkoutServi
             self.lastSyncedWorkout = workout
             self.lastSyncError = nil
 
-            if let workout = workout {
+            if workout != nil {
                 print("HealthKit workout saved successfully with ID: \(healthKitWorkoutId)")
             }
 
@@ -288,7 +288,7 @@ class HealthKitWorkoutManager: NSObject, ObservableObject, HealthKitWorkoutServi
             self.lastSyncedWorkout = workout
             self.lastSyncError = nil
 
-            if let workout = workout {
+            if workout != nil {
                 print("HealthKit workout saved directly with ID: \(healthKitWorkoutId)")
             }
 

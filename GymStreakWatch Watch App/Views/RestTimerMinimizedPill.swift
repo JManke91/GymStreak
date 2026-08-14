@@ -178,7 +178,7 @@ struct RestTimerMinimizedPill: View {
             .frame(width: totalWidth, height: 15)
             .scaleEffect(pulse ? 1.06 : 1.00)
             .animation(pulseAnimation, value: pulse)
-            .onChange(of: timeRemaining) { _ in
+            .onChange(of: timeRemaining) {
                 if timeRemaining <= 3 { pulse = true }
             }
 

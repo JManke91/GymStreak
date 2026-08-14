@@ -39,7 +39,14 @@
 import Foundation
 import os
 
-enum WatchSyncDiagnostics {
+/// `nonisolated` is load-bearing, not decoration: the watch target compiles with
+/// `SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor`, so without it every `static func`
+/// here would be main-actor-isolated and unreachable from the `nonisolated`
+/// `WCSessionDelegate` callbacks that need to log before hopping to the main
+/// actor. Nothing here touches mutable state — `Logger` is `Sendable` — so
+/// opting the whole type out of the module's default isolation is correct. (In the iOS copy this is a harmless no-op — that target defaults to
+/// nonisolated — but the two files are kept identical so they stay diffable.)
+nonisolated enum WatchSyncDiagnostics {
     private static let logger = Logger(
         subsystem: "com.shotat24fps.GymStreak", category: "WatchSync"
     )

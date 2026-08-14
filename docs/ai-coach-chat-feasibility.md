@@ -89,6 +89,7 @@ GymStreak/
 │   │                                     #   overflow policy, error mapping (extend with .refusal/.concurrentRequests)
 │   ├── ChatFactService.swift             # data layer for tools: queries SwiftData + wraps domain services,
 │   │                                     #   returns compact localized fact strings (aggregator pattern, arch §2 exception)
+│   │                                     #   — superseded by ChatFactStore/ChatFactBuilder, audit P1.3; see "as built" below
 │   ├── Tools/
 │   │   ├── NextWorkoutTool.swift
 │   │   ├── ExercisePRTool.swift
@@ -107,7 +108,7 @@ Key structural decision: **the UI message list is our own array, decoupled from 
 Three layers, honoring the fact-resolution doctrine (model never sees raw sets, never computes):
 
 1. **Ambient context in `Instructions`** (static per session, kept small — every token here is paid on every turn): today's date + weekday, locale/response-language directive, unit system, week-start convention (ISO/German, matching `HistoryStatsService.isoGermanCalendar()`). This is what makes "next workout" answers resolvable as "tomorrow"/"on Friday".
-2. **On-demand facts via tools** (the workhorse): the model picks a tool + arguments; the tool calls `ChatFactService`, which queries repositories/SwiftData and delegates all computation to the existing domain services; the tool returns **pre-formatted, localized fact lines** (same style as `toPromptText()` in the existing surfaces). The model's only job is verbalizing them.
+2. **On-demand facts via tools** (the workhorse): the model picks a tool + arguments; the tool calls the fact layer (planned as `ChatFactService`; built, then split by audit P1.3 into `ChatFactStore` + `ChatFactBuilder`), which queries repositories/SwiftData and delegates all computation to the existing domain services; the tool returns **pre-formatted, localized fact lines** (same style as `toPromptText()` in the existing surfaces). The model's only job is verbalizing them.
 3. **Nothing else.** No workout-history dump in the prompt, no raw numbers outside tool returns. Instructions explicitly state: answer only from tool results; if tools can't answer, say so; never perform arithmetic; repeat numbers verbatim.
 
 ### The 3 spike tools
@@ -173,11 +174,15 @@ GymStreak/
 ├── Domain/Models/AICoach/
 │   └── CoachChatModels.swift              # CoachChatMessage (id/role/phase) + ChatHistoryTimeframe (@Generable enum)
 ├── Domain/Interfaces/AICoach/
-│   ├── ChatFactProviding.swift            # @MainActor + Sendable tool-backing data surface (3 fact methods)
+│   ├── ChatFactProviding.swift            # Sendable, async tool-backing data surface (3 fact methods) — see delta 6
 │   └── CoachChatServicing.swift           # chat service surface (documentation/parity contract — see delta 3)
+├── Domain/Services/AICoach/
+│   ├── ChatFactBuilder.swift              # pure fact-line building over already-fetched models (Epley 1RM, timeframes, formatting)
+│   └── ExerciseNameResolver.swift         # free-form name → library (folded exact/contains/token; .noMatch hands list to model)
+├── Data/Persistence/
+│   └── CompletedSessionFetch.swift        # the one prefetch-correct completed-session fetch, shared with the History model actor
 ├── Data/AICoach/Chat/
-│   ├── ChatFactService.swift              # queries SwiftData + WorkoutPlanningService/HistoryStatsService + Epley 1RM; formats fact lines
-│   ├── ExerciseNameResolver.swift         # free-form name → library (folded exact/contains/token; .noMatch hands list to model)
+│   ├── ChatFactStore.swift                # ChatFactProvider (@concurrent hops) + @ModelActor ChatFactStore (fetching only)
 │   ├── CoachChatService.swift             # @Observable @MainActor singleton: session, streaming, overflow, error mapping
 │   ├── Tools/{NextWorkoutTool,ExercisePRTool,WorkoutHistoryTool}.swift
 │   └── SystemPrompts/CoachChatInstructions.swift   # ambient context + hard rules + DE glossary + optional digest
@@ -192,10 +197,18 @@ Entry point (since 2026-07-10): a floating "Ask your coach" companion bar (`Coac
 ### Deltas from the plan
 
 1. **No `ToolCallingMode` (Step 0).** Tool invocation is instructions-only; the `Instructions` state forcefully that any schedule/PR/history question MUST be answered from a tool. There is no `.required` lever, so the eval measures the achieved invocation rate directly.
-2. **Tool `call` runs off the main actor.** `Tool.call(arguments:)` is `@concurrent`; the fact layer is `@MainActor` (SwiftData). Each tool holds `any ChatFactProviding` (`@MainActor & Sendable`) and `await`s it to hop back — so `ChatFactProviding` is declared `Sendable`.
+2. **Tool `call` and the fact layer.** Apple declares the `Tool.call(arguments:)` *requirement* `@concurrent` (verified against the iOS 26 reference, 2026-08-13). Our three tools leave their own `call` unannotated, as Apple's `FindContacts` sample does. The fact layer originally leaned on that: it was `@MainActor` (SwiftData) and each tool `await`ed it to hop *back* onto the main actor. **Audit P1.3 inverted this** — see delta 6.
 3. **VM references `CoachChatService` concretely, not via `CoachChatServicing`.** SwiftUI Observation cannot track `@Observable` reads through an existential, so the VM depends on the concrete singleton (default-injected) and forwards `messages`/`isResponding` via computed properties; `CoachChatServicing` remains as a documentation/parity contract. This mirrors the existing deliberate concrete use of `AICoachAvailability`.
 4. **Overflow budgeting uses the exact token APIs on 26.4+.** `condenseIfNeeded()` measures `tokenCount(for: transcriptEntries)` + `tokenCount(for: tools)` against `contextSize`; below 26.4 it falls back to a chars/3.5 estimate. Both proactive (>70% of usable) and reactive (`exceededContextWindowSize` → condense → retry once) paths are implemented; condensation rebuilds the session with a deterministic Swift-side digest (last 2 exchanges verbatim + older-turn topic list) and prewarms it. The visible `messages` array is never touched by condensation.
-5. **Fact lines are compact canonical English; the model translates.** To contain spike scope, `ChatFactService` emits English fact lines (localized weekday/date via `Locale.current`) and the `Instructions` carry a small DE glossary (Topsatz/Wiederholungen/Bestwert/…) mirroring the Workout Analysis surface. Localizing the fact lines themselves is post-spike work.
+5. **Fact lines are compact canonical English; the model translates.** To contain spike scope, `ChatFactBuilder` emits English fact lines (weekday/date pinned to `en_US`, *not* the device locale — a device-locale weekday produced "…due Samstag, in 2 days" inside an English reply) and the `Instructions` carry a small DE glossary (Topsatz/Wiederholungen/Bestwert/…) mirroring the Workout Analysis surface. Localizing the fact lines themselves is post-spike work.
+
+6. **The fact layer moved off the main actor (audit P1.3, 2026-08-13).** The original design had a tool — running off the main actor — `await` a `@MainActor` fact service to hop *onto* the main actor and there run an unbounded, unprefetched fetch plus a session × exercise × set scan, live, mid-stream, possibly several times per turn. It is now split three ways:
+
+   - `ChatFactProviding` lost `@MainActor` and `AnyObject`; its three methods are `async`.
+   - `ChatFactProvider` (struct) carries `@concurrent` on each method and forwards into a `@ModelActor ChatFactStore`, built inside `Task.detached` — the exact pattern `SwiftDataHistorySnapshotProvider` established and measured. **319 ms** of main-actor stall at 240 sessions disappears with it (`chatFactLookupKeepsMainActorResponsive`).
+   - All fact-line building moved to `ChatFactBuilder` in `Domain/Services/AICoach/`, which must stay isolation-agnostic — the model actor calls it from its own executor. `ExerciseNameResolver` moved with it and lost the `@MainActor` it never needed.
+
+   The tools were **not** touched: guaranteeing off-main once, at the boundary that owns the cost, is what makes the tools' own (undocumented) isolation irrelevant. Fetching is now prefetch-correct — `nextWorkoutFacts` takes a lean fetch that prefetches only `\.routine`, the other two take the full graph via the shared `CompletedSessionFetch`. `CoachChatServicing` gained `isConfigured` so the ViewModel does not build a `@ModelActor` on every appearance of the chat's `fullScreenCover`.
 
 ### Device-test findings (July 2026)
 
@@ -203,7 +216,7 @@ Entry point (since 2026-07-10): a floating "Ask your coach" companion bar (`Coac
 
 **Fix applied (A + D):**
 - **A — model-assisted resolution bounded to real data.** `resolveExercise` now returns `.noMatch` on a total lexical miss; `exercisePRFacts` responds with the user's *actual* exercise-name list plus an instruction to re-call `getExercisePR` with the closest name "including a translation or synonym". The 3B model supplies the cross-lingual mapping (which it is good at) and re-invokes with the exact name; being bounded to the real library, it cannot invent an exercise, and Swift still computes the PR. Costs one extra tool round-trip + the name list (~100–300 tokens, capped at 60 names) **only on the miss path**. Instructions gained a matching bullet.
-- **D — diacritic/umlaut folding (`ChatFactService.fold`).** Expands ä/ö/ü/ß → ae/oe/ue/ss and folds other diacritics before matching, so same-language variants ("Bankdrücken" / "Bankdruecken" / "bank drücken") unify. Complementary only — it does **not** bridge languages (that's A's job).
+- **D — diacritic/umlaut folding (`ExerciseNameResolver.fold`).** Expands ä/ö/ü/ß → ae/oe/ue/ss and folds other diacritics before matching, so same-language variants ("Bankdrücken" / "Bankdruecken" / "bank drücken") unify. Complementary only — it does **not** bridge languages (that's A's job).
 
 Still to validate on-device: that the model reliably performs the re-call step (part of the tool-reliability eval below), and the added round-trip's latency impact.
 
@@ -224,7 +237,7 @@ First partial pass of `docs/ai-coach-chat-eval.md` (device, German locale). **Gr
 - **Markdown leak (fixed).** The model emitted `**Push:**` etc.; the chat renders plain `Text`, so asterisks showed literally. Fix: instruction "plain text only, no Markdown" **plus** a defensive `CoachChatService.stripMarkdown` (removes `**`/`__`/`` ` `` from each snapshot) so a stray marker never reaches the UI.
 - **Estimated 1RM mis-stated as "max weight" (fixed).** Tool returned `best set 12 kg × 7 reps, estimated 1RM 14.8 kg`; the model answered "dein maximales Gewicht … 14,8 kg" — presenting the derived 1RM as a lifted weight. Fix: instruction that the PR is the best SET (weight×reps) and the estimated 1RM is a calculation that must never be called the max/lifted weight. Same run showed formal "Sie/Ihr"; added an instruction to always address the user informally ("du"/"you").
 - **"Letztes Training" had no tool affordance (fixed).** `getWorkoutHistory` only knew thisWeek/lastWeek/thisMonth/lastMonth, so "my last workout" got forced into `lastWeek` → 0 workouts → wrong answer. Fix: added a `.allTime` case to `ChatHistoryTimeframe` (+ tool-description hint) so last/most-recent-workout questions resolve against all history.
-- **Language policy → match the query (decided + fixed).** English queries sometimes got German answers, or mixed output ("due Samstag, in 2 days" — the fact line's device-locale weekday leaked into an English reply). Decision: **answer in the language of the user's latest message.** Fix: instruction now says reply in the query's language and translate the (English) facts fully; and the fact lines are made **uniformly English** — `todayLine`, `weekday`, and `mediumDate` use a fixed `en_US` locale (`ChatFactService.factLocale`) instead of the device locale, so no weekday/month name leaks in the wrong language for the model to translate.
+- **Language policy → match the query (decided + fixed).** English queries sometimes got German answers, or mixed output ("due Samstag, in 2 days" — the fact line's device-locale weekday leaked into an English reply). Decision: **answer in the language of the user's latest message.** Fix: instruction now says reply in the query's language and translate the (English) facts fully; and the fact lines are made **uniformly English** — `todayLine`, `weekday`, and `mediumDate` use a fixed `en_US` locale (`ChatFactBuilder.factLocale`) instead of the device locale, so no weekday/month name leaks in the wrong language for the model to translate.
 
 ### Evaluation run 2 (partial, July 2026)
 
@@ -246,7 +259,7 @@ The DEBUG-only tool tracing added for the eval has been **removed** now that man
 
 ### Decision gate — PASSED (2026-07-10)
 
-The gate is cleared for the risk the spike existed to resolve — **tool-invocation reliability + grounding**. Evidence: three device-test rounds where grounding held and every failure was a fixable prompt/tool-shape issue (never a tool-call failure or hallucinated number), now regression-locked by **18 automated tests** (`ExerciseNameResolverTests`, `ChatFactServiceTests`, `ChatOverflowPolicyTests`; see `docs/ai-coach-chat-eval.md`). The DEBUG-only tool tracing added for the eval has been removed.
+The gate is cleared for the risk the spike existed to resolve — **tool-invocation reliability + grounding**. Evidence: three device-test rounds where grounding held and every failure was a fixable prompt/tool-shape issue (never a tool-call failure or hallucinated number), now regression-locked by **19 automated tests** (`ExerciseNameResolverTests`, `ChatFactProviderTests`, `ChatOverflowPolicyTests`; see `docs/ai-coach-chat-eval.md`). The DEBUG-only tool tracing added for the eval has been removed.
 
 Two items are **build-time checkpoints**, not gate blockers (they need the live 3B and can't be closed off-device): the real 40-turn overflow behavior (mechanism is unit-tested; live model behavior to confirm once) and first-token latency. The no-argument `NextWorkoutTool` (`@Generable struct Arguments {}`) compiles and was invoked in testing; watch it during the build (fallback: a single dummy enum argument).
 

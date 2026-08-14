@@ -343,7 +343,7 @@ final class WatchWorkoutViewModel: ObservableObject {
     /// Not excluded for overload-resolved exercises: unlike reps/weight, the
     /// rest time is not something the progressive-overload transaction commits,
     /// so there is nothing it could regress. iOS's own
-    /// `WorkoutViewModel.updatePrimaryTemplateSets` reconciles rest outside its
+    /// `RoutineTemplateSyncService.updatePrimaryTemplateSets` reconciles rest outside its
     /// overload exclusion for exactly this reason.
     var hasRestChanges: Bool {
         exercises.contains { $0.sets.contains(where: \.wasRestAdjusted) }

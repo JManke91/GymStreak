@@ -166,6 +166,12 @@
 "rest_timer.reminder.alerts_unavailable" = "Pausentimer-Hinweise sind in deinen Mitteilungseinstellungen nicht aktiviert.";
 "rest_timer.reminder.failed" = "GymStreak konnte die Pausentimer-Mitteilung nicht planen.";
 
+// Live Activity (Sperrbildschirm / Dynamic Island). Wird im App-Prozess erzeugt
+// und in RestTimerAttributes.ContentState übergeben — die Widget-Extension
+// rendert den bereits lokalisierten Text und braucht keine eigenen Keys.
+"live_activity.rest_timer.complete" = "Pause beendet! 💪";
+"live_activity.rest_timer.workout_fallback" = "Training";
+
 // MARK: - Rest Timer Config
 "rest_timer.config.title" = "Pausentimer";
 "rest_timer.config.disabled" = "Pausentimer deaktiviert";
@@ -198,8 +204,9 @@
 
 // MARK: - Workout History View
 "history.title" = "Verlauf";
-"history.empty.title" = "Noch keine Workouts";
-"history.empty.description" = "Starte eine Routine um deine Workouts zu verfolgen";
+// history.empty.title / .description sind nur einmal definiert, weiter unten mit
+// dem Wording des History-Redesigns. Ein doppeltes Paar stand hier und war tot —
+// in einer .strings-Datei gewinnt die LETZTE Definition.
 "history.pendingSync.title" = "Workouts warten auf Sync (%d)";
 "history.pendingSync.earliest" = "Ältestes nicht synchronisiert: %@";
 "history.pendingSync.help" = "Diese Workouts sind in Apple Health gespeichert, haben dieses iPhone aber nie erreicht. Füge sie deinem Verlauf hinzu – wir rekonstruieren sie aus deiner Routine.";

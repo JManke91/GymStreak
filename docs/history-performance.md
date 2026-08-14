@@ -34,7 +34,46 @@ cold, with no prior conversation context.
 
 Related: [history-redesign.md](./history-redesign.md) (what the screen is),
 [delete-workout.md](./delete-workout.md) (why the list is not a `List`),
-[architecture.md](./architecture.md) (layer rules).
+[architecture.md](./architecture.md) (layer rules),
+[swift6-concurrency.md](./swift6-concurrency.md) (the isolation contract Phase 3 depends on).
+
+---
+
+## 0. ⚠️ `nonisolated async` alone does NOT keep Phase 3 off the main actor (found 2026-08-12)
+
+Phase 3's whole value is that the unbounded fetch and O(history) aggregation run on a
+model actor, **off** `MainActor`. During the Swift 6 language-mode migration, enabling
+`SWIFT_APPROACHABLE_CONCURRENCY = YES` put all of that work **back on the main actor**
+— no code change, no warning, no error, build green.
+
+Cause: that setting enables SE-0461 (`nonisolated(nonsending)` by default), which makes
+a `nonisolated async` function run **on the caller's actor** instead of leaving it. The
+`HistorySnapshotProviding` methods are exactly that, so a call from a `@MainActor`
+ViewModel executed the aggregation inline on the main actor.
+
+**Fix (shipped): `@concurrent` on the three concrete
+`SwiftDataHistorySnapshotProvider` methods** — SE-0461's explicit "always leave the
+caller's actor" opt-out. The off-main guarantee is now a property of the code rather
+than of a build setting, and approachable concurrency is enabled project-wide.
+
+Measured with `GymStreakTests/SwiftDataHistorySnapshotStoreTests`:
+
+| Configuration | `heartbeat.maximumDelay` | |
+|---|---|---|
+| Swift 5, approachable OFF (pre-migration) | within the 100 ms budget | ✔ |
+| Swift 6, approachable ON, **no `@concurrent`** | **~600 ms** (0.597 / 0.611 / 0.616 s) | ✘ |
+| Swift 6, approachable ON, **`@concurrent` on the provider** | within budget | ✔ shipped |
+
+**Two variants that did not fix it:** `@concurrent` on the *protocol requirements*
+(616 ms) and removing the actor's vestigial conformance (599 ms). ⚠️ Neither number
+proves anything general — both were measured while the test called the **concrete**
+provider directly, so the protocol annotation could not have affected that path. The
+semantics of `@concurrent` on a requirement remain **unverified**. The tripwire test now
+dispatches through `any HistorySnapshotProviding`, so it guards the production path.
+
+`largeSnapshotBuildKeepsMainActorResponsive` is therefore not a nice-to-have — it is
+the tripwire for this whole document, and the only thing that catches this class of
+regression. Run it before believing any isolation or build-setting change is safe.
 
 ---
 

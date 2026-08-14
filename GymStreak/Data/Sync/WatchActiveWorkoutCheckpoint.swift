@@ -20,15 +20,20 @@
 //  navigation) — never on sensor samples or high-frequency statistics.
 //
 //  IDENTICAL COPY in both targets — `GymStreak/Data/Sync/` and
-//  `GymStreakWatch Watch App/Models/` — keep them in sync. There is no watch
-//  unit-test target, so the iOS test target covers this logic.
+//  `GymStreakWatch Watch App/Models/` — keep them in sync. Since audit item P1.1
+//  there IS a watch unit-test target (`GymStreakWatchTests`, see
+//  `docs/watch-unit-tests.md`), so cover the watch copy there rather than relying
+//  on the iOS twin — a schema drift between the copies compiles cleanly on both.
 //
 
 import Foundation
 
 /// The durable app-owned snapshot of an in-progress watch workout.
 struct WatchActiveWorkoutCheckpoint: Codable, Equatable {
-    /// Schema version so a future field addition stays backward-decodable.
+    /// Schema version, for migrations that need to know *which* older shape they
+    /// are reading. It is NOT what makes a field addition backward-decodable:
+    /// decoding never branches on it. That guarantee comes from the fields being
+    /// Optional, or from `ActiveWorkoutExercise`'s hand-written `init(from:)`.
     var version: Int
     /// Stable GymStreak workout UUID — `CompletedWatchWorkout.id` and the
     /// correlation key for the durable outgoing entry. Preallocated at workout
@@ -56,11 +61,20 @@ struct WatchActiveWorkoutCheckpoint: Codable, Equatable {
     /// re-derives a safe state without re-prompting, allocating a second
     /// transaction, or applying twice. Whether that transaction is still pending
     /// is NOT stored here — the shared sync-state owner is the only truth for
-    /// that. Defaulted so checkpoints written before this field stay decodable.
-    var appliedOverloads: [AppliedOverload] = []
+    /// that.
+    ///
+    /// Optional (nil default) is what keeps a checkpoint written before this
+    /// field decodable. A *defaulted non-optional* does NOT: synthesized
+    /// `Decodable` throws `keyNotFound` rather than consulting the default — the
+    /// comment here used to claim otherwise, and the 1.1.6 checkpoint shape
+    /// predates both this field and `deferredOverloadSlotIDs`, so the claim was
+    /// load-bearing and wrong. See `docs/watch-sync.md`, "Wire schema evolution
+    /// rule". nil and empty mean the same thing to every reader.
+    var appliedOverloads: [AppliedOverload]? = nil
     /// Targets the user dismissed with "Later". Deferring is per-slot and never
     /// marks overload applied, so the post-workout summary can still offer it.
-    var deferredOverloadSlotIDs: [UUID] = []
+    /// Optional for the same reason as `appliedOverloads`.
+    var deferredOverloadSlotIDs: [UUID]? = nil
 
     /// One applied overload's stable identity pair.
     struct AppliedOverload: Codable, Equatable {

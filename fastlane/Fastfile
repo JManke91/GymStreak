@@ -87,6 +87,40 @@ platform :ios do
     )
   end
 
+  desc "Run the iOS unit tests (GymStreakTests)"
+  lane :test_unit_ios do
+    run_tests(
+      scheme: "GymStreakTests",
+      devices: ["iPhone 17 Pro"],
+      clean: false
+    )
+  end
+
+  # The watch unit tests need their own invocation: they live in a separate
+  # scheme (GymStreakWatchTests) on a watchOS destination, and a single
+  # `xcodebuild test` run resolves exactly one destination platform, so they
+  # cannot be folded into the iOS run or into GymStreak.xctestplan.
+  # See docs/watch-unit-tests.md.
+  desc "Run the watchOS unit tests (GymStreakWatchTests)"
+  lane :test_unit_watch do
+    run_tests(
+      scheme: "GymStreakWatchTests",
+      devices: ["Apple Watch Series 11 (46mm)"],
+      sdk: "watchsimulator",
+      clean: false
+    )
+  end
+
+  # Run this before merging anything that touches watch code. The watch suite
+  # asserts on the *watch* copies of logic that is duplicated per target, so
+  # skipping it is exactly how a drift between the copies ships (see P1.4 in
+  # docs/architecture-audit-2026-08.md).
+  desc "Run all unit tests (iOS + watchOS)"
+  lane :test_unit do
+    test_unit_ios
+    test_unit_watch
+  end
+
   desc "Generate Apple Watch screenshots for App Store"
   lane :watch_screenshots do
     snapshot(

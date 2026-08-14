@@ -39,6 +39,30 @@ Generate only dark mode screenshots (alias for screenshots lane)
 
 Run UI tests without capturing screenshots
 
+### ios test_unit_ios
+
+```sh
+[bundle exec] fastlane ios test_unit_ios
+```
+
+Run the iOS unit tests (GymStreakTests)
+
+### ios test_unit_watch
+
+```sh
+[bundle exec] fastlane ios test_unit_watch
+```
+
+Run the watchOS unit tests (GymStreakWatchTests)
+
+### ios test_unit
+
+```sh
+[bundle exec] fastlane ios test_unit
+```
+
+Run all unit tests (iOS + watchOS)
+
 ### ios watch_screenshots
 
 ```sh

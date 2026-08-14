@@ -186,6 +186,53 @@ The engine does **not** gate on `HKHealthStore.authorizationStatus(for:)` — th
 
 After a successful ingest save, `.workoutHistoryDidChange` is posted by whichever isolated path committed — `WatchWorkoutIngestionService` for a no-template workout, `WatchTemplateTransactionService` for a template transaction. `WorkoutViewModel` observes this, refreshes its display cache, and re-runs reconciliation. Correlation correctness remains independent of that display refresh: it always comes from the fresh read boundary above.
 
+## Delegate isolation boundary (Swift 6, updated 2026-08-12)
+
+Both `WatchConnectivityManager`s are `@MainActor final class` with every
+`WCSessionDelegate` requirement individually `nonisolated`, hopping via
+`Task { @MainActor in … }`. That hop mechanism is deliberate and must not be swapped
+for `DispatchQueue.main.async` or `MainActor.assumeIsolated`: SE-0431 guarantees tasks
+targeting an actor are **enqueued in creation order**, which is what preserves the
+callback ordering this protocol depends on, and `assumeIsolated` would trap because
+these callbacks genuinely run on WCSession's background queue.
+
+Under Swift 6 strict concurrency **nothing non-`Sendable` may cross that hop**, so each
+callback now extracts what it needs *before* the `Task`:
+
+- **`WCSession` flags** (`isPaired`, `isWatchAppInstalled`, `isReachable`) are read
+  synchronously in the nonisolated callback; only the resulting `Bool`s are sent. The
+  session object itself never crosses.
+- **Its *mutable* snapshot state (`receivedApplicationContext`,
+  `outstandingFileTransfers`) is deliberately NOT hoisted.** Both are read *inside* the
+  hop from the manager's stored `self.session` (the same `WCSession.default` singleton
+  the callback receives), so they are sampled at the moment they are used — exactly as
+  before the migration. Hoisting them was tried and reverted: it opened a window
+  between callback and hop in which a newly started catalogue transfer would be missing
+  from `cleanUpOrphanedStagingFiles(keeping:)` and its staging file deleted mid-flight.
+  **Do not "optimise" these reads back out of the hop.**
+- **`[String: Any]` plist payloads** cross inside `WatchWirePayload`, a documented
+  `@unchecked Sendable` transport box in `WatchTemplateTransactionModels.swift` (a copy
+  in each target). It deliberately boxes rather than re-typing the dictionary:
+  re-encoding plist values into a closed `Sendable` enum would risk silently dropping
+  or widening a value this protocol depends on — the routine authority already encodes
+  `UInt64` generations as decimal strings because plists are lossy here. Boxing keeps
+  the received payload byte-identical and leaves every existing parser
+  (`TemplateAckRecord.from(payload:)`, `RoutineSnapshotHeader.parse(context:)`,
+  `WatchRoutineSync`, the catalogue challenge readers) unchanged.
+- **`ExerciseCatalogInbox`, `WatchWorkoutWire`, `WatchExerciseCatalogSync` and
+  `WatchSyncDiagnostics` are `nonisolated`** so the callbacks can reach them. This is
+  load-bearing on the watch target, which compiles with
+  `SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor`. `ExerciseCatalogInbox.storeIncomingFile`
+  especially **must** stay synchronous in the callback: `WCSessionFile`'s temp file is
+  deleted as soon as the delegate returns, and `WCSessionFile` is not `Sendable`, so
+  deferring it into the hop would be a bug.
+
+The activation callback's **load-bearing ordering** (challenge update before inbox
+drain) is unchanged — extraction happens before the `Task`, the use order inside it is
+identical. Full rationale: `docs/swift6-concurrency.md` §4.
+
+---
+
 ## Background lifecycle
 
 `GymStreakWatchApp` registers `.backgroundTask(.watchConnectivity)` → `WatchConnectivityManager.handleWatchConnectivityBackgroundWake()`. Every WatchConnectivity delegate callback synchronously registers its app-owned work with `WatchConnectivityDelegateWorkTracker` before hopping to the main actor, and unregisters it only when that work is complete. The background handler waits for activation, `hasContentPending == false`, and the tracker to become idle, then rechecks both signals before performing the catalogue inbox drain, challenge republication, and workout reconciliation. This is an explicit completion barrier: `hasContentPending` covers undelivered *system* content only, and a single `Task.yield()` cannot prove that already-dispatched delegate work has finished. There is no arbitrary local timeout: the system cancels the task at expiration, at which point every durable input remains replayable for the next wake. SwiftUI completes the background task when the async closure returns — there is no explicit completion call. Watch scene activation also reconciles directly, so reopening a suspended app remains a recovery trigger rather than relying on WCSession's one-time process activation callback.
@@ -369,7 +416,7 @@ A rest duration adjusted on the watch mid-workout (Digital Crown or the minimize
 
 *Wire.* `CompletedWatchSet` gains optional `plannedRestTime` — the rest the set started the workout with — alongside the existing `restTime`, which now carries what was actually rested for (both `WatchModels.swift` copies stay wire-identical, and `IncomingWatchSet` mirrors it). The **pair** is the point: `restTime != plannedRestTime` is *explicit intent*, exactly as `plannedReps`/`actualReps` is for values. Diffing the payload against the live template instead would read a concurrent iPhone rest edit as watch intent and silently revert it, which the transaction's "only explicit intent is merged against the current routine" contract forbids. Optional decoding keeps old-watch payloads readable: absent baseline ⇒ no rest intent, never a write.
 
-*One value per exercise, never per set.* The app models a single rest duration per exercise everywhere (routine editor, watch write path, iOS `WorkoutViewModel.updatePrimaryTemplateSets`), so both the fold and the merge take the performed exercise's **first set's** `restTime` and write it to that exercise's whole scheme — template sets that were never performed included. A superset round's rest is written by the watch to every member of the group (ticket 01's fan-out), so the payload already carries the new value on each slot and the merge needs no superset rule of its own.
+*One value per exercise, never per set.* The app models a single rest duration per exercise everywhere (routine editor, watch write path, iOS `RoutineTemplateSyncService.updatePrimaryTemplateSets`), so both the fold and the merge take the performed exercise's **first set's** `restTime` and write it to that exercise's whole scheme — template sets that were never performed included. A superset round's rest is written by the watch to every member of the group (ticket 01's fan-out), so the payload already carries the new value on each slot and the merge needs no superset rule of its own.
 
 *Change detection (watch).* `ActiveWorkoutSet.wasRestModified` is deliberately **not** folded into `wasModified`: a rest change is one change per exercise, so counting it per set would inflate the finish dialog's "you modified N sets". It surfaces instead as `WatchWorkoutViewModel.hasRestChanges` → `hasTemplateChanges`, and as the new `WatchWorkoutFinishDialogState.restOnly` ("You changed the rest time. Update your routine template?"). Rest is the weakest of the three signals — any set or structural change already offers the update and the rest rides along with it — so `.restOnly` is reached only when nothing else changed.
 
@@ -566,6 +613,32 @@ AppDependencies.init → WatchWorkoutIngestionCoordinator.routineAuthorityDidCha
 `WatchExercise.id` is the source `RoutineExercise.id` and remains unchanged through `ActiveWorkoutExercise`, `CompletedWatchExercise`, and `IncomingWatchExercise`. On ingestion, iOS snapshots that value into `WorkoutExercise.routineExerciseId`. This distinguishes repeated uses of the same library exercise in history without adding a new Watch wire field, so old cached routines and mixed app versions retain their existing Codable compatibility.
 
 All models preserve UUIDs from the iOS SwiftData originals for ID-based matching when updating templates.
+
+### Wire schema evolution rule (audit P1.4, fixed 2026-08-13)
+
+**Every field added after v1 to a DTO that is decoded from the wire *or from persistence* must be `Optional` with a `nil` default, in *both* target copies.** A non-optional property with a default value is not a decode-time fallback: synthesized `Decodable` emits `container.decode(...)` for it unconditionally, so an absent key throws `DecodingError.keyNotFound` and the default is never consulted. Only `Optional`-typed properties are synthesized as `decodeIfPresent`. This is compiler-synthesis behavior (`DerivedConformanceCodable.cpp`), unchanged from Swift 4 through 6.3, and no Swift Evolution proposal makes default values participate in decoding. Widening a field to `Optional` does **not** change the wire: a non-nil optional is still encoded (`encodeIfPresent`), so only `nil` omits the key.
+
+The one real drift found by the August 2026 audit across ~4,600 duplicated lines was `CompletedWatchExercise.loadBehaviorRaw` — `String? = nil` on iOS, `String = "resistance"` on the watch since `7812427` (2026-07-12). The watch copy is now `String? = nil`, identical to iOS, and both copies carry the rule as a doc comment.
+
+*Why the watch side was the one that had to widen.* iOS is the receiver and its tolerance for a pre-2026-07-12 payload must not be given up. More importantly, the watch is not only a sender: `CompletedWatchWorkout` is persisted inside `WatchSyncStateStore`'s App-Group state file and its legacy migration blob, so **the watch decodes this type itself**. Blast radius there is not one field — `WatchSyncStateFile` decodes as a whole, so a single undecodable entry quarantines the file as `.corrupt` and starts the outgoing queue empty (`WatchSyncStateStore.swift:117-135`); in `migrateLegacyEntries` an undecodable blob simply never migrates and the workouts are stranded. Apple does not document whether the `transferUserInfo` queue survives an app update, so an old-schema payload reaching a new build cannot be ruled out.
+
+*The one sanctioned exception: a hand-written `init(from:)` (2026-08-13).* `ActiveWorkoutExercise` keeps three fields the rule would otherwise forbid — `loadBehaviorRaw: String = "resistance"`, `isPendingWatchAddition: Bool = false`, `alternatives: [...] = []` — and it *is* decoded from persistence, as `WatchActiveWorkoutCheckpoint.exercises`. Widening them was rejected: it ripples to ~19 read sites, nearly all inside `WatchWorkoutViewModel`, which the audit puts on explicit P3 hold. Instead both copies carry an identical `init(from:)` that reads those three with `decodeIfPresent(...) ?? default`. Three details make this safe rather than a second footgun:
+
+- **It lives in an `extension`.** An `init` in the struct body would suppress the memberwise initializer that every construction site uses.
+- **`CodingKeys` and `encode(to:)` stay synthesized** — no hand-written `CodingKeys`, so a newly added property can never be silently dropped from the *encoded* form (which would be a worse hazard than the one being fixed).
+- **The decode side is guarded by a test, because the compiler cannot guard it.** A property added later but not decoded in the manual `init` compiles cleanly and then silently never restores. `checkpointExerciseRoundTripPreservesEveryField` has two halves, and the split matters:
+  - *Structural* — it pins the encoded key set against an explicit 21-key list and asserts `Mirror(reflecting:).children.count` equals that same count. This is what fails when a property is **added**. Round-trip equality alone does **not**: a new defaulted property left out of both the fixture and the `init` lands on its default on both sides and compares equal. The `Mirror` half additionally covers what a key-set check alone would miss — a new *Optional* property the fixture forgets to populate, which is nil and therefore absent from the encoded keys.
+  - *Value* — every field in the fixture is at a non-default value, so a field decoded **incorrectly** (rather than not at all) fails here.
+
+  Both halves were verified to bite: deleting one `decodeIfPresent` fails the value half, and adding an undecoded `var probeAddedLater: Int = 0` fails the structural half while the value half passes. `checkpointDecodesWhenPostV1FieldsAreAbsent` pins the containing checkpoint's key set the same way.
+
+Prefer the `Optional` rule; reach for this only when widening would ripple into held code. The containing `WatchActiveWorkoutCheckpoint` shows where the line falls: it had the identical hazard in `appliedOverloads` and `deferredOverloadSlotIDs` (both non-optional with `[]` defaults, added in `4f82e33` after the 1.1.6 checkpoint shape had already shipped), but those have only **two** read sites, so they were simply widened to Optional and coalesced at their only two read sites in `WatchWorkoutViewModel+Recovery.swift`. Two read sites is not a ripple.
+
+That one mattered more than the exercise-level fix it was found next to. A throw there is not partial: `WatchActiveWorkoutCheckpointStore.load()` swallows it with `try?`, renames the file `.corrupt` and returns nil, so `WatchWorkoutRecoveryPlanner` sees no checkpoint at all and the user's live in-progress workout — exercises, completed values, routine identity, structural baseline — is silently discarded. That is precisely the outcome the checkpoint exists to prevent. `checkpointDecodesWhenPostV1FieldsAreAbsent` (both suites) now decodes a checkpoint with those two keys stripped.
+
+Note the checkpoint's `version: Int` does **not** deliver backward-decodability on its own — decoding never branches on it — and its doc comment now says so. The `appliedOverloads` comment previously asserted that being "defaulted" kept old checkpoints decodable; that claim was load-bearing and false, and is corrected in place.
+
+*Tripwire.* `WatchModelsWireCompatibilityTests` exists in **both** test targets (twin suites, aligned assertions). Each decodes a `CompletedWatchWorkout` containing only the v1 keys and asserts every later addition arrives as `nil`, so any future non-optional wire field fails immediately on the side that added it. The watch suite additionally asserts the sender still emits `loadBehaviorRaw` (the widening did not change the wire) and that an absent value resolves to resistance through `toActiveWorkoutExercise()`; the iOS suite asserts the same fallback at the Data→Domain boundary (`toIncomingWatchExercise`). Verified to bite: reintroducing the drift fails the watch suite with `keyNotFound: Key 'loadBehaviorRaw' ... Path: exercises[0]`.
 
 ## UI Feedback
 When a template is updated on the watch, a "Template updated" banner appears on the workout summary screen (`WatchWorkoutSummaryView`), driven by `WatchWorkoutViewModel.templateWasUpdated`. That banner reports the accepted intent, not its fate — if the update later turns out to be terminally unappliable, the routine list shows a dismissible notice saying so (see "Telling the user a template update was not applied").

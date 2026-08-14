@@ -69,7 +69,7 @@ extension WatchTemplateTransactionService {
             // Rest reconciles even for an overload-resolved exercise: the
             // progressive-overload transaction commits reps and weight, never
             // the rest time, so there is nothing here it could regress. iOS's
-            // own `WorkoutViewModel.updatePrimaryTemplateSets` writes rest
+            // own `RoutineTemplateSyncService.updatePrimaryTemplateSets` writes rest
             // outside its overload exclusion for exactly this reason.
             let modifiedSets = overloadResolvedIDs.contains(completedExercise.id)
                 ? []
@@ -168,7 +168,7 @@ extension WatchTemplateTransactionService {
     /// mistake a concurrent iPhone rest edit for watch intent and revert it.
     /// The value is the exercise's first performed set's rest: rest is one value
     /// per exercise everywhere in the app, so the whole scheme takes it (this is
-    /// what `WorkoutViewModel.updatePrimaryTemplateSets` does for an iPhone
+    /// what `RoutineTemplateSyncService.updatePrimaryTemplateSets` does for an iPhone
     /// workout).
     func adjustedRestTime(of exercise: IncomingWatchExercise) -> TimeInterval? {
         guard exercise.sets.contains(where: \.wasRestAdjusted) else { return nil }

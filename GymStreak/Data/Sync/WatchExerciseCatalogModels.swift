@@ -61,7 +61,12 @@ struct WatchExerciseCatalogItem: Codable, Sendable, Hashable {
 
 // MARK: - Transfer + application-context keys
 
-enum WatchExerciseCatalogSync {
+/// Transfer/context key constants — read from the `nonisolated`
+/// `session(_:didReceive:)` callback to route incoming files, so the type opts
+/// out of the watch target's default main-actor isolation. All members are
+/// immutable `Sendable` constants. (In the iOS copy this is a harmless no-op — that target defaults to
+/// nonisolated — but the two files are kept identical so they stay diffable.)
+nonisolated enum WatchExerciseCatalogSync {
     static let schemaVersion = 1
 
     /// `WCSessionFile.metadata` tag identifying catalogue transfers; used to

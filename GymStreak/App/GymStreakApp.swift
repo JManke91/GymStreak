@@ -120,6 +120,13 @@ struct GymStreakApp: App {
                         dependencies.exerciseCatalogSync.requestCatalogSync()
                     }
                 }
+                .task {
+                    guard !isUITesting else { return }
+                    // Waits for CloudKit to prove it has nothing to deliver
+                    // before re-seeding a library the version flag stranded, so
+                    // it never fires while a new device is still importing.
+                    await dependencies.defaultContentSeeder.recoverStrandedLibraryIfNeeded()
+                }
                 .onChange(of: scenePhase) { _, newPhase in
                     if newPhase == .active {
                         watchConnectivity.requestWorkoutQueueDrain()

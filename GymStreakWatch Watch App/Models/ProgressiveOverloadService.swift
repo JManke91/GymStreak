@@ -17,9 +17,13 @@
 //
 //  Everything below `MARK: - Shared logic` is character-identical to the iOS
 //  original; only the small `ExerciseLoadBehavior` copy above it is added,
-//  because the watch models carry load behavior as a raw string. Unit coverage
-//  lives against the iOS original (`GymStreakTests/ProgressiveOverloadServiceTests`)
-//  — there is no watch unit-test target.
+//  because the watch models carry load behavior as a raw string.
+//
+//  COVERAGE: this copy is asserted on directly by
+//  `GymStreakWatchTests/ProgressiveOverloadServiceTests`, whose assertions are
+//  kept identical to the iOS twin (`GymStreakTests/ProgressiveOverloadServiceTests`)
+//  so a behavioural drift between the two copies fails the watch suite. See
+//  docs/watch-unit-tests.md.
 //
 
 import Foundation

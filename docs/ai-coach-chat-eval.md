@@ -8,7 +8,7 @@ Runnable checklist for the decision-gate evaluation defined in `docs/ai-coach-ch
 2. AI Coach settings → **Experimental → Chat assistant** ON → **Open chat**.
 3. Run **from Xcode** (debugger attached) so the DEBUG tool traces are visible.
 4. Watch the Xcode console (or Console.app filtered by subsystem `app.gymstreak.aicoach`). Relevant lines:
-   - `ChatFactService` category: `getExercisePR arg="…"`, `getNextWorkout -> …`, `getWorkoutHistory -> …`, `getExercisePR -> …` — the exact tool + argument + returned fact.
+   - `ChatTool` category: `getExercisePR arg="…"`, `getNextWorkout -> …`, `getWorkoutHistory -> …`, `getExercisePR -> …` — the exact tool + argument + returned fact.
    - `CoachChatService` category: `chat proactively condensing …` / `chat context overflow …` — overflow handling.
 
 ## How to score each query (the pass bar is about *grounding*, not phrasing)
@@ -83,7 +83,7 @@ Cannot be measured off-device (no FoundationModels on the simulator). **Build-ti
 
 18 tests over three suites, run on iPhone 17 / iOS 26.5 simulator — all pass:
 - `ExerciseNameResolverTests` (7): folded exact/contains/token matching, German umlaut/ß equivalence, same-name aggregation, distinct-name ambiguity, misses.
-- `ChatFactServiceTests` (6): fact lines against a real in-memory SwiftData store — PR best-set + estimated-1RM values, same-name variant aggregation, `__NO_MATCH__` marker with the real library, this-week count, allTime last-workout naming.
+- `ChatFactProviderTests` (7): fact lines against a real in-memory SwiftData store — PR best-set + estimated-1RM values, same-name variant aggregation, `__NO_MATCH__` marker with the real library, this-week count, allTime last-workout naming, and (since audit P1.3) next-workout dating through the lean `\.routine`-only fetch. All seven now run through the real `ChatFactProvider` → `ChatFactStore` boundary, so the fetch ordering and the `@concurrent` actor hop are covered too; the boundary's main-actor responsiveness is asserted separately by `chatFactLookupKeepsMainActorResponsive` in `SwiftDataHistorySnapshotStoreTests`.
 - `ChatOverflowPolicyTests` (5): condense threshold, chars/3.5 estimate, deterministic digest (recent verbatim + older topics, skips streaming/empty), markdown stripping.
 
 These lock the deterministic behavior we iterated on manually so it can't regress.

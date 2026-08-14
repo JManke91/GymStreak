@@ -13,6 +13,11 @@ import Foundation
 /// `PeriodRecapViewModel`, `ExerciseDeepDiveViewModel`, `PostWorkoutRecapViewModel`,
 /// and `WorkoutAnalysisViewModel`. See `AICoachAvailability` for how `state` is
 /// refreshed from `SystemLanguageModel.default.availability`.
+/// `@MainActor` like the rest of the AI-coach protocol surface: the only
+/// conformer (`AICoachAvailability`) is main-actor-isolated, and every consumer
+/// is a `@MainActor` ViewModel or View. A nonisolated protocol here would make
+/// the conformance an isolation mismatch under strict concurrency.
+@MainActor
 protocol AICoachAvailabilityProviding: AnyObject {
 
     /// Current availability state.

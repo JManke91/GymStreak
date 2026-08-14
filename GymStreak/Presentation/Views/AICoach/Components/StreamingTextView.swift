@@ -53,13 +53,10 @@ struct StreamingTextView: View {
             if isStreaming && !reduceMotion {
                 // Inline cursor appended to the streamed text.
                 // Suppress any implicit animation on text height changes.
-                (Text(text)
-                    .font(font)
-                    .foregroundColor(color)
-                + cursorText)
-                .lineSpacing(lineSpacing)
-                .animation(nil, value: text)
-                .transaction { $0.disablesAnimations = true }
+                Text(bodyWithCursor)
+                    .lineSpacing(lineSpacing)
+                    .animation(nil, value: text)
+                    .transaction { $0.disablesAnimations = true }
             } else {
                 Text(text)
                     .font(font)
@@ -85,10 +82,24 @@ struct StreamingTextView: View {
     /// Accessibility is suppressed on the whole container via `.accessibilityLabel(text)`,
     /// so we don't need `.accessibilityHidden` on this `Text` (which can't carry it anyway
     /// when used inside `Text` concatenation).
-    private var cursorText: Text {
-        Text(verbatim: " |")
-            .font(.system(size: 14, weight: .regular))
-            .foregroundColor(cursorVisible ? AICoachTheme.accent : .clear)
+    /// Streamed text plus the inline cursor, as one `AttributedString`.
+    ///
+    /// `Text` + `Text` is deprecated in iOS 26, and the suggested replacement
+    /// — `Text("\(a)\(b)")` — is a `LocalizedStringKey`, which would perform a
+    /// localization lookup on **every** streamed snapshot (~30 Hz, main actor) and
+    /// mint a junk "%@%@" key. `AttributedString` carries the per-run styling with
+    /// no lookup and no key, and keeps the model's output out of format-string
+    /// handling entirely (streamed text can legitimately contain `%`).
+    private var bodyWithCursor: AttributedString {
+        var body = AttributedString(text)
+        body.font = font
+        body.foregroundColor = color
+
+        var cursor = AttributedString(" |")
+        cursor.font = .system(size: 14, weight: .regular)
+        cursor.foregroundColor = cursorVisible ? AICoachTheme.accent : .clear
+
+        return body + cursor
     }
 
     private func runCursorBlink() async {

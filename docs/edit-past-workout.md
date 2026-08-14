@@ -53,17 +53,52 @@ values: when `WorkoutExercise.progressiveOverloadApplied` is true the planned fi
    to planned or actual per `usePlanned`, syncing `isCompleted`/`completedAt`, reassigning `order`), and
    inserts newly added sets.
 2. Sets `session.didUpdateTemplate`.
-3. If "Update template" was chosen, calls `updateRoutineTemplate(session:)`; otherwise `save()`.
+3. If "Update template" was chosen, calls
+   `RoutineTemplateSyncService.applyPerformedValues(from:reconcileExerciseMembership: false)`.
+   Then `save()` — one save either way, since the service mutates but never saves.
 4. `fetchWorkoutHistory()`; invalidates the stale AI cache for the session
    (`AICoachCache.invalidatePostWorkout` + `invalidateWorkoutAnalysis`).
 5. If the template changed, posts `.routineTemplateDidChange`.
 
 ### Template update + set-count reconcile
-`updateRoutineTemplate(session:)` is shared with `completeWorkout`. It pushes reps/weight from completed
-sets and rest time onto the matching `RoutineExercise`, and now **reconciles set count**: surplus
-template sets are deleted and extra session sets are appended, so add/delete edits are reflected for
-future workouts. (This count reconciliation also applies to the active-workout completion path — an
-intentional consistency improvement.)
+`RoutineTemplateSyncService.applyPerformedValues(from:reconcileExerciseMembership:)`
+(`Domain/Services/`, extracted from `WorkoutViewModel` by audit P1.5) is shared with
+`completeWorkout`. It pushes reps/weight from completed sets and rest time onto the matching
+`RoutineExercise`, and **reconciles set count**: surplus template sets are deleted and extra
+session sets are appended, so add/delete edits are reflected for future workouts. (This count
+reconciliation also applies to the active-workout completion path — an intentional consistency
+improvement.)
+
+`reconcileExerciseMembership` is what separates the two callers: `completeWorkout` passes `true`
+and may add or remove routine slots, this path passes `false` and never does — a routine may have
+changed since that older workout was recorded. `false` is also the only mode that enables the
+legacy fallback in slot matching (resolving by exercise id/name when history predates slot ids),
+and only when *no* workout exercise carries a slot id.
+
+### Regression coverage
+
+Before P1.5 this whole path had **no** tests — nothing in the repo called `saveEditedWorkout`.
+Two suites now cover it:
+
+- `RoutineTemplateSyncServiceTests` — the template writeback the ViewModel delegates to:
+  value writeback, never adding/removing slots, the legacy id/name fallback, mixed history
+  disabling that fallback, set-count reconciliation, and that the service does not save.
+- `EditWorkoutSessionCommitTests` — what the ViewModel itself does: editing a kept set writes
+  the actual fields (planned when `usePlanned`), a dropped draft set deletes its `WorkoutSet`,
+  an added set is inserted in draft order seeding both field pairs, unmarking a set clears
+  `completedAt`, a draft for an unknown exercise is skipped, `didUpdateTemplate` and the
+  `.routineTemplateDidChange` post fire only when the template was updated, and
+  `historyVersion` advances.
+
+**Latent bug fixed by P1.5, pinned by
+`editsToARoutinelessWorkoutSurviveEvenWhenTemplateUpdateIsRequested`:** the template writeback
+used to own the only `save()` on the `updateTemplate == true` branch, and it returns early for a
+session with no routine — so ticking "update routine" on a routine-less workout silently
+**discarded the user's set edits**. The save is now unconditional. The test was verified to fail
+against the old control flow before being kept.
+
+*Not covered:* the two `AICoachCache` invalidations — there is no `AICoachCaching` double in the
+test target and the real `.shared` does `FileManager` I/O in the test host. That is audit P2.6.
 
 ### Watch propagation
 `saveEditedWorkout` posts `.routineTemplateDidChange` (declared in `WatchConnectivityManager.swift`).
@@ -88,7 +123,8 @@ updated template via `RoutineStore.updateRoutines`. No watch-target changes are 
 | File | Role |
 |------|------|
 | `GymStreak/Presentation/Views/History/EditWorkoutSessionView.swift` | Draft editor sheet + draft structs |
-| `GymStreak/Presentation/ViewModels/WorkoutViewModel.swift` | `saveEditedWorkout`, reconciling `updateRoutineTemplate` |
+| `GymStreak/Presentation/ViewModels/WorkoutViewModel.swift` | `saveEditedWorkout` (draft commit, cache invalidation, notification) |
+| `GymStreak/Domain/Services/RoutineTemplateSyncService.swift` | `applyPerformedValues(from:reconcileExerciseMembership:)` — the template writeback + set-count reconcile |
 | `GymStreak/Presentation/Views/History/WorkoutDetailView.swift` | Ellipsis toolbar menu (Edit + Delete), sheet presentation, post-edit reload |
 | `GymStreak/Presentation/ViewModels/RoutinesViewModel.swift` | `observeRoutineTemplateChanges()` → re-fetch + watch sync |
 | `GymStreak/Data/Sync/WatchConnectivityManager.swift` | `Notification.Name.routineTemplateDidChange` |

@@ -26,7 +26,12 @@ final class WorkoutDeletionUITests: XCTestCase {
     /// A row title unique to the settings screen (the section headers are uppercased).
     private var coachSettingsRow: String { isGerman ? "Nach jedem Workout" : "After each workout" }
 
-    override func setUpWithError() throws {
+    // `setUp() async throws` rather than `setUpWithError() throws`: the throwing
+    // synchronous variant overrides a `nonisolated` XCTest method, and an override
+    // must match its superclass's isolation — which strips this class's `@MainActor`
+    // and makes every `XCUIApplication` touch a cross-actor reference. The `async`
+    // variant inherits the class isolation correctly.
+    override func setUp() async throws {
         continueAfterFailure = false
         app = XCUIApplication()
         app.launchArguments = [
@@ -40,7 +45,7 @@ final class WorkoutDeletionUITests: XCTestCase {
         dismissCoachOptIn()
     }
 
-    override func tearDownWithError() throws {
+    override func tearDown() async throws {
         app = nil
     }
 

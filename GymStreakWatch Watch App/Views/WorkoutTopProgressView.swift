@@ -115,20 +115,40 @@ struct WorkoutTopProgressView<Trailing: View>: View {
             }
             .accessibilityElement(children: .combine)
             .accessibilityLabel(
-                Text(exerciseName) + Text(", ") + Text("Set \(setIndex + 1) of \(setCount)")
+                // Composed as a plain String and passed verbatim on purpose. A
+                // `Text("\(exerciseName), Set …")` interpolation would mint a NEW
+                // string-catalog key ("%@, Set %lld of %lld") with no German
+                // translation, silently regressing the German VoiceOver label —
+                // whereas `String(localized:)` reuses the existing, translated
+                // "Set %lld of %lld" key ("Satz %1$lld von %2$lld").
+                Text(verbatim: "\(exerciseName), " + String(localized: "Set \(setIndex + 1) of \(setCount)"))
             )
         }
     }
 
     /// "Set 1/3" — the current set number in green, the rest muted.
+    /// Built as one `AttributedString` rather than concatenated `Text` values:
+    /// `Text` + `Text` is deprecated in watchOS 26, and the suggested replacement
+    /// — `Text("\(a)\(b)\(c)")` — is a `LocalizedStringKey`, so it mints a junk
+    /// "%@%@%@" entry in the string catalog. An `AttributedString` carries the
+    /// per-segment styling with no localization key at all. The size is pinned to
+    /// the same metric the call site applies so the bold run matches its siblings.
     private var setCounter: Text {
-        Text(String(localized: "Set") + " ")
-            .foregroundColor(OnyxWatch.Colors.textMuted)
-            + Text("\(setIndex + 1)")
-            .foregroundColor(accent)
-            .fontWeight(.bold)
-            + Text("/\(setCount)")
-            .foregroundColor(OnyxWatch.Colors.textMuted)
+        var label = AttributedString(String(localized: "Set") + " ")
+        label.foregroundColor = OnyxWatch.Colors.textMuted
+
+        var current = AttributedString("\(setIndex + 1)")
+        current.foregroundColor = accent
+        // `.monospacedDigit()` is required, not decorative: setting an explicit run
+        // font overrides the call site's `.monospacedDigit()` for this run, and this
+        // is the digit that changes 9 → 10 — exactly where width jitter shows on the
+        // smallest cases. The `label`/`total` runs set no font, so they still inherit it.
+        current.font = .system(size: metrics.topPercentSize, weight: .bold).monospacedDigit()
+
+        var total = AttributedString("/\(setCount)")
+        total.foregroundColor = OnyxWatch.Colors.textMuted
+
+        return Text(label + current + total)
     }
 
     /// One exercise segment: a dark track with a leading neutral-gray fill sized

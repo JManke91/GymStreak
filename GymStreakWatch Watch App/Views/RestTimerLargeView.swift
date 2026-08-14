@@ -62,7 +62,7 @@ struct RestTimerLargeView: View {
             scope: $adjustmentScope
         )
         .onAppear { pulse = true }
-        .onChange(of: shouldPulse) { isPulsing in
+        .onChange(of: shouldPulse) { _, isPulsing in
             if isPulsing {
                 withAnimation(.easeInOut(duration: 0.6).repeatForever(autoreverses: true)) {
                     backgroundPulse = 1.03
@@ -75,7 +75,7 @@ struct RestTimerLargeView: View {
                 }
             }
         }
-        .onChange(of: timeRemaining) { newTime in
+        .onChange(of: timeRemaining) { _, newTime in
             guard state == .running else { return }
 
             let currentSecond = Int(newTime.rounded(.up))

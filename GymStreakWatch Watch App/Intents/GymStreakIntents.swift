@@ -22,7 +22,10 @@ enum GymStreakWorkoutStyle: String, AppEnum {
 /// Requires `workout-processing` in WKBackgroundModes and `workoutStyle`
 /// declared as @Parameter — otherwise Settings only offers "Open App".
 struct GymStreakStartWorkoutIntent: StartWorkoutIntent {
-    static var title: LocalizedStringResource = "Start Workout"
+    // `let`, not `var`: a mutable static is global shared mutable state and is
+    // rejected under strict concurrency. `AppIntent.title` is a get-only
+    // requirement, so an immutable constant satisfies it.
+    static let title: LocalizedStringResource = "Start Workout"
 
     static var openAppWhenRun: Bool { true }
 
@@ -54,7 +57,7 @@ struct GymStreakStartWorkoutIntent: StartWorkoutIntent {
 // MARK: - Complete Set Intent (Primary Action Button function during workout)
 
 struct GymStreakCompleteSetIntent: AppIntent {
-    static var title: LocalizedStringResource = "Complete Set"
+    static let title: LocalizedStringResource = "Complete Set"
 
     static var description: IntentDescription {
         IntentDescription("Mark the current exercise set as complete")

@@ -36,8 +36,7 @@ struct ExerciseProgressChartView: View {
             exerciseName: exerciseName,
             exerciseId: exerciseId,
             availableExercises: availableExercises,
-            progressService: dependencies.exerciseProgressService,
-            workoutSessionRepository: dependencies.workoutSessionRepository
+            snapshotProvider: dependencies.historySnapshotProvider
         )
     }
 }
@@ -47,15 +46,11 @@ private struct ExerciseProgressChartViewInternal: View {
     @State private var currentExerciseId: UUID?
     @State private var showingMetricInfo = false
     let availableExercises: [ExerciseWithHistory]
-    let progressService: ExerciseProgressProviding
-    let workoutSessionRepository: WorkoutSessionRepository
 
     @StateObject private var viewModel: ExerciseProgressViewModel
     /// Kept only to pass through to the (out-of-scope) AI Coach deep-dive ViewModel API.
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
-
-    @State private var recentSessions: [RecentSession] = []
 
     // MARK: - AI Coach Deep-Dive
 
@@ -67,18 +62,15 @@ private struct ExerciseProgressChartViewInternal: View {
         exerciseName: String,
         exerciseId: UUID?,
         availableExercises: [ExerciseWithHistory],
-        progressService: ExerciseProgressProviding,
-        workoutSessionRepository: WorkoutSessionRepository
+        snapshotProvider: HistorySnapshotProviding
     ) {
         self._currentExerciseName = State(initialValue: exerciseName)
         self._currentExerciseId = State(initialValue: exerciseId)
         self.availableExercises = availableExercises
-        self.progressService = progressService
-        self.workoutSessionRepository = workoutSessionRepository
         self._viewModel = StateObject(wrappedValue: ExerciseProgressViewModel(
             exerciseName: exerciseName,
             exerciseId: exerciseId,
-            progressService: progressService
+            provider: snapshotProvider
         ))
     }
 
@@ -113,11 +105,12 @@ private struct ExerciseProgressChartViewInternal: View {
             deepDiveVM.cancel()
             CoachScreenContext.shared.anchor = nil
         }
-        .onChange(of: viewModel.progressData?.exerciseName) { _, _ in
-            Task { await loadRecentSessions() }
-        }
-        .task {
-            await loadRecentSessions()
+        // One load for the whole screen. `.task(id:)` cancels the superseded fetch when
+        // the exercise or the timeframe changes; the view model's generation counter
+        // handles the rest, since the fetches inside the model actor are synchronous and
+        // a cancelled one can still complete.
+        .task(id: viewModel.loadKey) {
+            await viewModel.load()
         }
         .task(id: currentExerciseId) {
             // Auto-load cached deep-dive on appear or when exercise switches
@@ -382,7 +375,6 @@ private struct ExerciseProgressChartViewInternal: View {
                 Button {
                     HapticManager.shared.selection()
                     viewModel.updateTimeframe(timeframe)
-                    Task { await loadRecentSessions() }
                 } label: {
                     Text(timeframe.localizedTitle)
                         .font(.system(size: 11, weight: .bold, design: .rounded))
@@ -418,21 +410,23 @@ private struct ExerciseProgressChartViewInternal: View {
                     .font(.system(size: 15, weight: .bold, design: .rounded))
                     .foregroundStyle(Color.white)
                 Spacer()
-                Text("history.exercise.entries".localized(recentSessions.count))
+                Text("history.exercise.entries".localized(viewModel.recentSessions.count))
                     .font(.system(size: 11))
                     .foregroundStyle(Color.white.opacity(0.45))
             }
             .padding(.horizontal, 20)
 
-            if recentSessions.isEmpty {
+            if viewModel.recentSessions.isEmpty {
                 Text("chart.empty.message".localized)
                     .font(.system(size: 12))
                     .foregroundStyle(Color.white.opacity(0.5))
                     .frame(maxWidth: .infinity, alignment: .center)
                     .padding(.vertical, 16)
             } else {
+                // Plain stack on purpose: the view model caps this list at
+                // `recentSessionLimit` (8), so it is a bounded set, not user-scaled data.
                 VStack(spacing: 8) {
-                    ForEach(recentSessions) { session in
+                    ForEach(viewModel.recentSessions) { session in
                         SessionCardView(session: session)
                     }
                 }
@@ -493,69 +487,18 @@ private struct ExerciseProgressChartViewInternal: View {
     private func switchToExercise(_ exercise: ExerciseWithHistory) {
         currentExerciseName = exercise.name
         currentExerciseId = exercise.exerciseId
+        // Changes `viewModel.loadKey`, which restarts the `.task(id:)` load.
         viewModel.updateExercise(exercise.name, exerciseId: exercise.exerciseId)
         // Reset deep-dive state when the user switches exercises
         deepDiveVM = ExerciseDeepDiveViewModel()
         hasTappedAskCoach = false
-        Task { await loadRecentSessions() }
-    }
-
-    @MainActor
-    private func loadRecentSessions() async {
-        let sessions = workoutSessionRepository.fetchCompleted()
-        let limit = 8
-        let nameIsUnique = progressService.isLiveNameUnique(currentExerciseName)
-        var collected: [RecentSession] = []
-        for session in sessions {
-            guard let exercise = session.workoutExercisesList.first(where: {
-                ExerciseProgressService.matches(
-                    $0,
-                    exerciseId: currentExerciseId,
-                    exerciseName: currentExerciseName,
-                    nameIsUnique: nameIsUnique
-                )
-            }) else { continue }
-            let sortedSets = exercise.setsList.sorted { $0.order < $1.order }
-            let usePlanned = exercise.progressiveOverloadApplied
-            let entries = sortedSets.filter(\.isCompleted).map { set in
-                RecentSession.SetEntry(
-                    id: set.id,
-                    weight: usePlanned ? set.plannedWeight : set.actualWeight,
-                    reps: usePlanned ? set.plannedReps : set.actualReps
-                )
-            }
-            guard !entries.isEmpty else { continue }
-            collected.append(
-                RecentSession(id: session.id, date: session.startTime, sets: entries)
-            )
-            if collected.count >= limit { break }
-        }
-        recentSessions = collected
-    }
-
-    // MARK: - Types
-
-    struct RecentSession: Identifiable {
-        let id: UUID
-        let date: Date
-        let sets: [SetEntry]
-
-        struct SetEntry: Identifiable {
-            let id: UUID
-            let weight: Double
-            let reps: Int
-        }
-
-        var bestSet: SetEntry? {
-            sets.max(by: { $0.weight < $1.weight })
-        }
     }
 }
 
 // MARK: - Session card
 
 struct SessionCardView: View {
-    fileprivate let session: ExerciseProgressChartViewInternal.RecentSession
+    let session: ExerciseRecentSession
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -617,20 +560,28 @@ struct SessionCardView: View {
         .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
     }
 
+    // Hoisted out of `body`'s read path: both used to be allocated per row per render.
+    // `Locale.current` is the default for both, so it does not need setting.
+    private static let monthFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.setLocalizedDateFormatFromTemplate("MMM")
+        return formatter
+    }()
+
+    private static let relativeFormatter: RelativeDateTimeFormatter = {
+        let formatter = RelativeDateTimeFormatter()
+        formatter.unitsStyle = .short
+        return formatter
+    }()
+
     private var dayNumber: Int { Calendar.current.component(.day, from: session.date) }
 
     private var monthLabel: String {
-        let fmt = DateFormatter()
-        fmt.locale = Locale.current
-        fmt.setLocalizedDateFormatFromTemplate("MMM")
-        return fmt.string(from: session.date)
+        Self.monthFormatter.string(from: session.date)
     }
 
     private var relativeDate: String {
-        let fmt = RelativeDateTimeFormatter()
-        fmt.locale = Locale.current
-        fmt.unitsStyle = .short
-        return fmt.localizedString(for: session.date, relativeTo: Date())
+        Self.relativeFormatter.localizedString(for: session.date, relativeTo: Date())
     }
 
     private var setsRow: some View {

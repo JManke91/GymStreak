@@ -3,8 +3,10 @@
 //  GymStreak
 //
 //  Chat tool: "when is my next workout?" Wraps `ChatFactProviding.nextWorkoutFacts`.
-//  `Tool.call` runs off the main actor (`@concurrent`); the fact provider is
-//  `@MainActor`, so `call` awaits it to hop back. Descriptions are kept terse —
+//  This tool's own isolation is deliberately irrelevant: since audit P1.3 the fact
+//  provider guarantees off-main execution itself, via `@concurrent` on its concrete
+//  methods. Apple declares the `Tool.call` requirement `@concurrent`, but nothing here
+//  depends on that reaching an unannotated witness. Descriptions are kept terse —
 //  every tool schema rides along on each request inside the ~4K-token budget.
 //
 

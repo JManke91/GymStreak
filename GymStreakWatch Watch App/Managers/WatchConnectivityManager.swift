@@ -174,10 +174,17 @@ final class WatchConnectivityManager: NSObject, ObservableObject {
 extension WatchConnectivityManager: WCSessionDelegate {
     nonisolated func session(_ session: WCSession, activationDidCompleteWith activationState: WCSessionActivationState, error: Error?) {
         delegateWorkTracker.beginWork()
+        // `WCSession` is a non-`Sendable` class and must not cross to the main
+        // actor, so read the reachability flag here and send only the `Bool`.
+        // The session's mutable `receivedApplicationContext` is deliberately NOT
+        // hoisted: it is read inside the hop from the stored `self.session`, so it
+        // is still sampled at the moment it is applied rather than one hop earlier.
+        let isReachable = session.isReachable
+        let errorDescription = error?.localizedDescription
         Task { @MainActor in
             defer { self.delegateWorkTracker.endWork() }
-            if let error = error {
-                WatchSyncDiagnostics.error("watch: WCSession activation failed — \(error.localizedDescription)")
+            if let errorDescription {
+                WatchSyncDiagnostics.error("watch: WCSession activation failed — \(errorDescription)")
                 return
             }
             guard activationState == .activated else {
@@ -185,15 +192,15 @@ extension WatchConnectivityManager: WCSessionDelegate {
                 return
             }
 
-            self.isReachable = session.isReachable
+            self.isReachable = isReachable
             WatchSyncDiagnostics.info("watch: WCSession activated")
 
             // Bootstrap exactly once after activation. The delegate handles
             // new arrivals; this read recovers the latest context that a
             // previous process already received.
-            let applicationContext = session.receivedApplicationContext
-            if !applicationContext.isEmpty {
-                self.processApplicationContext(applicationContext)
+            let bootstrapContext = self.session?.receivedApplicationContext ?? [:]
+            if !bootstrapContext.isEmpty {
+                self.processApplicationContext(bootstrapContext)
             }
 
             // Retry transport for any finalized workouts still awaiting an
@@ -232,10 +239,11 @@ extension WatchConnectivityManager: WCSessionDelegate {
 
     nonisolated func sessionReachabilityDidChange(_ session: WCSession) {
         delegateWorkTracker.beginWork()
+        let isReachable = session.isReachable
         Task { @MainActor in
             defer { self.delegateWorkTracker.endWork() }
-            self.isReachable = session.isReachable
-            WatchSyncDiagnostics.info("watch: reachability changed — \(session.isReachable)")
+            self.isReachable = isReachable
+            WatchSyncDiagnostics.info("watch: reachability changed — \(isReachable)")
 
             // Reconcile on every connectivity transition. The durable path
             // does not require reachability; reachability only enables the
@@ -246,17 +254,19 @@ extension WatchConnectivityManager: WCSessionDelegate {
 
     nonisolated func session(_ session: WCSession, didReceiveApplicationContext applicationContext: [String: Any]) {
         delegateWorkTracker.beginWork()
+        let boxed = WatchWirePayload(applicationContext)
         Task { @MainActor in
             defer { self.delegateWorkTracker.endWork() }
-            self.processApplicationContext(applicationContext)
+            self.processApplicationContext(boxed.payload)
         }
     }
 
     nonisolated func session(_ session: WCSession, didReceiveMessage message: [String: Any]) {
         delegateWorkTracker.beginWork()
+        let boxed = WatchWirePayload(message)
         Task { @MainActor in
             defer { self.delegateWorkTracker.endWork() }
-            self.handleIncoming(message)
+            self.handleIncoming(boxed.payload)
         }
     }
 
@@ -264,9 +274,10 @@ extension WatchConnectivityManager: WCSessionDelegate {
     /// in addition to the sendMessage fast-path, so acks can arrive here too.
     nonisolated func session(_ session: WCSession, didReceiveUserInfo userInfo: [String: Any] = [:]) {
         delegateWorkTracker.beginWork()
+        let boxed = WatchWirePayload(userInfo)
         Task { @MainActor in
             defer { self.delegateWorkTracker.endWork() }
-            self.handleIncoming(userInfo)
+            self.handleIncoming(boxed.payload)
         }
     }
 

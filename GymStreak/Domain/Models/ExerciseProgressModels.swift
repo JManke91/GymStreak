@@ -129,7 +129,7 @@ func formatCompactValue(_ value: Double, unit: String? = nil) -> String {
 
 // MARK: - Exercise Progress Data Point
 
-struct ExerciseProgressDataPoint: Identifiable {
+struct ExerciseProgressDataPoint: Identifiable, Sendable {
     let id = UUID()
     let date: Date
     let maxWeight: Double
@@ -151,7 +151,7 @@ struct ExerciseProgressDataPoint: Identifiable {
 
 // MARK: - Exercise Progress Data
 
-struct ExerciseProgressData {
+struct ExerciseProgressData: Sendable {
     let exerciseName: String
     let dataPoints: [ExerciseProgressDataPoint]
     let loadBehavior: ExerciseLoadBehavior
@@ -216,6 +216,43 @@ struct ExerciseProgressData {
     var hasEnoughDataForTrend: Bool {
         dataPoints.count >= 2
     }
+}
+
+// MARK: - Exercise Recent Session
+
+/// One row of the exercise detail's "recent sessions" list.
+///
+/// A denormalized value, not a `WorkoutSession`: it is built inside
+/// `SwiftDataHistorySnapshotStore`'s model actor and crosses back to the main
+/// actor, so no `PersistentModel` and no relationship walk may survive in it.
+struct ExerciseRecentSession: Identifiable, Sendable {
+    /// The originating `WorkoutSession.id` — stable across reloads, unlike a minted UUID.
+    let id: UUID
+    let date: Date
+    let sets: [SetEntry]
+
+    struct SetEntry: Identifiable, Sendable {
+        let id: UUID
+        let weight: Double
+        let reps: Int
+    }
+
+    var bestSet: SetEntry? {
+        sets.max(by: { $0.weight < $1.weight })
+    }
+}
+
+// MARK: - Exercise Progress Snapshot
+
+/// Everything the exercise detail screen renders, built in a single pass over one
+/// prefetched session graph.
+///
+/// The chart series and the recent-session list are returned together deliberately:
+/// they read the same fetch, and shipping them as two boundary calls would mean two
+/// unbounded fetches plus a chance for the two halves of one screen to disagree.
+struct ExerciseProgressSnapshot: Sendable {
+    let data: ExerciseProgressData
+    let recentSessions: [ExerciseRecentSession]
 }
 
 // MARK: - Selected Data Point

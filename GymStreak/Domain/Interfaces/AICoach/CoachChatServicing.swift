@@ -22,11 +22,16 @@ protocol CoachChatServicing: AnyObject {
     /// `true` while an assistant turn is streaming.
     var isResponding: Bool { get }
 
+    /// Whether `configure` has already installed a fact provider. Lets a caller skip
+    /// *building* one — since audit P1.3 that allocates a `@ModelActor` and its
+    /// `ModelContext`, so it should not happen on every appearance.
+    var isConfigured: Bool { get }
+
     /// Provides the tool-backing data layer, restores the persisted conversation
     /// (if any), and builds the tool-equipped session — seeded with a digest of
     /// the restored messages so follow-ups keep grounding across launches.
-    /// Idempotent — the first call wins; later calls are ignored (the underlying
-    /// `ModelContext` is the app's stable main context).
+    /// Idempotent — the first call wins; later calls are ignored (the provider owns
+    /// a stable, app-lifetime read boundary).
     func configure(factProvider: ChatFactProviding)
 
     /// Warms the model weights so the first token arrives faster.

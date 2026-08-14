@@ -1,7 +1,6 @@
 import Foundation
 import SwiftUI
 import Combine
-import ActivityKit
 import HealthKit
 
 // MARK: - HealthKit Sync Status
@@ -66,10 +65,14 @@ class WorkoutViewModel: ObservableObject {
 
     private let workoutSessionRepository: WorkoutSessionRepository
     private let routineRepository: RoutineRepository
-    private let exerciseRepository: ExerciseRepository
     private let watchSync: WatchSyncServicing
     private let workoutHistoryCorrelation: WorkoutHistoryCorrelationProviding
     private let restTimerReminders: RestTimerReminderScheduling
+    private let restTimerLiveActivity: RestTimerLiveActivityPresenting
+    /// The template-writeback half of "Update routine" (audit P1.5). Bound to the
+    /// same main context as the repositories above, so everything it changes
+    /// commits in this ViewModel's own `save()` — the service never saves.
+    private let routineTemplateSync: RoutineTemplateSyncService
     private let aiCoachCache: AICoachCaching
     private let now: () -> Date
     private var timer: Timer?
@@ -85,9 +88,6 @@ class WorkoutViewModel: ObservableObject {
     private var restTimerDeadline: Date?
     private var restTimerID: UUID?
     private var hasPlayedRestCountdownHaptic = false
-
-    // Live Activity for rest timer
-    private var currentRestActivity: Activity<RestTimerAttributes>?
 
     // HealthKit workout manager
     let healthKitManager: HealthKitWorkoutServicing
@@ -132,26 +132,28 @@ class WorkoutViewModel: ObservableObject {
     init(
         workoutSessionRepository: WorkoutSessionRepository,
         routineRepository: RoutineRepository,
-        exerciseRepository: ExerciseRepository,
         healthKitManager: HealthKitWorkoutServicing,
         watchSync: WatchSyncServicing,
         workoutHistoryCorrelation: WorkoutHistoryCorrelationProviding,
         restTimerReminders: RestTimerReminderScheduling,
+        restTimerLiveActivity: RestTimerLiveActivityPresenting,
+        routineTemplateSync: RoutineTemplateSyncService,
         recovery: WorkoutRecoveryCoordinating? = nil,
         aiCoachCache: AICoachCaching? = nil,
         now: @escaping () -> Date = Date.init
     ) {
         self.workoutSessionRepository = workoutSessionRepository
         self.routineRepository = routineRepository
-        self.exerciseRepository = exerciseRepository
         self.healthKitManager = healthKitManager
         self.watchSync = watchSync
         self.workoutHistoryCorrelation = workoutHistoryCorrelation
         self.restTimerReminders = restTimerReminders
+        self.restTimerLiveActivity = restTimerLiveActivity
+        self.routineTemplateSync = routineTemplateSync
         self.recovery = recovery
         self.aiCoachCache = aiCoachCache ?? AICoachCache.shared
         self.now = now
-        cleanupStaleActivities()
+        restTimerLiveActivity.dismissExpiredActivities()
         loadHealthKitPreferences()
         healthKitManager.checkAuthorizationStatus()
         observeCloudKitChanges()
@@ -361,34 +363,13 @@ class WorkoutViewModel: ObservableObject {
 
     // MARK: - Live Activity Management
 
-    private func cleanupStaleActivities() {
-        Task {
-            for activity in Activity<RestTimerAttributes>.activities {
-                // Check if timer has expired
-                if activity.content.state.timerRange.upperBound < now() {
-                    await activity.end(nil, dismissalPolicy: .immediate)
-                }
-            }
-        }
-    }
-
-    private func startRestTimerLiveActivity(
+    /// What the Lock Screen countdown should say for the timer that is starting.
+    /// The exercise name is read from the session the user is actually in;
+    /// restoring after a relaunch may have no session yet, which is fine.
+    private func liveActivityContent(
         startDate: Date,
         deadline: Date
-    ) {
-        // Check if Live Activities are enabled
-        let authInfo = ActivityAuthorizationInfo()
-        print("Live Activity Authorization Status: \(authInfo.areActivitiesEnabled)")
-        print("Live Activity Frequent Updates Enabled: \(authInfo.frequentPushesEnabled)")
-
-        guard authInfo.areActivitiesEnabled else {
-            print("⚠️ Live Activities not enabled by user")
-            return
-        }
-
-        let timerRange = startDate...deadline
-
-        // Get current exercise name if available
+    ) -> RestTimerLiveActivityContent {
         let exerciseName: String? = {
             guard let session = currentSession else { return nil }
             let exercises = session.workoutExercisesList.sorted(by: { $0.order < $1.order })
@@ -396,65 +377,13 @@ class WorkoutViewModel: ObservableObject {
             return exercises[currentExerciseIndex].exerciseName
         }()
 
-        let initialContentState = RestTimerAttributes.ContentState(
-            timerRange: timerRange,
+        return RestTimerLiveActivityContent(
+            workoutName: currentSession?.routine?.name
+                ?? "live_activity.rest_timer.workout_fallback".localized,
             exerciseName: exerciseName,
-            completionMessage: nil
+            startDate: startDate,
+            deadline: deadline
         )
-
-        let attributes = RestTimerAttributes(
-            workoutName: currentSession?.routine?.name ?? "Workout"
-        )
-
-        do {
-            let content = ActivityContent(
-                state: initialContentState,
-                staleDate: deadline
-            )
-            let activity = try Activity<RestTimerAttributes>.request(
-                attributes: attributes,
-                content: content,
-                pushType: nil
-            )
-            currentRestActivity = activity
-            print("✅ Started Live Activity: \(activity.id)")
-        } catch {
-            // Check for specific error messages in the error description
-            let errorDescription = error.localizedDescription
-            if errorDescription.contains("unsupportedTarget") {
-                print("❌ Live Activity Error: unsupportedTarget - NSSupportsLiveActivities must be set to YES in Info.plist")
-            } else if errorDescription.contains("activitiesDisabled") {
-                print("❌ Live Activity Error: User has disabled Live Activities")
-            } else if errorDescription.contains("activityLimitExceeded") {
-                print("❌ Live Activity Error: Too many active Live Activities")
-            } else {
-                print("❌ Live Activity Error: \(errorDescription)")
-            }
-        }
-    }
-
-    private func endRestTimerLiveActivity() {
-        guard let activity = currentRestActivity else { return }
-
-        Task {
-            // Show "Rest Complete" for 3 seconds then dismiss
-            let finalState = RestTimerAttributes.ContentState(
-                timerRange: Date.now...Date.now,
-                exerciseName: nil,
-                completionMessage: "Rest Complete! 💪"
-            )
-
-            let content = ActivityContent(
-                state: finalState,
-                staleDate: nil
-            )
-            await activity.end(
-                content,
-                dismissalPolicy: .after(Date.now.addingTimeInterval(3))
-            )
-        }
-
-        currentRestActivity = nil
     }
 
     // MARK: - Background Timer Persistence
@@ -506,13 +435,13 @@ class WorkoutViewModel: ObservableObject {
                 restTimerID = timerID
                 restDuration = duration
 
-                // Restart Live Activity if not already active
-                if currentRestActivity == nil {
-                    startRestTimerLiveActivity(
-                        startDate: restStart,
-                        deadline: deadline
-                    )
-                }
+                // Re-present the Lock Screen countdown. Idempotent: if this
+                // process already presents this timer, the presenter leaves it
+                // alone rather than requesting a second activity.
+                restTimerLiveActivity.startActivity(
+                    id: timerID,
+                    content: liveActivityContent(startDate: restStart, deadline: deadline)
+                )
 
                 // Restart the UI update timer
                 startRestTimerUI()
@@ -628,7 +557,10 @@ class WorkoutViewModel: ObservableObject {
         session.didUpdateTemplate = updateTemplate
 
         if updateTemplate {
-            updateRoutineTemplate(session: session, reconcileExerciseMembership: true)
+            routineTemplateSync.applyPerformedValues(
+                from: session,
+                reconcileExerciseMembership: true
+            )
         }
 
         save()
@@ -1489,9 +1421,9 @@ class WorkoutViewModel: ObservableObject {
         }
 
         // Start Live Activity for Lock Screen display
-        startRestTimerLiveActivity(
-            startDate: startDate,
-            deadline: deadline
+        restTimerLiveActivity.startActivity(
+            id: timerID,
+            content: liveActivityContent(startDate: startDate, deadline: deadline)
         )
 
         // Start UI update timer
@@ -1546,13 +1478,13 @@ class WorkoutViewModel: ObservableObject {
         restDuration = 0
         hasPlayedRestCountdownHaptic = false
 
-        // Cancel any pending notification
+        // Cancel any pending notification and end the Lock Screen countdown.
+        // Both are keyed by the timer's identity, so a second WorkoutViewModel
+        // sharing these gateways can never cancel this timer's surfaces.
         if let timerID {
             restTimerReminders.cancelReminder(id: timerID)
+            restTimerLiveActivity.endActivity(id: timerID)
         }
-
-        // End Live Activity
-        endRestTimerLiveActivity()
 
         // Clear saved state
         UserDefaults.standard.removeObject(forKey: "restTimerStartTime")
@@ -1837,12 +1769,16 @@ class WorkoutViewModel: ObservableObject {
 
         session.didUpdateTemplate = updateTemplate
 
+        // Historical edits deliberately do NOT reconcile exercise membership —
+        // the routine may have changed since that older workout was recorded.
         if updateTemplate {
-            updateRoutineTemplate(session: session, reconcileExerciseMembership: false) // also calls save()
-        } else {
-            save()
+            routineTemplateSync.applyPerformedValues(
+                from: session,
+                reconcileExerciseMembership: false
+            )
         }
 
+        save()
         refreshHistory()
 
         // The cached AI recap/analysis for this session reflect the old values — drop them.
@@ -1852,243 +1788,6 @@ class WorkoutViewModel: ObservableObject {
         // Propagate template changes to the watch (RoutinesViewModel re-fetches and syncs).
         if updateTemplate {
             NotificationCenter.default.post(name: .routineTemplateDidChange, object: nil)
-        }
-    }
-
-    // MARK: - Template Update
-
-    /// Pushes a session's performed values back onto its routine template. Active-workout
-    /// completion also reconciles exercise membership; historical edits deliberately do not,
-    /// because a routine may have changed since that older workout was recorded.
-    private func updateRoutineTemplate(
-        session: WorkoutSession,
-        reconcileExerciseMembership: Bool
-    ) {
-        guard let routine = session.routine else { return }
-
-        let routineExercises = routine.routineExercisesList.sorted { $0.order < $1.order }
-        let workoutExercises = session.workoutExercisesList.sorted { $0.order < $1.order }
-        let allowsLegacyFallback = !reconcileExerciseMembership
-            && workoutExercises.allSatisfy { $0.routineExerciseId == nil }
-        var claimedRoutineExerciseIds: Set<UUID> = []
-        let matches: [(workout: WorkoutExercise, routine: RoutineExercise?)] = workoutExercises.map {
-            workoutExercise in
-            let match = matchingRoutineExercise(
-                for: workoutExercise,
-                in: routineExercises,
-                excluding: claimedRoutineExerciseIds,
-                allowsLegacyFallback: allowsLegacyFallback
-            )
-            if let match {
-                claimedRoutineExerciseIds.insert(match.id)
-            }
-            return (workoutExercise, match)
-        }
-
-        if reconcileExerciseMembership {
-            for removedExercise in routineExercises where !claimedRoutineExerciseIds.contains(removedExercise.id) {
-                routine.routineExercises?.removeAll { $0.id == removedExercise.id }
-                for set in removedExercise.setsList {
-                    removedExercise.sets?.removeAll { $0.id == set.id }
-                    routineRepository.delete(set)
-                }
-                routineRepository.delete(removedExercise)
-            }
-
-            for (order, routineExercise) in routine.routineExercisesList
-                .sorted(by: { $0.order < $1.order })
-                .enumerated() {
-                routineExercise.order = order
-            }
-        }
-
-        for match in matches {
-            guard let routineExercise = match.routine else {
-                if reconcileExerciseMembership {
-                    appendRoutineExercise(from: match.workout, to: routine)
-                }
-                continue
-            }
-
-            // Swapped exercises write their values back into the performed
-            // alternative's own set scheme — the primary's sets stay untouched.
-            if match.workout.wasSwapped {
-                if let alternative = routineExercise.alternativesList.first(where: { $0.exercise?.id == match.workout.exerciseId }) {
-                    updateAlternativeTemplateSets(alternative, from: match.workout)
-                }
-                continue
-            }
-
-            updatePrimaryTemplateSets(routineExercise, from: match.workout)
-        }
-
-        routine.updatedAt = Date()
-        save()
-    }
-
-    private func matchingRoutineExercise(
-        for workoutExercise: WorkoutExercise,
-        in candidates: [RoutineExercise],
-        excluding claimedIds: Set<UUID>,
-        allowsLegacyFallback: Bool
-    ) -> RoutineExercise? {
-        if let slotId = workoutExercise.routineExerciseId {
-            return candidates.first { $0.id == slotId && !claimedIds.contains($0.id) }
-        }
-
-        guard allowsLegacyFallback else { return nil }
-        let originId = workoutExercise.plannedExerciseId ?? workoutExercise.exerciseId
-        let originName = workoutExercise.plannedExerciseName ?? workoutExercise.exerciseName
-        return candidates.first { candidate in
-            guard !claimedIds.contains(candidate.id) else { return false }
-            if let originId, let candidateId = candidate.exercise?.id {
-                return candidateId == originId
-            }
-            return candidate.exercise?.name == originName
-        }
-    }
-
-    private func appendRoutineExercise(from workoutExercise: WorkoutExercise, to routine: Routine) {
-        guard let exerciseId = workoutExercise.exerciseId,
-              let exercise = exerciseRepository.fetch(id: exerciseId) else { return }
-
-        let routineExercise = RoutineExercise(order: routine.routineExercisesList.count)
-        routineRepository.insert(routineExercise)
-        routineExercise.exercise = exercise
-        routineExercise.routine = routine
-        if !routine.routineExercisesList.contains(where: { $0.id == routineExercise.id }) {
-            routine.routineExercises?.append(routineExercise)
-        }
-
-        for (order, workoutSet) in workoutExercise.setsList
-            .sorted(by: { $0.order < $1.order })
-            .enumerated() {
-            let routineSet = ExerciseSet(
-                reps: workoutSet.actualReps,
-                weight: workoutSet.actualWeight,
-                restTime: workoutSet.restTime,
-                order: order
-            )
-            routineRepository.insert(routineSet)
-            routineSet.routineExercise = routineExercise
-            if !routineExercise.setsList.contains(where: { $0.id == routineSet.id }) {
-                routineExercise.sets?.append(routineSet)
-            }
-        }
-
-        workoutExercise.routineExerciseId = routineExercise.id
-    }
-
-    /// An exercise whose progressive-overload apply owns the template scheme is
-    /// excluded from generic set-value writeback: its performed values are by
-    /// definition the weights from BEFORE the increase, so writing them back at
-    /// Save would silently undo the increase and immediately re-qualify the
-    /// exercise. (Until the increase stopped rewriting the live sets this was
-    /// harmless only by accident — the performed values had been overwritten
-    /// with the overload target.) Both Watch paths already apply this rule via
-    /// `overloadAppliedExerciseIDs` — `WatchRoutineTemplateFold` and
-    /// `WatchTemplateTransactionService+Validation`. Set count, order and rest
-    /// time still reconcile; a set ADDED during such a workout still seeds its
-    /// new template set from the performance, since it has no counterpart the
-    /// increase could have raised.
-    private func updatePrimaryTemplateSets(
-        _ routineExercise: RoutineExercise,
-        from workoutExercise: WorkoutExercise
-    ) {
-        let exerciseRestTime = workoutExercise.setsList.first?.restTime ?? 60.0
-        let workoutSets = workoutExercise.setsList.sorted(by: { $0.order < $1.order })
-        var routineSets = routineExercise.setsList.sorted(by: { $0.order < $1.order })
-        let writesSetValues = !workoutExercise.progressiveOverloadApplied
-
-        if routineSets.count > workoutSets.count {
-            for routineSet in routineSets[workoutSets.count...] {
-                routineExercise.sets?.removeAll { $0.id == routineSet.id }
-                routineRepository.delete(routineSet)
-            }
-            routineSets = Array(routineSets[..<workoutSets.count])
-        }
-
-        for (index, routineSet) in routineSets.enumerated() {
-            routineSet.order = index
-            routineSet.restTime = exerciseRestTime
-            let workoutSet = workoutSets[index]
-            if workoutSet.isCompleted && writesSetValues {
-                routineSet.reps = workoutSet.actualReps
-                routineSet.weight = workoutSet.actualWeight
-            }
-        }
-
-        if workoutSets.count > routineSets.count {
-            // A set added during the workout has no template counterpart the
-            // increase could have raised, so for an overload-applied exercise
-            // it inherits the raised scheme (last template set) instead of the
-            // pre-increase performance — otherwise the template ends up mixing
-            // raised and unraised sets.
-            let raised = writesSetValues ? nil : routineSets.last
-            for index in routineSets.count..<workoutSets.count {
-                let workoutSet = workoutSets[index]
-                let newRoutineSet = ExerciseSet(
-                    reps: raised?.reps ?? workoutSet.actualReps,
-                    weight: raised?.weight ?? workoutSet.actualWeight,
-                    restTime: exerciseRestTime,
-                    order: index
-                )
-                routineRepository.insert(newRoutineSet)
-                newRoutineSet.routineExercise = routineExercise
-                if !routineExercise.setsList.contains(where: { $0.id == newRoutineSet.id }) {
-                    routineExercise.sets?.append(newRoutineSet)
-                }
-            }
-        }
-    }
-
-    /// Mirrors the primary-set template update for a performed alternative:
-    /// reps/weight from completed sets, rest time from the exercise, and the
-    /// alternative's set count reconciled to the session's. The same
-    /// overload-applied exclusion as `updatePrimaryTemplateSets` applies.
-    private func updateAlternativeTemplateSets(_ alternative: RoutineExerciseAlternative, from workoutExercise: WorkoutExercise) {
-        let exerciseRestTime = workoutExercise.setsList.first?.restTime ?? 60.0
-        let workoutSets = workoutExercise.setsList.sorted(by: { $0.order < $1.order })
-        var alternativeSets = alternative.setsList
-        let writesSetValues = !workoutExercise.progressiveOverloadApplied
-
-        // Remove surplus template sets beyond the session's set count
-        if alternativeSets.count > workoutSets.count {
-            for alternativeSet in alternativeSets[workoutSets.count...] {
-                alternative.sets?.removeAll { $0.id == alternativeSet.id }
-                routineRepository.delete(alternativeSet)
-            }
-            alternativeSets = Array(alternativeSets[..<workoutSets.count])
-        }
-
-        // Update existing template sets in order
-        for (index, alternativeSet) in alternativeSets.enumerated() {
-            alternativeSet.order = index
-            alternativeSet.restTime = exerciseRestTime
-            let workoutSet = workoutSets[index]
-            if workoutSet.isCompleted && writesSetValues {
-                alternativeSet.reps = workoutSet.actualReps
-                alternativeSet.weight = workoutSet.actualWeight
-            }
-        }
-
-        // Append new template sets for extra session sets. Same rule as the
-        // primary path: an overload-applied exercise seeds them from the raised
-        // scheme, not from the pre-increase performance.
-        if workoutSets.count > alternativeSets.count {
-            let raised = writesSetValues ? nil : alternativeSets.last
-            for index in alternativeSets.count..<workoutSets.count {
-                let workoutSet = workoutSets[index]
-                let newSet = AlternativeExerciseSet(
-                    reps: raised?.reps ?? workoutSet.actualReps,
-                    weight: raised?.weight ?? workoutSet.actualWeight,
-                    restTime: exerciseRestTime,
-                    order: index
-                )
-                newSet.alternative = alternative
-                if alternative.sets == nil { alternative.sets = [] }
-                alternative.sets?.append(newSet)
-            }
         }
     }
 
@@ -2164,7 +1863,12 @@ class WorkoutViewModel: ObservableObject {
         }
     }
 
-    deinit {
+    /// `isolated deinit` (SE-0371): `Timer` and the `NSObjectProtocol` observer
+    /// tokens are non-`Sendable`, so a nonisolated `deinit` may not read them
+    /// under strict concurrency. This teardown is inherently main-actor work
+    /// (invalidating main-run-loop timers), so isolating it is also the honest
+    /// description of what it does.
+    isolated deinit {
         timer?.invalidate()
         restTimer?.invalidate()
         restTimerReminderTask?.cancel()

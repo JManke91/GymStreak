@@ -93,7 +93,10 @@
       "mcp__things__get_projects",
       "mcp__things__get_todos",
       "Bash(gh api *)",
-      "Bash(git *)"
+      "Bash(git *)",
+      "Bash(xcrun --sdk iphoneos --show-sdk-path)",
+      "Bash(md5 GymStreak/Domain/Models/RestTimerAttributes.swift GymStreakWidgets/RestTimerAttributes.swift)",
+      "mcp__things__search_todos"
     ],
     "defaultMode": "acceptEdits"
   },

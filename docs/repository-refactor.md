@@ -102,7 +102,7 @@ Notable decisions:
   never called `modelContext.insert` even before this refactor). Explicit `delete` is always
   needed since removing an object from a relationship array does not delete the underlying
   record. `RoutineRepository.insert(_ set: ExerciseSet)` exists only because
-  `WorkoutViewModel.updateRoutineTemplate` explicitly inserted new template sets in the
+  `RoutineTemplateSyncService.applyPerformedValues` explicitly inserted new template sets in the
   original code; that one call site was preserved as-is for fidelity.
 - **`RoutineExercise` is not a "relationship-managed child"** in the same sense — the original
   code always explicitly deleted it (`RoutinesViewModel.removeRoutineExercise`,
@@ -114,7 +114,8 @@ Notable decisions:
   secondarily on `healthKitWorkoutId`) — a semantic query, not a generic fetch.
 - **`WorkoutSessionRepository.fetchCompleted()`** (`endTime != nil`, most recent first) backs
   three call sites that previously each built their own `FetchDescriptor`:
-  `ExerciseProgressChartView.loadRecentSessions`, `WorkoutDetailView.loadPRs`, and (unchanged,
+  `ExerciseProgressChartView.loadRecentSessions` (removed 2026-08-13 by audit P1.2 — that
+  read moved into the History model actor), `WorkoutDetailView.loadPRs`, and (unchanged,
   Data-layer) `ExerciseProgressService`. `PersonalRecordService.computePRs` sorts its input
   internally, so the shared descending order is safe for `loadPRs` even though the original
   code didn't sort there at all.
@@ -122,7 +123,7 @@ Notable decisions:
 ## `WorkoutViewModel` needs two repositories
 
 `WorkoutViewModel` depends on both `WorkoutSessionRepository` (its primary data) and
-`RoutineRepository` — the latter because `updateRoutineTemplate` and `matchRoutine` (orphan
+`RoutineRepository` — the latter because `RoutineTemplateSyncService.applyPerformedValues` and `matchRoutine` (orphan
 recovery) mutate/fetch `Routine`/`ExerciseSet` (the routine template), not `WorkoutSession`
 data. Both repositories wrap the same underlying `ModelContext`, so calling `.save()` on
 either commits everything pending — which one is called is a style choice, not a correctness
@@ -259,6 +260,12 @@ established "protocol in `Domain/Interfaces/`, nil-defaulted init param resolved
    root. The one static-utility call site, `ExerciseProgressService.matches(...)` in
    `ExerciseProgressChartView.loadRecentSessions`, was left referencing the concrete type
    directly since it's a pure static helper, not an injected dependency.
+
+   > **Superseded 2026-08-13 (audit P1.2).** The chart no longer goes through this
+   > protocol at all: `fetchProgressData` and `isLiveNameUnique` were removed from it and
+   > the aggregation moved to `ExerciseProgressAggregator`, called from the History
+   > `@ModelActor`. `ExerciseProgressProviding` is down to `compareWithPrevious(workout:)`,
+   > and `loadRecentSessions` no longer exists — see [progress-charts.md](./progress-charts.md).
 
 ## Follow-up: RoutinesViewModel size reduction (two Domain services extracted)
 

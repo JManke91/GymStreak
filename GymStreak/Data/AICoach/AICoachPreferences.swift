@@ -14,7 +14,12 @@ import Observation
 /// Use `AICoachPreferences.shared` throughout the app.
 /// Effective-state helpers combine `hasCompletedOptIn` with `isMasterEnabled`
 /// so call-sites never have to re-implement the AND-logic.
+/// `@MainActor`: the settings are mutable state bound directly into SwiftUI, and
+/// a `static let shared` of a non-`Sendable` type is global shared mutable state
+/// under strict concurrency. Main-actor isolation makes the class implicitly
+/// `Sendable` and matches its sibling AI-coach services.
 @Observable
+@MainActor
 final class AICoachPreferences: AICoachPreferencesProviding {
 
     // MARK: - Singleton

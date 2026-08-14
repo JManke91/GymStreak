@@ -14,7 +14,12 @@ struct TemplateTransactionKey: Hashable {
     let sequence: UInt64
 }
 
-enum WatchWorkoutWire {
+/// Wire-format constants — read from `nonisolated` `WCSessionDelegate`
+/// callbacks, so the type opts out of the watch target's default main-actor
+/// isolation. Every member is an immutable `Sendable` constant or a pure
+/// function over the payload dictionary. (In the iOS copy this is a harmless no-op — that target defaults to
+/// nonisolated — but the two files are kept identical so they stay diffable.)
+nonisolated enum WatchWorkoutWire {
     static let payloadKey = "completedWorkout"
     static let templateTransactionKey = "templateTransaction"
     static let workoutIdKey = "workoutId"

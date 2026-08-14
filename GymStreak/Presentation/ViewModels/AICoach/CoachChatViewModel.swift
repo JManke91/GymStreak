@@ -13,7 +13,6 @@
 //
 
 import Foundation
-import SwiftData
 
 @Observable
 @MainActor
@@ -29,14 +28,21 @@ final class CoachChatViewModel {
     private let availability: AICoachAvailabilityProviding
     private let screenContext: CoachScreenContext
 
+    /// Dependencies default to the shared instances *inside* the initializer
+    /// body rather than as `= Foo.shared` default arguments: a default argument
+    /// is evaluated in the caller's isolation, so referencing a `@MainActor`
+    /// singleton there is rejected outside the main actor. Resolving `nil` in
+    /// this `@MainActor` init body is the pattern every other AI-coach ViewModel
+    /// uses (`PeriodRecapViewModel`, `ExerciseDeepDiveViewModel`,
+    /// `PostWorkoutRecapViewModel`, `WorkoutAnalysisViewModel`).
     init(
-        service: CoachChatService = .shared,
-        availability: AICoachAvailabilityProviding = AICoachAvailability.shared,
-        screenContext: CoachScreenContext = .shared
+        service: CoachChatService? = nil,
+        availability: AICoachAvailabilityProviding? = nil,
+        screenContext: CoachScreenContext? = nil
     ) {
-        self.service = service
-        self.availability = availability
-        self.screenContext = screenContext
+        self.service = service ?? .shared
+        self.availability = availability ?? AICoachAvailability.shared
+        self.screenContext = screenContext ?? .shared
     }
 
     // MARK: - Forwarded state
@@ -74,8 +80,17 @@ final class CoachChatViewModel {
     // MARK: - Lifecycle
 
     /// Wires the tool-backing data layer (idempotent) and warms the model.
-    func onAppear(modelContext: ModelContext) {
-        service.configure(factProvider: ChatFactService(modelContext: modelContext))
+    ///
+    /// Takes a *factory* rather than a built provider so the provider is constructed
+    /// only when the service is still unconfigured. `configure` is idempotent and would
+    /// discard a second one, but building it is no longer free: since audit P1.3 it
+    /// spins up a `@ModelActor` and its `ModelContext`, and the chat is a
+    /// `fullScreenCover`, so this runs on every presentation. The factory comes from
+    /// `AppDependencies` — Presentation never names the concrete Data type.
+    func onAppear(makeFactProvider: () -> ChatFactProviding) {
+        if !service.isConfigured {
+            service.configure(factProvider: makeFactProvider())
+        }
         service.prewarm()
     }
 

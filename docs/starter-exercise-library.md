@@ -19,8 +19,10 @@ Decision record (research 2026-07-11): **local bundle, no backend.** A backend (
 | `Exercise.seedKey` property | `GymStreak/Domain/Models/Models.swift` |
 | `EquipmentType` + `cable`, `bodyweight` cases | `GymStreak/Domain/Models/EquipmentType.swift` |
 | Catalog (96 `SeedExercise` rows, `currentVersion`) | `GymStreak/Data/Seeding/SeedExerciseCatalog.swift` |
-| Seeder (dedup + version-gated seed) | `GymStreak/Data/Seeding/DefaultContentSeeder.swift` |
-| Wiring | `App/AppDependencies.swift` (constructs seeder), `App/GymStreakApp.swift` (`.onAppear`, non-`-UI_TESTING` path) |
+| Seeder (dedup + version-gated seed + stranded-library recovery) | `GymStreak/Data/Seeding/DefaultContentSeeder.swift` |
+| Version-flag seam (`SeedCatalogVersionStore`, `UbiquitousSeedCatalogVersionStore`) | `GymStreak/Data/Seeding/DefaultContentSeeder.swift` |
+| Wiring | `App/AppDependencies.swift` (constructs seeder with `cloudSyncStatus`), `App/GymStreakApp.swift` (`.onAppear` runs the seeder, `.task` runs the recovery — both non-`-UI_TESTING`) |
+| Tests | `GymStreakTests/DefaultContentSeederRecoveryTests.swift` |
 | Localized names | `Resources/en.lproj/Localizable.strings` + `de.lproj` (`seed.exercise.*`, `equipment.cable`, `equipment.bodyweight`) |
 | iCloud KV entitlement | `GymStreak/GymStreak.entitlements` (`com.apple.developer.ubiquity-kvstore-identifier`) |
 
@@ -30,10 +32,24 @@ Decision record (research 2026-07-11): **local bundle, no backend.** A backend (
 - `DefaultContentSeeder.run()` executes at every launch (except UI-testing runs, which use `TestDataSeeder` instead):
   1. **Dedup pass (every launch):** groups exercises by non-empty `seedKey`; duplicates are collapsed into a deterministic survivor (sorted by `createdAt`, then `id.uuidString` — deterministic so concurrent devices keep the SAME record and never delete both copies). Routine references (`RoutineExercise.exercise`, `RoutineExerciseAlternative.exercise`) are re-pointed to the survivor before deletion.
   2. **Seed pass (version-gated):** runs only when the stored catalog version < `SeedExerciseCatalog.currentVersion`, and inserts only rows with `introducedInVersion > lastSeededVersion` whose `seedKey` isn't present, so **deleted seeds are never resurrected**. Rows whose localized name normalizes (case/diacritic/whitespace-folded) to an existing exercise's name are skipped — existing users get the catalog backfilled without lookalikes of exercises they created themselves. Version history: **v1 = unreleased interim policy** (seed only empty libraries; some dev devices stamped it) — **v2 = first shipped catalog** (all 96 rows carry `introducedInVersion: 2` so v1-stamped devices get backfilled).
-  3. Version flag lives in `NSUbiquitousKeyValueStore` (propagates across the user's devices) with a `UserDefaults` mirror for no-iCloud accounts; reads take the max of both.
+  3. Version flag lives in `NSUbiquitousKeyValueStore` (propagates across the user's devices) with a `UserDefaults` mirror for no-iCloud accounts; reads take the max of both. Both halves go through `SeedCatalogVersionStore` so tests can drive them — the real KV store is a single process-wide instance whose contents outlive the app, so a test that wrote it would stamp the developer's simulator permanently.
+
+### Stranded-library recovery (`recoverStrandedLibraryIfNeeded()`)
+
+The flag and the seeded rows live in **different stores** (iCloud KV vs. CloudKit) and are not written transactionally, so a device can end up carrying "already seeded v2" over a store that holds nothing at all. `run()` then refuses to seed for the lifetime of the install and the library stays empty forever, with no way out from inside the app. Reproduced 2026-08-13 on a simulator: `cloud=2 local=0`, store had 0 exercises, and CoreData SQL logging showed the seeder's fetch with zero `INSERT INTO ZEXERCISE`.
+
+How it happens: the KV record lives outside the app container and survives deleting the app (and, on a simulator, resetting its data), while the SwiftData store does not. In production the same shape appears whenever the flag arrives but the data doesn't — mirroring blocked or never set up, the CloudKit schema not deployed to production, or the user purging the app's data from iCloud.
+
+The recovery runs once per launch from `GymStreakApp`'s `.task` and re-seeds only when both hold:
+
+- **The store is completely empty** — no exercises, no routines, no history. Deliberately stricter than "no seeded exercises": a user who deleted the built-ins but kept their own content made a choice, and the append-only rule ("deleted seeds are never resurrected") still governs that case. The cost is that a partially-populated stranded store is not recovered; erasing/reinstalling is the way back for those.
+- **CloudKit has proved it cannot explain the emptiness** — either `CloudSyncStatus.state == .off` (signed out, or the local-only store fallback), or a transfer has completed (`lastSuccessfulSync != nil`) and the store is *still* empty. Waiting for that signal is what keeps the recovery off a new device of an existing user, which starts empty and fills in from CloudKit moments later; seeding into that window would upload 96 rows only for the next dedup pass to delete them.
+
+After a successful recovery the seeder posts `.cloudKitDataDidChange`, which is what makes the already-loaded view models refetch and carries the catalog to the watch via `ExerciseCatalogSyncCoordinator` — `run()` needs neither, because it commits before any view model reads the store.
 
 ### Why this design (CloudKit constraints)
 
+- The version flag is an optimisation, not the correctness mechanism, and it can lie about a given store — hence the recovery above. Treat it as "some device of this user has seeded v2", never as "this store holds the catalog".
 - **CloudKit-backed SwiftData cannot enforce uniqueness** — `@Attribute(.unique)` is silently unenforced when `cloudKitDatabase != .none` (Apple Forums 772007). Two devices seeding independently WILL both upload the catalog. The seedKey dedup pass is the actual correctness mechanism; the KV-store version flag and the name-collision skip just make duplicates rare in the first place.
 - Residual accepted race: a fresh device of an existing iCloud user can seed before the KV flag or CloudKit data arrives → duplicates exist briefly and are cleaned deterministically on the next launch.
 - **Localization decision:** the localized name is resolved **once at seed time** (device language) into the mutable `Exercise.name`; `seedKey` stays as stable identity. Switching the phone language later does not re-localize names. The display-time alternative (store key, resolve in views) was deliberately rejected — it would touch every view reading `.name`, the AI coach's `ExerciseNameResolver`, and watch sync.

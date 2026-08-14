@@ -67,6 +67,7 @@ This is an iOS app built with Xcode:
 - **Clean Build**: Product → Clean Build Folder (Cmd+Shift+K)
 - **iOS Target**: iOS 26.1+ (app target; bumped 2026-07-10 for `tabViewBottomAccessory(isEnabled:)` — widgets/tests targets are 26.0/26.2)
 - **Xcode Version**: 26+ required (iOS 26 SDK)
+- **Unit tests**: two targets, two schemes — iOS `GymStreakTests` and watchOS `GymStreakWatchTests`. There is no combined test plan (one `xcodebuild test` run resolves one destination platform), so run both via `bundle exec fastlane test_unit` (or `test_unit_ios` / `test_unit_watch`). **A change touching watch code must run the watch suite** — it asserts on the *watch* copies of per-target-duplicated logic, and skipping it is how a copy-drift ships. Watch tests are Swift Testing and must annotate suites `@MainActor` (the watch module is `SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor`). See `docs/watch-unit-tests.md`.
 
 ## Architecture
 
@@ -205,6 +206,48 @@ measured 630 ms hang, its seven causes, and the remediation.
 When a screen's cost scales with user data, measure rather than assume — Instruments'
 SwiftUI template; `docs/history-performance.md` §5 has the click paths, the acceptance
 targets and a before/after comparison method.
+
+## Concurrency (hard rules)
+
+The project compiles in **Swift 6 language mode** (`SWIFT_VERSION = 6.0`, project level)
+with zero warnings across all six targets. **`docs/swift6-concurrency.md` is the
+reference — read it before changing isolation, adding a singleton, or touching a
+concurrency build setting.** Binding rules:
+
+1. **`nonisolated async` does NOT guarantee off-caller execution.** Under SE-0461
+   (enabled project-wide via `SWIFT_APPROACHABLE_CONCURRENCY`) it runs on the *caller's*
+   actor. Any boundary whose purpose is to leave the main actor needs **`@concurrent` on
+   the concrete method** — see `SwiftDataHistorySnapshotProvider`. Without it the History
+   aggregation silently ran on main (~600 ms; build green, caught only by
+   `largeSnapshotBuildKeepsMainActorResponsive`). Put `@concurrent` on the **conforming
+   type's method** — whether annotating a protocol requirement also works is not
+   documented (SE-0461 is silent on witnesses), so do not rely on it.
+   `SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor` is watch-target-only, because a module
+   default of `MainActor` misdescribes the isolation-agnostic `Domain/` layer.
+2. **Shared service** = `@MainActor final class X { static let shared = X() }` behind a
+   `@MainActor` Domain protocol, wired in `AppDependencies`. A `static let` of a
+   non-`Sendable` type will not compile.
+3. **`Domain/` stays isolation-agnostic.** Never add `@MainActor` to `Domain/Services/`
+   pure logic — the `@ModelActor` History store calls it from its own executor.
+4. **Apple delegate conformances**: `@MainActor` class, each delegate method
+   `nonisolated`, hop with `Task { @MainActor in … }` (never `DispatchQueue.main.async`
+   — SE-0431 ordering is relied on by watch sync; never `MainActor.assumeIsolated` for
+   callbacks that are genuinely off-main). **Extract `Sendable` values before the hop**
+   — never let `WCSession`, `WCSessionFile`, an `NSPersistentCloudKitContainer.Event` or
+   a `[String: Any]` payload cross it.
+5. **Escape-hatch ranking** — prefer left, justify right in a comment:
+   `nonisolated` (checked; the compiler still rejects mutable/non-`Sendable` state
+   inside) → `Sendable` boundary projection → `@preconcurrency import` (Apple's
+   annotation gap) → `@unchecked Sendable` box (needs a written invariant) →
+   `nonisolated(unsafe)` (avoid).
+6. **`isolated deinit`** (SE-0371) for `@MainActor` classes tearing down `Timer`s or
+   `NSObjectProtocol` observer tokens.
+7. **`@MainActor` XCTest classes** must override `setUp() async throws` /
+   `tearDown() async throws`, never the `…WithError() throws` variants (which are
+   `nonisolated` and silently strip the class's isolation).
+8. **After any isolation or concurrency-build-setting change, run the unit tests** —
+   not just a build. A build cannot catch rule 1; only
+   `largeSnapshotBuildKeepsMainActorResponsive` can.
 
 ## Naming
 

@@ -14,8 +14,10 @@
 //  the throw exists to let a caller log, not to abort the workout.
 //
 //  IDENTICAL COPY in both targets — `GymStreak/Data/Sync/` and
-//  `GymStreakWatch Watch App/Managers/` — keep them in sync. There is no watch
-//  unit-test target, so the iOS test target covers this logic.
+//  `GymStreakWatch Watch App/Managers/` — keep them in sync. Since audit item
+//  P1.1 there IS a watch unit-test target (`GymStreakWatchTests`, see
+//  `docs/watch-unit-tests.md`), so cover the watch copy there rather than relying
+//  on the iOS twin — a schema drift between the copies compiles cleanly on both.
 //
 
 import Foundation

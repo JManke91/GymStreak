@@ -55,6 +55,101 @@ This follows `Presentation → Domain ← Data`: the ViewModel no longer talks t
 `UNUserNotificationCenter` directly and the permission/scheduling boundary can
 be replaced by a recording test double.
 
+## The Live Activity surface (audit P1.5, 2026-08-13)
+
+The Lock Screen / Dynamic Island countdown was the last system integration
+`WorkoutViewModel` drove directly — ~100 lines of ActivityKit inline in a
+2,195-line file, with no test coverage. It now follows the same shape as the
+notification scheduler:
+
+- `Domain/Interfaces/RestTimerLiveActivityPresenting.swift` — `startActivity(id:content:)`,
+  `endActivity(id:)`, `dismissExpiredActivities()`, plus the ActivityKit-free
+  `RestTimerLiveActivityContent` value the ViewModel builds. `Domain/` and
+  `Presentation/` no longer reference ActivityKit at all.
+- `Data/LiveActivity/ActivityKitRestTimerPresenter.swift` — the only app-target
+  file importing ActivityKit. `RestTimerAttributes.swift` moved here from
+  `Domain/Models/` in the same change, since it imports ActivityKit and is the
+  wire format of one system integration, not a domain model.
+- `AppDependencies` owns one presenter, injected into both `WorkoutViewModel`s.
+
+**Identity keying is not cosmetic.** Two `WorkoutViewModel` instances exist
+concurrently (Routines tab and History tab) and now share one presenter, so
+`endActivity(id:)` mirrors `cancelReminder(id:)`: it does nothing unless the id
+matches the countdown actually on screen. The timer UUID is the same one the
+notification request and the persisted timer state use — one identity across all
+four surfaces.
+
+`startActivity` is idempotent per id, which is what lets `restoreTimerState()`
+call it unconditionally on every foreground instead of the ViewModel tracking
+whether an activity object exists.
+
+**Localization.** The two user-facing Live Activity strings were hardcoded
+English before P1.5 and are now `live_activity.rest_timer.complete` and
+`live_activity.rest_timer.workout_fallback` (the title when a rest runs outside a
+routine-backed session). Both are localized **in the app process** before they
+cross into `RestTimerAttributes.ContentState`; the widget extension renders
+whatever string arrives and therefore needs no keys of its own.
+
+### Behavior change: duplicate countdowns on relaunch
+
+Previously, relaunching mid-rest produced **two** Live Activities — the previous
+process's countdown was still on the Lock Screen, and `restoreTimerState()`
+requested a second one because the fresh ViewModel's `currentRestActivity` was
+`nil`. The presenter now ends leftovers before presenting a restored countdown.
+
+The sweep is deliberately gated on "this process has never presented anything":
+between two timers *within* one session the previous activity is still listed for
+a few seconds showing "Rest Complete! 💪", and sweeping it there would cut that
+state short on every set transition. `dismissExpiredActivities()` (called from
+`WorkoutViewModel.init`) still only ends countdowns whose deadline has already
+passed — ending a live one at construction time would kill a legitimate rest if
+the app were ever launched into the background with no `restoreTimerState()` to
+follow.
+
+### Regression coverage
+
+`ActivityKitRestTimerPresenterTests` asserts the policy against a fake
+`RestTimerLiveActivityStore`: the authorization gate, idempotence, replacement,
+identity-scoped ending, ending being idempotent, expired-only dismissal, the
+leftover sweep, the completed-countdown carve-out above, retry after a failed
+request, and rejection of an inverted timer range. `WorkoutViewModelTests` adds
+two tests that the ViewModel drives it at the right moments and with the same
+identity as the notification.
+
+## ActivityKit findings (verified against the iOS 26.5 SDK interface)
+
+Read out of `ActivityKit.swiftinterface` rather than inferred, because the
+project's own comments had drifted from it:
+
+- `Activity<Attributes>` is a **non-`Sendable` class with no isolation
+  annotation**; `request`, `update` and `end` are plain `nonisolated async`.
+  Nothing is `@concurrent`. See `docs/swift6-concurrency.md` §8 for why
+  `@preconcurrency import` is still required and how that was verified.
+- **`ActivityAuthorizationError` is a typed enum** with 12 cases
+  (`attributesTooLarge`, `unsupported`, `denied`, `globalMaximumExceeded`,
+  `targetMaximumExceeded`, `unsupportedTarget`, `visibility`,
+  `persistenceFailure`, `missingProcessIdentifier`, `unentitled`,
+  `malformedActivityIdentifier`, `reconnectNotPermitted`). *Root cause worth
+  recording:* the code this replaced classified failures by string-matching
+  `error.localizedDescription` against `"unsupportedTarget"`,
+  `"activitiesDisabled"` and `"activityLimitExceeded"`. Two of those are not
+  cases of the enum at all, and `localizedDescription` on a `LocalizedError`
+  returns a localized sentence, never a case name — so **none of those branches
+  could ever be taken**. The presenter catches the typed error instead.
+- `Activity.request` is documented as foreground-only; the case for calling it
+  while backgrounded is `visibility`.
+- `dismissalPolicy: .after(_:)` has a documented four-hour *upper* bound and no
+  minimum, so the 3-second completion display is within spec.
+- The combined attributes + `ContentState` payload limit is 4 KB
+  (`attributesTooLarge`); a `ClosedRange<Date>` is negligible against it.
+- **Not documented, tracked as a known unknown:** Apple does not guarantee that
+  the synchronous `Activity.activities` is fully populated at process start.
+  `dismissExpiredActivities()` reads it at `WorkoutViewModel.init`. If expired
+  leftovers ever survive a launch, `Activity.activityUpdates` is the documented
+  async alternative.
+- There is no supported way to fake ActivityKit; the `RestTimerLiveActivityStore`
+  seam is the only route to unit tests, which is why it exists.
+
 ## Platform scope
 
 - **iOS 26+:** behavior above is active. The notification permission prompt is
@@ -76,8 +171,9 @@ late stale request without deleting the current one. They also recreate the
 scheduler around a shared notification-center fake to verify cleanup after an
 app relaunch, verify the post-authorization remaining interval, and cover
 granted, denied, provisional, and expired-deadline outcomes.
-Existing timer, Live Activity, and workout tests continue to cover their
-independent behavior.
+Existing timer and workout tests continue to cover their independent behavior.
+(This line used to claim Live Activity tests among them; there were none until
+audit P1.5 — see "Regression coverage" under the Live Activity section below.)
 
 ## Apple API findings
 

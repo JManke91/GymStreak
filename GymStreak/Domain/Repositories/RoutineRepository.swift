@@ -34,7 +34,7 @@ protocol RoutineRepository: AnyObject {
     /// normally attached via their parent's relationship array and cascade-insert
     /// automatically once the parent is persisted. Explicit insert is only needed
     /// where a set is synthesized independently of that relationship append (see
-    /// `WorkoutViewModel.updateRoutineTemplate`); explicit delete is always needed
+    /// `RoutineTemplateSyncService.applyPerformedValues`); explicit delete is always needed
     /// since removing an object from a relationship array does not delete the
     /// underlying record.
     func insert(_ set: ExerciseSet)

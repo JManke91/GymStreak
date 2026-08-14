@@ -3,14 +3,18 @@
 //  GymStreak
 //
 //  Resolves a free-form, user-typed exercise name (in any language) to the live
-//  Exercise library. Extracted from ChatFactService so the fact service stays
-//  focused on formatting. See docs/ai-coach-chat-feasibility.md (Device-test
-//  findings) for why cross-language names need the model-assisted fallback.
+//  Exercise library. See docs/ai-coach-chat-feasibility.md (Device-test findings)
+//  for why cross-language names need the model-assisted fallback.
+//
+//  Pure logic over already-fetched `Exercise` models, so it lives in `Domain/`
+//  and stays isolation-agnostic: audit P1.3 moved its caller into a model actor,
+//  which calls this from its own executor (docs/swift6-concurrency.md §10 rule 3).
+//  It was `@MainActor` while it lived in `Data/AICoach/Chat/`; that annotation was
+//  incidental to the old main-actor fact service, not a requirement.
 //
 
 import Foundation
 
-@MainActor
 struct ExerciseNameResolver {
 
     enum Match {

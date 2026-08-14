@@ -29,6 +29,13 @@
 			remoteGlobalIDString = A6A3406A2E4E6F360017A4F7;
 			remoteInfo = GymStreak;
 		};
+		A6E1B0072F4A00100095483C /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = A6A340632E4E6F360017A4F7 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = A6FBC5CB2ECCED0F0095483C;
+			remoteInfo = "GymStreakWatch Watch App";
+		};
 		A6FBC4FC2EC91C1E0095483C /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = A6A340632E4E6F360017A4F7 /* Project object */;
@@ -81,6 +88,7 @@
 		77AD04CC867B73B51F0A45D4 /* GymStreakTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = GymStreakTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		A67A49292F129423002A3457 /* GymStreakUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = GymStreakUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		A6A3406B2E4E6F360017A4F7 /* GymStreak.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = GymStreak.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		A6E1B0012F4A00100095483C /* GymStreakWatchTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = GymStreakWatchTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		A6FBC4EA2EC91C1C0095483C /* GymStreakWidgetsExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = GymStreakWidgetsExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		A6FBC4EC2EC91C1C0095483C /* WidgetKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = WidgetKit.framework; path = System/Library/Frameworks/WidgetKit.framework; sourceTree = SDKROOT; };
 		A6FBC4EE2EC91C1C0095483C /* SwiftUI.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SwiftUI.framework; path = System/Library/Frameworks/SwiftUI.framework; sourceTree = SDKROOT; };
@@ -125,6 +133,11 @@
 				A6D6C7142F38AF980071D28A /* Exceptions for "GymStreak" folder in "GymStreak" target */,
 			);
 			path = GymStreak;
+			sourceTree = "<group>";
+		};
+		A6E1B0022F4A00100095483C /* GymStreakWatchTests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = GymStreakWatchTests;
 			sourceTree = "<group>";
 		};
 		A6FBC4F02EC91C1C0095483C /* GymStreakWidgets */ = {
@@ -185,6 +198,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		A6E1B0052F4A00100095483C /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		A6FBC4E72EC91C1C0095483C /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
@@ -215,6 +235,7 @@
 				A6FBC4EB2EC91C1C0095483C /* Frameworks */,
 				A6A3406C2E4E6F360017A4F7 /* Products */,
 				E13A7E0ACBD44C5A7E25FDA1 /* GymStreakWatchUITests */,
+				A6E1B0022F4A00100095483C /* GymStreakWatchTests */,
 			);
 			sourceTree = "<group>";
 		};
@@ -227,6 +248,7 @@
 				A67A49292F129423002A3457 /* GymStreakUITests.xctest */,
 				77AD04CC867B73B51F0A45D4 /* GymStreakTests.xctest */,
 				DEC8F14B2C193FDA2C33B6B4 /* GymStreakWatchUITests.xctest */,
+				A6E1B0012F4A00100095483C /* GymStreakWatchTests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -318,6 +340,27 @@
 			productReference = A6A3406B2E4E6F360017A4F7 /* GymStreak.app */;
 			productType = "com.apple.product-type.application";
 		};
+		A6E1B0032F4A00100095483C /* GymStreakWatchTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = A6E1B00B2F4A00100095483C /* Build configuration list for PBXNativeTarget "GymStreakWatchTests" */;
+			buildPhases = (
+				A6E1B0042F4A00100095483C /* Sources */,
+				A6E1B0052F4A00100095483C /* Frameworks */,
+				A6E1B0062F4A00100095483C /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				A6E1B0082F4A00100095483C /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				A6E1B0022F4A00100095483C /* GymStreakWatchTests */,
+			);
+			name = GymStreakWatchTests;
+			productName = GymStreakWatchTests;
+			productReference = A6E1B0012F4A00100095483C /* GymStreakWatchTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
 		A6FBC4E92EC91C1C0095483C /* GymStreakWidgetsExtension */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = A6FBC5002EC91C1E0095483C /* Build configuration list for PBXNativeTarget "GymStreakWidgetsExtension" */;
@@ -396,6 +439,10 @@
 					A6A3406A2E4E6F360017A4F7 = {
 						CreatedOnToolsVersion = 16.4;
 					};
+					A6E1B0032F4A00100095483C = {
+						CreatedOnToolsVersion = 26.5;
+						TestTargetID = A6FBC5CB2ECCED0F0095483C;
+					};
 					A6FBC4E92EC91C1C0095483C = {
 						CreatedOnToolsVersion = 26.0.1;
 					};
@@ -429,6 +476,7 @@
 				A67A49282F129423002A3457 /* GymStreakUITests */,
 				95505618E47D13F5E82A6053 /* GymStreakWatchUITests */,
 				B9F0C0ABEEAD939A64666A2E /* GymStreakTests */,
+				A6E1B0032F4A00100095483C /* GymStreakWatchTests */,
 			);
 		};
 /* End PBXProject section */
@@ -456,6 +504,13 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		A6A340692E4E6F360017A4F7 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A6E1B0062F4A00100095483C /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -500,6 +555,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		A6E1B0042F4A00100095483C /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		A6FBC4E62EC91C1C0095483C /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -534,6 +596,12 @@
 			target = A6A3406A2E4E6F360017A4F7 /* GymStreak */;
 			targetProxy = A67A492F2F129423002A3457 /* PBXContainerItemProxy */;
 		};
+		A6E1B0082F4A00100095483C /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			name = "GymStreakWatch Watch App";
+			target = A6FBC5CB2ECCED0F0095483C /* GymStreakWatch Watch App */;
+			targetProxy = A6E1B0072F4A00100095483C /* PBXContainerItemProxy */;
+		};
 		A6FBC4FD2EC91C1E0095483C /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
 			target = A6FBC4E92EC91C1C0095483C /* GymStreakWidgetsExtension */;
@@ -563,7 +631,6 @@
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = watchos;
 				SUPPORTED_PLATFORMS = "watchos watchsimulator";
-				SWIFT_VERSION = 6.0;
 				TARGETED_DEVICE_FAMILY = 4;
 				TEST_TARGET_NAME = "GymStreakWatch Watch App";
 				VALIDATE_PRODUCT = YES;
@@ -581,7 +648,6 @@
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = watchos;
 				SUPPORTED_PLATFORMS = "watchos watchsimulator";
-				SWIFT_VERSION = 6.0;
 				TARGETED_DEVICE_FAMILY = 4;
 				TEST_TARGET_NAME = "GymStreakWatch Watch App";
 				WATCHOS_DEPLOYMENT_TARGET = 26.0;
@@ -608,7 +674,6 @@
 				SDKROOT = iphoneos;
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
 				SUPPORTS_MACCATALYST = NO;
-				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = 1;
 				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/GymStreak.app/GymStreak";
 				VALIDATE_PRODUCT = YES;
@@ -635,7 +700,6 @@
 				SDKROOT = iphoneos;
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
 				SUPPORTS_MACCATALYST = NO;
-				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = 1;
 				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/GymStreak.app/GymStreak";
 			};
@@ -658,10 +722,8 @@
 				SUPPORTS_MACCATALYST = NO;
 				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
 				SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD = NO;
-				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
-				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = 1;
 				TEST_TARGET_NAME = GymStreak;
 			};
@@ -684,10 +746,8 @@
 				SUPPORTS_MACCATALYST = NO;
 				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
 				SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD = NO;
-				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
-				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = 1;
 				TEST_TARGET_NAME = GymStreak;
 				VALIDATE_PRODUCT = YES;
@@ -752,7 +812,9 @@
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 6.0;
 			};
 			name = Debug;
 		};
@@ -806,7 +868,9 @@
 				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_VERSION = 6.0;
 			};
 			name = Release;
 		};
@@ -848,7 +912,6 @@
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
 				SUPPORTS_MACCATALYST = NO;
 				SWIFT_EMIT_LOC_STRINGS = YES;
-				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = 1;
 				XROS_DEPLOYMENT_TARGET = 2.5;
 			};
@@ -892,9 +955,51 @@
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
 				SUPPORTS_MACCATALYST = NO;
 				SWIFT_EMIT_LOC_STRINGS = YES;
-				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = 1;
 				XROS_DEPLOYMENT_TARGET = 2.5;
+			};
+			name = Release;
+		};
+		A6E1B0092F4A00100095483C /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 45VTMQ88RW;
+				GENERATE_INFOPLIST_FILE = YES;
+				MARKETING_VERSION = 1.1.8;
+				PRODUCT_BUNDLE_IDENTIFIER = com.shotat24fps.GymStreakWatchTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = watchos;
+				STRING_CATALOG_GENERATE_SYMBOLS = NO;
+				SUPPORTED_PLATFORMS = "watchos watchsimulator";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				TARGETED_DEVICE_FAMILY = 4;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/GymStreakWatch Watch App.app/GymStreakWatch Watch App";
+				WATCHOS_DEPLOYMENT_TARGET = 26.0;
+			};
+			name = Debug;
+		};
+		A6E1B00A2F4A00100095483C /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 45VTMQ88RW;
+				GENERATE_INFOPLIST_FILE = YES;
+				MARKETING_VERSION = 1.1.8;
+				PRODUCT_BUNDLE_IDENTIFIER = com.shotat24fps.GymStreakWatchTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = watchos;
+				STRING_CATALOG_GENERATE_SYMBOLS = NO;
+				SUPPORTED_PLATFORMS = "watchos watchsimulator";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				TARGETED_DEVICE_FAMILY = 4;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/GymStreakWatch Watch App.app/GymStreakWatch Watch App";
+				VALIDATE_PRODUCT = YES;
+				WATCHOS_DEPLOYMENT_TARGET = 26.0;
 			};
 			name = Release;
 		};
@@ -926,10 +1031,8 @@
 				SUPPORTS_MACCATALYST = NO;
 				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
 				SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD = NO;
-				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
-				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = 1;
 			};
 			name = Debug;
@@ -962,10 +1065,8 @@
 				SUPPORTS_MACCATALYST = NO;
 				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
 				SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD = NO;
-				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
-				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = 1;
 				VALIDATE_PRODUCT = YES;
 			};
@@ -998,11 +1099,9 @@
 				SDKROOT = watchos;
 				SKIP_INSTALL = YES;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
-				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
-				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = 4;
 				WATCHOS_DEPLOYMENT_TARGET = 26.0;
 			};
@@ -1035,11 +1134,9 @@
 				SDKROOT = watchos;
 				SKIP_INSTALL = YES;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
-				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
-				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = 4;
 				VALIDATE_PRODUCT = YES;
 				WATCHOS_DEPLOYMENT_TARGET = 26.0;
@@ -1072,6 +1169,15 @@
 			buildConfigurations = (
 				A6A340782E4E6F370017A4F7 /* Debug */,
 				A6A340792E4E6F370017A4F7 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		A6E1B00B2F4A00100095483C /* Build configuration list for PBXNativeTarget "GymStreakWatchTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				A6E1B0092F4A00100095483C /* Debug */,
+				A6E1B00A2F4A00100095483C /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

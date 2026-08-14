@@ -88,15 +88,18 @@ final class CloudKitSyncStatusMonitor: CloudSyncStatusProviding {
         Task { await refreshAccountStatus() }
     }
 
-    deinit {
-        // NotificationCenter and NWPathMonitor teardown are both thread-safe;
-        // capturing only these values keeps deinit off the main actor.
-        let observers = observers
-        let monitor = pathMonitor
+    /// `isolated deinit` (SE-0371): the observer tokens are non-`Sendable`
+    /// `NSObjectProtocol` values, which a nonisolated `deinit` may not read under
+    /// strict concurrency — the previous "capture the values first" trick did not
+    /// actually satisfy the checker, because reading the stored properties is
+    /// itself the cross-actor access. Isolating the deinit to this class's main
+    /// actor is the sanctioned fix; NotificationCenter and NWPathMonitor teardown
+    /// are both still thread-safe, so nothing else changes.
+    isolated deinit {
         for observer in observers {
             NotificationCenter.default.removeObserver(observer)
         }
-        monitor?.cancel()
+        pathMonitor?.cancel()
     }
 
     // MARK: - CloudSyncStatusProviding
@@ -128,8 +131,12 @@ final class CloudKitSyncStatusMonitor: CloudSyncStatusProviding {
                 guard let event = notification.userInfo?[
                     NSPersistentCloudKitContainer.eventNotificationUserInfoKey
                 ] as? NSPersistentCloudKitContainer.Event else { return }
+                // `Event` is a non-`Sendable` class, so it must not cross into
+                // main-actor code. Project the fields the status model needs into
+                // a `Sendable` value here, at the boundary, and send that instead.
+                let summary = SyncEventSummary(event)
                 MainActor.assumeIsolated {
-                    self?.handle(event: event)
+                    self?.handle(summary)
                 }
             }
         )
@@ -151,6 +158,9 @@ final class CloudKitSyncStatusMonitor: CloudSyncStatusProviding {
         let monitor = NWPathMonitor()
         monitor.pathUpdateHandler = { [weak self] path in
             let isSatisfied = path.status == .satisfied
+            #if DEBUG
+            print("☁️ [CloudKitSyncStatusMonitor] path status=\(path.status) satisfied=\(isSatisfied) expensive=\(path.isExpensive) constrained=\(path.isConstrained) interfaces=\(path.availableInterfaces.map { "\($0.type)" })")
+            #endif
             Task { @MainActor in
                 guard let self, self.hasNetwork != isSatisfied else { return }
                 self.hasNetwork = isSatisfied
@@ -169,12 +179,12 @@ final class CloudKitSyncStatusMonitor: CloudSyncStatusProviding {
 
     // MARK: - State machine
 
-    private func handle(event: NSPersistentCloudKitContainer.Event) {
+    private func handle(_ event: SyncEventSummary) {
         #if DEBUG
         // Whether SwiftData's container emits these events at all can only be
         // confirmed on a device signed into iCloud — this log is how that check
         // is made (see docs/settings-tab.md §"Verification record").
-        print("☁️ [CloudKitSyncStatusMonitor] event type=\(event.type.rawValue) ended=\(event.endDate != nil) succeeded=\(event.succeeded) error=\(event.error.map { String(describing: $0) } ?? "none")")
+        print("☁️ [CloudKitSyncStatusMonitor] event type=\(event.type.rawValue) ended=\(event.endDate != nil) succeeded=\(event.succeeded) error=\(event.errorDescription ?? "none")")
         #endif
 
         guard let endDate = event.endDate else {
@@ -203,7 +213,7 @@ final class CloudKitSyncStatusMonitor: CloudSyncStatusProviding {
             if event.type == .export {
                 hasQueuedChanges = true
             }
-            if let error = event.error as? CKError, isAccountProblem(error) {
+            if event.isAccountProblem {
                 // An authentication/permission failure may mean the account went
                 // away since the last query. Re-ask CloudKit rather than pinning a
                 // synthetic "signed out" for the rest of the session — a transient
@@ -215,16 +225,14 @@ final class CloudKitSyncStatusMonitor: CloudSyncStatusProviding {
         publish()
     }
 
-    private func isAccountProblem(_ error: CKError) -> Bool {
-        switch error.code {
-        case .notAuthenticated, .managedAccountRestricted, .permissionFailure:
-            true
-        default:
-            false
-        }
-    }
-
     private func publish() {
+        #if DEBUG
+        // Prints the whole input vector, not just the result: the airplane-mode
+        // regression (row returns to "Aktuell" while offline) can only come from
+        // `hasNetwork` or `hasQueuedChanges` being wrong, and this is what tells
+        // the two apart on a device. See docs/settings-tab.md §7.
+        print("☁️ [CloudKitSyncStatusMonitor] state=\(makeState()) hasNetwork=\(hasNetwork) inFlight=\(eventsInFlight.count) queued=\(hasQueuedChanges) account=\(accountStatus.map(String.init(describing:)) ?? "unqueried")")
+        #endif
         currentStatus = makeStatus()
     }
 
@@ -237,8 +245,14 @@ final class CloudKitSyncStatusMonitor: CloudSyncStatusProviding {
         // `nil` = not yet queried; every known non-available status means the
         // user's data is not going anywhere.
         if let accountStatus, accountStatus != .available { return .off }
+        // No network outranks an in-flight transfer. CloudKit opens a mirroring
+        // event and simply never ends it while the device is offline, so testing
+        // `eventsInFlight` first pinned the row at "Lädt …" for the whole outage
+        // (measured on device: `state=syncing hasNetwork=false inFlight=1`).
+        // A transfer that cannot reach the network is queued, not progressing.
+        if !hasNetwork { return .waiting }
         if !eventsInFlight.isEmpty { return .syncing }
-        if !hasNetwork || hasQueuedChanges { return .waiting }
+        if hasQueuedChanges { return .waiting }
         return .upToDate
     }
 

@@ -36,7 +36,12 @@ private enum LocalizedStrings {
 final class GymStreakWatchUITests: XCTestCase {
     var app: XCUIApplication!
 
-    override func setUpWithError() throws {
+    // `setUp() async throws` rather than `setUpWithError() throws`: the throwing
+    // synchronous variant overrides a `nonisolated` XCTest method, and an
+    // override must match its superclass's isolation — which strips this class's
+    // `@MainActor` and makes every `XCUIApplication` touch a cross-actor
+    // reference. The `async` variant inherits the class isolation correctly.
+    override func setUp() async throws {
         continueAfterFailure = false
 
         app = XCUIApplication()
@@ -50,7 +55,7 @@ final class GymStreakWatchUITests: XCTestCase {
         let _ = app.wait(for: .runningForeground, timeout: 5)
     }
 
-    override func tearDownWithError() throws {
+    override func tearDown() async throws {
         app = nil
     }
 

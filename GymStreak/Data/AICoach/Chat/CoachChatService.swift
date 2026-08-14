@@ -59,6 +59,8 @@ final class CoachChatService: CoachChatServicing {
 
     // MARK: - Configuration
 
+    var isConfigured: Bool { factProvider != nil }
+
     func configure(factProvider: ChatFactProviding) {
         guard self.factProvider == nil else { return }
         self.factProvider = factProvider

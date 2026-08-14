@@ -35,7 +35,11 @@ extension WatchTemplateTransactionService {
         var removals: [RoutineExercise]
         var additions: [Addition]
 
-        static let empty = MergePlan(setUpdates: [], removals: [], additions: [])
+        /// Computed rather than a `static let`: `MergePlan` holds SwiftData
+        /// `@Model` references and so can never be `Sendable`, which makes a
+        /// stored static global shared mutable state under strict concurrency.
+        /// Building an empty struct on demand is free and owns no global.
+        static var empty: MergePlan { MergePlan(setUpdates: [], removals: [], additions: []) }
     }
 
     /// Applies the validated structural plan against the current routine.

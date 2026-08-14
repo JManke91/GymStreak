@@ -107,7 +107,12 @@ extension Font {
 
 // MARK: - Haptic Manager
 
-class HapticManager {
+/// `@MainActor` because every member drives UIKit feedback generators, which are
+/// main-actor-isolated — and because a `static let shared` of a non-`Sendable`
+/// type is otherwise global shared mutable state. Every one of the ~83 call sites
+/// is already inside a SwiftUI `body` or a view action, so this costs no hops.
+@MainActor
+final class HapticManager {
     static let shared = HapticManager()
 
     func success() {

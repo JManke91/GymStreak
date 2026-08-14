@@ -216,8 +216,24 @@ GymStreak/
 
 ## Availability and Opt-in
 
-- `AICoachAvailability` (@Observable singleton): maps `SystemLanguageModel.default.availability` to `isAvailable: Bool`. Re-checked on `.active` scene phase change via `.task`.
-- `AICoachPreferences` (@Observable, UserDefaults-backed): `hasCompletedOptIn`, `isMasterEnabled`, `postWorkoutRecapEnabled`, `periodRecapEnabled`, `exerciseDeepDiveEnabled`, `workoutDetailEnabled`. Also stores `lastOptInDeclinedAt` for the 7-day re-prompt cooldown.
+- `AICoachAvailability` (`@Observable @MainActor` singleton): maps `SystemLanguageModel.default.availability` to `isAvailable: Bool`. Re-checked on `.active` scene phase change via `.task`.
+- `AICoachPreferences` (`@Observable @MainActor`, UserDefaults-backed): `hasCompletedOptIn`, `isMasterEnabled`, `postWorkoutRecapEnabled`, `periodRecapEnabled`, `exerciseDeepDiveEnabled`, `workoutDetailEnabled`. Also stores `lastOptInDeclinedAt` for the 7-day re-prompt cooldown.
+
+> **`@MainActor` added 2026-08-12** to both, and to their Domain protocols
+> (`AICoachAvailabilityProviding`, `AICoachPreferencesProviding`). Both were plain
+> `@Observable` classes holding mutable state behind a `static let shared`, which under
+> Swift 6 strict concurrency is global shared mutable state (a non-`Sendable` static).
+> Global-actor isolation makes them implicitly `Sendable`, and the protocols had to
+> follow because SE-0470 rejects a `@MainActor` type satisfying a nonisolated
+> requirement. This also let `AICoachAvailability.refresh()` drop its
+> `await MainActor.run { … }` wrapper. The rest of the AI-coach protocol surface was
+> already `@MainActor`, so this made it uniform. See `docs/swift6-concurrency.md` §2.
+>
+> **One deliberate exception since 2026-08-13:** `ChatFactProviding` is *not*
+> `@MainActor` — audit P1.3 made it a `Sendable`, `async`, actor-backed read boundary,
+> because it is the one AI-coach protocol that reads the user's whole workout history
+> rather than a UserDefaults flag. Uniformity is not the goal; keeping unbounded fetches
+> off the main actor is. See `docs/ai-coach-chat-feasibility.md` delta 6.
 - **First-run opt-in**: `AICoachOptInView` is presented as `.fullScreenCover` when `AICoachAvailability.isAvailable && !preferences.hasCompletedOptIn`. "Enable Coach" → sets `hasCompletedOptIn = true` + `isMasterEnabled = true`. "Maybe later" → records decline timestamp.
 - **Decline cooldown**: re-shown after 7 days if user still has not opted in.
 
@@ -314,6 +330,31 @@ The caps are applied in `AICoachService.stream(instructions:promptText:outputTyp
 ---
 
 ## Error Handling
+
+**Where errors surface (changed 2026-08-12).** `LanguageModelSession.streamResponse(…)`
+is **non-throwing** in the current SDK — a generation failure arrives when the returned
+stream is *iterated*, not when it is created. `AICoachService.stream(…)` is therefore
+`async` (not `async throws`) and contains no `do`/`catch`: a creation-time
+`catch` + `mapError` had become unreachable dead code and was removed. Error
+classification and telemetry live in each ViewModel's `for try await` catch block,
+which is where the error actually arrives — all four consumers of `stream()` already
+call `AICoachTelemetry.recordError` (`ExerciseDeepDiveViewModel`, `PeriodRecapViewModel`,
+`PostWorkoutRecapViewModel`, `WorkoutAnalysisViewModel`; chat streams through
+`CoachChatService` instead).
+
+The public `streamXxx` methods keep their `async throws` signatures (they are the
+`AICoachServicing` protocol contract, and `streamPeriodRecap` still calls the throwing
+`tokenCount`).
+
+*Deliberate omission:* the old `mapError` also logged one line per `GenerationError`
+case (guardrail vs. context-overflow vs. rate-limited). That per-case logging went away
+with the dead code. If it is wanted back it belongs at the iteration sites, not at
+stream creation — see git history for the original switch. Two cases the SDK has since
+added, `.concurrentRequests` and `.refusal`, had already made that switch
+non-exhaustive.
+
+`prewarm()` is likewise synchronous now (no `await`); the wrapping `Task` is kept
+deliberately so constructing the session never blocks the caller's main-actor turn.
 
 `GenerationError` cases handled across all ViewModels:
 

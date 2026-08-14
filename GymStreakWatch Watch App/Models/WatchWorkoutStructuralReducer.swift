@@ -1,7 +1,10 @@
 import Foundation
 
-// This pure reducer is duplicated in the iOS target. Keeping it Foundation-
-// only lets the existing iOS unit-test target cover the watch state machine.
+// This pure reducer is duplicated in the iOS target. Keeping it Foundation-only
+// keeps both copies testable without SwiftUI or WatchKit. This copy is covered
+// directly by `GymStreakWatchTests/WatchWorkoutStructuralReducerTests`, which
+// mirrors the iOS twin's assertions so a drift between the copies fails the
+// watch suite. See docs/watch-unit-tests.md.
 
 enum WatchExerciseCatalogDisplayState: Equatable {
     case neverSynced

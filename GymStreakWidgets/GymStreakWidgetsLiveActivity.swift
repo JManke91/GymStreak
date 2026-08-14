@@ -76,7 +76,7 @@ struct GymStreakWidgetsLiveActivity: Widget {
                     .foregroundStyle(.blue)
             } compactTrailing: {
                 // Compact view - trailing area
-                if let message = context.state.completionMessage {
+                if context.state.completionMessage != nil {
                     Image(systemName: "checkmark.circle.fill")
                         .foregroundStyle(.green)
                 } else {

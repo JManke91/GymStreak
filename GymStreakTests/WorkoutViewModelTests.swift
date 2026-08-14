@@ -72,13 +72,10 @@ struct WorkoutViewModelTests {
         let context = ModelContext(InMemoryModelContainer.make())
         let reminders = RecordingRestTimerReminders()
         let now = Date(timeIntervalSinceReferenceDate: 1_000)
-        let viewModel = WorkoutViewModel(
-            workoutSessionRepository: SwiftDataWorkoutSessionRepository(modelContext: context),
+        let viewModel = makeViewModel(
+            sessionRepository: SwiftDataWorkoutSessionRepository(modelContext: context),
             routineRepository: SwiftDataRoutineRepository(modelContext: context),
             exerciseRepository: SwiftDataExerciseRepository(modelContext: context),
-            healthKitManager: MockHealthKitWorkoutServicing(),
-            watchSync: MockWatchSyncServicing(),
-            workoutHistoryCorrelation: EmptyWorkoutHistoryCorrelationProvider(),
             restTimerReminders: reminders,
             now: { now }
         )
@@ -102,13 +99,10 @@ struct WorkoutViewModelTests {
         let context = ModelContext(InMemoryModelContainer.make())
         let reminders = RecordingRestTimerReminders()
         reminders.outcome = .authorizationDenied
-        let viewModel = WorkoutViewModel(
-            workoutSessionRepository: SwiftDataWorkoutSessionRepository(modelContext: context),
+        let viewModel = makeViewModel(
+            sessionRepository: SwiftDataWorkoutSessionRepository(modelContext: context),
             routineRepository: SwiftDataRoutineRepository(modelContext: context),
             exerciseRepository: SwiftDataExerciseRepository(modelContext: context),
-            healthKitManager: MockHealthKitWorkoutServicing(),
-            watchSync: MockWatchSyncServicing(),
-            workoutHistoryCorrelation: EmptyWorkoutHistoryCorrelationProvider(),
             restTimerReminders: reminders
         )
 
@@ -123,14 +117,10 @@ struct WorkoutViewModelTests {
     func restoringRestTimerDerivesRemainingTimeFromPersistedDeadline() {
         let context = ModelContext(InMemoryModelContainer.make())
         var currentDate = Date(timeIntervalSinceReferenceDate: 1_000)
-        let viewModel = WorkoutViewModel(
-            workoutSessionRepository: SwiftDataWorkoutSessionRepository(modelContext: context),
+        let viewModel = makeViewModel(
+            sessionRepository: SwiftDataWorkoutSessionRepository(modelContext: context),
             routineRepository: SwiftDataRoutineRepository(modelContext: context),
             exerciseRepository: SwiftDataExerciseRepository(modelContext: context),
-            healthKitManager: MockHealthKitWorkoutServicing(),
-            watchSync: MockWatchSyncServicing(),
-            workoutHistoryCorrelation: EmptyWorkoutHistoryCorrelationProvider(),
-            restTimerReminders: RecordingRestTimerReminders(),
             now: { currentDate }
         )
 
@@ -140,6 +130,94 @@ struct WorkoutViewModelTests {
 
         #expect(viewModel.restTimeRemaining == 35)
         viewModel.stopRestTimer()
+    }
+
+    // MARK: - Rest timer Live Activity
+
+    /// The Lock Screen countdown is a third delivery surface for the *same*
+    /// timer identity the notification and the persisted state use. Creating a
+    /// ViewModel must only clear a previous process's leftovers — never present
+    /// anything — and starting a timer must hand the presenter the routine, the
+    /// exercise the user is resting from, and the authoritative deadline.
+    @Test
+    func startingARestTimerPresentsTheCountdownUnderTheTimerIdentity() async throws {
+        let context = ModelContext(InMemoryModelContainer.make())
+        let routineRepository = SwiftDataRoutineRepository(modelContext: context)
+        let sessionRepository = SwiftDataWorkoutSessionRepository(modelContext: context)
+        let reminders = RecordingRestTimerReminders()
+        let liveActivity = RecordingRestTimerLiveActivity()
+        let now = Date(timeIntervalSinceReferenceDate: 1_000)
+        let viewModel = makeViewModel(
+            sessionRepository: sessionRepository,
+            routineRepository: routineRepository,
+            exerciseRepository: SwiftDataExerciseRepository(modelContext: context),
+            restTimerReminders: reminders,
+            restTimerLiveActivity: liveActivity,
+            now: { now }
+        )
+
+        #expect(liveActivity.dismissExpiredCallCount == 1)
+        #expect(liveActivity.startedActivities.isEmpty)
+
+        let routine = Routine(name: "Push")
+        routineRepository.insert(routine)
+        let session = WorkoutSession(routine: routine)
+        let workoutExercise = WorkoutExercise(
+            exerciseName: "Bench Press",
+            muscleGroups: ["Chest"],
+            order: 0
+        )
+        workoutExercise.workoutSession = session
+        session.workoutExercises = [workoutExercise]
+        sessionRepository.insert(session)
+        viewModel.currentSession = session
+
+        viewModel.startRestTimer(duration: 60)
+        await Task.yield()
+
+        #expect(liveActivity.startedActivities.count == 1)
+        let started = try #require(liveActivity.startedActivities.first)
+        #expect(started.content.workoutName == "Push")
+        #expect(started.content.exerciseName == "Bench Press")
+        #expect(started.content.startDate == now)
+        #expect(started.content.deadline == now.addingTimeInterval(60))
+        // One identity across every surface of this timer.
+        #expect(started.id == reminders.scheduledReminders.first?.id)
+
+        viewModel.stopRestTimer()
+
+        #expect(liveActivity.endedActivityIDs == [started.id])
+    }
+
+    /// Restoring after a background/relaunch re-presents the *same* timer id
+    /// rather than a new one, so the presenter can recognise the countdown it is
+    /// already showing instead of requesting a duplicate Live Activity.
+    @Test
+    func restoringARestTimerRepresentsTheSameLiveActivityIdentity() throws {
+        let context = ModelContext(InMemoryModelContainer.make())
+        let liveActivity = RecordingRestTimerLiveActivity()
+        var currentDate = Date(timeIntervalSinceReferenceDate: 1_000)
+        let viewModel = makeViewModel(
+            sessionRepository: SwiftDataWorkoutSessionRepository(modelContext: context),
+            routineRepository: SwiftDataRoutineRepository(modelContext: context),
+            exerciseRepository: SwiftDataExerciseRepository(modelContext: context),
+            restTimerLiveActivity: liveActivity,
+            now: { currentDate }
+        )
+
+        viewModel.startRestTimer(duration: 60)
+        currentDate = currentDate.addingTimeInterval(25)
+        viewModel.restoreTimerState()
+
+        #expect(liveActivity.startedActivities.count == 2)
+        let first = try #require(liveActivity.startedActivities.first)
+        let second = try #require(liveActivity.startedActivities.last)
+        #expect(first.id == second.id)
+        // The absolute deadline survives the round trip through UserDefaults.
+        #expect(second.content.deadline == first.content.deadline)
+
+        viewModel.stopRestTimer()
+        #expect(liveActivity.endedActivityIDs == [first.id])
     }
 
     @Test
@@ -201,14 +279,10 @@ struct WorkoutViewModelTests {
         sessionRepository.insert(session)
         try sessionRepository.save()
 
-        let viewModel = WorkoutViewModel(
-            workoutSessionRepository: sessionRepository,
+        let viewModel = makeViewModel(
+            sessionRepository: sessionRepository,
             routineRepository: routineRepository,
-            exerciseRepository: exerciseRepository,
-            healthKitManager: MockHealthKitWorkoutServicing(),
-            watchSync: MockWatchSyncServicing(),
-            workoutHistoryCorrelation: EmptyWorkoutHistoryCorrelationProvider(),
-            restTimerReminders: RecordingRestTimerReminders()
+            exerciseRepository: exerciseRepository
         )
         viewModel.currentSession = session
 
@@ -270,14 +344,10 @@ struct WorkoutViewModelTests {
         sessionRepository.insert(session)
         try sessionRepository.save()
 
-        let viewModel = WorkoutViewModel(
-            workoutSessionRepository: sessionRepository,
+        let viewModel = makeViewModel(
+            sessionRepository: sessionRepository,
             routineRepository: routineRepository,
-            exerciseRepository: exerciseRepository,
-            healthKitManager: MockHealthKitWorkoutServicing(),
-            watchSync: MockWatchSyncServicing(),
-            workoutHistoryCorrelation: EmptyWorkoutHistoryCorrelationProvider(),
-            restTimerReminders: RecordingRestTimerReminders()
+            exerciseRepository: exerciseRepository
         )
         viewModel.currentSession = session
 
@@ -335,14 +405,10 @@ struct WorkoutViewModelTests {
         sessionRepository.insert(session)
         try sessionRepository.save()
 
-        let viewModel = WorkoutViewModel(
-            workoutSessionRepository: sessionRepository,
+        let viewModel = makeViewModel(
+            sessionRepository: sessionRepository,
             routineRepository: routineRepository,
-            exerciseRepository: exerciseRepository,
-            healthKitManager: MockHealthKitWorkoutServicing(),
-            watchSync: MockWatchSyncServicing(),
-            workoutHistoryCorrelation: EmptyWorkoutHistoryCorrelationProvider(),
-            restTimerReminders: RecordingRestTimerReminders()
+            exerciseRepository: exerciseRepository
         )
         viewModel.currentSession = session
 
@@ -385,14 +451,10 @@ struct WorkoutViewModelTests {
         sessionRepository.insert(session)
         try sessionRepository.save()
 
-        let viewModel = WorkoutViewModel(
-            workoutSessionRepository: sessionRepository,
+        let viewModel = makeViewModel(
+            sessionRepository: sessionRepository,
             routineRepository: routineRepository,
-            exerciseRepository: exerciseRepository,
-            healthKitManager: MockHealthKitWorkoutServicing(),
-            watchSync: MockWatchSyncServicing(),
-            workoutHistoryCorrelation: EmptyWorkoutHistoryCorrelationProvider(),
-            restTimerReminders: RecordingRestTimerReminders()
+            exerciseRepository: exerciseRepository
         )
         viewModel.currentSession = session
 
@@ -448,20 +510,32 @@ struct WorkoutViewModelTests {
     }
 
     @MainActor
+    /// The single `WorkoutViewModel` construction point for this suite. Both
+    /// system surfaces of the rest timer (the local notification and the Live
+    /// Activity) default to recording doubles, so no test touches
+    /// `UNUserNotificationCenter` or ActivityKit in the test host.
     private func makeViewModel(
         sessionRepository: SwiftDataWorkoutSessionRepository,
         routineRepository: SwiftDataRoutineRepository,
         exerciseRepository: SwiftDataExerciseRepository,
-        healthKitManager: HealthKitWorkoutServicing? = nil
+        healthKitManager: HealthKitWorkoutServicing? = nil,
+        restTimerReminders: RestTimerReminderScheduling? = nil,
+        restTimerLiveActivity: RestTimerLiveActivityPresenting? = nil,
+        now: (() -> Date)? = nil
     ) -> WorkoutViewModel {
         WorkoutViewModel(
             workoutSessionRepository: sessionRepository,
             routineRepository: routineRepository,
-            exerciseRepository: exerciseRepository,
             healthKitManager: healthKitManager ?? MockHealthKitWorkoutServicing(),
             watchSync: MockWatchSyncServicing(),
             workoutHistoryCorrelation: EmptyWorkoutHistoryCorrelationProvider(),
-            restTimerReminders: RecordingRestTimerReminders()
+            restTimerReminders: restTimerReminders ?? RecordingRestTimerReminders(),
+            restTimerLiveActivity: restTimerLiveActivity ?? RecordingRestTimerLiveActivity(),
+            routineTemplateSync: RoutineTemplateSyncService(
+                routineRepository: routineRepository,
+                exerciseRepository: exerciseRepository
+            ),
+            now: now ?? Date.init
         )
     }
 
