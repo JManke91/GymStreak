@@ -1068,3 +1068,11 @@
 "paywall.headline.exercise_deep_dive" = "Unbegrenzte Übungs-Analysen";
 "paywall.headline.weekday_schedule" = "Wochentag-Zeitpläne";
 "paywall.placeholder.body" = "Gym Streak Pro ist noch nicht verfügbar.";
+
+// MARK: - Pro lock UI kit (docs/monetization-strategy.md §8 placement C and D)
+"pro.lock.subtitle" = "In Gym Streak Pro enthalten";
+"pro.lock.cta" = "Freischalten";
+"pro.lock.accessibility" = "Gesperrt: %@";
+"pro.lock.accessibility_hint" = "Mit Gym Streak Pro freischalten";
+"pro.badge.label" = "PRO";
+"pro.badge.accessibility" = "Gym Streak Pro Funktion";

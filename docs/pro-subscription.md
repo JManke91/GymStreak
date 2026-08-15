@@ -1,13 +1,14 @@
 # Pro subscription — entitlement core, Founder grant and RevenueCat
 
-**Status (2026-08-15):** tickets 01, 02, 03 and 04 of `.scratch/pro-entitlements/issues/` are
+**Status (2026-08-15):** tickets 01, 02, 03, 04 and 05 of `.scratch/pro-entitlements/issues/` are
 implemented. The app knows whether the current user is Pro, every future gate can ask that
 question through one abstraction, users who installed before monetization are permanently granted
 Pro, the entitlement is now backed by **RevenueCat** — purchases against the Test Store work
-end to end — and anything in the app can ask for a paywall at a named placement without knowing
-what a paywall looks like. But **nothing is gated yet**, no shipping code raises a paywall, the
-only purchase entry point is DEBUG-only, and the global gating switch ships **off**. In a release
-build the shipped app behaves exactly as it did before.
+end to end — anything in the app can ask for a paywall at a named placement without knowing
+what a paywall looks like, and the three visual treatments the gates share exist as design-system
+components. But **nothing is gated yet**, no shipping code raises a paywall, nothing yet uses the
+lock kit, the only purchase entry point is DEBUG-only, and the global gating switch ships **off**.
+In a release build the shipped app behaves exactly as it did before.
 
 `docs/monetization-strategy.md` is the *why* (what gets gated, at which cap, and the promises in
 §1 that constrain all of it). This file is the *how* — the shipped implementation. It grows with
@@ -38,6 +39,9 @@ ticket 13 (the full runbook) and ticket 14 (the paywall).
 | App-wide "a workout is running" flag | `ActiveWorkoutReporting` / `ActiveWorkoutRegistry` | `Domain/Interfaces/`, `Data/System/` |
 | Presentation decision + one-shot record | `PaywallPresenter` | `Data/Purchases/` |
 | The stand-in paywall | `PaywallPlaceholderView` | `Presentation/Views/Pro/` |
+| Blurred preview lock (+ `.proLocked` modifier) | `OnyxProLockOverlay` | `Presentation/Views/DesignSystem/` |
+| Pro marker for gated entry points | `OnyxProBadge` | `Presentation/Views/DesignSystem/` |
+| §8 placement D allowance hint | `OnyxCapNudge` | `Presentation/Views/DesignSystem/` |
 | Debug placement section | `DebugPaywallSectionView` (`#if DEBUG`) | `Presentation/Views/Settings/Components/` |
 | Tests | `ProEntitlementTests`, `FounderStatusTests`, `PaywallPlacementTests`, `PaywallPresentationTests` | `GymStreakTests/` |
 
@@ -491,6 +495,80 @@ today is `PaywallPlaceholderView` — headline, no offer, dismiss — because th
 surface in a shipping build until ticket 14 replaces this view with a RevenueCat paywall. No
 caller changes when it does.
 
+## 5b. The Pro lock UI kit
+
+Three components in `Presentation/Views/DesignSystem/`, so the nine gates of tickets 06–11 look
+like one product decision rather than nine improvisations. All of them are **presentational**:
+they take values and a callback, never a ViewModel, never `ProEntitlementProviding`, never
+`PaywallPresenting`. The caller decides *whether* to lock and what unlocking does — in practice
+`{ paywalls.present(.chartMetric) }`.
+
+**`OnyxProLockOverlay` / `.proLocked(_:placement:onUnlock:)` — the blurred preview.** The real
+content keeps rendering behind a blur, a scrim and a lock card. **Blur rather than hide** is the
+point, not a style choice: §3 Rule 2's engine is loss aversion against data the user generated
+themselves, and a hidden feature produces no loss while a blurred chart of *your own numbers*
+does. Blurred content is `allowsHitTesting(false)` and `accessibilityHidden(true)`; the card takes
+its headline from `placement.headlineKey`, so §8 C's "name the specific capability" rule is
+honoured by construction rather than re-decided per gate. The CTA uses `.onyxProminent`
+(tint background, `textOnTint` label — never white on tint).
+
+**Locked content must be cheap to render — this is a contract, not a preference.** Because the
+content keeps rendering, its `body` is still evaluated on every invalidation, now with an
+offscreen blur pass on top, all of it invisible. So a gate locks a *precomputed preview*: value
+structs, no live aggregation in `body`, no formatter allocation, no SwiftData relationship reads.
+`docs/history-performance.md`'s measured 630 ms hang came from exactly the shape that is tempting
+here — a chart view that aggregates while it draws — and blurring it makes it cost the same while
+showing nothing.
+
+Four behaviours worth knowing before reusing it:
+
+- **The scrim is an `overlay`, not a `ZStack` sibling.** A bare `Color` is infinitely greedy, so
+  as a stack sibling it sizes the lock to the *proposal* rather than to the content, and the
+  locked branch would occupy more space than the unlocked one inside an `HStack`, a grid cell or
+  any `maxHeight: .infinity` parent. As an overlay the scrim inherits the content's geometry and
+  `.proLocked(true)` / `.proLocked(false)` stay layout-identical.
+- **The blurred content is `disabled(true)` as well as `allowsHitTesting(false)`.**
+  `allowsHitTesting` silences only that subtree's own hit testing; it does nothing about an
+  *enclosing* `NavigationLink` or `Button` — which is exactly the shape the chart-tab and
+  Deep-Dive gates will have — so without `disabled` a tap on the blur would carry through to the
+  gated screen, and Full Keyboard Access would still reach the hidden controls.
+  **Modifier order is load-bearing here, and it was measured, not assumed** (throwaway
+  `UIHostingController` probe reading `@Environment(\.isEnabled)`, 2026-08-15): an overlay
+  attached *after* `.disabled(true)` reports `isEnabled == true`, one attached *before* it
+  reports `false`. So the lock card's CTA works precisely because both `.overlay`s come after
+  the `.disabled`. Moving `.disabled` below them would dim the CTA to 50 % (that is
+  `OnyxProminentButtonStyle`'s disabled opacity) and make it untappable.
+
+- **Reduce Transparency replaces the blur with an opaque scrim** (`accessibilityReduceTransparency`
+  is read in the overlay). A blur is a legibility hazard for exactly the users who turn that
+  setting on, and the lock card sits on top of it.
+- **The lock card is a single VoiceOver element** (`children: .ignore`, label "Locked: <headline>",
+  hint "Unlock with Gym Streak Pro", `.isButton`, plus an `accessibilityAction`). A blur conveys
+  nothing to a VoiceOver user, and the content behind it is deliberately out of the tree — so
+  without this the locked region would be silent.
+
+The modifier's unlocked branch returns `self` unchanged, i.e. there is **no** wrapper view and no
+`.id()` on either branch (an explicit `.id()` on both branches of a conditional inside a
+`LazyVStack` freezes the swap — a bug this project has already paid for once).
+
+**`OnyxProBadge`** — a tint capsule with a lock glyph and the "PRO" wordmark (`.icon` style drops
+the wordmark for tight rows). Typography is `onyxCaption2`, so it scales with Dynamic Type instead
+of staying a fixed 10pt. **§8's absolute prohibition covers the badge, not just paywalls**: no Pro
+badge inside an active workout session, on the watch app, or on the rest-timer Live Activity.
+
+**`OnyxCapNudge`** — §8 placement D. An inline "2 of 3 routines used" hint with a linear meter; it
+turns `warning`-coloured at the cap. It is **not a paywall**: no CTA, and `allowsHitTesting(false)`
+so it cannot swallow a tap meant for the content beside it. It takes its `text` **already
+localized from the caller** rather than formatting one generic string, because each gate phrases
+its allowance differently ("2 of 3 routines used" vs. "1 message left today") and a single format
+string does not survive German translation; `used`/`limit` (clamped) drive only the meter and the
+colour.
+
+Strings: `pro.lock.*` and `pro.badge.*` in en + de. Every component has previews in dark, light and
+at `.accessibility1`. Note that the Onyx palette is **fixed dark** — `DesignSystem.Colors` are
+literal values, not asset-catalog appearances — so the light previews confirm the components do
+not depend on the environment's colour scheme, not that a light theme exists.
+
 ## 6. The debug surfaces
 
 Settings shows three DEBUG-only sections. The first two are backed by the single
@@ -541,6 +619,10 @@ the sheet appears is exactly what the in-memory fired set in §5a exists for.
 - **The gate tickets (06–11) must call `paywalls.present(_:)`**, not build their own sheet. The
   presenter is where §8's prohibitions are enforced; a screen-owned paywall sheet re-opens every
   hole §5a closes.
+- **The gate tickets must reuse the §5b kit** rather than hand-rolling a blur, a badge or a hint.
+  Each gate still owns its own nudge copy (`OnyxCapNudge` takes localized text), so a gate that
+  adds a cap nudge adds one en + de string pair with it. **What a gate blurs must be a precomputed
+  preview**, never a live-aggregating chart body — see the contract in §5b.
 - **Ticket 11 owns the *triggers* for A and B**, not their suppression: `hasPresented(_:)` and the
   automatic once-ever record already exist, so ticket 11 only has to decide *when* "first routine
   created" and "third completed workout / first overload suggestion" have happened.
@@ -622,6 +704,13 @@ the sheet appears is exactly what the in-memory fired set in §5a exists for.
 
 - `bundle exec fastlane test_unit` (iOS + watchOS) — green, 2026-08-15, zero Swift warnings. The
   watch suite passing is also the check that the watch target still builds without RevenueCat.
+- The Pro lock kit (§5b) carries **no unit tests, deliberately**: three presentational views with
+  no logic beyond a clamped fraction. Its evidence is the Debug simulator build, the previews, and
+  `fastlane test_unit_ios` (75 suites, green 2026-08-15, no new warnings). The watch suite was not
+  re-run for it — the components live in `GymStreak/Presentation/` and the watch target links none
+  of them. The one framework behaviour the kit depends on (an `.overlay` attached after
+  `.disabled(true)` stays enabled) was verified with a throwaway hosting-controller probe and then
+  deleted; the result is recorded in §5b so it does not have to be re-measured.
 - Release-configuration build of the `GymStreak` scheme — succeeds, i.e. the DEBUG-only surface
   (picker, store section *and* placement section) compiles out cleanly. Re-verified 2026-08-15
   after the paywall seam landed, zero Swift warnings.
