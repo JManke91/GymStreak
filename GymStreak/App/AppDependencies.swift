@@ -84,6 +84,19 @@ final class AppDependencies: ObservableObject {
     /// Presentation only ever sees `CloudSyncStatusProviding`.
     let cloudSyncStatus: CloudSyncStatusProviding
 
+    /// The Pro entitlement every gate reads (docs/pro-subscription.md): the
+    /// Founder grant composed with the RevenueCat entitlement. This is the only
+    /// place the purchase layer is named — Presentation only ever sees
+    /// `ProEntitlementProviding`.
+    let proEntitlements: ProEntitlementProviding
+
+    #if DEBUG
+    /// The same instance as `proEntitlements`, typed for the debug-only
+    /// entitlement picker and Test Store section in Settings. Compiled out of
+    /// release builds along with them.
+    let proEntitlementDebug: ProEntitlementDebugging
+    #endif
+
     /// Bundle/OS/hardware metadata prefilled into the Settings support mail.
     /// Stateless, so it is cheap to hold for the app's lifetime; Presentation
     /// only ever sees `DeviceDiagnosticsProviding`.
@@ -116,6 +129,19 @@ final class AppDependencies: ObservableObject {
             containerIdentifier: GymStreakSchema.cloudKitContainerIdentifier
         )
         self.deviceDiagnostics = SystemDeviceDiagnosticsProvider()
+        // Constructing the gateway configures the RevenueCat SDK — this runs in
+        // `GymStreakApp.init()`, so it happens once, before any UI exists and
+        // before anything can read an entitlement.
+        let proEntitlements = ProEntitlementProvider(
+            founderStatus: FounderStatusService(
+                downloads: StoreKitOriginalAppDownloadReader()
+            ),
+            purchases: RevenueCatPurchaseGateway()
+        )
+        self.proEntitlements = proEntitlements
+        #if DEBUG
+        self.proEntitlementDebug = proEntitlements
+        #endif
         let aiCoachPreferences = AICoachPreferences.shared
         let aiCoachAvailability = AICoachAvailability.shared
         self.aiCoachPreferences = aiCoachPreferences

@@ -67,6 +67,11 @@ Perform the following steps:
    - Replace **all** occurrences of `MARKETING_VERSION = <old>;` with `MARKETING_VERSION = <new>;` across all production targets and configurations. There are typically 6 occurrences (3 targets × 2 configurations: GymStreak, GymStreakWidgetsExtension, GymStreakWatch Watch App — each for Debug and Release).
    - **Do not** change the version in test targets (e.g., `GymStreakUITests`).
 
+9b. **Update CURRENT_PROJECT_VERSION (the build number) in the same file**
+   - Read the current `CURRENT_PROJECT_VERSION` of the production targets (e.g. `1000`) and increment it by 1 → `<new-build>`.
+   - Replace it at the **same 6** production sites only. The test targets (`GymStreakTests`, `GymStreakUITests`, `GymStreakWatchTests`) stay at `CURRENT_PROJECT_VERSION = 1`.
+   - **Never skip this and never let the production build number fall below `1000`.** The Founder grant (`docs/pro-subscription.md`) permanently grants Pro, free, to every install reporting an original build below `FounderStatusService.cutoffBuild` (`1000`). Shipping a build below the cutoff silently grants Founder to every new paying user, and the only visible symptom is missing revenue. If the value read is below `1000`, stop and tell the user.
+
 10. **Archive release notes into CHANGELOG.md**
     - Read the contents of `TestFlight/WhatToTest.en-US.txt`.
     - If `CHANGELOG.md` does not exist, create it with a header: `# Changelog`
@@ -100,6 +105,6 @@ Perform the following steps:
 
 14. **Report the result**
     - Summarize the merge (number of commits, any conflicts resolved).
-    - State the version bump: `<old-version>` → `<new-version>`.
+    - State the version bump: `<old-version>` → `<new-version>`, and the build bump: `<old-build>` → `<new-build>`.
     - Confirm the WhatToTest files were archived and cleared.
     - If any conflicts were auto-resolved via `-X theirs`, list the affected files.

@@ -1,7 +1,15 @@
 # Monetization Strategy — GymStreak Pro
 
-**Status:** proposal, not implemented. No paywall, entitlement layer, or StoreKit code exists yet.
-**Purpose:** this document is the spec a later implementation ticket set picks up. It defines
+**Status:** strategy agreed; implementation not started. No paywall, entitlement layer, or purchase
+code exists in the codebase yet. The §4.2a gate-only work has been broken down into the ticket set
+at `.scratch/pro-entitlements/issues/` (2026-08-15), which can be worked straight through in
+numerical order: **01–02** establish the entitlement abstraction and the Founder grant, **03**
+integrates the RevenueCat SDK against its Test Store so the abstraction is validated against the
+real thing before anything depends on it, **04–12** build the paywall seam and the six §4.2a gates
+behind a kill switch that ships off, **13–14** add the subscription surfaces, real paywalls and
+Customer Center, and **15** is the launch checklist that swaps in the production key, updates the
+listing copy and flips gating on.
+**Purpose:** this document is the spec that ticket set picks up. It defines
 *what* is gated, *why* that specific gate was chosen, *how* each gate behaves in every state
 (free / trial / Pro / lapsed / grandfathered), and what must never be gated.
 **Date of research:** 2026-08-13. Sources are listed in §12.
@@ -145,9 +153,17 @@ launch with.**
 | P3 | 🔒 **AI Coach Chat** | 5 messages / month | Highest perceived value in the app; the taster cap is what makes it convert rather than sit unnoticed. |
 | P4 | 🔒 **AI Period Recap** (week / month / quarter / year) | 1 per month | Cross-session scope (§4.3). |
 | P5 | 🔒 **AI Exercise Deep-Dive** | 1 per month | Cross-session scope. |
-| P9 | 🔒 **Advanced planning**: fixed-weekday schedules, multiple routines per day, plan preview | Simple every-N-days cadence | Programming depth signals a committed lifter. |
+| P9 | 🔒 **Fixed-weekday schedules** | Simple every-N-days cadence | Programming depth signals a committed lifter. |
 
 *(P9 keeps its number for cross-reference stability; it is shipped, not future.)*
+
+**P9 scope correction (2026-08-15).** An earlier draft described P9 as "fixed-weekday schedules,
+multiple routines per day, plan preview". Only the first is a real gateable surface. The
+"next 3 sessions" preview is part of the schedule sheet for *both* schedule types, so gating it
+would only make the free sheet worse with no conversion upside; and "multiple routines per day"
+is not a feature at all — each routine carries an independent schedule, so two routines can
+already fall on the same day. P9 is therefore one gate, not three, and the launch bundle is
+correspondingly thinner than §4.3's warning already assumed.
 
 ### 4.2b Pro — proposed, NOT BUILT
 
@@ -316,9 +332,37 @@ behavior, not a single Apple source.)*
 3. **Compare as `Int`, not as a string.** `CURRENT_PROJECT_VERSION` is a flat integer in this
    project, so parse it. `.compare(_:options:.numeric)` silently falls back to lexicographic
    ordering on a non-numeric component and returns a wrong answer with no error.
+
 4. **`AppTransaction.shared` is `async throws` and may need the network** — it can fail on a
    true first-launch-offline. Resolve once and cache the *decision*; on throw, leave the
    decision undecided and retry next launch rather than recording `false`.
+
+**Trap 5 — this project had no usable build number (found 2026-08-15).** The scheme above
+assumes a monotonically increasing `CFBundleVersion`. This project did not have one:
+`CURRENT_PROJECT_VERSION` was `1` at every production site in the Xcode project, and the `/release`
+command bumped only `MARKETING_VERSION` — so every shipped version appears in App Store Connect as
+`1.1.x (1)`, confirmed against ASC. **Every pre-existing install therefore reports
+`originalAppVersion == "1"`.**
+
+The fix, and the scheme ticket 02 implemented: bump `CURRENT_PROJECT_VERSION` to **1000** across
+the production targets and set `cutoffBuild = 1000`. Everything already in the wild reads
+`1 < 1000` and is granted Founder. `/release` must increment the build number every cycle —
+**if a future release ever ships as build `1` again, every new paying user is silently granted
+Founder forever**, and the bug is invisible until the revenue is missing. Done: `/release` step 6b
+and `merge-testflight-to-store` step 9b both bump it and report it, and
+`FounderStatusTests.shippingBuildIsNotBelowCutoff` fails if the shipped build ever drops below the
+cutoff.
+
+**What `1000` actually means, and the open decision it creates.** The cutoff is the first build
+carrying the entitlement layer — *not* the first build that charges anyone. Gating ships off
+(§9 Phase 1) and flips on in a later release (ticket 15), and the build number increments every
+release cycle in between, so the paywall arrives on build `1000 + k`. Anyone installing during
+that ungated window reads `1000 + j >= 1000` and is **not** granted Founder, even though they
+installed while the listing still said "completely subscription-free" and never saw a paywall.
+It fails in the safe direction — it under-grants and leaks no revenue — but it is narrower than
+§7's promise. **Decide before ticket 15** whether that rollout-window cohort is intentionally
+excluded, or whether ticket 15 must re-pin `cutoffBuild` to the build that actually turns gating
+on (which also means shipping the listing-copy change in exactly that release, as §7 requires).
 
 **Verification:** grant only on `.verified`. `.unverified` is the exact vector for forging a
 pre-cutoff transaction to unlock Pro, so fail closed. *(Apple's explicit guidance here covers
@@ -332,27 +376,17 @@ nothing — an earlier draft of this document called for KVS mirroring and was w
 `@MainActor final class FounderStatusService` wired through `AppDependencies` can await it
 directly — no `nonisolated` hop or boundary projection needed (Concurrency rule 5).
 
-```swift
-@MainActor
-final class FounderStatusService {
-    private let cutoffBuild = 142  // CFBundleVersion of the last free build — set at release
+**Shipped as `FounderStatusService` in `Data/Purchases/` (ticket 02, 2026-08-15).** The sketch
+that used to sit here has been replaced by the real implementation — see
+`docs/pro-subscription.md` §3a for how each trap is closed, why the `UserDefaults` flag
+(`pro.isFounder`) is three-valued, and why the StoreKit fetch sits behind a protocol seam
+(`AppTransaction` has no public initializer, so the decision branches are otherwise untestable).
 
-    func resolveIfNeeded() async {
-        guard defaults.object(forKey: "isFounder") == nil else { return }
-        do {
-            guard case .verified(let tx) = try await AppTransaction.shared,
-                  tx.environment == .production,
-                  let originalBuild = Int(tx.originalAppVersion) else { return }
-            defaults.set(originalBuild < cutoffBuild, forKey: "isFounder")
-        } catch {
-            // offline / not signed in — stay undecided, retry next launch
-        }
-    }
-}
-```
-
-**Not independently verified:** the `Sendable` conformance is inferred from the documented
-`async throws` signature (high confidence, no quoted declaration line).
+**Resolved on 2026-08-15** (previously flagged as not independently verified): Apple's
+documentation confirms `AppTransaction`, `VerificationResult` and `AppStore.Environment` all
+conform to `Sendable`, `AppTransaction.originalAppVersion` is a non-optional `String`,
+`static var shared: VerificationResult<AppTransaction> { get async throws }` carries no
+main-actor requirement, and `AppTransaction` exposes no public initializer of any kind.
 
 ### Lapse behavior (a Pro subscriber who stops paying)
 
@@ -392,10 +426,16 @@ only. No recurring interstitials, no launch-time paywalls.
 
 Do not ship gates and entitlements in one step.
 
-- **Phase 0 — Instrument (before writing any StoreKit code).**
-  Measure the routine-count distribution across the existing base, chart-tab usage, AI surface
-  usage per user per month, and D1/D7/D30 retention. **The 3-routine cap is currently a guess;
-  Phase 0 turns it into a decision.** If the median user has 6 routines, the cap is wrong.
+- **Phase 0 — Instrument. ❌ Skipped, deliberately (decided 2026-08-15).**
+  The intent was to measure the routine-count distribution, chart-tab usage, AI surface usage per
+  user per month, and D1/D7/D30 retention before writing any purchase code, so the 3-routine cap
+  stopped being a guess. **The app has no analytics backend to instrument into** — that is a
+  direct consequence of the no-account, privacy-first position in §1, not an oversight — so the
+  measurement this phase describes is not available at any reasonable cost.
+  The mitigation: **every cap ships as a named constant in one place**, so retuning the routine
+  cap, the chat allowance or the chart window is a one-line diff and a release rather than a
+  refactor. The open questions in §11 stay open; they get answered by post-launch App Store
+  Connect and RevenueCat data instead of by pre-launch instrumentation.
 - **Phase 1 — Entitlement layer, gates OFF.**
   StoreKit 2 + entitlement + Founder grant (mechanism and traps: **§7.1**) ship silently.
   **Pin the cutoff `CFBundleVersion` at this release** — it is the build number Founder
@@ -411,10 +451,30 @@ Do not ship gates and entitlements in one step.
 
 ### Implementation notes (fit with this repo's architecture)
 
-- One protocol, `ProEntitlementProviding`, in `Domain/Interfaces/`. A single
-  `var isPro: Bool { get }` plus per-cap counters. `@MainActor`, `@Observable`.
-- Implementation `StoreKitEntitlementService` in `Data/Purchases/` — the only place that
-  imports StoreKit. Wired in `App/AppDependencies.swift` (Hard rule 5).
+> **Purchase infrastructure decision (2026-08-15): RevenueCat, not StoreKit directly.**
+> An earlier draft of this section assumed a hand-rolled StoreKit 2 layer, and assumed integration
+> had to wait for Apple to approve the pending subscriptions. **Neither holds.** The project has a
+> RevenueCat **Test Store** key, so the entire purchase flow — configure, fetch offerings,
+> purchase, entitlement activation, restore — is integrable and testable now; only the swap to the
+> production `appl_` key is gated on Apple. What changes:
+> product identifiers, prices and the subscription group move to the RevenueCat dashboard, so
+> §6's pricing table is configuration rather than code; paywall *content* is dashboard-authored
+> via **Placements**, which map one-to-one onto the §8 A/B/C/D triggers, so changing a paywall
+> stops requiring a release; and **Customer Center** provides restore, manage-subscription,
+> refund requests and cancellation surveys instead of us building them.
+> Anonymous app user IDs keep the no-account promise in §1 intact — but note that the **Lifetime
+> SKU must be a non-consumable, not a non-renewing subscription**, because only the former
+> restores from the store receipt without an account system.
+> The full integration runbook lives in `docs/pro-subscription.md`.
+
+- One protocol, `ProEntitlementProviding`, in `Domain/Interfaces/`. Entitlement state plus its
+  **source** (none / founder / subscription / lifetime), and per-cap counters. `@MainActor`,
+  modelled on the existing `AICoachAvailabilityProviding`.
+- The implementation lives in `Data/Purchases/` — the only place permitted to import RevenueCat,
+  `RevenueCatUI` or StoreKit. Wired in `App/AppDependencies.swift` (Hard rule 5).
+- **The Founder grant stays local and SDK-independent.** It is resolved from `AppTransaction`
+  (§7.1), it wins over any RevenueCat state, and it never round-trips to RevenueCat's servers —
+  a grandfathered user must not depend on a network call to keep what they were promised.
 - ViewModels take the protocol via init (Hard rule 2). **No `.shared` access in views.**
 - Monthly taster counters: month-keyed counts in App Group `UserDefaults`, mirrored to iCloud
   KVS so they don't reset on reinstall.

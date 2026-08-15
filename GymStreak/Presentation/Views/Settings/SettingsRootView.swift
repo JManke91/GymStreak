@@ -89,6 +89,16 @@ struct SettingsRootView: View {
                             .accessibilityIdentifier("settings-row-contact-support")
                         }
 
+                        #if DEBUG
+                        DebugProEntitlementSectionView(
+                            entitlements: dependencies.proEntitlementDebug
+                        )
+
+                        DebugProStoreSectionView(
+                            entitlements: dependencies.proEntitlementDebug
+                        )
+                        #endif
+
                         // Clears the floating tab bar and coach accessory.
                         Color.clear.frame(height: 100)
                     }

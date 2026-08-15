@@ -21,6 +21,10 @@ section/row blueprint documented here.
 - **Support** section: "App bewerten" / "Rate app" deep-links to the App Store's
   write-a-review composer, and "Support kontaktieren" / "Contact support" hands a prefilled
   support mail to the user's default mail app (§5).
+- **Debug** and **Debug — Store** sections (`#if DEBUG`, never in a shipping build): a picker
+  that overrides the reported Pro entitlement, and the RevenueCat Test Store products with Buy
+  and Restore actions. Their strings are deliberately unlocalized — developer-facing only.
+  Documented in `docs/pro-subscription.md` §6; this file does not repeat their behaviour.
 - The gear button that used to sit in the History header was removed together with its
   navigation destination — the AI Coach settings are now reachable from the Settings tab and
   from the coach chat toolbar (`CoachChatView`), not from History.

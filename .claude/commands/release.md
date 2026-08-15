@@ -65,13 +65,16 @@ Follow all steps from the **merge-testflight-to-store** command:
 
 5. `git checkout main && git pull origin main`
 6. Read `MARKETING_VERSION` from `GymStreak.xcodeproj/project.pbxproj`. Increment the patch component by 1 (e.g., `1.1.2` → `1.1.3`). Replace **all 6** production occurrences (3 targets × 2 configurations: GymStreak, GymStreakWidgetsExtension, GymStreakWatch Watch App — each for Debug and Release). **Do not** change the version in test targets (`GymStreakUITests`, `GymStreakWatchUITests` — these sit at their own value, e.g. `1.0`). The **current** value is `<old-version>` — this is the version being shipped to the store, and the version the App Store notes below describe.
+6b. **Bump the build number in the same edit.** Read `CURRENT_PROJECT_VERSION` from the same file and increment it by 1 (e.g. `1000` → `1001`). Replace the **same 6** production occurrences and no others — the test targets (`GymStreakTests`, `GymStreakUITests`, `GymStreakWatchTests`) keep `CURRENT_PROJECT_VERSION = 1`. Capture the result as `<new-build>` for the final report.
+
+   > **This step is load-bearing and must never be skipped.** The Founder grant (`docs/pro-subscription.md`, `docs/monetization-strategy.md` §7.1) grants Pro permanently and free to every install whose `AppTransaction.originalAppVersion` is below `FounderStatusService.cutoffBuild` (`1000`). Before the monetization release every shipped build was `1`, which is what makes the grant work for existing users. If a release ever ships with a build number below the cutoff again, **every new paying user is silently granted Founder forever** — the app looks fine and the bug only surfaces as missing revenue. If the current value is somehow below `1000`, stop and tell the user rather than guessing.
 7. **Generate App Store release notes** for `<old-version>` — do this **before** clearing the WhatToTest files, while they still hold this version's notes. See [App Store release notes](#app-store-release-notes) below for how to distill and where to write them.
 8. Archive `TestFlight/WhatToTest.en-US.txt` into `CHANGELOG.md` under a new `## [<old-version>] - <YYYY-MM-DD>` heading with `### Added / Improved / Fixed` subsections (categorize each bullet by content). If `CHANGELOG.md` does not exist, create it with a `# Changelog` header. Clear both WhatToTest files afterward.
 9. `git add GymStreak.xcodeproj/project.pbxproj CHANGELOG.md TestFlight/WhatToTest.en-US.txt TestFlight/WhatToTest.de-DE.txt AppStore/ReleaseNotes.<old-version>.md`
 10. `git commit -m "Bump version to <new-version> for next release cycle"`
 11. `git push origin main`
 
-Announce: **"Phase 3 complete — `testflight-beta` merged into `store-build`, version bumped to `<new-version>`."**
+Announce: **"Phase 3 complete — `testflight-beta` merged into `store-build`, version bumped to `<new-version>` (build `<new-build>`)."**
 
 ---
 
@@ -130,6 +133,7 @@ Summarize the entire pipeline:
 - Commits merged in each phase
 - Any conflicts that were auto-resolved (list affected files per phase)
 - Old version → new version
+- **Old build number → new build number** (`CURRENT_PROJECT_VERSION`), stated explicitly — this is the Founder-grant cutoff guard from Phase 3 Part B step 6b
 - Confirmation that WhatToTest files were archived and cleared
 - Confirmation that `AppStore/ReleaseNotes.<old-version>.md` was written (or that it was skipped because WhatToTest was empty)
 - Confirmation that `<source-branch>` was deleted locally and on origin (or why deletion was skipped)

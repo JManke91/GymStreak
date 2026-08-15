@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		032F9C3B1B38D6F8081676E0 /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = B6F8543234AD4851B7E887F6 /* Foundation.framework */; };
+		A6DDDD032F5A00100095483C /* RevenueCat in Frameworks */ = {isa = PBXBuildFile; productRef = A6DDDD022F5A00100095483C /* RevenueCat */; };
 		A6FBC4ED2EC91C1C0095483C /* WidgetKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A6FBC4EC2EC91C1C0095483C /* WidgetKit.framework */; };
 		A6FBC4EF2EC91C1C0095483C /* SwiftUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A6FBC4EE2EC91C1C0095483C /* SwiftUI.framework */; };
 		A6FBC4FE2EC91C1E0095483C /* GymStreakWidgetsExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = A6FBC4EA2EC91C1C0095483C /* GymStreakWidgetsExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
@@ -195,6 +196,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				A6DDDD032F5A00100095483C /* RevenueCat in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -336,6 +338,9 @@
 				A6A3406D2E4E6F360017A4F7 /* GymStreak */,
 			);
 			name = GymStreak;
+			packageProductDependencies = (
+				A6DDDD022F5A00100095483C /* RevenueCat */,
+			);
 			productName = GymStreak;
 			productReference = A6A3406B2E4E6F360017A4F7 /* GymStreak.app */;
 			productType = "com.apple.product-type.application";
@@ -465,6 +470,9 @@
 			);
 			mainGroup = A6A340622E4E6F360017A4F7;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				A6DDDD012F5A00100095483C /* XCRemoteSwiftPackageReference "purchases-ios-spm" */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = A6A3406C2E4E6F360017A4F7 /* Products */;
 			projectDirPath = "";
@@ -881,12 +889,13 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = GymStreak/GymStreak.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 1000;
 				DEVELOPMENT_TEAM = 45VTMQ88RW;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = GymStreak/Info.plist;
+				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_NSHealthShareUsageDescription = "GymStreak needs access to read your workout data to display your fitness history and avoid duplicate entries.";
 				INFOPLIST_KEY_NSHealthUpdateUsageDescription = "GymStreak needs access to save your workouts to Apple Health so they appear in the Fitness app and contribute to your activity rings.";
 				INFOPLIST_KEY_NSSupportsLiveActivities = YES;
@@ -924,12 +933,13 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = GymStreak/GymStreak.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 1000;
 				DEVELOPMENT_TEAM = 45VTMQ88RW;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = GymStreak/Info.plist;
+				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_NSHealthShareUsageDescription = "GymStreak needs access to read your workout data to display your fitness history and avoid duplicate entries.";
 				INFOPLIST_KEY_NSHealthUpdateUsageDescription = "GymStreak needs access to save your workouts to Apple Health so they appear in the Fitness app and contribute to your activity rings.";
 				INFOPLIST_KEY_NSSupportsLiveActivities = YES;
@@ -1009,7 +1019,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				ASSETCATALOG_COMPILER_WIDGET_BACKGROUND_COLOR_NAME = WidgetBackground;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 1000;
 				DEVELOPMENT_TEAM = 45VTMQ88RW;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = GymStreakWidgets/Info.plist;
@@ -1043,7 +1053,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				ASSETCATALOG_COMPILER_WIDGET_BACKGROUND_COLOR_NAME = WidgetBackground;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 1000;
 				DEVELOPMENT_TEAM = 45VTMQ88RW;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = GymStreakWidgets/Info.plist;
@@ -1079,7 +1089,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = "GymStreakWatch Watch App/GymStreakWatch Watch App.entitlements";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 1000;
 				DEVELOPMENT_TEAM = 45VTMQ88RW;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -1114,7 +1124,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = "GymStreakWatch Watch App/GymStreakWatch Watch App.entitlements";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 1000;
 				DEVELOPMENT_TEAM = 45VTMQ88RW;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -1219,6 +1229,25 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		A6DDDD012F5A00100095483C /* XCRemoteSwiftPackageReference "purchases-ios-spm" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/RevenueCat/purchases-ios-spm.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 5.0.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		A6DDDD022F5A00100095483C /* RevenueCat */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = A6DDDD012F5A00100095483C /* XCRemoteSwiftPackageReference "purchases-ios-spm" */;
+			productName = RevenueCat;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = A6A340632E4E6F360017A4F7 /* Project object */;
 }

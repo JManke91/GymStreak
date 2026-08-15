@@ -127,6 +127,15 @@ struct GymStreakApp: App {
                     // it never fires while a new device is still importing.
                     await dependencies.defaultContentSeeder.recoverStrandedLibraryIfNeeded()
                 }
+                .task {
+                    guard !isUITesting else { return }
+                    // Resolves the Founder grant, which needs one App Store
+                    // round-trip on the very first launch (docs/pro-subscription.md).
+                    // Its own `.task` rather than appended to the one above: the
+                    // seeder deliberately waits on CloudKit, and the entitlement
+                    // must not queue behind that wait.
+                    await dependencies.proEntitlements.refresh()
+                }
                 .onChange(of: scenePhase) { _, newPhase in
                     if newPhase == .active {
                         watchConnectivity.requestWorkoutQueueDrain()
