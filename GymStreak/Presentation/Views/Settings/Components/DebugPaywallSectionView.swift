@@ -21,6 +21,11 @@ import SwiftUI
 struct DebugPaywallSectionView: View {
 
     let paywalls: any PaywallPresentationDebugging
+    /// The armed record behind A and B. Reset together with the once-ever
+    /// record: clearing only the latter would leave both triggers still armed,
+    /// so they would re-fire at the next routine creation or session end — which
+    /// looks like the reset worked but proves nothing about the triggers.
+    let triggers: any ProactivePaywallTrackingDebugging
 
     var body: some View {
         SettingsSectionView(
@@ -46,10 +51,13 @@ struct DebugPaywallSectionView: View {
                 icon: "arrow.counterclockwise",
                 iconTint: DesignSystem.Colors.warning,
                 title: "Reset once-ever placements",
-                subtitle: "Lets A and B fire again",
+                subtitle: "Clears the fired record and disarms A and B",
                 isLast: true
             ) {
-                Button("Reset") { paywalls.resetPresentedPlacements() }
+                Button("Reset") {
+                    paywalls.resetPresentedPlacements()
+                    triggers.resetTriggers()
+                }
                     .buttonStyle(.borderless)
                     .font(.system(size: 14, weight: .semibold))
                     .foregroundStyle(DesignSystem.Colors.tint)

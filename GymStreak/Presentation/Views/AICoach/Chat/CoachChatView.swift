@@ -2,20 +2,40 @@
 //  CoachChatView.swift
 //  GymStreak
 //
-//  Minimal chat surface for the AI Coach chat spike. Message bubbles + input bar,
+//  Minimal chat surface for the AI Coach chat spike. Message list + input bar,
 //  an empty state with 3 tappable starter questions, and the on-device privacy
-//  footer. Reuses `StreamingTextView` for the live assistant reply.
-//  See docs/ai-coach-chat-feasibility.md.
+//  footer. The bubbles themselves live in `CoachChatMessageBubble.swift`.
+//  See docs/ai-coach-chat-feasibility.md, and docs/pro-subscription.md §5e for
+//  the free monthly message allowance.
 //
 
 import SwiftUI
 
+/// Environment-facing wrapper: resolves the composition root and hands the
+/// dependencies to the view that owns the ViewModel, so the ViewModel is built
+/// with injected collaborators rather than singletons (Hard rule 2). Same shape
+/// as `ExerciseProgressChartView`.
 struct CoachChatView: View {
 
     @EnvironmentObject private var dependencies: AppDependencies
+
+    var body: some View {
+        CoachChatViewInternal(
+            allowanceGate: dependencies.makeAICoachAllowanceGate(for: .coachChat)
+        )
+    }
+}
+
+private struct CoachChatViewInternal: View {
+
+    @EnvironmentObject private var dependencies: AppDependencies
     @Environment(\.dismiss) private var dismiss
-    @State private var viewModel = CoachChatViewModel()
+    @State private var viewModel: CoachChatViewModel
     @FocusState private var inputFocused: Bool
+
+    init(allowanceGate: AICoachAllowanceGate) {
+        self._viewModel = State(wrappedValue: CoachChatViewModel(allowanceGate: allowanceGate))
+    }
 
     var body: some View {
         ZStack {
@@ -173,6 +193,15 @@ struct CoachChatView: View {
         VStack(spacing: 0) {
             Divider().background(Color.white.opacity(0.06))
 
+            // §8 placement D — the free-tier allowance hint. Not a paywall: it
+            // blocks nothing and swallows no taps, and it sits above the field
+            // so it is on screen *before* the send that hits the gate.
+            if let nudge = viewModel.allowanceNudge {
+                OnyxCapNudge(text: nudge.text, used: nudge.used, limit: nudge.limit)
+                    .padding(.horizontal, 16)
+                    .padding(.top, 10)
+            }
+
             if viewModel.isAvailable {
                 HStack(spacing: 10) {
                     TextField(
@@ -247,64 +276,4 @@ struct CoachChatView: View {
     }
 
     private static let footerId = "coach-chat-privacy-footer"
-}
-
-// MARK: - Message bubble
-
-private struct MessageBubble: View {
-
-    let message: CoachChatMessage
-
-    var body: some View {
-        switch message.role {
-        case .user:
-            HStack {
-                Spacer(minLength: 40)
-                Text(message.text)
-                    .font(.system(size: 15))
-                    .foregroundStyle(DesignSystem.Colors.textOnTint)
-                    .padding(.vertical, 10)
-                    .padding(.horizontal, 14)
-                    .background(
-                        RoundedRectangle(cornerRadius: 18, style: .continuous)
-                            .fill(AICoachTheme.accent)
-                    )
-            }
-        case .assistant:
-            HStack {
-                assistantContent
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                Spacer(minLength: 40)
-            }
-        }
-    }
-
-    @ViewBuilder
-    private var assistantContent: some View {
-        switch message.phase {
-        case .streaming:
-            AISurface(isStreaming: true, showFooter: false, compact: true) {
-                StreamingTextView(text: message.text, isStreaming: true)
-            }
-        case .final:
-            AISurface(isStreaming: false, showFooter: false, compact: true) {
-                StreamingTextView(text: message.text, isStreaming: false)
-            }
-        case .failed:
-            HStack(spacing: 8) {
-                Image(systemName: "exclamationmark.triangle")
-                    .font(.system(size: 13))
-                    .foregroundStyle(DesignSystem.Colors.warning)
-                Text(message.text)
-                    .font(.system(size: 14))
-                    .foregroundStyle(Color.white.opacity(0.7))
-            }
-            .padding(.vertical, 10)
-            .padding(.horizontal, 14)
-            .background(
-                RoundedRectangle(cornerRadius: 14, style: .continuous)
-                    .fill(Color.white.opacity(0.04))
-            )
-        }
-    }
 }

@@ -50,6 +50,25 @@ enum CompletedSessionFetch {
         return try context.fetch(sessionDescriptor)
     }
 
+    /// How many completed sessions exist, without loading any of them.
+    ///
+    /// `fetchCount` answers from the store rather than materializing models, so this
+    /// faults no relationship and allocates no `WorkoutSession`. It exists because
+    /// §8 placement B's trigger asks "have three workouts happened yet?" after **every**
+    /// completion, and answering that with `withFullGraph` would walk the entire
+    /// exercise/set graph on completions that provably cannot meet the threshold — and
+    /// would queue ahead of the History tab's own post-workout refetch on the same
+    /// model actor. See `docs/pro-subscription.md` §5g.
+    static func completedCount(in context: ModelContext) throws -> Int {
+        try context.fetchCount(
+            FetchDescriptor<WorkoutSession>(
+                predicate: #Predicate { session in
+                    session.endTime != nil
+                }
+            )
+        )
+    }
+
     /// Every completed session, newest first, with only the owning `routine` prefetched.
     ///
     /// For callers that date routines against their last completion and never touch a

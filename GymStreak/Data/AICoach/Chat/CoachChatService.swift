@@ -50,7 +50,17 @@ final class CoachChatService: CoachChatServicing {
     private var factProvider: ChatFactProviding?
     private var tools: [any Tool] = []
     private var session: LanguageModelSession?
-    private var streamTask: Task<Void, Never>?
+    /// Carries the turn's outcome as its value so the DEBUG drill — which runs
+    /// turns without going through `send` — can await the same handle `cancel()`
+    /// cancels.
+    private var streamTask: Task<CoachChatTurnOutcome, Never>?
+
+    /// Reported once when the in-flight turn ends, however it ends. Held here
+    /// rather than passed down the call chain because `cancel()` — which can
+    /// arrive from the presenting cover's dismissal, not from the turn — is one
+    /// of the ways a turn finishes. Cleared as it fires, so no turn reports
+    /// twice. See `CoachChatTurnOutcome`.
+    private var turnOutcomeHandler: ((CoachChatTurnOutcome) -> Void)?
 
     /// One short topic per user turn (captured at send time), used to build the
     /// digest cheaply when the transcript is condensed. Deterministic — no extra
@@ -88,27 +98,43 @@ final class CoachChatService: CoachChatServicing {
 
     // MARK: - Sending
 
-    func send(_ text: String) {
-        guard let turn = beginTurn(text) else { return }
+    /// - Parameter onOutcome: called exactly once if — and only if — a turn
+    ///   actually started, when it ends. The taster gate uses it to refund a
+    ///   failed generation (docs/pro-subscription.md §5e).
+    /// - Returns: `false` when no turn started (empty input, a turn already
+    ///   running, or an unavailable model), in which case `onOutcome` never
+    ///   fires and the caller still owns whatever it reserved.
+    @discardableResult
+    func send(_ text: String, onOutcome: ((CoachChatTurnOutcome) -> Void)? = nil) -> Bool {
+        guard let turn = beginTurn(text) else { return false }
+        turnOutcomeHandler = onOutcome
         streamTask = Task {
-            await self.performTurn(prompt: turn.prompt, assistantId: turn.assistantId)
-            guard !Task.isCancelled else { return } // cancel() already cleaned up
-            self.endTurn()
+            let outcome = await self.performTurn(prompt: turn.prompt, assistantId: turn.assistantId)
+            guard !Task.isCancelled else { return outcome } // cancel() already cleaned up
+            self.endTurn(outcome: outcome)
+            return outcome
         }
+        return true
     }
 
     func cancel() {
         streamTask?.cancel()
         streamTask = nil
+        // A cancelled turn that produced no text gave the user nothing, so it
+        // reports as failed and the taster unit goes back; a partial answer the
+        // user keeps on screen counts as delivered.
+        var outcome = CoachChatTurnOutcome.completed
         if let idx = messages.lastIndex(where: { $0.role == .assistant && $0.phase == .streaming }) {
             if messages[idx].text.isEmpty {
                 messages.remove(at: idx)
+                outcome = .failed
             } else {
                 messages[idx].phase = .final
             }
             store.save(messages: messages, turnTopics: turnTopics)
         }
         isResponding = false
+        reportTurnOutcome(outcome)
     }
 
     func reset() {
@@ -142,21 +168,31 @@ final class CoachChatService: CoachChatServicing {
     }
 
     /// Finishes a turn (success or failure) and persists the conversation.
-    private func endTurn() {
+    private func endTurn(outcome: CoachChatTurnOutcome) {
         isResponding = false
         streamTask = nil
         store.save(messages: messages, turnTopics: turnTopics)
+        reportTurnOutcome(outcome)
+    }
+
+    /// Fires the in-flight turn's outcome handler once and drops it.
+    private func reportTurnOutcome(_ outcome: CoachChatTurnOutcome) {
+        guard let handler = turnOutcomeHandler else { return }
+        turnOutcomeHandler = nil
+        handler(outcome)
     }
 
     // MARK: - Turn execution
 
-    private func performTurn(prompt: String, assistantId: UUID) async {
+    /// Runs one turn to completion. The `.failed` return is what refunds a
+    /// taster unit; a cancelled turn returns early and is reported by `cancel()`.
+    private func performTurn(prompt: String, assistantId: UUID) async -> CoachChatTurnOutcome {
         var didCondenseRetry = false
         var didTransientRetry = false
 
         while true {
             await condenseIfNeeded()
-            guard let session else { markFailed(assistantId); return }
+            guard let session else { markFailed(assistantId); return .failed }
 
             // Reset the assistant bubble for each attempt (a retry after overflow
             // must not keep partial text from the failed attempt).
@@ -168,7 +204,7 @@ final class CoachChatService: CoachChatServicing {
                 var sawFirstToken = false
                 let stream = session.streamResponse(to: prompt, options: options)
                 for try await snapshot in stream {
-                    if Task.isCancelled { return }
+                    if Task.isCancelled { return .failed }
                     if !sawFirstToken, !snapshot.content.isEmpty {
                         sawFirstToken = true
                         let ms = Int(Date().timeIntervalSince(attemptStart) * 1000)
@@ -176,11 +212,11 @@ final class CoachChatService: CoachChatServicing {
                     }
                     updateAssistant(assistantId) { $0.text = Self.stripMarkdown(snapshot.content) }
                 }
-                if Task.isCancelled { return }
+                if Task.isCancelled { return .failed }
                 updateAssistant(assistantId) { $0.phase = .final }
-                return
+                return .completed
             } catch {
-                if Task.isCancelled { return }
+                if Task.isCancelled { return .failed }
                 if isContextOverflow(error) {
                     if !didCondenseRetry {
                         didCondenseRetry = true
@@ -202,7 +238,7 @@ final class CoachChatService: CoachChatServicing {
                 }
                 logError(error)
                 markFailed(assistantId)
-                return
+                return .failed
             }
         }
     }
@@ -271,12 +307,15 @@ final class CoachChatService: CoachChatServicing {
                     await self.performTurn(prompt: turn.prompt, assistantId: turn.assistantId)
                 }
                 streamTask = turnTask
-                await turnTask.value
+                let outcome = await turnTask.value
                 if turnTask.isCancelled {
                     logger.notice("drill cancelled at turn \(index + 1)")
                     break
                 }
-                endTurn()
+                // The drill bypasses the taster gate entirely (it never goes
+                // through `send`), so its turns cost the user nothing — which is
+                // correct: it is a DEBUG-only diagnostic, not a conversation.
+                endTurn(outcome: outcome)
                 let ms = Int(Date().timeIntervalSince(turnStart) * 1000)
                 logger.notice("drill turn \(index + 1)/\(prompts.count) finished in \(ms) ms")
             }

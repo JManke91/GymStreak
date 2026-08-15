@@ -48,4 +48,31 @@ final class RecordingPaywallPresenter: PaywallPresenting {
     func hasPresented(_ placement: PaywallPlacement) -> Bool {
         presentedPlacements.contains(placement)
     }
+
+    /// Forgets the recording, so a test can set up state through the gate and
+    /// then assert only on what the step under test raised.
+    func reset() {
+        presentedPlacements.removeAll()
+        pendingPlacement = nil
+    }
+}
+
+/// An `AICoachAvailabilityProviding` pinned to one state, mutable so a test can
+/// move the device in and out of Apple-Intelligence availability.
+///
+/// The AI taster gates (tickets 08/09) check availability *before* the
+/// entitlement — an ineligible device must never be paywalled — so every one of
+/// those tests needs to drive this.
+@MainActor
+final class StubAICoachAvailability: AICoachAvailabilityProviding {
+
+    var state: AICoachAvailabilityState
+
+    init(state: AICoachAvailabilityState = .available) {
+        self.state = state
+    }
+
+    var isAvailable: Bool { state == .available }
+
+    func refresh() async {}
 }

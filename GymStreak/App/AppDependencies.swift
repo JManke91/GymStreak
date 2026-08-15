@@ -114,6 +114,24 @@ final class AppDependencies: ObservableObject {
     let paywallDebug: PaywallPresentationDebugging
     #endif
 
+    /// §8's two proactive placements (A — first routine created, B — the value
+    /// moment). App-lifetime because a trigger armed inside a workout has to
+    /// outlive the screen that armed it: the deferral is the feature
+    /// (docs/pro-subscription.md §5g).
+    let proactivePaywalls: ProactivePaywallCoordinator
+
+    #if DEBUG
+    /// The armed-trigger record behind `proactivePaywalls`, typed for the debug
+    /// placement section's reset. Same instance.
+    let proactivePaywallTriggersDebug: ProactivePaywallTrackingDebugging
+    #endif
+
+    /// The month-keyed free-tier counters behind the AI tasters (P3/P4/P5).
+    /// App-lifetime because it caches its records in memory — a second instance
+    /// would answer from a stale cache after the first one wrote. Presentation
+    /// only ever sees `MonthlyAllowanceTracking`.
+    let aiAllowance: MonthlyAllowanceTracking
+
     /// Bundle/OS/hardware metadata prefilled into the Settings support mail.
     /// Stateless, so it is cheap to hold for the app's lifetime; Presentation
     /// only ever sees `DeviceDiagnosticsProviding`.
@@ -169,6 +187,20 @@ final class AppDependencies: ObservableObject {
         #if DEBUG
         self.paywallDebug = paywalls
         #endif
+        let proactivePaywallTriggers = ProactivePaywallTriggerStore()
+        self.proactivePaywalls = ProactivePaywallCoordinator(
+            entitlements: proEntitlements,
+            paywalls: paywalls,
+            triggers: proactivePaywallTriggers,
+            // The same provider the History tab reads, so placement B's figures
+            // come off the one `@ModelActor` rather than a second context.
+            totals: historySnapshotProvider,
+            activeWorkout: activeWorkout
+        )
+        #if DEBUG
+        self.proactivePaywallTriggersDebug = proactivePaywallTriggers
+        #endif
+        self.aiAllowance = MonthlyAllowanceStore()
         let aiCoachPreferences = AICoachPreferences.shared
         let aiCoachAvailability = AICoachAvailability.shared
         self.aiCoachPreferences = aiCoachPreferences
@@ -247,6 +279,20 @@ final class AppDependencies: ObservableObject {
     /// History tab). A factory preserves that instead of collapsing them into one.
     func makeHealthKitWorkoutService() -> HealthKitWorkoutServicing {
         HealthKitWorkoutManager()
+    }
+
+    /// The free-tier gate for one metered AI surface (docs/pro-subscription.md
+    /// §5e). A factory rather than a stored property because each surface gets
+    /// its own gate and they are cheap, stateless compositions of app-lifetime
+    /// collaborators — the counters they share live in `aiAllowance`.
+    func makeAICoachAllowanceGate(for surface: MeteredAISurface) -> AICoachAllowanceGate {
+        AICoachAllowanceGate(
+            surface: surface,
+            entitlements: proEntitlements,
+            paywalls: paywalls,
+            allowance: aiAllowance,
+            availability: aiCoachAvailability
+        )
     }
 
     /// The AI-coach chat's tool-backing read boundary. A factory rather than a stored

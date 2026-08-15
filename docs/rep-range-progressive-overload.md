@@ -152,6 +152,21 @@ The prompt is now a **screen-level surface**:
   `overloadSuggestionExercises` (completion screen) does not read this state and
   remains the independent second chance.
 
+- **It also arms §8 placement B** (`docs/pro-subscription.md` §5g). "The first automatic
+  progressive-overload suggestion" is one of the two triggers for the monetization
+  value-moment paywall, so the bar reports the prompt it is showing through
+  `WorkoutViewModel.overloadPromptDidAppear(_:)`, from `.onChange(of: prompt, initial: true)`
+  on the container. **The view reports, the ViewModel decides**: the `case .suggestion`
+  test lives in the ViewModel, because the `.applied` confirmation is feedback on the
+  user's own action, not a suggestion the app made, and that is trigger policy rather
+  than view state. **Nothing about the prompt itself changes**: it only arms a durable
+  flag, and Rule 3 forbids any paywall inside a workout, so the paywall is deferred to
+  the end of the session. The completion screen's second chance reports the same way,
+  from `SaveWorkoutView`'s `.task` into
+  `WorkoutViewModel.completionOverloadSuggestionsDidAppear()`, which applies the
+  "`overloadSuggestionExercises` is non-empty" test. Both are inert while
+  `ProGating.isEnabled` is off, which is how the app ships.
+
 **Rejected alternatives (do not re-try):** pinning `openedExerciseId` to the finished
 exercise so its card stays expanded — it fights the redesigned screen's "one card
 follows the workout" navigation and `findNextIncompleteSet()`'s ownership of superset

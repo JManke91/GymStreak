@@ -98,7 +98,10 @@ struct SettingsRootView: View {
                             entitlements: dependencies.proEntitlementDebug
                         )
 
-                        DebugPaywallSectionView(paywalls: dependencies.paywallDebug)
+                        DebugPaywallSectionView(
+                            paywalls: dependencies.paywallDebug,
+                            triggers: dependencies.proactivePaywallTriggersDebug
+                        )
                         #endif
 
                         // Clears the floating tab bar and coach accessory.

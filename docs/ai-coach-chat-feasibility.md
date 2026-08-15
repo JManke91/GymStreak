@@ -187,9 +187,10 @@ GymStreak/
 │   ├── Tools/{NextWorkoutTool,ExercisePRTool,WorkoutHistoryTool}.swift
 │   └── SystemPrompts/CoachChatInstructions.swift   # ambient context + hard rules + DE glossary + optional digest
 ├── Presentation/ViewModels/AICoach/
-│   └── CoachChatViewModel.swift           # @Observable @MainActor; input state, suggestions, forwards service state
+│   ├── CoachChatViewModel.swift           # @Observable @MainActor; input state, suggestions, forwards service state, meters sending
+│   └── AICoachAllowanceGate.swift         # free-tier taster gate (availability → entitlement → monthly allowance)
 └── Presentation/Views/AICoach/Chat/
-    └── CoachChatView.swift                # bubbles, input bar, empty-state suggestions, AIPrivacyFooter
+    └── CoachChatView.swift                # bubbles, input bar, empty-state suggestions, AIPrivacyFooter, allowance nudge
 ```
 
 Entry point (since 2026-07-10): a floating "Ask your coach" companion bar (`CoachBarView`, hosted via `tabViewBottomAccessory` on the root TabView, iOS 26.1+) — visible on every tab and pushed screen when availability + opt-in + the `chatEnabled` per-surface toggle (default on, `AICoachPreferences`, key `aiCoachChatEnabled`) are all active; it zoom-morphs into `CoachChatView` in a fullScreenCover. The toggle lives in the normal Surfaces section of `AICoachSettingsView` (the earlier Experimental section + `chatExperimentalEnabled` toggle are gone). See `docs/ai-coach-entry-point-concepts.md` for the design/decision history. Localized EN + DE (`ai_coach.chat.*`).
@@ -209,6 +210,27 @@ Entry point (since 2026-07-10): a floating "Ask your coach" companion bar (`Coac
    - All fact-line building moved to `ChatFactBuilder` in `Domain/Services/AICoach/`, which must stay isolation-agnostic — the model actor calls it from its own executor. `ExerciseNameResolver` moved with it and lost the `@MainActor` it never needed.
 
    The tools were **not** touched: guaranteeing off-main once, at the boundary that owns the cost, is what makes the tools' own (undocumented) isolation irrelevant. Fetching is now prefetch-correct — `nextWorkoutFacts` takes a lean fetch that prefetches only `\.routine`, the other two take the full graph via the shared `CompletedSessionFetch`. `CoachChatServicing` gained `isConfigured` so the ViewModel does not build a `@ModelActor` on every appearance of the chat's `fullScreenCover`.
+
+7. **Sending is metered on the free tier (2026-08-15, monetization ticket 08).** Chat is a Pro
+   surface: a free user gets five messages per calendar month, the sixth raises the `coachChat`
+   paywall, and Pro/Founder are unmetered. **Reading the conversation is never gated and never
+   costs anything**, in any entitlement state. Two things changed in this subsystem for it:
+
+   - `CoachChatServicing.send` became `@discardableResult send(_:onOutcome:) -> Bool`. The return
+     value distinguishes "no turn started" (empty input, already responding, model unavailable)
+     from a started one, and `onOutcome` reports `.completed` / `.failed` exactly once per started
+     turn — including from `cancel()`, which reports `.failed` when the cancelled turn produced no
+     text. That is what lets a failed generation give the message back; `streamTask` now carries
+     the outcome as its value so the DEBUG drill can await the same handle `cancel()` cancels.
+   - `CoachChatViewModel` takes an `AICoachAllowanceGate` by init (no default — it carries the
+     entitlement and the paywall seam, which come from `AppDependencies`), so `CoachChatView` is
+     now an environment-facing wrapper over an internal view that owns the ViewModel.
+
+   **Availability is checked before the entitlement**: on a device without Apple Intelligence the
+   gate meters nothing and raises nothing, so the existing unavailable state is all the user sees.
+   With `ProGating.isEnabled` off — how the app ships until the launch release — none of this is
+   reachable and the chat behaves exactly as before. The full design is
+   `docs/pro-subscription.md` §5e.
 
 ### Device-test findings (July 2026)
 

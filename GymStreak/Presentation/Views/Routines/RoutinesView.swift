@@ -23,7 +23,8 @@ private struct RoutinesViewInternal: View {
             workoutSessionRepository: dependencies.workoutSessionRepository,
             watchSync: dependencies.watchSync,
             proEntitlements: dependencies.proEntitlements,
-            paywalls: dependencies.paywalls
+            paywalls: dependencies.paywalls,
+            proactivePaywalls: dependencies.proactivePaywalls
         ))
         self._exercisesViewModel = StateObject(wrappedValue: ExercisesViewModel(
             exerciseRepository: dependencies.exerciseRepository,
@@ -40,7 +41,8 @@ private struct RoutinesViewInternal: View {
             restTimerLiveActivity: dependencies.restTimerLiveActivity,
             routineTemplateSync: dependencies.routineTemplateSync,
             recovery: dependencies.workoutRecovery,
-            activeWorkout: dependencies.activeWorkout
+            activeWorkout: dependencies.activeWorkout,
+            proactivePaywalls: dependencies.proactivePaywalls
         ))
     }
 

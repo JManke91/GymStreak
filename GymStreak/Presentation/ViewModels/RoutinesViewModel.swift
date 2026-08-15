@@ -24,6 +24,9 @@ class RoutinesViewModel: ObservableObject {
     private let watchSync: WatchSyncServicing
     private let proEntitlements: any ProEntitlementProviding
     private let paywalls: any PaywallPresenting
+    /// §8 placement A's trigger. Optional because unit-test instances that are
+    /// not about the proactive placements have nothing to report to.
+    private let proactivePaywalls: ProactivePaywallCoordinator?
     private let isGatingEnabled: Bool
     private var cloudSyncObserver: NSObjectProtocol?
 
@@ -42,6 +45,7 @@ class RoutinesViewModel: ObservableObject {
         watchSync: WatchSyncServicing,
         proEntitlements: any ProEntitlementProviding,
         paywalls: any PaywallPresenting,
+        proactivePaywalls: ProactivePaywallCoordinator? = nil,
         isGatingEnabled: Bool = ProGating.isEnabled
     ) {
         self.routineRepository = routineRepository
@@ -49,6 +53,7 @@ class RoutinesViewModel: ObservableObject {
         self.watchSync = watchSync
         self.proEntitlements = proEntitlements
         self.paywalls = paywalls
+        self.proactivePaywalls = proactivePaywalls
         self.isGatingEnabled = isGatingEnabled
         fetchRoutines()
         observeCloudKitChanges()
@@ -253,6 +258,7 @@ class RoutinesViewModel: ObservableObject {
         routineRepository.insert(routine)
         save()
         fetchRoutines()
+        Task { await proactivePaywalls?.routineWasCreated() }
     }
 
     /// Persists a brand-new routine along with its pending exercises, sets and
@@ -307,6 +313,10 @@ class RoutinesViewModel: ObservableObject {
 
         save()
         fetchRoutines()
+        // §8 placement A. Reported after the save, from the ViewModel that owns
+        // the transaction — a view does not get to decide that a routine now
+        // exists (Hard rule 3).
+        Task { await proactivePaywalls?.routineWasCreated() }
     }
 
     func updateRoutine(_ routine: Routine) {
@@ -403,6 +413,9 @@ class RoutinesViewModel: ObservableObject {
 
         save()
         fetchRoutines()
+        // Duplication is creation (§5c), so it arms placement A like any other
+        // saved template — but only on the path that actually saved one.
+        Task { await proactivePaywalls?.routineWasCreated() }
         return copy
     }
 
@@ -586,16 +599,63 @@ class RoutinesViewModel: ObservableObject {
 
     // MARK: - Schedule / Planning
 
+    // The fixed-weekday plan shape is Pro (P9); the rolling cadence is free.
+    // The rules live in `ScheduleGatingPolicy`, this end owns only the
+    // entitlement and the paywall request. Nothing downstream of a *saved*
+    // schedule is gated — `WorkoutPlanningService` computes occurrences for
+    // whatever it is given, so per §7's Rule 4 a weekday plan built while
+    // subscribed keeps driving the planned week and the up-next ordering after
+    // a lapse. Only writing one is refused.
+
+    /// `true` when putting a routine on a fixed-weekday plan is Pro-only for
+    /// this user.
+    var isWeekdayScheduleLocked: Bool {
+        ScheduleGatingPolicy.isScheduleTypeLocked(
+            .weekdays,
+            isPro: proEntitlements.isPro,
+            isGatingEnabled: isGatingEnabled
+        )
+    }
+
+    /// The single entry point behind every weekday-shaped intent in the planning
+    /// sheet — picking the mode, or touching a weekday chip. Returns `false` and
+    /// raises the `weekdaySchedule` paywall when the shape is locked, leaving
+    /// whatever the routine already has completely untouched.
+    ///
+    /// Asked at the point of intent rather than only at save, so a refused user
+    /// is not left editing days into a plan that could never be written.
+    @discardableResult
+    func requestWeekdaySchedule() -> Bool {
+        guard isWeekdayScheduleLocked else { return true }
+        paywalls.present(.weekdaySchedule)
+        return false
+    }
+
     /// Creates or updates a routine's training plan. Passing the mode + both
     /// sets of parameters keeps the call site simple; only the fields relevant
     /// to `type` are actually used by `WorkoutPlanningService`.
+    ///
+    /// Returns `false` when the requested shape is Pro-only for this user — the
+    /// refusal happens *before* any mutation, so an existing schedule survives
+    /// it intact rather than being cleared or downgraded. The check lives here
+    /// rather than only at the mode picker so no call site can bypass it.
+    @discardableResult
     func setSchedule(
         for routine: Routine,
         type: RoutineScheduleType,
         intervalDays: Int,
         weekdays: Set<Int>,
         referenceDate: Date
-    ) {
+    ) -> Bool {
+        guard !ScheduleGatingPolicy.isScheduleTypeLocked(
+            type,
+            isPro: proEntitlements.isPro,
+            isGatingEnabled: isGatingEnabled
+        ) else {
+            paywalls.present(.weekdaySchedule)
+            return false
+        }
+
         let schedule: RoutineSchedule
         if let existing = routine.schedule {
             schedule = existing
@@ -613,9 +673,11 @@ class RoutinesViewModel: ObservableObject {
         schedule.startDate = referenceDate
         schedule.isActive = true
         updateRoutine(routine)
+        return true
     }
 
-    /// Clears a routine's plan entirely.
+    /// Clears a routine's plan entirely. Never gated: §7's Rule 4 constrains what
+    /// a user may *build*, and removing a plan only ever gives capability back.
     func removeSchedule(from routine: Routine) {
         guard let schedule = routine.schedule else { return }
         routine.schedule = nil

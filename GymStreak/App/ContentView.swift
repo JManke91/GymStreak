@@ -26,6 +26,9 @@ private struct ContentViewInternal: View {
     /// without its screen owning a sheet. `@Observable`, so reading
     /// `pendingPlacement` in `body` is enough to re-render on a request.
     private let paywalls: any PaywallPresenting
+    /// Owns §8 A/B's armed triggers and the endowed figures placement B renders.
+    /// Read here because both paywall hosts below are here.
+    private let proactivePaywalls: ProactivePaywallCoordinator
 
     /// Observable singletons — @State so SwiftUI tracks their changes.
     @State private var preferences = AICoachPreferences.shared
@@ -41,6 +44,7 @@ private struct ContentViewInternal: View {
         self.aiCoachAvailability = dependencies.aiCoachAvailability
         self.proactivePromptCoordinator = dependencies.proactivePromptCoordinator
         self.paywalls = dependencies.paywalls
+        self.proactivePaywalls = dependencies.proactivePaywalls
         self._workoutViewModel = StateObject(wrappedValue: WorkoutViewModel(
             workoutSessionRepository: dependencies.workoutSessionRepository,
             routineRepository: dependencies.routineRepository,
@@ -51,7 +55,8 @@ private struct ContentViewInternal: View {
             restTimerLiveActivity: dependencies.restTimerLiveActivity,
             routineTemplateSync: dependencies.routineTemplateSync,
             recovery: dependencies.workoutRecovery,
-            activeWorkout: dependencies.activeWorkout
+            activeWorkout: dependencies.activeWorkout,
+            proactivePaywalls: dependencies.proactivePaywalls
         ))
     }
 
@@ -114,16 +119,37 @@ private struct ContentViewInternal: View {
                 CoachChatView()
             }
             .navigationTransition(.zoom(sourceID: Self.coachBarTransitionId, in: coachChatZoom))
+            // Second paywall host, inside the cover. `.coachChat` is by
+            // definition raised from in here (docs/pro-subscription.md §5e), and
+            // the root's sheet below cannot reach the screen while a full-screen
+            // cover is up — it would only appear once the user left the chat,
+            // which reads as a paywall arriving out of nowhere. Both hosts read
+            // the same `pendingPlacement`, so whichever shows it clears it for
+            // the other; the presenter is untouched.
+            .sheet(item: paywallBinding(for: pendingPaywall)) { placement in
+                PaywallPlaceholderView(
+                    placement: placement,
+                    lifetimeTotals: proactivePaywalls.valueMomentTotals
+                )
+                .onAppear { paywalls.didPresent(placement) }
+            }
         }
         // Pro paywall host. Every placement in the app raises its sheet from
         // here; the presenter decides whether a request becomes a presentation
-        // (docs/pro-subscription.md).
-        .sheet(item: paywallBinding(for: pendingPaywall)) { placement in
-            PaywallPlaceholderView(placement: placement)
-                // Reported from `onAppear`, not from the request, because the
-                // covers below can keep a raised paywall off the screen — and a
-                // paywall nobody saw must not spend its once-ever fire.
-                .onAppear { paywalls.didPresent(placement) }
+        // (docs/pro-subscription.md). Suppressed while the coach-chat cover is
+        // up, because that cover hosts its own — one binding non-nil in two
+        // hosts at once would have both attempt a presentation.
+        .sheet(item: paywallBinding(for: showingCoachChat ? nil : pendingPaywall)) { placement in
+            PaywallPlaceholderView(
+                placement: placement,
+                // Only `.valueMoment` renders these; every other placement
+                // ignores them (docs/pro-subscription.md §5g).
+                lifetimeTotals: proactivePaywalls.valueMomentTotals
+            )
+            // Reported from `onAppear`, not from the request, because the
+            // covers below can keep a raised paywall off the screen — and a
+            // paywall nobody saw must not spend its once-ever fire.
+            .onAppear { paywalls.didPresent(placement) }
         }
         // AI Coach opt-in: shown once when Apple Intelligence is available
         // and the user has not yet completed or permanently dismissed opt-in.

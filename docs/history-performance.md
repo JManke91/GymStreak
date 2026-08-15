@@ -55,6 +55,9 @@ ViewModel executed the aggregation inline on the main actor.
 `SwiftDataHistorySnapshotProvider` methods** — SE-0461's explicit "always leave the
 caller's actor" opt-out. The off-main guarantee is now a property of the code rather
 than of a build setting, and approachable concurrency is enabled project-wide.
+(Three at the time of this fix; the provider carries seven such methods today —
+see `docs/swift6-concurrency.md` §1 for the current list and the rule that every new
+one must be annotated.)
 
 Measured with `GymStreakTests/SwiftDataHistorySnapshotStoreTests`:
 

@@ -399,6 +399,14 @@ struct ActiveWorkoutView: View {
                     }
                 }
             )
+            // Reports what appeared; the ViewModel decides what it means (§8
+            // placement B's second trigger — docs/pro-subscription.md §5g).
+            // `initial: true` covers the first appearance, and the change form
+            // covers a hand-off from a confirmation to the next suggestion,
+            // which leaves this container mounted.
+            .onChange(of: prompt, initial: true) { _, current in
+                viewModel.overloadPromptDidAppear(current)
+            }
             .padding(.horizontal, 12)
             .padding(.top, 8)
             .padding(.bottom, 8)

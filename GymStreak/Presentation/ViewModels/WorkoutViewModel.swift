@@ -113,6 +113,11 @@ class WorkoutViewModel: ObservableObject {
     /// because unit-test instances have no app to report to.
     private let activeWorkout: (any ActiveWorkoutReporting)?
 
+    /// §8 placement B's triggers — the third completed workout and the first
+    /// automatic overload suggestion. Optional for the same reason
+    /// `activeWorkout` is: unit-test instances have no app to report to.
+    private let proactivePaywalls: ProactivePaywallCoordinator?
+
     /// Pre-apply values captured when progressive overload is applied, keyed by
     /// WorkoutExercise.id, so the completion screen can offer Undo. In-memory
     /// only — undo is available while the session is still open.
@@ -155,6 +160,7 @@ class WorkoutViewModel: ObservableObject {
         routineTemplateSync: RoutineTemplateSyncService,
         recovery: WorkoutRecoveryCoordinating? = nil,
         activeWorkout: (any ActiveWorkoutReporting)? = nil,
+        proactivePaywalls: ProactivePaywallCoordinator? = nil,
         aiCoachCache: AICoachCaching? = nil,
         now: @escaping () -> Date = Date.init
     ) {
@@ -168,6 +174,7 @@ class WorkoutViewModel: ObservableObject {
         self.routineTemplateSync = routineTemplateSync
         self.recovery = recovery
         self.activeWorkout = activeWorkout
+        self.proactivePaywalls = proactivePaywalls
         self.aiCoachCache = aiCoachCache ?? AICoachCache.shared
         self.now = now
         restTimerLiveActivity.dismissExpiredActivities()
@@ -554,6 +561,11 @@ class WorkoutViewModel: ObservableObject {
         healthKitSyncStatus = .idle
         overloadSnapshots.removeAll()
         appliedOverloadWeights.removeAll()
+        // A discarded session is still a session that ended, so a §8 A/B
+        // trigger Rule 3 suppressed during it gets its safe moment here. It
+        // earns nothing new — a workout that was thrown away is not a value
+        // moment (docs/pro-subscription.md §5g).
+        Task { await proactivePaywalls?.activeWorkoutDidEnd() }
     }
 
     func pauseForCompletion() {
@@ -590,6 +602,10 @@ class WorkoutViewModel: ObservableObject {
         elapsedTime = 0
         overloadSnapshots.removeAll()
         appliedOverloadWeights.removeAll()
+        // §8 placement B. Reported **after** `currentSession` is cleared, which
+        // is what makes Rule 3 stop suppressing — this is the "safe moment after
+        // the session ends" the placement is deferred to.
+        Task { await proactivePaywalls?.workoutDidComplete() }
     }
 
     private func saveWorkoutToHealthKit(session: WorkoutSession) {
@@ -895,6 +911,37 @@ class WorkoutViewModel: ObservableObject {
         workoutExercise.wasSwapped
             ? alternativeEntry(for: workoutExercise) != nil
             : routineExercise(for: workoutExercise) != nil
+    }
+
+    // §8 placement B's second trigger: "the first automatic progressive-overload
+    // suggestion". Two screens can show one, so there are two events — but
+    // *whether a given appearance counts* is decided here, not in the views:
+    // the screens report what appeared, this decides what it means.
+    //
+    // Both surfaces are inside a session, so these only ever arm the trigger;
+    // Rule 3 defers the paywall itself to the end of the workout
+    // (docs/pro-subscription.md §5g).
+
+    /// Reported by the mid-workout prompt bar whenever the prompt it shows
+    /// changes, including its first appearance.
+    ///
+    /// Only a `.suggestion` counts. The bar's other state is the `.applied`
+    /// confirmation, which is feedback on the user's own action rather than a
+    /// suggestion the app made.
+    func overloadPromptDidAppear(_ prompt: OverloadPrompt?) {
+        guard case .suggestion = prompt else { return }
+        reportOverloadSuggestionShown()
+    }
+
+    /// Reported by the completion screen when it appears. Counts only when the
+    /// "Ready for More Weight" section actually has something to offer.
+    func completionOverloadSuggestionsDidAppear() {
+        guard !overloadSuggestionExercises.isEmpty else { return }
+        reportOverloadSuggestionShown()
+    }
+
+    private func reportOverloadSuggestionShown() {
+        Task { await proactivePaywalls?.overloadSuggestionWasShown() }
     }
 
     func canUndoProgressiveOverload(for workoutExercise: WorkoutExercise) -> Bool {

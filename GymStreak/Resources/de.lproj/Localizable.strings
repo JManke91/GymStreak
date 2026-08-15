@@ -925,6 +925,8 @@
 "ai_coach.settings.open" = "AI Coach Einstellungen";
 "ai_coach.chat.close" = "Schließen";
 "ai_coach.chat.suggestion.anchor_pr" = "Was ist mein Bestwert bei %@?";
+"ai_coach.chat.allowance.nudge" = "%1$d von %2$d Coach-Nachrichten diesen Monat übrig";
+"ai_coach.chat.allowance.nudge.exhausted" = "Diesen Monat keine Coach-Nachrichten mehr. Mit Gym Streak Pro chattest du unbegrenzt.";
 
 // MARK: - Seed Exercise Catalog (built-in starter library)
 
@@ -1073,6 +1075,8 @@
 "paywall.headline.exercise_deep_dive" = "Unbegrenzte Übungs-Analysen";
 "paywall.headline.weekday_schedule" = "Wochentag-Zeitpläne";
 "paywall.placeholder.body" = "Gym Streak Pro ist noch nicht verfügbar.";
+// Placement B's endowed-progress line. The numbers are the user's own real totals.
+"paywall.value_moment.figures" = "Du hast %@ Trainings, %@ Sätze und %@ kg Volumen protokolliert.";
 
 // MARK: - Pro lock UI kit (docs/monetization-strategy.md §8 placement C and D)
 "pro.lock.subtitle" = "In Gym Streak Pro enthalten";

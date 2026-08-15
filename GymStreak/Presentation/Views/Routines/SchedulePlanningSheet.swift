@@ -102,11 +102,22 @@ struct SchedulePlanningSheet: View {
     private func modeButton(_ target: RoutineScheduleType, title: String, icon: String) -> some View {
         Button {
             HapticManager.shared.selection()
+            // Tapping the mode you are already in is a no-op, not an intent —
+            // a gated user with an existing weekday plan must not get a paywall
+            // for touching the segment that is already selected.
+            guard target != mode else { return }
+            // P9: the weekday split is Pro. The ViewModel owns the decision and
+            // raises the paywall; this end only refuses to switch mode.
+            guard target != .weekdays || requestWeekdayShape() else { return }
             withAnimation(DesignSystem.Animation.easeOut) { mode = target }
         } label: {
             HStack(spacing: 6) {
                 Image(systemName: icon).font(.system(size: 12, weight: .semibold))
                 Text(title).font(.system(size: 14, weight: .semibold, design: .rounded))
+                // Honest before the tap, per §8 C.
+                if target == .weekdays && viewModel.isWeekdayScheduleLocked {
+                    OnyxProBadge(style: .icon)
+                }
             }
             .foregroundStyle(mode == target ? DesignSystem.Colors.textOnTint : Color.white.opacity(0.6))
             .frame(maxWidth: .infinity)
@@ -246,6 +257,12 @@ struct SchedulePlanningSheet: View {
         let selected = weekdays.contains(weekday)
         return Button {
             HapticManager.shared.selection()
+            // A gated user reaching these chips has an existing weekday plan
+            // (the mode picker cannot get them here otherwise). Editing its days
+            // is editing into a Pro-only shape, so it is refused here rather
+            // than at save — which also keeps the chips showing the plan they
+            // actually have.
+            guard requestWeekdayShape() else { return }
             withAnimation(DesignSystem.Animation.easeOut) {
                 if selected { weekdays.remove(weekday) } else { weekdays.insert(weekday) }
             }
@@ -323,14 +340,30 @@ struct SchedulePlanningSheet: View {
         }
     }
 
+    // Hoisted per the main-thread rules: these run once per preview cell, from a
+    // computed property `body` reads, and every stepper tap, chip tap and mode
+    // switch re-evaluates it — a fresh `DateFormatter` each time is the exact
+    // shape that cost 630 ms in docs/history-performance.md.
+    private static let previewWeekdayFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = Locale.current
+        formatter.setLocalizedDateFormatFromTemplate("EEE")
+        return formatter
+    }()
+
+    private static let previewDayFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = Locale.current
+        formatter.setLocalizedDateFormatFromTemplate("d")
+        return formatter
+    }()
+
     private func previewWeekday(_ date: Date) -> String {
-        let f = DateFormatter(); f.locale = Locale.current; f.setLocalizedDateFormatFromTemplate("EEE")
-        return String(f.string(from: date).filter(\.isLetter).prefix(2))
+        String(Self.previewWeekdayFormatter.string(from: date).filter(\.isLetter).prefix(2))
     }
 
     private func previewDay(_ date: Date) -> String {
-        let f = DateFormatter(); f.locale = Locale.current; f.setLocalizedDateFormatFromTemplate("d")
-        return f.string(from: date)
+        Self.previewDayFormatter.string(from: date)
     }
 
     // MARK: Remove
@@ -354,16 +387,39 @@ struct SchedulePlanningSheet: View {
         .buttonStyle(.plain)
     }
 
+    // MARK: - P9 gate
+
+    /// Asks the ViewModel whether this user may work in weekday shape, and gets
+    /// out of the paywall's way when they may not.
+    ///
+    /// **Why it dismisses.** The paywall is hosted at the app root, and SwiftUI
+    /// cannot put that sheet on screen while this one is up — it *defers* the
+    /// presentation until this sheet goes away (docs/pro-subscription.md §7).
+    /// Staying open would therefore mean a paywall arriving out of nowhere later.
+    /// Nothing is lost by closing: a refusal writes nothing, and the routine
+    /// keeps whatever plan it already had.
+    private func requestWeekdayShape() -> Bool {
+        guard viewModel.requestWeekdaySchedule() else {
+            dismiss()
+            return false
+        }
+        return true
+    }
+
     private func save() {
         guard canSave else { return }
-        HapticManager.shared.success()
-        viewModel.setSchedule(
+        // The ViewModel is the authority on P9, not the two gated controls above
+        // — reachable when a gated user opens an existing weekday plan and saves
+        // it unchanged. A refusal writes nothing and raises the paywall, so the
+        // sheet closes for the same reason `requestWeekdayShape()` does.
+        let saved = viewModel.setSchedule(
             for: routine,
             type: mode,
             intervalDays: intervalDays,
             weekdays: weekdays,
             referenceDate: startDate
         )
+        if saved { HapticManager.shared.success() }
         dismiss()
     }
 }

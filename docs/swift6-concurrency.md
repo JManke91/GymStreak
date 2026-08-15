@@ -38,10 +38,13 @@ ViewModel ran that entire aggregation **on the main actor**, reproducing the han
 `docs/history-performance.md`.
 
 **The fix: `@concurrent` on the concrete `SwiftDataHistorySnapshotProvider`
-methods** (three at migration time, four since audit P1.2 added
-`fetchExerciseProgress`). That restores the unconditional "always leave the caller's
-actor" contract, so the guarantee is a property of the code and survives any
-build-setting change.
+methods** (three at migration time; seven today — audit P1.2 added
+`fetchExerciseProgress`, P1.6 `fetchPreviousPerformances`, and Pro ticket 11 both
+`fetchLifetimeTotals` — the widest of them, no date window at all — and
+`fetchCompletedWorkoutCount`, which is annotated even though it is only a
+`fetchCount`, because it still enters the model actor). That restores the
+unconditional "always leave the caller's actor" contract, so the guarantee is a
+property of the code and survives any build-setting change.
 
 Measured with `GymStreakTests/SwiftDataHistorySnapshotStoreTests`:
 
@@ -101,7 +104,11 @@ regression test types the provider as `any HistorySnapshotProviding`, matching h
 
 Any new type conforming to `HistorySnapshotProviding` that does real work must carry
 `@concurrent` on its own methods. The actor deliberately no longer conforms, so it
-cannot be injected as an unannotated conformer.
+cannot be injected as an unannotated conformer. The same rule and the same warning
+comment are carried by `LifetimeTrainingTotalsProviding` (ticket 11) — a second, narrow
+read boundary conformed to by the *same* provider struct, so there is still one
+`@ModelActor` and one `ModelContext`, and `lifetimeTotalsKeepMainActorResponsive` types
+it as the existential exactly like the four cases above it.
 `largeSnapshotBuildKeepsMainActorResponsive` is the acceptance criterion — a green
 build cannot catch this.
 

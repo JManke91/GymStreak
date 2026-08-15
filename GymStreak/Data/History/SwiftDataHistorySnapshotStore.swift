@@ -15,7 +15,7 @@ import SwiftData
 /// contract. It is deliberately limited to constructing the stable actor: it does not receive or
 /// process models, and actual fetch tasks retain normal caller cancellation through the actor
 /// methods and their explicit cancellation checks.
-struct SwiftDataHistorySnapshotProvider: HistorySnapshotProviding {
+struct SwiftDataHistorySnapshotProvider: HistorySnapshotProviding, LifetimeTrainingTotalsProviding {
     private let storeTask: Task<SwiftDataHistorySnapshotStore, Never>
 
     init(modelContainer: ModelContainer) {
@@ -91,6 +91,21 @@ struct SwiftDataHistorySnapshotProvider: HistorySnapshotProviding {
     ) async throws -> [UUID: PreviousExercisePerformance] {
         let store = await storeTask.value
         return try await store.fetchPreviousPerformances(lookup)
+    }
+
+    /// `LifetimeTrainingTotalsProviding`. A counting query, not an aggregation —
+    /// still `@concurrent`, because it still enters the model actor.
+    @concurrent func fetchCompletedWorkoutCount() async throws -> Int {
+        let store = await storeTask.value
+        return try await store.fetchCompletedWorkoutCount()
+    }
+
+    /// `LifetimeTrainingTotalsProviding`. `@concurrent` for the same
+    /// load-bearing reason as the five above — this one walks *every* completed
+    /// session's set graph, so it is the largest of them.
+    @concurrent func fetchLifetimeTotals() async throws -> LifetimeTrainingTotals {
+        let store = await storeTask.value
+        return try await store.fetchLifetimeTotals()
     }
 }
 
@@ -260,6 +275,39 @@ actor SwiftDataHistorySnapshotStore {
         }
         try Task.checkCancellation()
         return resolved
+    }
+
+    /// How many completed workouts exist — §8 placement B's trigger question.
+    ///
+    /// Deliberately does **not** go through `fetchCompletedSessions()`. This runs
+    /// after every completed workout, and the full-graph fetch would put an
+    /// unbounded walk on this actor ahead of the History tab's own post-workout
+    /// refetch, which `completeWorkout` invalidates a few lines earlier.
+    /// `fetchCount` answers from the store without materializing a session.
+    func fetchCompletedWorkoutCount() async throws -> Int {
+        try Task.checkCancellation()
+        return try measured("HistoryCountCompletedSessions") {
+            try CompletedSessionFetch.completedCount(in: modelContext)
+        }
+    }
+
+    /// All-time totals for §8 placement B's endowed figures.
+    ///
+    /// Reuses the same prefetch-correct fetch as every other read here, so the
+    /// numbers the paywall shows are derived from exactly the graph the History
+    /// tab renders — an off-by-one against the user's own screen is the one
+    /// failure this placement cannot survive.
+    func fetchLifetimeTotals() async throws -> LifetimeTrainingTotals {
+        try Task.checkCancellation()
+        let sessions = try measured("HistoryFetchSessions") {
+            try fetchCompletedSessions()
+        }
+        try Task.checkCancellation()
+        let totals = measured("HistoryBuildLifetimeTotals") {
+            LifetimeTotalsAggregator.build(sessions: sessions)
+        }
+        try Task.checkCancellation()
+        return totals
     }
 
     /// The prefetch-correct completed-session fetch, shared with the AI-coach fact actor.

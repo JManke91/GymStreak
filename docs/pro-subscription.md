@@ -1,13 +1,17 @@
 # Pro subscription — entitlement core, Founder grant and RevenueCat
 
-**Status (2026-08-15):** tickets 01, 02, 03, 04, 05, 06 and 07 of `.scratch/pro-entitlements/issues/`
+**Status (2026-08-15):** tickets 01, 02, 03, 04, 05, 06, 07, 08, 10 and 11 of
+`.scratch/pro-entitlements/issues/`
 are implemented. The app knows whether the current user is Pro, every future gate can ask that
 question through one abstraction, users who installed before monetization are permanently granted
 Pro, the entitlement is now backed by **RevenueCat** — purchases against the Test Store work
 end to end — anything in the app can ask for a paywall at a named placement without knowing
 what a paywall looks like, and the three visual treatments the gates share exist as design-system
-components. The first two gates are wired: the three-routine cap (§5c) and progress-analytics
-gating (§5d). But the only purchase entry point is DEBUG-only, and the global gating switch ships
+components. Four gates are wired: the three-routine cap (§5c), progress-analytics
+gating (§5d), the Coach Chat monthly taster (§5e, which also builds the month-keyed allowance
+store ticket 09 reuses) and fixed-weekday schedules (§5f). §8's two **proactive** placements —
+the soft one after a routine is created and the endowed-progress value moment — now fire on
+their own (§5g). But the only purchase entry point is DEBUG-only, and the global gating switch ships
 **off** — so in a release build the shipped app still behaves exactly as it did before, gates
 included.
 
@@ -46,7 +50,17 @@ ticket 13 (the full runbook) and ticket 14 (the paywall).
 | Debug placement section | `DebugPaywallSectionView` (`#if DEBUG`) | `Presentation/Views/Settings/Components/` |
 | P1 — routine cap rules | `RoutineCapPolicy` | `Domain/Services/` |
 | P2 — analytics gate rules | `ChartGatingPolicy` | `Domain/Services/` |
-| Tests | `ProEntitlementTests`, `FounderStatusTests`, `PaywallPlacementTests`, `PaywallPresentationTests`, `RoutineCapTests`, `ChartGatingTests` | `GymStreakTests/` |
+| P3/P4/P5 — the metered AI surfaces | `MeteredAISurface` | `Domain/Models/Pro/` |
+| P3/P4/P5 — taster allowance rules | `AIAllowancePolicy` | `Domain/Services/` |
+| The abstraction gates read a monthly count through | `MonthlyAllowanceTracking` | `Domain/Interfaces/` |
+| Month-keyed counters (App Group defaults + iCloud KVS) | `MonthlyAllowanceStore` | `Data/Purchases/` |
+| P3/P4/P5 — the per-surface gate | `AICoachAllowanceGate` | `Presentation/ViewModels/AICoach/` |
+| P9 — weekday-schedule gate rules | `ScheduleGatingPolicy` | `Domain/Services/` |
+| §8 A/B — the two proactive triggers | `ProactivePaywallTrigger` | `Domain/Models/Pro/` |
+| §8 A/B — the armed record | `ProactivePaywallTracking` / `ProactivePaywallTriggerStore` | `Domain/Interfaces/`, `Data/Purchases/` |
+| §8 A/B — when a trigger has arrived, and when it is safe to say so | `ProactivePaywallCoordinator` | `Presentation/ViewModels/Pro/` |
+| §8 B — the endowed figures | `LifetimeTrainingTotals`, `LifetimeTotalsAggregator`, `LifetimeTrainingTotalsProviding` | `Domain/Models/`, `Domain/Services/`, `Domain/Interfaces/` |
+| Tests | `ProEntitlementTests`, `FounderStatusTests`, `PaywallPlacementTests`, `PaywallPresentationTests`, `RoutineCapTests`, `ChartGatingTests`, `CoachChatAllowanceTests`, `ScheduleGatingTests`, `ProactivePaywallTests` | `GymStreakTests/` |
 
 Wiring: `AppDependencies` builds one `ProEntitlementProvider`, hands it a `FounderStatusService`
 and a `RevenueCatPurchaseGateway`, and exposes it as `proEntitlements` (and, in DEBUG only, the
@@ -708,6 +722,397 @@ pill highlights as selected while the chart under the blur is the last unlocked 
 visible selection and the previewed data disagree; that is the price of not widening the fetch, and
 the blur is what makes it invisible.
 
+## 5e. P3 — the Coach Chat monthly taster
+
+The third shipped gate (`monetization-strategy.md` §4.2a P3, §4.3, §7 lapse, §8 C/D). A free user
+sends `ProFeatureCaps.freeCoachChatMessagesPerMonth` (5) chat messages per **calendar month**; the
+sixth raises `.coachChat`. This ticket also builds the month-keyed allowance store that P4 and P5
+(ticket 09) reuse without touching any of the logic below.
+
+**Availability is checked before the entitlement, and that ordering is the rule, not an
+optimisation.** Coach Chat needs iOS 26 and Apple-Intelligence hardware, and §4.3 is explicit that
+the paywall must not lead with AI when availability reports unavailable: a device that *cannot run
+the model* must never be shown a price for it. So `AICoachAllowanceGate` asks
+`AICoachAvailabilityProviding` first and, on an unavailable device, allows every request, meters
+nothing and raises nothing — the chat's existing unavailable state is what the user sees.
+Unavailable is a disappointment, not a conversion opportunity.
+
+**What consumes, and what never does.** The unit is a **sent message**:
+
+- Consumption happens when a turn actually *starts* — not when the screen opens. A user who opens
+  the chat, reads it and backs out has spent nothing.
+- **A failed generation refunds the unit.** Charging for an error is indefensible. So does a turn
+  that never started (empty input, a turn already running, an unavailable model) and a cancellation
+  that produced no text at all — the user got no answer either way.
+- **Reading the existing conversation is always free and never blocked**, in every entitlement
+  state. That is §7's Rule 4 over the user's own data: `onAppear` still restores and renders the
+  persisted conversation when the allowance is spent, and only the paywall is raised on top.
+- The DEBUG Phase 0 drill bypasses the gate entirely (it never goes through `send`), so a
+  40-turn diagnostic costs the developer's simulator nothing.
+
+**Where the decision lives.** Split three ways, one layer each:
+
+- **The arithmetic** is `Domain/Services/AIAllowancePolicy.swift` — pure, isolation-agnostic
+  functions over `consumed`, `limit`, `isPro` and `isGatingEnabled`, returning `isMetered`,
+  `remaining`, `isExhausted` and a `NudgeState` (`.lastRemaining` / `.exhausted` / `nil`). Like
+  `RoutineCapPolicy` it produces **no user-facing text**. It is shared by all three metered
+  surfaces, because the taster mechanic is identical and only the limit differs.
+- **The counters** are `Data/Purchases/MonthlyAllowanceStore.swift` behind
+  `Domain/Interfaces/MonthlyAllowanceTracking.swift` (three verbs: `consumedCount(for:)`,
+  `consume(_:)`, `refund(_:)`).
+- **The decision and its consequences** are `AICoachAllowanceGate`
+  (`Presentation/ViewModels/AICoach/`): availability → entitlement → allowance, then either consume
+  and hand back a `Ticket`, or raise the placement. It is built by
+  `AppDependencies.makeAICoachAllowanceGate(for:)` — a gate is a cheap, stateless composition of
+  app-lifetime collaborators, and the composition root is the only place that names them.
+
+The gate is its own type rather than three methods on `CoachChatViewModel` for a testability reason
+worth recording: the ViewModel holds `CoachChatService` **concretely** (Observation cannot see
+`@Observable` reads through an existential — see `docs/ai-coach.md`), and that service is a
+singleton over an on-device model that is unavailable in a test process. A ViewModel-level test of
+"five messages then the wall" is therefore impossible. The gate takes no service, so every
+acceptance criterion is assertable directly against it — and ticket 09 instantiates the same type
+with `.periodRecap` / `.exerciseDeepDive`.
+
+**`Ticket` exists so a refund cannot invent allowance.** `requestGeneration()` returns
+`Ticket?` — `nil` means blocked (the paywall was raised) — and the ticket carries `didConsume`.
+Unmetered requests (Pro, gating off, no Apple Intelligence) return a ticket that consumed nothing,
+so the refund path is a no-op for them. A plain `Bool` would have made a refund after an unmetered
+request hand the user a free message.
+
+**The store: month-keyed, mirrored, and hostile to a rolled-back clock.**
+
+- The key is a **calendar month** (`"2026-08"`), not a rolling 30 days, because a user can reason
+  about "it resets on the 1st". It is built from `DateComponents` and `String(format:)`, never a
+  `DateFormatter` — this is read on a path a view body evaluates (main-thread rule 2).
+- Month and count are one record under one key (`pro.allowance.<surface>` → `"2026-08:3"`). A torn
+  write that updated one and not the other would either hand out a free allowance or charge for a
+  month never used.
+- It writes **App Group `UserDefaults` and iCloud KVS** (§9), the latter behind `AllowanceCloudStore`
+  for the same reason `SeedCatalogVersionStore` exists: `NSUbiquitousKeyValueStore` has one usable
+  instance whose contents outlive deleting the app, so a test that wrote it would stamp the
+  developer's simulator permanently. The mirror is the deliberate difference from the Founder flag
+  (§3a), which needs none because `AppTransaction` is itself durable — a counter has no such
+  backing and would otherwise be reset by deleting the app.
+- Reading merges both stores with `MonthlyAllowanceRecord.newer` (later month wins; on a tie the
+  larger count wins), so **neither store can lower the other** and a count only moves forward
+  within a month.
+- The active month is `max(current, stored)`. A device date moved **backwards** therefore keeps
+  losing to the month already consumed, which closes the "reset the clock, get five more messages"
+  hole. Rolling *forward* is not defended against and does not need to be: it spends the next
+  month's allowance early and permanently forfeits the current one — a worse deal than waiting.
+- Records are cached in memory after the first read per surface. That is a contract: the count is
+  read from a computed property a view body evaluates, and `synchronize()` on every render would
+  put file I/O on the main thread. The consequence, accepted: a KVS change arriving from another
+  device mid-session is not observed until the next launch.
+- **The cache is `[MeteredAISurface: MonthlyAllowanceRecord?]` — doubly optional, and that is the
+  bug that nearly shipped.** Assigning `nil` to a `Dictionary` subscript *removes* the key, so with
+  a singly-optional value the "no record yet" answer is never cached and every read falls through
+  to `UserDefaults` **and** `NSUbiquitousKeyValueStore.synchronize()`. That is precisely the state
+  of every free user before their first message — and, while the kill switch is off, of every user
+  there is — on a path re-evaluated on each keystroke and each streamed token.
+  `absentRecordIsCachedLikeAPresentOne` pins one backing read per surface, ever.
+- `AICoachAllowanceGate.nudgeState` checks `isMetered` **before** touching `consumedCount`, so a
+  Pro user and a kill-switch-off build never reach the store from a view body at all
+  (`unmeteredUsersNeverTouchTheStore`).
+- `UbiquitousAllowanceCloudStore.record(forKey:)` calls `synchronize()` before reading, mirroring
+  `UbiquitousSeedCatalogVersionStore`. Kept for that parity now that the cache bounds it to one
+  call per surface per process; it is a pull-latest-from-disk on a cold read, not a render-path
+  cost.
+- `MonthlyAllowanceRecord.newer` takes the **larger** count on a month tie, so a refund that has
+  propagated to KVS can be re-raised by a second device still holding the pre-refund count. Bounded
+  at one unit and it fails toward the business rather than against the user — the alternative,
+  letting the smaller count win, would make a stale device able to hand out free messages.
+
+**The nudge (§8 placement D).** `CoachChatViewModel.allowanceNudge` returns a
+`CoachChatAllowanceNudge` value struct — finished string, `used`, `limit` — rendered as
+`OnyxCapNudge` directly above the input bar, so it is on screen *before* the send that hits the
+wall. It appears on the last free message ("1 of 5 Coach messages left this month") and *stays*
+once the allowance is spent, which is exactly what removes the surprise from the gate. It is
+computed, not stored: the gate reads the `@Observable` entitlement provider inside it, so a
+purchase or a lapse removes or restores the hint with no reload, and the count refreshes because
+sending changes `messages`, which the same body already reads.
+
+**A blocked send keeps the user's text.** `startTurn(with:)` clears `inputText` only after a turn
+actually starts, so hitting the gate does not also delete what they typed.
+
+**The refund closure captures the gate, never `self`.** The dominant cancellation path is the
+cover's `onDismiss` calling `CoachChatService.shared.cancel()` — which runs *after* the chat view
+and its `@State`-owned ViewModel are gone. A `[weak self]` capture would be nil exactly then, and
+the unit for a cancelled-with-no-answer turn would be silently kept. The gate holds only
+app-lifetime collaborators, so capturing it strongly neither leaks nor cycles.
+
+**The paywall is raised at most once per opening.** `onAppear` fires again every time the pushed
+AI-coach settings screen is popped back to the chat, and returning from settings is not the
+"opened Coach Chat at 0 remaining" intent §8 C gates on. The ViewModel is `@State` inside the
+cover's content, so the once-flag resets the next time the chat is opened.
+
+**Two paywall hosts, and why.** §5a predicted this: a sheet raised from the root cannot reach the
+screen while a full-screen cover is up, and `.coachChat` is by definition raised from *inside* the
+coach-chat cover. Left alone, the paywall would have appeared only after the user left the chat —
+a paywall arriving out of nowhere. So the cover hosts its own `.sheet(item:)` reading the **same**
+`pendingPlacement`, exactly as §5a's follow-up sanctioned, and the root host is suppressed while
+`showingCoachChat` is true so the two never both attempt a presentation. **The presenter is
+unchanged** — one source of truth, two hosts, and whichever shows the placement clears it for the
+other. Second-order effect, accepted: while the chat cover is up, *any* placement raised from
+elsewhere now surfaces inside the chat, where previously it could not appear at all. Nothing but
+the chat raises one from in there today, and the §8 A/B one-shots are recorded on `didPresent`
+either way.
+
+**With the kill switch off nothing changes** — no nudge, no meter, no paywall, and `send` behaves
+exactly as it did before monetization — which is its own test (`killSwitchOffBehavesAsBefore`)
+rather than an inspection.
+
+**Lapse behaviour.** A lapsed subscriber returns to five messages a month with their chat history
+fully readable. Nothing was counted while they were Pro, so the taster starts whole rather than
+retroactively spent (`lapseReturnsToTheTaster`).
+
+Strings: `ai_coach.chat.allowance.nudge` and `ai_coach.chat.allowance.nudge.exhausted`, en + de.
+
+**Deliberately not built:** no Pro badge on the send button or the chat entry point. The nudge
+already removes the surprise, and a badge on the composer would read as an upsell in the middle of
+a conversation.
+
+## 5f. P9 — fixed-weekday schedules
+
+A routine is planned either on a rolling cadence (*every N days*) or on a fixed weekly split
+(*Mon · Wed · Fri*) — see `docs/workout-planning.md`. **The cadence is free; the weekly split is
+Pro.** That is the whole of P9.
+
+**§4.2a claimed more than exists, and was corrected.** It described P9 as "fixed-weekday
+schedules, multiple routines per day, plan preview". Only the first is a gateable surface. The
+*plan preview* ("next 3 sessions") is shown for both schedule types and is not a separate
+capability — gating it would only make the free schedule sheet worse for no conversion gain.
+*Multiple routines per day* is not a feature at all: every routine carries its own independent
+schedule, so two routines already fall on the same day and there is nothing to gate. If the launch
+tier needs more weight, that is an argument for building something from §4.2b, not for inventing a
+gate here.
+
+**`ScheduleGatingPolicy` answers exactly one question**, `isScheduleTypeLocked(_:isPro:isGatingEnabled:)`,
+and it takes the **requested** type rather than the stored one. That is what collapses all three
+routes into weekday shape — creating a plan that way, switching an interval plan into one, editing
+an existing weekday plan's days — into a single check.
+
+**The planner never asks.** `WorkoutPlanningService` computes occurrences for whatever schedule it
+is handed and does not import or reference the policy, the entitlement or the paywall. This is the
+mechanism behind §7's Rule 4 rather than a promise about it: a weekday plan built while subscribed
+keeps driving the planned week, the weekly goal, the day-strip markers and the up-next ordering
+forever, because there is no place in that path where an entitlement could be consulted.
+`lapsedWeekdayPlanStillPlansTheWeek` pins it.
+
+**One gate, three intent points.** `RoutinesViewModel.requestWeekdaySchedule()` is asked when the
+user picks the weekday mode and when they touch a weekday chip; `setSchedule(...)` re-checks and
+returns `false` at save, so no call site can bypass the gate by writing the schedule directly. Both
+refuse **before** any mutation, which is what makes "a refused edit leaves the existing schedule
+intact" true by construction (`refusedEditLeavesExistingPlanIntact`). Moving *out* of weekday shape
+back to the cadence is allowed — the gate is on the Pro shape, not on the routine. **Removing a
+plan is never gated**: Rule 4 constrains what a user may build, and removing only gives capability
+back.
+
+**Why the schedule sheet closes itself on a refusal.** The paywall is hosted at the app root, and
+SwiftUI supports one presentation per context: a root `.sheet` raised while `SchedulePlanningSheet`
+is up is **queued, not dropped** — SwiftUI logs *"only presenting a single sheet is supported. The
+next sheet will be presented when the currently presented sheet gets dismissed"* and presents it
+the moment the inner sheet goes away. Leaving the sheet open would therefore mean a paywall
+arriving out of nowhere later. Dismissing on refusal is also exactly what Apple's HIG prescribes —
+["If something people do within a sheet results in another sheet appearing, close the first sheet
+before displaying the new one"](https://developer.apple.com/design/human-interface-guidelines/sheets) —
+so the dismiss-and-raise-together action gets the correct sequencing for free, with no `onDismiss`
+timing code. Nothing is lost by closing: a refusal writes nothing.
+
+**Deliberately *not* a second paywall host.** §5e added one inside the coach-chat cover because a
+full-screen cover blocks the root host for as long as the user stays in the chat. A sheet does not:
+it is dismissed by the same action that raises the paywall, so the deferral lasts one animation.
+Adding a host here would put two `.sheet` modifiers on the same `pendingPlacement` in one
+presentation context — the configuration §5a's follow-up warns about, whose behaviour depends on
+which modifier SwiftUI attaches first. (Researched 2026-08-15 against Apple's `sheet(item:)`,
+`modal-presentations` and HIG *Sheets* docs; the ancestor/descendant queuing path itself is
+described only by the console message, not by Apple prose, so the dismiss→auto-present handoff is
+listed as unverified-on-device in §7.)
+
+**Reminders do not exist yet, and that is why nothing needs to be done to them.** Planned-routine
+notifications are deferred to phase 2 of `docs/workout-planning.md` — the app schedules only rest
+timers. The acceptance criterion "notification scheduling contains no entitlement checks" is
+therefore satisfied by absence, and it stays a **binding constraint on the phase-2 work**: when
+per-weekday reminders are built, `WorkoutReminderScheduling` must fire an existing weekday plan's
+reminders regardless of entitlement, exactly as the planner does.
+
+**The watch was not touched and could not be.** Schedules are not part of the watch-sync DTO — the
+watch has no plan data at all — so §9's "the watch never learns about entitlements" holds without a
+line of watch code. The one schedule-derived thing it does receive is the ordering of the routine
+payload (up-next first), which is computed from the same unaware planner.
+
+**With the kill switch off, planning behaves exactly as it did before monetization** — no badge, no
+refusal, no paywall (`killSwitchOffBehavesAsBefore`).
+
+**No new strings.** The gate reuses `paywall.headline.weekday_schedule` (already localized with the
+rest of the placements in ticket 04) and `OnyxProBadge`'s existing copy.
+
+## 5g. Placements A and B — the two paywalls that fire on their own
+
+Everything in §5c–§5f is a **contextual gate**: the user taps something, it is refused, a paywall
+appears. §8's rows A and B are the opposite — nothing is refused and the user asked for nothing.
+The app decides the moment has arrived.
+
+- **A — soft, after a routine is created.** Dismissible in one tap. Once, ever.
+- **B — the value moment.** After the third completed workout **or** the first automatic
+  progressive-overload suggestion, whichever lands first. It shows what the user has accumulated —
+  "You've logged 7 workouts, 143 sets and 24,313 kg of volume" — and then the offer. Once, ever.
+
+§8 calls B the highest-value placement in the app: a paywall after a measurable value moment sees
+roughly 2.1× the trial-start rate of an immediate hard paywall. **The endowed figures are the whole
+mechanism**, which makes their correctness a product requirement rather than a nicety — a
+placeholder or an off-by-one total does more damage than showing nothing.
+
+There is no onboarding flow in this app, so A hooks the routine-creation event rather than an
+onboarding host. That is how §8 words the trigger anyway.
+
+### Armed, presented, and why they are different facts
+
+`PaywallPresenter` already records what has been **shown** — once ever, written on `didPresent`
+(§5a). What it cannot record is a condition that became **true** at a moment when nothing may be
+shown. Rule 3 is exactly that moment, and §8 B is exactly the trigger most likely to arrive there:
+the third workout completes *inside* a workout, and an overload suggestion appears mid-set. The
+presenter drops such a request — `show(_:)` returns without setting anything — and because the
+once-ever record is written on presentation, nothing is spent. But without a second record the
+condition itself would be forgotten and placement B would never fire again for that user.
+
+So `ProactivePaywallTracking` / `ProactivePaywallTriggerStore` holds one durable flag per trigger:
+**armed**. Arming is one-way and nothing ever disarms it (outside the debug reset); the presenter's
+once-ever record is what ends a trigger's life. That pair — armed here, presented there — is the
+whole mechanism behind "a suppressed trigger is deferred, not consumed", and
+`deferredTriggerSurvivesRelaunch` pins it across a process boundary.
+
+Storage is plain `UserDefaults.standard` under `pro.trigger.<id>`, matching the presenter's
+`pro.paywallPresented.<id>` rather than the allowance store's App Group + iCloud KVS pair. Not the
+App Group suite: neither the widget nor the watch can act on a paywall trigger, and per §4.1 the
+watch never learns about entitlements. Not mirrored to iCloud: mirroring one half of the
+armed/presented pair would let a reinstalled device believe a placement is still owed after it was
+already shown elsewhere.
+
+### Where the decision lives
+
+`ProactivePaywallCoordinator` (`Presentation/ViewModels/Pro/`) — the same shape as
+`AICoachAllowanceGate` (§5e) and for the same testability reason: the ViewModels that report the
+events are untestable in isolation (HealthKit, a live `ModelContext`), while every acceptance
+criterion here is about *what is armed and what is raised*. It takes no repository and no service.
+
+**It re-implements none of the four eligibility rules.** The kill switch, the entitlement, Rule 3
+and the once-ever cap are still enforced once, in `PaywallPresenter`. What the coordinator adds is
+a *guard on the work*: it asks the same three cheap questions before arming or fetching, because
+otherwise every workout completion of every user — including all of them while the kill switch is
+off — would run an unbounded aggregation over their whole history to feed a paywall that can never
+appear. `killSwitchOffFiresNothing` asserts the read count is zero, not just that no paywall
+appeared.
+
+It also asks `ActiveWorkoutReporting` before raising, for the same reason and not as a second copy
+of Rule 3: an overload suggestion appearing between two sets would otherwise trigger a
+whole-history aggregation inside the one part of the app where nothing may compete for resources.
+Arming is *not* guarded that way — arming mid-workout is precisely the case the deferral exists for.
+
+**One placement per safe moment.** `flushOrder` puts `.valueMoment` first. Raising both back to
+back would silently drop the first: the presenter replaces a request that has not yet reached the
+screen (§5a). Whatever is not raised stays armed for the next safe moment
+(`onlyOnePlacementPerSafeMoment`).
+
+### The event hooks, and where each one sits
+
+| Event | Reported by | Effect |
+|---|---|---|
+| A routine template was saved | `RoutinesViewModel.addRoutine` / `createRoutine` / `duplicateRoutine` | Arms A, then raises |
+| A workout was completed | `WorkoutViewModel.completeWorkout`, **after** `currentSession = nil` | Counts completed workouts; arms B at the threshold; raises |
+| The mid-workout overload prompt changed | `ActiveWorkoutView`'s prompt bar → `WorkoutViewModel.overloadPromptDidAppear(_:)` | Arms B **if the prompt is a `.suggestion`** (always suppressed here — it is inside a session) |
+| The completion screen appeared | `SaveWorkoutView`'s `.task` → `WorkoutViewModel.completionOverloadSuggestionsDidAppear()` | Arms B **if the "Ready for More Weight" list is non-empty** (likewise suppressed) |
+| A workout was discarded | `WorkoutViewModel.cancelWorkout`, after `currentSession = nil` | Raises only; a thrown-away workout earns nothing |
+
+The completion hook sits **after** the session is cleared, which is what makes Rule 3 stop
+suppressing — that ordering *is* "the safe moment after the session ends".
+
+**The screens report what appeared; the ViewModel decides what it means.** That inversion is
+deliberate — deciding which appearances count is trigger policy, and Hard rule 3 keeps it out of
+views. `WorkoutViewModel.overloadPromptDidAppear(_:)` takes the `OverloadPrompt?` and applies the
+`case .suggestion` test itself, because the bar's other state is an `.applied` confirmation —
+feedback on the user's own action rather than a suggestion the app made.
+`completionOverloadSuggestionsDidAppear()` applies the non-empty test against
+`overloadSuggestionExercises`. Both funnel into one private `reportOverloadSuggestionShown()`, so
+the two surfaces cannot drift apart. Neither view reaches into the composition root.
+
+The hooks themselves: the prompt bar uses **`.onChange(of: prompt, initial: true)`** rather than
+`.onAppear` — `initial: true` covers the first appearance, and the change form also catches a
+hand-off from a confirmation to the next exercise's suggestion, which leaves that container
+mounted. The completion screen reports from its **existing `.task`**, before the first `await`,
+deliberately *not* from an `.onAppear` on the `Section`: a modifier attached to a `Section` inside a
+`Form` is not a reliable appearance hook. Both are idempotent — arming twice is a no-op — so a
+container that unmounts and remounts costs nothing.
+
+**A is armed by the first creation event this install observes, not by "the user's first routine".**
+§8 words the trigger as the creation event, and the narrower `count == 1` reading would leave A
+permanently dead for everyone who already had routines when gating flipped on — which, since the
+switch ships off until ticket 15, is the entire existing user base. Duplication counts as creation
+here exactly as it does for the cap (§5c).
+
+**Watch-originated workouts do not fire B.** The watch path never touches `WorkoutViewModel`
+(`WatchWorkoutIngestionService` writes history on an isolated context), so a workout recorded on the
+watch and synced over increments the count but raises nothing until the next iPhone-side completion
+— at which point the count is read fresh and the threshold is met. This is the correct outcome for
+§8's prohibition ("no paywall on the watch app") rather than a gap: the paywall must appear on the
+phone, at a phone-side safe moment.
+
+### The figures
+
+`LifetimeTrainingTotals` (workout count, completed sets, volume in kg) comes from
+`LifetimeTrainingTotalsProviding` — a **second, narrow read boundary conformed to by the same
+`SwiftDataHistorySnapshotProvider`**. A separate protocol rather than a sixth requirement on
+`HistorySnapshotProviding` (this is a different question with a different consumer, and the
+existing five requirements each exist for one screen), but the same concrete type, so there is still
+exactly one `@ModelActor` and one `ModelContext` warming the completed-session graph — the
+constraint that argued against a second boundary in the first place.
+
+**The boundary has two methods, and the split is the load-bearing part.**
+`fetchCompletedWorkoutCount()` is a `fetchCount` over the completed-session predicate: it
+materializes nothing and faults no relationship. `fetchLifetimeTotals()` is the aggregation. The
+trigger question — "have three workouts happened?" — is asked after **every** completed workout,
+including the first two, which provably cannot meet the threshold; answering it with the
+aggregation put a whole-history walk on the shared History actor *in front of the History tab's own
+post-workout refetch*, which `completeWorkout()` invalidates a few lines before reporting the
+event. The aggregation now runs exactly once, at the moment B is raised.
+`belowThresholdCostsOnlyACount` pins that, and `completedWorkoutCountAgreesWithTheAggregation`
+pins that the cheap read is not merely cheaper but returns the same number. The two reads are
+milliseconds apart and can only disagree if another workout lands in between (watch sync), which
+makes the shown figures more current, never wrong.
+
+- `@concurrent` on the concrete method is load-bearing, like the five beside it. This is the widest
+  read in the app: no date window at all. `lifetimeTotalsKeepMainActorResponsive` joins the shared
+  tripwire suite in `SwiftDataHistorySnapshotStoreTests` (`docs/swift6-concurrency.md` §1).
+- The aggregation is `LifetimeTotalsAggregator`, a pure function over `[WorkoutSession]` like
+  `FortschrittAggregator`. It sums `WorkoutSession.aggregates` — the one place the volume formula
+  lives — so the paywall's numbers are derived from exactly the graph the History tab renders, and
+  **completed** sets, not planned ones.
+- **The count that decides the trigger and the numbers shown are the same read**, so they cannot
+  disagree.
+- A completed workout **invalidates** the cached read (`completionInvalidatesCachedFigures`).
+  Without that, the read taken at workout two would be what the paywall showed at workout three.
+- A failed read **defers** rather than showing zeroes or placeholders: B stays armed and is retried
+  at the next safe moment (`failedReadDefersTheValueMoment`).
+
+The figures are rendered by `PaywallPlaceholderView`, which takes them as an optional value struct
+and ignores them for every placement other than `.valueMoment`. The number formatter is a
+`static let` — main-thread rule 2 applies to every view body, not only to the ones inside a list.
+Ticket 14 replaces the view; the coordinator and both hosts stay as they are.
+
+Strings: `paywall.value_moment.figures`, en + de.
+
+### With the kill switch off, nothing happens at all
+
+No trigger arms, no placement raises, and the history read never runs — asserted rather than
+inspected (`killSwitchOffFiresNothing`). Because nothing is armed while the switch is off, flipping
+it on in ticket 15 does not retroactively fire A or B for anyone: the next routine creation and the
+next workout completion are what arm them.
+
+**Deliberately not built:** no launch-time flush. §8 forbids launch-time paywalls outright, so a
+trigger armed inside a workout waits for the next session end rather than for the next app start.
+The consequence is recorded as a follow-up in §7.
+
 ## 6. The debug surfaces
 
 Settings shows three DEBUG-only sections. The first two are backed by the single
@@ -753,6 +1158,13 @@ nothing during development. It bypasses the switch, the entitlement and the once
 otherwise "nothing happened" and "already spent" look identical — and that row updating the moment
 the sheet appears is exactly what the in-memory fired set in §5a exists for.
 
+The Reset button clears the fired record **and disarms the §5g triggers**, through
+`ProactivePaywallTrackingDebugging`. Clearing only the former would leave both triggers armed, so
+A and B would re-raise at the next routine creation or session end — which looks like the reset
+worked but proves nothing about the triggers themselves. Note that a placement raised from this
+section shows placement B **without figures** unless a workout has been completed in the same
+process: the debug path bypasses the coordinator entirely, and the coordinator is what loads them.
+
 ## 7. Known follow-ups for the gate tickets
 
 - **The gate tickets (06–11) must call `paywalls.present(_:)`**, not build their own sheet. The
@@ -794,18 +1206,53 @@ the sheet appears is exactly what the in-memory fired set in §5a exists for.
 - **P2's gate is per-screen, and the exercise detail screen is the only analytics surface today.**
   Any future chart that re-derives a window or a metric has to ask `ChartGatingPolicy` rather than
   read `ProFeatureCaps` at the call site.
-- **Ticket 11 owns the *triggers* for A and B**, not their suppression: `hasPresented(_:)` and the
-  automatic once-ever record already exist, so ticket 11 only has to decide *when* "first routine
-  created" and "third completed workout / first overload suggestion" have happened.
+- **A contextual gate's paywall raised while a workout is running is still dropped, not deferred.**
+  Ticket 11 changed this only for the two *proactive* placements: `ProactivePaywallCoordinator`
+  keeps its own armed record and re-attempts at the next session end (§5g). The presenter itself is
+  unchanged and still returns without setting anything, so a C gate hit during a session — a
+  duplicate refused at the cap, a locked chart window tapped — produces no upsell at all. That
+  remains the intended reading of Rule 3 (§8 has no "show it afterwards" clause). If a general
+  queue is ever wanted, it belongs in the presenter, never at a call site — and §5g's armed/presented
+  split is the shape it should take.
+- **A trigger armed inside a workout waits for the next session end, not for the next launch.**
+  §8 forbids launch-time paywalls, so there is deliberately no flush on foreground or on app start.
+  The consequence: a user who arms placement A mid-workout (creating a routine from the Routines tab
+  while a session runs) and then never finishes or discards another workout never sees it. Narrow —
+  A is normally armed outside a session, where it raises immediately — and the record is durable, so
+  nothing is lost. If it ever matters, the safe moment to add is a screen the user deliberately
+  navigated to, never a launch.
 - **The placement `rawValue`s must exist as Placements in the RevenueCat dashboard** before ticket
   14 fetches offerings for them, or every placement silently serves the default offering.
 - **`PaywallPlaceholderView` ships in release builds** but is unreachable there while the kill
   switch is off. Ticket 14 replaces its body with a RevenueCat paywall; the host, the binding and
   every caller stay as they are.
-- **A paywall raised while a workout is running is dropped, not deferred.** That is the intended
-  reading of Rule 3 (§8 has no "show it afterwards" clause), but it means a contextual gate hit
-  during a session produces no upsell at all. If a queue is ever wanted, it belongs in the
-  presenter — never at a call site.
+- **The value moment's presentation timing rests on SwiftUI's sheet queuing, and was not exercised
+  on device.** `completeWorkout()` runs from `SaveWorkoutView`'s Save button, which dismisses that
+  sheet and then the active-workout screen; the coordinator's raise lands a few milliseconds later
+  (it is behind an `await` on the off-main totals read), so the root host's `.sheet(item:)` binding
+  goes non-nil while those dismissals are in flight. SwiftUI presents it once the context is free —
+  the same handoff §5f relies on, and the same one Apple documents only through a console message.
+  `ProactivePaywallTests` asserts what is *raised*; nothing asserts that the sheet actually appears
+  after the summary closes. Verify it during ticket 15's launch pass with `ProGating.isEnabled`
+  flipped locally; if the request turns out to be dropped rather than queued, the fix is
+  `.sheet(onDismiss:)` sequencing at the host, **not** a paywall sheet inside `SaveWorkoutView`.
+- **`fetchLifetimeTotals()` is unbounded and gets no cheaper as history grows.** It reads the whole
+  completed-session graph to produce three scalars. It is off-main (`@concurrent`), guarded so it
+  never runs while gating is off or for a Pro user, never used to *decide* the trigger (§5g — that
+  is `fetchCompletedWorkoutCount()`), cached for the process, and it runs **once**: at the moment B
+  is raised, after which `isEligible` is false forever. Acceptable for a once-ever placement; it
+  would not be acceptable for anything recurring. A future all-time-totals *screen* must not reuse
+  this call on a render path.
+- **`loadValueMomentTotals()` has no in-flight coalescing.** The cache is written after the `await`,
+  so two overlapping raises could each start a fetch. Not reachable today — the only concurrent
+  callers would be a completion and a discard of the same session — and the read is idempotent, so
+  the cost of the duplicate is one wasted walk, never a wrong number. If it ever matters, hold the
+  `Task` rather than the value.
+- **`AppDependencies` is past the 300-line convention** (306 lines; ticket 11 added 46). Accepted:
+  a composition root grows monotonically with the app, and stored properties cannot move to an
+  extension, so a split would only relocate the `init` body away from the declarations it assigns.
+  If it is ever done, split by feature area (`AppDependencies+Pro.swift` holding a nested `Pro`
+  struct built in one call) rather than by mechanism.
 - **A gate cannot tell that its request was dropped, and that leaves a silent tap.** `present(_:)`
   returns `Void` by design (§5a), so when the presenter suppresses a request — Rule 3, or a paywall
   already on screen — a gated affordance blocks with no feedback at all. On the routines list the
@@ -815,20 +1262,58 @@ the sheet appears is exactly what the in-memory fired set in §5a exists for.
   accepted for ticket 06, because the alternative changes the shared seam for all nine gates. If it
   is ever fixed, fix it once: have `present(_:)` report whether the request was honoured, and let
   each gate fall back to an inline message — never by giving a gate its own sheet.
-- **A paywall raised from inside a full-screen cover is deferred, not dropped.** SwiftUI will not
-  put the root's sheet on screen while the coach-chat or opt-in cover is up, but the placement
-  stays in `pendingPlacement`, so the likely on-device behaviour is that the paywall appears once
-  the cover closes — not that nothing happens. (Contrast Rule 3, which genuinely drops the
-  request: `show(_:)` returns without setting anything.) **Ticket 08 must check what `.coachChat`
-  actually does on device.** If deferral reads badly there, host a second sheet inside the cover —
-  the presenter stays exactly as it is, a second host just reads the same `pendingPlacement`.
+- **A paywall raised from inside a full-screen cover is deferred, not dropped** — and ticket 08
+  took the sanctioned fix rather than living with the deferral. SwiftUI will not put the root's
+  sheet on screen while the coach-chat or opt-in cover is up, but the placement stays in
+  `pendingPlacement`, so the paywall would surface only once the cover closed. (Contrast Rule 3,
+  which genuinely drops the request: `show(_:)` returns without setting anything.) The coach-chat
+  cover now hosts its own sheet over the same `pendingPlacement` and the root host is suppressed
+  while that cover is up (§5e). **The presenter did not change**, and any future placement raised
+  from inside the AI opt-in cover inherits the same choice: add a host there, never a second seam.
+- **The P9 dismiss→auto-present handoff has no automated coverage and was not exercised on
+  device.** `ScheduleGatingTests` asserts what the gate *asks for* and that nothing is written on a
+  refusal; the unit tests cannot see whether the root's paywall sheet actually appears once
+  `SchedulePlanningSheet` finishes dismissing. Apple documents the queuing behaviour only through a
+  console message, so this rests on cross-corroborated reporting plus the HIG's explicit
+  "close the first sheet before displaying the new one". Verify it with the debug placement section
+  during ticket 15's launch pass; if it ever turns out the request is dropped rather than queued,
+  the fix is `.sheet(onDismiss:)` on `RoutineDetailView` — **not** a second host inside the
+  schedule sheet (§5f).
 - `ProGating.isEnabled` being a `static let false` does **not** produce unreachable-branch
   warnings at a gate call site — verified with `swiftc -swift-version 6 -typecheck` on
   `if ProGating.isEnabled { … }` (2026-08-15). Swift only warns on a literal `if false`, not on
   reading a constant declaration. The zero-warning build is safe; no gate needs a workaround.
-- No SwiftData `@Model`, property or relationship changed by tickets 01 or 02, so neither needs a
-  **CloudKit Console schema deploy**. The monthly taster counters in tickets 08/09 must stay out
-  of SwiftData (App Group `UserDefaults` mirrored to iCloud KVS, per §9) for the same reason.
+- No SwiftData `@Model`, property or relationship changed by tickets 01, 02, 08, 10 or 11, so none
+  needs a **CloudKit Console schema deploy**. Ticket 11 in particular only *reads* completed
+  sessions — `LifetimeTrainingTotals` is a plain `Sendable` struct, and the armed-trigger flags live
+  in `UserDefaults`. P9 in particular reads `RoutineSchedule.type` and refuses to
+  write it — the model is untouched. The monthly taster counters stayed out of SwiftData (App
+  Group `UserDefaults` mirrored to iCloud KVS, per §9) for exactly that reason.
+- **The allowance store does not observe `NSUbiquitousKeyValueStoreDidChangeExternallyNotification`.**
+  It caches each surface's record in memory on first read (§5e — main-thread rule 2), so a count
+  spent on the user's other device lands only on the next launch. Two devices can therefore each
+  spend up to five messages in the same month. Accepted: the mirror exists to survive a reinstall,
+  not to arbitrate concurrent devices, and the overspend is bounded by the cap itself. If it ever
+  matters, observe the notification and invalidate the cache — do not move the counters to
+  SwiftData/CloudKit.
+- **The in-cover paywall host (§5e) has no automated coverage and was not exercised on device.**
+  `CoachChatAllowanceTests` asserts what the gate *asks for*; nothing asserts that the sheet
+  actually appears over the coach-chat cover, and the unit tests cannot see it. It also cannot be
+  reached in a normal build: the kill switch ships off, so `present(_:)` is inert. Verifying it
+  needs a local build with `ProGating.isEnabled` flipped **and** an Apple-Intelligence-capable
+  device — check "the sixth message raises the sheet", "dismissing it clears the placement", and
+  "no second paywall appears after leaving the chat". Until then this is the one part of ticket 08
+  standing on reasoning rather than evidence.
+- **`CoachChatService.swift` is 442 lines**, past the 300-line convention and grown by ticket 08's
+  turn-outcome bookkeeping. Accepted for this ticket: the addition is ~40 lines threaded through
+  the existing turn lifecycle, not a new concern that can be lifted out cleanly. The natural split,
+  if one is wanted, is the turn lifecycle (`beginTurn`/`endTurn`/`cancel`/outcome reporting) into
+  its own type. `CoachChatView` was brought back under the ceiling instead, by moving `MessageBubble`
+  to `CoachChatMessageBubble.swift`.
+- **Ticket 09 must not reimplement any of §5e.** It instantiates `AICoachAllowanceGate` with
+  `.periodRecap` / `.exerciseDeepDive` (the surfaces, their limits and their placements already
+  exist in `MeteredAISurface`), and its only genuinely new decision is that a **cached** recap or
+  deep-dive is a free re-read rather than a generation.
 - Ticket 12's Founder celebration screen is what makes the grant *visible*. Until it ships, a
   Founder is silently Pro — correct, but unannounced, and §7 is explicit that surfacing it loudly
   is most of its value.
@@ -882,9 +1367,11 @@ the sheet appears is exactly what the in-memory fired set in §5a exists for.
 
 ## 8. Verification
 
-- `bundle exec fastlane test_unit` (iOS + watchOS) — green, 2026-08-15, re-run after P2 (§5d) with
-  zero Swift warnings. The
-  watch suite passing is also the check that the watch target still builds without RevenueCat.
+- `bundle exec fastlane test_unit` (iOS + watchOS) — green, 2026-08-15, re-run after §5g with
+  zero new Swift warnings (iOS: 699 tests, 0 failures; watch: 34 tests, 0 failures). The
+  watch suite passing is also the check that the watch target still builds without RevenueCat, and
+  for §5g it is the evidence for "neither placement fires on the watch": the whole mechanism lives
+  in the iOS target and no watch type references it.
 - The Pro lock kit (§5b) carries **no unit tests, deliberately**: three presentational views with
   no logic beyond a clamped fraction. Its evidence is the Debug simulator build, the previews, and
   `fastlane test_unit_ios` (75 suites, green 2026-08-15, no new warnings). The watch suite was not
@@ -894,7 +1381,8 @@ the sheet appears is exactly what the in-memory fired set in §5a exists for.
   deleted; the result is recorded in §5b so it does not have to be re-measured.
 - Release-configuration build of the `GymStreak` scheme — succeeds, i.e. the DEBUG-only surface
   (picker, store section *and* placement section) compiles out cleanly. Re-verified 2026-08-15
-  after the paywall seam landed, zero Swift warnings.
+  after §5g landed, zero Swift warnings — which is also what proves
+  `ProactivePaywallTrackingDebugging` and the reset it backs are absent from a shipping binary.
 - `PaywallPlacementTests` + `PaywallPresentationTests` (18 tests, green 2026-08-15) cover the
   taxonomy and all four
   eligibility rules: every placement has a localized headline key that actually resolves; only A
@@ -921,6 +1409,43 @@ the sheet appears is exactly what the in-memory fired set in §5a exists for.
   load key with nothing migrated; a lapse blurs, clamps the rendered window back to 3M and throws
   away neither the loaded series nor the recent sessions. Three more exercise `ChartGatingPolicy`
   directly against explicit caps, for the §4.4 / §11 Q4 retune.
+- `CoachChatAllowanceTests` (24 tests, 29 cases with parameterization, green 2026-08-15) covers P3
+  (§5e) against the real `MonthlyAllowanceStore` over a throwaway defaults suite and a fake KVS:
+  five messages then the `.coachChat` wall; the refused sixth consumes nothing; opening an
+  exhausted chat raises the paywall without consuming, and opening it with messages left raises
+  nothing; a failed generation refunds, including the one that hit the wall; the nudge appears at
+  one remaining, stays at zero, and disappears the instant a purchase lands; subscription, lifetime
+  and Founder are unmetered; a lapse returns to a whole taster; **an unavailable device is never
+  paywalled and never metered**, and unavailability does not clear a count already spent; the kill
+  switch off behaves exactly as before; the count resets on the 1st; **a clock moved backwards
+  restores nothing**; a reinstall restores the count from the cloud store while a record from a
+  month already over does not carry over; a refund never goes below zero; the three surfaces count
+  independently and their keys, limits and placements are all distinct; and the policy holds at
+  retuned caps of 1, 3 and 10 and clamps a count above a retuned-down cap. Two of them guard the
+  render path rather than the product rule: **an absent record is cached like a present one** (one
+  backing read per surface, ever) and **an unmetered gate never reads the store at all**.
+- `ProactivePaywallTests` (19 tests, 22 cases with parameterization, green 2026-08-15) covers §5g
+  against the **real** `PaywallPresenter` and `ActiveWorkoutRegistry` over a throwaway defaults
+  suite, because the deferral and the one-shot are interactions between the coordinator's armed
+  record and the presenter's suppression — a double that presents everything would assert the
+  mechanism away. Creating a routine raises A; A fires once and its record survives a relaunch
+  (a fresh presenter, store and coordinator over the same defaults); the third completed workout
+  raises B and the first two do not; the first overload suggestion raises B before three workouts;
+  B fires once and survives a relaunch; the threshold holds at retuned values of 1 and 5;
+  **a trigger armed inside a workout is deferred, still armed and not spent**, including across a
+  relaunch, and including a completion reported while a session is still running; only one placement
+  is raised per safe moment and the other is not lost; subscription, lifetime and Founder see
+  neither and never pay for the history read; **with the kill switch off nothing arms, nothing fires
+  and the read count is zero**; B carries the user's real totals; a completed workout invalidates a
+  cached read; a failed read defers instead of showing figure-less copy; the totals are read
+  once per safe moment rather than per raise; and **a workout below the threshold costs a count
+  read and never the aggregation**.
+- `lifetimeTotalsKeepMainActorResponsive` (in `SwiftDataHistorySnapshotStoreTests`, the shared
+  main-actor tripwire suite) proves both halves of §5g's figures against a real 240-session
+  container: the aggregation does not stall the main actor, and the three totals are exactly the
+  arithmetic of the seed (240 workouts, 4 800 completed sets, 2 016 000 kg).
+  `completedWorkoutCountAgreesWithTheAggregation` pins the cheap trigger read against the same
+  container, including that an in-progress session is not counted.
 - `grep -rl "import RevenueCat"` returns exactly one file, `RevenueCatPurchaseGateway.swift`, and
   the pbxproj lists the `RevenueCat` product dependency on the `GymStreak` target only.
 - The watch app genuinely does not link it: in the Release build products, `strings` finds 624

@@ -48,6 +48,18 @@ struct CoachChatMessage: Identifiable, Equatable, Codable {
     }
 }
 
+/// How an assistant turn ended, reported to whoever started it.
+///
+/// It exists for the free-tier taster (docs/pro-subscription.md §5e): a message
+/// costs the user one of their five monthly units, and charging for a generation
+/// that errored is indefensible — so the caller has to learn the difference
+/// without inspecting the message list. A cancelled turn that produced no text
+/// counts as `.failed` for the same reason: the user got no answer.
+enum CoachChatTurnOutcome: Sendable, Equatable {
+    case completed
+    case failed
+}
+
 /// Timeframe argument for the workout-history tool. A `@Generable` enum so guided
 /// generation constrains the model at the decoding level to exactly one case —
 /// the same guarantee the `WorkoutAnalysisTrend` output enum relies on. Lives in

@@ -55,6 +55,14 @@ struct SaveWorkoutView: View {
                 syncToHealthKit = viewModel.healthKitSyncEnabled
             }
             .task {
+                // §8 placement B's second trigger, on the completion screen's
+                // copy of the suggestion (docs/pro-subscription.md §5g). The
+                // ViewModel decides whether this appearance counts; the screen
+                // only reports that it appeared. Here rather than in an
+                // `.onAppear` on the section: a modifier attached to a `Section`
+                // inside a `Form` is not a reliable appearance hook, and this
+                // runs before the first `await`, i.e. as the screen appears.
+                viewModel.completionOverloadSuggestionsDidAppear()
                 await loadComparisons()
                 if let session = viewModel.currentSession {
                     await recapVM.generate(

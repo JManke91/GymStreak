@@ -78,6 +78,28 @@ The watch has **no plan/schedule data and no workout history** — it cannot com
 - `RoutineListView` (watch) renders the first stored routine in an "Up Next" section: the routine row (navigates to detail as before) plus a tinted quick-start button (`textOnTint` on tint-gradient `listRowBackground`) that presents `ActiveWorkoutView` directly, skipping the detail screen. Remaining routines render under "All Routines".
 - Freshness: the order is a snapshot from the last sync (`updateApplicationContext` — coalesced, latest wins). iOS re-syncs on every `fetchRoutines()` (incl. after a watch workout is ingested and on `.watchAppBecameAvailable`), so the hero updates whenever the iOS app runs. An old cached payload simply shows the previous hero — acceptable.
 
+## Pro gating (P9) — the weekday split is Pro, the cadence is free
+
+Since the monetization work, the **fixed-weekday** plan shape is a Pro capability while the rolling
+`everyNDays` cadence stays free. Full rationale and the presentation decisions live in
+`docs/pro-subscription.md` §5f; what matters for planning itself:
+
+- **`WorkoutPlanningService` is entitlement-unaware and must stay that way.** It computes
+  occurrences for whatever schedule it is handed. A weekday plan built while subscribed keeps
+  driving the weekly goal, the day-strip markers and the up-next ordering after a lapse — that
+  guarantee is structural, not a check somebody remembered to write.
+- The gate is `ScheduleGatingPolicy.isScheduleTypeLocked(_:isPro:isGatingEnabled:)`, consulted only
+  by `RoutinesViewModel` — at `requestWeekdaySchedule()` (the sheet's mode picker and weekday chips)
+  and again inside `setSchedule(...)`, which now returns `Bool` and refuses **before** mutating, so
+  a refused edit leaves an existing plan intact.
+- Moving a weekday plan back to the cadence is allowed, and `removeSchedule(...)` is never gated.
+- A refused tap dismisses `SchedulePlanningSheet`, because the paywall is hosted at the app root and
+  SwiftUI only presents it once the inner sheet is gone (§5f).
+- Everything above is inert while `ProGating.isEnabled` is `false`, which is how the app ships until
+  the launch release.
+- **Constraint on the phase-2 reminders below:** notification scheduling must not consult the
+  entitlement either. A lapsed user's existing weekday reminders have to keep firing.
+
 ## Edge cases
 - **Never-trained cadence routine**: anchors on the reference date (default today); its `reference + k·N` grid is counted, `k = 0` included.
 - **Stale history + fresh reference date**: an old completion before the chosen reference date is ignored; the plan restarts from the reference date until the next workout.

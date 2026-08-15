@@ -217,6 +217,83 @@ struct SwiftDataHistorySnapshotStoreTests {
         )
     }
 
+    /// §8 placement B's endowed figures join the same tripwire suite.
+    ///
+    /// The widest read the provider has: it walks *every* completed session's
+    /// exercise → set graph with no date window at all. Ticket 11 requires that
+    /// this aggregation not run on the main actor, and the requirement is not
+    /// theoretical — the value moment fires the instant a workout finishes, i.e.
+    /// while the completion screen is dismissing.
+    ///
+    /// It also pins the numbers themselves, which is the other half of the
+    /// ticket: the seed is 240 sessions × 5 exercises × 4 completed sets at
+    /// `40 + exerciseIndex` kg × 10 reps, so the totals are arithmetic rather
+    /// than whatever the aggregator happens to produce.
+    @Test
+    func lifetimeTotalsKeepMainActorResponsive() async throws {
+        let container = InMemoryModelContainer.make()
+        let context = ModelContext(container)
+        try seedHistory(sessionCount: 240, context: context)
+
+        // Existential on purpose — see the note in the training-snapshot test
+        // above. `ProactivePaywallCoordinator` holds
+        // `any LifetimeTrainingTotalsProviding`, so the `@concurrent` guarantee
+        // has to survive this witness too.
+        let provider: any LifetimeTrainingTotalsProviding =
+            SwiftDataHistorySnapshotProvider(modelContainer: container)
+        let heartbeat = MainActorHeartbeat(interval: .milliseconds(10))
+        let heartbeatTask = Task { await heartbeat.run() }
+        await Task.yield()
+
+        let totals = try await provider.fetchLifetimeTotals()
+
+        heartbeatTask.cancel()
+        await heartbeatTask.value
+
+        #expect(totals.workoutCount == 240)
+        #expect(totals.completedSetCount == 240 * 5 * 4)
+        // 240 sessions × 4 sets × 10 reps × (40 + 41 + 42 + 43 + 44) kg.
+        #expect(totals.volumeKilograms == 240 * 4 * 10 * 210)
+        #expect(
+            heartbeat.sampleCount >= 1,
+            "the main actor should run while the model actor is summing lifetime totals"
+        )
+        #expect(
+            heartbeat.maximumDelay < .milliseconds(100),
+            "Lifetime totals work delayed MainActor by \(heartbeat.maximumDelay)"
+        )
+    }
+
+    /// The trigger question §8 B asks after every workout must agree with the
+    /// aggregation without paying for it.
+    ///
+    /// `fetchCompletedWorkoutCount()` exists because the alternative — deciding
+    /// the threshold with `fetchLifetimeTotals()` — put a whole-history walk on
+    /// the shared History actor after *every* completion, including the ones
+    /// that cannot meet the threshold, in front of the History tab's own
+    /// post-workout refetch. This pins that the cheap read is not merely cheaper
+    /// but returns the same number.
+    @Test
+    func completedWorkoutCountAgreesWithTheAggregation() async throws {
+        let container = InMemoryModelContainer.make()
+        let context = ModelContext(container)
+        try seedHistory(sessionCount: 40, context: context)
+        // An in-progress session must not count: "completed" is `endTime != nil`.
+        let running = WorkoutSession(routine: nil)
+        running.routineName = "In progress"
+        context.insert(running)
+        try context.save()
+
+        let provider: any LifetimeTrainingTotalsProviding =
+            SwiftDataHistorySnapshotProvider(modelContainer: container)
+
+        let count = try await provider.fetchCompletedWorkoutCount()
+        let totals = try await provider.fetchLifetimeTotals()
+
+        #expect(count == 40)
+        #expect(count == totals.workoutCount)
+    }
+
     /// Cancellation must survive the `@concurrent` hop.
     ///
     /// `SwiftDataHistorySnapshotProvider`'s methods are `@concurrent` (SE-0461) so

@@ -38,7 +38,13 @@ protocol CoachChatServicing: AnyObject {
     func prewarm()
 
     /// Appends the user message and streams the assistant reply.
-    func send(_ text: String)
+    ///
+    /// Returns `false` when no turn started (empty input, a turn already
+    /// running, or an unavailable model) — the free-tier taster reserves a unit
+    /// before calling and gives it back on `false` (docs/pro-subscription.md
+    /// §5e). `onOutcome` fires exactly once per started turn, when it ends.
+    @discardableResult
+    func send(_ text: String, onOutcome: ((CoachChatTurnOutcome) -> Void)?) -> Bool
 
     /// Cancels the in-flight assistant turn, if any.
     func cancel()
