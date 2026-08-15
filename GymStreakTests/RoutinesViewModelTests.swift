@@ -29,10 +29,15 @@ struct RoutinesViewModelTests {
         let routineRepository = SwiftDataRoutineRepository(modelContext: context)
         let workoutSessionRepository = SwiftDataWorkoutSessionRepository(modelContext: context)
         let watchSync = MockWatchSyncServicing()
+        // Gating off, i.e. the shipped configuration: these tests are about the
+        // routine graph, not the cap. `RoutineCapTests` turns it on.
         let viewModel = RoutinesViewModel(
             routineRepository: routineRepository,
             workoutSessionRepository: workoutSessionRepository,
-            watchSync: watchSync
+            watchSync: watchSync,
+            proEntitlements: StubProEntitlements(state: .free),
+            paywalls: RecordingPaywallPresenter(),
+            isGatingEnabled: false
         )
         return (viewModel, watchSync, context)
     }

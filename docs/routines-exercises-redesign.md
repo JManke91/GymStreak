@@ -30,6 +30,7 @@ v2 only redesigns the **routine detail**; the Routinen list, Übungen tab, picke
 - **"Alle Routinen"** section: the remaining routines as regular `RoutineCardView`s (inline circular play button).
 - Each card is a `NavigationLink(value: routine.id)` → `RoutineDetailView`, resolved via `.navigationDestination(for: UUID.self)`. A `contextMenu` offers Duplicate / Delete.
 - Dashed "Neue Routine" tile → `CreateRoutineView` (unchanged flow).
+- **Pro routine cap (2026-08-15).** All three create affordances (header `+`, dashed tile, empty-state button) now go through `RoutinesViewModel.requestAddRoutine()`, and `duplicateRoutine` returns `Routine?`: at the free-tier cap they raise the `.routineCap` paywall instead. An `OnyxCapNudge` sits above the dashed tile from the last free slot onward and the tile carries an `OnyxProBadge` at the cap. All of it is inert while `ProGating.isEnabled` is `false`, and none of it touches the workout path — starting a workout from any routine is never capped. See `docs/pro-subscription.md` §5c.
 - Start button → `WorkoutViewModel.startWorkout` + `fullScreenCover(ActiveWorkoutView)`.
 
 ### Routine detail (`RoutineDetailView` + `RoutineDetailComponents`)

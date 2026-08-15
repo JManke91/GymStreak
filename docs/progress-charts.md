@@ -190,7 +190,8 @@ covers all four AI-coach aggregators together and is gated behind the AI opt-in.
 | StatCard | `Views/Charts/ChartSupportViews.swift` | Reusable stat card with icon, value, and label |
 | EmptyChartView | `Views/Charts/ChartSupportViews.swift` | Placeholder shown when no workout data exists |
 | SessionCardView | `Views/Charts/ExerciseProgressChartView.swift` | One recent-session card; takes an `ExerciseRecentSession` value, never a `@Model` |
-| ExerciseProgressViewModel | `ViewModels/ExerciseProgressViewModel.swift` | `async load()` behind a generation counter; owns timeframe, metric, selection and the loaded snapshot; computed display properties |
+| ExerciseProgressViewModel | `ViewModels/ExerciseProgressViewModel.swift` | `async load()` behind a generation counter; owns timeframe, metric, selection and the loaded snapshot; computed display properties; owns the **P2 Pro gate** (which metric/window is locked, what a locked selection renders, which paywall it raises) |
+| ChartGatingPolicy | `Domain/Services/ChartGatingPolicy.swift` | **Pure, isolation-agnostic.** Which metrics and windows the free tier may read, from `ProFeatureCaps` — plus the widest free window a lapsed user's chart clamps back to |
 | ExerciseProgressModels | `Domain/Models/ExerciseProgressModels.swift` | Domain values: ChartTimeframe, ProgressMetric, ExerciseProgressDataPoint, ExerciseProgressData, **ExerciseRecentSession**, **ExerciseProgressSnapshot**, SelectedDataPoint. The four that cross the actor boundary are explicitly `Sendable`. |
 | ExerciseProgressAggregator | `Domain/Services/ExerciseProgressAggregator.swift` | **Pure, isolation-agnostic** chart + recent-session aggregation. `matches(_:exerciseId:exerciseName:nameIsUnique:)` resolves workout exercises to the chart target — an exact `exerciseId` match, OR a legacy row with `exerciseId == nil` whose name matches case-insensitively **and only when the name is unique in the live library**. Without the fallback, workouts logged before `WorkoutExercise.exerciseId` existed would be invisible and progress would look frozen; without the uniqueness gate, same-named equipment variants would double-count. |
 | SwiftDataHistorySnapshotStore | `Data/History/SwiftDataHistorySnapshotStore.swift` | `@ModelActor` that performs the fetch and calls the aggregator off the main actor. `SwiftDataHistorySnapshotProvider.fetchExerciseProgress` is the `@concurrent` entry point. |
@@ -223,7 +224,7 @@ exercise's selected chart range lacks a snapshot, the chart safely falls back to
 
 ## Chart Interaction
 
-- **Timeframe selection**: 1W, 1M, 3M, 1Y, All — filters data and adapts X-axis date granularity. Changing it changes `viewModel.loadKey`, so `.task(id:)` cancels the in-flight load and starts a new one. The recent-session list is deliberately **all-time** and unaffected by the range, matching the pre-existing behaviour.
+- **Timeframe selection**: 1W, 1M, 3M, 1Y, All — filters data and adapts X-axis date granularity. Changing it changes `viewModel.loadKey` (via `chartTimeframe` — see "Pro gating" below), so `.task(id:)` cancels the in-flight load and starts a new one. The recent-session list is deliberately **all-time** and unaffected by the range, matching the pre-existing behaviour.
 - **Metric switching**: Segmented picker switches chart data without reloading (all metrics pre-fetched)
 - **Info popover**: ⓘ button next to metric picker shows metric description
 - **Data point tap**: Tap on chart area finds nearest data point, shows floating annotation with exact value + date. Tap empty area to dismiss. Selection clears on metric/timeframe/exercise change.
@@ -232,3 +233,29 @@ exercise's selected chart range lacks a snapshot, the chart safely falls back to
 
 - **Y-axis**: Compact number formatting with "kg" unit (e.g., "85 kg", "1.2k kg")
 - **X-axis**: Timeframe-adaptive date labels (days for 1W, weeks for 1M, months for 3M/1Y, months+year for All)
+
+## Pro gating (P2)
+
+While `ProGating.isEnabled` is `false` — which is how the app ships until ticket 15 of
+`.scratch/pro-entitlements/` — **none of this is active and the screen behaves exactly as described
+above**. With gating on, a free user reads max weight over 1W / 1M / 3M; estimated 1RM, total
+volume, 1Y and All are Pro. The rules live in `ChartGatingPolicy` and the full rationale in
+`docs/pro-subscription.md` §5d; what matters for this screen:
+
+- The metric tabs and the range pills **stay interactive** while the chart is locked. Only the
+  chart headline and the chart itself sit inside `.proLocked`, which disables what it blurs — a
+  user who could not switch back would be trapped behind the blur.
+- Selecting a Pro-only metric or window still *selects* it (the tab/pill highlights) and raises
+  `.chartMetric` / `.chartWindow`. Locked options carry an `OnyxProBadge(style: .icon)` so the gate
+  is honest before the tap.
+- **A locked window is previewed, never fetched.** `loadKey` and `load()` key off
+  `chartTimeframe`, not `selectedTimeframe`: while a Pro-only window is selected the chart keeps
+  drawing the last window the user is entitled to, so the blurred preview costs exactly what the
+  free path costs. A locked *metric* costs nothing either — every `ExerciseProgressDataPoint`
+  already carries all three values from the one fetch.
+- The PR and Trend stat cards fall back to the free metric while the selected one is locked, so no
+  Pro number is printed in plain text beside the blurred chart.
+- Entitlement changes are live: the gate reads the `@Observable` provider during `body`, so a
+  purchase unblurs the chart and reloads the wider window through the existing `.task(id:)` with no
+  refresh gesture, and a lapse blurs it and clamps the rendered window back to 3M. No workout,
+  session or set is ever hidden in any entitlement state.

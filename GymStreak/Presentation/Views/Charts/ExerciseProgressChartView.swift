@@ -36,7 +36,9 @@ struct ExerciseProgressChartView: View {
             exerciseName: exerciseName,
             exerciseId: exerciseId,
             availableExercises: availableExercises,
-            snapshotProvider: dependencies.historySnapshotProvider
+            snapshotProvider: dependencies.historySnapshotProvider,
+            proEntitlements: dependencies.proEntitlements,
+            paywalls: dependencies.paywalls
         )
     }
 }
@@ -62,7 +64,9 @@ private struct ExerciseProgressChartViewInternal: View {
         exerciseName: String,
         exerciseId: UUID?,
         availableExercises: [ExerciseWithHistory],
-        snapshotProvider: HistorySnapshotProviding
+        snapshotProvider: HistorySnapshotProviding,
+        proEntitlements: any ProEntitlementProviding,
+        paywalls: any PaywallPresenting
     ) {
         self._currentExerciseName = State(initialValue: exerciseName)
         self._currentExerciseId = State(initialValue: exerciseId)
@@ -70,7 +74,9 @@ private struct ExerciseProgressChartViewInternal: View {
         self._viewModel = StateObject(wrappedValue: ExerciseProgressViewModel(
             exerciseName: exerciseName,
             exerciseId: exerciseId,
-            provider: snapshotProvider
+            provider: snapshotProvider,
+            proEntitlements: proEntitlements,
+            paywalls: paywalls
         ))
     }
 
@@ -237,8 +243,17 @@ private struct ExerciseProgressChartViewInternal: View {
     private var chartCard: some View {
         VStack(alignment: .leading, spacing: 14) {
             metricTabs
-            chartHeadline
-            chartContent
+            // Only the readable half is locked (P2): the tabs and the range
+            // pills stay live, because `.proLocked` disables what it blurs and
+            // a user who cannot switch back off a Pro-only selection would be
+            // stuck behind the blur.
+            VStack(alignment: .leading, spacing: 14) {
+                chartHeadline
+                chartContent
+            }
+            .proLocked(viewModel.isChartLocked, placement: viewModel.chartLockPlacement) {
+                viewModel.requestChartUnlock()
+            }
             rangeSelector
         }
         .padding(.horizontal, 12)
@@ -259,17 +274,24 @@ private struct ExerciseProgressChartViewInternal: View {
                     HapticManager.shared.selection()
                     viewModel.updateMetric(metric)
                 } label: {
-                    Text(metric == .maxWeight ? viewModel.selectedMetricTitle : metric.localizedTitle)
-                        .font(.system(size: 13, weight: viewModel.selectedMetric == metric ? .bold : .medium, design: .rounded))
-                        .foregroundStyle(viewModel.selectedMetric == metric ? Color.white : Color.white.opacity(0.45))
-                        .padding(.bottom, 4)
-                        .overlay(
-                            Rectangle()
-                                .fill(viewModel.selectedMetric == metric ? DesignSystem.Colors.tint : Color.clear)
-                                .frame(height: 2)
-                                .padding(.top, 2),
-                            alignment: .bottom
-                        )
+                    HStack(spacing: 4) {
+                        Text(metric == .maxWeight ? viewModel.selectedMetricTitle : metric.localizedTitle)
+                            .font(.system(size: 13, weight: viewModel.selectedMetric == metric ? .bold : .medium, design: .rounded))
+                            .foregroundStyle(viewModel.selectedMetric == metric ? Color.white : Color.white.opacity(0.45))
+                        // Honest before the tap: the tab still works, it just
+                        // leads to a blurred preview and the paywall.
+                        if viewModel.isMetricLocked(metric) {
+                            OnyxProBadge(style: .icon)
+                        }
+                    }
+                    .padding(.bottom, 4)
+                    .overlay(
+                        Rectangle()
+                            .fill(viewModel.selectedMetric == metric ? DesignSystem.Colors.tint : Color.clear)
+                            .frame(height: 2)
+                            .padding(.top, 2),
+                        alignment: .bottom
+                    )
                 }
                 .buttonStyle(.plain)
             }
@@ -340,7 +362,9 @@ private struct ExerciseProgressChartViewInternal: View {
             ProgressChartContent(
                 data: data,
                 metric: viewModel.selectedMetric,
-                timeframe: viewModel.selectedTimeframe,
+                // The window the data actually covers — a Pro-only selection
+                // blurs the last unlocked window rather than fetching a wider one.
+                timeframe: viewModel.chartTimeframe,
                 selectedDataPoint: viewModel.selectedDataPoint,
                 onSelectPoint: { viewModel.selectDataPoint($0, for: viewModel.selectedMetric) },
                 onClearSelection: { viewModel.clearSelection() }
@@ -376,21 +400,26 @@ private struct ExerciseProgressChartViewInternal: View {
                     HapticManager.shared.selection()
                     viewModel.updateTimeframe(timeframe)
                 } label: {
-                    Text(timeframe.localizedTitle)
-                        .font(.system(size: 11, weight: .bold, design: .rounded))
-                        .foregroundStyle(
-                            viewModel.selectedTimeframe == timeframe
-                                ? DesignSystem.Colors.textOnTint
-                                : Color.white.opacity(0.6)
-                        )
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 6)
-                        .background(
-                            viewModel.selectedTimeframe == timeframe
-                                ? DesignSystem.Colors.tint
-                                : Color.clear
-                        )
-                        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                    HStack(spacing: 3) {
+                        Text(timeframe.localizedTitle)
+                            .font(.system(size: 11, weight: .bold, design: .rounded))
+                            .foregroundStyle(
+                                viewModel.selectedTimeframe == timeframe
+                                    ? DesignSystem.Colors.textOnTint
+                                    : Color.white.opacity(0.6)
+                            )
+                        if viewModel.isTimeframeLocked(timeframe) {
+                            OnyxProBadge(style: .icon)
+                        }
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 6)
+                    .background(
+                        viewModel.selectedTimeframe == timeframe
+                            ? DesignSystem.Colors.tint
+                            : Color.clear
+                    )
+                    .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                 }
                 .buttonStyle(.plain)
             }

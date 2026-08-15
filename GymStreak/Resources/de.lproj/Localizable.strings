@@ -50,6 +50,11 @@
 "routines.card_meta" = "%d Übungen · %d Sätze · ~%d min";
 "routines.header_meta" = "%d Routinen · zuletzt %@";
 "routines.last_done.never" = "Noch nie";
+// Placement D — ein Inline-Hinweis, kein Paywall (docs/monetization-strategy.md §8).
+// Die "reached"-Variante nennt bewusst keine Zahlen: Wer Pro hatte, darf mehr
+// Routinen behalten als das Gratis-Limit erlaubt.
+"routines.cap.nudge" = "%1$d von %2$d Routinen belegt";
+"routines.cap.nudge.reached" = "Routinen-Limit erreicht. Mit Gym Streak Pro sind es unbegrenzt viele.";
 "date.today" = "Heute";
 "date.yesterday" = "Gestern";
 

@@ -317,8 +317,12 @@ struct RoutineDetailView: View {
                         Label("routine.rename".localized, systemImage: "pencil")
                     }
                     Button {
-                        HapticManager.shared.success()
-                        viewModel.duplicateRoutine(routine)
+                        // Success only on an actual copy: at the Pro routine cap
+                        // this returns nil and raises the paywall instead, and a
+                        // success haptic for a blocked action is a lie.
+                        if viewModel.duplicateRoutine(routine) != nil {
+                            HapticManager.shared.success()
+                        }
                     } label: {
                         Label("routine.duplicate".localized, systemImage: "plus.square.on.square")
                     }

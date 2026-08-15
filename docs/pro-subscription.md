@@ -1,14 +1,15 @@
 # Pro subscription — entitlement core, Founder grant and RevenueCat
 
-**Status (2026-08-15):** tickets 01, 02, 03, 04 and 05 of `.scratch/pro-entitlements/issues/` are
-implemented. The app knows whether the current user is Pro, every future gate can ask that
+**Status (2026-08-15):** tickets 01, 02, 03, 04, 05, 06 and 07 of `.scratch/pro-entitlements/issues/`
+are implemented. The app knows whether the current user is Pro, every future gate can ask that
 question through one abstraction, users who installed before monetization are permanently granted
 Pro, the entitlement is now backed by **RevenueCat** — purchases against the Test Store work
 end to end — anything in the app can ask for a paywall at a named placement without knowing
 what a paywall looks like, and the three visual treatments the gates share exist as design-system
-components. But **nothing is gated yet**, no shipping code raises a paywall, nothing yet uses the
-lock kit, the only purchase entry point is DEBUG-only, and the global gating switch ships **off**.
-In a release build the shipped app behaves exactly as it did before.
+components. The first two gates are wired: the three-routine cap (§5c) and progress-analytics
+gating (§5d). But the only purchase entry point is DEBUG-only, and the global gating switch ships
+**off** — so in a release build the shipped app still behaves exactly as it did before, gates
+included.
 
 `docs/monetization-strategy.md` is the *why* (what gets gated, at which cap, and the promises in
 §1 that constrain all of it). This file is the *how* — the shipped implementation. It grows with
@@ -43,7 +44,9 @@ ticket 13 (the full runbook) and ticket 14 (the paywall).
 | Pro marker for gated entry points | `OnyxProBadge` | `Presentation/Views/DesignSystem/` |
 | §8 placement D allowance hint | `OnyxCapNudge` | `Presentation/Views/DesignSystem/` |
 | Debug placement section | `DebugPaywallSectionView` (`#if DEBUG`) | `Presentation/Views/Settings/Components/` |
-| Tests | `ProEntitlementTests`, `FounderStatusTests`, `PaywallPlacementTests`, `PaywallPresentationTests` | `GymStreakTests/` |
+| P1 — routine cap rules | `RoutineCapPolicy` | `Domain/Services/` |
+| P2 — analytics gate rules | `ChartGatingPolicy` | `Domain/Services/` |
+| Tests | `ProEntitlementTests`, `FounderStatusTests`, `PaywallPlacementTests`, `PaywallPresentationTests`, `RoutineCapTests`, `ChartGatingTests` | `GymStreakTests/` |
 
 Wiring: `AppDependencies` builds one `ProEntitlementProvider`, hands it a `FounderStatusService`
 and a `RevenueCatPurchaseGateway`, and exposes it as `proEntitlements` (and, in DEBUG only, the
@@ -569,6 +572,142 @@ at `.accessibility1`. Note that the Onyx palette is **fixed dark** — `DesignSy
 literal values, not asset-catalog appearances — so the light previews confirm the components do
 not depend on the environment's colour scheme, not that a light theme exists.
 
+## 5c. P1 — the three-routine cap
+
+The first shipped gate (`monetization-strategy.md` §4.2a P1, §4.4). A free user may hold
+`ProFeatureCaps.freeRoutineLimit` saved routine templates; asking for another raises
+`.routineCap`.
+
+**What is counted, and what is never counted.** The unit is a **saved routine template**.
+Starting a workout from any routine is unlimited, always — the cap is on programming, never on
+training. This is why the gate lives at the *creation entry points* and nowhere near
+`WorkoutViewModel`: there is no cap check anywhere on the workout path, by construction.
+
+**Lapse behaviour is the load-bearing rule** (§7's table, Rule 4). A user who built six routines
+as a subscriber and then lapsed keeps all six, fully usable, editable and trainable. Nothing is
+auto-deleted, hidden, made read-only, or reordered. `isRoutineCapReached` is
+`count >= limit`, so it is simply `true` for that user — and *only* the two creation paths
+consult it. `RoutineCapTests` asserts the six routines survive the entitlement dropping to
+`.free`, that one of them can still be renamed and saved afterwards, and that creation is the
+only thing refused.
+
+**Where the decision lives.** Split in two. The *rules* are `Domain/Services/RoutineCapPolicy.swift`
+— pure functions over three scalars (`routineCount`, `isPro`, `isGatingEnabled`) plus an
+overridable `limit`, returning `isCapReached` and a `NudgeState` (`.approaching` / `.reached` /
+`nil`). It produces **no user-facing text**: copy is Presentation's, and `Domain/` holds no
+localization keys. Being pure is what lets the boundary math — including the retune §4.4 expects —
+be asserted without a SwiftData container.
+
+The *inputs and the copy* are `RoutinesViewModel`'s: it already holds the routine list, so the
+count is free, and per Hard rule 3 a view does not get to decide whether persistence is allowed.
+It takes `ProEntitlementProviding` and `PaywallPresenting` by init from `AppDependencies` (never
+`.shared`), plus `isGatingEnabled` defaulted to `ProGating.isEnabled` — injected for the same
+reason `PaywallPresenter` injects it: with the shipped flag baked in, every cap test would pass by
+proving the gate is inert rather than that it is correct.
+
+**Three affordances, one entry point.** The list header's "+", the dashed create tile and the
+empty state all call `requestAddRoutine()`, which either opens the create flow or calls
+`paywalls.present(.routineCap)`. **Duplication is creation**, so the check sits *inside*
+`duplicateRoutine(_:)` — which now returns `Routine?` — rather than in a wrapper the two menu
+call sites could forget to use. `RoutineDetailView`'s menu consequently fires its success haptic
+*after* a non-`nil` result: a success haptic for a blocked action is a lie.
+
+**The gate fires before the work, not at the save.** Refusing a routine the user has just spent
+five minutes building is a worse experience than never opening the flow, so nothing in the
+creation path itself is gated: `createRoutine(name:pendingExercises:)` always saves. A user who
+entered the flow under the cap and crossed it mid-flight (watch sync, iCloud) keeps their work —
+covered by `inFlightCreationIsNeverLost`.
+
+**The nudge (§8 placement D).** `routineCapNudge` returns a `RoutineCapNudge` value struct —
+finished string, `used`, `limit` — or `nil`. It appears on the last free slot ("2 of 3 routines
+used") and *stays* once the cap is reached, which is exactly what removes the surprise from the
+gate. The at-cap copy (`routines.cap.nudge.reached`) is deliberately **number-free**: a lapsed
+user can be at 6 of 3, and "all 3 used" would be a visible lie. At the cap the dashed create tile
+also carries an `OnyxProBadge(style: .icon)`, so the gate is honest before the tap.
+
+It is a **computed** property, not stored state refreshed in `fetchRoutines()`. Reading the
+`@Observable` entitlement provider inside it — during the list's `body` evaluation — is what makes
+a purchase or a lapse remove or restore the nudge live, with no refetch; stored state would go
+stale until the next fetch. It stays inside the main-thread rules because it counts nothing
+(`routines.count` on an array the ViewModel already holds), allocates no formatter, and touches no
+SwiftData relationship. `nudgeFollowsTheEntitlement` is the regression test for the live half.
+
+**With the kill switch off nothing changes** — no nudge, no badge, no gate, no paywall — which is
+its own test (`killSwitchOffBehavesAsBefore`) rather than an inspection.
+
+Strings: `routines.cap.nudge` and `routines.cap.nudge.reached`, en + de.
+
+## 5d. P2 — progress analytics gating
+
+The second shipped gate (`monetization-strategy.md` §4.2a P2, §3 Rule 2, §5 history retention,
+§7 lapse behaviour). A free user charts `ProFeatureCaps.freeChartMetric` (max weight) over
+`ProFeatureCaps.freeChartTimeframes` (1W / 1M / 3M). Estimated 1RM, total volume, 1Y and All render
+as a **blurred preview of the user's own real data** with an unlock CTA, and raise `.chartMetric` /
+`.chartWindow` respectively. The one surface is the exercise detail screen
+(`ExerciseProgressChartView`) — `docs/progress-charts.md` documents the screen itself.
+
+**Nothing is hidden, ever.** This gate narrows an *analytics view* and touches no persistence:
+every workout, session and set stays readable in the History tab and in the recent-sessions list
+below the chart, in every entitlement state. That is Rule 4 and §5's history-retention position —
+Hevy caps the analytics window at three months but never deletes logs, and so do we.
+
+**Where the decision lives.** Split like P1. The *rules* are `Domain/Services/ChartGatingPolicy.swift`
+— pure functions over `isPro` and `isGatingEnabled` plus overridable caps, returning `isMetricLocked`,
+`isTimeframeLocked` and `widestFreeTimeframe()`. No user-facing text: the lock copy comes from
+`PaywallPlacement.headlineKey`, so this gate added **no new localized strings at all**.
+The *inputs* are `ExerciseProgressViewModel`'s — it takes `ProEntitlementProviding`,
+`PaywallPresenting` and an injected `isGatingEnabled` (defaulted to `ProGating.isEnabled`) by init
+from `AppDependencies`, threaded through `ExerciseProgressChartView`'s public wrapper. The gate
+predicates are read during the chart's `body`, deliberately: `proEntitlements` is `@Observable`, so
+a purchase or a lapse re-evaluates the whole gate with no refetch and no app restart.
+
+**A locked window is previewed, not fetched — this is the load-bearing rule.** §5b's contract says
+locked content must be cheap to render, because a blur keeps paying the full render cost while
+showing nothing, and this screen is the one that already produced a measured 630 ms hang
+(`docs/history-performance.md`). So the view model separates the *selection* from the *rendered
+window*:
+
+- `selectedTimeframe` is what the pills highlight — a Pro-only window really is selected.
+- `chartTimeframe` is what the chart draws, and it is what `loadKey` (and therefore the screen's
+  `.task(id:)`) keys off. While a Pro-only window is selected it stays on `lastUnlockedTimeframe`,
+  so tapping 1Y issues **no fetch at all** and blurs the window the user is entitled to.
+- After a lapse `lastUnlockedTimeframe` can itself be Pro-only (it was picked while entitled), so it
+  is clamped to `ChartGatingPolicy.widestFreeTimeframe()` — otherwise a lapsed user's chart would
+  keep fetching a year of history purely to blur it. "Widest" reads `ChartTimeframe.allCases` as
+  narrowest-first; `widestFreeWindowIsThreeMonths` pins that so reordering the enum cannot silently
+  narrow every lapsed chart.
+
+A locked **metric** costs nothing by construction: `ExerciseProgressDataPoint` already carries
+`maxWeight`, `estimated1RM` and `totalVolume` from the single aggregation pass, so switching to a
+locked metric selects a value that was computed either way — no second series, no second fetch.
+
+**What is locked, and what must not be.** Only the chart headline and the chart content sit inside
+`.proLocked`. The metric tabs and the range pills stay outside it, because `.proLocked` *disables*
+what it blurs (§5b) — locking the whole card would leave a user unable to switch back off a
+Pro-only selection and trapped behind the blur. Locked options carry `OnyxProBadge(style: .icon)`,
+so the gate is honest before the tap rather than only after it.
+
+**The stat triple falls back to the free metric.** PR and Trend are metric-derived, and printing an
+estimated-1RM personal record in plain text directly above its own blurred chart would hand over
+the number the gate is selling. `statMetric` returns the free metric while the selection is locked,
+which for a free user on a free selection is simply the selection — i.e. unchanged from before the
+gate existed. The third card (workout count) is metric-independent and untouched.
+
+**With the kill switch off nothing changes** — no badge, no blur, no paywall, and `chartTimeframe`
+is exactly `selectedTimeframe` — which is its own test (`killSwitchOffBehavesAsBefore`) rather than
+an inspection.
+
+**Deliberately not built:** no cap nudge (§8 placement D) for this gate. There is no allowance to
+count down — a metric or a window is either readable or blurred — and the badge on the locked
+option already removes the surprise.
+
+**Known cosmetic consequences, both accepted.** On a *selected* locked range pill the badge's tint
+capsule sits on the pill's own tint background, so the capsule shape disappears and only the black
+lock glyph reads (contrast is unaffected — it is `textOnTint` on tint either way). And a locked
+pill highlights as selected while the chart under the blur is the last unlocked window, so the
+visible selection and the previewed data disagree; that is the price of not widening the fetch, and
+the blur is what makes it invisible.
+
 ## 6. The debug surfaces
 
 Settings shows three DEBUG-only sections. The first two are backed by the single
@@ -623,6 +762,38 @@ the sheet appears is exactly what the in-memory fired set in §5a exists for.
   Each gate still owns its own nudge copy (`OnyxCapNudge` takes localized text), so a gate that
   adds a cap nudge adds one en + de string pair with it. **What a gate blurs must be a precomputed
   preview**, never a live-aggregating chart body — see the contract in §5b.
+- **Gate tests reuse `GymStreakTests/Support/ProGatingTestDoubles.swift`** — `StubProEntitlements`
+  (a pinned, mutable entitlement) and `RecordingPaywallPresenter` (records what a gate asked for
+  and presents nothing). A gate's tests are about *what it asks for*; the eligibility rules belong
+  to `PaywallPresenter` and are covered once, in `PaywallPresentationTests`, which keeps its own
+  private doubles because it is testing the real presenter rather than standing in for one.
+- **The routines list is still a non-lazy `VStack` + `ForEach` inside a `ScrollView`**
+  (`RoutinesView.routineList`). Pre-existing and untouched by ticket 06 — the cap nudge is a
+  single sibling view, not per-row work — but it violates the first main-thread rule and every row
+  is a `RoutineCardView` taking a `@Model` object. It is bounded by the cap only for free users;
+  a Pro user with thirty routines pays for all thirty on every render. Worth a `LazyVStack` and a
+  display struct in its own change.
+- **The `.proLocked` lock card is not clipped to the content it covers.** `OnyxProLockOverlay`
+  applies `.clipped()` to the blurred content *before* overlaying the card, so at accessibility
+  Dynamic Type sizes the card (icon + headline + subtitle + CTA + `Spacing.lg`) can be taller than
+  the region it locks and spill over the neighbouring views. On the chart screen it cannot trap
+  anyone — `rangeSelector` is a later sibling in the same `VStack`, so it draws on top and wins hit
+  testing — but the overlap wants an eyeball at `.accessibility3+`, and every future gate inherits
+  it. The fix belongs in the kit, not at a call site.
+- **`ExerciseProgressChartView.swift` (819 lines) and `ExerciseProgressViewModel.swift` (306) are
+  both over the 300-line convention.** Accepted for P2: the change adds only in-place edits (two
+  badge insertions and one `.proLocked` wrap) and roughly half of the view model's growth is doc
+  comments. The natural split, if one is ever wanted, is a `ChartCardControls` view holding the two
+  lock-aware controls (`metricTabs`, `rangeSelector`) and an `ExerciseProgressViewModel+ProGate`
+  extension.
+- **`ChartTimeframePicker` (`Presentation/Views/Charts/`) is ungated, and currently unused.** The
+  shipped range selector is `ExerciseProgressChartView.rangeSelector`; that separate segmented
+  picker has no call site today. If it is ever adopted it needs the same `isTimeframeLocked` /
+  badge treatment, or it becomes an unlocked back door to the 1Y and All windows. Deleting it would
+  close the hole outright.
+- **P2's gate is per-screen, and the exercise detail screen is the only analytics surface today.**
+  Any future chart that re-derives a window or a metric has to ask `ChartGatingPolicy` rather than
+  read `ProFeatureCaps` at the call site.
 - **Ticket 11 owns the *triggers* for A and B**, not their suppression: `hasPresented(_:)` and the
   automatic once-ever record already exist, so ticket 11 only has to decide *when* "first routine
   created" and "third completed workout / first overload suggestion" have happened.
@@ -635,6 +806,15 @@ the sheet appears is exactly what the in-memory fired set in §5a exists for.
   reading of Rule 3 (§8 has no "show it afterwards" clause), but it means a contextual gate hit
   during a session produces no upsell at all. If a queue is ever wanted, it belongs in the
   presenter — never at a call site.
+- **A gate cannot tell that its request was dropped, and that leaves a silent tap.** `present(_:)`
+  returns `Void` by design (§5a), so when the presenter suppresses a request — Rule 3, or a paywall
+  already on screen — a gated affordance blocks with no feedback at all. On the routines list the
+  cap nudge is visible and explains it, but the two *duplicate* menus (`RoutinesView` context menu,
+  `RoutineDetailView` "…" menu) have no nudge beside them, so at the cap a tap can do nothing
+  visible. Narrow in practice (both suppressions need a workout or a paywall already up) and
+  accepted for ticket 06, because the alternative changes the shared seam for all nine gates. If it
+  is ever fixed, fix it once: have `present(_:)` report whether the request was honoured, and let
+  each gate fall back to an inline message — never by giving a gate its own sheet.
 - **A paywall raised from inside a full-screen cover is deferred, not dropped.** SwiftUI will not
   put the root's sheet on screen while the coach-chat or opt-in cover is up, but the placement
   stays in `pendingPlacement`, so the likely on-device behaviour is that the paywall appears once
@@ -702,7 +882,8 @@ the sheet appears is exactly what the in-memory fired set in §5a exists for.
 
 ## 8. Verification
 
-- `bundle exec fastlane test_unit` (iOS + watchOS) — green, 2026-08-15, zero Swift warnings. The
+- `bundle exec fastlane test_unit` (iOS + watchOS) — green, 2026-08-15, re-run after P2 (§5d) with
+  zero Swift warnings. The
   watch suite passing is also the check that the watch target still builds without RevenueCat.
 - The Pro lock kit (§5b) carries **no unit tests, deliberately**: three presentational views with
   no logic beyond a clamped fraction. Its evidence is the Debug simulator build, the previews, and
@@ -723,6 +904,23 @@ the sheet appears is exactly what the in-memory fired set in §5a exists for.
   (a fresh presenter over the same defaults); contextual gates repeat; a second request does not
   swap a sheet already on screen, but one that never appeared is replaced rather than wedging the
   seam, and a one-shot raised without appearing is not spent.
+- `RoutineCapTests` (14 tests, 17 cases with parameterization, green 2026-08-15) covers P1 (§5c).
+  Eleven run against the real SwiftData repositories: under the cap, at the cap, duplication,
+  deleting back under, a lapsed user above the cap (routines survive, stay editable, only creation
+  is refused), work already inside the create flow, subscription / lifetime / Founder, the kill
+  switch off, and both nudge states including the nudge following a lapse without a refetch. Three
+  exercise `RoutineCapPolicy` directly, with no container: the boundary at limit 3 **and** 4 (the
+  §4.4 retune), all three nudge states including a lapsed 6-of-3, and both exemptions.
+- `ChartGatingTests` (14 tests, 18 cases with parameterization, green 2026-08-15) covers P2 (§5d),
+  against a stub history provider that records the cutoff every load asked for: the free metric and
+  the three free windows are never locked; each Pro metric and each Pro window locks, stays
+  selectable, and raises its own placement; **a locked window is previewed and not fetched** (the
+  reload asks for the same one-month cutoff, not `distantPast`); a locked metric triggers no second
+  fetch; the stat triple keeps reporting the free metric; Pro, lifetime and Founder see everything;
+  the kill switch off behaves identically to today; resubscribing restores the year window in the
+  load key with nothing migrated; a lapse blurs, clamps the rendered window back to 3M and throws
+  away neither the loaded series nor the recent sessions. Three more exercise `ChartGatingPolicy`
+  directly against explicit caps, for the §4.4 / §11 Q4 retune.
 - `grep -rl "import RevenueCat"` returns exactly one file, `RevenueCatPurchaseGateway.swift`, and
   the pbxproj lists the `RevenueCat` product dependency on the `GymStreak` target only.
 - The watch app genuinely does not link it: in the Release build products, `strings` finds 624

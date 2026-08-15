@@ -50,6 +50,11 @@
 "routines.card_meta" = "%d exercises · %d sets · ~%d min";
 "routines.header_meta" = "%d routines · last %@";
 "routines.last_done.never" = "Never trained";
+// Placement D — an inline hint, never a paywall (docs/monetization-strategy.md §8).
+// The "reached" variant carries no numbers: a lapsed Pro user can hold more
+// routines than the free cap and keeps every one of them.
+"routines.cap.nudge" = "%1$d of %2$d routines used";
+"routines.cap.nudge.reached" = "Routine limit reached. Gym Streak Pro unlocks unlimited routines.";
 "date.today" = "Today";
 "date.yesterday" = "Yesterday";
 

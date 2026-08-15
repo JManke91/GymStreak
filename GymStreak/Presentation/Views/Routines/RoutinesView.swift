@@ -21,7 +21,9 @@ private struct RoutinesViewInternal: View {
         self._viewModel = StateObject(wrappedValue: RoutinesViewModel(
             routineRepository: dependencies.routineRepository,
             workoutSessionRepository: dependencies.workoutSessionRepository,
-            watchSync: dependencies.watchSync
+            watchSync: dependencies.watchSync,
+            proEntitlements: dependencies.proEntitlements,
+            paywalls: dependencies.paywalls
         ))
         self._exercisesViewModel = StateObject(wrappedValue: ExercisesViewModel(
             exerciseRepository: dependencies.exerciseRepository,
@@ -119,9 +121,26 @@ private struct RoutinesViewInternal: View {
                     }
                 }
 
+                // Placement D — the non-blocking allowance hint, right next to
+                // the affordance it explains. Nil for Pro, for Founders and
+                // with the kill switch off.
+                if let nudge = viewModel.routineCapNudge {
+                    OnyxCapNudge(text: nudge.text, used: nudge.used, limit: nudge.limit)
+                        .padding(.top, 2)
+                }
+
                 DashedCreateButton(title: "routines.new".localized) {
                     HapticManager.shared.light()
-                    viewModel.showingAddRoutine = true
+                    viewModel.requestAddRoutine()
+                }
+                // The gate is honest before the tap: at the cap the create tile
+                // is marked as leading somewhere gated.
+                .overlay(alignment: .trailing) {
+                    if viewModel.isRoutineCapReached {
+                        OnyxProBadge(style: .icon)
+                            .padding(.trailing, 14)
+                            .allowsHitTesting(false)
+                    }
                 }
                 .padding(.top, 2)
 
@@ -175,7 +194,7 @@ private struct RoutinesViewInternal: View {
 
             Button {
                 HapticManager.shared.light()
-                viewModel.showingAddRoutine = true
+                viewModel.requestAddRoutine()
             } label: {
                 Image(systemName: "plus")
                     .font(.system(size: 16, weight: .bold))
@@ -209,8 +228,10 @@ private struct RoutinesViewInternal: View {
         } description: {
             Text("routines.empty.description".localized)
         } actions: {
+            // Unreachable at the cap (the empty state means zero routines), but
+            // routed through the same entry point so there is exactly one.
             Button("routines.add".localized) {
-                viewModel.showingAddRoutine = true
+                viewModel.requestAddRoutine()
             }
             .buttonStyle(.onyxProminent)
         }

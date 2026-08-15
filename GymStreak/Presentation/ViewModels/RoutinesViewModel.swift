@@ -1,6 +1,16 @@
 import Foundation
 import SwiftUI
 
+/// Everything the routines list needs to draw the §8 placement D cap nudge,
+/// assembled where the count and the entitlement already live. The view gets a
+/// finished string and two numbers — no formatting, no counting, no entitlement
+/// read in a `body`.
+struct RoutineCapNudge {
+    let text: String
+    let used: Int
+    let limit: Int
+}
+
 @MainActor
 class RoutinesViewModel: ObservableObject {
     @Published var routines: [Routine] = []
@@ -12,6 +22,9 @@ class RoutinesViewModel: ObservableObject {
     private let routineRepository: RoutineRepository
     private let workoutSessionRepository: WorkoutSessionRepository
     private let watchSync: WatchSyncServicing
+    private let proEntitlements: any ProEntitlementProviding
+    private let paywalls: any PaywallPresenting
+    private let isGatingEnabled: Bool
     private var cloudSyncObserver: NSObjectProtocol?
 
     // Watch-workout ingestion lives in WatchWorkoutIngestionCoordinator
@@ -19,14 +32,24 @@ class RoutinesViewModel: ObservableObject {
     // durable inbox before any view/ViewModel exists. This ViewModel only
     // reacts to `.routineTemplateDidChange` (posted by the coordinator after
     // a template update) via observeRoutineTemplateChanges().
+    /// - Parameter isGatingEnabled: injected rather than read from `ProGating`
+    ///   inside the cap checks, for the same reason `PaywallPresenter` injects
+    ///   it: the shipped switch is off, so tests baking it in would prove the
+    ///   gate is inert rather than that it is correct.
     init(
         routineRepository: RoutineRepository,
         workoutSessionRepository: WorkoutSessionRepository,
-        watchSync: WatchSyncServicing
+        watchSync: WatchSyncServicing,
+        proEntitlements: any ProEntitlementProviding,
+        paywalls: any PaywallPresenting,
+        isGatingEnabled: Bool = ProGating.isEnabled
     ) {
         self.routineRepository = routineRepository
         self.workoutSessionRepository = workoutSessionRepository
         self.watchSync = watchSync
+        self.proEntitlements = proEntitlements
+        self.paywalls = paywalls
+        self.isGatingEnabled = isGatingEnabled
         fetchRoutines()
         observeCloudKitChanges()
         observeWatchAvailability()
@@ -162,6 +185,69 @@ class RoutinesViewModel: ObservableObject {
         watchSync.syncRoutines(ordered)
     }
 
+    // MARK: - Routine cap (P1)
+    //
+    // The rules live in `RoutineCapPolicy`; this end owns only the inputs (the
+    // routine count and the live entitlement) and the copy. The cap is consulted
+    // at the creation entry points and nowhere else — per §7's lapse table a
+    // user who dropped from Pro keeps every routine they made, fully usable and
+    // trainable, and starting a workout is never capped at all.
+
+    /// `true` when saving another routine template would go past the free cap.
+    /// Also `true` for a lapsed user sitting above it — they keep what they
+    /// have, they just cannot add to it.
+    var isRoutineCapReached: Bool {
+        RoutineCapPolicy.isCapReached(
+            routineCount: routines.count,
+            isPro: proEntitlements.isPro,
+            isGatingEnabled: isGatingEnabled
+        )
+    }
+
+    /// The §8 placement D hint, or `nil` when none belongs on screen.
+    ///
+    /// Computed rather than stored so it tracks the entitlement as well as the
+    /// count: `proEntitlements` is `@Observable`, and reading it here — during
+    /// the list's `body` evaluation — is what makes a purchase or a lapse remove
+    /// or restore the nudge without a refetch. It counts nothing and allocates
+    /// no formatter.
+    var routineCapNudge: RoutineCapNudge? {
+        switch RoutineCapPolicy.nudgeState(
+            routineCount: routines.count,
+            isPro: proEntitlements.isPro,
+            isGatingEnabled: isGatingEnabled
+        ) {
+        case .approaching(let used, let limit):
+            return RoutineCapNudge(
+                text: String(format: "routines.cap.nudge".localized, used, limit),
+                used: used,
+                limit: limit
+            )
+        case .reached(let used, let limit):
+            // Deliberately number-free: a lapsed user can be at 6 of 3, and
+            // "all 3 used" would be a lie on that screen.
+            return RoutineCapNudge(
+                text: "routines.cap.nudge.reached".localized,
+                used: used,
+                limit: limit
+            )
+        case nil:
+            return nil
+        }
+    }
+
+    /// The single entry point behind every "new routine" affordance. At the cap
+    /// it raises the `routineCap` paywall instead of opening the create flow —
+    /// the check belongs here, before the user invests work in a routine that
+    /// could not be saved. A user already inside the flow is never interrupted.
+    func requestAddRoutine() {
+        guard !isRoutineCapReached else {
+            paywalls.present(.routineCap)
+            return
+        }
+        showingAddRoutine = true
+    }
+
     func addRoutine(name: String) {
         let routine = Routine(name: name)
         routineRepository.insert(routine)
@@ -262,8 +348,18 @@ class RoutinesViewModel: ObservableObject {
 
     /// Deep-copies a routine (exercises, sets, rep ranges, supersets and
     /// alternatives with their set schemes) under a "(name Copy)" title.
+    ///
+    /// A duplicate is a saved template like any other, so it is capped exactly
+    /// like creation: at the cap this raises the paywall and returns `nil`
+    /// instead of copying. The check lives here rather than at the two menu call
+    /// sites so neither can bypass it.
     @discardableResult
-    func duplicateRoutine(_ routine: Routine) -> Routine {
+    func duplicateRoutine(_ routine: Routine) -> Routine? {
+        guard !isRoutineCapReached else {
+            paywalls.present(.routineCap)
+            return nil
+        }
+
         let copy = Routine(name: String(format: "routine.duplicate.name_format".localized, routine.name))
         routineRepository.insert(copy)
 
