@@ -1,0 +1,2 @@
+- The control between two exercises now reads "Superset" instead of "Link superset"
+- German wording is now consistently "Supersatz" everywhere, including the group badge

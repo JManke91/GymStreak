@@ -27,7 +27,17 @@ class WorkoutViewModel: ObservableObject {
     /// an invalidation token for its actor-owned read model; it deliberately does not retain or
     /// synchronously fetch the entire SwiftData history on MainActor.
     @Published private(set) var historyVersion = 0
-    @Published var currentSession: WorkoutSession?
+    /// Setting or clearing this *is* "a workout is running", so the app-wide
+    /// flag Rule 3 reads is kept in step here rather than at the three call
+    /// sites that start, finish and discard a session.
+    @Published var currentSession: WorkoutSession? {
+        didSet {
+            // Both instances write the one shared flag, so a nil-to-nil write on
+            // the instance that owns no session must not clear the other's.
+            guard currentSession != nil || oldValue != nil else { return }
+            activeWorkout?.setWorkoutActive(currentSession != nil)
+        }
+    }
     @Published var elapsedTime: TimeInterval = 0
     @Published var currentExerciseIndex: Int = 0
     @Published var currentSetIndex: Int = 0
@@ -98,6 +108,11 @@ class WorkoutViewModel: ObservableObject {
     private let recovery: WorkoutRecoveryCoordinating?
     private var recoverableWorkoutsObserver: NSObjectProtocol?
 
+    /// The app-wide workout flag this ViewModel keeps up to date, so the paywall
+    /// presenter can refuse to present inside a session (§8 Rule 3). Optional
+    /// because unit-test instances have no app to report to.
+    private let activeWorkout: (any ActiveWorkoutReporting)?
+
     /// Pre-apply values captured when progressive overload is applied, keyed by
     /// WorkoutExercise.id, so the completion screen can offer Undo. In-memory
     /// only — undo is available while the session is still open.
@@ -139,6 +154,7 @@ class WorkoutViewModel: ObservableObject {
         restTimerLiveActivity: RestTimerLiveActivityPresenting,
         routineTemplateSync: RoutineTemplateSyncService,
         recovery: WorkoutRecoveryCoordinating? = nil,
+        activeWorkout: (any ActiveWorkoutReporting)? = nil,
         aiCoachCache: AICoachCaching? = nil,
         now: @escaping () -> Date = Date.init
     ) {
@@ -151,6 +167,7 @@ class WorkoutViewModel: ObservableObject {
         self.restTimerLiveActivity = restTimerLiveActivity
         self.routineTemplateSync = routineTemplateSync
         self.recovery = recovery
+        self.activeWorkout = activeWorkout
         self.aiCoachCache = aiCoachCache ?? AICoachCache.shared
         self.now = now
         restTimerLiveActivity.dismissExpiredActivities()

@@ -60,7 +60,7 @@
 "routine.rename" = "Umbenennen";
 "routine.section.sets" = "Sätze";
 "routine.sort" = "Sortieren";
-"routine.sort_hint" = "Ziehen zum Umsortieren · Supersets bleiben zusammen · Papierkorb zum Entfernen";
+"routine.sort_hint" = "Ziehen zum Umsortieren · Supersätze bleiben zusammen · Papierkorb zum Entfernen";
 "routine.exercise_removed" = "Übung entfernt";
 "routine.set_scheme.uniform" = "%d × %d Wdh. · %@";
 "routine.set_scheme.mixed" = "%d Sätze · max %@";
@@ -536,8 +536,8 @@
 "superset.dissolve_named" = "Supersatz %@ auflösen";
 "superset.create_with" = "Supersatz erstellen mit...";
 "superset.add_to" = "Zu Supersatz %@ hinzufügen";
-"superset.link_exercises" = "Übungen als Supersatz verknüpfen";
-"superset.link_action" = "Verknüpfen";
+"superset.link_exercises" = "Supersatz erstellen";
+"superset.link_action" = "Supersatz";
 "superset.unlink_between" = "Supersatz zwischen %1$@ und %2$@ trennen";
 "superset.selected_count" = "%d ausgewählt";
 "superset.edit" = "Supersatz bearbeiten";
@@ -1053,5 +1053,18 @@
 "rest_timer.extend" = "+30s";
 "rest_timer.next" = "Weiter";
 "rest_timer.expand_hint" = "Tippen für den großen Timer";
-"superset.label" = "Superset %@";
+"superset.label" = "Supersatz %@";
 "superset.exercise_count" = "(%d Übungen)";
+
+// MARK: - Pro paywall placements (docs/monetization-strategy.md §8)
+// Placement C must name the specific capability being unlocked, never "Go Pro".
+"paywall.headline.first_routine_created" = "Hol mehr aus Gym Streak heraus";
+"paywall.headline.value_moment" = "Dein Fortschritt, freigeschaltet";
+"paywall.headline.routine_cap" = "Unbegrenzte Routinen";
+"paywall.headline.chart_metric" = "Alle Fortschritts-Metriken";
+"paywall.headline.chart_window" = "Deine gesamte Trainingshistorie";
+"paywall.headline.coach_chat" = "Unbegrenzter Coach-Chat";
+"paywall.headline.period_recap" = "Unbegrenzte Rückblicke";
+"paywall.headline.exercise_deep_dive" = "Unbegrenzte Übungs-Analysen";
+"paywall.headline.weekday_schedule" = "Wochentag-Zeitpläne";
+"paywall.placeholder.body" = "Gym Streak Pro ist noch nicht verfügbar.";

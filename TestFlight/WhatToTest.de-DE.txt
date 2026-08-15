@@ -1,0 +1,2 @@
+- Die Schaltfläche zwischen zwei Übungen heißt jetzt „Supersatz" statt „Verknüpfen"
+- Die deutsche App sagt jetzt durchgehend „Supersatz" statt „Superset", auch beim Gruppen-Badge

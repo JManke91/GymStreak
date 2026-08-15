@@ -1,12 +1,13 @@
 # Pro subscription — entitlement core, Founder grant and RevenueCat
 
-**Status (2026-08-15):** tickets 01, 02 and 03 of `.scratch/pro-entitlements/issues/` are
+**Status (2026-08-15):** tickets 01, 02, 03 and 04 of `.scratch/pro-entitlements/issues/` are
 implemented. The app knows whether the current user is Pro, every future gate can ask that
 question through one abstraction, users who installed before monetization are permanently granted
-Pro, and the entitlement is now backed by **RevenueCat** — purchases against the Test Store work
-end to end. But **nothing is gated yet**, the only purchase entry point is DEBUG-only, and the
-global gating switch ships **off**. In a release build the shipped app behaves exactly as it did
-before.
+Pro, the entitlement is now backed by **RevenueCat** — purchases against the Test Store work
+end to end — and anything in the app can ask for a paywall at a named placement without knowing
+what a paywall looks like. But **nothing is gated yet**, no shipping code raises a paywall, the
+only purchase entry point is DEBUG-only, and the global gating switch ships **off**. In a release
+build the shipped app behaves exactly as it did before.
 
 `docs/monetization-strategy.md` is the *why* (what gets gated, at which cap, and the promises in
 §1 that constrain all of it). This file is the *how* — the shipped implementation. It grows with
@@ -31,7 +32,14 @@ ticket 13 (the full runbook) and ticket 14 (the paywall).
 | Dashboard identifiers + API keys | `RevenueCatConfiguration` | `Data/Purchases/` |
 | Debug entitlement picker | `DebugProEntitlementSectionView` (`#if DEBUG`) | `Presentation/Views/Settings/Components/` |
 | Debug Test Store section | `DebugProStoreSectionView` (`#if DEBUG`) | `Presentation/Views/Settings/Components/` |
-| Tests | `ProEntitlementTests`, `FounderStatusTests` | `GymStreakTests/` |
+| Paywall placements (§8 A–C) | `PaywallPlacement` | `Domain/Models/Pro/` |
+| The abstraction gates raise a paywall through | `PaywallPresenting` | `Domain/Interfaces/` |
+| Debug-only presentation surface | `PaywallPresentationDebugging` (`#if DEBUG`) | `Domain/Interfaces/` |
+| App-wide "a workout is running" flag | `ActiveWorkoutReporting` / `ActiveWorkoutRegistry` | `Domain/Interfaces/`, `Data/System/` |
+| Presentation decision + one-shot record | `PaywallPresenter` | `Data/Purchases/` |
+| The stand-in paywall | `PaywallPlaceholderView` | `Presentation/Views/Pro/` |
+| Debug placement section | `DebugPaywallSectionView` (`#if DEBUG`) | `Presentation/Views/Settings/Components/` |
+| Tests | `ProEntitlementTests`, `FounderStatusTests`, `PaywallPlacementTests`, `PaywallPresentationTests` | `GymStreakTests/` |
 
 Wiring: `AppDependencies` builds one `ProEntitlementProvider`, hands it a `FounderStatusService`
 and a `RevenueCatPurchaseGateway`, and exposes it as `proEntitlements` (and, in DEBUG only, the
@@ -407,11 +415,86 @@ a conscious edit in both the code and `monetization-strategy.md`.
 One flag, not one per gate: §9's rollout ships the entitlement layer silently in Phase 1 and flips
 gating on in Phase 2 (ticket 15). A per-gate flag set would make "is gating live?" un-answerable
 at a glance and would allow a half-gated release. A gate reads the switch *and* the entitlement —
-with the switch off, nothing blocks.
+with the switch off, nothing blocks. The paywall presenter reads it too (§5a), so "no gate blocks
+but a paywall still appears" is impossible.
+
+## 5a. The paywall presentation seam
+
+A gate says `paywalls.present(.routineCap)` and is done. It never learns whether a paywall
+appeared, what it looked like, or who drew it.
+
+**Placements, not booleans.** `PaywallPlacement` enumerates the `monetization-strategy.md` §8
+triggers: `firstRoutineCreated` (A), `valueMoment` (B), and the seven contextual gates (C)
+`routineCap`, `chartMetric`, `chartWindow`, `coachChat`, `periodRecap`, `exerciseDeepDive`,
+`weekdaySchedule`. The enum exists in this shape because RevenueCat's **Placements** feature keys
+dashboard-authored paywalls off exactly this kind of identifier
+(`offerings.currentOffering(forPlacement:)`), so ticket 14 hands the case straight to the SDK and
+paywall *content* becomes a dashboard concern while paywall *triggering* stays in code.
+Consequence worth knowing: **`rawValue` is a wire string** (`"routine-cap"`, …). Renaming a case
+without renaming the dashboard Placement does not fail — it silently falls back to the default
+offering.
+
+Each case carries `kind` (§8 row), `isOneShot`, and a `headlineKey`. The headline lives on the
+placement because §8 C demands a gate name the specific thing being unlocked — "Unlimited
+routines", never "Go Pro" — and passing that copy in from the call site would spread one decision
+across nine places. The strings are localized (`paywall.headline.*`, en + de).
+
+Two §8 entries deliberately have **no** case: **placement D** (the cap-approach nudge) is not a
+paywall but an inline hint owned by the screen showing it, and **P7** (custom exercises beyond 3)
+is not a shipped gate — there is no cap constant for it and no gate ticket. Conversely
+`weekdaySchedule` is the one case §8's C row does not spell out: it is P9 in §5's gate matrix, a
+shipped gate, and a contextual placement in every respect.
+
+**All four eligibility rules live in `PaywallPresenter`, not at the call sites:**
+
+1. **The kill switch** — `ProGating.isEnabled`, injected via `isGatingEnabled` rather than read
+   inline, so the eligibility logic stays testable while the shipped switch is off. With the flag
+   baked in, every test would pass for the wrong reason.
+2. **Rule 3, absolute** — no paywall, upsell or Pro badge inside an active workout session (§8).
+   Checked in the one place a presentation can happen, because the failure mode is a
+   rage-uninstall and nine call sites each remembering is not a mechanism. The **debug bypass does
+   not lift it either** — bypassing it would prove the wrong thing.
+3. **The entitlement** — a Pro user, Founder included, is never shown a paywall.
+4. **§8's frequency cap** — A and B fire once each, ever, recorded in `UserDefaults.standard`
+   under `pro.paywallPresented.<identifier>`. Not the App Group suite and not mirrored to iCloud
+   KVS: this is device-local presentation history that neither the widget nor the watch can use,
+   and a reinstall showing the soft placement A once more is the benign outcome.
+   The presenter also keeps the fired set **in memory**, seeded from the defaults at init, and
+   `hasPresented(_:)` answers from that. Not redundancy — `UserDefaults` is not observable, so
+   while the query read it directly, a view rendering from the answer (the debug section's
+   "already fired") only updated on the next launch. Any future UI keyed off a one-shot inherits
+   the fix.
+
+**Raised is not presented, and the difference is load-bearing.** The app root also hosts two
+full-screen covers (the coach chat, the AI opt-in), and a `.sheet` raised while one of them is up
+never reaches the screen. So the presenter tracks the two states separately: `present(_:)` sets
+`pendingPlacement`, and the host reports `didPresent(_:)` from the sheet's `onAppear`. The
+once-ever fire is recorded **there**, not at raise time — a paywall nobody saw does not spend
+placement B, and a request suppressed by Rule 3 is not burned either. For the same reason, the
+"don't swap a sheet mid-presentation" guard keys off *presented*, not *pending*: a placement the
+host could not show is replaced by the next request instead of wedging the seam for the rest of
+the session. This matters concretely for ticket 08 — `.coachChat` is by definition raised from
+inside the coach-chat cover.
+
+**Where "a workout is running" comes from.** There are two `WorkoutViewModel` instances (Routines
+and History), each owning its own HealthKit session, so no ViewModel can answer that question for
+the app. `ActiveWorkoutRegistry` holds the single flag; `WorkoutViewModel` keeps it in step from
+`currentSession`'s `didSet` — that property *is* the session's lifetime, so the three call sites
+that start, finish and discard a workout cannot forget. The registry is deliberately not
+`@Observable`: nothing renders from it, the presenter asks at the instant a paywall is requested.
+
+**Hosting.** `ContentViewInternal` owns the one `.sheet(item:)` bound to the presenter's
+`pendingPlacement`, so a gate anywhere raises a paywall without its screen owning a sheet. A
+second request while one is **on screen** is ignored rather than swapping the sheet's contents (a
+request that never appeared is replaced instead — see above). What it shows
+today is `PaywallPlaceholderView` — headline, no offer, dismiss — because there is no purchase
+surface in a shipping build until ticket 14 replaces this view with a RevenueCat paywall. No
+caller changes when it does.
 
 ## 6. The debug surfaces
 
-Settings shows two DEBUG-only sections, both backed by the single `ProEntitlementDebugging`
+Settings shows three DEBUG-only sections. The first two are backed by the single
+`ProEntitlementDebugging`
 protocol — one seam, because they answer one question: *what is this build reporting as Pro, and
 why*.
 
@@ -443,8 +526,40 @@ already-localized titles and prices (nothing above `Data/` ever formats a curren
 buttons while a purchase is in flight, and reports a failure in the footer. **Cancelling clears the
 failure instead of setting one**, which is the visible half of "`userCancelled` is not an error".
 
+**Debug — Paywall placements.** One row per §8 placement with a Show button, plus "Reset
+once-ever placements".
+
+It goes through `presentIgnoringEligibility`, because the shipped `present(_:)` is inert while the
+kill switch is off — which is how the app ships until ticket 15 — so the ordinary path would draw
+nothing during development. It bypasses the switch, the entitlement and the once-ever cap;
+**Rule 3 still holds**. Each one-shot row states whether the record says it already fired, since
+otherwise "nothing happened" and "already spent" look identical — and that row updating the moment
+the sheet appears is exactly what the in-memory fired set in §5a exists for.
+
 ## 7. Known follow-ups for the gate tickets
 
+- **The gate tickets (06–11) must call `paywalls.present(_:)`**, not build their own sheet. The
+  presenter is where §8's prohibitions are enforced; a screen-owned paywall sheet re-opens every
+  hole §5a closes.
+- **Ticket 11 owns the *triggers* for A and B**, not their suppression: `hasPresented(_:)` and the
+  automatic once-ever record already exist, so ticket 11 only has to decide *when* "first routine
+  created" and "third completed workout / first overload suggestion" have happened.
+- **The placement `rawValue`s must exist as Placements in the RevenueCat dashboard** before ticket
+  14 fetches offerings for them, or every placement silently serves the default offering.
+- **`PaywallPlaceholderView` ships in release builds** but is unreachable there while the kill
+  switch is off. Ticket 14 replaces its body with a RevenueCat paywall; the host, the binding and
+  every caller stay as they are.
+- **A paywall raised while a workout is running is dropped, not deferred.** That is the intended
+  reading of Rule 3 (§8 has no "show it afterwards" clause), but it means a contextual gate hit
+  during a session produces no upsell at all. If a queue is ever wanted, it belongs in the
+  presenter — never at a call site.
+- **A paywall raised from inside a full-screen cover is deferred, not dropped.** SwiftUI will not
+  put the root's sheet on screen while the coach-chat or opt-in cover is up, but the placement
+  stays in `pendingPlacement`, so the likely on-device behaviour is that the paywall appears once
+  the cover closes — not that nothing happens. (Contrast Rule 3, which genuinely drops the
+  request: `show(_:)` returns without setting anything.) **Ticket 08 must check what `.coachChat`
+  actually does on device.** If deferral reads badly there, host a second sheet inside the cover —
+  the presenter stays exactly as it is, a second host just reads the same `pendingPlacement`.
 - `ProGating.isEnabled` being a `static let false` does **not** produce unreachable-branch
   warnings at a gate call site — verified with `swiftc -swift-version 6 -typecheck` on
   `if ProGating.isEnabled { … }` (2026-08-15). Swift only warns on a literal `if false`, not on
@@ -508,7 +623,17 @@ failure instead of setting one**, which is the visible half of "`userCancelled` 
 - `bundle exec fastlane test_unit` (iOS + watchOS) — green, 2026-08-15, zero Swift warnings. The
   watch suite passing is also the check that the watch target still builds without RevenueCat.
 - Release-configuration build of the `GymStreak` scheme — succeeds, i.e. the DEBUG-only surface
-  (picker *and* store section) compiles out cleanly.
+  (picker, store section *and* placement section) compiles out cleanly. Re-verified 2026-08-15
+  after the paywall seam landed, zero Swift warnings.
+- `PaywallPlacementTests` + `PaywallPresentationTests` (18 tests, green 2026-08-15) cover the
+  taxonomy and all four
+  eligibility rules: every placement has a localized headline key that actually resolves; only A
+  and B are one-shot; **nothing presents during an active workout, including on the debug bypass**;
+  a one-shot suppressed by Rule 3 is not spent; with gating off no placement presents; a Pro user
+  and a Founder are never paywalled; a one-shot fires once and the record survives a relaunch
+  (a fresh presenter over the same defaults); contextual gates repeat; a second request does not
+  swap a sheet already on screen, but one that never appeared is replaced rather than wedging the
+  seam, and a one-shot raised without appearing is not spent.
 - `grep -rl "import RevenueCat"` returns exactly one file, `RevenueCatPurchaseGateway.swift`, and
   the pbxproj lists the `RevenueCat` product dependency on the `GymStreak` target only.
 - The watch app genuinely does not link it: in the Release build products, `strings` finds 624

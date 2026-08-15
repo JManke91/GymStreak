@@ -239,10 +239,22 @@ Creating and breaking a superset are equally quick, and the two controls read as
 
 | Control | Where | Symbol | Tap target |
 |---------|-------|--------|-----------|
-| Link (`SupersetLinkButton`) | Between two adjacent, unlinked cards | `link.badge.plus` + the label "Link superset" / „Verknüpfen“ | whole row, `minHeight: 44` |
+| Link (`SupersetLinkButton`) | Between two adjacent, unlinked cards | `link.badge.plus` + the label "Superset" / „Supersatz“ | whole row, `minHeight: 44` |
 | Unlink (`SupersetUnlinkButton`, private to `SupersetGroupContainer`) | On the connecting line, at every seam between two adjacent members | `scissors` in a 26pt ringed circle | 44pt `contentShape(Circle())` around the 26pt glyph |
 
 Before this change the app had a one-tap way to *create* a superset and no equivalent way to undo it — unlinking was buried in the long-press context menu and the multi-select editor.
+
+**The link pill's width is Dynamic-Type-invariant** (verified 2026-08-15). The obvious worry about
+the pill — that it is `lineLimit(1)` + `.fixedSize()` between two dashed rules that flex to fill
+the row, so at accessibility text sizes it would win the space contest and squeeze the rules out —
+cannot happen. Its label is `.font(.system(size: 11.5, weight: .semibold))`, a *fixed-size* system
+font, which SwiftUI does not scale with Dynamic Type (only text styles and
+`.custom(_:size:relativeTo:)` scale). The whole routine-detail screen is built this way, so it
+renders pixel-identically at AX5 and at the default size. Checked by driving the app on an
+iPhone SE (3rd generation, 375pt — the narrowest device supporting the deployment target) with
+the simulator set to `accessibility-extra-extra-extra-large`: „Supersatz" stayed on one line and
+both dashed rules stayed fully drawn. Note the flip side: this screen's text does not grow for
+low-vision users at all. That is a pre-existing property of its typography, not of the wording.
 
 **Split-at-seam semantics** (`RoutinesViewModel.splitSuperset(after:in:)`): the members up to and including the tapped seam's upper neighbour keep the group; the members below it become a new group. A side left with a single exercise becomes standalone, so a two-member superset dissolves entirely — the same lone-survivor rule `removeExerciseFromSuperset` already applies, not a parallel one. Positions are then restored by `SupersetOrderingService.normalizeOrdering`, so both halves come out as contiguous blocks. Covered by four tests in `GymStreakTests/RoutinesViewModelTests.swift`. The view wraps the call in the standard spring and fires `HapticManager.shared.success()` — the same confirmation linking gives.
 
@@ -422,16 +434,25 @@ Stored in `@AppStorage` (UserDefaults).
 
 ## Localization
 
-Key strings in `GymStreak/Resources/en.lproj/Localizable.strings`:
+Key strings in `GymStreak/Resources/{en,de}.lproj/Localizable.strings`. German consistently uses
+„Supersatz" / „Supersätze" — no German value says "Superset":
 
 - `superset.rest_timer.explanation` - "Rest starts after completing all exercises in each round"
 - `superset.remove_from` / `superset.remove_from_named` - Remove from superset actions
 - `superset.dissolve` / `superset.dissolve_named` - Dissolve superset actions
 - `superset.create_with` - "Create Superset With..." context menu label
 - `superset.add_to` - "Add to Superset %@" context menu label
-- `superset.link_action` - Label on the link affordance between two unlinked cards ("Link superset" / „Verknüpfen")
-- `superset.link_exercises` - VoiceOver label of that same control
+- `superset.link_action` - Label on the link affordance between two unlinked cards ("Superset" / „Supersatz")
+- `superset.link_exercises` - VoiceOver label of that same control ("Create superset" / „Supersatz erstellen")
 - `superset.unlink_between` - VoiceOver label of the unlink control on the connector ("Break superset between %1$@ and %2$@")
+- `superset.label` - Group badge letter on sorting rows and in the active workout ("Superset %@" / „Supersatz %@")
+- `superset.create_new` - Title of the group editor sheet when creating ("Create Superset" / „Supersatz erstellen")
+
+The visible link pill names the *result* rather than the mechanic: `link.badge.plus` plus the
+position between two cards already say "create", so the label is free to say what gets created.
+Its VoiceOver counterpart keeps the verb, because a screen-reader user perceives neither the
+symbol nor the between-two-cards position — a bare „Supersatz" would announce a noun with no hint
+that activating it does anything.
 
 ---
 

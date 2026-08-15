@@ -97,6 +97,23 @@ final class AppDependencies: ObservableObject {
     let proEntitlementDebug: ProEntitlementDebugging
     #endif
 
+    /// The app-wide "a workout is running" flag. Written by the `WorkoutViewModel`
+    /// that owns the session, read by `paywalls` to enforce Rule 3 — no upsell
+    /// inside a workout (docs/monetization-strategy.md §8).
+    let activeWorkout: ActiveWorkoutReporting
+
+    /// The one seam any gate uses to raise a paywall (docs/pro-subscription.md).
+    /// Hosted once near the app root, so a gate anywhere raises the sheet
+    /// without its screen owning one.
+    let paywalls: PaywallPresenting
+
+    #if DEBUG
+    /// The same instance as `paywalls`, typed for the debug-only placement
+    /// section in Settings — the shipped `present(_:)` is inert while the kill
+    /// switch is off, so nothing else could raise a placement during development.
+    let paywallDebug: PaywallPresentationDebugging
+    #endif
+
     /// Bundle/OS/hardware metadata prefilled into the Settings support mail.
     /// Stateless, so it is cheap to hold for the app's lifetime; Presentation
     /// only ever sees `DeviceDiagnosticsProviding`.
@@ -141,6 +158,16 @@ final class AppDependencies: ObservableObject {
         self.proEntitlements = proEntitlements
         #if DEBUG
         self.proEntitlementDebug = proEntitlements
+        #endif
+        let activeWorkout = ActiveWorkoutRegistry()
+        self.activeWorkout = activeWorkout
+        let paywalls = PaywallPresenter(
+            entitlements: proEntitlements,
+            activeWorkout: activeWorkout
+        )
+        self.paywalls = paywalls
+        #if DEBUG
+        self.paywallDebug = paywalls
         #endif
         let aiCoachPreferences = AICoachPreferences.shared
         let aiCoachAvailability = AICoachAvailability.shared

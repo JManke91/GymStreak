@@ -536,8 +536,8 @@
 "superset.dissolve_named" = "Dissolve Superset %@";
 "superset.create_with" = "Create Superset With...";
 "superset.add_to" = "Add to Superset %@";
-"superset.link_exercises" = "Link exercises as superset";
-"superset.link_action" = "Link superset";
+"superset.link_exercises" = "Create superset";
+"superset.link_action" = "Superset";
 "superset.unlink_between" = "Break superset between %1$@ and %2$@";
 "superset.selected_count" = "%d selected";
 "superset.edit" = "Edit Superset";
@@ -1055,3 +1055,16 @@
 "rest_timer.expand_hint" = "Tap to open the large timer";
 "superset.label" = "Superset %@";
 "superset.exercise_count" = "(%d exercises)";
+
+// MARK: - Pro paywall placements (docs/monetization-strategy.md §8)
+// Placement C must name the specific capability being unlocked, never "Go Pro".
+"paywall.headline.first_routine_created" = "Get more out of Gym Streak";
+"paywall.headline.value_moment" = "Your progress, unlocked";
+"paywall.headline.routine_cap" = "Unlimited routines";
+"paywall.headline.chart_metric" = "Every progress metric";
+"paywall.headline.chart_window" = "Your full training history";
+"paywall.headline.coach_chat" = "Unlimited Coach Chat";
+"paywall.headline.period_recap" = "Unlimited recaps";
+"paywall.headline.exercise_deep_dive" = "Unlimited exercise analyses";
+"paywall.headline.weekday_schedule" = "Weekday schedules";
+"paywall.placeholder.body" = "Gym Streak Pro isn't available yet.";

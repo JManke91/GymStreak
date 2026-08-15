@@ -37,7 +37,8 @@ private struct RoutinesViewInternal: View {
             restTimerReminders: dependencies.restTimerReminders,
             restTimerLiveActivity: dependencies.restTimerLiveActivity,
             routineTemplateSync: dependencies.routineTemplateSync,
-            recovery: dependencies.workoutRecovery
+            recovery: dependencies.workoutRecovery,
+            activeWorkout: dependencies.activeWorkout
         ))
     }
 
