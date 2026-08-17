@@ -26,6 +26,12 @@ struct DebugPaywallSectionView: View {
     /// so they would re-fire at the next routine creation or session end — which
     /// looks like the reset worked but proves nothing about the triggers.
     let triggers: any ProactivePaywallTrackingDebugging
+    /// The Founder thank-you (docs/pro-subscription.md §5h). It lives in this
+    /// section because it is the same kind of thing — a once-ever screen the
+    /// kill switch keeps inert — and because the Founder grant never resolves
+    /// outside a production install, so this and the entitlement picker are the
+    /// only ways to see it at all.
+    let founderCelebration: FounderCelebrationCoordinator
 
     var body: some View {
         SettingsSectionView(
@@ -48,15 +54,28 @@ struct DebugPaywallSectionView: View {
             }
 
             SettingsRowView(
+                icon: "checkmark.seal",
+                iconTint: DesignSystem.Colors.warning,
+                title: "Founder celebration",
+                subtitle: "Once ever · \(founderCelebration.hasCelebrated ? "already shown" : "not yet shown")"
+            ) {
+                Button("Show") { founderCelebration.presentIgnoringEligibility() }
+                    .buttonStyle(.borderless)
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(DesignSystem.Colors.tint)
+            }
+
+            SettingsRowView(
                 icon: "arrow.counterclockwise",
                 iconTint: DesignSystem.Colors.warning,
                 title: "Reset once-ever placements",
-                subtitle: "Clears the fired record and disarms A and B",
+                subtitle: "Clears the fired record, disarms A and B, un-shows the Founder screen",
                 isLast: true
             ) {
                 Button("Reset") {
                     paywalls.resetPresentedPlacements()
                     triggers.resetTriggers()
+                    founderCelebration.resetCelebration()
                 }
                     .buttonStyle(.borderless)
                     .font(.system(size: 14, weight: .semibold))

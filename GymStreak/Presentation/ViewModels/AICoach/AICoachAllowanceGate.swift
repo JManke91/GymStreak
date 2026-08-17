@@ -144,6 +144,14 @@ final class AICoachAllowanceGate {
     /// never a unit, and reading what is already there is always free (Rule 4).
     func presentPaywallIfExhausted() {
         guard isExhausted else { return }
+        presentPaywall()
+    }
+
+    /// Raises the surface's paywall on demand — the unlock CTA a screen shows
+    /// once it has parked on the gate (ticket 09's `.gated` recap state).
+    /// Consumes nothing and checks nothing: the caller already established that
+    /// the user asked for it.
+    func presentPaywall() {
         paywalls.present(surface.placement)
     }
 }

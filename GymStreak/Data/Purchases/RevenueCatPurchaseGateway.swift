@@ -7,6 +7,7 @@
 //
 
 import Foundation
+import OSLog
 import RevenueCat
 
 /// Configures the RevenueCat SDK and projects `CustomerInfo` down to the two
@@ -48,7 +49,7 @@ final class RevenueCatPurchaseGateway: ProPurchaseGateway {
             with: Configuration.Builder(withAPIKey: RevenueCatConfiguration.apiKey)
                 .with(appUserID: nil)
                 // `.informational` never blocks access on its own — it only
-                // *surfaces* the signal, which `entitlement(in:)` then acts on.
+                // *surfaces* the signal, which `entitlement(in:source:)` then acts on.
                 .with(entitlementVerificationMode: .informational)
                 .with(storeKitVersion: .storeKit2)
                 .build()
@@ -69,7 +70,7 @@ final class RevenueCatPurchaseGateway: ProPurchaseGateway {
         return AsyncStream { continuation in
             let relay = Task {
                 for await customerInfo in customerInfoStream {
-                    continuation.yield(Self.entitlement(in: customerInfo))
+                    continuation.yield(Self.entitlement(in: customerInfo, source: .stream))
                 }
                 continuation.finish()
             }
@@ -77,15 +78,12 @@ final class RevenueCatPurchaseGateway: ProPurchaseGateway {
         }
     }
 
-    func currentEntitlement() async -> PurchasedProEntitlement {
-        do {
-            return Self.entitlement(in: try await Purchases.shared.customerInfo())
-        } catch {
-            // Offline, or the backend failed. "Not seen" — never "revoked", and
-            // never persisted: the Founder grant resolves on its own path and
-            // the next stream emission corrects this.
-            return .none
-        }
+    func currentEntitlement() async throws -> PurchasedProEntitlement {
+        // Deliberately the default fetch policy (`.cachedOrFetched`): a purchase
+        // is itself one of the events that refreshes the SDK's cache, so the
+        // entitlement is already there by the time this runs after one — while
+        // on a cold offline launch the cached answer is far better than an error.
+        Self.entitlement(in: try await Purchases.shared.customerInfo(), source: .read)
     }
 
     /// Reduces a customer record to the app's entitlement.
@@ -102,18 +100,66 @@ final class RevenueCatPurchaseGateway: ProPurchaseGateway {
     ///   purchase carries none. There is no `isLifetime` flag to read.
     ///
     /// `nonisolated` because it is pure and is called from the stream relay.
+    ///
+    /// Every outcome is logged. §9.4a's failure table is only ever resolved by a
+    /// real purchase against a real backend, and until this was traced the four
+    /// ways it can report `.none` — wrong entitlement identifier, inactive,
+    /// failed verification, or simply no purchase — were indistinguishable from
+    /// the outside.
     nonisolated private static func entitlement(
-        in customerInfo: CustomerInfo
+        in customerInfo: CustomerInfo,
+        source: Source
     ) -> PurchasedProEntitlement {
-        guard
-            let pro = customerInfo.entitlements[RevenueCatConfiguration.proEntitlementIdentifier],
-            pro.isActive,
-            pro.verification != .failed
-        else {
+        guard let pro = customerInfo.entitlements[RevenueCatConfiguration.proEntitlementIdentifier] else {
+            // The purchases are logged alongside the entitlements because an
+            // empty entitlement list has two completely different causes and the
+            // app cannot tell them apart: RevenueCat never registered the
+            // transaction (nothing purchased either), or it registered it and the
+            // product is attached to no entitlement in the dashboard (products
+            // present, entitlements empty). §9.4a's table turns on which.
+            logger.info(
+                """
+                Entitlement (\(source.rawValue, privacy: .public)): \
+                "\(RevenueCatConfiguration.proEntitlementIdentifier, privacy: .public)" absent; \
+                entitlements: [\(customerInfo.entitlements.all.keys.joined(separator: ", "), privacy: .public)]; \
+                purchased: [\(customerInfo.allPurchasedProductIdentifiers.sorted().joined(separator: ", "), privacy: .public)]; \
+                active: [\(customerInfo.activeSubscriptions.sorted().joined(separator: ", "), privacy: .public)]; \
+                appUserID: \(customerInfo.originalAppUserId, privacy: .public)
+                """
+            )
             return .none
         }
-        return pro.expirationDate == nil ? .lifetime : .subscription
+        guard pro.isActive, pro.verification != .failed else {
+            logger.info(
+                """
+                Entitlement (\(source.rawValue, privacy: .public)): not granted — \
+                active \(pro.isActive, privacy: .public), \
+                verification \(String(describing: pro.verification), privacy: .public)
+                """
+            )
+            return .none
+        }
+        let entitlement: PurchasedProEntitlement = pro.expirationDate == nil ? .lifetime : .subscription
+        logger.info(
+            """
+            Entitlement (\(source.rawValue, privacy: .public)): \(String(describing: entitlement), privacy: .public), \
+            verification \(String(describing: pro.verification), privacy: .public)
+            """
+        )
+        return entitlement
     }
+
+    /// Which of the three reads produced a log line. An enum rather than a
+    /// string because these three values are the only join key the log has —
+    /// "was the stream silent, or did it disagree with the read?" is the first
+    /// question §3d's trail has to answer, and a typo would quietly break it.
+    nonisolated private enum Source: String {
+        case stream
+        case read
+        case restore
+    }
+
+    nonisolated private static let logger = Logger(subsystem: "app.gymstreak.pro", category: "Purchases")
 
     // MARK: - Buying
 
@@ -182,11 +228,7 @@ final class RevenueCatPurchaseGateway: ProPurchaseGateway {
         }
     }
 
-    func restorePurchases() async -> PurchasedProEntitlement {
-        do {
-            return Self.entitlement(in: try await Purchases.shared.restorePurchases())
-        } catch {
-            return .none
-        }
+    func restorePurchases() async throws -> PurchasedProEntitlement {
+        Self.entitlement(in: try await Purchases.shared.restorePurchases(), source: .restore)
     }
 }

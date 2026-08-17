@@ -7,10 +7,15 @@
 
 import SwiftUI
 import SwiftData
+import OSLog
 
 @main
 struct GymStreakApp: App {
     @Environment(\.scenePhase) private var scenePhase
+
+    /// Same subsystem as the entitlement and purchase logs, so one Console
+    /// filter shows the whole Pro story for a launch.
+    private static let logger = Logger(subsystem: "app.gymstreak.pro", category: "Gating")
 
     // Initialize CloudSyncObserver early to catch all sync events
     @StateObject private var cloudSyncObserver = CloudSyncObserver.shared
@@ -129,16 +134,38 @@ struct GymStreakApp: App {
                 }
                 .task {
                     guard !isUITesting else { return }
+                    // Logged every launch, and worth the line: `-PRO_GATING_ON`
+                    // comes from the Xcode scheme, so it is present only when
+                    // *Xcode* launched the app. Kill the app and reopen it from
+                    // the home screen and gating silently turns itself off — a
+                    // free user then sees exactly what a Pro user sees, which is
+                    // indistinguishable from "the purchase worked" and cost a
+                    // whole investigation to spot (docs/pro-subscription.md §9.4b).
+                    Self.logger.info(
+                        """
+                        Launch: gating \(ProGating.isEnabled ? "ON" : "OFF", privacy: .public) \
+                        (\(ProGating.gatingSourceDescription, privacy: .public))
+                        """
+                    )
                     // Resolves the Founder grant, which needs one App Store
                     // round-trip on the very first launch (docs/pro-subscription.md).
                     // Its own `.task` rather than appended to the one above: the
                     // seeder deliberately waits on CloudKit, and the entitlement
                     // must not queue behind that wait.
                     await dependencies.proEntitlements.refresh()
+                    // Straight after the grant settles, so a Founder meets the
+                    // thank-you on the first launch of the build that turns
+                    // gating on — before any gate, badge or nudge is reachable
+                    // (docs/pro-subscription.md §5h). A no-op for everyone else.
+                    dependencies.founderCelebration.presentIfDue()
                 }
                 .onChange(of: scenePhase) { _, newPhase in
                     if newPhase == .active {
                         watchConnectivity.requestWorkoutQueueDrain()
+                        // The next safe moment for a Founder screen that Rule 3
+                        // suppressed (the launch above landed inside a restored
+                        // workout). Idempotent, and inert once it has been shown.
+                        dependencies.founderCelebration.presentIfDue()
                     }
                 }
         }

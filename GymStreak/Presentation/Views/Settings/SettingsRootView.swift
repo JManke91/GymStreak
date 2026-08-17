@@ -42,6 +42,12 @@ struct SettingsRootView: View {
                             .padding(.top, 8)
                             .padding(.bottom, 18)
 
+                        // Renders nothing while the gating kill switch is off,
+                        // which is every shipping build before ticket 15.
+                        SubscriptionSettingsSectionView(
+                            entitlements: dependencies.proEntitlements
+                        )
+
                         SettingsSectionView(
                             header: "settings.section.data".localized,
                             footer: "settings.section.data.footer".localized
@@ -100,7 +106,8 @@ struct SettingsRootView: View {
 
                         DebugPaywallSectionView(
                             paywalls: dependencies.paywallDebug,
-                            triggers: dependencies.proactivePaywallTriggersDebug
+                            triggers: dependencies.proactivePaywallTriggersDebug,
+                            founderCelebration: dependencies.founderCelebration
                         )
                         #endif
 

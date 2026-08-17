@@ -19,7 +19,23 @@ import SwiftUI
 import SwiftData
 import Charts
 
+/// Thin wrapper that resolves the P4 allowance gate from the composition root
+/// and hands it to the screen — a view may not construct the entitlement or the
+/// paywall seam itself. Mirrors `ExerciseProgressChartView`.
 struct PeriodRecapView: View {
+
+    let initialRange: PeriodRange
+    @EnvironmentObject private var dependencies: AppDependencies
+
+    var body: some View {
+        PeriodRecapViewInternal(
+            initialRange: initialRange,
+            allowanceGate: dependencies.makeAICoachAllowanceGate(for: .periodRecap)
+        )
+    }
+}
+
+private struct PeriodRecapViewInternal: View {
 
     // MARK: - Init
 
@@ -32,10 +48,13 @@ struct PeriodRecapView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.locale) private var locale
 
-    init(initialRange: PeriodRange) {
+    init(initialRange: PeriodRange, allowanceGate: AICoachAllowanceGate) {
         self.initialRange = initialRange
         self._viewModel = State(
-            initialValue: PeriodRecapViewModel(initialRange: initialRange)
+            initialValue: PeriodRecapViewModel(
+                initialRange: initialRange,
+                allowanceGate: allowanceGate
+            )
         )
     }
 
@@ -70,7 +89,10 @@ struct PeriodRecapView: View {
             .safeAreaPadding(.bottom, 24)
         }
         .toolbar(.hidden, for: .navigationBar)
-        .task {
+        // Keyed, not bare: `.gated` and `.offer` are stored states, so a purchase
+        // made from this screen's own paywall would otherwise leave the lock up
+        // with a dead Unlock button (docs/pro-subscription.md §3c).
+        .task(id: viewModel.allowanceReloadKey) {
             await viewModel.load(modelContext: modelContext)
         }
     }
@@ -239,7 +261,54 @@ struct PeriodRecapView: View {
             insufficientView(metrics: metrics)
         case .error(let msg):
             errorView(message: msg)
+        case .offer(let metrics):
+            allowanceView(
+                metrics: metrics,
+                mode: .offer(periodLabel: viewModel.range.label(locale: locale))
+            ) {
+                Task { await viewModel.generateNow(modelContext: modelContext) }
+            }
+        case .gated(let metrics):
+            allowanceView(metrics: metrics, mode: .gated) {
+                viewModel.unlock()
+            }
         }
+    }
+
+    // MARK: - Free-tier offer / gate (P4)
+
+    /// The metered user's two states, rendered as the same stack: the stat strip
+    /// stays in both because those numbers are the user's own data and are never
+    /// gated — only the narrative over them is. The card itself lives in
+    /// `PeriodRecapAllowanceCard`.
+    private func allowanceView(
+        metrics: HeadlineMetrics?,
+        mode: PeriodRecapAllowanceCard.Mode,
+        onPrimaryTap: @escaping () -> Void
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 16) {
+            if let metrics {
+                statStrip(
+                    sessions: metrics.totalSessions,
+                    volumeKg: metrics.totalVolumeKg,
+                    prs: nil,
+                    isStreaming: false
+                )
+            }
+
+            PeriodRecapAllowanceCard(
+                mode: mode,
+                nudge: viewModel.allowanceNudge,
+                onPrimaryTap: onPrimaryTap
+            )
+
+            // Only on the offer: the on-device promise is what the user is
+            // about to opt into. On the gate there is nothing to process.
+            if case .offer = mode {
+                AIPrivacyFooter(tone: .full)
+            }
+        }
+        .padding(.horizontal, 20)
     }
 
     // MARK: - Unified Card Tree

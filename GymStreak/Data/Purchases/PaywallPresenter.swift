@@ -35,9 +35,16 @@ final class PaywallPresenter: PaywallPresenting {
 
     private(set) var pendingPlacement: PaywallPlacement?
 
-    /// Whether `pendingPlacement` actually reached the screen. A raised
+    /// Whether the host's sheet actually reached the screen. A raised
     /// placement is not a presented one — the app root also hosts full-screen
     /// covers, and a sheet raised while one is up never appears.
+    ///
+    /// Set by `sheetDidAppear()` rather than by `didPresent(_:)`: the paywall
+    /// inside the sheet resolves its offering over the network and may never get
+    /// as far as an offer, and the user is looking at *the sheet* the whole time
+    /// — including while it loads and if it ends in "couldn't be loaded". Tying
+    /// this to the offer would let a request landing during that window swap the
+    /// sheet out from under them.
     private var isPresented = false
 
     /// The one-shot placements already shown on this install.
@@ -89,10 +96,14 @@ final class PaywallPresenter: PaywallPresenting {
         show(placement)
     }
 
-    func didPresent(_ placement: PaywallPlacement) {
+    func sheetDidAppear() {
         isPresented = true
-        // Spent only now, on the screen — a placement that was raised but never
-        // appeared (something was covering the app root) stays available.
+    }
+
+    func didPresent(_ placement: PaywallPlacement) {
+        // Spent only once an offer is on the screen — a placement that was
+        // raised but never appeared (something was covering the app root), or
+        // one whose offering could not be resolved, stays available.
         if placement.isOneShot {
             presentedOneShots.insert(placement)
             defaults.set(true, forKey: Self.presentedKey(placement))

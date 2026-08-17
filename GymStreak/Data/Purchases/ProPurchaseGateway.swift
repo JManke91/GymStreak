@@ -16,8 +16,11 @@ import Foundation
 /// `ProEntitlementProvider` look total when it is not.
 enum PurchasedProEntitlement: Equatable, Sendable {
 
-    /// No active purchase — including "we could not ask". Never a decision the
-    /// app persists, and never a reason to revoke the Founder grant.
+    /// No active purchase — a fact about the *account*, and one that
+    /// legitimately drops the entitlement. It emphatically does **not** cover
+    /// "we could not ask": that is an error, because folding the two together is
+    /// how an offline refresh came to revoke a live subscription (§3d). Never a
+    /// decision the app persists, and never a reason to revoke the Founder grant.
     case none
 
     /// An active auto-renewing subscription (monthly or yearly).
@@ -34,9 +37,13 @@ enum PurchasedProEntitlement: Equatable, Sendable {
 /// constructed in a test, so without this seam none of the composition branches
 /// — the ones that silently grant or withhold Pro — could be covered at all.
 ///
-/// **No method throws.** Every failure here degrades to "no purchase seen": a
-/// gate must never crash or hang because RevenueCat is unreachable, and the
-/// Founder grant is resolved on a path that does not touch this protocol.
+/// **"Could not ask" is an error, not an answer.** The two reads throw rather
+/// than reporting `.none`, because the caller has to tell them apart: `.none` is
+/// a fact about the account that legitimately revokes Pro, while a failed lookup
+/// is a fact about the network and must leave a live entitlement alone. Folding
+/// the second into the first is what let an offline launch refresh silently
+/// un-buy a subscription the stream had just delivered (docs/pro-subscription.md
+/// §3d). Neither error is ever surfaced to a gate — the provider swallows both.
 ///
 /// `@MainActor` to match `ProEntitlementProviding`; the SDK's async surface is
 /// isolation-agnostic and `CustomerInfo` is `Sendable`, so awaiting it from the
@@ -48,8 +55,9 @@ protocol ProPurchaseGateway: AnyObject {
     /// Long-lived: the caller owns the iteration and cancels it on teardown.
     func entitlementUpdates() -> AsyncStream<PurchasedProEntitlement>
 
-    /// One-shot read, for the launch refresh.
-    func currentEntitlement() async -> PurchasedProEntitlement
+    /// One-shot read, for the launch refresh and the post-purchase re-read.
+    /// Throws when the purchase layer could not be reached at all.
+    func currentEntitlement() async throws -> PurchasedProEntitlement
 
     /// The buyable products, or `[]` when none can be fetched (offline, or
     /// nothing configured) — an empty list is what keeps a purchase surface from
@@ -59,5 +67,7 @@ protocol ProPurchaseGateway: AnyObject {
     func purchase(_ option: ProPurchaseOption) async -> ProPurchaseResult
 
     /// Re-syncs purchases made on another device or before a reinstall.
-    func restorePurchases() async -> PurchasedProEntitlement
+    /// Throws for the same reason `currentEntitlement()` does: a restore that
+    /// could not run is not a restore that found nothing.
+    func restorePurchases() async throws -> PurchasedProEntitlement
 }

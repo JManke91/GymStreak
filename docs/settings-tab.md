@@ -14,6 +14,14 @@ section/row blueprint documented here.
 - Adds a fourth tab with a gear icon after "Verlauf"/"History" (`ContentView`).
 - Its root screen (`SettingsRootView`) shows the screen title followed by grouped sections:
   uppercase section header → rounded card holding the rows → optional footnote below the card.
+- **Gym Streak Pro** section (first, above Data): states the user's plan — Founder, Pro
+  (subscription or lifetime) or Free — and where it came from. **It renders nothing while the
+  gating kill switch is off**, which is every build today, so the shipping Settings screen is
+  unchanged. Below the status row it offers **Manage subscription**, which opens RevenueCat's
+  Customer Center (restore, manage, change plan, cancel, refund) — everyone but a Founder gets it,
+  since a Founder has no purchase to manage. There is still no *purchase* affordance here; the
+  paywall is reached from a gate, never from Settings. Documented in `docs/pro-subscription.md`
+  §5i and §5j; this file does not repeat its rules.
 - **Data** section: a single iCloud row that reports at a glance whether the user's data is
   safe — state-tinted icon tile, "Last: \<timestamp\>" subtitle and a status dot (or spinner)
   with a short label. Footnote: "Your training data syncs automatically via iCloud …".
@@ -41,6 +49,9 @@ section/row blueprint documented here.
 | `Domain/Services/SupportMailComposer.swift` | Builds the support `mailto:` URL from a `DeviceDiagnostics` value |
 | `Domain/Interfaces/DeviceDiagnosticsProviding.swift` | `DeviceDiagnostics` + the provider protocol |
 | `Data/System/SystemDeviceDiagnosticsProvider.swift` | Reads bundle/OS/hardware metadata (`Bundle`, `ProcessInfo`, `sysctlbyname`) |
+| `Presentation/Views/Settings/Components/SubscriptionSettingsSectionView.swift` | Pro plan section: renders the summary, or nothing while gating is off |
+| `Presentation/ViewModels/Pro/SubscriptionStatusSummary.swift` | Entitlement → plan + copy keys; the kill-switch visibility rule |
+| `Presentation/Views/Pro/CustomerCenterSettingsRow.swift` | The Manage-subscription row and its `CustomerCenterView` presentation |
 | `Presentation/Views/Settings/Components/ICloudSyncRowView.swift` | iCloud row: subscribes to the status stream, maps state → icon/tint/label |
 | `Domain/Interfaces/CloudSyncStatusProviding.swift` | `CloudSyncState`, `CloudSyncStatus`, the provider protocol |
 | `Data/Sync/CloudKitSyncStatusMonitor.swift` | The status source (CloudKit account status + mirroring events + network path) |

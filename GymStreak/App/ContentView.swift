@@ -26,9 +26,16 @@ private struct ContentViewInternal: View {
     /// without its screen owning a sheet. `@Observable`, so reading
     /// `pendingPlacement` in `body` is enough to re-render on a request.
     private let paywalls: any PaywallPresenting
+    /// Handed to the paywall so a restore is judged by the same rule every gate
+    /// is judged by (docs/pro-subscription.md §5j). Read nowhere else here.
+    private let entitlements: any ProEntitlementProviding
     /// Owns §8 A/B's armed triggers and the endowed figures placement B renders.
     /// Read here because both paywall hosts below are here.
     private let proactivePaywalls: ProactivePaywallCoordinator
+    /// The one-time Founder thank-you. Hosted here, above the tabs, because it
+    /// has to reach the user before any gate, badge or nudge can
+    /// (docs/pro-subscription.md §5h).
+    private let founderCelebration: FounderCelebrationCoordinator
 
     /// Observable singletons — @State so SwiftUI tracks their changes.
     @State private var preferences = AICoachPreferences.shared
@@ -44,7 +51,9 @@ private struct ContentViewInternal: View {
         self.aiCoachAvailability = dependencies.aiCoachAvailability
         self.proactivePromptCoordinator = dependencies.proactivePromptCoordinator
         self.paywalls = dependencies.paywalls
+        self.entitlements = dependencies.proEntitlements
         self.proactivePaywalls = dependencies.proactivePaywalls
+        self.founderCelebration = dependencies.founderCelebration
         self._workoutViewModel = StateObject(wrappedValue: WorkoutViewModel(
             workoutSessionRepository: dependencies.workoutSessionRepository,
             routineRepository: dependencies.routineRepository,
@@ -66,6 +75,9 @@ private struct ContentViewInternal: View {
         // `@Observable` presenter. A closure evaluated later, outside body's
         // tracking scope, would leave a raised paywall unnoticed.
         let pendingPaywall = paywalls.pendingPlacement
+        // Read in `body` for the same reason, so raising the Founder screen
+        // from the launch task actually re-renders this view.
+        let isCelebratingFounder = founderCelebration.isPresenting
 
         TabView {
             RoutinesView()
@@ -126,12 +138,21 @@ private struct ContentViewInternal: View {
             // which reads as a paywall arriving out of nowhere. Both hosts read
             // the same `pendingPlacement`, so whichever shows it clears it for
             // the other; the presenter is untouched.
-            .sheet(item: paywallBinding(for: pendingPaywall)) { placement in
-                PaywallPlaceholderView(
+            //
+            // Filtered to `.coachChat` deliberately: any *other* placement that
+            // manages to fire while the chat is open belongs on the screen the
+            // user came from, not inside a chat they are reading. Such a
+            // placement stays pending and surfaces at the root host once the
+            // cover closes — the deferral §7 describes, which is the correct
+            // behaviour for a placement the chat did not raise.
+            .sheet(item: paywallBinding(for: pendingPaywall == .coachChat ? pendingPaywall : nil)) { placement in
+                ProPaywallView(
                     placement: placement,
-                    lifetimeTotals: proactivePaywalls.valueMomentTotals
+                    entitlements: entitlements,
+                    lifetimeTotals: proactivePaywalls.valueMomentTotals,
+                    onPaywallShown: { paywalls.didPresent(placement) }
                 )
-                .onAppear { paywalls.didPresent(placement) }
+                .onAppear { paywalls.sheetDidAppear() }
             }
         }
         // Pro paywall host. Every placement in the app raises its sheet from
@@ -140,20 +161,35 @@ private struct ContentViewInternal: View {
         // up, because that cover hosts its own — one binding non-nil in two
         // hosts at once would have both attempt a presentation.
         .sheet(item: paywallBinding(for: showingCoachChat ? nil : pendingPaywall)) { placement in
-            PaywallPlaceholderView(
+            ProPaywallView(
                 placement: placement,
+                entitlements: entitlements,
                 // Only `.valueMoment` renders these; every other placement
                 // ignores them (docs/pro-subscription.md §5g).
-                lifetimeTotals: proactivePaywalls.valueMomentTotals
+                lifetimeTotals: proactivePaywalls.valueMomentTotals,
+                // Reported when an *offer* reaches the screen, not when the
+                // sheet does: an offering that fails to resolve shows no offer
+                // at all, and that must not spend a once-ever fire.
+                onPaywallShown: { paywalls.didPresent(placement) }
             )
-            // Reported from `onAppear`, not from the request, because the
-            // covers below can keep a raised paywall off the screen — and a
-            // paywall nobody saw must not spend its once-ever fire.
-            .onAppear { paywalls.didPresent(placement) }
+            // The sheet itself, on the other hand, is on screen from here on —
+            // which is what stops a later request swapping it out from under
+            // the user, loading and retry states included.
+            .onAppear { paywalls.sheetDidAppear() }
+        }
+        // The one-time Founder thank-you (docs/pro-subscription.md §5h). A
+        // full-screen cover above the tabs, so a grandfathered user meets the
+        // good news before anything that could read as bad news. It sells
+        // nothing, so it is not routed through the paywall seam.
+        .fullScreenCover(isPresented: founderCelebrationBinding(isPresenting: isCelebratingFounder)) {
+            FounderCelebrationView()
         }
         // AI Coach opt-in: shown once when Apple Intelligence is available
         // and the user has not yet completed or permanently dismissed opt-in.
-        .fullScreenCover(isPresented: .constant(shouldShowOptIn)) {
+        // Suppressed while the Founder screen is up: two covers on one context
+        // present one at a time, and this is the ordering that matters — the
+        // opt-in comes back on its own once the thank-you is dismissed.
+        .fullScreenCover(isPresented: .constant(shouldShowOptIn && !isCelebratingFounder)) {
             AICoachOptInView()
         }
         .task {
@@ -170,6 +206,16 @@ private struct ContentViewInternal: View {
         Binding(
             get: { placement },
             set: { if $0 == nil { paywalls.dismiss() } }
+        )
+    }
+
+    /// The Founder screen's presentation, with its dismissal reported back —
+    /// which is the only thing that spends the once-ever record. Nothing but the
+    /// coordinator raises it, so only a dismissal is written back.
+    private func founderCelebrationBinding(isPresenting: Bool) -> Binding<Bool> {
+        Binding(
+            get: { isPresenting },
+            set: { if !$0 { founderCelebration.celebrationWasDismissed() } }
         )
     }
 

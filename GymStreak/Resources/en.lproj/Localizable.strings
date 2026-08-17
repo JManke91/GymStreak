@@ -36,6 +36,21 @@
 "settings.support.contact.fallback.title" = "No mail app";
 "settings.support.contact.fallback.message" = "No mail app is set up on this device. You can reach support at %@.";
 "settings.support.contact.fallback.copy" = "Copy address";
+"settings.section.subscription" = "Gym Streak Pro";
+"settings.subscription.founder.title" = "Founder";
+"settings.subscription.founder.detail" = "Pro is yours, free, forever";
+"settings.subscription.founder.footer" = "You installed Gym Streak before Pro existed. There is nothing to manage and nothing to renew — your access never expires.";
+"settings.subscription.pro.title" = "Gym Streak Pro";
+"settings.subscription.pro.detail" = "Active subscription";
+"settings.subscription.pro.footer" = "You can manage or cancel your subscription any time in the App Store.";
+"settings.subscription.lifetime.title" = "Gym Streak Pro";
+"settings.subscription.lifetime.detail" = "Lifetime purchase";
+"settings.subscription.lifetime.footer" = "A one-time purchase. Nothing renews and nothing expires.";
+"settings.subscription.free.title" = "Free";
+"settings.subscription.free.detail" = "The complete workout tracker";
+"settings.subscription.manage.title" = "Manage subscription";
+"settings.subscription.manage.subtitle" = "Restore, change, cancel or request a refund";
+"settings.subscription.free.footer" = "Track unlimited workouts for free. Gym Streak Pro adds unlimited routines and full progress analytics.";
 
 // MARK: - Routines View
 "routines.title" = "Routines";
@@ -271,6 +286,7 @@
 "action.add" = "Add";
 "action.remove" = "Remove";
 "action.dismiss" = "Dismiss";
+"action.retry" = "Try again";
 "action.continue" = "Continue";
 "action.back" = "Back";
 
@@ -928,6 +944,17 @@
 "ai_coach.chat.allowance.nudge" = "%1$d of %2$d Coach messages left this month";
 "ai_coach.chat.allowance.nudge.exhausted" = "No Coach messages left this month. Gym Streak Pro unlocks unlimited chat.";
 
+// P4 — AI Period Recap monthly taster
+"ai_coach.period_recap.allowance.nudge" = "%1$d of %2$d free AI recaps left this month";
+"ai_coach.period_recap.allowance.nudge.exhausted" = "No free AI recaps left this month. Gym Streak Pro unlocks unlimited recaps.";
+"ai_coach.period_recap.offer.title" = "Generate your AI recap";
+"ai_coach.period_recap.offer.subtitle" = "Your coach reads through %@ on this device and writes up what changed.";
+"ai_coach.period_recap.offer.cta" = "Generate recap";
+
+// P5 — AI Exercise Deep-Dive monthly taster
+"ai_coach.deep_dive.allowance.nudge" = "%1$d of %2$d free exercise analyses left this month";
+"ai_coach.deep_dive.allowance.nudge.exhausted" = "No free exercise analyses left this month. Gym Streak Pro unlocks unlimited analyses.";
+
 // MARK: - Seed Exercise Catalog (built-in starter library)
 
 // Chest
@@ -1074,7 +1101,9 @@
 "paywall.headline.period_recap" = "Unlimited recaps";
 "paywall.headline.exercise_deep_dive" = "Unlimited exercise analyses";
 "paywall.headline.weekday_schedule" = "Weekday schedules";
-"paywall.placeholder.body" = "Gym Streak Pro isn't available yet.";
+// Shown when no offering could be resolved (offline, or the placement is not
+// configured in the dashboard). It never unlocks the gated capability.
+"paywall.unavailable.body" = "The offer couldn't be loaded. Check your connection and try again.";
 // Placement B's endowed-progress line. The numbers are the user's own real totals.
 "paywall.value_moment.figures" = "You've logged %@ workouts, %@ sets and %@ kg of volume.";
 
@@ -1085,3 +1114,18 @@
 "pro.lock.accessibility_hint" = "Unlock with Gym Streak Pro";
 "pro.badge.label" = "PRO";
 "pro.badge.accessibility" = "Gym Streak Pro feature";
+
+// MARK: - Founder celebration (docs/monetization-strategy.md §7)
+// Shown once to users who installed before monetization. A thank-you, never an
+// offer: no purchase call to action may appear on this screen.
+"founder.celebration.eyebrow" = "FOUNDER";
+"founder.celebration.headline" = "Pro is yours, forever";
+"founder.celebration.body" = "You were here before Gym Streak Pro existed. That makes you a Founder — so Pro is yours, free, for good. No subscription, no account, nothing to do.";
+"founder.celebration.included1.title" = "Unlimited routines";
+"founder.celebration.included1.detail" = "Build as many training plans as you want.";
+"founder.celebration.included2.title" = "Full progress analytics";
+"founder.celebration.included2.detail" = "Every metric, across your whole training history.";
+"founder.celebration.included3.title" = "Everything Pro adds later";
+"founder.celebration.included3.detail" = "New Pro features are included as they arrive.";
+"founder.celebration.footer" = "Thank you for being here early.";
+"founder.celebration.cta" = "Let's train";

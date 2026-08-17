@@ -74,6 +74,14 @@
             argument = "-INITIALIZE_CLOUDKIT_SCHEMA"
             isEnabled = "NO">
          </CommandLineArgument>
+         <CommandLineArgument
+            argument = "-PRO_GATING_ON"
+            isEnabled = "YES">
+         </CommandLineArgument>
+         <CommandLineArgument
+            argument = "-REVENUECAT_APP_STORE"
+            isEnabled = "YES">
+         </CommandLineArgument>
       </CommandLineArguments>
    </LaunchAction>
    <ProfileAction

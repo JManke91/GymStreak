@@ -25,7 +25,7 @@ struct DebugProEntitlementSectionView: View {
     var body: some View {
         SettingsSectionView(
             header: "Debug",
-            footer: "Debug builds only. Gating is globally \(ProGating.isEnabled ? "ON" : "OFF"), so gates stay inert regardless of this setting."
+            footer: gatingFooter
         ) {
             SettingsRowView(
                 icon: "hammer",
@@ -46,6 +46,22 @@ struct DebugProEntitlementSectionView: View {
                 .accessibilityIdentifier("settings-debug-entitlement-picker")
             }
         }
+    }
+
+    /// Says whether gates are live *and where that came from*, because "nothing
+    /// happened" has two very different causes: the shipped switch being off, or
+    /// the launch argument not being ticked in the scheme (§9.4a).
+    private var gatingFooter: String {
+        guard ProGating.isEnabled else {
+            return """
+            Debug builds only. Gating is globally OFF, so gates stay inert regardless of this \
+            setting. Launch with \(ProGating.forceOnLaunchArgument) to turn them on.
+            """
+        }
+        let source = ProGating.isForcedOnForDebugging
+            ? "forced on by \(ProGating.forceOnLaunchArgument)"
+            : "on in the shipped build"
+        return "Debug builds only. Gating is \(source), so every gate is live."
     }
 
     /// Always names the really-resolved entitlement, so it is unambiguous
@@ -93,6 +109,9 @@ final class PreviewProEntitlementProvider: ProEntitlementDebugging {
     var state: ProEntitlementState { simulatedState ?? resolvedState }
     var isPro: Bool { state.isPro }
     func refresh() async {}
+
+    let storeBackendDescription = "Preview (no store)"
+    let isUsingTestStore = true
 
     func availableProducts() async -> [ProPurchaseOption] {
         [

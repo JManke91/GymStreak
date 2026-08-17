@@ -290,7 +290,11 @@ Reasoning:
   persist a `founder` flag. No account, no server, no "restore purchases" flow.
 - **Surface it loudly.** A one-time "You're a Founder — Pro, free, forever" screen. This turns
   the most dangerous moment of the whole rollout into the most positive one, and it recruits
-  exactly the cohort that writes reviews and tells friends.
+  exactly the cohort that writes reviews and tells friends. **Shipped as
+  `FounderCelebrationView` + `FounderCelebrationCoordinator` (ticket 12, 2026-08-15)** — see
+  `docs/pro-subscription.md` §5h for the four rules that decide when it appears, including why it
+  stays inert until the kill switch flips (so the release that starts gating is the one that
+  thanks the user) and why an undecided grant never shows a retractable version of it.
 - **Cost is bounded and shrinking.** The pre-monetization base is the smallest it will ever be.
   Precedent (e.g. Anova) shows a clean permanent grant defuses the backlash entirely, whereas
   time-limited grandfathering just delays it.

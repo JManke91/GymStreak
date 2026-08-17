@@ -16,14 +16,6 @@
 
 import Foundation
 
-/// The §8 placement D hint for the chat's monthly allowance: finished copy plus
-/// the two numbers the meter draws. Mirrors `RoutineCapNudge`.
-struct CoachChatAllowanceNudge: Equatable {
-    let text: String
-    let used: Int
-    let limit: Int
-}
-
 @Observable
 @MainActor
 final class CoachChatViewModel {
@@ -112,27 +104,12 @@ final class CoachChatViewModel {
     /// lapse remove or restore the hint with no reload. The count itself
     /// refreshes because sending changes `messages`, and this body already reads
     /// that.
-    var allowanceNudge: CoachChatAllowanceNudge? {
-        switch allowanceGate.nudgeState {
-        case .lastRemaining(let consumed, let limit):
-            return CoachChatAllowanceNudge(
-                text: String(
-                    format: "ai_coach.chat.allowance.nudge".localized,
-                    AIAllowancePolicy.remaining(consumed: consumed, limit: limit),
-                    limit
-                ),
-                used: consumed,
-                limit: limit
-            )
-        case .exhausted(let consumed, let limit):
-            return CoachChatAllowanceNudge(
-                text: "ai_coach.chat.allowance.nudge.exhausted".localized,
-                used: consumed,
-                limit: limit
-            )
-        case nil:
-            return nil
-        }
+    var allowanceNudge: AIAllowanceNudge? {
+        AIAllowanceNudge(
+            state: allowanceGate.nudgeState,
+            remainingFormat: "ai_coach.chat.allowance.nudge".localized,
+            exhaustedText: "ai_coach.chat.allowance.nudge.exhausted".localized
+        )
     }
 
     // MARK: - Lifecycle

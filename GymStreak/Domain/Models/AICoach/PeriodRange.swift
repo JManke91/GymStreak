@@ -59,11 +59,20 @@ enum PeriodRange {
         case .lastThreeMonths: return isGerman ? "Letzten 3 Monate" : "Last 3 Months"
         case .thisYear:  return isGerman ? "Dieses Jahr" : "This Year"
         case .thisMonth, .lastMonth:
-            let interval = dateInterval(now: now)
-            let fmt = DateFormatter()
-            fmt.locale = locale
-            fmt.setLocalizedDateFormatFromTemplate("MMMM yyyy")
-            return fmt.string(from: interval.start)
+            // `Date.FormatStyle`, not a `DateFormatter`: this is read from view
+            // bodies (the recap's title block, its range chips and its
+            // free-tier offer card), and allocating a formatter — let alone
+            // calling `setLocalizedDateFormatFromTemplate` on it — on a body
+            // path is what the main-thread rules forbid. A cached `static let`
+            // formatter is not an option either: `Domain/` stays
+            // isolation-agnostic, and a mutable per-locale cache would need an
+            // actor to live on. The format style is a `Sendable` value usable
+            // from any isolation domain, and it honours the `locale` argument —
+            // which matters because `PeriodRecapAggregator` calls this with an
+            // explicit locale to build the model's prompt, not just for display.
+            return dateInterval(now: now).start.formatted(
+                Date.FormatStyle().locale(locale).month(.wide).year()
+            )
         }
     }
 }

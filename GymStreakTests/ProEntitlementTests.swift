@@ -97,9 +97,8 @@ struct ProEntitlementTests {
 
     @Test("A Founder stays Pro when the purchase layer cannot answer at all")
     func founderSurvivesUnavailablePurchaseLayer() async {
-        // What a failed RevenueCat lookup reports: no purchase seen.
         let purchases = StubPurchaseGateway()
-        purchases.current = .none
+        purchases.isUnreachable = true
         let provider = makeProvider(
             founderStatus: StubFounderStatus(isFounder: true),
             purchases: purchases
@@ -131,6 +130,60 @@ struct ProEntitlementTests {
 
         neverAnswers.continuation.finish()
         await refresh.value
+    }
+
+    @Test("A purchase is reported even while the Founder resolution has not returned")
+    func purchaseDoesNotWaitOnTheFounderResolution() async {
+        // The bug this pins (docs/pro-subscription.md §3d): `refresh()` used to
+        // await `resolveIfNeeded()` first, and that resolution round-trips
+        // StoreKit's `AppTransaction` — which outside production never records a
+        // decision, so every call retries it. A refresh fired the instant the
+        // user paid therefore never reached the purchase layer at all.
+        let founderStatus = StubFounderStatus(isFounder: false)
+        let neverResolves = AsyncStream<Void>.makeStream()
+        founderStatus.beforeResolve = { for await _ in neverResolves.stream {} }
+        let purchases = StubPurchaseGateway()
+        purchases.current = .subscription
+        let provider = makeProvider(founderStatus: founderStatus, purchases: purchases)
+
+        let refresh = Task { await provider.refresh() }
+        await waitUntil(provider.resolvedState == .subscription)
+
+        #expect(provider.isPro)
+
+        neverResolves.continuation.finish()
+        await refresh.value
+    }
+
+    @Test("A purchase layer that cannot be reached never revokes a live entitlement")
+    func unreachablePurchaseLayerDoesNotRevoke() async {
+        // `.none` means "this account has no purchase" and legitimately revokes.
+        // A failed lookup means nothing at all, and used to revoke too — an
+        // offline launch refresh could un-buy a subscription the stream had
+        // already delivered.
+        let purchases = StubPurchaseGateway()
+        let provider = makeProvider(purchases: purchases)
+        purchases.emit(.subscription)
+        await waitUntil(provider.resolvedState == .subscription)
+
+        purchases.isUnreachable = true
+        await provider.refresh()
+
+        #expect(provider.resolvedState == .subscription)
+        #expect(provider.isPro)
+    }
+
+    @Test("A restore that could not run leaves the entitlement alone")
+    func unreachableRestoreDoesNotRevoke() async {
+        let purchases = StubPurchaseGateway()
+        let provider = makeProvider(purchases: purchases)
+        purchases.emit(.lifetime)
+        await waitUntil(provider.resolvedState == .lifetime)
+
+        purchases.isUnreachable = true
+        await provider.restorePurchases()
+
+        #expect(provider.resolvedState == .lifetime)
     }
 
     @Test("An entitlement change propagates live, without a refresh or a restart")
@@ -254,9 +307,36 @@ struct ProEntitlementTests {
 
     // MARK: - Kill switch
 
+    /// Asserts `shippedValue`, not `isEnabled`: a developer with
+    /// `-PRO_GATING_ON` ticked in the test scheme would otherwise get a red test
+    /// for having set up sandbox testing correctly (§9.4a). What must never
+    /// change silently is the value a *shipping build* compiles in.
     @Test("Gating ships off")
     func gatingDefaultsOff() {
-        #expect(ProGating.isEnabled == false)
+        #expect(ProGating.shippedValue == false)
+    }
+
+    /// The Test Store key is a rejection if it reaches App Review, so a Release
+    /// build must have no way to select it — outside DEBUG the literal is not
+    /// even compiled in. This asserts what holds in *any* Debug run: the two
+    /// keys are distinct and correctly prefixed, and the product list follows
+    /// whichever backend is actually live.
+    ///
+    /// Deliberately **not** asserting `isUsingTestStore == true`. The shared
+    /// scheme runs tests with the Run action's launch arguments
+    /// (`shouldUseLaunchSchemeArgsEnv`), so a developer who set up sandbox
+    /// testing per §9.4a and ticked `-REVENUECAT_APP_STORE` would otherwise get
+    /// a red test for having followed the runbook.
+    @Test("The store backend follows the build, not a checklist")
+    func storeBackendIsStructural() {
+        #expect(RevenueCatConfiguration.appStoreAPIKey.hasPrefix("appl_"))
+        #expect(RevenueCatConfiguration.testStoreAPIKey.hasPrefix("test_"))
+        #expect(RevenueCatConfiguration.appStoreAPIKey != RevenueCatConfiguration.testStoreAPIKey)
+
+        let expected = RevenueCatConfiguration.isUsingTestStore
+            ? RevenueCatConfiguration.testStoreProductIdentifiers
+            : RevenueCatConfiguration.appStoreProductIdentifiers
+        #expect(RevenueCatConfiguration.proProductIdentifiers == expected)
     }
 }
 
@@ -299,12 +379,17 @@ private final class StubFounderStatus: FounderStatusResolving {
     var isFounder: Bool
     private(set) var resolveCount = 0
 
+    /// Suspends `resolveIfNeeded()`, standing in for the `AppTransaction`
+    /// round-trip the real service performs on every call outside production.
+    var beforeResolve: (() async -> Void)?
+
     init(isFounder: Bool = false) {
         self.isFounder = isFounder
     }
 
     func resolveIfNeeded() async {
         resolveCount += 1
+        await beforeResolve?()
     }
 }
 
@@ -319,6 +404,12 @@ private final class StubPurchaseGateway: ProPurchaseGateway {
     var products: [ProPurchaseOption] = []
     var purchaseResult: ProPurchaseResult = .purchased
     private(set) var currentEntitlementCount = 0
+
+    /// What a purchase layer that could not be reached does — the case
+    /// `PurchasedProEntitlement.none` deliberately no longer stands in for.
+    struct Unreachable: Error {}
+
+    var isUnreachable = false
 
     /// Suspends `currentEntitlement()`, so a test can observe the state while
     /// the purchase layer has not answered yet.
@@ -337,9 +428,10 @@ private final class StubPurchaseGateway: ProPurchaseGateway {
         continuation?.yield(entitlement)
     }
 
-    func currentEntitlement() async -> PurchasedProEntitlement {
+    func currentEntitlement() async throws -> PurchasedProEntitlement {
         currentEntitlementCount += 1
         await beforeCurrentEntitlement?()
+        if isUnreachable { throw Unreachable() }
         return current
     }
 
@@ -347,5 +439,8 @@ private final class StubPurchaseGateway: ProPurchaseGateway {
 
     func purchase(_ option: ProPurchaseOption) async -> ProPurchaseResult { purchaseResult }
 
-    func restorePurchases() async -> PurchasedProEntitlement { restored }
+    func restorePurchases() async throws -> PurchasedProEntitlement {
+        if isUnreachable { throw Unreachable() }
+        return restored
+    }
 }

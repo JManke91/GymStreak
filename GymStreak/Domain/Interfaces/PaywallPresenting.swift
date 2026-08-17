@@ -32,13 +32,22 @@ protocol PaywallPresenting: AnyObject {
     /// request is not eligible — a gate has no decision to make about that.
     func present(_ placement: PaywallPlacement)
 
-    /// Reported by the host when the paywall for `placement` actually appeared.
+    /// Reported by the host when its sheet reached the screen.
     ///
     /// A raised placement is not the same as a presented one: the app root also
     /// hosts full-screen covers (the coach chat, the AI opt-in), and a sheet
-    /// raised while one of those is up never reaches the screen. Recording the
-    /// §8 once-ever fire here rather than at raise time is what stops a paywall
-    /// nobody saw from being spent.
+    /// raised while one of those is up never reaches the screen. This is what
+    /// tells the presenter not to swap the contents of a paywall the user is
+    /// looking at.
+    func sheetDidAppear()
+
+    /// Reported by the host when a **paywall** — an actual offer — is on screen.
+    ///
+    /// Separate from `sheetDidAppear()` because the sheet appears first and may
+    /// never get further: resolving the offering is a network call, and it can
+    /// end in "couldn't be loaded" (docs/pro-subscription.md §5j). Recording the
+    /// §8 once-ever fire here is what stops a placement from being spent on a
+    /// sheet that showed no offer — or on one nobody saw at all.
     func didPresent(_ placement: PaywallPlacement)
 
     /// Clears `pendingPlacement`. Called by the host when its sheet is dismissed.

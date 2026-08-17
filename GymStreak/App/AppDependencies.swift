@@ -126,6 +126,11 @@ final class AppDependencies: ObservableObject {
     let proactivePaywallTriggersDebug: ProactivePaywallTrackingDebugging
     #endif
 
+    /// The one-time Founder thank-you (docs/pro-subscription.md §5h). Held as
+    /// the concrete type, like `proactivePaywalls`: the app root binds a
+    /// `.fullScreenCover` straight to its `@Observable` `isPresenting`.
+    let founderCelebration: FounderCelebrationCoordinator
+
     /// The month-keyed free-tier counters behind the AI tasters (P3/P4/P5).
     /// App-lifetime because it caches its records in memory — a second instance
     /// would answer from a stale cache after the first one wrote. Presentation
@@ -200,6 +205,11 @@ final class AppDependencies: ObservableObject {
         #if DEBUG
         self.proactivePaywallTriggersDebug = proactivePaywallTriggers
         #endif
+        self.founderCelebration = FounderCelebrationCoordinator(
+            entitlements: proEntitlements,
+            record: FounderCelebrationStore(),
+            activeWorkout: activeWorkout
+        )
         self.aiAllowance = MonthlyAllowanceStore()
         let aiCoachPreferences = AICoachPreferences.shared
         let aiCoachAvailability = AICoachAvailability.shared

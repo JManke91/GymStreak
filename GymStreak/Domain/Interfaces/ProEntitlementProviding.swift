@@ -43,7 +43,8 @@ protocol ProEntitlementProviding: AnyObject {
 /// *what is this build reporting as Pro, and why* — and splitting them would
 /// mean two protocols and two composition-root properties over the same object.
 /// The store half is what makes a real Test Store purchase reachable before the
-/// paywall exists (ticket 14); ticket 13 promotes restore to a shipping surface.
+/// paywall exists; ticket 14 promotes purchase and restore to shipping surfaces
+/// (`PaywallView` and `CustomerCenterView`).
 @MainActor
 protocol ProEntitlementDebugging: ProEntitlementProviding {
 
@@ -53,6 +54,20 @@ protocol ProEntitlementDebugging: ProEntitlementProviding {
     /// The entitlement as actually resolved, ignoring any override — so the
     /// picker can show *what it is overriding* rather than only its own value.
     var resolvedState: ProEntitlementState { get }
+
+    /// Which store backend this run is talking to, in words — "Test Store
+    /// (simulated)" or "App Store (sandbox or production)".
+    ///
+    /// Exposed through the protocol rather than read off the Data layer's
+    /// configuration, so the debug section stays on the right side of
+    /// `Presentation → Domain ← Data`. It earns its place because an empty
+    /// product list looks identical whichever backend produced it, and the
+    /// causes are completely different (docs/pro-subscription.md §9.4a).
+    var storeBackendDescription: String { get }
+
+    /// `true` while the simulated store is in use, which is what decides whether
+    /// an empty product list is worth explaining or expected.
+    var isUsingTestStore: Bool { get }
 
     /// The buyable products, or `[]` when none could be fetched.
     func availableProducts() async -> [ProPurchaseOption]

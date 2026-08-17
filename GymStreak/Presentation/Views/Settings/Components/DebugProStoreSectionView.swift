@@ -63,14 +63,27 @@ struct DebugProStoreSectionView: View {
         .task { products = await entitlements.availableProducts() }
     }
 
+    /// Always names the backend first. An empty product list looks identical
+    /// whichever backend produced it, and the causes are completely different —
+    /// see §9.4a's failure table, which this footer points at.
     private var footer: String {
+        let backend = "Backend: \(entitlements.storeBackendDescription)."
+
         if let failure {
-            return "Purchase failed: \(failure)"
+            return "\(backend) Purchase failed: \(failure)"
         }
         if products.isEmpty {
-            return "No store products — offline, or no offering/products configured in RevenueCat."
+            return entitlements.isUsingTestStore
+                ? "\(backend) No products — offline, or nothing configured in RevenueCat."
+                : """
+                \(backend) No products — the simulator cannot reach the sandbox, the Paid \
+                Applications Agreement is not active, or the identifiers are not configured. \
+                See docs/pro-subscription.md §9.4a.
+                """
         }
-        return "RevenueCat Test Store. Purchases are simulated, cost nothing, and grant the real entitlement."
+        return entitlements.isUsingTestStore
+            ? "\(backend) Purchases are simulated, cost nothing, and grant the real entitlement."
+            : "\(backend) On a device signed into a Sandbox Apple Account these are real StoreKit purchases."
     }
 
     private func buy(_ product: ProPurchaseOption) {

@@ -36,6 +36,21 @@
 "settings.support.contact.fallback.title" = "Keine Mail-App";
 "settings.support.contact.fallback.message" = "Auf diesem Gerät ist keine Mail-App eingerichtet. Du erreichst den Support unter %@.";
 "settings.support.contact.fallback.copy" = "Adresse kopieren";
+"settings.section.subscription" = "Gym Streak Pro";
+"settings.subscription.founder.title" = "Founder";
+"settings.subscription.founder.detail" = "Pro gehört dir – für immer";
+"settings.subscription.founder.footer" = "Du hast Gym Streak installiert, bevor es Pro gab. Es gibt nichts zu verwalten und nichts zu verlängern – dein Zugang läuft nie ab.";
+"settings.subscription.pro.title" = "Gym Streak Pro";
+"settings.subscription.pro.detail" = "Aktives Abo";
+"settings.subscription.pro.footer" = "Du kannst dein Abo jederzeit im App Store verwalten oder kündigen.";
+"settings.subscription.lifetime.title" = "Gym Streak Pro";
+"settings.subscription.lifetime.detail" = "Einmalkauf";
+"settings.subscription.lifetime.footer" = "Ein einmaliger Kauf. Nichts verlängert sich und nichts läuft ab.";
+"settings.subscription.free.title" = "Kostenlos";
+"settings.subscription.free.detail" = "Der komplette Workout-Tracker";
+"settings.subscription.manage.title" = "Abo verwalten";
+"settings.subscription.manage.subtitle" = "Wiederherstellen, ändern, kündigen oder Erstattung anfragen";
+"settings.subscription.free.footer" = "Tracke unbegrenzt viele Workouts kostenlos. Gym Streak Pro ergänzt unbegrenzte Routinen und die vollständige Fortschrittsanalyse.";
 
 // MARK: - Routines View
 "routines.title" = "Routinen";
@@ -271,6 +286,7 @@
 "action.add" = "Hinzufügen";
 "action.remove" = "Entfernen";
 "action.dismiss" = "Schließen";
+"action.retry" = "Erneut versuchen";
 "action.continue" = "Weiter";
 "action.back" = "Zurück";
 
@@ -928,6 +944,17 @@
 "ai_coach.chat.allowance.nudge" = "%1$d von %2$d Coach-Nachrichten diesen Monat übrig";
 "ai_coach.chat.allowance.nudge.exhausted" = "Diesen Monat keine Coach-Nachrichten mehr. Mit Gym Streak Pro chattest du unbegrenzt.";
 
+// P4 — AI-Rückblick, monatliche Kostprobe
+"ai_coach.period_recap.allowance.nudge" = "%1$d von %2$d kostenlosen AI-Rückblicken diesen Monat übrig";
+"ai_coach.period_recap.allowance.nudge.exhausted" = "Diesen Monat keine kostenlosen AI-Rückblicke mehr. Mit Gym Streak Pro sind sie unbegrenzt.";
+"ai_coach.period_recap.offer.title" = "AI-Rückblick erstellen";
+"ai_coach.period_recap.offer.subtitle" = "Dein Coach wertet %@ direkt auf diesem Gerät aus und fasst zusammen, was sich verändert hat.";
+"ai_coach.period_recap.offer.cta" = "Rückblick erstellen";
+
+// P5 — AI-Übungsanalyse, monatliche Kostprobe
+"ai_coach.deep_dive.allowance.nudge" = "%1$d von %2$d kostenlosen Übungs-Analysen diesen Monat übrig";
+"ai_coach.deep_dive.allowance.nudge.exhausted" = "Diesen Monat keine kostenlosen Übungs-Analysen mehr. Mit Gym Streak Pro sind sie unbegrenzt.";
+
 // MARK: - Seed Exercise Catalog (built-in starter library)
 
 // Chest
@@ -1074,7 +1101,9 @@
 "paywall.headline.period_recap" = "Unbegrenzte Rückblicke";
 "paywall.headline.exercise_deep_dive" = "Unbegrenzte Übungs-Analysen";
 "paywall.headline.weekday_schedule" = "Wochentag-Zeitpläne";
-"paywall.placeholder.body" = "Gym Streak Pro ist noch nicht verfügbar.";
+// Shown when no offering could be resolved (offline, or the placement is not
+// configured in the dashboard). It never unlocks the gated capability.
+"paywall.unavailable.body" = "Das Angebot konnte nicht geladen werden. Prüfe deine Verbindung und versuche es erneut.";
 // Placement B's endowed-progress line. The numbers are the user's own real totals.
 "paywall.value_moment.figures" = "Du hast %@ Trainings, %@ Sätze und %@ kg Volumen protokolliert.";
 
@@ -1085,3 +1114,18 @@
 "pro.lock.accessibility_hint" = "Mit Gym Streak Pro freischalten";
 "pro.badge.label" = "PRO";
 "pro.badge.accessibility" = "Gym Streak Pro Funktion";
+
+// MARK: - Founder celebration (docs/monetization-strategy.md §7)
+// Shown once to users who installed before monetization. A thank-you, never an
+// offer: no purchase call to action may appear on this screen.
+"founder.celebration.eyebrow" = "FOUNDER";
+"founder.celebration.headline" = "Pro gehört dir, für immer";
+"founder.celebration.body" = "Du warst schon dabei, bevor es Gym Streak Pro gab. Das macht dich zum Founder — Pro gehört dir, kostenlos, für immer. Kein Abo, kein Konto, nichts zu tun.";
+"founder.celebration.included1.title" = "Unbegrenzte Routinen";
+"founder.celebration.included1.detail" = "Erstelle so viele Trainingspläne, wie du willst.";
+"founder.celebration.included2.title" = "Volle Fortschritts-Analysen";
+"founder.celebration.included2.detail" = "Alle Metriken, über deine gesamte Trainingshistorie.";
+"founder.celebration.included3.title" = "Alles, was zu Pro dazukommt";
+"founder.celebration.included3.detail" = "Neue Pro-Funktionen sind automatisch dabei.";
+"founder.celebration.footer" = "Danke, dass du von Anfang an dabei bist.";
+"founder.celebration.cta" = "Los geht's";

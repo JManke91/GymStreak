@@ -5,6 +5,11 @@
 //  Orchestrates AI period recap generation: cache lookup, streaming,
 //  range switching, and graceful degradation.
 //
+//  Since ticket 09 a fresh generation also spends the free monthly taster
+//  (P4, docs/pro-subscription.md §5e). Re-reading a cached recap does not, and
+//  a metered user is never generated *for* — they are offered the generation
+//  and tap it.
+//
 
 import Foundation
 import SwiftData
@@ -27,6 +32,13 @@ enum PeriodRecapState {
     case insufficient(HeadlineMetrics)
     /// Unexpected generation error.
     case error(String)
+    /// Free tier with allowance left: a fresh recap would spend the month's
+    /// single generation, so the screen offers it and waits for a tap.
+    /// Unreachable for a Pro user and while the kill switch is off.
+    case offer(HeadlineMetrics?)
+    /// Free tier with nothing left this month — the paywall has been raised and
+    /// the screen shows the unlock affordance behind it.
+    case gated(HeadlineMetrics?)
 }
 
 // MARK: - ViewModel
@@ -61,6 +73,7 @@ final class PeriodRecapViewModel {
     private let cache: AICoachCaching
     private let preferences: AICoachPreferencesProviding
     private let availability: AICoachAvailabilityProviding
+    private let allowanceGate: AICoachAllowanceGate
 
     /// ISO8601 date formatter for building cache keys.
     private let isoFmt: ISO8601DateFormatter = {
@@ -74,39 +87,114 @@ final class PeriodRecapViewModel {
     // Defaults are resolved inside the @MainActor-isolated init body — a
     // `= Foo.shared` default argument would be evaluated in a nonisolated
     // context (error under Swift 6 language mode).
+    //
+    // `allowanceGate` has no such default: it carries the entitlement and the
+    // paywall seam, which per Hard rule 2 come from `AppDependencies` and never
+    // from a singleton.
     init(
         initialRange: PeriodRange,
+        allowanceGate: AICoachAllowanceGate,
         service: AICoachServicing? = nil,
         cache: AICoachCaching? = nil,
         preferences: AICoachPreferencesProviding? = nil,
         availability: AICoachAvailabilityProviding? = nil
     ) {
         self.range = initialRange
+        self.allowanceGate = allowanceGate
         self.service = service ?? AICoachService.shared
         self.cache = cache ?? AICoachCache.shared
         self.preferences = preferences ?? AICoachPreferences.shared
         self.availability = availability ?? AICoachAvailability.shared
     }
 
+    // MARK: - Free-tier allowance
+
+    /// The §8 placement D hint, or `nil` when none belongs on screen.
+    ///
+    /// Computed, not stored: the gate reads the `@Observable` entitlement
+    /// provider inside it, so a purchase or a lapse removes or restores the
+    /// hint with no reload.
+    var allowanceNudge: AIAllowanceNudge? {
+        AIAllowanceNudge(
+            state: allowanceGate.nudgeState,
+            remainingFormat: "ai_coach.period_recap.allowance.nudge".localized,
+            exhaustedText: "ai_coach.period_recap.allowance.nudge.exhausted".localized
+        )
+    }
+
+    /// Raises `.periodRecap` from the unlock CTA on the `.gated` state.
+    func unlock() {
+        allowanceGate.presentPaywall()
+    }
+
+    /// Identity for the screen's `.task(id:)`, so a change of entitlement
+    /// re-enters `load`.
+    ///
+    /// **This screen is the one place a gate is *stored* rather than derived.**
+    /// `.gated` and `.offer` are written into `state` (they are steps in a flow —
+    /// the screen waits for a tap), so unlike every other gate in the app they
+    /// do not fix themselves when the entitlement changes. Left alone, a user who
+    /// bought Pro from this very screen's paywall kept the lock *and* lost the
+    /// CTA: `unlock()` asks `PaywallPresenter`, which correctly refuses to show
+    /// a paywall to a Pro user, so the button became inert. Re-entry is what
+    /// clears it — and for a now-unmetered user, `load` streams the recap they
+    /// just paid for.
+    ///
+    /// Reading `isMetered` is what makes this live: it goes through the
+    /// `@Observable` entitlement provider, so the view's `body` registers the
+    /// dependency and SwiftUI restarts the task on its own
+    /// (docs/pro-subscription.md §3c).
+    var allowanceReloadKey: Bool { allowanceGate.isMetered }
+
     // MARK: - Public API
 
     /// Load from cache if available, otherwise stream fresh content.
+    ///
+    /// Navigation, not intent: a metered user lands on `.offer` rather than on
+    /// a generation they did not ask for.
     func load(modelContext: ModelContext) async {
         streamTask?.cancel()
         state = .loading
         streamTask = Task { [weak self] in
-            await self?.run(modelContext: modelContext, bypassCache: false)
+            await self?.run(modelContext: modelContext, bypassCache: false, ticket: nil)
         }
     }
 
     /// Bypass cache and stream fresh content for the current range.
+    ///
+    /// The gate is asked **before** the cache is invalidated, and a refusal
+    /// leaves the state untouched: the recap the user already spent an
+    /// allowance on stays on screen and on disk behind the paywall (§7 Rule 4).
     func regenerate(modelContext: ModelContext) async {
+        guard let ticket = allowanceGate.requestGeneration() else { return }
         streamTask?.cancel()
         let key = buildCacheKey(range: range, modelContext: modelContext)
         if let key { cache.invalidatePeriodRecap(key: key) }
         state = .loading
-        streamTask = Task { [weak self] in
-            await self?.run(modelContext: modelContext, bypassCache: true)
+        streamTask = Task { [weak self, gate = allowanceGate] in
+            guard let self else {
+                gate.refund(ticket)
+                return
+            }
+            await self.run(modelContext: modelContext, bypassCache: true, ticket: ticket)
+        }
+    }
+
+    /// The explicit "generate it" tap on the `.offer` state — the only path
+    /// that spends a metered user's monthly recap.
+    func generateNow(modelContext: ModelContext) async {
+        guard let ticket = allowanceGate.requestGeneration() else {
+            state = .gated(buildHeadlineMetrics(range: range, modelContext: modelContext))
+            return
+        }
+        streamTask?.cancel()
+        state = .loading
+        streamTask = Task { [weak self, gate = allowanceGate] in
+            guard let self else {
+                gate.refund(ticket)
+                return
+            }
+            await self.run(modelContext: modelContext, bypassCache: false, ticket: ticket)
         }
     }
 
@@ -117,7 +205,7 @@ final class PeriodRecapViewModel {
         range = newRange
         state = .loading
         streamTask = Task { [weak self] in
-            await self?.run(modelContext: modelContext, bypassCache: false)
+            await self?.run(modelContext: modelContext, bypassCache: false, ticket: nil)
         }
     }
 
@@ -126,9 +214,32 @@ final class PeriodRecapViewModel {
         streamTask = nil
     }
 
+#if DEBUG
+    /// Test hook: awaits the in-flight generation so a test can assert on the
+    /// terminal state (and on what the allowance was charged) instead of
+    /// polling `Task.yield()`. The generation itself is fire-and-forget by
+    /// design — the `.task` that starts it must be free to be cancelled
+    /// independently — which is why this is a hook rather than an `await` in
+    /// `load`.
+    func waitForCurrentGeneration() async {
+        await streamTask?.value
+    }
+#endif
+
     // MARK: - Core Pipeline
 
-    private func run(modelContext: ModelContext, bypassCache: Bool) async {
+    /// - Parameter ticket: a generation the user already authorised
+    ///   (`generateNow`, `regenerate`), or `nil` on the navigation path, where
+    ///   the allowance is resolved at step 5 instead. Every exit that does not
+    ///   produce a recap gives the unit back.
+    private func run(
+        modelContext: ModelContext,
+        bypassCache: Bool,
+        ticket: AICoachAllowanceGate.Ticket?
+    ) async {
+        var pending = ticket
+        defer { if let pending { allowanceGate.refund(pending) } }
+
         // 1. Availability
         switch availability.state {
         case .deviceNotEligible, .appleIntelligenceNotEnabled:
@@ -178,21 +289,66 @@ final class PeriodRecapViewModel {
             }
         }
 
-        // 5. Stream
-        await stream(
+        // 5. The free monthly taster (P4). Everything above this line stays
+        //    free: an unavailable device, a period too thin to narrate and —
+        //    above all — a cached recap never reach the meter.
+        guard let admitted = admitGeneration(
+            preAuthorized: pending,
+            // Step 3's metrics, not a second aggregation: `buildHeadlineMetrics`
+            // fetches sessions and walks their exercise relationships on the
+            // main actor, and `sampleInput.headline` is the same figure the
+            // screen would show.
+            metrics: sampleInput.headline
+        ) else { return }
+        pending = admitted
+
+        // 6. Stream
+        if await stream(
             range: range,
             modelContext: modelContext,
             headlineMetrics: sampleInput.headline
-        )
+        ) {
+            pending = nil
+        }
+    }
+
+    /// Resolves the allowance for a generation about to start, or parks the
+    /// screen on the offer / the gate and returns `nil`.
+    ///
+    /// The navigation path (`load`, `setRange`) deliberately never generates
+    /// for a metered user. One free recap a month is a single, irreversible
+    /// choice, and opening the screen — or tapping a range chip, or following
+    /// the proactive month-boundary prompt — must not be the thing that spends
+    /// it. An unmetered user is unaffected: they stream immediately, exactly as
+    /// the screen did before monetization.
+    private func admitGeneration(
+        preAuthorized: AICoachAllowanceGate.Ticket?,
+        metrics: HeadlineMetrics?
+    ) -> AICoachAllowanceGate.Ticket? {
+        if let preAuthorized { return preAuthorized }
+        guard allowanceGate.isMetered else { return allowanceGate.requestGeneration() }
+
+        if allowanceGate.isExhausted {
+            allowanceGate.presentPaywallIfExhausted()
+            state = .gated(metrics)
+        } else {
+            state = .offer(metrics)
+        }
+        return nil
     }
 
     // MARK: - Streaming
 
+    /// - Returns: `true` only when a complete recap reached the screen and the
+    ///   cache. The caller keeps the allowance unit on `true` and refunds it
+    ///   otherwise — a cancelled or superseded stream surfaces nothing and
+    ///   saves nothing, so it costs the user nothing.
+    @discardableResult
     private func stream(
         range: PeriodRange,
         modelContext: ModelContext,
         headlineMetrics: HeadlineMetrics
-    ) async {
+    ) async -> Bool {
         let locale = Locale.current
         let capturedRange = range
 
@@ -222,7 +378,7 @@ final class PeriodRecapViewModel {
             ) else {
                 let metrics = buildHeadlineMetrics(range: capturedRange, modelContext: modelContext)
                 state = .unavailable(metrics)
-                return
+                return false
             }
 
             var finalOutput: PeriodRecapOutput?
@@ -258,20 +414,22 @@ final class PeriodRecapViewModel {
             }
 
             // If cancelled mid-stream, do not surface partial output.
-            guard !Task.isCancelled else { return }
+            guard !Task.isCancelled else { return false }
 
             guard let output = finalOutput else {
                 if self.range == capturedRange {
                     state = .error("ai_coach.period_recap.error.empty_output".localized)
                 }
-                return
+                return false
             }
 
             // Cache and surface result only if range hasn't changed
+            var didDeliver = false
             if self.range == capturedRange {
                 let key = buildCacheKey(range: capturedRange, modelContext: modelContext)
                 if let key { cache.savePeriodRecap(key: key, output: output) }
                 state = .success(output, isCached: false, generatedAt: Date(), metrics: headlineMetrics)
+                didDeliver = true
             }
 
             let elapsed = ContinuousClock.now - start
@@ -283,6 +441,7 @@ final class PeriodRecapViewModel {
                 outputTokens: nil,
                 success: true
             )
+            return didDeliver
 
         } catch let error as LanguageModelSession.GenerationError {
             let elapsed = ContinuousClock.now - start
@@ -308,6 +467,8 @@ final class PeriodRecapViewModel {
             AICoachTelemetry.recordGeneration(useCase: "period_recap", durationMs: ms, inputTokens: nil, outputTokens: nil, success: false)
             if self.range == capturedRange { state = .error(error.localizedDescription) }
         }
+
+        return false
     }
 
     // MARK: - Cache Key

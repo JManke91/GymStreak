@@ -8,6 +8,7 @@
 
 import Foundation
 import Observation
+import OSLog
 
 /// Composes the two things that can make a user Pro — the local Founder grant
 /// and an active purchase — into the single `ProEntitlementState` every gate
@@ -83,38 +84,89 @@ final class ProEntitlementProvider: ProEntitlementProviding {
 
     var isPro: Bool { state.isPro }
 
-    /// Resolves the Founder grant (at most once per install) and re-reads the
-    /// purchased entitlement.
+    /// Re-reads the purchased entitlement and resolves the Founder grant.
     ///
-    /// Composed **twice**, on purpose: a granted Founder is live before the
-    /// network call is even attempted, so a user who was here first keeps Pro
-    /// when RevenueCat is unreachable, slow, or never answers at all.
+    /// Composed **three** times, and the order is the fix for a bug rather than
+    /// a preference (docs/pro-subscription.md §3d):
+    ///
+    /// 1. Immediately, before any I/O — a Founder grant already on record is
+    ///    live without waiting for anything.
+    /// 2. After the purchase read. This one used to run *last*, queued behind
+    ///    `resolveIfNeeded()`, and that is what broke the purchase flow: the
+    ///    Founder resolution round-trips StoreKit's `AppTransaction`, and in
+    ///    every non-production environment it can never record a decision, so it
+    ///    re-attempts that round-trip on every single call. A refresh fired the
+    ///    moment a user paid therefore sat behind a StoreKit call that can take
+    ///    tens of seconds — or, mid-purchase, block on an App Store sign-in
+    ///    prompt that never appears — and the entitlement it was supposed to
+    ///    deliver never arrived.
+    /// 3. After the Founder resolution, for a grant that resolved just now.
+    ///
+    /// A read that *failed* writes nothing at all. `.none` from this method used
+    /// to mean both "no purchase" and "could not ask", so an offline refresh
+    /// revoked an entitlement the stream had already delivered.
     func refresh() async {
-        await founderStatus.resolveIfNeeded()
         recompose()
-        purchased = await purchases.currentEntitlement()
+
+        do {
+            purchased = try await purchases.currentEntitlement()
+            recompose()
+        } catch {
+            // Offline, or the backend failed. Never "revoked": whatever the
+            // stream last delivered stands, and the next emission corrects it.
+            Self.logger.info(
+                """
+                Entitlement read failed, keeping \
+                \(String(describing: self.purchased), privacy: .public) — \
+                \(String(describing: error), privacy: .public)
+                """
+            )
+        }
+
+        await founderStatus.resolveIfNeeded()
         recompose()
     }
 
     /// Founder wins. The grant is local, permanent and offline-durable, so it
     /// takes precedence over anything the network says — including "no
-    /// purchase", which is also what a failed lookup reports.
+    /// purchase". (A *failed* lookup no longer says anything at all: since §3d
+    /// the two reads throw rather than reporting `.none`.)
     ///
     /// The consequence, accepted knowingly: a Founder who somehow *also* holds a
     /// subscription reads as `.founder`, so Settings (ticket 13) would show the
     /// grandfathered source rather than the paid one. A Founder is never shown a
     /// paywall, so nothing in the app can produce that pairing.
     private func recompose() {
-        guard !founderStatus.isFounder else {
-            resolvedState = .founder
-            return
+        let composed: ProEntitlementState
+        if founderStatus.isFounder {
+            composed = .founder
+        } else {
+            switch purchased {
+            case .none: composed = .free
+            case .subscription: composed = .subscription
+            case .lifetime: composed = .lifetime
+            }
         }
-        switch purchased {
-        case .none: resolvedState = .free
-        case .subscription: resolvedState = .subscription
-        case .lifetime: resolvedState = .lifetime
-        }
+        // For the log line, and as belt and braces under it. `refresh()`
+        // recomposes three times per call and has three callers, so most
+        // recompositions write the value that is already there; an unconditional
+        // log would bury the one transition worth reading. Observation happens to
+        // suppress the redundant *notification* on its own — the `@Observable`
+        // macro compares `Equatable` values before notifying, and
+        // `ProEntitlementState` is a raw-value enum (`idempotentStateDoesNotNotify`
+        // pins that) — but that guarantee lives in the property's conformance,
+        // not here, and this guard is what makes it not matter.
+        guard composed != resolvedState else { return }
+        Self.logger.info(
+            """
+            Entitlement \(self.resolvedState.rawValue, privacy: .public) → \
+            \(composed.rawValue, privacy: .public)
+            """
+        )
+        resolvedState = composed
     }
+
+    private static let logger = Logger(subsystem: "app.gymstreak.pro", category: "Entitlement")
 }
 
 #if DEBUG
@@ -122,6 +174,12 @@ final class ProEntitlementProvider: ProEntitlementProviding {
 /// the real store — are DEBUG-only, so a shipping binary has no writable
 /// entitlement and no purchase entry point at all until ticket 14's paywall.
 extension ProEntitlementProvider: ProEntitlementDebugging {
+
+    /// The two backend facts, projected from the Data layer's configuration so
+    /// the debug section never has to name it (§9.4a).
+    var storeBackendDescription: String { RevenueCatConfiguration.backendDescription }
+
+    var isUsingTestStore: Bool { RevenueCatConfiguration.isUsingTestStore }
 
     func availableProducts() async -> [ProPurchaseOption] {
         await purchases.availableProducts()
@@ -133,14 +191,19 @@ extension ProEntitlementProvider: ProEntitlementDebugging {
             // The stream reports this too; reading it back makes the entitlement
             // observable the instant the sheet dismisses rather than a round-trip
             // later.
-            purchased = await purchases.currentEntitlement()
-            recompose()
+            if let entitlement = try? await purchases.currentEntitlement() {
+                purchased = entitlement
+                recompose()
+            }
         }
         return result
     }
 
     func restorePurchases() async {
-        purchased = await purchases.restorePurchases()
+        // A restore that could not run found nothing to *report*, which is not
+        // the same as finding nothing — and must not revoke what is already held.
+        guard let entitlement = try? await purchases.restorePurchases() else { return }
+        purchased = entitlement
         recompose()
     }
 }

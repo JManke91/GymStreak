@@ -29,6 +29,10 @@ class RoutinesViewModel: ObservableObject {
     private let proactivePaywalls: ProactivePaywallCoordinator?
     private let isGatingEnabled: Bool
     private var cloudSyncObserver: NSObjectProtocol?
+    /// Republishes when the entitlement changes. Without it a purchase leaves
+    /// every cap check on this screen reporting the right answer to a view that
+    /// is never asked to draw again (docs/pro-subscription.md §3c).
+    private var entitlementObserver: EntitlementChangeObserver?
 
     // Watch-workout ingestion lives in WatchWorkoutIngestionCoordinator
     // (composition root) since ticket 04 — payloads are drained from the
@@ -59,6 +63,13 @@ class RoutinesViewModel: ObservableObject {
         observeCloudKitChanges()
         observeWatchAvailability()
         observeRoutineTemplateChanges()
+        entitlementObserver = EntitlementChangeObserver(
+            entitlements: proEntitlements
+        ) { [weak self] in
+            // The cap and the §8 D nudge are both computed from the entitlement,
+            // so there is nothing to recompute — only something to redraw.
+            self?.objectWillChange.send()
+        }
     }
 
     private func observeCloudKitChanges() {

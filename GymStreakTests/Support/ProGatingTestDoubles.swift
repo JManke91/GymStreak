@@ -39,6 +39,8 @@ final class RecordingPaywallPresenter: PaywallPresenting {
         pendingPlacement = placement
     }
 
+    func sheetDidAppear() {}
+
     func didPresent(_ placement: PaywallPlacement) {}
 
     func dismiss() {

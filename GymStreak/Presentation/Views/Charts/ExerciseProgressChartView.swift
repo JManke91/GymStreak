@@ -38,7 +38,8 @@ struct ExerciseProgressChartView: View {
             availableExercises: availableExercises,
             snapshotProvider: dependencies.historySnapshotProvider,
             proEntitlements: dependencies.proEntitlements,
-            paywalls: dependencies.paywalls
+            paywalls: dependencies.paywalls,
+            deepDiveAllowanceGate: dependencies.makeAICoachAllowanceGate(for: .exerciseDeepDive)
         )
     }
 }
@@ -56,9 +57,13 @@ private struct ExerciseProgressChartViewInternal: View {
 
     // MARK: - AI Coach Deep-Dive
 
-    @State private var deepDiveVM = ExerciseDeepDiveViewModel()
+    @State private var deepDiveVM: ExerciseDeepDiveViewModel
     @State private var hasTappedAskCoach = false
     @Query private var allExercises: [Exercise]
+    /// Retained so `switchToExercise` can rebuild the deep-dive ViewModel — a
+    /// view may not construct the entitlement or the paywall seam itself, and
+    /// the gate is a cheap, stateless composition of app-lifetime collaborators.
+    private let deepDiveAllowanceGate: AICoachAllowanceGate
 
     init(
         exerciseName: String,
@@ -66,11 +71,16 @@ private struct ExerciseProgressChartViewInternal: View {
         availableExercises: [ExerciseWithHistory],
         snapshotProvider: HistorySnapshotProviding,
         proEntitlements: any ProEntitlementProviding,
-        paywalls: any PaywallPresenting
+        paywalls: any PaywallPresenting,
+        deepDiveAllowanceGate: AICoachAllowanceGate
     ) {
         self._currentExerciseName = State(initialValue: exerciseName)
         self._currentExerciseId = State(initialValue: exerciseId)
         self.availableExercises = availableExercises
+        self.deepDiveAllowanceGate = deepDiveAllowanceGate
+        self._deepDiveVM = State(
+            initialValue: ExerciseDeepDiveViewModel(allowanceGate: deepDiveAllowanceGate)
+        )
         self._viewModel = StateObject(wrappedValue: ExerciseProgressViewModel(
             exerciseName: exerciseName,
             exerciseId: exerciseId,
@@ -473,13 +483,24 @@ private struct ExerciseProgressChartViewInternal: View {
         if prefs.isExerciseDeepDiveEffectivelyEnabled, avail.isAvailable, let exercise = resolvedExercise {
             Group {
                 if case .idle = deepDiveVM.state, !hasTappedAskCoach {
-                    CoachDeepDiveButton(exerciseName: currentExerciseName) {
-                        hasTappedAskCoach = true
-                        deepDiveVM.generate(
-                            exercise: exercise,
-                            locale: .current,
-                            modelContext: modelContext
-                        )
+                    VStack(spacing: 10) {
+                        // §8 placement D — the free-tier allowance hint, above
+                        // the button that spends it. Blocks nothing.
+                        if let nudge = deepDiveVM.allowanceNudge {
+                            OnyxCapNudge(text: nudge.text, used: nudge.used, limit: nudge.limit)
+                        }
+                        CoachDeepDiveButton(exerciseName: currentExerciseName) {
+                            // Only commit to the surface if the generation was
+                            // admitted: a refused tap raises the paywall and
+                            // leaves the button where it was.
+                            if deepDiveVM.generate(
+                                exercise: exercise,
+                                locale: .current,
+                                modelContext: modelContext
+                            ) {
+                                hasTappedAskCoach = true
+                            }
+                        }
                     }
                     .transition(.opacity)
                 } else {
@@ -519,7 +540,7 @@ private struct ExerciseProgressChartViewInternal: View {
         // Changes `viewModel.loadKey`, which restarts the `.task(id:)` load.
         viewModel.updateExercise(exercise.name, exerciseId: exercise.exerciseId)
         // Reset deep-dive state when the user switches exercises
-        deepDiveVM = ExerciseDeepDiveViewModel()
+        deepDiveVM = ExerciseDeepDiveViewModel(allowanceGate: deepDiveAllowanceGate)
         hasTappedAskCoach = false
     }
 }

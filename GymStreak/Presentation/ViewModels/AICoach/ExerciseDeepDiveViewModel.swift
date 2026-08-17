@@ -7,6 +7,9 @@
 //  streaming, and graceful degradation — all AI logic stays
 //  out of the view layer.
 //
+//  Since ticket 09 a fresh generation also spends the free monthly taster
+//  (P5, docs/pro-subscription.md §5e). Re-reading a cached narrative does not.
+//
 
 import Foundation
 import SwiftData
@@ -22,6 +25,10 @@ import os
 /// 2. If no cache hit, the view renders `CoachDeepDiveButton`. Tapping it calls
 ///    `generate(exercise:locale:modelContext:)`.
 /// 3. `regenerate(...)` bypasses the cache and forces a fresh generation.
+///
+/// Steps 2 and 3 pass through `AICoachAllowanceGate` (P5, one free generation
+/// per calendar month); step 1 never does — a narrative already generated is
+/// free to re-read forever, in every entitlement state.
 @Observable
 @MainActor
 final class ExerciseDeepDiveViewModel {
@@ -57,22 +64,44 @@ final class ExerciseDeepDiveViewModel {
     private let cache: AICoachCaching
     private let preferences: AICoachPreferencesProviding
     private let availability: AICoachAvailabilityProviding
+    private let allowanceGate: AICoachAllowanceGate
 
     // MARK: - Init
 
     // Defaults are resolved inside the @MainActor-isolated init body — a
     // `= Foo.shared` default argument would be evaluated in a nonisolated
     // context (error under Swift 6 language mode).
+    //
+    // `allowanceGate` has no such default: it carries the entitlement and the
+    // paywall seam, which per Hard rule 2 come from `AppDependencies` and never
+    // from a singleton.
     init(
+        allowanceGate: AICoachAllowanceGate,
         service: AICoachServicing? = nil,
         cache: AICoachCaching? = nil,
         preferences: AICoachPreferencesProviding? = nil,
         availability: AICoachAvailabilityProviding? = nil
     ) {
+        self.allowanceGate = allowanceGate
         self.service = service ?? AICoachService.shared
         self.cache = cache ?? AICoachCache.shared
         self.preferences = preferences ?? AICoachPreferences.shared
         self.availability = availability ?? AICoachAvailability.shared
+    }
+
+    // MARK: - Free-tier allowance
+
+    /// The §8 placement D hint, or `nil` when none belongs on screen.
+    ///
+    /// Computed, not stored: the gate reads the `@Observable` entitlement
+    /// provider inside it, so a purchase or a lapse removes or restores the
+    /// hint with no reload.
+    var allowanceNudge: AIAllowanceNudge? {
+        AIAllowanceNudge(
+            state: allowanceGate.nudgeState,
+            remainingFormat: "ai_coach.deep_dive.allowance.nudge".localized,
+            exhaustedText: "ai_coach.deep_dive.allowance.nudge.exhausted".localized
+        )
     }
 
     // MARK: - Public API
@@ -94,24 +123,74 @@ final class ExerciseDeepDiveViewModel {
     /// Generates a deep-dive narrative for `exercise`, using cache if available.
     /// Fire-and-forget: cancels any in-flight stream before starting a new one.
     /// Transitions to `.preparing` synchronously so the UI responds to the tap immediately.
-    func generate(exercise: Exercise, locale: Locale, modelContext: ModelContext) {
-        streamTask?.cancel()
-        state = .preparing
-        streamTask = Task { [weak self] in
-            await self?.run(exercise: exercise, locale: locale, modelContext: modelContext, bypassCache: false)
-        }
+    ///
+    /// Returns `false` when the free monthly allowance is spent — the gate has
+    /// raised `.exerciseDeepDive` and the state is left untouched, so the "Ask
+    /// the Coach" button stays where it was rather than collapsing into an
+    /// empty surface behind the paywall.
+    @discardableResult
+    func generate(exercise: Exercise, locale: Locale, modelContext: ModelContext) -> Bool {
+        guard let ticket = allowanceGate.requestGeneration() else { return false }
+        start(
+            exercise: exercise,
+            locale: locale,
+            modelContext: modelContext,
+            bypassCache: false,
+            ticket: ticket
+        )
+        return true
     }
 
     /// Forces a fresh generation, ignoring any cached result.
     /// Fire-and-forget: cancels any in-flight stream before starting a new one.
-    func regenerate(exercise: Exercise, locale: Locale, modelContext: ModelContext) {
-        streamTask?.cancel()
-        state = .preparing
+    ///
+    /// The gate is asked **before** the cache is invalidated: a refused
+    /// regeneration must leave the narrative the user already paid an allowance
+    /// for both on screen and on disk (§7 Rule 4).
+    @discardableResult
+    func regenerate(exercise: Exercise, locale: Locale, modelContext: ModelContext) -> Bool {
+        guard let ticket = allowanceGate.requestGeneration() else { return false }
         if let key = cacheKey(exerciseId: exercise.id, modelContext: modelContext) {
             cache.invalidateExerciseDeepDive(key: key)
         }
-        streamTask = Task { [weak self] in
-            await self?.run(exercise: exercise, locale: locale, modelContext: modelContext, bypassCache: true)
+        start(
+            exercise: exercise,
+            locale: locale,
+            modelContext: modelContext,
+            bypassCache: true,
+            ticket: ticket
+        )
+        return true
+    }
+
+    /// Starts the stream for an already-admitted generation.
+    ///
+    /// The task captures the **gate** strongly alongside `[weak self]`, like the
+    /// chat's refund closure does: if this `@State`-owned ViewModel is gone
+    /// before the task body runs, the reserved unit still has to find its way
+    /// back to the user. The gate holds only app-lifetime collaborators, so a
+    /// strong capture neither leaks nor cycles.
+    private func start(
+        exercise: Exercise,
+        locale: Locale,
+        modelContext: ModelContext,
+        bypassCache: Bool,
+        ticket: AICoachAllowanceGate.Ticket
+    ) {
+        streamTask?.cancel()
+        state = .preparing
+        streamTask = Task { [weak self, gate = allowanceGate] in
+            guard let self else {
+                gate.refund(ticket)
+                return
+            }
+            await self.run(
+                exercise: exercise,
+                locale: locale,
+                modelContext: modelContext,
+                bypassCache: bypassCache,
+                ticket: ticket
+            )
         }
     }
 
@@ -121,14 +200,34 @@ final class ExerciseDeepDiveViewModel {
         streamTask = nil
     }
 
+#if DEBUG
+    /// Test hook: awaits the in-flight generation so a test can assert on the
+    /// terminal state (and on what the allowance was charged) instead of
+    /// polling `Task.yield()`. Generation is fire-and-forget by design — the
+    /// tap must return immediately — which is why this is a hook rather than
+    /// an `await` inside `generate`.
+    func waitForCurrentGeneration() async {
+        await streamTask?.value
+    }
+#endif
+
     // MARK: - Core pipeline
 
+    /// - Parameter ticket: the admitted generation. Every exit that does not
+    ///   produce a narrative gives its unit back — an unavailable model, the
+    ///   preference switched off mid-flight, a cache hit that arrived first, an
+    ///   exercise with too little data, a failed or cancelled stream. Only a
+    ///   completed narrative keeps it.
     private func run(
         exercise: Exercise,
         locale: Locale,
         modelContext: ModelContext,
-        bypassCache: Bool
+        bypassCache: Bool,
+        ticket: AICoachAllowanceGate.Ticket
     ) async {
+        var pending: AICoachAllowanceGate.Ticket? = ticket
+        defer { if let pending { allowanceGate.refund(pending) } }
+
         // 1. Availability check
         guard await isAvailable() else {
             state = .unavailable
@@ -163,7 +262,9 @@ final class ExerciseDeepDiveViewModel {
         }
 
         // 5. Stream
-        await stream(input: input, exerciseId: exercise.id, modelContext: modelContext)
+        if await stream(input: input, exerciseId: exercise.id, modelContext: modelContext) {
+            pending = nil
+        }
     }
 
     // MARK: - Availability helper
@@ -183,17 +284,21 @@ final class ExerciseDeepDiveViewModel {
 
     // MARK: - Streaming
 
+    /// - Returns: `true` only when a complete narrative reached the screen. The
+    ///   caller keeps the allowance unit on `true` and refunds it otherwise —
+    ///   a cancelled stream surfaces no text, so it costs nothing either.
+    @discardableResult
     private func stream(
         input: ExerciseDeepDiveInput,
         exerciseId: UUID,
         modelContext: ModelContext
-    ) async {
+    ) async -> Bool {
         let start = ContinuousClock.now
 
         do {
             guard let responseStream = try await service.streamExerciseDeepDive(input: input) else {
                 state = .unavailable
-                return
+                return false
             }
 
             var finalText = ""
@@ -205,7 +310,7 @@ final class ExerciseDeepDiveViewModel {
             }
 
             // If cancelled mid-stream, do not surface partial output.
-            guard !Task.isCancelled else { return }
+            guard !Task.isCancelled else { return false }
 
             // Stream complete
             state = .success(text: finalText, isCached: false)
@@ -227,6 +332,7 @@ final class ExerciseDeepDiveViewModel {
                 outputTokens: nil,
                 success: true
             )
+            return true
 
         } catch let error as LanguageModelSession.GenerationError {
             let elapsed = ContinuousClock.now - start
@@ -269,6 +375,8 @@ final class ExerciseDeepDiveViewModel {
             )
             state = .error
         }
+
+        return false
     }
 
     // MARK: - Cache key

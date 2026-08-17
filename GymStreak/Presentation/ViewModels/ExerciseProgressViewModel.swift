@@ -54,6 +54,12 @@ class ExerciseProgressViewModel: ObservableObject {
     /// the newest generation is allowed to write.
     private var generation = 0
 
+    /// Republishes when the entitlement changes (docs/pro-subscription.md §3c).
+    /// It does more here than repaint: `chartTimeframe` is part of `loadKey`, so
+    /// the re-render is what restarts `.task(id:)` and actually widens the
+    /// window a purchase just unlocked.
+    private var entitlementObserver: EntitlementChangeObserver?
+
     /// - Parameter isGatingEnabled: injected rather than read from `ProGating`
     ///   inside the gate, for the same reason `PaywallPresenter` and
     ///   `RoutinesViewModel` inject it: the shipped switch is off, so a test
@@ -72,6 +78,11 @@ class ExerciseProgressViewModel: ObservableObject {
         self.proEntitlements = proEntitlements
         self.paywalls = paywalls
         self.isGatingEnabled = isGatingEnabled
+        entitlementObserver = EntitlementChangeObserver(
+            entitlements: proEntitlements
+        ) { [weak self] in
+            self?.objectWillChange.send()
+        }
     }
 
     /// Keyed on `chartTimeframe`, not on the selection: picking a Pro-only

@@ -1,0 +1,69 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+    Privacy manifest for the GymStreak iOS app target.
+
+    Every entry below is justified in docs/pro-subscription.md §9.7, including
+    why the categories that are absent are absent. Change this file only
+    together with that section and with the App Store Connect nutrition labels —
+    the three have to agree.
+-->
+<plist version="1.0">
+<dict>
+	<!-- No tracking: no IDFA, no AdSupport, no attribution SDK, and
+	     RevenueCat's collectDeviceIdentifiers() is deliberately never called.
+	     NSPrivacyTrackingDomains is therefore omitted rather than empty. -->
+	<key>NSPrivacyTracking</key>
+	<false/>
+
+	<key>NSPrivacyCollectedDataTypes</key>
+	<array>
+		<!-- Purchase history leaves the device for RevenueCat, which validates
+		     receipts and resolves the Pro entitlement. Not linked to identity —
+		     the app has no accounts and uses an anonymous RevenueCat app user
+		     ID — and never used for tracking. RevenueCat's own bundled manifest
+		     declares the same entry; Xcode merges them, and stating it here as
+		     well keeps the app's own declaration self-describing. -->
+		<dict>
+			<key>NSPrivacyCollectedDataType</key>
+			<string>NSPrivacyCollectedDataTypePurchaseHistory</string>
+			<key>NSPrivacyCollectedDataTypeLinked</key>
+			<false/>
+			<key>NSPrivacyCollectedDataTypeTracking</key>
+			<false/>
+			<key>NSPrivacyCollectedDataTypePurposes</key>
+			<array>
+				<string>NSPrivacyCollectedDataTypePurposeAppFunctionality</string>
+				<string>NSPrivacyCollectedDataTypePurposeAnalytics</string>
+			</array>
+		</dict>
+	</array>
+
+	<key>NSPrivacyAccessedAPITypes</key>
+	<array>
+		<!-- CA92.1: app-local flags in UserDefaults.standard.
+		     1C8F.1: the App Group suite shared with the widget extension and
+		     the watch app. -->
+		<dict>
+			<key>NSPrivacyAccessedAPIType</key>
+			<string>NSPrivacyAccessedAPICategoryUserDefaults</string>
+			<key>NSPrivacyAccessedAPITypeReasons</key>
+			<array>
+				<string>CA92.1</string>
+				<string>1C8F.1</string>
+			</array>
+		</dict>
+
+		<!-- C617.1: the AI Coach reads the modification date of its own recap
+		     cache file inside the app's Application Support directory. -->
+		<dict>
+			<key>NSPrivacyAccessedAPIType</key>
+			<string>NSPrivacyAccessedAPICategoryFileTimestamp</string>
+			<key>NSPrivacyAccessedAPITypeReasons</key>
+			<array>
+				<string>C617.1</string>
+			</array>
+		</dict>
+	</array>
+</dict>
+</plist>

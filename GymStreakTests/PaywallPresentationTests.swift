@@ -212,6 +212,24 @@ struct PaywallPresentationTests {
         #expect(presenter.pendingPlacement == .routineCap)
     }
 
+    /// The sheet is on screen well before its offer is: `ProPaywallView` fetches
+    /// the offering over the network, and may end on the retry state instead
+    /// (§5j). The user is looking at the sheet throughout, so a request landing
+    /// in that window must not swap it — which is why `sheetDidAppear()` and
+    /// `didPresent(_:)` are two reports rather than one.
+    @Test("A sheet whose offer has not loaded yet is still not swapped")
+    func doesNotReplaceASheetStillLoading() {
+        let presenter = makePresenter()
+
+        presenter.present(.valueMoment)
+        presenter.sheetDidAppear()
+        presenter.present(.routineCap)
+
+        #expect(presenter.pendingPlacement == .valueMoment)
+        // …and B was not spent, because no offer ever reached the screen.
+        #expect(presenter.hasPresented(.valueMoment) == false)
+    }
+
     @Test("Dismissing clears the pending placement")
     func dismissClears() {
         let presenter = makePresenter()
@@ -235,12 +253,17 @@ struct PaywallPresentationTests {
 
     // MARK: - Helpers
 
-    /// What the host does: raise the placement, and report it on screen if it
-    /// landed. Tests that deliberately skip the second half are modelling a
-    /// paywall the app root could not show.
+    /// What the host does: raise the placement, and — if it landed — report the
+    /// sheet on screen and then the offer inside it. Tests that deliberately
+    /// skip the second half are modelling a paywall the app root could not show.
+    ///
+    /// The two reports are separate in the host too: the sheet appears first and
+    /// the offer only once its offering resolves (docs/pro-subscription.md §5j).
+    /// Both are made here because the offer arriving is the ordinary case.
     private func raise(_ placement: PaywallPlacement, on presenter: PaywallPresenter) {
         presenter.present(placement)
         if presenter.pendingPlacement == placement {
+            presenter.sheetDidAppear()
             presenter.didPresent(placement)
         }
     }

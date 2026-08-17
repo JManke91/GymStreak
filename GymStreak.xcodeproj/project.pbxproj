@@ -9,6 +9,7 @@
 /* Begin PBXBuildFile section */
 		032F9C3B1B38D6F8081676E0 /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = B6F8543234AD4851B7E887F6 /* Foundation.framework */; };
 		A6DDDD032F5A00100095483C /* RevenueCat in Frameworks */ = {isa = PBXBuildFile; productRef = A6DDDD022F5A00100095483C /* RevenueCat */; };
+		A6DDDD052F5A00100095483C /* RevenueCatUI in Frameworks */ = {isa = PBXBuildFile; productRef = A6DDDD042F5A00100095483C /* RevenueCatUI */; };
 		A6FBC4ED2EC91C1C0095483C /* WidgetKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A6FBC4EC2EC91C1C0095483C /* WidgetKit.framework */; };
 		A6FBC4EF2EC91C1C0095483C /* SwiftUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A6FBC4EE2EC91C1C0095483C /* SwiftUI.framework */; };
 		A6FBC4FE2EC91C1E0095483C /* GymStreakWidgetsExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = A6FBC4EA2EC91C1C0095483C /* GymStreakWidgetsExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
@@ -197,6 +198,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				A6DDDD032F5A00100095483C /* RevenueCat in Frameworks */,
+				A6DDDD052F5A00100095483C /* RevenueCatUI in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -340,6 +342,7 @@
 			name = GymStreak;
 			packageProductDependencies = (
 				A6DDDD022F5A00100095483C /* RevenueCat */,
+				A6DDDD042F5A00100095483C /* RevenueCatUI */,
 			);
 			productName = GymStreak;
 			productReference = A6A3406B2E4E6F360017A4F7 /* GymStreak.app */;
@@ -1246,6 +1249,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = A6DDDD012F5A00100095483C /* XCRemoteSwiftPackageReference "purchases-ios-spm" */;
 			productName = RevenueCat;
+		};
+		A6DDDD042F5A00100095483C /* RevenueCatUI */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = A6DDDD012F5A00100095483C /* XCRemoteSwiftPackageReference "purchases-ios-spm" */;
+			productName = RevenueCatUI;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

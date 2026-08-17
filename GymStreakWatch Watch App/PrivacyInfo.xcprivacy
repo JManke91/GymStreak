@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+    Privacy manifest for the watchOS app, which ships as its own bundle inside
+    the iOS app and is therefore scanned separately at submission.
+
+    The watch app links no third-party SDK at all — no RevenueCat (see
+    docs/pro-subscription.md §9.2) — and transmits nothing off device: its only
+    outbound path is WatchConnectivity to the paired iPhone. So it collects no
+    data, and its one required-reason API is the App Group defaults that
+    RoutineStore uses as the watch persistence layer.
+
+    See docs/pro-subscription.md §9.7.
+-->
+<plist version="1.0">
+<dict>
+	<key>NSPrivacyTracking</key>
+	<false/>
+
+	<key>NSPrivacyCollectedDataTypes</key>
+	<array/>
+
+	<key>NSPrivacyAccessedAPITypes</key>
+	<array>
+		<!-- CA92.1: watch-local flags. 1C8F.1: the App Group suite shared with
+		     the iOS app. -->
+		<dict>
+			<key>NSPrivacyAccessedAPIType</key>
+			<string>NSPrivacyAccessedAPICategoryUserDefaults</string>
+			<key>NSPrivacyAccessedAPITypeReasons</key>
+			<array>
+				<string>CA92.1</string>
+				<string>1C8F.1</string>
+			</array>
+		</dict>
+	</array>
+</dict>
+</plist>
