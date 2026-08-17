@@ -65,8 +65,10 @@ protocol PaywallPresenting: AnyObject {
 /// Separate from `PaywallPresenting` for the same reason `ProEntitlementDebugging`
 /// is separate: the shipping protocol stays the narrow thing gates call. The
 /// debug half exists because with `ProGating.isEnabled` off — which is how the
-/// app ships until ticket 15 — the ordinary `present(_:)` is inert by design, so
-/// nothing would ever draw a paywall during development.
+/// app shipped until ticket 15 — the ordinary `present(_:)` is inert by design,
+/// so nothing would ever draw a paywall during development. It stays useful
+/// after the flip: `present(_:)` now honours real eligibility, so a spent
+/// one-shot or an entitled account still draws nothing.
 @MainActor
 protocol PaywallPresentationDebugging: PaywallPresenting {
 

@@ -308,12 +308,18 @@ struct ProEntitlementTests {
     // MARK: - Kill switch
 
     /// Asserts `shippedValue`, not `isEnabled`: a developer with
-    /// `-PRO_GATING_ON` ticked in the test scheme would otherwise get a red test
-    /// for having set up sandbox testing correctly (§9.4a). What must never
-    /// change silently is the value a *shipping build* compiles in.
-    @Test("Gating ships off")
-    func gatingDefaultsOff() {
-        #expect(ProGating.shippedValue == false)
+    /// `-PRO_GATING_ON` or `-PRO_GATING_OFF` ticked in the test scheme would
+    /// otherwise get a red test for having set up sandbox testing or a rollback
+    /// check correctly (§9.4a). What must never change silently is the value a
+    /// *shipping build* compiles in.
+    ///
+    /// `true` since the Phase 2 launch release (ticket 15). This assertion is
+    /// deliberately kept — turning gating back off is the documented rollback
+    /// (§9.6), and it should be a two-line, obviously-intentional diff rather
+    /// than one constant nobody notices.
+    @Test("Gating ships on")
+    func gatingShipsOn() {
+        #expect(ProGating.shippedValue == true)
     }
 
     /// The Test Store key is a rejection if it reaches App Review, so a Release

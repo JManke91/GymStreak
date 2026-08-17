@@ -50,18 +50,23 @@ struct DebugProEntitlementSectionView: View {
 
     /// Says whether gates are live *and where that came from*, because "nothing
     /// happened" has two very different causes: the shipped switch being off, or
-    /// the launch argument not being ticked in the scheme (§9.4a).
+    /// a launch argument in the scheme (§9.4a).
     private var gatingFooter: String {
         guard ProGating.isEnabled else {
+            // Not "launch with -PRO_GATING_ON": OFF wins over ON, so while the
+            // OFF argument is ticked, adding the ON one changes nothing.
+            let howToTurnOn = ProGating.isForcedOffForDebugging
+                ? "Untick \(ProGating.forceOffLaunchArgument) in the scheme"
+                : "Launch with \(ProGating.forceOnLaunchArgument)"
             return """
-            Debug builds only. Gating is globally OFF, so gates stay inert regardless of this \
-            setting. Launch with \(ProGating.forceOnLaunchArgument) to turn them on.
+            Debug builds only. Gating is OFF (\(ProGating.gatingSourceDescription)), so gates stay \
+            inert regardless of this setting. \(howToTurnOn) to turn them on.
             """
         }
-        let source = ProGating.isForcedOnForDebugging
-            ? "forced on by \(ProGating.forceOnLaunchArgument)"
-            : "on in the shipped build"
-        return "Debug builds only. Gating is \(source), so every gate is live."
+        return """
+        Debug builds only. Gating is ON (\(ProGating.gatingSourceDescription)), so every gate is \
+        live. Launch with \(ProGating.forceOffLaunchArgument) to see the pre-monetization app.
+        """
     }
 
     /// Always names the really-resolved entitlement, so it is unambiguous

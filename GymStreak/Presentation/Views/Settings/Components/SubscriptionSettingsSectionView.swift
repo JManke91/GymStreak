@@ -20,7 +20,8 @@ import SwiftUI
 /// they are not a RevenueCat customer at all (`showsCustomerCenter`).
 ///
 /// It renders nothing while the kill switch is off (`SubscriptionStatusSummary`
-/// returns `nil`), so in a shipping build today the Settings screen is unchanged.
+/// returns `nil`), which is what kept the Settings screen unchanged in every
+/// shipping build before ticket 15 flipped the switch on.
 ///
 /// Reads `entitlements.state` straight out of `body`: the provider is
 /// `@Observable`, so a purchase, a restore or a lapse rewrites this section with

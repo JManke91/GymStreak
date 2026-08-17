@@ -202,6 +202,81 @@ struct FounderStatusTests {
         #expect(build >= FounderStatusService.cutoffBuild)
     }
 
+    // MARK: - The debug simulator (§9.4c)
+
+    /// The simulated reader exists so the grant can be walked on a device at
+    /// all — outside a production App Store install the real one can never
+    /// grant (§7.1 trap 2). These pin that it simulates the *right* two cases:
+    /// a simulator that quietly stopped granting, or that granted at the
+    /// cutoff, would send a device pass to the wrong conclusion about shipping
+    /// code, which is worse than having no simulator.
+
+    @Test("The pre-cutoff argument simulates a download that grants Founder")
+    func simulatedPreCutoffGrants() async throws {
+        let (defaults, suiteName) = makeDefaults()
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let reader = try #require(
+            SimulatedOriginalAppDownloadReader.fromLaunchArguments(
+                [SimulatedOriginalAppDownloadReader.preCutoffArgument]
+            )
+        )
+        let service = FounderStatusService(downloads: reader, defaults: defaults)
+
+        await service.resolveIfNeeded()
+
+        #expect(service.isFounder)
+    }
+
+    /// Follows `cutoffBuild` rather than hard-coding `1000`, so re-pinning the
+    /// cutoff cannot silently turn the simulator's negative case into a grant.
+    @Test("The cutoff argument simulates the boundary, which does not grant")
+    func simulatedCutoffDoesNotGrant() async throws {
+        let (defaults, suiteName) = makeDefaults()
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let reader = try #require(
+            SimulatedOriginalAppDownloadReader.fromLaunchArguments(
+                [SimulatedOriginalAppDownloadReader.cutoffArgument]
+            )
+        )
+        let service = FounderStatusService(downloads: reader, defaults: defaults)
+
+        await service.resolveIfNeeded()
+
+        #expect(service.isFounder == false)
+        #expect(service.isDecided)
+    }
+
+    @Test("Without an argument there is no simulator, so the real reader is used")
+    func noArgumentMeansNoSimulator() {
+        #expect(SimulatedOriginalAppDownloadReader.fromLaunchArguments([]) == nil)
+        #expect(SimulatedOriginalAppDownloadReader.fromLaunchArguments(["-PRO_GATING_OFF"]) == nil)
+    }
+
+    /// The safety property the whole simulator rests on: a simulated run must
+    /// never write the real `pro.isFounder`, because that decision is recorded
+    /// once and kept forever — a leak would mark the device Founder permanently,
+    /// with no gate in sight and nothing on screen to say why.
+    ///
+    /// `UserDefaults(suiteName:)` returns `nil` only for a nonsensical name
+    /// (`NSGlobalDomain`, a CFPreferences constant, or the app's own bundle id),
+    /// and `AppDependencies` falls back to *not simulating* if it ever does.
+    /// This asserts the fallback stays unreachable, which is the difference
+    /// between the separation being structural and being aspirational.
+    @Test("The simulated suite name is usable, so the real defaults are never the fallback")
+    func simulatedSuiteNameIsUsable() throws {
+        let suiteName = SimulatedOriginalAppDownloadReader.defaultsSuiteName
+        #expect(suiteName != Bundle.main.bundleIdentifier)
+        #expect(suiteName != UserDefaults.globalDomain)
+
+        let suite = try #require(UserDefaults(suiteName: suiteName))
+        defer { UserDefaults.standard.removePersistentDomain(forName: suiteName) }
+        // And that it really is a separate store: a value written through the
+        // suite must not appear in `.standard` under the same key.
+        let probeKey = "FounderStatusTests.suiteIsolation"
+        suite.set(true, forKey: probeKey)
+        #expect(UserDefaults.standard.object(forKey: probeKey) == nil)
+    }
+
     // MARK: - Helpers
 
     private func makeDefaults() -> (defaults: UserDefaults, suiteName: String) {

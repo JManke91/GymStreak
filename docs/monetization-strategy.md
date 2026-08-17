@@ -1,14 +1,14 @@
 # Monetization Strategy — GymStreak Pro
 
-**Status:** strategy agreed; implementation not started. No paywall, entitlement layer, or purchase
-code exists in the codebase yet. The §4.2a gate-only work has been broken down into the ticket set
-at `.scratch/pro-entitlements/issues/` (2026-08-15), which can be worked straight through in
-numerical order: **01–02** establish the entitlement abstraction and the Founder grant, **03**
-integrates the RevenueCat SDK against its Test Store so the abstraction is validated against the
-real thing before anything depends on it, **04–12** build the paywall seam and the six §4.2a gates
-behind a kill switch that ships off, **13–14** add the subscription surfaces, real paywalls and
-Customer Center, and **15** is the launch checklist that swaps in the production key, updates the
-listing copy and flips gating on.
+**Status (2026-08-17):** strategy agreed and **implemented**. The ticket set at
+`.scratch/pro-entitlements/issues/` (2026-08-15) is complete: **01–02** established the entitlement
+abstraction and the Founder grant, **03** integrated the RevenueCat SDK against its Test Store so the
+abstraction was validated against the real thing before anything depended on it, **04–12** built the
+paywall seam and the six §4.2a gates behind a kill switch that shipped off, **13–14a** added the
+subscription surfaces, real paywalls, the Customer Center and sandbox testability, and **15** flipped
+gating on and rewrote the listing copy in the same change. `docs/pro-subscription.md` documents what
+shipped; its §9.6 lists the launch steps that remain outside the repo (device verification, App Store
+Connect, submission). Phase 3 of §9 — tuning — is what comes next.
 **Purpose:** this document is the spec that ticket set picks up. It defines
 *what* is gated, *why* that specific gate was chosen, *how* each gate behaves in every state
 (free / trial / Pro / lapsed / grandfathered), and what must never be gated.
@@ -25,12 +25,14 @@ listing copy and flips gating on.
 
 ## 1. The one constraint that shapes everything
 
-The shipped App Store listing says, verbatim, in both storefronts:
+The App Store listing said, verbatim, in both storefronts, until the launch release of 2026-08-17:
 
 > "fast, private, and **completely subscription-free**"
 > "**No account, no subscription.** Your training data belongs to you."
 
-Every existing user downloaded the app under that promise. This is not a detail — it is the
+Every existing user downloaded the app under that promise. (Non-negotiable 2 below has since been
+executed: the subscription claim is gone from both storefronts and the no-account half — still true —
+stayed. The copy lives in `docs/marketing/app-store-description.md`.) This is not a detail — it is the
 governing constraint of the whole plan, and it produces three non-negotiables:
 
 1. **Existing users are grandfathered permanently** (§7). Anything else is a promise broken in
@@ -302,6 +304,9 @@ Reasoning:
   / "ganz ohne Abo" and "Kein Konto, kein Abo" from both storefronts. Replace with an honest
   free-tier statement (e.g. "Track unlimited workouts free. Pro unlocks unlimited routines and
   full analytics." / "Kein Konto. Track unbegrenzt viele Workouts kostenlos.").
+  **✅ Done 2026-08-17 (ticket 15)** — both descriptions and every promotional-text variant, in
+  `docs/marketing/`. Pasting them into App Store Connect is part of the submission itself
+  (`docs/pro-subscription.md` §9.6).
 
 ### 7.1 Founder detection — verified API research
 
@@ -440,16 +445,20 @@ Do not ship gates and entitlements in one step.
   cap, the chat allowance or the chart window is a one-line diff and a release rather than a
   refactor. The open questions in §11 stay open; they get answered by post-launch App Store
   Connect and RevenueCat data instead of by pre-launch instrumentation.
-- **Phase 1 — Entitlement layer, gates OFF.**
+- **Phase 1 — Entitlement layer, gates OFF. ✅ Built, and never released as its own version.**
   StoreKit 2 + entitlement + Founder grant (mechanism and traps: **§7.1**) ship silently.
   **Pin the cutoff `CFBundleVersion` at this release** — it is the build number Founder
   detection compares against forever, so it must be recorded before the next bump. Gates
   evaluate and log "would have
   blocked" without blocking. Validates grant logic and produces a real forecast of who the cap
   would hit, at zero user-facing risk.
-- **Phase 2 — Gates ON for post-cutoff installs only.**
+  In the event Phase 1 and Phase 2 landed in the **same** App Store release: the entitlement layer
+  was built, tested and merged with the switch off, but no build carrying it was ever submitted, so
+  the two phases were separated in the repo rather than on the store. That is what makes the
+  `cutoffBuild = 1000` pin exactly right with nobody in between — see `docs/pro-subscription.md` §3a.
+- **Phase 2 — Gates ON for post-cutoff installs only. ✅ Flipped 2026-08-17 (ticket 15).**
   Founders never see a gate. Listing copy updated in this same release.
-- **Phase 3 — Tune.**
+- **Phase 3 — Tune. ← current phase.**
   A/B the routine cap (3 vs 4), paywall B's trigger threshold, and trial length (7 vs 3 days —
   shorter trials often convert better because the user hasn't forgotten the charge).
 
@@ -514,14 +523,27 @@ optimizing.
 
 ## 11. Open questions for Phase 0
 
-1. What is the actual routine-count distribution? Decides 3 vs 4 vs 5.
-2. What fraction of the base is Apple-Intelligence-capable? Decides how much revenue weight AI
-   can carry, and whether the paywall needs two variants.
-3. How large is the pre-cutoff base being granted Founder status? Bounds the forgone revenue.
-4. Does the 3-month chart window bite? If the median user has under 3 months of history, P2
-   converts nobody and the window should be shortened to 1 month.
-5. Which existing free users already exceed 3 routines? They are the strongest evidence the cap
-   is correctly placed — or that it's too tight.
+Phase 0 was skipped deliberately (§9) — the app has no analytics backend, which is a consequence of
+§1's no-account position rather than an oversight. These therefore get answered from **post-launch**
+App Store Connect and RevenueCat data instead of from pre-launch instrumentation.
+
+**Status at the launch flip (2026-08-17): all five still open, and none of them blocks the launch.**
+Each is a Phase 3 tuning input, and every cap they would move is a named constant in
+`ProFeatureCaps` — a one-line diff and a release, which is exactly the mitigation Phase 0's skip was
+traded for. Re-check this section once the launch build has been live for a full 30-day window, which
+is the earliest any of the retention-shaped answers exists.
+
+| # | Question | Decides | Where the answer will come from |
+|---|---|---|---|
+| 1 | What is the actual routine-count distribution? | 3 vs 4 vs 5 routines | **Not directly observable** — no analytics backend, and routine data lives in the user's own CloudKit database. Proxy: how often the routine-cap placement fires, from RevenueCat Placement impressions. |
+| 2 | What fraction of the base is Apple-Intelligence-capable? | How much revenue weight AI can carry; whether the paywall needs two variants | App Store Connect → Analytics → device-model breakdown, against the Apple Intelligence hardware list. |
+| 3 | How large is the pre-cutoff base granted Founder status? | Bounds the forgone revenue | Bounded above by total downloads before the launch build (App Store Connect → Sales & Trends). Unlike the others this one is **fixed forever the moment the launch build ships** — the cohort cannot grow. |
+| 4 | Does the 3-month chart window bite? | Whether P2 converts anyone, or the window should shorten to 1 month | RevenueCat impressions on the `chart-window` placement vs. `chart-metric`. If the window placement barely fires, the median user has under 3 months of history and it converts nobody. |
+| 5 | Which existing free users already exceed 3 routines? | Whether the cap is placed right or is too tight | `routine-cap` placement impressions in the first weeks, which is dominated by exactly that cohort — Founders never see it. |
+
+Two of the §10 guardrails are read on the same cadence and outrank all five: **D30 retention for
+free users** and the **App Store rating**, both against their pre-paywall baselines. If either moves
+against the baseline, loosen before optimizing.
 
 ---
 

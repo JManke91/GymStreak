@@ -15,7 +15,9 @@ import SwiftUI
 ///
 /// It goes through `presentIgnoringEligibility`, because the shipped
 /// `present(_:)` is inert while `ProGating.isEnabled` is off — which is how the
-/// app ships until ticket 15 — so the ordinary path would show nothing at all.
+/// app shipped until ticket 15 — so the ordinary path showed nothing at all.
+/// Still the development route after the flip: `present(_:)` now honours real
+/// eligibility, so a spent one-shot or an entitled account draws nothing.
 /// Rule 3 is *not* bypassed: even here nothing presents during a workout.
 /// Developer-facing, so the strings are not localized.
 struct DebugPaywallSectionView: View {

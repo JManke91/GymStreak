@@ -173,9 +173,7 @@ final class AppDependencies: ObservableObject {
         // `GymStreakApp.init()`, so it happens once, before any UI exists and
         // before anything can read an entitlement.
         let proEntitlements = ProEntitlementProvider(
-            founderStatus: FounderStatusService(
-                downloads: StoreKitOriginalAppDownloadReader()
-            ),
+            founderStatus: Self.makeFounderStatusService(),
             purchases: RevenueCatPurchaseGateway()
         )
         self.proEntitlements = proEntitlements
@@ -303,6 +301,32 @@ final class AppDependencies: ObservableObject {
             allowance: aiAllowance,
             availability: aiCoachAvailability
         )
+    }
+
+    /// The Founder grant, reading StoreKit — unless a Debug run asked to
+    /// simulate the original download (docs/pro-subscription.md §9.4c).
+    ///
+    /// The simulated service is handed a **separate defaults suite**, wiped at
+    /// the start of every simulated launch. Two things follow, both deliberate:
+    /// the real `pro.isFounder` key is never written, so removing the argument
+    /// returns the device to its real state; and each simulated launch resolves
+    /// from scratch instead of short-circuiting on `isDecided`, which is the
+    /// only way to exercise the decision itself more than once per install.
+    private static func makeFounderStatusService() -> FounderStatusService {
+        #if DEBUG
+        let suiteName = SimulatedOriginalAppDownloadReader.defaultsSuiteName
+        // Falling back to `.standard` here would write a simulated grant into
+        // the real `pro.isFounder` key, which is recorded once and kept forever
+        // — so the whole point of the separate suite would be undone by the one
+        // line meant to make it robust. Not simulating is the fail-closed
+        // choice, and the argument having no effect is a loud enough symptom.
+        if let simulated = SimulatedOriginalAppDownloadReader.fromLaunchArguments(),
+           let simulatedDefaults = UserDefaults(suiteName: suiteName) {
+            UserDefaults.standard.removePersistentDomain(forName: suiteName)
+            return FounderStatusService(downloads: simulated, defaults: simulatedDefaults)
+        }
+        #endif
+        return FounderStatusService(downloads: StoreKitOriginalAppDownloadReader())
     }
 
     /// The AI-coach chat's tool-backing read boundary. A factory rather than a stored

@@ -1,8 +1,9 @@
 # Pro subscription — entitlement core, Founder grant and RevenueCat
 
-**Status (2026-08-16):** tickets 01, 02, 03, 04, 05, 06, 07, 08, 09, 10, 11, 12 and 13 of
-`.scratch/pro-entitlements/issues/`
-are implemented. The app knows whether the current user is Pro, every future gate can ask that
+**Status (2026-08-17):** every ticket of `.scratch/pro-entitlements/issues/` — 01 through 15,
+including 14a — is implemented, and **the kill switch is on**: `ProGating.shippedValue` is `true`,
+so a release build now gates. What remains of ticket 15 needs a device, App Store Connect or time
+after release, not code; §9.6 is the executed checklist and lists exactly what is outstanding. The app knows whether the current user is Pro, every future gate can ask that
 question through one abstraction, users who installed before monetization are permanently granted
 Pro, the entitlement is now backed by **RevenueCat** — purchases against the Test Store work
 end to end — anything in the app can ask for a paywall at a named placement without knowing
@@ -16,13 +17,14 @@ reaches a grandfathered user before any gate can (§5h). Settings now states whi
 on and where it came from (§5i), the app declares its data usage in a **privacy manifest** for the
 first time (§9.7), and everything needed to operate and ship the integration — identifiers, the
 import boundary, the Test Store procedure, the App Store Connect constraints and the ordered
-checklist for turning gating on — is written down in the **runbook** (§9). But the only purchase
-entry point is DEBUG-only, and the global gating switch ships **off** — so in a release build the
-shipped app still behaves exactly as it did before, gates and the Settings section included.
+checklist for turning gating on — is written down in the **runbook** (§9). Ticket 14 replaced the
+DEBUG-only purchase entry point with real RevenueCat paywalls and the Customer Center (§5j), 14a made
+the sandbox reachable without editing constants (§9.4a), and ticket 15 flipped the switch and
+rewrote both storefront listings in the same change (§9.6).
 
 `docs/monetization-strategy.md` is the *why* (what gets gated, at which cap, and the promises in
 §1 that constrain all of it). This file is the *how* — the shipped implementation, plus the runbook
-in §9. It grows with ticket 14 (the paywall and the Customer Center).
+in §9.
 
 ---
 
@@ -160,13 +162,20 @@ test targets keep `1`, matching how `/release` already treats `MARKETING_VERSION
 the wild reads `1 < 1000` and is granted; this build and everything after it is not (the
 comparison is strictly less-than, so the cutoff build itself never grants).
 
-**`1000` is the first build carrying the entitlement layer — not the first build that charges.**
-Gating ships off and flips on in ticket 15, and the build number increments every release cycle in
-between, so the paywall actually arrives on build `1000 + k`. Anyone installing during that
-ungated window is therefore *not* a Founder despite never seeing a paywall. This fails in the safe
-direction — it under-grants and leaks no revenue — but it is narrower than `monetization-strategy.md`
-§7's promise, and **it is an open decision for ticket 15**: either accept the exclusion, or re-pin
-`cutoffBuild` to the build that turns gating on. See §7 below.
+**`1000` is the first build carrying the entitlement layer — not, in general, the first build that
+charges.** The concern was that gating ships off, the build number increments every release cycle,
+and the paywall therefore arrives on build `1000 + k` — leaving everyone who installed during that
+ungated window excluded from Founder despite never seeing a paywall.
+
+**Settled 2026-08-17 (ticket 15): the ungated window is empty, so `cutoffBuild` stays at `1000`.**
+No build carrying the entitlement layer was ever released. `CURRENT_PROJECT_VERSION = 1000` was
+introduced by the entitlement-layer commit itself (`37fe741`), which reached neither `store-build`
+nor `testflight-beta` — both still carried `CURRENT_PROJECT_VERSION = 1` when the launch release was
+prepared. Every install in the wild therefore reports `1`, and the launch build (`1000 + 1` after
+`/release`'s bump) is the first the App Store has ever served at or above the cutoff. There is no
+cohort between the two, so nothing had to be re-pinned and no exclusion was accepted. TestFlight
+never enters this: its `AppTransaction` environment is not `.production`, so §3a's environment guard
+withholds the grant there regardless of build number.
 
 > **This invariant is load-bearing.** If any future release ever ships a build number below
 > `FounderStatusService.cutoffBuild`, every new paying user is silently granted Pro forever and the
@@ -302,12 +311,13 @@ credentials, not this. A RevenueCat **secret** REST API key must never appear in
 > testers go through App Review too. Internal-only TestFlight builds are unaffected, which is what
 > makes shipping the integration this early safe at all.
 
-The shipped key is `test_IjLklyuZDXOVrXMjaURxfwJnWxk`. **The `test_` prefix is load-bearing**: it
+The Debug default is `test_IjLklyuZDXOVrXMjaURxfwJnWxk`. **The `test_` prefix is load-bearing**: it
 routes the SDK to RevenueCat's **Simulated Store** (`Store.testStore`), where offerings, purchases,
 entitlements and restore all work in the simulator with no App Store Connect products and no
 StoreKit configuration file. That is what let the whole purchase path ship *before* Apple approved
-the real subscriptions. Production Apple keys begin with `appl_`; `appStoreAPIKey` is an empty
-placeholder until ticket 15 fills it in and points `apiKey` at it.
+the real subscriptions. Production Apple keys begin with `appl_`; **`appStoreAPIKey` has been filled
+in since ticket 14a**, and outside DEBUG `apiKey` resolves to it unconditionally while the `test_`
+literal is not compiled in at all (§9.4a).
 
 ### The entitlement identifier — the highest-risk string in the integration
 
@@ -590,6 +600,12 @@ value at the seam.
 | Entitlement never resolved | Treated as not entitled, and nothing is written down |
 | Network entirely unavailable | The Founder path is untouched — it never calls this gateway |
 
+**Observed on device 2026-08-17**, in the airplane-mode pass: `Entitlement read failed, keeping none
+— … OFFLINE_CONNECTION_ERROR`. That is row 1 of the table doing its job — "keeping none" is the
+provider declining to *write*, not a revocation. It reads as free tier here only because the run was
+a fresh install with nothing cached; RevenueCat serves a cached `CustomerInfo` on any install that
+has resolved once, so an existing subscriber going offline keeps Pro.
+
 ### Buying: offerings, with a products fallback
 
 `availableProducts()` reads `offerings().current?.availablePackages` first — the path ticket 14's
@@ -619,13 +635,27 @@ a conscious edit in both the code and `monetization-strategy.md`.
 
 ## 5. The kill switch
 
-`ProGating.isEnabled` is a single global flag that ships `false`.
+`ProGating.isEnabled` is a single global flag. **`ProGating.shippedValue` is `true` since the
+Phase 2 launch release (ticket 15, 2026-08-17)**; it shipped `false` through Phase 1.
 
 One flag, not one per gate: §9's rollout ships the entitlement layer silently in Phase 1 and flips
 gating on in Phase 2 (ticket 15). A per-gate flag set would make "is gating live?" un-answerable
 at a glance and would allow a half-gated release. A gate reads the switch *and* the entitlement —
 with the switch off, nothing blocks. The paywall presenter reads it too (§5a), so "no gate blocks
 but a paywall still appears" is impossible.
+
+**Flipping it back is the rollback**, and it is a real one rather than a stated intention: every
+gate was built to leave existing routines, schedules and history intact and editable (§5c, §5d, §7's
+Rule 4), so turning gating off restores the pre-monetization app in one release without touching
+data. Two things travel with it — the storefront copy (§9.6, `docs/marketing/app-store-description.md`)
+must be reverted in the same release, and the `gatingShipsOn` assertion in `ProEntitlementTests`
+has to be flipped, which is deliberate: the constant should not be changeable without a
+second, obviously-intentional edit.
+
+Since the shipped value is `true`, the Debug-only **`-PRO_GATING_OFF`** launch argument is the only
+way to see the pre-monetization app again — including to verify that rollback claim. It is the
+counterpart to `-PRO_GATING_ON`, which was the useful direction before the flip and is a no-op now
+(§9.4a). `-PRO_GATING_OFF` wins if both are passed.
 
 ## 5a. The paywall presentation seam
 
@@ -657,8 +687,8 @@ shipped gate, and a contextual placement in every respect.
 **All four eligibility rules live in `PaywallPresenter`, not at the call sites:**
 
 1. **The kill switch** — `ProGating.isEnabled`, injected via `isGatingEnabled` rather than read
-   inline, so the eligibility logic stays testable while the shipped switch is off. With the flag
-   baked in, every test would pass for the wrong reason.
+   inline, so the eligibility logic stays testable whichever way the shipped switch is pinned. With
+   the flag baked in, every test would pass for the wrong reason.
 2. **Rule 3, absolute** — no paywall, upsell or Pro badge inside an active workout session (§8).
    Checked in the one place a presentation can happen, because the failure mode is a
    rage-uninstall and nine call sites each remembering is not a mechanism. The **debug bypass does
@@ -1273,6 +1303,19 @@ refusal, no paywall (`killSwitchOffBehavesAsBefore`).
 **No new strings.** The gate reuses `paywall.headline.weekday_schedule` (already localized with the
 rest of the placements in ticket 04) and `OnyxProBadge`'s existing copy.
 
+**Two bugs this gate produced while being built**, both worth knowing because neither is specific to
+P9:
+
+- `previewWeekday(_:)` / `previewDay(_:)` allocated a `DateFormatter` **per preview cell**, from a
+  computed property that `body` reads — main-thread rule 2, in the exact shape the rule describes.
+  Fixed by hoisting to two `private static let` formatters. A weekday picker is a bounded set, so it
+  never showed up as a hang; it was caught by review, not by a symptom.
+- Tapping the **already-selected** weekday segment raised a paywall. The gate asked "is this the
+  locked mode?" without asking "is this a change?", so a free user re-tapping their current selection
+  was charged a placement. Fixed with `guard target != mode`. Any gate attached to a segmented
+  control needs the same guard — the no-op tap is easy to miss because it never occurs while testing
+  the feature itself, only while poking at it.
+
 ## 5g. Placements A and B — the two paywalls that fire on their own
 
 Everything in §5c–§5f is a **contextual gate**: the user taps something, it is refused, a paywall
@@ -1373,7 +1416,7 @@ container that unmounts and remounts costs nothing.
 **A is armed by the first creation event this install observes, not by "the user's first routine".**
 §8 words the trigger as the creation event, and the narrower `count == 1` reading would leave A
 permanently dead for everyone who already had routines when gating flipped on — which, since the
-switch ships off until ticket 15, is the entire existing user base. Duplication counts as creation
+switch shipped off until ticket 15, was the entire existing user base at the flip. Duplication counts as creation
 here exactly as it does for the cap (§5c).
 
 **Watch-originated workouts do not fire B.** The watch path never touches `WorkoutViewModel`
@@ -1703,21 +1746,168 @@ Strings: `settings.subscription.manage.{title,subtitle}`, `paywall.unavailable.b
 
 Verified in the simulator against the Test Store on 2026-08-16: the P1 routine-cap gate raises the
 sheet, the offering resolves, and a **real** `PaywallView` renders the three Test Store packages
-with a close button, Purchase and Restore; the Test Store purchase dialog opens from it. Not yet
-exercised interactively: completing the purchase, restore, and the Customer Center screen itself —
-driving the simulator from the CLI is unreliable past the first few taps. They belong in ticket 15's
-launch pass, together with dark mode, large Dynamic Type and de, all of which are properties of
-**dashboard-authored** paywall content that does not exist yet: the project has no paywall designed
-for any offering, so what renders today is RevenueCat's own "No Paywall configured" template.
+with a close button, Purchase and Restore; the Test Store purchase dialog opens from it.
+
+**Verified on a real device against the App Store sandbox on 2026-08-17** (ticket 15's launch pass),
+which is what the simulator could not do — driving it from the CLI is unreliable past the first few
+taps:
+
+- **Completing a purchase.** The paywall dismisses itself on success and every gate is gone
+  immediately, with no relaunch — which is the acceptance test that matters, because it is what §3d
+  was written to fix.
+- **Restore.** On a fresh install the entitlement comes back **without the user tapping Restore and
+  without seeing a paywall at all**: RevenueCat resolves the anonymous app user ID's receipt at
+  configure time, and Settings reports `real: subscription` straight away. Restore remains in the
+  Customer Center for the case where it does not.
+- **The Customer Center**, and the Settings subscription section it hangs off.
+
+Dark mode, large Dynamic Type and de were walked on device on 2026-08-17 and hold — including the
+Settings subscription section, whose footers are the longest copy on that screen. Note that the
+paywall half of that is a property of the **dashboard-authored** content rather than of this code, so
+it needs re-checking whenever a paywall is redesigned, without an app release being involved.
 
 **Designing the paywalls is dashboard work, not code work** — that is what the placement indirection
-bought. §9.1's placement table is the list of Placements to create.
+bought. §9.1's placement table is the list of Placements. A designed paywall has been live since
+2026-08-17, so the "No Paywall configured" developer template no longer renders; changing what a
+paywall says needs no release.
 
 **The loading and `unavailable` states cannot be previewed or unit-tested.** `ProPaywallView` calls
 the SDK directly (§9.2), so there is no stub offering to inject and no seam to fake a failure at:
 only `PaywallOfferingSource`'s ladder is asserted, not the view that walks it. The states are
 reachable in the simulator — airplane mode produces `unavailable` — and that is the only way to see
 them. Recorded here so nobody looks for the test that would have caught a broken retry.
+
+**Verified on device 2026-08-17.** The repro is airplane mode **before** the first launch after
+install, so no offering is ever fetched — anything less and the cached offering renders (below). The
+state came up as designed: the placement's own headline, an honest message, retry and close, and the
+gate still closed. The retry then resolved normally once online, which is the half that had no
+evidence behind it. Note that "the retry showed a different paywall" is expected when the two
+attempts are different placements — resolution is per-placement, and there is only one code path.
+
+#### The chain is placement → offering → paywall, and the payload can go missing on its own
+
+Four things must line up for a gate to show the paywall it was designed for, and **all of the
+failures are silent in a Release build**. Two are dashboard configuration; the fourth is not
+configuration at all and was the one actually hit on 2026-08-17.
+
+| What is wrong | What the user gets | The log says |
+|---|---|---|
+| No **Placement** for that identifier | The project's **current** offering — a real paywall, but the wrong one, and §8 C's "name the capability" is lost | `resolved to default-offering-fallback` |
+| No **paywall on the offering** served | RevenueCat's **generic default template** — app icon, packages, buy, restore. Buyable, none of the authored copy | `resolved to placement … paywall none` |
+| Neither resolves | Our own `unavailable` state, honest, with a retry | `resolved to unavailable` |
+| The paywall exists but its **payload never arrived** | The same generic default template as row 2 — indistinguishable on screen, entirely different cause | `resolved to placement … paywall declared-but-absent` |
+
+```
+Paywall coach-chat resolved to placement — offering gymstreak_sale, paywall declared-but-absent
+```
+
+#### Row 4: the payload and the offering travel separately
+
+**Symptom.** The same placement shows the designed paywall when presented normally, and RevenueCat's
+"No Paywall configured" template when reached through our `unavailable` retry — same offering, same
+placement, dashboard correct. It looks exactly like a misconfiguration and is not one. Chasing it as
+one cost a round of wrong advice; the sequence is what identifies it.
+
+**Cause, from the SDK source (5.83.2).** `OfferingsManager` decodes offerings **without** paywall
+components whenever remote config is active:
+
+```swift
+var shouldCreatePaywallComponents: Bool { self.remoteConfigManager?.isDisabled ?? true }
+var offeringsResponseDecodingMode: OfferingsResponse.DecodingMode {
+    self.shouldCreatePaywallComponents ? .withPaywallComponents : .withoutPaywallComponents
+}
+```
+
+The renderable components come from a **separate `/v1/config` request** made at SDK start-up. Launch
+offline and that request fails. Come back online and tap retry: the *offerings* fetch now succeeds —
+but by design it carries no components, and nothing re-issues the config request. The offering
+arrives with the backend's marker that a paywall exists and no payload behind it. `PaywallView`
+finds `internalPaywallComponents == nil`, falls back to `validatedPaywall`, finds no v1 data either
+(the paywall is v2), and draws its default template. The SDK names this state internally —
+`hasPaywallComponents && internalPaywallComponents == nil` — in a helper that repairs a *related*
+case, but not this one.
+
+**We cannot fix it by trying harder.** `offerings(fetchPolicy:)` is `internal` and there is no
+public API to refresh the config, so the retry button has no stronger move available. The state is
+session-scoped: relaunching while online loads the config and the designed paywall returns.
+
+**Exposure is narrow but real**: launch offline, come online *without* relaunching, hit a gate. The
+paywall still functions — correct products, correct prices, purchase works — it is simply the
+generic template rather than the authored one.
+
+**Decided 2026-08-17: leave it.** The alternative considered and rejected was to keep our own
+`unavailable` screen whenever the payload is absent, so the generic template is never seen. It was
+rejected because it trades a working purchase surface for an error screen in the one situation where
+the user has just demonstrated intent, and because the same suppression would then also hide row 2 —
+a genuine dashboard fault — behind a message that reads as a network problem. To restore that
+behaviour, gate `phase = .ready` on `paywallPayloadState(of:) == "present"` in `ProPaywallView`.
+
+**Distinguishing it is the whole point of the three-state log field**
+(`ProPaywallView.paywallPayloadState`). `none` is a dashboard problem; `declared-but-absent` is this
+one and needs no dashboard change at all; `present` alongside a generic template would be something
+new. Without that field the two causes log identically, which is exactly how this was misdiagnosed
+the first time.
+
+#### Attaching a paywall to an offering
+
+Not the fix for row 4 — kept because row 2 is a real failure mode and this is how it gets repaired
+(dashboard steps verified against RevenueCat's docs 2026-08-17; no app release is involved, paywalls
+are served dynamically):
+
+1. **Paywalls** page → three-dot menu on an existing paywall → **Duplicate to this project**. The
+   copy is created inactive.
+2. Open it in the **Paywall Editor** and open the paywall's own **Settings** panel — that is where
+   the **Offering** is chosen, alongside the initial step, default locale and any exit offer.
+3. **Publish Paywall**. A paywall with no Offering attached cannot be published: RevenueCat's
+   changelog (2025-03-25) allows unattached paywalls specifically for duplication, but "an Offering
+   must still be attached to the Paywall to be able to publish it and serve it to customers".
+
+The REST equivalent is `POST /v2/projects/{project_id}/paywalls` with `offering_id`, needing
+`project_configuration:offerings:read_write`.
+
+**Attached is not published, and published is not yet served** — drafts are never served, and
+dashboard changes take minutes to propagate on top of the SDK's own offerings cache. Reinstall before
+concluding a dashboard change did not work.
+
+**One product question the mechanics hide.** An offering named for a *sale* implies its own pricing,
+so a contextual gate pointed at it shows different prices than the same user sees elsewhere. Check
+that is intended, and that §9.5's rule still holds: the trial is annual-only and contextual gates get
+no trial at all, because at a gate the user already has intent and a trial only adds a cancellation
+decision.
+
+
+#### Offline is two different states, and only one of them is ours
+
+Found on device 2026-08-17, and worth writing down because the symptom looks alarming and is neither
+a bug nor ours:
+
+**If the offering is already cached, going offline does not produce `unavailable`.** The paywall
+renders — correct German copy, correct prices, working buttons — because that all comes from the
+cached offering and paywall configuration. What fails is the **imagery**: RevenueCat's
+dashboard-authored paywalls host every image and icon on `assets.pawwalls.com`, so offline the hero,
+the feature-row icons and the package selection indicators cannot load.
+
+In a **Debug** build each failure renders as a red box containing the full `NSURLErrorDomain
+Code=-1009` dump — `RemoteImage.swift` uses `DebugErrorView(…, releaseBehavior: .emptyView)`, and
+`DebugErrorView` shows its error text only under `#if DEBUG`. In **Release** the same failure renders
+`Rectangle().hidden()`: invisible, but laid out at the same size, so a shipping build shows a paywall
+with blank spaces where the art should be, never an error message. Verified by reading the SDK
+source, not by inference.
+
+**Why a fresh install hits it and normal use does not.** `Purchases` warms the paywall asset cache
+automatically — `warmUpCaches(offerings:)` fires on every offerings fetch and dispatches
+`warmUpPaywallAssetsCache`, which pre-downloads every image in every paywall, once per process. Go
+offline within seconds of a first launch and that background download has not finished; any user
+who has had the app open online for longer has the images on disk and sees a normal paywall offline.
+
+**Accepted, with no code change.** The purchase cannot complete offline in any case, and suppressing
+a paywall whose offering *is* cached would trade a cosmetic degradation for a worse one — a gate
+that blocks with no explanation. If it ever needs fixing, the lever is warming earlier (fetch
+offerings at launch rather than at first gate), not a new state in `ProPaywallView`.
+
+**So the genuine `unavailable` state needs a stricter repro**: airplane mode **before** the first
+launch after install, so no offering is ever fetched. That is the only path where
+`PaywallOfferingSource`'s ladder runs out and our own retry UI appears.
 
 ## 6. The debug surfaces
 
@@ -1739,9 +1929,9 @@ why*.
   before RevenueCat there was nothing to return to and the picker was one-way.
 - `.lifetime` is omitted from the picker: it is indistinguishable from `.subscription` at every
   gate, and the store section below reaches it through a real purchase.
-- The section footer states whether `ProGating.isEnabled` is on, because with gating off a
-  simulated entitlement changes nothing visible and that is otherwise indistinguishable from a
-  broken picker.
+- The section footer states whether `ProGating.isEnabled` is on **and where that came from** (the
+  shipped value, or one of the two launch arguments), because with gating off a simulated
+  entitlement changes nothing visible and that is otherwise indistinguishable from a broken picker.
 - It is also the **only** way to see the Founder branch during development: the environment guard
   in §3a means a real Founder grant can never resolve outside a production App Store install.
 
@@ -1758,8 +1948,10 @@ failure instead of setting one**, which is the visible half of "`userCancelled` 
 once-ever placements".
 
 It goes through `presentIgnoringEligibility`, because the shipped `present(_:)` is inert while the
-kill switch is off — which is how the app ships until ticket 15 — so the ordinary path would draw
-nothing during development. It bypasses the switch, the entitlement and the once-ever cap;
+kill switch is off — which is how the app shipped until ticket 15 — so the ordinary path drew
+nothing during development. It stays the development route after the flip: `present(_:)` now
+depends on real eligibility, and a placement that has already fired once, or an entitled account,
+would still draw nothing. It bypasses the switch, the entitlement and the once-ever cap;
 **Rule 3 still holds**. Each one-shot row states whether the record says it already fired, since
 otherwise "nothing happened" and "already spent" look identical — and that row updating the moment
 the sheet appears is exactly what the in-memory fired set in §5a exists for.
@@ -1817,9 +2009,35 @@ process: the debug path bypasses the coordinator entirely, and the coordinator i
   picker has no call site today. If it is ever adopted it needs the same `isTimeframeLocked` /
   badge treatment, or it becomes an unlocked back door to the 1Y and All windows. Deleting it would
   close the hole outright.
+- **`AddRoutineView` (`Presentation/Views/Routines/`) is dead code and an ungated creation path.**
+  Nothing presents it, and it calls `addRoutine(name:)` directly rather than going through
+  `requestAddRoutine`, so it bypasses the three-routine cap entirely. Harmless only for as long as it
+  stays unreachable — which is a property no test asserts. Flagged during ticket 06 as "should
+  probably be deleted"; deleting it is still the right fix, since the shipped creation flow lives
+  elsewhere.
+- **`RoutinesViewModel` (977 lines) and `SchedulePlanningSheet` (405) are over the 300-line
+  convention**, acknowledged rather than fixed by ticket 10 — both were already past it before the
+  gates arrived, and splitting them was out of scope for a gating ticket. The seam if they are ever
+  split: extract `RoutinesViewModel+Gating.swift` holding `isRoutineCapReached`, `routineCapNudge`,
+  `isWeekdayScheduleLocked`, `requestAddRoutine` and `requestWeekdaySchedule`.
 - **P2's gate is per-screen, and the exercise detail screen is the only analytics surface today.**
   Any future chart that re-derives a window or a metric has to ask `ChartGatingPolicy` rather than
   read `ProFeatureCaps` at the call site.
+- **The fastlane snapshot run is now gated, and was deliberately left that way.** Snapshot tests
+  launch with only `-UI_TESTING`, so since the ticket-15 flip they run with gating on — and
+  `TestDataSeeder` seeds exactly three routines against a `freeRoutineLimit` of 3, so the routines
+  screenshot renders the cap nudge. **Decided 2026-08-17: irrelevant**, because the fastlane
+  snapshots are no longer used — App Store screenshots come from a separate app. The infrastructure
+  was left in place rather than removed; if it is ever revived it needs either `-PRO_GATING_OFF` in
+  its launch arguments or a seed count below the cap.
+- **`WorkoutDeletionUITests.testCoachSettingsStillPushesOnThePathBoundStack()` fails
+  deterministically, and predates all of this** — reproduced against a pristine `HEAD` with gating
+  off. It taps the History tab and queries `ai_coach.settings.open`, a label that exists only in
+  `CoachChatView`'s toolbar, a screen the test never opens; the AI Coach settings moved when the
+  Settings tab shipped. Tracked separately in `.scratch/coach-settings-uitest/`. The reason it went
+  unnoticed matters more than the test: **`fastlane test_unit` runs the `GymStreakTests` scheme,
+  which excludes the UI test targets**, so the repo's normal green signal says nothing about that
+  suite.
 - **A contextual gate's paywall raised while a workout is running is still dropped, not deferred.**
   Ticket 11 changed this only for the two *proactive* placements: `ProactivePaywallCoordinator`
   keeps its own armed record and re-attempts at the next session end (§5g). The presenter itself is
@@ -1905,11 +2123,10 @@ process: the debug path bypasses the coordinator entirely, and the coordinator i
   (`ExerciseProgressChartView`'s coach section and the recap's offer/gate cards); the bound is
   unchanged — one backing read per surface per launch, metered users only — so a fix would be one
   `prime(_:)` for all three.
-- **The recap's `.offer` step is new UX and was not exercised on device.** It is covered by unit
-  tests at the ViewModel level (the state, what is charged, what is not), but nobody has yet tapped
-  "Generate recap" on a metered build — the kill switch ships off, so it is unreachable in a
-  release build. Verify it during ticket 15's launch pass with `ProGating.isEnabled` flipped
-  locally, together with the two paywall hosts (§5e) it shares a screen with.
+- ~~**The recap's `.offer` step is new UX and was not exercised on device.**~~ **Closed — verified on
+  a real device 2026-08-17** (ticket 15's launch pass), together with the metered deep-dive and the
+  coach chat. It was unreachable in a release build while the kill switch shipped off, which is why
+  it stood on unit tests at the ViewModel level for so long.
 - **`PeriodRecapViewModel` (507 lines) and `ExerciseDeepDiveViewModel` (393) are over the 300-line
   guideline**, acknowledged rather than fixed in ticket 09. The added code is the allowance
   lifecycle, which is cohesive with the pipeline it guards. If they are ever split, the seam is the
@@ -1919,14 +2136,14 @@ process: the debug path bypasses the coordinator entirely, and the coordinator i
   because it is one; if §11 ever retunes `freePeriodRecapsPerMonth` upwards, the nudge below it
   already counts correctly but the title should be revisited — the offer step itself only earns its
   place at a cap low enough that a single accidental generation matters.
-- **The P9 dismiss→auto-present handoff has no automated coverage and was not exercised on
-  device.** `ScheduleGatingTests` asserts what the gate *asks for* and that nothing is written on a
-  refusal; the unit tests cannot see whether the root's paywall sheet actually appears once
-  `SchedulePlanningSheet` finishes dismissing. Apple documents the queuing behaviour only through a
-  console message, so this rests on cross-corroborated reporting plus the HIG's explicit
-  "close the first sheet before displaying the new one". Verify it with the debug placement section
-  during ticket 15's launch pass; if it ever turns out the request is dropped rather than queued,
-  the fix is `.sheet(onDismiss:)` on `RoutineDetailView` — **not** a second host inside the
+- **The P9 dismiss→auto-present handoff has no automated coverage.** `ScheduleGatingTests` asserts
+  what the gate *asks for* and that nothing is written on a refusal; the unit tests cannot see
+  whether the root's paywall sheet actually appears once `SchedulePlanningSheet` finishes
+  dismissing. Apple documents the queuing behaviour only through a console message, so the design
+  rested on cross-corroborated reporting plus the HIG's explicit "close the first sheet before
+  displaying the new one". **Verified on a real device 2026-08-17** — the handoff works as designed,
+  so the queuing reading was right. Should it ever regress to the request being dropped rather than
+  queued, the fix is `.sheet(onDismiss:)` on `RoutineDetailView` — **not** a second host inside the
   schedule sheet (§5f).
 - `ProGating.isEnabled` being a `static let false` does **not** produce unreachable-branch
   warnings at a gate call site — verified with `swiftc -swift-version 6 -typecheck` on
@@ -1945,14 +2162,13 @@ process: the debug path bypasses the coordinator entirely, and the coordinator i
   not to arbitrate concurrent devices, and the overspend is bounded by the cap itself. If it ever
   matters, observe the notification and invalidate the cache — do not move the counters to
   SwiftData/CloudKit.
-- **The in-cover paywall host (§5e) has no automated coverage and was not exercised on device.**
-  `CoachChatAllowanceTests` asserts what the gate *asks for*; nothing asserts that the sheet
-  actually appears over the coach-chat cover, and the unit tests cannot see it. It also cannot be
-  reached in a normal build: the kill switch ships off, so `present(_:)` is inert. Verifying it
-  needs a local build with `ProGating.isEnabled` flipped **and** an Apple-Intelligence-capable
-  device — check "the sixth message raises the sheet", "dismissing it clears the placement", and
-  "no second paywall appears after leaving the chat". Until then this is the one part of ticket 08
-  standing on reasoning rather than evidence.
+- **The in-cover paywall host (§5e) has no automated coverage.** `CoachChatAllowanceTests` asserts
+  what the gate *asks for*; nothing asserts that the sheet actually appears over the coach-chat
+  cover, and the unit tests cannot see it. It was unreachable in a normal build while the kill
+  switch shipped off, which left it standing on reasoning rather than evidence for the whole of
+  ticket 08. **Verified on a real device 2026-08-17**, so it no longer does — but the coverage gap
+  is structural and remains: nothing in CI would catch a regression here, and the next change to the
+  cover's presentation needs the same manual check.
 - **`CoachChatService.swift` is 442 lines**, past the 300-line convention and grown by ticket 08's
   turn-outcome bookkeeping. Accepted for this ticket: the addition is ~40 lines threaded through
   the existing turn lifecycle, not a new concern that can be lifted out cleanly. The natural split,
@@ -2012,10 +2228,11 @@ process: the debug path bypasses the coordinator entirely, and the coordinator i
   Generate Privacy Report on an archive) is the only check, and it belongs in a release pass rather
   than in CI. §9.7 lists which categories were deliberately left out and why, so the next reviewer
   starts from the decisions rather than from scratch.
-- **The Settings subscription section (§5i) has never been on screen.** It is hidden while the kill
-  switch is off, so it is unreachable in every build today; `SubscriptionStatusTests` asserts the
-  copy mapping, not the rendering. Verify all four plans during ticket 15's launch pass with
-  `ProGating.isEnabled` flipped locally and the debug entitlement picker — including at German
+- **The Settings subscription section (§5i) was never on screen until the ticket-15 flip.** It was
+  hidden while the kill switch shipped off, and `SubscriptionStatusTests` asserts the copy mapping,
+  not the rendering. **Verified on a real device 2026-08-17** for the states reached by the launch
+  pass — Founder, active subscription and free. Still worth walking, since the copy is the longest
+  on the Settings screen: the remaining plan states via the debug entitlement picker, at German
   string lengths and accessibility Dynamic Type sizes, where the footers are the longest copy on the
   Settings screen.
 - **A free user's Settings section states the plan and offers nothing.** That is deliberate for
@@ -2283,8 +2500,8 @@ Nothing else in the app names a product, a price or an entitlement.
 | Test Store product ids | `lifetime`, `yearly`, `monthly` | Simulated Store products, attached to that entitlement |
 | Test Store package ids | `$rc_lifetime`, `$rc_annual`, `$rc_monthly` | The current Offering's packages |
 | Test Store SDK key | `test_IjLklyuZDXOVrXMjaURxfwJnWxk` | `RevenueCatConfiguration.testStoreAPIKey` |
-| App Store SDK key | `appl_…` — **empty until ticket 15** | `RevenueCatConfiguration.appStoreAPIKey` |
-| Placement identifiers | `PaywallPlacement.rawValue`: `first-routine-created`, `value-moment`, `routine-cap`, `chart-metric`, `chart-window`, `coach-chat`, `period-recap`, `exercise-deep-dive`, `weekday-schedule` | RevenueCat dashboard → Placements (ticket 14) |
+| App Store SDK key | `appl_NjUvNeWpHECDnqaxDNJcFnbAhoW` (filled in by ticket 14a; the only key a Release build can select) | `RevenueCatConfiguration.appStoreAPIKey` |
+| Placement identifiers | `PaywallPlacement.rawValue`: `first-routine-created`, `value-moment`, `routine-cap`, `chart-metric`, `chart-window`, `coach-chat`, `period-recap`, `exercise-deep-dive`, `weekday-schedule` | RevenueCat dashboard → Placements (ticket 14). **Each must exist *and* point at an offering that has a paywall** — both halves fail silently in a Release build (§5j) |
 | URL scheme (RevenueCat) | `rc-399243b0af` | `GymStreak/Info.plist` → `CFBundleURLTypes` |
 
 **The entitlement identifier is the single highest-risk string in the integration.** A wrong value
@@ -2388,9 +2605,10 @@ simulator, with no App Store Connect product and no StoreKit configuration file.
    while one is in flight.
 5. A fresh anonymous app user ID comes from a fresh install. Re-testing "buy monthly from nothing"
    means deleting the app, not just relaunching it.
-6. Gates are inert while gating is off, which is every shipping build today. Launch with
-   **`-PRO_GATING_ON`** to exercise a gate, a nudge, the paywall, the Settings subscription section
-   (§5i) or the Founder screen. Do **not** edit `ProGating.shippedValue` — see §9.4a.
+6. Gates are live in every shipping build since ticket 15, so nothing has to be turned on to
+   exercise a gate, a nudge, the paywall, the Settings subscription section (§5i) or the Founder
+   screen. Launch with **`-PRO_GATING_OFF`** for the opposite: the pre-monetization app. Do **not**
+   edit `ProGating.shippedValue` — see §9.4a.
 
 The Test Store and the App Store are **different backends**. A Test Store purchase proves the code
 path and the entitlement identifier; it proves nothing about App Store Connect products, prices,
@@ -2416,8 +2634,12 @@ shipping build.
 
 | Argument | Effect | Without it |
 |---|---|---|
-| `-PRO_GATING_ON` | `ProGating.isEnabled` is `true`, so every gate, the paywall, the §5i section and the Founder screen are live | `ProGating.shippedValue`, i.e. off |
+| `-PRO_GATING_ON` | `ProGating.isEnabled` is `true`, so every gate, the paywall, the §5i section and the Founder screen are live. **A no-op since ticket 15** — the shipped value is already `true` | `ProGating.shippedValue`, i.e. on |
+| `-PRO_GATING_OFF` | `ProGating.isEnabled` is `false`: the pre-monetization app, and the only way to see it since the flip. Added by ticket 15 to make §9.6's rollback claim checkable. Wins if both gating arguments are passed | `ProGating.shippedValue`, i.e. on |
 | `-REVENUECAT_APP_STORE` | the SDK configures with the `appl_` key against the real RevenueCat project, which is what makes StoreKit purchases real | the Test Store key |
+
+Two further Debug-only arguments, `-FOUNDER_SIMULATE_PRECUTOFF` and `-FOUNDER_SIMULATE_CUTOFF`, make
+the Founder grant reachable on a device at all. They are their own topic — see **§9.4c**.
 
 **A Release build has no switch at all**: outside DEBUG `RevenueCatConfiguration.apiKey` resolves to
 the `appl_` key unconditionally, and the `test_` literal is not compiled in — the whole Test Store
@@ -2546,22 +2768,32 @@ else above is quoted from Apple documentation.
 Both cost a full debugging round, both are configuration rather than code, and both produce symptoms
 that point convincingly at the app. Check them **first**.
 
-#### Trap 1: relaunching the app turns gating off, and that looks exactly like Pro
+#### Trap 1: relaunching the app silently changes what gating is, and one direction looks exactly like Pro
 
-`-PRO_GATING_ON` lives in the Xcode scheme, and scheme launch arguments are passed **only when Xcode
-launches the process**. Kill the app and reopen it from the home screen and `ProGating.isEnabled`
-falls back to `shippedValue` (`false`) for that run: no cap nudge, no lock badge, "Neue Routine"
-opens the create flow.
+Both gating arguments live in the Xcode scheme, and scheme launch arguments are passed **only when
+Xcode launches the process**. Kill the app, reopen it from the home screen, and `ProGating.isEnabled`
+falls back to `shippedValue` for that run.
 
-That is pixel-identical to a working Pro subscription. Which is why "the gate is gone after a
-restart" was read — twice, including in §3c — as *the entitlement resolves correctly on launch, so
-the value is fine and the bug must be in the UI*. It was never evidence of anything about the
-entitlement.
+**Before the ticket-15 flip** that fallback was `false`: no cap nudge, no lock badge, "Neue Routine"
+opens the create flow — pixel-identical to a working Pro subscription. Which is why "the gate is
+gone after a restart" was read — twice, including in §3c — as *the entitlement resolves correctly on
+launch, so the value is fine and the bug must be in the UI*. It was never evidence of anything about
+the entitlement.
+
+**Since the flip the fallback is `true`**, so the trap runs the other way: a `-PRO_GATING_OFF` run
+being verified against the rollback silently re-arms every gate on a manual relaunch, and that reads
+as "the rollback does not work". The asymmetry is worth holding on to — the pre-flip direction was
+dangerous because it was *invisible*, this one at least announces itself with a paywall.
 
 Guards now in place:
 
 - Every launch logs `Launch: gating ON|OFF (…)` to `app.gymstreak.pro` / `Gating`, naming the
-  source. `ProGating.gatingSourceDescription` says outright when the argument was not passed.
+  source. `ProGating.gatingSourceDescription` says outright when an argument was not passed — and,
+  since the flip, when `-PRO_GATING_ON` *was* passed but is a no-op because the shipped value is
+  already on. **That description is derived from `ProcessInfo`, never from comparing `isEnabled`
+  against `shippedValue`**: the comparison describes the outcome, and it goes vacuous exactly when
+  the argument agrees with the shipped value, which would make the log line assert the opposite of
+  the truth in the one situation this guard exists for.
 - Settings → *Debug* → the entitlement section's footer says the same thing while the app is open.
 
 ⚠️ **Never compare an Xcode-launched run with a hand-launched one.** They are different products.
@@ -2611,6 +2843,85 @@ the purchases next to the entitlements. Read it as:
 Note what the empty list also *rules out*: an identifier typo, the highest-risk string in the
 integration (§3b). If the entitlement existed under any name it would be printed.
 
+### 9.4c Testing the Founder grant on a device, which is otherwise impossible
+
+**The grant cannot be observed outside a production App Store install, and no amount of retrying
+changes that.** Verified on device 2026-08-17 by installing 1.1.8 from TestFlight (and separately
+1.1.7 from the App Store), then the Debug build over it: the routine cap gated, no Founder screen
+appeared. That is the design working. `FounderStatusService.resolveDecision()` refuses to decide
+unless `AppTransaction.environment == .production`; a TestFlight install reports `.sandbox` and an
+Xcode-installed build reports `.xcode`, so the decision stays **undecided** and `isFounder` is
+`false`. Those environments also report `originalAppVersion` as `"1.0"`, which is not parseable as
+an `Int` and would be rejected a line later anyway. The guard is load-bearing — without it every
+TestFlight tester would be granted Pro forever (§7.1 trap 2) — so it is not relaxed for testing.
+
+Two consequences worth being precise about:
+
+- **What was installed before does not matter.** The environment belongs to the *running* build, so
+  a Debug build installed over a real App Store install still reports `.xcode`.
+- **The failure is safe.** Every non-production or unparseable read returns `nil` — neither granting
+  nor recording a negative — so it is retried on the next launch and nobody can be permanently
+  disinherited by one bad read. A `false` is only ever written when the parse succeeded and the
+  build was genuinely at or above the cutoff.
+
+#### The simulator, and what it does and does not prove
+
+`SimulatedOriginalAppDownloadReader` (`Data/Purchases/`, entirely `#if DEBUG`) is the other
+implementation of the `OriginalAppDownloadReading` seam — the seam §3a introduced because
+`AppTransaction` has no public initializer. `AppDependencies.makeFounderStatusService()` selects it
+when a launch argument asks for it.
+
+| Argument | Simulates | Expect |
+|---|---|---|
+| `-FOUNDER_SIMULATE_PRECUTOFF` | verified, `.production`, `originalAppVersion` `"1"` — what every pre-monetization install reports | Founder granted: the thank-you screen on first launch, then no gate anywhere, and Settings reporting Founder with no Customer Center row. **Walked on a real device 2026-08-17: all three observed, with Settings reporting a real `founder` state** |
+| `-FOUNDER_SIMULATE_CUTOFF` | verified, `.production`, `originalAppVersion` = `cutoffBuild` | **No** grant — the comparison is strictly less-than. This is the boundary, deliberately, rather than a value safely past it |
+
+It replaces the *reader*, not the decision: the environment guard, the `Int` parse, the
+`< cutoffBuild` comparison, the entitlement composition (Founder wins over RevenueCat, §3c) and the
+celebration all run exactly as they will in production.
+
+**What it does not cover**, so a green simulated pass is not read as more than it is:
+
+- **Apple's own production read** — that `AppTransaction.shared` really returns `"1"` for a
+  pre-cutoff install on a real App Store update. Verifiable only after release.
+- **Decide-once across launches.** The suite is wiped on every simulated launch, so the run always
+  takes the resolve path and never the `guard !isDecided else { return }` short-circuit — which
+  also means the grant always arrives *after* the await, never already-on-record at launch (§3d).
+  Both are covered by `FounderStatusTests` instead.
+
+A simulated run writes its decision to a **separate defaults suite** (`pro.founder.simulated`),
+wiped at the start of every simulated launch. The real `pro.isFounder` key is never touched, so
+removing the argument returns the device to its real state immediately, and each run re-resolves
+instead of short-circuiting on `isDecided`. Without that separation a simulated grant would land in
+`UserDefaults.standard` and stick **forever** — the decision is recorded once by design — leaving
+the device permanently claiming Founder with no gate in sight, which is precisely the §9.4b class of
+symptom that reads as a broken app.
+
+That separation is **structural, not aspirational**: if the suite cannot be opened,
+`AppDependencies` falls back to *not simulating* rather than to `.standard`, so there is no path on
+which a simulated decision reaches the real key. `FounderStatusTests` asserts the suite name is
+usable and that a value written through it does not appear in `.standard`, which is what keeps that
+fallback unreachable.
+
+One thing the suite does *not* cover: the celebration's own "already shown" record lives in the real
+defaults, so a simulated run marks the screen as seen. Settings → Debug → paywall placements →
+*Reset* un-shows it.
+
+**The logging that makes a device pass readable.** `FounderStatusService` logs one line per outcome
+to `app.gymstreak.pro` / **`Founder`**, and the reasons are what matter: `AppTransaction`
+unavailable, unverified, *environment is not production*, an unparseable `originalAppVersion`, the
+original build against the cutoff, and the decision itself — plus "already decided" on every later
+launch. The environment line is the one to look for on a pre-release device; it is the whole
+explanation for a missing Founder screen, and it names the argument that gets around it.
+
+Alongside it, `GymStreakApp` logs `Launch: entitlement <state>` next to the gating line. That line
+deliberately claims less: `ProEntitlementState` has no undecided case, so undecided and free both
+print `free` — the `Founder` category is what separates them — and in DEBUG it reflects the Settings
+debug override when one is set, which is a fact about the picker rather than about the grant.
+
+`FounderStatusTests` pins the two simulated cases against `cutoffBuild` itself, so re-pinning the
+cutoff cannot quietly turn the negative case into a grant.
+
 ### 9.5 App Store Connect: the two product constraints that cannot be fixed in code
 
 1. **Lifetime must be a non-consumable, not a non-renewing subscription.** The app uses an
@@ -2626,94 +2937,157 @@ integration (§3b). If the entitlement existed under any name it would be printe
 Both are dashboard/App Store Connect configuration. Neither is expressible in the codebase, which is
 exactly why they are written down here.
 
-### 9.6 The ordered checklist for flipping the kill switch on
+### 9.6 The launch checklist, and what it did
 
-Ticket 15 executes this. The ordering is not cosmetic — steps 1–4 cannot be undone by a hotfix.
+Ticket 15 executed this on **2026-08-17**. It is kept as an executed record rather than as a plan,
+because the parts that cannot be undone by a hotfix — the Founder cutoff and the storefront copy —
+are worth being able to re-read afterwards.
 
-**Before the build:**
+**Done in the repo:**
 
-1. **Nothing to swap.** `RevenueCatConfiguration.appStoreAPIKey` is filled in and a Release build
-   resolves `apiKey` to it unconditionally (§9.4a), so this step is now a *confirmation*: check
-   that the key still matches the RevenueCat dashboard, and that `strings` on the Release binary
-   does not contain the `test_` key.
-2. Verify against a **real sandbox purchase** on a device, not the Test Store — different backends.
-   §9.4a is the procedure. The acceptance test is not "the purchase went through": it is that the
-   paywall closes and the gate is gone **without relaunching**, and that tapping "new routine"
-   opens the create flow rather than the paywall (§3d explains why that specific tap is the
-   discriminating one). Watch the `app.gymstreak.pro` log while you do it.
-3. Confirm the App Store Connect subscriptions are **approved** and mapped to the `Gym Streak Pro`
-   entitlement, that Lifetime is a **non-consumable**, and that the trial is annual-only (§9.5).
-   ⚠️ The mapping half was **not** done as of 2026-08-17: only the *Test Store* products were
-   attached to `Gym Streak Pro`, so a successful sandbox purchase granted no entitlement at all
-   (§9.4b trap 2). Attaching the App Store products to the entitlement is the single thing standing
-   between the code and a working purchase.
-4. **Design a paywall for the offering, and create the dashboard Placements** for every
-   `PaywallPlacement.rawValue` (§9.1). Both halves are release-blocking and neither exists today: an
-   offering with no paywall renders RevenueCat's own "No Paywall configured" developer template
-   (§5j), and a missing Placement silently serves the default offering, losing §8 C's requirement
-   that a contextual gate name the specific capability being unlocked. Confirm the annual trial and
-   the no-trial-at-contextual-gates rule (§9.5) are what the offerings actually serve.
-5. Decide the Founder cutoff question (§7, "who counts as pre-monetization"): accept the exclusion
-   of the ungated-rollout cohort, or re-pin `FounderStatusService.cutoffBuild` to this release's
-   build number. **It cannot be revisited after release.** Verify `CURRENT_PROJECT_VERSION` is at or
-   above the cutoff at all six production sites.
-6. Flip `ProGating.shippedValue` to `true`. (`-PRO_GATING_ON` only affects Debug builds, so it
-   cannot substitute for this — and this is the line that must never be flipped by accident, which
-   is why the launch argument exists.)
-7. Install the *previous App Store build*, then update to this one on a real device, and confirm the
-   Founder screen appears. This is the only real test of the grant and it cannot be done after
-   release.
-8. Walk the surfaces that have never been exercised on device, all of them listed in §7: the two
-   in-cover paywall hosts, the recap's `.offer` step, the P9 dismiss→present handoff, the value
-   moment's post-save timing, the Founder cover's ordering against the AI opt-in, and the Settings
-   subscription section (§5i), which is invisible until this switch is on. Add the two purchase
-   surfaces of §5j: completing a purchase from a paywall (it must dismiss and flip every gate),
-   restore, the Customer Center's manage and cancel paths, and each paywall in dark mode, at large
-   Dynamic Type and in de. Include the paywall's **`unavailable`** state in airplane mode: it has no
-   test and no preview behind it (§5j), so this pass is the only thing that checks the retry works.
+1. **The API key needed no swap.** `RevenueCatConfiguration.appStoreAPIKey` was already filled in and
+   a Release build resolves `apiKey` to it unconditionally (§9.4a), so this was a confirmation.
+   Checked against a real `-configuration Release` binary on 2026-08-17: `strings` finds
+   `appl_NjUvNeWpHECDnqaxDNJcFnbAhoW` and **zero** occurrences of the `test_…` key — the Test Store
+   half of the file is `#if DEBUG`, so the literal is absent rather than merely unused. (Other
+   `test_`-prefixed strings in the binary are RevenueCat SDK internals, not a key.) The same check
+   finds neither `-PRO_GATING_ON` nor `-PRO_GATING_OFF`, which is the direct evidence that the
+   §5 override arguments cannot affect a shipping build however the scheme is left.
+2. **The Founder cutoff question was settled, not deferred: `cutoffBuild` stays at `1000`.** The
+   ungated-rollout cohort the question was about turned out to be empty — no build carrying the
+   entitlement layer was ever released, so no install in the wild reports a build at or above the
+   cutoff. §3a records the evidence. **This is the irreversible one**: once the launch build is out,
+   the pre-paywall cohort is no longer distinguishable.
+3. **`ProGating.shippedValue` flipped to `true`**, with the Debug-only **`-PRO_GATING_OFF`**
+   counterpart added in the same change (§5). Without it there would be no way to see the
+   pre-monetization app again — which is exactly what verifying the rollback below requires.
+   `ProEntitlementTests.gatingShipsOn` was flipped with it, deliberately: the constant should take
+   two obviously-intentional edits to change, in either direction.
+4. **Both storefront listings were rewritten** in `docs/marketing/app-store-description.md` and
+   `app-store-promotional-text.md`. "completely subscription-free" / "ganz ohne Abo" and "No account,
+   no subscription" / "Kein Konto, kein Abo" are gone from every variant, including the promotional
+   alternatives that were not live — that field is edited without a build, so a stale variant can be
+   pasted back months later. The no-**account** promise stays, because it is still true. Both
+   versions carry a free-vs-Pro block and the subscription terms Guideline 3.1.2 expects; the German
+   description had to be tightened elsewhere to stay under the 4,000-character limit.
+5. **TestFlight `WhatToTest` written in en and de**, leading with the Founder grant rather than the
+   paywall — plus the caveat that the grant cannot resolve *in TestFlight* at all (§3a's environment
+   guard), so a qualifying tester still sees the locks there and should not report it as a bug.
+
+**The largest piece of work the flip switches on** is worth knowing about: `ProactivePaywallCoordinator
+.isEligible` short-circuited on `isGatingEnabled`, so `fetchLifetimeTotals()` — a walk of the entire
+workout history — never ran in a shipping build. It now runs after workout completion for free users.
+The boundary holds: `fetchLifetimeTotals()` is `@concurrent` on the concrete
+`SwiftDataHistorySnapshotStore` and delegates to the `@ModelActor` store, so the walk stays off the
+main actor (Concurrency rule 1). Nothing to fix, but it is the one place where "the flip is just a
+constant" is not the whole truth.
+
+**Confirmed outside the repo (2026-08-17).** The App Store products are attached to the
+`Gym Streak Pro` entitlement and a RevenueCat paywall is live — a real sandbox purchase went through
+and flipped every gate. This supersedes the warning that previously stood here: until that day only
+the *Test Store* products were attached, so a successful sandbox purchase granted no entitlement at
+all (§9.4b trap 2).
+
+**"A paywall is live" is still not "every placement is configured."** Each of the nine placements is
+its own dashboard mapping onto an offering that needs its own paywall, and every way that chain can
+break is silent in a Release build — so the nine-placement walk in the outstanding list below is a
+release blocker, not a nicety (§5j).
+
+*(The `coach-chat` case investigated that day turned out **not** to be a configuration fault: the
+paywall is attached and published, and the generic template appears only when the gate is reached
+through the offline-launch retry path, because the components payload travels on a separate request
+— §5j row 4. Recorded because two successive diagnoses were wrong in the same direction: the SDK's
+"No Paywall configured" text describes what this client received, never what the dashboard holds.)*
+
+**Decided: Lifetime does not ship at launch.** The SKU does not exist in App Store Connect, and a
+first non-consumable must be submitted with its own app version (§9.5). It gets a later release; the
+listing copy deliberately does not mention it until then.
+
+**The device pass — done 2026-08-17.** Every gate and purchase surface was walked on real hardware
+against the App Store sandbox, and all of it behaved as designed:
+
+- **The sandbox purchase.** The paywall dismisses on success and every gate is gone without a
+  relaunch (§5j).
+- **Restore**, which turned out not to need a tap: a fresh install resolves the entitlement at
+  configure time and never shows a paywall (§5j).
+- **The Founder grant**, via `-FOUNDER_SIMULATE_PRECUTOFF` (§9.4c) — thank-you screen on first
+  launch, no gate afterwards, Settings reporting a real `founder` state. The simulator exists
+  because a TestFlight or Xcode install can never be granted; only Apple's production read is left
+  unproven, and that is verified after release.
+- **All six gates**: the routine cap including duplication-counts-as-creation, analytics gating with
+  existing data still visible, the three metered AI surfaces after their allowance is spent, and
+  fixed-weekday schedules.
+- **Both proactive placements**, the P9 dismiss→present handoff, and the Founder cover's ordering
+  against the AI opt-in.
+- **Rule 3**: no paywall, upsell or Pro badge during an active workout.
+- **The Customer Center** and the Settings subscription section.
+- **The paywall's `unavailable` state and its retry** (§5j) — the one surface with neither a test nor
+  a preview behind it.
+- **The rollback**, launched with `-PRO_GATING_OFF` (§5): routines beyond the cap all present and
+  editable, schedules still applied, the full chart range back, no lock badges and no Settings
+  subscription section — then gated again as a free user, with those routines still there and still
+  editable and only *creating* another one blocked. That last step is the one that proves a gate
+  blocks creation rather than hiding content.
+- **Dark mode, large Dynamic Type and German**, across a paywall, the Settings subscription section,
+  the Founder screen and a cap nudge.
+
+**Outstanding, and none of it is code** — App Store Connect, one device check, and time after
+release:
+
+- **Walk all nine placements and confirm each logs `resolved to placement … paywall present`** —
+  `app.gymstreak.pro` / `Paywall`, one line per presentation, naming the offering it landed on and
+  whether the paywall payload arrived. This catches a missing Placement and an offering with no
+  paywall, both invisible on screen in a Release build (§5j). Present each gate **normally** for this
+  walk: reaching one through the offline retry path produces §5j row 4, which looks identical and is
+  not a configuration fault.
+- The two App Store Connect product constraints of §9.5: the trial attached to **annual only**, and
+  not to the contextual-gate offerings.
+- The **privacy nutrition labels** for the purchase data RevenueCat handles (§9.7) — a separate
+  manual questionnaire, not generated from the manifest.
+- Pasting the new listing copy into **both storefronts**, in the same release.
+- Submitting with **manual release** and App Review Notes naming the exact path to a paywall
+  (Routines → a fourth routine is the shortest), because 2.1(b) puts the burden of findability on us.
+- After release: Apple's production `AppTransaction` read, confirmed by updating from the App Store
+  and seeing the Founder screen; the §10 guardrails — D30 retention for free users and the App Store
+  rating against their pre-paywall baselines, where §10 is explicit that if either moves against the
+  baseline you **loosen before optimizing**; and the §11 open questions, which Phase 0 was skipped
+  for.
 
 **The subscriptions cannot be approved before this release.** App Review Guideline 2.1(b)
 requires in-app purchases to be "visible to the reviewer and functional", and the first
 auto-renewable subscription — and, separately, the first non-consumable — must each be submitted
-*with a new app version*. A build with the kill switch off has no reachable paywall, so it cannot be
-the build that gets the products approved. The consequences for sequencing:
+*with a new app version*. A build with the kill switch off has no reachable paywall, so it could not
+be the build that got the products approved. The submission carrying the flipped switch is the
+submission that gets them approved; there is no earlier one.
 
-- The submission that carries the flipped switch is the submission that gets the subscriptions
-  approved. There is no earlier one.
-- Use **manual release** so approval does not put the paywall live before the listing copy and the
-  nutrition labels are ready — the same release still has to carry all three (below).
-- §6's **Lifetime** SKU is a non-consumable and therefore its own first-of-type. If it is not in
-  App Store Connect by then, it needs its own version submission later; shipping without it is a
-  product decision, not an oversight to discover at submission time.
-- Write App Review Notes naming the exact path to a paywall (Routines → a fourth routine is the
-  shortest), because 2.1(b) puts the burden of findability on us.
+**Shipping the copy in the same release was release-blocking, not optional.**
+`monetization-strategy.md` §1 and §7 both require it: leaving a "subscription-free" claim live next
+to a paywall is a review-guideline risk and, per §1, a guaranteed one-star generator. The listing
+change and the gating flip are **one release or neither** — which also means the rollback below is
+not complete without reverting the copy.
 
-**Shipping in the same release — release-blocking, not optional.** `monetization-strategy.md` §1 and
-§7 both require it: leaving a "subscription-free" claim live next to a paywall is a review-guideline
-risk and, per §1, a guaranteed one-star generator. The listing change and the gating flip are **one
-release or neither**.
-
-9. Remove "completely subscription-free" and "No account, no subscription" from the **US** listing.
-10. Remove "ganz ohne Abo" and "Kein Konto, kein Abo" from the **DE** listing.
-11. Replace both with an honest free-tier statement — §7 suggests "Track unlimited workouts free.
-    Pro unlocks unlimited routines and full analytics." / "Kein Konto. Track unbegrenzt viele
-    Workouts kostenlos."
-12. Update the App Store **privacy nutrition labels** for the purchase data RevenueCat handles
-    (§9.7).
-13. Write the TestFlight `WhatToTest` entries in en and de, leading with the Founder grant rather
-    than with the paywall.
-
-**Rollback.** The kill switch is the rollback: flipping `ProGating.isEnabled` back to `false`
+**Rollback.** The kill switch is the rollback: setting `ProGating.shippedValue` back to `false`
 restores the free app in one release, touches no data, and takes nothing away — every gate was built
-to leave existing routines, schedules and history intact and editable (§5c, §5d, §7's Rule 4). The
-listing copy would have to be reverted with it.
+to leave existing routines, schedules and history intact and editable (§5c, §5d, §7's Rule 4). Three
+things travel with it: the listing copy, the `gatingShipsOn` assertion, and the nutrition labels if
+purchases are withdrawn entirely.
+
+**This is no longer a claim — it was checked on device on 2026-08-17.** A `-PRO_GATING_OFF` launch
+left nothing in a degraded state: routines beyond the cap all present and editable, weekday schedules
+still applied, the full chart range back, no lock badge and no Settings subscription section. The
+step that carries the weight is the one after: gated again as a *free* user, those same routines are
+still there and still editable, and only creating another one is blocked — which is what
+distinguishes a gate that blocks creation from one that hides content. Re-run it the same way if the
+switch is ever flipped back, and note trap 1 in §9.4b while you do: a manual relaunch drops the
+argument and re-arms every gate, which reads as "the rollback does not work".
 
 ### 9.7 Privacy: the manifest and the nutrition labels
 
-This is not a formality for this app. Its whole brand position is "fast, private, and completely
-subscription-free… your training data belongs to you", and RevenueCat introduced a third-party
-network flow at launch that did not previously exist. Ticket 03 added the flow; ticket 13 declared
-it.
+This is not a formality for this app. Its brand position was "fast, private, and completely
+subscription-free… your training data belongs to you" — ticket 15 removed the subscription half of
+that claim from both listings and kept the privacy half, which is still true — and RevenueCat
+introduced a third-party network flow at launch that did not previously exist. Ticket 03 added the
+flow; ticket 13 declared it.
 
 #### The manifests
 

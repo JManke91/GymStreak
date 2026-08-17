@@ -140,19 +140,54 @@ struct ProPaywallView: View {
             hasDefaultOffering: defaultOffering != nil
         )
 
-        Self.logger.info(
-            """
-            Paywall \(placement.identifier, privacy: .public) resolved to \
-            \(source.logLabel, privacy: .public)
-            """
-        )
-
         guard let offering = placementOffering ?? defaultOffering else {
+            Self.logger.info(
+                """
+                Paywall \(placement.identifier, privacy: .public) resolved to \
+                \(source.logLabel, privacy: .public)
+                """
+            )
             phase = .unavailable
             return
         }
+
+        Self.logger.info(
+            """
+            Paywall \(placement.identifier, privacy: .public) resolved to \
+            \(source.logLabel, privacy: .public) — offering \
+            \(offering.identifier, privacy: .public), \
+            paywall \(Self.paywallPayloadState(of: offering), privacy: .public)
+            """
+        )
         phase = .ready(offering)
         onPaywallShown()
+    }
+
+    /// Whether the resolved offering carries something `PaywallView` can render.
+    ///
+    /// Three states, not two, because the middle one is a real thing that looks
+    /// exactly like a dashboard mistake and is not one (§5j):
+    ///
+    /// - `present` — a renderable payload is in memory, v2 components or v1
+    ///   data. `PaywallView` prefers `internalPaywallComponents` and falls back
+    ///   to `validatedPaywall`, so either satisfies it.
+    /// - `declared-but-absent` — the backend said this offering *has* a paywall
+    ///   (`hasPaywall` is `true`) while neither payload arrived. With remote
+    ///   config active the SDK decodes offerings **without** components and
+    ///   resolves them from `/v1/config` instead, so a launch that could not
+    ///   reach that endpoint leaves the marker without the payload. Fetching
+    ///   offerings again does not repair it — the components come from the other
+    ///   request — and `PaywallView` then draws its generic default template.
+    /// - `none` — genuinely no paywall configured for this offering.
+    ///
+    /// The distinction is worth its lines because all three log the same
+    /// `placement` rung and, in a Release build, the first two are the
+    /// difference between the authored paywall and a blank-looking one.
+    private static func paywallPayloadState(of offering: Offering) -> String {
+        if offering.paywallComponents != nil || offering.paywall != nil {
+            return "present"
+        }
+        return offering.hasPaywall ? "declared-but-absent" : "none"
     }
 
     // MARK: - States

@@ -43,7 +43,7 @@ struct SettingsRootView: View {
                             .padding(.bottom, 18)
 
                         // Renders nothing while the gating kill switch is off,
-                        // which is every shipping build before ticket 15.
+                        // which was every shipping build before ticket 15.
                         SubscriptionSettingsSectionView(
                             entitlements: dependencies.proEntitlements
                         )

@@ -8,6 +8,7 @@
 //
 
 import Foundation
+import os
 import StoreKit
 
 /// The App Store's signed record of the original app download, reduced to the
@@ -128,9 +129,17 @@ final class FounderStatusService: FounderStatusResolving {
     var isDecided: Bool { defaults.object(forKey: Self.decisionKey) != nil }
 
     func resolveIfNeeded() async {
-        guard !isDecided else { return }
+        guard !isDecided else {
+            Self.logger.info(
+                "Founder: already decided — \(self.isFounder ? "granted" : "not granted", privacy: .public)"
+            )
+            return
+        }
         guard let decision = await resolveDecision() else { return }
         defaults.set(decision, forKey: Self.decisionKey)
+        Self.logger.info(
+            "Founder: decided — \(decision ? "granted" : "not granted", privacy: .public)"
+        )
     }
 
     /// The decision, or `nil` for "cannot decide — ask again next launch".
@@ -144,23 +153,70 @@ final class FounderStatusService: FounderStatusResolving {
             download = try await downloads.originalAppDownload()
         } catch {
             // Offline or not signed in on a true first launch (§7.1 trap 4).
+            Self.logger.info("Founder: undecided — AppTransaction unavailable, retrying next launch")
             return nil
         }
 
         // `.unverified` is precisely the forge-a-pre-cutoff-transaction vector.
         guard case .verified(let environment, let originalAppVersion) = download else {
+            Self.logger.info("Founder: undecided — AppTransaction unverified")
             return nil
         }
         // Sandbox, TestFlight and Xcode always report "1.0", so every non-production
         // run would otherwise look pre-cutoff (§7.1 trap 2). Guarding on the
         // environment rather than special-casing that string is what keeps a
         // TestFlight tester from being granted Founder.
-        guard environment == .production else { return nil }
+        guard environment == .production else {
+            // The single most misread result of the whole feature: it is what a
+            // TestFlight or Xcode install always produces, and on screen it is
+            // indistinguishable from "you are not a Founder" (§9.4c).
+            //
+            // The way out is named only in the DEBUG half — a TestFlight build is
+            // a Release build, so pointing its log at a Debug-only launch
+            // argument would be advice its reader cannot take, and it would put
+            // the flag's name in a shipping binary for no reason.
+            #if DEBUG
+            Self.logger.info(
+                """
+                Founder: undecided — environment is \(environment.rawValue, privacy: .public), \
+                not production. No pre-release install can be granted; launch with \
+                \(SimulatedOriginalAppDownloadReader.preCutoffArgument, privacy: .public) to simulate one
+                """
+            )
+            #else
+            Self.logger.info(
+                """
+                Founder: undecided — environment is \
+                \(environment.rawValue, privacy: .public), not production
+                """
+            )
+            #endif
+            return nil
+        }
         // Parsed as `Int`, never compared as a string: `.compare(_:options:.numeric)`
         // falls back to lexicographic ordering on a non-numeric component and
         // returns a wrong answer without erroring (§7.1 trap 3).
-        guard let originalBuild = Int(originalAppVersion) else { return nil }
+        guard let originalBuild = Int(originalAppVersion) else {
+            Self.logger.info(
+                """
+                Founder: undecided — originalAppVersion \
+                "\(originalAppVersion, privacy: .public)" is not an integer build number
+                """
+            )
+            return nil
+        }
 
+        Self.logger.info(
+            "Founder: original build \(originalBuild, privacy: .public), cutoff \(Self.cutoffBuild, privacy: .public)"
+        )
         return originalBuild < Self.cutoffBuild
     }
+
+    /// Its own category, because the three outcomes — granted, not granted, and
+    /// *undecided* — are indistinguishable on screen, and the last one is what
+    /// every pre-release install produces (§9.4c). The entitlement line logged
+    /// at launch cannot separate undecided from free: `ProEntitlementState` has
+    /// no undecided case, and it is deliberately not given one — the app has
+    /// nothing different to show for it.
+    private static let logger = Logger(subsystem: "app.gymstreak.pro", category: "Founder")
 }

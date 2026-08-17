@@ -75,8 +75,16 @@
             isEnabled = "NO">
          </CommandLineArgument>
          <CommandLineArgument
+            argument = "-FOUNDER_SIMULATE_PRECUTOFF"
+            isEnabled = "NO">
+         </CommandLineArgument>
+         <CommandLineArgument
             argument = "-PRO_GATING_ON"
             isEnabled = "YES">
+         </CommandLineArgument>
+         <CommandLineArgument
+            argument = "-PRO_GATING_OFF"
+            isEnabled = "NO">
          </CommandLineArgument>
          <CommandLineArgument
             argument = "-REVENUECAT_APP_STORE"
