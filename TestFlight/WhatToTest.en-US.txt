@@ -1,7 +1,0 @@
-- The control between two exercises now reads "Superset" instead of "Link superset"
-- German wording is now consistently "Supersatz" everywhere, including the group badge
-- You keep everything: if you installed Gym Streak before this update, you get Gym Streak Pro free, forever, as a thank-you. A one-time welcome screen confirms it. Nothing you already created is ever taken away — all your routines, schedules and history stay exactly as they are, whatever tier you are on.
-- Please note that this Founder check only runs on App Store installs. In TestFlight it cannot run, so you will see the Pro locks here even if you qualify — that is expected and does not mean you lost anything.
-- New: Gym Streak Pro. Tracking workouts stays free and unlimited. Pro adds unlimited routines (free keeps 3), the full progress charts (1RM, volume, 1-year and all-time ranges), fixed weekday schedules, and unlimited AI Coach chat, recaps and exercise deep-dives.
-- Settings has a new subscription section showing your current plan, with restore purchases and a manage-subscription screen where you can also request a refund or cancel.
-- Please test: creating a fourth routine, opening the progress charts, and the AI Coach after its free monthly allowance is used up. Each should explain what is locked and offer the upgrade rather than just blocking.

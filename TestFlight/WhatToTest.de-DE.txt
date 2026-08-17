@@ -1,7 +1,0 @@
-- Die Schaltfläche zwischen zwei Übungen heißt jetzt „Supersatz" statt „Verknüpfen"
-- Die deutsche App sagt jetzt durchgehend „Supersatz" statt „Superset", auch beim Gruppen-Badge
-- Du behältst alles: Wenn du Gym Streak vor diesem Update installiert hast, bekommst du Gym Streak Pro als Dankeschön dauerhaft kostenlos. Ein einmaliger Willkommens-Screen bestätigt das. Nichts, was du bereits angelegt hast, wird dir weggenommen – alle Routinen, Pläne und dein Verlauf bleiben genau so, wie sie sind, in jedem Tarif.
-- Bitte beachte: Diese Founder-Prüfung läuft nur bei Installationen aus dem App Store. In TestFlight ist sie nicht möglich, deshalb siehst du hier die Pro-Sperren auch dann, wenn du eigentlich dazugehörst. Das ist so gewollt und bedeutet nicht, dass du etwas verloren hast.
-- Neu: Gym Streak Pro. Workouts tracken bleibt kostenlos und unbegrenzt. Pro ergänzt unbegrenzte Routinen (kostenlos bleiben 3), die vollständigen Fortschritts-Charts (1RM, Volumen, Zeiträume 1 Jahr und gesamt), feste Wochentag-Pläne sowie unbegrenzten KI-Coach-Chat, Rückblicke und Übungs-Tiefenanalysen.
-- In den Einstellungen gibt es einen neuen Abo-Bereich mit deinem aktuellen Tarif, dem Wiederherstellen von Käufen und einer Verwaltungsseite, über die du auch eine Rückerstattung anfragen oder kündigen kannst.
-- Bitte testen: eine vierte Routine anlegen, die Fortschritts-Charts öffnen und den KI-Coach nutzen, wenn das kostenlose Monatskontingent aufgebraucht ist. Überall sollte erklärt werden, was gesperrt ist, statt dich nur zu blockieren.

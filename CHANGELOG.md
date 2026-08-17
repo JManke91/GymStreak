@@ -4,6 +4,20 @@ All notable changes to GymStreak are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.1.9] - 2026-08-17
+
+### Added
+
+- New: Gym Streak Pro. Tracking workouts stays free and unlimited. Pro adds unlimited routines (free keeps 3), the full progress charts (1RM, volume, 1-year and all-time ranges), fixed weekday schedules, and unlimited AI Coach chat, recaps and exercise deep-dives.
+- Founder status: everyone who installed Gym Streak before this update gets Gym Streak Pro free, forever, as a thank-you, confirmed by a one-time welcome screen. Nothing already created is ever taken away — all routines, schedules and history stay exactly as they are, whatever tier you are on. (The check reads the App Store original-purchase record and therefore cannot run in TestFlight, where the Pro locks appear even for users who qualify.)
+- Settings has a new subscription section showing the current plan, with restore purchases and a manage-subscription screen that also offers refund requests and cancellation.
+- Locked features explain what is gated and offer the upgrade instead of simply blocking — a fourth routine, the progress charts, and the AI Coach once its free monthly allowance is used up.
+
+### Improved
+
+- The control between two exercises now reads "Superset" instead of "Link superset".
+- German wording is now consistently "Supersatz" everywhere, including the group badge.
+
 ## [1.1.8] - 2026-08-14
 
 ### Added
