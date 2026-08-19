@@ -54,6 +54,12 @@ final class AppDependencies: ObservableObject {
     /// docs/starter-exercise-library.md). Invoked once from GymStreakApp at launch.
     let defaultContentSeeder: DefaultContentSeeder
 
+    /// One-shot repair that re-exports training plans whose CloudKit records
+    /// were written without their owning routine, back when the link was a
+    /// to-one ↔ to-one relationship CloudKit does not mirror (see
+    /// docs/workout-planning.md). Invoked once from GymStreakApp at launch.
+    let routinePlanLinkRepair: RoutinePlanLinkRepair
+
     /// App-lifetime owner of the exercise-catalogue → watch sync triggers
     /// (post-seed, committed library mutations, CloudKit changes). ViewModels
     /// receive it as `ExerciseCatalogSyncRequesting` — never the concrete type.
@@ -223,6 +229,10 @@ final class AppDependencies: ObservableObject {
             historyProvider: historySnapshotProvider
         )
         self.defaultContentSeeder = DefaultContentSeeder(
+            modelContext: modelContext,
+            cloudSyncStatus: cloudSyncStatus
+        )
+        self.routinePlanLinkRepair = RoutinePlanLinkRepair(
             modelContext: modelContext,
             cloudSyncStatus: cloudSyncStatus
         )

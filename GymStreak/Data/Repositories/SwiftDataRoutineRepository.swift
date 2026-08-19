@@ -15,7 +15,11 @@ final class SwiftDataRoutineRepository: RoutineRepository {
     }
 
     func fetchAll() -> [Routine] {
-        let descriptor = FetchDescriptor<Routine>(sortBy: [SortDescriptor(\.updatedAt, order: .reverse)])
+        var descriptor = FetchDescriptor<Routine>(sortBy: [SortDescriptor(\.updatedAt, order: .reverse)])
+        // The routines list reads `Routine.schedule` per row (card subtitle,
+        // next-due ordering), and that walks this relationship — prefetch it so
+        // the list does not fault once per routine.
+        descriptor.relationshipKeyPathsForPrefetching = [\.schedules]
         do {
             return try modelContext.fetch(descriptor)
         } catch {

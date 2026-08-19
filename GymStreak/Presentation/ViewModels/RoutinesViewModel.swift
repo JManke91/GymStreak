@@ -670,10 +670,21 @@ class RoutinesViewModel: ObservableObject {
         let schedule: RoutineSchedule
         if let existing = routine.schedule {
             schedule = existing
+            // `schedules` is a to-many holding at most one plan, but two devices
+            // planning offline — or two repair passes — can leave a second row.
+            // Collapse the losers while editing so none survives to be promoted
+            // by `Routine.schedule` later.
+            for duplicate in (routine.schedules ?? []) where duplicate !== existing {
+                duplicate.routine = nil
+                routineRepository.delete(duplicate)
+            }
         } else {
             schedule = RoutineSchedule()
+            // Setting the child's to-one is what establishes the link — SwiftData
+            // maintains `routine.schedules` as its inverse, exactly as
+            // `addConfiguredExercise` does for a RoutineExercise. Assigning the
+            // parent side instead is what CloudKit failed to mirror.
             schedule.routine = routine
-            routine.schedule = schedule
             routineRepository.insert(schedule)
         }
         schedule.type = type
@@ -690,9 +701,15 @@ class RoutinesViewModel: ObservableObject {
     /// Clears a routine's plan entirely. Never gated: §7's Rule 4 constrains what
     /// a user may *build*, and removing a plan only ever gives capability back.
     func removeSchedule(from routine: Routine) {
-        guard let schedule = routine.schedule else { return }
-        routine.schedule = nil
-        routineRepository.delete(schedule)
+        let schedules = routine.schedules ?? []
+        guard !schedules.isEmpty else { return }
+        // Every row, not just the one `Routine.schedule` surfaces: deleting only
+        // the winner would promote a duplicate and the removed plan would
+        // reappear — card, weekly goal and next-due ordering included.
+        for schedule in schedules {
+            schedule.routine = nil
+            routineRepository.delete(schedule)
+        }
         updateRoutine(routine)
     }
 

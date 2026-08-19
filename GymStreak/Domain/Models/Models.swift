@@ -10,9 +10,18 @@ final class Routine {
     @Relationship(inverse: \WorkoutSession.routine)
     var workoutSessions: [WorkoutSession]? = []
     /// Optional training plan driving the dynamic weekly goal (see
-    /// docs/workout-planning.md). Nil ⇒ the routine is unplanned.
+    /// docs/workout-planning.md). Empty ⇒ the routine is unplanned.
+    ///
+    /// Modelled as a to-many holding at most one element, *not* as a to-one,
+    /// because CloudKit does not mirror to-one↔to-one relationships: schedule
+    /// records reached the private database with every scalar field intact and
+    /// no `CD_routine` reference, and `CD_Routine.CD_schedule` stayed empty
+    /// too, so a plan set on one device never appeared on another. The
+    /// to-many ↔ to-one shape every other relationship here uses mirrors
+    /// correctly. Read plans through `schedule`, write them through
+    /// `RoutinesViewModel.setSchedule`. See docs/workout-planning.md.
     @Relationship(deleteRule: .cascade, inverse: \RoutineSchedule.routine)
-    var schedule: RoutineSchedule? = nil
+    var schedules: [RoutineSchedule]? = []
     var createdAt: Date = Date()
     var updatedAt: Date = Date()
 
@@ -28,6 +37,23 @@ final class Routine {
     // Convenience accessor for non-optional usage
     var routineExercisesList: [RoutineExercise] {
         routineExercises ?? []
+    }
+
+    /// The routine's training plan, or nil when unplanned.
+    ///
+    /// `schedules` carries at most one element. Two devices planning the same
+    /// routine before syncing can leave two, so the winner is chosen
+    /// deterministically — oldest `createdAt`, then smallest `id`, the same
+    /// convention `DefaultContentSeeder` uses to collapse duplicate exercises —
+    /// so every device displays the same plan.
+    var schedule: RoutineSchedule? {
+        schedules?.min { lhs, rhs in
+            // Tie-break lazily: `body` reads this, and building the UUID strings
+            // for both sides on every comparison is pure waste in the common
+            // single-element case.
+            if lhs.createdAt != rhs.createdAt { return lhs.createdAt < rhs.createdAt }
+            return lhs.id.uuidString < rhs.id.uuidString
+        }
     }
 
     /// Groups exercises by superset for display purposes.

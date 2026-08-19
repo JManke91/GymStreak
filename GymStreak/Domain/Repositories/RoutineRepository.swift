@@ -42,7 +42,7 @@ protocol RoutineRepository: AnyObject {
     func delete(_ alternative: RoutineExerciseAlternative)
     func delete(_ set: AlternativeExerciseSet)
 
-    /// A `RoutineSchedule` is attached via `Routine.schedule`. Explicit insert
+    /// A `RoutineSchedule` is attached by setting `RoutineSchedule.routine`; the parent's `schedules` is the inverse. Explicit insert
     /// is needed when the schedule is synthesized independently of that
     /// relationship append; explicit delete is always needed to remove the
     /// underlying record when a plan is cleared.

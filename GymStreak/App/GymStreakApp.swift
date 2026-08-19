@@ -127,6 +127,13 @@ struct GymStreakApp: App {
                 }
                 .task {
                     guard !isUITesting else { return }
+                    // Repairs plan→routine links CloudKit never received, once
+                    // per device. Waits for a finished transfer first, so it
+                    // cannot race the importer — hence a task, not onAppear.
+                    await dependencies.routinePlanLinkRepair.runIfNeeded()
+                }
+                .task {
+                    guard !isUITesting else { return }
                     // Waits for CloudKit to prove it has nothing to deliver
                     // before re-seeding a library the version flag stranded, so
                     // it never fires while a new device is still importing.

@@ -18,37 +18,8 @@ import SwiftData
 import Foundation
 @testable import GymStreak
 
-/// Feeds the seeder a scripted sync status; `emit` drives the recovery's wait.
-@MainActor
-private final class StubCloudSyncStatus: CloudSyncStatusProviding {
-    private(set) var currentStatus: CloudSyncStatus = CloudSyncStatus(
-        state: .syncing,
-        lastSuccessfulSync: nil
-    )
-    private var continuations: [UUID: AsyncStream<CloudSyncStatus>.Continuation] = [:]
-
-    init(initial: CloudSyncStatus = CloudSyncStatus(state: .syncing, lastSuccessfulSync: nil)) {
-        self.currentStatus = initial
-    }
-
-    func statusUpdates() -> AsyncStream<CloudSyncStatus> {
-        let id = UUID()
-        return AsyncStream { continuation in
-            continuations[id] = continuation
-            continuation.yield(currentStatus)
-            continuation.onTermination = { [weak self] _ in
-                Task { @MainActor in self?.continuations[id] = nil }
-            }
-        }
-    }
-
-    func emit(_ status: CloudSyncStatus) {
-        currentStatus = status
-        for continuation in continuations.values {
-            continuation.yield(status)
-        }
-    }
-}
+// `StubCloudSyncStatus` lives in Support/CloudSyncTestDoubles.swift — shared
+// with RoutinePlanLinkRepairTests.
 
 /// Stands in for iCloud key-value storage, which must never be touched by tests.
 private final class InMemoryVersionStore: SeedCatalogVersionStore, @unchecked Sendable {

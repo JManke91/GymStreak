@@ -122,10 +122,10 @@ actor ChatFactStore {
     private let logger = Logger(subsystem: "app.gymstreak.aicoach", category: "ChatFactStore")
 
     func nextWorkoutFacts() async -> String {
-        // `\.schedule` is read for every routine — a single direct key path, so this is
+        // `\.schedules` is read for every routine — a single direct key path, so this is
         // the documented use of prefetching, not the identity-map bet `withFullGraph` makes.
         var routineDescriptor = FetchDescriptor<Routine>()
-        routineDescriptor.relationshipKeyPathsForPrefetching = [\.schedule]
+        routineDescriptor.relationshipKeyPathsForPrefetching = [\.schedules]
         let routines = fetched("routines") { try modelContext.fetch(routineDescriptor) }
         // Only `startTime` and the owning routine are read, so the full exercise/set
         // graph is deliberately not faulted here.

@@ -150,7 +150,7 @@ actor SwiftDataHistorySnapshotStore {
         }
         let routines = try measured("HistoryFetchRoutines") {
             var descriptor = FetchDescriptor<Routine>()
-            descriptor.relationshipKeyPathsForPrefetching = [\.schedule]
+            descriptor.relationshipKeyPathsForPrefetching = [\.schedules]
             return try modelContext.fetch(descriptor)
         }
 

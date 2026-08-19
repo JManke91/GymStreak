@@ -175,7 +175,7 @@ struct ChatFactProviderTests {
         context.insert(routine)
         let schedule = RoutineSchedule(type: .weekdays, weekdays: [1, 2, 3, 4, 5, 6, 7])
         context.insert(schedule)
-        routine.schedule = schedule
+        schedule.routine = routine
 
         let session = WorkoutSession(routine: routine)
         session.routineName = "Push"
