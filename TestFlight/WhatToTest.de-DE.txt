@@ -1,2 +1,0 @@
-- Routinen-Zeitpläne werden jetzt über iCloud synchronisiert. Ein auf einem Gerät gesetzter Zeitplan erscheint auch auf deinen anderen Geräten, und bereits gesetzte Zeitpläne werden beim ersten Start automatisch repariert.
-- Die Einstellungen haben jetzt einen Bereich „Rechtliches“ mit Links zu den Nutzungsbedingungen und zur Datenschutzerklärung.

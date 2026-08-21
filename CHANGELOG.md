@@ -4,6 +4,16 @@ All notable changes to GymStreak are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.1.10] - 2026-08-21
+
+### Added
+
+- Settings now has a Legal section with links to the Terms of Use and the privacy policy.
+
+### Improved
+
+- Routine plans now sync via iCloud. A plan set on one device appears on your others, and plans that were already set are repaired automatically on first launch.
+
 ## [1.1.9] - 2026-08-17
 
 ### Added
