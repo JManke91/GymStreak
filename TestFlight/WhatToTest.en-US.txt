@@ -1,1 +1,2 @@
 - Routine plans now sync via iCloud. A plan set on one device appears on your others, and plans that were already set are repaired automatically on first launch.
+- Settings now has a Legal section with links to the Terms of Use and the privacy policy.

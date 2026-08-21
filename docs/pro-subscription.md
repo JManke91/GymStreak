@@ -1,5 +1,7 @@
 # Pro subscription — entitlement core, Founder grant and RevenueCat
 
+**Status (2026-08-21):** version **1.1.9 (68)** — the monetization launch — was **rejected by App Review** on 2026-08-18 under guidelines 3.1.2(c) and 2.1(b). §**9.8** is the analysis: the missing legal links (fixed, §5k), the purchase error (**still undiagnosed**), and three faults neither guideline mentions — Xcode Cloud overriding the build number, which would have granted every new user Founder for free (fixed); privacy nutrition labels declaring “no data collected” (fixed); and the subscriptions currently sitting outside review (**blocking**). **Read §9.8 before resubmitting**, and `docs/appstore-rejection-1.1.9.md` for the live status of every open item.
+
 **Status (2026-08-17):** every ticket of `.scratch/pro-entitlements/issues/` — 01 through 15,
 including 14a — is implemented, and **the kill switch is on**: `ProGating.shippedValue` is `true`,
 so a release build now gates. What remains of ticket 15 needs a device, App Store Connect or time
@@ -152,9 +154,15 @@ caches the answer in plain `UserDefaults`.
 ### The build-number cutoff, and why 1000
 
 `AppTransaction.originalAppVersion` returns the **build number** (`CFBundleVersion`) on iOS. This
-project had no usable one: `CURRENT_PROJECT_VERSION` was `1` at every production site and
-`/release` bumped only `MARKETING_VERSION`, so every shipped version appears in App Store Connect
-as `1.1.x (1)` and every existing install reports `originalAppVersion == "1"`.
+project had no usable one in the project file: `CURRENT_PROJECT_VERSION` was `1` at every production
+site and `/release` bumped only `MARKETING_VERSION`.
+
+> **Corrected 2026-08-20.** This section originally concluded from that setting that every shipped
+> version appears in App Store Connect as `1.1.x (1)`. It does not. **Xcode Cloud stamps its own
+> counter over `CFBundleVersion`**, so the shipped builds are 63, 64, 65, 66 and 68 — and it is those
+> numbers, not the project's, that `originalAppVersion` reports. Everything below still holds for
+> installs in the wild (all ≤ 67, so all correctly pre-cutoff), but the reasoning about *future*
+> builds did not, and §9.8 Fault 3 is what that cost.
 
 The fix, applied in this ticket: `CURRENT_PROJECT_VERSION` is now **1000** at the six production
 sites (GymStreak, GymStreakWidgetsExtension, GymStreakWatch Watch App × Debug/Release). The three
@@ -182,8 +190,13 @@ withholds the grant there regardless of build number.
 > only symptom is missing revenue, discovered months later. Three things hold it:
 > the `/release` command (Phase 3 Part B step 6b) and `merge-testflight-to-store` (step 9b) both
 > increment `CURRENT_PROJECT_VERSION` every cycle and report the new build; and
-> `FounderStatusTests.shippingBuildIsNotBelowCutoff` reads `Bundle.main`'s actual `CFBundleVersion`
-> (the suite is app-hosted) and fails the build if it ever regresses.
+> `FounderStatusTests.shippingBuildIsNotBelowCutoff` reads `Bundle.main`'s `CFBundleVersion` (the
+> suite is app-hosted) and fails if it ever regresses.
+>
+> **None of the three is sufficient, and 1.1.9 proved it.** All of them read the *project's* build
+> number, and the project does not decide what ships — **Xcode Cloud does**, from its own counter in
+> App Store Connect → Xcode Cloud → Settings → Build Number. The test passes on a number the App
+> Store never sees. The only real check is reading that setting before submitting; see §9.8 Fault 3.
 
 ### The four traps, and how each is closed
 
@@ -1909,6 +1922,48 @@ offerings at launch rather than at first gate), not a new state in `ProPaywallVi
 launch after install, so no offering is ever fetched. That is the only path where
 `PaywallOfferingSource`'s ladder runs out and our own retry UI appears.
 
+## 5k. The legal links, and why they exist in two places
+
+**Guideline 3.1.2(c) requires an app selling auto-renewing subscriptions to carry a functional link
+to both the Terms of Use (EULA) and the privacy policy *inside the app*.** Version 1.1.9 shipped
+with neither — a grep of the whole target for a legal URL returned nothing — and was rejected for it
+on 2026-08-18. `LegalLinks` and the Settings **Legal** section are the fix.
+
+Apple asks for four things per offer, and the other three are the paywall's job (§5j): the
+subscription's title, its length, and its price. Those come from the dashboard-authored paywall, so
+they are checked there, not here.
+
+**The links live in two places on purpose, and the redundancy is the point:**
+
+| Surface | Where it is authored | Why it is not enough on its own |
+|---|---|---|
+| The paywall footer | RevenueCat dashboard, Paywall Editor | Served dynamically — so it can be fixed with no release, but it is also absent whenever the paywall falls back to the generic template or the `unavailable` state (§5j) |
+| Settings → Legal | `SettingsRootView` + `LegalLinks`, in the binary | Not in the purchase flow, which is where a reviewer looks first |
+
+In the Paywall Editor the link is **not** a property of the text: a URL is set on a *Button*
+component wrapping the text, under Navigate → Privacy Policy / Terms of Service. A text component
+alone cannot carry one.
+
+**The Terms of Use is Apple's standard EULA**
+(`https://www.apple.com/legal/internet-services/itunes/dev/stdeula/`), not a custom document. It is
+the agreement that already applies to every app that does not supply its own, so it needs no
+drafting, no hosting and no legal review, and Apple accepts it by definition. Choosing a custom EULA
+later means writing it, hosting it, *and* pasting it into App Store Connect → App Information →
+Custom Licence Agreement — the link alone would not be enough.
+
+**The privacy policy is the same URL as App Store Connect's Privacy Policy field.** The two must not
+drift: Apple checks the metadata field and the in-app link, and a mismatch reads as an app pointing
+at a policy that does not govern it.
+
+**The metadata half is not optional either.** The same guideline requires the privacy policy in App
+Store Connect's Privacy Policy field *and* the Terms of Use in the App Description or the EULA
+field. The in-app links alone do not satisfy 3.1.2(c); this was half of what 1.1.9 was rejected for.
+
+**The section is shown to everyone**, Founders and free tier included. The requirement is a property
+of an app that offers subscriptions, not of the user currently looking at it — and unlike
+`SubscriptionSettingsSectionView`, it is not conditioned on the kill switch, because a build with
+gating off still ships the products.
+
 ## 6. The debug surfaces
 
 Settings shows three DEBUG-only sections. The first two are backed by the single
@@ -3156,3 +3211,123 @@ RevenueCat ships its own `PrivacyInfo.xcprivacy` inside the package, declaring `
 SDK's manifest with the app's** into one Privacy Report at archive time, so the app's manifest does
 not strictly need to repeat the purchase entry. It repeats it anyway, deliberately: the app's own
 declaration should be readable on its own, and this file is what a reviewer of *this repo* reads.
+
+
+### 9.8 The 1.1.9 rejection, and the three faults behind it
+
+Version **1.1.9 (68)** — the monetization launch — was **rejected on 2026-08-18**, reviewed on an
+iPad Air 11-inch (M3) running iPadOS 26.6.1. Two guidelines were cited; investigating them turned up
+a third fault that neither mentions and that would have been far more expensive.
+
+#### Fault 1 — Guideline 3.1.2(c): no legal links anywhere in the app
+
+Straightforward and entirely ours. Neither the paywall nor Settings carried a Terms of Use or
+privacy policy link. Fixed by §5k: a Settings **Legal** section in the binary, two Button components
+in the dashboard paywall footer, and the matching App Store Connect metadata fields.
+
+#### Fault 2 — Guideline 2.1(b): "an error when we tried to buy"
+
+**Eliminated by Phase 0 checks on 2026-08-20**, each of which is a documented cause of this exact
+rejection elsewhere and none of which applies here:
+
+| Checked | Result |
+|---|---|
+| Paid Applications Agreement | Active since 2026-01-09 |
+| Tax forms, banking | W-8BEN and Foreign Status certificate active; bank account active |
+| Product review state | Both subscriptions "In Review", submitted with the binary |
+| Pricing and localization | All storefronts; de + en on the group and both products |
+| Subscription review screenshot | Attached |
+| RevenueCat sandbox testing access | "Anybody" — the default. Note this could never produce a purchase *error* in any case: sandbox purchases are still processed and recorded, only the entitlement grant is withheld |
+
+**A billing plan unavailable in the reviewer's storefront was the leading hypothesis, and it is
+wrong.** Recorded because the reasoning was sound and someone will have it again: the annual product
+`gymstreak.iap.pro.yearly.sub` has **two** availability variants enabled in App Store Connect —
+"1 Jahr im Voraus" and "Monatlich mit Vertrag über 12 Monate". The second is Apple's
+monthly-with-12-month-commitment plan, launched 2026-04-27 and available worldwide on iOS 26.4+
+**except in the United States and Singapore**. App Review buys from a US account; the device sandbox
+purchase that succeeded on 2026-08-17 was made from a German one. The SDK models such a plan as a
+*compound product identifier* (`SK2StoreProduct.representsBillingPlan` is
+`compoundProductIdentifier.productPlanIdentifier != nil`), so a package resolving to the commitment
+plan would leave a US account with nothing to buy.
+
+**Falsified 2026-08-21.** RevenueCat's product page states **Billing Plan: Upfront**, and the
+`gymstreak_sale` offering's `$rc_annual` package is bound to that product. The commitment plan is
+never offered by the paywall, so a US account buys the up-front annual normally. The App Store
+Connect variant is dormant configuration; removing it is a product decision, not a fix.
+
+**The cause is still unknown.** The live investigation — what is ruled out, what is still open, and
+the traps in reading RevenueCat's customer records — is tracked in
+`docs/appstore-rejection-1.1.9.md`.
+
+#### Why there was no evidence, and what now produces some
+
+`ProPaywallView` wired `onPurchaseCompleted`, `onRestoreCompleted` and `onRequestedDismissal` — but
+**not** `onPurchaseFailure` or `onRestoreFailure`. RevenueCat showed the reviewer its own error alert
+and the app logged nothing, so the rejection arrived with no diagnosable detail at all and the cause
+had to be reasoned about from configuration rather than read from a log. Both handlers are now wired
+(§5j) and log the RevenueCat `ErrorCode` by name, the domain and code, the underlying `SKError`, and
+the message. Neither changes behaviour.
+
+**Reading the RevenueCat customer list is a trap worth knowing.** A profile showing
+`Last Seen App Version 1.1.10` on `iOS 26.5` from the USA storefront looks like the reviewer and is
+not one: 1.1.10 is `main`, which was never submitted, and 26.5 is a simulator runtime — that record
+is a local Debug build, whose default locale and storefront are en-US. The reviewer's session is the
+one reporting **1.1.9** on **26.6.1**, and it will only appear once the "Has made sandbox purchase"
+filter is cleared, because a purchase that errored never became one. Sandbox transactions are also
+hidden behind "Show sandbox data" on the profile.
+
+#### Fault 3 — Xcode Cloud silently overrides the build number
+
+Found while investigating, cited by nobody, and the most expensive of the three.
+
+Apple's rejection names the version as **1.1.9 (68)**, while `store-build` ships
+`CURRENT_PROJECT_VERSION = 1000`. Xcode Cloud stamps submissions with its **own** counter
+(`CI_BUILD_NUMBER`) rather than the project's `CFBundleVersion`. The shipped build numbers are
+63, 64, 65, 66, 68 — and the next one was set to 69.
+
+**This breaks §3a's load-bearing invariant.** `FounderStatusService.cutoffBuild` is `1000` and the
+grant is `originalBuild < cutoffBuild`. Had 1.1.9 been approved, every new install would have
+reported `68`, read as pre-cutoff, and been **granted Founder — Pro, free, permanently**. Nobody
+could ever have been charged, and the only symptom would have been revenue that never arrived.
+
+`FounderStatusTests.shippingBuildIsNotBelowCutoff` cannot catch it: the suite is app-hosted and reads
+the **locally built** `CFBundleVersion`, which is whatever the project says. It never sees the number
+Xcode Cloud stamps. The test is not wrong, it is simply blind to this — record the limitation rather
+than trusting it.
+
+**Fix applied: App Store Connect → Xcode Cloud → Settings → Build Number → next build = 1001.** Build
+numbers only have to increase, so 68 → 1001 is legal, and afterwards the shipped number agrees with
+`CURRENT_PROJECT_VERSION` again — which is what makes the guard test meaningful. Installs already in
+the wild (63–66) stay correctly below the cutoff and keep their grant; 68 was never released
+publicly, and TestFlight is excluded by §3a's environment guard regardless.
+
+**The rejected alternative** was lowering `cutoffBuild` to `68`. The boundary would land correctly
+(pre-monetization builds are all ≤ 67), but it leaves `CURRENT_PROJECT_VERSION` permanently
+misdescribing what ships, and the next person to reason about build numbers walks into the same trap.
+
+
+#### Fault 4 — the privacy nutrition labels were never updated (fixed 2026-08-21)
+
+App Store Connect answered the App Privacy questionnaire with **"no data collected"** right up to the
+rejection. §9.7
+specified the correct answers and §9.6 step 12 required them in the same release that turns purchases
+on; it was missed. **Purchases → Purchase History** is now declared — purposes App Functionality
+*and* Analytics, not linked to identity, not used for tracking — and published 2026-08-21.
+Publishing needs no app version, so this one was fixed without waiting for a build. A privacy label contradicting the app's behaviour is
+its own rejection risk, independent of the two guidelines already cited.
+
+#### Fault 5 — editing a subscription pulls it out of review
+
+Fixing the group's localized display name (it read **"RideStreak Pro Zugriff"**, copied from the other
+project) required withdrawing the group from the submission, so the group and both products now read
+"Vom Entwickler abgelehnt". **Apple reviews the app and its subscriptions together** — resubmitting
+the binary while the products sit outside review is a documented cause of exactly the 2.1(b) rejection
+already received. "Zur Prüfung hinzufügen" must be pressed before or with the next submission.
+
+**Note the reference name is not the display name.** `gymstreak.pro.abos` is internal and was always
+correct; the customer-facing string is the localized *Anzeigename der Abo-Gruppe*, shown in Settings →
+Subscriptions. Checking the former tells you nothing about the latter.
+
+> **Whoever owns the release must know: Xcode Cloud, not the project file, decides the shipped build
+> number.** If that setting is ever reset, or a workflow is recreated, the counter can return to a
+> low value and Fault 3 returns silently. Check the number in App Store Connect before submitting.

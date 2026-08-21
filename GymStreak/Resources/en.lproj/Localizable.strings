@@ -36,6 +36,13 @@
 "settings.support.contact.fallback.title" = "No mail app";
 "settings.support.contact.fallback.message" = "No mail app is set up on this device. You can reach support at %@.";
 "settings.support.contact.fallback.copy" = "Copy address";
+
+"settings.section.legal" = "Legal";
+"settings.section.legal.footer" = "Gym Streak Pro is an auto-renewing subscription. Both documents open in your browser.";
+"settings.legal.terms.row.title" = "Terms of Use (EULA)";
+"settings.legal.terms.row.subtitle" = "Apple's standard licence agreement";
+"settings.legal.privacy.row.title" = "Privacy Policy";
+"settings.legal.privacy.row.subtitle" = "What Gym Streak stores, and where";
 "settings.section.subscription" = "Gym Streak Pro";
 "settings.subscription.founder.title" = "Founder";
 "settings.subscription.founder.detail" = "Pro is yours, free, forever";

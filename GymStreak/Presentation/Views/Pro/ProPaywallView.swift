@@ -110,6 +110,22 @@ struct ProPaywallView: View {
                                 if entitlements.isPro { dismiss() }
                             }
                         }
+                        // A failed purchase is the one paywall outcome the app
+                        // used to have **no** record of. RevenueCat shows the
+                        // user its own alert and tells us nothing, so when App
+                        // Review reported "an error when we tried to buy" on
+                        // 2026-08-18 (guideline 2.1(b)) there was no evidence to
+                        // work from at all — see §9.8. Neither handler changes
+                        // behaviour: the paywall stays up, the entitlement is
+                        // untouched, and a user cancelling is not an error here
+                        // (the SDK routes that through its own cancellation
+                        // path, not this one).
+                        .onPurchaseFailure { error in
+                            Self.log(error, during: "purchase")
+                        }
+                        .onRestoreFailure { error in
+                            Self.log(error, during: "restore")
+                        }
                 }
 
             case .unavailable:
@@ -271,6 +287,45 @@ struct ProPaywallView: View {
 
     private static func counted(_ value: Int) -> String {
         countFormatter.string(from: NSNumber(value: value)) ?? "\(value)"
+    }
+
+    /// Writes a paywall failure to the log in the one shape that is actually
+    /// diagnosable.
+    ///
+    /// The `NSError` alone is not enough: `localizedDescription` is the same
+    /// friendly sentence for a dozen distinct causes. What separates them is
+    /// RevenueCat's `ErrorCode` — `storeProblemError` (Apple's sandbox down),
+    /// `productNotAvailableForPurchaseError` (the product cannot be bought on
+    /// this storefront), `receiptAlreadyInUseError`, `configurationError` — plus
+    /// Apple's own underlying `SKError`, which carries the StoreKit-level
+    /// reason. All three are logged, `.public` because none of them is personal
+    /// data and a redacted log would defeat the purpose.
+    ///
+    /// `nonisolated` so it can be called from the `@Sendable` handlers without
+    /// dragging the view's isolation into them.
+    nonisolated private static func log(_ error: NSError, during stage: String) {
+        let code: String
+        if error.domain == ErrorCode.errorDomain {
+            // `ErrorCode` is `CustomStringConvertible`, so an unwrapped case
+            // prints its name. The `nil` branch is a code the compiled-against
+            // SDK does not know — worth logging as such rather than as "n/a".
+            code = ErrorCode(rawValue: error.code)
+                .map(String.init(describing:)) ?? "unrecognised(\(error.code))"
+        } else {
+            code = "non-RevenueCat"
+        }
+        let underlying = (error.userInfo[NSUnderlyingErrorKey] as? NSError)
+            .map { "\($0.domain) \($0.code)" } ?? "none"
+
+        logger.error(
+            """
+            Paywall \(stage, privacy: .public) failed — \
+            code \(code, privacy: .public), \
+            domain \(error.domain, privacy: .public) \(error.code, privacy: .public), \
+            underlying \(underlying, privacy: .public), \
+            message "\(error.localizedDescription, privacy: .public)"
+            """
+        )
     }
 
     private static let logger = Logger(subsystem: "app.gymstreak.pro", category: "Paywall")

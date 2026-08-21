@@ -95,6 +95,35 @@ struct SettingsRootView: View {
                             .accessibilityIdentifier("settings-row-contact-support")
                         }
 
+                        // Guideline 3.1.2(c): an app selling auto-renewing
+                        // subscriptions must carry both links inside the binary.
+                        // Shown to everyone, including Founders and the free
+                        // tier — the requirement is about the app, not about
+                        // who is currently paying.
+                        SettingsSectionView(
+                            header: "settings.section.legal".localized,
+                            footer: "settings.section.legal.footer".localized
+                        ) {
+                            SettingsActionRowView(
+                                icon: "doc.text",
+                                title: "settings.legal.terms.row.title".localized,
+                                subtitle: "settings.legal.terms.row.subtitle".localized
+                            ) {
+                                open(LegalLinks.termsOfUse)
+                            }
+                            .accessibilityIdentifier("settings-row-terms-of-use")
+
+                            SettingsActionRowView(
+                                icon: "hand.raised",
+                                title: "settings.legal.privacy.row.title".localized,
+                                subtitle: "settings.legal.privacy.row.subtitle".localized,
+                                isLast: true
+                            ) {
+                                open(LegalLinks.privacyPolicy)
+                            }
+                            .accessibilityIdentifier("settings-row-privacy-policy")
+                        }
+
                         #if DEBUG
                         DebugProEntitlementSectionView(
                             entitlements: dependencies.proEntitlementDebug
@@ -142,6 +171,16 @@ struct SettingsRootView: View {
                 )
             }
         }
+    }
+
+    /// Opens one of the legal documents in the browser.
+    ///
+    /// The URLs are compile-time literals, so `nil` is unreachable in practice;
+    /// the guard exists because `URL(string:)` is failable and a typo in a
+    /// future edit should be a dead row rather than a crash.
+    private func open(_ url: URL?) {
+        guard let url else { return }
+        openURL(url)
     }
 
     /// Opens the App Store's write-a-review composer for Gym Streak.

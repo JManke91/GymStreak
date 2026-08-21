@@ -36,6 +36,13 @@
 "settings.support.contact.fallback.title" = "Keine Mail-App";
 "settings.support.contact.fallback.message" = "Auf diesem Gerät ist keine Mail-App eingerichtet. Du erreichst den Support unter %@.";
 "settings.support.contact.fallback.copy" = "Adresse kopieren";
+
+"settings.section.legal" = "Rechtliches";
+"settings.section.legal.footer" = "Gym Streak Pro ist ein automatisch verlängerndes Abo. Beide Dokumente öffnen im Browser.";
+"settings.legal.terms.row.title" = "Nutzungsbedingungen (EULA)";
+"settings.legal.terms.row.subtitle" = "Apples Standard-Lizenzvereinbarung";
+"settings.legal.privacy.row.title" = "Datenschutzerklärung";
+"settings.legal.privacy.row.subtitle" = "Was Gym Streak speichert – und wo";
 "settings.section.subscription" = "Gym Streak Pro";
 "settings.subscription.founder.title" = "Founder";
 "settings.subscription.founder.detail" = "Pro gehört dir – für immer";

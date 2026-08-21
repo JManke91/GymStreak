@@ -46,6 +46,7 @@ section/row blueprint documented here.
 | `Presentation/Views/Settings/Components/SettingsRowView.swift` | Shared row shape |
 | `Presentation/Views/Settings/Components/SettingsActionRowView.swift` | Tappable row: the row shape wrapped in a plain-styled `Button` |
 | `Presentation/Views/Settings/SupportLinks.swift` | App Store Apple ID, the write-a-review URL, the support mail address |
+| `Presentation/Views/Settings/LegalLinks.swift` | Terms of Use (Apple's standard EULA) and privacy policy URLs — an App Review requirement, see §5a |
 | `Domain/Services/SupportMailComposer.swift` | Builds the support `mailto:` URL from a `DeviceDiagnostics` value |
 | `Domain/Interfaces/DeviceDiagnosticsProviding.swift` | `DeviceDiagnostics` + the provider protocol |
 | `Data/System/SystemDeviceDiagnosticsProvider.swift` | Reads bundle/OS/hardware metadata (`Bundle`, `ProcessInfo`, `sysctlbyname`) |
@@ -350,6 +351,23 @@ tap. The same alert covers the — practically impossible — case of the compos
 **Verification split:** the simulator ships no mail client, so it is the natural place to prove
 the *fallback* (`SettingsTabUITests.testContactSupportRowFallsBackToCopyableAddress`); the
 *primary* path needs a device run, done and confirmed on 2026-08-14 (§8).
+
+## 5a. Legal section
+
+Two action rows below Support: "Nutzungsbedingungen (EULA)" / "Terms of Use (EULA)" (`doc.text`)
+and "Datenschutzerklärung" / "Privacy Policy" (`hand.raised`), both opening a URL with
+`@Environment(\.openURL)` through `SettingsRootView.open(_:)`. Strings: `settings.section.legal*`,
+`settings.legal.terms.row.*`, `settings.legal.privacy.row.*`. URLs: `LegalLinks`.
+
+**This section is a submission requirement, not a design choice.** App Store guideline 3.1.2(c)
+requires an app offering auto-renewing subscriptions to carry a functional link to both documents
+*inside the app*. Version 1.1.9 shipped with neither and was rejected for it on 2026-08-18. The full
+reasoning — including why the same two links also live in the RevenueCat paywall footer, and why the
+Terms of Use is Apple's standard EULA rather than a custom document — is in
+`docs/pro-subscription.md` §5k.
+
+**Shown to everyone**, unconditionally: unlike `SubscriptionSettingsSectionView` it is not gated on
+the entitlement or on the kill switch, because a build with gating off still ships the products.
 
 ## 6. Adding another setting
 
