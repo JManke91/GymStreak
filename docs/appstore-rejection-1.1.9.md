@@ -5,8 +5,12 @@ investigation has established or ruled out, what has already been fixed, and wha
 Update it as things change; it is the file to re-read after a context reset. The filename still says
 1.1.9 because that is the build that was first rejected; the file covers the whole episode.
 
-**Status: 2026-08-23 — second rejection *diagnosed*.** 1.1.10 (1002) came back with the same 2.1(b)
-purchase error. 3.1.2(c) was **not** re-cited, so §2's fixes landed.
+**Status: 2026-08-23 — 1.1.11 (1004) submitted; awaiting the third review.** The binary, the
+subscription group and both subscriptions went in as **one** submission, all four elements reading
+*Bereit zur Prüfung* (§6, §10). Everything below is the record of how we got here.
+
+The previous state, for context: 1.1.10 (1002) came back with the same 2.1(b) purchase error. 3.1.2(c)
+was **not** re-cited, so §2's fixes landed.
 
 **The cause is now known, and it is ours.** Apple attached a screenshot this time (§3.7): it shows
 RevenueCat's **Customer Center** reading *"No subscriptions found"* — not the paywall, not an error
@@ -17,7 +21,7 @@ headed *Subscription* — sells nothing (§3.9). Two rounds of 2.1(b) are fully 
 
 **§3.9's code fix is done** (2026-08-23): a free user's Settings now offers **Get Gym Streak Pro** and
 **Restore purchases**, and the Customer Center — the screen Apple screenshotted — is no longer shown to
-anyone who has never bought anything. It ships in the next build.
+anyone who has never bought anything. It **shipped in 1.1.11 (1004)**.
 
 A second, independent defect surfaced the same day: the paywall advertised a **free trial that did not
 exist for any new customer** (§3.10). Both introductory offers were *paid*; the only free trial was a
@@ -25,9 +29,9 @@ Promotional Offer no user could reach. Resolved on two fronts the same day — t
 offer is now a genuine **7-day free trial**, and the paywall's copy and badge were rewritten to state
 whatever the store actually offers.
 
-Seven faults are known and all seven are now addressed in substance. **What remains is mechanical:**
-press *Publish changes* on the RevenueCat paywall, ship a build carrying §3.9's Settings rows, and write
-the App Review notes.
+Seven faults are known and all seven are addressed and shipped. **Nothing is outstanding on our
+side** — the paywall is published, 1.1.11 carries §3.9's Settings rows, the App Review notes name the
+click path, and the reply is with Apple (§9). What remains is the review verdict.
 
 Durable engineering knowledge (why the code is shaped the way it is) lives in
 `docs/pro-subscription.md` §5k and §9.8. This file is the operational record: evidence, dead ends,
@@ -791,13 +795,16 @@ Access*, both with app name *GymStreak*.
 
 ### Open — one ordered list
 
-| # | Do | Why | Where |
-|---|---|---|---|
-| 1 | **Commit the working tree and run the merge chain** | 23 files of §3.9's fix are uncommitted, and `store-build` still points at `7150b19` — the *rejected* 1.1.10 binary. Archiving it today would upload the rejected build again | `main` → `testflight-beta` → `store-build` |
-| 2 | **Read the build number App Store Connect actually stamps** | 1.1.10 was reviewed as **1002** and `main` still carries `CURRENT_PROJECT_VERSION = 1002`. Xcode Cloud overrides it with its own counter (§4) — all that matters is **≥ 1000**, or every production install reads as a Founder | App Store Connect → Xcode Cloud |
-| 3 | **Re-check *Übermittelte Elemente*** | The yearly's introductory offer was edited *after* the subscriptions were re-added to review (§6). Group + both subs must read *Bereit zur Prüfung* | App Store Connect → submission page |
-| 4 | Verify the new Settings rows on a **TestFlight build**, iPhone then iPad | They *are* the fix for the rejection and have only been unit-tested and previewed. One cycle is cheap after two rounds | TestFlight |
-| 5 | **Record a screen capture of a completed purchase** and attach it | Apple asked for one; the flow is proven (§7b) | — |
+**Nothing is open on our side.** 1.1.11 (1004) was submitted on 2026-08-23 with all four elements in
+one submission (§10). The list below is kept as the record of what closed it.
+
+| # | Do | Outcome |
+|---|---|---|
+| 1 | **Commit the working tree and run the merge chain** | ✅ done — `store-build` is at `8e25d5e`, carrying §3.9's Settings rows and `MARKETING_VERSION = 1.1.11` |
+| 2 | **Read the build number App Store Connect actually stamps** | ✅ done — Xcode Cloud stamped **1004**, comfortably ≥ 1000, so no production install reads as a Founder (§4) |
+| 3 | **Re-check *Übermittelte Elemente*** | ✅ done — group + both subs read *Bereit zur Prüfung* alongside the binary (§6, §10) |
+| 4 | Verify the new Settings rows on a **TestFlight build**, iPhone then iPad | ⬜ **not done** — shipped on the unit tests and the preview alone. If a third rejection cites 2.1(b) again, this is the first thing to close |
+| 5 | **Record a screen capture of a completed purchase** and attach it | ⬜ **not done, and not required.** Apple never asked for one — the request lived only in our own §9 draft. The draft was rewritten to drop the promise and spell out the click path instead |
 | 6 | **Submit binary + group + both subscriptions together** | Apple reviews them as one submission; splitting them is §6 | App Store Connect |
 | 7 | Sandbox purchase test **on an iPad** in compatibility mode | §3.8's theory is demoted, not refuted. Cheap to close once a build exists | TestFlight on iPad |
 
@@ -853,24 +860,20 @@ app fault — re-authenticate in Settings and the purchase proceeds.
 
 ### Before submitting
 
+All eight cleared for 1.1.11 (1004) on 2026-08-23. **Keep this list — it is the checklist for any
+future resubmission**, not a one-off.
+
 1. ✅ **The paywall draft is published** (§3.10).
 2. ✅ **App Review Notes name the exact click path** (§9a).
 3. ✅ **Privacy labels published** (§5).
-4. ⬜ **The binary actually contains §3.9's Settings rows.** As of 2026-08-23 the fix is *uncommitted*
-   and `store-build` still points at `7150b19` — the rejected 1.1.10 binary. Commit, then
-   `main` → `testflight-beta` → `store-build`, then archive. **Archiving `store-build` as it stands
-   would re-upload the rejected build.**
-5. ⬜ **Build number in App Store Connect ≥ 1000** (§4). 1.1.10 was reviewed as 1002 and `main` still
-   carries `CURRENT_PROJECT_VERSION = 1002`; Xcode Cloud overrides it with its own counter, so read the
-   number rather than assuming it. Reusing 1002 under the new marketing version 1.1.11 is legal but
-   confusing — expect 1003.
-6. ⬜ **Subscriptions "Bereit zur Prüfung" alongside the binary** (§6). The yearly's introductory offer
-   was edited *after* they were re-added, so this must be re-read.
-7. ⬜ **Screen capture of a completed purchase** attached.
-8. ⬜ **Submit binary + group + both subscriptions as one submission.**
-
-**Ship it as 1.1.11.** `main` already carries `MARKETING_VERSION = 1.1.11`, and both 1.1.9 and 1.1.10
-have rejections on their record.
+4. ✅ **The binary actually contains §3.9's Settings rows.** `store-build` is at `8e25d5e`; archiving
+   `7150b19` would have re-uploaded the rejected 1.1.10 binary.
+5. ✅ **Build number in App Store Connect ≥ 1000** (§4) — Xcode Cloud stamped **1004**. Read the number
+   in App Store Connect rather than trusting `CURRENT_PROJECT_VERSION`; Xcode Cloud overrides it.
+6. ✅ **Subscriptions "Bereit zur Prüfung" alongside the binary** (§6) — re-read after the yearly's
+   introductory-offer edit, still in review.
+7. ➖ **Screen capture of a completed purchase** — dropped. Apple never asked; see §7 item 5.
+8. ✅ **Submit binary + group + both subscriptions as one submission.**
 
 ---
 
@@ -952,3 +955,94 @@ telling them where to tap. It should have been in 1.1.9.
 > soft paywall fires after the **first** routine, not the fourth — a reviewer following the note
 > literally still reaches a paywall (at routine 1 via the soft placement, or at the 4th ➕ via
 > `routineCap`), so both routes work.
+
+> **Second inaccuracy, worth fixing before the next submission:** the note says *Settings tab →
+> **Subscription** → Get Gym Streak Pro*, but the section header in the shipped app is
+> **"Gym Streak Pro"** — `settings.section.subscription = "Gym Streak Pro"` in both `en.lproj` and
+> `de.lproj`. The key is named `subscription`; the visible string is not. A reviewer scanning for a
+> heading called "Subscription" will not find one. The §10 reply gives the corrected path; the
+> Anmerkungen field still carries the old wording.
+
+
+---
+
+## 10. The third submission — 1.1.11 (1004), 2026-08-23
+
+Submitted with all four elements in one submission, exactly as §6 requires:
+
+| Element | Typ | Prüfungsstatus at submission |
+|---|---|---|
+| `gymstreak.pro.abos` | Abo-Gruppe | 🕒 Bereit zur Prüfung |
+| GymStreak Pro – Jahresabo (1 Jahr) | Abo | 🕒 Bereit zur Prüfung |
+| GymStreak Pro – Monatsabo (1 Monat) | Abo | 🕒 Bereit zur Prüfung |
+| iOS-App 1.1.11 (**1004**) | App-Version | 🕒 Bereit zur Prüfung |
+
+**Two things learned about the App Store Connect mechanics**, both non-obvious enough to be worth
+writing down:
+
+- **"Zur Prüfung hinzufügen" greyed out on the subscription-group page is the *good* state.** It means
+  the group is already attached to the open submission. The button is only live for an element sitting
+  *outside* review (status "Vom Entwickler abgelehnt") — the §6 condition. Read *Übermittelte Elemente*
+  on the submission page, not the button, to know where things stand.
+- **"Erneut zur App-Prüfung übermitteln" stays greyed out while the version has no build attached.**
+  After removing the rejected build, the button only comes back once Xcode Cloud's upload finishes
+  processing and the build is selected on the version page. It is not a sign that anything is wrong
+  with the subscriptions.
+
+### The reply sent to App Review
+
+Rewritten once more before sending: the §9 draft promised a screen recording that was never made, so
+that promise came out and the click path went in, with the corrected section name (§9a).
+
+```
+Hello,
+
+Thank you for the screenshot — it identified the problem immediately.
+
+The screen you captured is our subscription *management* screen. It correctly
+reported "No subscriptions found" because no purchase had been made yet, but it
+is not where a purchase is started. Our payment records confirm that no purchase
+was ever attempted during either review session, so nothing failed — the purchase
+screen was simply never reached. That was our fault: in the previous build, every
+route to it required app data that a fresh install does not have.
+
+This build (1.1.11) adds a direct, always-available route.
+
+To purchase the In-App Purchase:
+
+  1. Open the app and tap the "Settings" tab (bottom right).
+  2. Scroll to the "Gym Streak Pro" section.
+  3. Tap "Get Gym Streak Pro".
+  4. The purchase screen opens, showing both subscriptions with their price,
+     duration and the links to our Terms of Use (EULA) and Privacy Policy.
+  5. Tap either plan, then "Continue" to complete the purchase.
+
+No account or sign-in is required at any point.
+
+The management screen you saw previously is now shown only to users who already
+have an active subscription, so it can no longer be mistaken for the purchase
+screen. A "Restore purchases" option sits directly below the purchase entry.
+
+An alternative route, if you prefer to reach the purchase screen through normal
+use: Routines tab > "+" (top right) > create a routine. The Pro screen appears
+after the routine is saved.
+
+We have also corrected the pricing text on the purchase screen: it previously
+described the introductory offer as a free trial. The annual plan now carries a
+genuine 7-day free trial, and the text states whatever the App Store actually
+offers for each plan.
+
+The subscription group and both subscriptions are submitted for review together
+with this build.
+
+Thank you for your time.
+```
+
+### If it is rejected a third time
+
+The Settings route is the fix, and it has **not been verified on a real device** (§7 item 4) — only
+unit-tested and previewed. So on a third 2.1(b), close that gap first: install the TestFlight build on
+an iPad Air (both rejections came from one, §3.8), walk the exact five steps above, and read
+`§7a`'s RevenueCat trail afterwards to see whether a transaction was attempted this time. A reviewer
+session that *again* shows no transaction means they still never reached the paywall, and the problem
+is discoverability, not StoreKit.

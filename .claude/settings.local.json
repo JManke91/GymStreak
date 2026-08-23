@@ -97,7 +97,8 @@
       "Bash(xcrun --sdk iphoneos --show-sdk-path)",
       "Bash(md5 GymStreak/Domain/Models/RestTimerAttributes.swift GymStreakWidgets/RestTimerAttributes.swift)",
       "mcp__things__search_todos",
-      "Bash(echo \"exit=$?\")"
+      "Bash(echo \"exit=$?\")",
+      "Bash(awk -F: '$1>960 && $1<1020')"
     ],
     "defaultMode": "acceptEdits"
   },
