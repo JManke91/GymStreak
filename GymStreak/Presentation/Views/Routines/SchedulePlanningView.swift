@@ -12,7 +12,17 @@ import SwiftUI
 
 // MARK: - Formatting
 
+@MainActor
 enum ScheduleFormatter {
+    /// Hoisted per the main-thread rules: `nextDueLabel` runs once per routine
+    /// card, from a computed property `body` reads (see docs/history-performance.md).
+    private static let weekdayFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = Locale.current
+        formatter.setLocalizedDateFormatFromTemplate("EEEE")
+        return formatter
+    }()
+
     /// Short weekday labels keyed by ISO weekday (1 = Monday … 7 = Sunday).
     static func weekdayShortLabels() -> [(weekday: Int, label: String)] {
         let formatter = DateFormatter()
@@ -46,10 +56,7 @@ enum ScheduleFormatter {
         if target < today { return "schedule.due.overdue".localized }
         if target == today { return "schedule.due.today".localized }
         if calendar.isDateInTomorrow(target) { return "schedule.due.tomorrow".localized }
-        let formatter = DateFormatter()
-        formatter.locale = Locale.current
-        formatter.setLocalizedDateFormatFromTemplate("EEEE") // weekday name
-        return formatter.string(from: target)
+        return weekdayFormatter.string(from: target)
     }
 }
 
@@ -110,6 +117,10 @@ struct RoutineScheduleCard: View {
                 ))
                 .font(.system(size: 15, weight: .semibold, design: .rounded))
                 .foregroundStyle(.white)
+                // The due pill next to this is fixedSize, so a long weekday
+                // summary ("Mo · Di · Mi · Do · Fr") has to truncate here
+                // instead of breaking mid-word.
+                .lineLimit(1)
             } else {
                 Text("schedule.not_planned".localized)
                     .font(.system(size: 15, weight: .semibold, design: .rounded))
@@ -123,8 +134,12 @@ struct RoutineScheduleCard: View {
         if schedule != nil, let dueLabel = ScheduleFormatter.nextDueLabel(for: nextDue) {
             Text(dueLabel)
                 .font(.system(size: 11.5, weight: .bold))
+                .lineLimit(1)
+                // Long labels ("Überfällig", "Heute fällig") must not be squeezed
+                // and broken mid-word by the schedule summary next to them.
+                .fixedSize(horizontal: true, vertical: false)
                 .foregroundStyle(DesignSystem.Colors.tint)
-                .padding(.horizontal, 9)
+                .padding(.horizontal, 10)
                 .padding(.vertical, 5)
                 .background(DesignSystem.Colors.tint.opacity(0.14))
                 .clipShape(Capsule())

@@ -1,1 +1,2 @@
+- Routine cards: the due badge no longer breaks mid-word, and muscle group tags now wrap to a second line when space is tight.
 - Fixed a crash that could close the app a few seconds after opening it while it was contacting your Apple Watch.

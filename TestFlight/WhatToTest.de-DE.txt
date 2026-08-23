@@ -1,1 +1,2 @@
+- Routinen-Karten: Das Fälligkeits-Label bricht nicht mehr mitten im Wort um, und Muskelgruppen-Tags rutschen bei wenig Platz in die nächste Zeile.
 - Absturz behoben, der die App wenige Sekunden nach dem Öffnen beenden konnte, während sie deine Apple Watch kontaktiert hat.

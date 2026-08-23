@@ -70,7 +70,51 @@ This was originally a one-to-one (`schedule: RoutineSchedule?`) and had to be re
 - `WeekHeroView`: dynamic "X von Y" headline; **zero-goal state** (dashed ring + `calendar.badge.plus` + "Plane deine Woche"); day-strip cells now render three states — completed (filled ✓), planned-not-done (dashed tint outline; past+missed dimmed), rest (neutral).
 - `RoutinesViewModel`: `setSchedule(...)` / `removeSchedule(...)`, `nextDueDate(for:)`, and `upNextRoutine` now prefers the **soonest-due planned** routine (overdue sorts first), falling back to least-recently-trained when nothing is planned.
 - `RoutineCardView`: shows a next-due pill when planned (else the "last trained" label).
+  The pill shares the card's meta row with the muscle-group chips, so it carries
+  `.lineLimit(1)` + `.fixedSize(horizontal: true, vertical: false)` + `.layoutPriority(1)`
+  and the chips sit in a greedy `FlowLayout` (no `Spacer`) — see "Meta-row layout" below.
 - `RoutineDetailView`: a **"Zeitplan" card** (`RoutineScheduleCard`) below the title block → opens `SchedulePlanningSheet` (segmented Intervall/Wochentage, interval stepper or weekday chips, live "next 3 sessions" preview, remove-plan button).
+
+### Meta-row layout (why the due pill never wraps)
+German labels are long — "Überfällig", "Heute fällig", weekday names such as
+"Donnerstag" — and the meta row of `RoutineCardView` shares one line between up to three
+muscle-group chips and the due pill. The chips are `.fixedSize()` (in `MuscleChipView`),
+so `HStack` treated them as inflexible and compressed the *pill* instead, breaking
+"Überfällig" mid-word into "Überfäll / ig".
+
+The fix, in `RoutineCardView.metaRow` / `scheduleStatus`:
+- The pill (or the "last trained" text) gets `.lineLimit(1)`,
+  `.fixedSize(horizontal: true, vertical: false)` and `.layoutPriority(1)`. Per Apple's
+  `layoutPriority` contract the parent hands the highest-priority child its full intrinsic
+  width before dividing anything among the rest, so the pill can no longer be squeezed.
+- The chips move into the existing `FlowLayout` (`Presentation/Views/Components/RedesignControls.swift`),
+  which wraps them onto a second line when they no longer fit beside the pill.
+- **No `Spacer` between the two.** `FlowLayout` is greedy (it returns the full proposed
+  width), which already pushes the pill to the trailing edge. Adding a `Spacer` back would
+  make `HStack` split the leftover width equally between the spacer and the chips, so the
+  chips would wrap earlier than necessary.
+- The row is `HStack(alignment: .top)` so the pill stays on the first line when the chips
+  wrap. Pill horizontal padding was widened 8 → 11 pt.
+
+`RoutineScheduleCard.trailing` (routine detail) got the same `.lineLimit(1)` +
+`.fixedSize` hardening, since a long schedule summary ("Mo · Di · Mi · Do · Fr") can
+squeeze the pill there too. Pinning the pill there moves the squeeze onto the summary
+`Text` next to it, so that one got `.lineLimit(1)` as well — it truncates instead of
+breaking mid-word.
+
+While in this path, `ScheduleFormatter.nextDueLabel` stopped allocating a `DateFormatter`
+per call: it now reads a hoisted `private static let weekdayFormatter`, which required
+marking `ScheduleFormatter` `@MainActor` (a `static let` of the non-`Sendable`
+`DateFormatter` does not compile in an isolation-agnostic type — see
+`docs/swift6-concurrency.md`). All four call sites are SwiftUI view bodies, so the
+isolation costs nothing. The old code ran `setLocalizedDateFormatFromTemplate("EEEE")`
+once per routine card per body evaluation, which main-thread rule 2 forbids.
+
+Researched via the `ios-api-researcher` agent (Apple docs: `Layout`,
+`ProposedViewSize`, `layoutPriority(_:)`, `fixedSize(horizontal:vertical:)`): **iOS 26
+still ships no native flow/wrapping container** — a custom `Layout` conformance is the
+supported approach, and `ViewThatFits` would require hand-authoring every chip
+combination. No third-party dependency needed.
 
 ### Repository
 `RoutineRepository` gained `insert(_:RoutineSchedule)` / `delete(_:RoutineSchedule)` (implemented in `SwiftDataRoutineRepository`). Presentation never touches `ModelContext` — schedule CRUD goes through the ViewModel → repository.

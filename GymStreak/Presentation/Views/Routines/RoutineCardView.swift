@@ -122,29 +122,50 @@ struct RoutineCardView: View {
         }
     }
 
+    /// Muscle chips on the leading side, schedule status trailing.
+    ///
+    /// `scheduleStatus` gets `layoutPriority(1)` + `fixedSize`, so the HStack hands
+    /// it its full intrinsic width first: long localizations ("Überfällig",
+    /// "Heute fällig", weekday names) always render on one line instead of being
+    /// squeezed and broken mid-word. `FlowLayout` then takes the whole remaining
+    /// width — it is greedy, which is also what pins the badge to the trailing edge
+    /// without a `Spacer` — and wraps chips that do not fit onto a second line.
+    /// A `Spacer` here would be wrong: the HStack would split the leftover width
+    /// between it and the chips, making them wrap earlier than necessary.
     private var metaRow: some View {
-        HStack(spacing: 6) {
-            ForEach(muscles.prefix(3), id: \.self) { muscle in
-                MuscleChipView(muscleGroup: muscle, small: true)
-            }
-            Spacer(minLength: 8)
-            if let dueLabel = ScheduleFormatter.nextDueLabel(for: nextDue) {
-                HStack(spacing: 4) {
-                    Image(systemName: "calendar")
-                        .font(.system(size: 9, weight: .bold))
-                    Text(dueLabel)
-                        .font(.system(size: 11, weight: .bold))
+        HStack(alignment: .top, spacing: 10) {
+            FlowLayout(spacing: 6) {
+                ForEach(muscles.prefix(3), id: \.self) { muscle in
+                    MuscleChipView(muscleGroup: muscle, small: true)
                 }
-                .foregroundStyle(DesignSystem.Colors.tint)
-                .padding(.horizontal, 8)
-                .padding(.vertical, 4)
-                .background(DesignSystem.Colors.tint.opacity(0.14))
-                .clipShape(Capsule())
-            } else {
-                Text(TimeFormatting.lastTrainedLabel(for: lastPerformed))
-                    .font(.system(size: 11, weight: .medium))
-                    .foregroundStyle(Color.white.opacity(0.4))
             }
+            scheduleStatus
+                .layoutPriority(1)
+        }
+    }
+
+    @ViewBuilder
+    private var scheduleStatus: some View {
+        if let dueLabel = ScheduleFormatter.nextDueLabel(for: nextDue) {
+            HStack(spacing: 4) {
+                Image(systemName: "calendar")
+                    .font(.system(size: 9, weight: .bold))
+                Text(dueLabel)
+                    .font(.system(size: 11, weight: .bold))
+            }
+            .lineLimit(1)
+            .fixedSize(horizontal: true, vertical: false)
+            .foregroundStyle(DesignSystem.Colors.tint)
+            .padding(.horizontal, 11)
+            .padding(.vertical, 4)
+            .background(DesignSystem.Colors.tint.opacity(0.14))
+            .clipShape(Capsule())
+        } else {
+            Text(TimeFormatting.lastTrainedLabel(for: lastPerformed))
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(Color.white.opacity(0.4))
+                .lineLimit(1)
+                .fixedSize(horizontal: true, vertical: false)
         }
     }
 
