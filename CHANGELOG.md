@@ -4,6 +4,13 @@ All notable changes to GymStreak are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.1.11] - 2026-08-23
+
+### Added
+
+- Settings now has a direct "Get Gym Streak Pro" entry that opens the subscription screen — previously the only way there was to run into a locked feature.
+- Settings also has its own "Restore purchases" row for anyone without an active subscription. It tells you whether a purchase was found, and no longer sends you to a screen that just says "No subscriptions found".
+
 ## [1.1.10] - 2026-08-21
 
 ### Added

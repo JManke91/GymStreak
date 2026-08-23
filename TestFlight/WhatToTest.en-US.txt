@@ -1,2 +1,0 @@
-- Settings now has a direct "Get Gym Streak Pro" entry that opens the subscription screen — previously the only way there was to run into a locked feature.
-- Settings also has its own "Restore purchases" row for anyone without an active subscription. It tells you whether a purchase was found, and no longer sends you to a screen that just says "No subscriptions found".
