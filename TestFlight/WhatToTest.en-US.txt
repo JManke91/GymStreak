@@ -1,2 +1,4 @@
 - Routine cards: the due badge no longer breaks mid-word, and muscle group tags now wrap to a second line when space is tight.
 - Fixed a crash that could close the app a few seconds after opening it while it was contacting your Apple Watch.
+- Progress tab: an exercise you train twice in the same workout now counts as one workout instead of two, so its workout count matches the exercise's detail screen and its trend and mini chart stop zig-zagging between the two usages.
+- Exercise detail: "Recent Sets" now shows every time you trained the exercise in a workout, not just one of them. Each card is labelled with the rep range and routine it came from, so a heavy 4-6 block and a light 8-12 block from the same day read as two separate pieces of work instead of contradicting the chart above.

@@ -196,7 +196,7 @@ struct ChartGatingTests {
         #expect(harness.viewModel.chartTimeframe == .threeMonths)
         // Nothing already loaded was thrown away.
         #expect(harness.viewModel.progressData?.dataPoints.isEmpty == false)
-        #expect(harness.viewModel.recentSessions.isEmpty == false)
+        #expect(harness.viewModel.recentUsages.isEmpty == false)
     }
 
     // MARK: - The policy, without a view model
@@ -325,11 +325,18 @@ private actor StubHistorySnapshotProvider: HistorySnapshotProviding {
         ]
         return ExerciseProgressSnapshot(
             data: ExerciseProgressData(exerciseName: exerciseName, dataPoints: points),
-            recentSessions: [
-                ExerciseRecentSession(
-                    id: sessionId,
+            recentUsages: [
+                ExerciseRecentUsage(
+                    id: UUID(),
+                    workoutSessionId: sessionId,
                     date: Date(),
-                    sets: [ExerciseRecentSession.SetEntry(id: UUID(), weight: 90, reps: 10)]
+                    usage: ExerciseUsage(
+                        slot: .unattributed,
+                        targetRepMin: nil,
+                        targetRepMax: nil,
+                        routineName: ""
+                    ),
+                    sets: [ExerciseRecentUsage.SetEntry(id: UUID(), weight: 90, reps: 10)]
                 )
             ]
         )

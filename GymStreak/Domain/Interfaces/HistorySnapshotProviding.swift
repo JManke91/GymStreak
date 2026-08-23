@@ -29,18 +29,20 @@ protocol HistorySnapshotProviding: Sendable {
     func fetchFortschrittSnapshot() async throws -> [FortschrittExerciseModel]
     func fetchPRDetails(sessionID: UUID) async throws -> [UUID: PersonalRecordService.PRDetail]
 
-    /// The exercise detail screen pushed from Fortschritt: chart series + recent sessions.
+    /// The exercise detail screen pushed from Fortschritt: chart series + recent sets.
     ///
     /// Part of this boundary rather than a separate one because it reads the same
     /// completed-session graph the two snapshots above already fetch and prefetch, and
     /// because a second `@ModelActor` would mean a second `ModelContext` warming the
     /// same rows. Both halves come back in one call so the screen cannot render a chart
-    /// and a session list built from two different fetches.
+    /// and a recent-sets list built from two different fetches.
     ///
     /// - Parameters:
     ///   - startDate: chart window lower bound, computed by the caller (it depends on
     ///     `Calendar.current`). `Date.distantPast` for the "All" timeframe.
-    ///   - recentSessionLimit: caps the recent-session list, which is all-time.
+    ///   - recentSessionLimit: caps the recent-sets list by **sessions**, which is
+    ///     all-time. A workout that trained the exercise twice returns two
+    ///     `ExerciseRecentUsage` cards but counts once against the cap.
     func fetchExerciseProgress(
         exerciseName: String,
         exerciseId: UUID?,

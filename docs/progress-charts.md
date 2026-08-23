@@ -13,7 +13,7 @@ See also: [history-redesign.md](./history-redesign.md) — the History tab UI th
 ```
 HistoryView (History tab)
   → FortschrittTabView ("Fortschritt" sub-tab, replaces old ExerciseProgressListView)
-    → ExerciseProgressChartView (chart + controls — stat triple, metric tabs, range pills, recent-sessions list)
+    → ExerciseProgressChartView (chart + controls — stat triple, metric tabs, range pills, recent-sets list)
       → ExerciseProgressViewModel (async load + display state)
         → HistorySnapshotProviding  ── @concurrent hop ──▶  SwiftDataHistorySnapshotStore (@ModelActor)
                                                               → ExerciseProgressAggregator (pure Domain logic)
@@ -21,7 +21,7 @@ HistoryView (History tab)
 
 The screen renders exactly one boundary call, `fetchExerciseProgress(exerciseName:exerciseId:startDate:recentSessionLimit:)`,
 which returns an `ExerciseProgressSnapshot` carrying both the chart series and the
-recent-session list. Only immutable `Sendable` values cross back; no `@Model` and no
+recent-sets list. Only immutable `Sendable` values cross back; no `@Model` and no
 relationship walk survives on the main actor.
 
 ### Off-main loading (2026-08-13, audit P1.2)
@@ -174,6 +174,146 @@ in and is about to render every set of it anyway.
 fetches (`findPreviousSession`, `detectNewPRs`) are untouched — they are audit P2.1, which
 covers all four AI-coach aggregators together and is gated behind the AI opt-in.
 
+### The Fortschritt row counts sessions, not exercise instances (2026-08-23)
+
+The Fortschritt list's own aggregation (`FortschrittAggregator.build`, feeding the row's
+count, sparkline and trend badge) used to walk every `WorkoutExercise` of every session and
+append **one accumulator entry per exercise instance**. A routine that trains the same
+exercise twice in one workout — the common heavy/light pairing — therefore produced two
+entries carrying the *same* `session.startTime`, and all three numbers on the row lied at once:
+
+- **The count was an instance count.** 14 sessions, 7 of which trained "Biceps Curls" both
+  heavy and light, reported **21 Workouts**, while the exercise detail screen — which has
+  always emitted one data point per session — reported 14 for the same all-time window.
+- **The sparkline was a zero-width sawtooth.** It alternated between the light usage's
+  estimated 1RM (14 kg × 12 ≈ 19.6) and the heavy one's (20 kg × 5 ≈ 23.3) at no horizontal
+  distance, because both points shared a date.
+- **The trend read +0.0%.** Trend is first-value vs. last-value; with an even number of
+  alternating entries both ends sampled the same usage and cancelled exactly.
+
+**The rule now: the session is the unit.** Each `(session, live exercise)` pair contributes
+exactly one entry, and a session's repeats are folded together using the same reduction
+`ExerciseProgressAggregator.buildProgress` already applies to its per-session data point, so
+the two surfaces cannot disagree about how many workouts they are summarising:
+
+- **Effective-load series** (any resistance exercise, and counterweight assistance when the
+  session carries a body-mass snapshot): fold with **max** — the higher estimated 1RM is the
+  better usage.
+- **Raw-assistance series** (counterweight assistance with no snapshot): fold with **min** —
+  *least* assistance is the better usage. This is why the fold tracks a `hasValue` flag
+  instead of treating 0 as "unset": an assisted set performed with no counterweight at all is
+  a legitimate best value, and a min-fold seeded at 0 would silently discard the better usage
+  or invert the pair. Inverting the sparkline against the series maximum, and inverting the
+  trend's delta, both happen after the fold and are unchanged.
+
+Whether a session's value is effective load or raw assistance is decided per session (it
+depends on `WorkoutSession.bodyWeightKg`), and it is constant across the instances *within*
+one session, so the fold never has to mix the two directions.
+
+This slice deliberately does **not** separate the two usages into their own series — a
+heavy/light pair still collapses to whichever usage scores higher. It only stops the row
+from misreporting how many workouts it covers.
+
+**What this rule does *not* make identical: the value space of a partly-snapshotted
+counterweight series.** The two surfaces now agree on the *count* and on the within-session
+reduction, but not necessarily on the numbers of an assisted exercise whose history carries
+`WorkoutSession.bodyWeightKg` on some sessions only. `ExerciseProgressAggregator.buildProgress`
+decides `usesEffectiveLoad` **series-wide** (`relevant.allSatisfy { $0.0.bodyWeightKg != nil }`)
+and so values *every* session as raw assistance the moment one snapshot is missing;
+`FortschrittAggregator` decides `canUseEffectiveLoad` **per session**, so such a series mixes
+estimated-1RM numbers with raw kilograms and then subtracts both from one common baseline. This
+divergence predates the per-session fold and is untouched by it — the row's sparkline for that
+narrow case was already mixing units. Closing it means making the Fortschritt flag series-wide
+too — tracked as ticket 08 of `.scratch/exercise-usage-progress/`, whose resolution is to value
+every session as raw assistance as soon as one snapshot is missing, matching the chart. It is an
+open item, not a property of the fold.
+
+Two more pre-existing quirks in this aggregator, recorded so they are not mistaken for the
+fold's doing: a session whose completed sets all fail the `reps > 0` guard still contributes an
+entry valued 0, which on a raw-assistance series renders as `baseline - 0` — i.e. as the best
+workout ever; and that `reps > 0` guard itself differs from `buildProgress`, which gates on
+`weight > 0` instead. Both are only reachable through a completed set with 0 reps.
+
+`GymStreakTests/FortschrittAggregatorTests.swift` pins it: a session with two usages, a mix
+of single- and double-usage sessions (asserting a real +30% trend where the bug reported
++0.0%), the count agreeing with `ExerciseProgressAggregator.buildProgress`, and both assisted
+paths — least-assistance folding with inverted sparkline/trend, and highest-effective-1RM
+folding once a body-mass snapshot exists.
+
+### The recent-sets list shows every usage (2026-08-23)
+
+The "Letzte Sätze" list under the chart used to read **one** `WorkoutExercise` per session —
+`session.workoutExercisesList.first(where:)` — and silently drop the rest, while the chart
+above it takes the **maximum** across all of them. A workout that trains the exercise both
+heavy and light therefore rendered two different numbers side by side on the same screen, with
+nothing explaining why. Confirmed on device: the chart's point for one day read 20 kg (the
+4–6 rep usage) while the card for that same day read 14 kg × 12, 10, 8 (the 8–12 rep usage).
+
+**The surviving instance was arbitrary, not "the first slot".** `workoutExercisesList` is
+`workoutExercises ?? []` — the raw SwiftData to-many relationship, unsorted. A to-many array has
+no documented stable order, so which usage reached the card was whichever the relationship
+happened to materialise. The old behaviour could not even be described as "shows the first
+usage", which is why the fix imposes an explicit order rather than inheriting the array's.
+
+**The rule now: one card per usage, capped by session.** `ExerciseProgressAggregator.buildRecentUsages`
+emits an `ExerciseRecentUsage` for every matching `WorkoutExercise` that has completed sets, so a
+two-usage workout renders two cards:
+
+- **Card identity** is the originating `WorkoutExercise.id`; the session id travels alongside as
+  `workoutSessionId`, so every card of one workout can still be recognised as such (and, from
+  ticket 03 on, filtered).
+- **Block order within a session is `WorkoutExercise.order`** — the sequence the user actually
+  performed — with `id` as a tiebreak so the sort is a total order even if two rows share an
+  `order`. Sets keep their `WorkoutSet.order` sort inside each block. Nothing reads the
+  relationship array's order, and `blockOrderFollowsWorkoutExerciseOrderNotTheRelationshipArray`
+  pins it with two sessions whose insertion order is the opposite of their `order` values.
+- **`recentSessionLimit` (8) is a session cap, not a card cap.** Showing every usage must not
+  silently shrink how far back the list reaches, so a two-usage workout emits two cards and
+  counts once against the limit. The rendered stack therefore scales with the routine's shape
+  (a handful of cards per workout at most), not with history length, which is what keeps the
+  plain non-lazy `VStack` in `recentUsagesSection` legitimate.
+
+**Each card names its usage.** `ExerciseUsage` carries the routine slot the history rows were
+recorded against (`WorkoutExercise.routineExerciseId`), the slot's denormalised rep-range goal
+and the workout's `routineName`; the card renders them as a small badge ("4–6 reps · Push A")
+opposite the relative date. Rows with **no** slot — history recorded before `routineExerciseId`
+existed, and exercises added ad hoc mid-workout — resolve to the explicit
+`ExerciseUsage.Slot.unattributed` case rather than to `nil` or to some other usage. Nothing new is persisted: `WorkoutExercise`
+already denormalises all three fields precisely so they survive routine edits and deletion.
+Carrying the identity here is what lets ticket 03's usage picker filter this panel.
+
+**The badge always names the usage, never just the routine.** The rep range is what usually
+identifies a usage, but it can be absent, and falling through to the routine name alone leaves
+two usages of one routine both reading "Pull" — observed on device on 2026-08-23, where a "Pull"
+routine holds Biceps Curls twice and only one slot has a rep-range goal. The two ways a rep range
+can be missing are different facts and get different words:
+
+| Case | Badge |
+|------|-------|
+| Slot with a rep-range goal | `4–6 Wdh. · Pull` (`workout.exercise.rep_goal`, the active-workout chip's wording) |
+| Slot whose goal is not set | `Kein Ziel · Pull` (`rep_range.no_goal`, the routine editor's own wording for that setting, so the badge names what the user would go and change) |
+| No slot at all | `Ohne Zuordnung · Pull` (`history.exercise.usage.unassigned`) |
+
+Note that an alternative-exercise swap keeps the *slot's* `routineExerciseId` while adopting the
+**alternative's** own rep-range goal and set scheme (`WorkoutViewModel.swapExercise`), so a slot
+performed as its alternative is badged with the alternative's range. It also rewrites
+`exerciseId` to what was actually performed, so the main exercise and the alternative are never
+mixed into one series — the detail screen filters on `exerciseId` before usage even applies.
+
+**Deliberate behaviour change: the list now applies the chart's `loadBehavior` filter**, which it
+previously did not apply at all. Keeping a block the chart excluded is exactly how two panels end
+up disagreeing about one workout, which is the defect this change exists to end. The list still
+ignores the selected timeframe — it remains all-time.
+
+**Not addressed here:** the card's "Best" line is still `max(by: weight)`, which on a
+counterweight-assisted exercise names the *most*-assisted set rather than the best one. That
+inversion predates this change and belongs to the record/trend work (ticket 04).
+
+`GymStreakTests/ExerciseProgressAggregatorTests.swift` pins the rule: a two-usage session (both
+blocks present, in performed order, with the heaviest set shown equal to the value the chart
+plots for that day), the explicit block ordering above, the session cap over a mix of one- and
+two-usage workouts, a legacy row resolving to `.unattributed`, and the load-behaviour filter.
+
 ### Components
 
 #### iOS Target
@@ -189,11 +329,12 @@ covers all four AI-coach aggregators together and is gated behind the AI opt-in.
 | SummaryStatsView | `Views/Charts/ChartSupportViews.swift` | Three stat cards: Personal Record, Trend, Sessions |
 | StatCard | `Views/Charts/ChartSupportViews.swift` | Reusable stat card with icon, value, and label |
 | EmptyChartView | `Views/Charts/ChartSupportViews.swift` | Placeholder shown when no workout data exists |
-| SessionCardView | `Views/Charts/ExerciseProgressChartView.swift` | One recent-session card; takes an `ExerciseRecentSession` value, never a `@Model` |
+| RecentUsageCardView | `Views/Charts/RecentUsageCardView.swift` | One recent-sets card — **one usage's sets within one workout**, badged with the usage it belongs to. Takes an `ExerciseRecentUsage` value, never a `@Model` |
 | ExerciseProgressViewModel | `ViewModels/ExerciseProgressViewModel.swift` | `async load()` behind a generation counter; owns timeframe, metric, selection and the loaded snapshot; computed display properties; owns the **P2 Pro gate** (which metric/window is locked, what a locked selection renders, which paywall it raises) |
 | ChartGatingPolicy | `Domain/Services/ChartGatingPolicy.swift` | **Pure, isolation-agnostic.** Which metrics and windows the free tier may read, from `ProFeatureCaps` — plus the widest free window a lapsed user's chart clamps back to |
-| ExerciseProgressModels | `Domain/Models/ExerciseProgressModels.swift` | Domain values: ChartTimeframe, ProgressMetric, ExerciseProgressDataPoint, ExerciseProgressData, **ExerciseRecentSession**, **ExerciseProgressSnapshot**, SelectedDataPoint. The four that cross the actor boundary are explicitly `Sendable`. |
-| ExerciseProgressAggregator | `Domain/Services/ExerciseProgressAggregator.swift` | **Pure, isolation-agnostic** chart + recent-session aggregation. `matches(_:exerciseId:exerciseName:nameIsUnique:)` resolves workout exercises to the chart target — an exact `exerciseId` match, OR a legacy row with `exerciseId == nil` whose name matches case-insensitively **and only when the name is unique in the live library**. Without the fallback, workouts logged before `WorkoutExercise.exerciseId` existed would be invisible and progress would look frozen; without the uniqueness gate, same-named equipment variants would double-count. |
+| ExerciseProgressModels | `Domain/Models/ExerciseProgressModels.swift` | Domain values: ChartTimeframe, ProgressMetric, ExerciseProgressDataPoint, ExerciseProgressData, **ExerciseUsage**, **ExerciseRecentUsage**, **ExerciseProgressSnapshot**, SelectedDataPoint. The five that cross the actor boundary are explicitly `Sendable`. |
+| ExerciseProgressAggregator | `Domain/Services/ExerciseProgressAggregator.swift` | **Pure, isolation-agnostic** chart + recent-sets aggregation. `buildRecentUsages` emits **one card per usage per session** — see "The recent-sets list shows every usage" above. `matches(_:exerciseId:exerciseName:nameIsUnique:)` resolves workout exercises to the chart target — an exact `exerciseId` match, OR a legacy row with `exerciseId == nil` whose name matches case-insensitively **and only when the name is unique in the live library**. Without the fallback, workouts logged before `WorkoutExercise.exerciseId` existed would be invisible and progress would look frozen; without the uniqueness gate, same-named equipment variants would double-count. |
+| FortschrittAggregator | `Domain/Services/FortschrittAggregator.swift` | **Pure, isolation-agnostic.** Builds the Fortschritt list's rows (count, sparkline, trend) from completed sessions + the live `Exercise` library. **One entry per session, not per `WorkoutExercise`** — see "The Fortschritt row counts sessions, not exercise instances" above. |
 | SwiftDataHistorySnapshotStore | `Data/History/SwiftDataHistorySnapshotStore.swift` | `@ModelActor` that performs the fetch and calls the aggregator off the main actor. `SwiftDataHistorySnapshotProvider.fetchExerciseProgress` is the `@concurrent` entry point. |
 | ExerciseProgressService | `Data/Progress/ExerciseProgressService.swift` | The vs-previous seam. Owns no `ModelContext`: `@MainActor` glue that runs `ExerciseComparisonBuilder` either side of one `@concurrent` boundary call. Does not feed the chart. |
 | ExerciseComparisonBuilder | `Domain/Services/ExerciseComparisonBuilder.swift` | **Pure, isolation-agnostic.** `makeLookup` reduces the current workout to `Sendable` values; `build` assembles the comparison rows from it plus the resolved predecessors. Runs on the main actor because the workout may be uncommitted. |
@@ -224,7 +365,7 @@ exercise's selected chart range lacks a snapshot, the chart safely falls back to
 
 ## Chart Interaction
 
-- **Timeframe selection**: 1W, 1M, 3M, 1Y, All — filters data and adapts X-axis date granularity. Changing it changes `viewModel.loadKey` (via `chartTimeframe` — see "Pro gating" below), so `.task(id:)` cancels the in-flight load and starts a new one. The recent-session list is deliberately **all-time** and unaffected by the range, matching the pre-existing behaviour.
+- **Timeframe selection**: 1W, 1M, 3M, 1Y, All — filters data and adapts X-axis date granularity. Changing it changes `viewModel.loadKey` (via `chartTimeframe` — see "Pro gating" below), so `.task(id:)` cancels the in-flight load and starts a new one. The recent-sets list is deliberately **all-time** and unaffected by the range, matching the pre-existing behaviour.
 - **Metric switching**: Segmented picker switches chart data without reloading (all metrics pre-fetched)
 - **Info popover**: ⓘ button next to metric picker shows metric description
 - **Data point tap**: Tap on chart area finds nearest data point, shows floating annotation with exact value + date. Tap empty area to dismiss. Selection clears on metric/timeframe/exercise change.

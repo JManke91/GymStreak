@@ -218,17 +218,60 @@ struct ExerciseProgressData: Sendable {
     }
 }
 
-// MARK: - Exercise Recent Session
+// MARK: - Exercise Usage
 
-/// One row of the exercise detail's "recent sessions" list.
+/// Which way an exercise was trained: the routine slot its history rows were
+/// recorded against, plus what a user needs to recognise that slot.
+///
+/// The identity already exists in history — `WorkoutExercise` denormalizes
+/// `routineExerciseId` and the slot's rep range precisely so they survive routine
+/// edits and deletion — so this persists nothing new. It is a `Sendable` value
+/// because it is built inside `SwiftDataHistorySnapshotStore`'s model actor.
+struct ExerciseUsage: Hashable, Sendable {
+    /// The routine slot behind a block of history.
+    enum Slot: Hashable, Sendable {
+        case routineSlot(UUID)
+        /// No slot at all: history recorded before `WorkoutExercise.routineExerciseId`
+        /// existed, and exercises added ad hoc during a workout. An explicit case so
+        /// these rows are never folded into an arbitrary real usage and never dropped.
+        case unattributed
+    }
+
+    let slot: Slot
+    let targetRepMin: Int?
+    let targetRepMax: Int?
+    /// `WorkoutSession.routineName`, denormalized — empty when the workout had no routine.
+    let routineName: String
+
+    /// "8–12", or "10" when the goal is a single number. Nil when the slot carries
+    /// no rep-range goal. Mirrors `WorkoutExerciseDisplay.repRangeText`, which formats
+    /// the same pair for the active-workout screen.
+    var repRangeText: String? {
+        guard let targetRepMin, let targetRepMax else { return nil }
+        return targetRepMin == targetRepMax ? "\(targetRepMin)" : "\(targetRepMin)–\(targetRepMax)"
+    }
+}
+
+// MARK: - Exercise Recent Usage
+
+/// One card of the exercise detail's "recent sets" list: the completed sets of **one
+/// usage** within one completed workout.
+///
+/// A workout that trained the exercise twice — the heavy/light pairing this feature
+/// exists for — contributes two of these, so a card is no longer one-to-one with a
+/// session. The list is still capped by *sessions* (`recentSessionLimit`), never by cards.
 ///
 /// A denormalized value, not a `WorkoutSession`: it is built inside
 /// `SwiftDataHistorySnapshotStore`'s model actor and crosses back to the main
 /// actor, so no `PersistentModel` and no relationship walk may survive in it.
-struct ExerciseRecentSession: Identifiable, Sendable {
-    /// The originating `WorkoutSession.id` — stable across reloads, unlike a minted UUID.
+struct ExerciseRecentUsage: Identifiable, Sendable {
+    /// The originating `WorkoutExercise.id` — stable across reloads, and unique per
+    /// card even when one workout contributes several.
     let id: UUID
+    /// The workout these sets belong to. Shared by every card of the same session.
+    let workoutSessionId: UUID
     let date: Date
+    let usage: ExerciseUsage
     let sets: [SetEntry]
 
     struct SetEntry: Identifiable, Sendable {
@@ -247,12 +290,12 @@ struct ExerciseRecentSession: Identifiable, Sendable {
 /// Everything the exercise detail screen renders, built in a single pass over one
 /// prefetched session graph.
 ///
-/// The chart series and the recent-session list are returned together deliberately:
+/// The chart series and the recent-sets list are returned together deliberately:
 /// they read the same fetch, and shipping them as two boundary calls would mean two
 /// unbounded fetches plus a chance for the two halves of one screen to disagree.
 struct ExerciseProgressSnapshot: Sendable {
     let data: ExerciseProgressData
-    let recentSessions: [ExerciseRecentSession]
+    let recentUsages: [ExerciseRecentUsage]
 }
 
 // MARK: - Selected Data Point

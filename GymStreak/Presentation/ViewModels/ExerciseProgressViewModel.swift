@@ -29,7 +29,9 @@ class ExerciseProgressViewModel: ObservableObject {
     @Published var selectedTimeframe: ChartTimeframe = .month
     @Published var selectedMetric: ProgressMetric = .maxWeight
     @Published private(set) var progressData: ExerciseProgressData?
-    @Published private(set) var recentSessions: [ExerciseRecentSession] = []
+    /// One card per usage per session — a workout that trained the exercise twice
+    /// contributes two entries. Capped by sessions, see `recentSessionLimit`.
+    @Published private(set) var recentUsages: [ExerciseRecentUsage] = []
     @Published var selectedDataPoint: SelectedDataPoint?
     @Published private(set) var isLoading = true
 
@@ -38,7 +40,9 @@ class ExerciseProgressViewModel: ObservableObject {
     /// `chartTimeframe`.
     @Published private(set) var lastUnlockedTimeframe: ChartTimeframe = .month
 
-    /// Bounded so the recent-session list stays a fixed-size, non-lazy stack.
+    /// Bounded so the recent-sets list stays a small, non-lazy stack. It caps
+    /// **sessions**, not cards: a session that trained the exercise twice renders two
+    /// cards, so the stack scales with the routine's shape rather than with history length.
     static let recentSessionLimit = 8
 
     private var exerciseName: String
@@ -130,7 +134,7 @@ class ExerciseProgressViewModel: ObservableObject {
             )
             guard !Task.isCancelled, generation == self.generation else { return }
             progressData = snapshot.data
-            recentSessions = snapshot.recentSessions
+            recentUsages = snapshot.recentUsages
             if !availableMetrics.contains(selectedMetric) {
                 selectedMetric = .maxWeight
             }
@@ -140,7 +144,7 @@ class ExerciseProgressViewModel: ObservableObject {
         } catch {
             guard generation == self.generation else { return }
             progressData = nil
-            recentSessions = []
+            recentUsages = []
             isLoading = false
         }
     }

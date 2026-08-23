@@ -43,9 +43,38 @@ struct FortschrittAggregator {
             var sessionValues: [(date: Date, value: Double, isEffectiveLoad: Bool)] = []
         }
 
+        /// A single session's folded value for one exercise. `hasValue` distinguishes
+        /// "no comparable set yet" from a legitimately recorded 0 (an assisted set
+        /// performed with no counterweight at all), which the min-fold must keep.
+        struct SessionFold {
+            var value: Double = 0
+            var hasValue = false
+            let isEffectiveLoad: Bool
+
+            mutating func record(_ newValue: Double) {
+                value = newValue
+                hasValue = true
+            }
+        }
+
         var map: [UUID: Accumulator] = [:]
 
         for session in finished {
+            // One entry per *session*, not per exercise instance. A routine that trains
+            // the same exercise twice in a workout (heavy + light) used to append two
+            // entries carrying the same date: the row reported 21 "workouts" for 14
+            // sessions, the sparkline alternated between both usages at zero horizontal
+            // distance, and first-vs-last trend cancelled to 0.0% because both ends
+            // sampled the same usage. The fold below mirrors the *within-session*
+            // reduction `ExerciseProgressAggregator.buildProgress` applies to its
+            // per-session data point, so the two surfaces cannot disagree about how
+            // many workouts they summarise. They can still disagree about the values
+            // of a counterweight series whose history only partly carries body-mass
+            // snapshots: `buildProgress` picks its value space series-wide, this
+            // aggregator per session. Pre-existing and documented in
+            // `docs/progress-charts.md`.
+            var folds: [UUID: SessionFold] = [:]
+
             for workoutExercise in session.workoutExercisesList {
                 let completed = workoutExercise.setsList.filter(\.isCompleted)
                 guard !completed.isEmpty else { continue }
@@ -68,11 +97,13 @@ struct FortschrittAggregator {
                 acc.displayName = live.name
                 acc.muscleGroups = live.muscleGroups
                 acc.loadBehavior = workoutExercise.loadBehavior
+                map[live.id] = acc
 
-                let usePlanned = workoutExercise.progressiveOverloadApplied
-                var bestValue: Double = 0
                 let behavior = workoutExercise.loadBehavior
                 let canUseEffectiveLoad = !behavior.isCounterweightAssistance || session.bodyWeightKg != nil
+                var fold = folds[live.id] ?? SessionFold(isEffectiveLoad: canUseEffectiveLoad)
+
+                let usePlanned = workoutExercise.progressiveOverloadApplied
                 for set in completed {
                     let w = usePlanned ? set.plannedWeight : set.actualWeight
                     let r = usePlanned ? set.plannedReps   : set.actualReps
@@ -84,13 +115,21 @@ struct FortschrittAggregator {
                         behavior: behavior,
                         bodyWeightKg: session.bodyWeightKg
                        ) {
-                        bestValue = max(bestValue, ExerciseLoadMetrics.estimatedOneRepMax(weight: effective, reps: r))
+                        // Higher estimated 1RM is the better usage. `value` starts at 0
+                        // and an estimate is never negative, so plain max also covers
+                        // the first recorded set.
+                        fold.record(max(fold.value, ExerciseLoadMetrics.estimatedOneRepMax(weight: effective, reps: r)))
                     } else if behavior.isCounterweightAssistance {
-                        bestValue = bestValue == 0 ? w : min(bestValue, w)
+                        // Raw assistance without a body-mass snapshot: *least*
+                        // assistance is the better usage, so fold with min.
+                        fold.record(fold.hasValue ? min(fold.value, w) : w)
                     }
                 }
-                acc.sessionValues.append((session.startTime, bestValue, canUseEffectiveLoad))
-                map[live.id] = acc
+                folds[live.id] = fold
+            }
+
+            for (id, fold) in folds {
+                map[id]?.sessionValues.append((session.startTime, fold.value, fold.isEffectiveLoad))
             }
         }
 

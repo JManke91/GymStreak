@@ -816,6 +816,7 @@
 "history.exercise.recent" = "Letzte Sätze";
 "history.exercise.entries" = "%d Einträge";
 "history.exercise.best_set" = "Bester: %@";
+"history.exercise.usage.unassigned" = "Ohne Zuordnung";
 
 "switch" = "Wechseln";
 

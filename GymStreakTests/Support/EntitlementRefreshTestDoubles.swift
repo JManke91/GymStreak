@@ -58,7 +58,7 @@ actor SilentHistorySnapshotProvider: HistorySnapshotProviding {
     ) async throws -> ExerciseProgressSnapshot {
         ExerciseProgressSnapshot(
             data: ExerciseProgressData(exerciseName: exerciseName, dataPoints: []),
-            recentSessions: []
+            recentUsages: []
         )
     }
 

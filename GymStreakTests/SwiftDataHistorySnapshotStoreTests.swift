@@ -82,7 +82,7 @@ struct SwiftDataHistorySnapshotStoreTests {
         await heartbeatTask.value
 
         #expect(snapshot.data.dataPoints.count == 240)
-        #expect(snapshot.recentSessions.count == 8)
+        #expect(snapshot.recentUsages.count == 8)
         #expect(
             heartbeat.sampleCount >= 1,
             "the main actor should run while the model actor is building the chart"

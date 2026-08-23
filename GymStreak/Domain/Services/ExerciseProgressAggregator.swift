@@ -7,7 +7,7 @@ import Foundation
 import SwiftData
 
 /// Pure aggregator that turns completed `WorkoutSession`s into the exercise detail
-/// screen's chart series and its "recent sessions" list.
+/// screen's chart series and its "recent sets" list.
 ///
 /// Extracted from `ExerciseProgressService` (audit P1.2) so the whole-history
 /// traversal can run inside `SwiftDataHistorySnapshotStore`'s model actor instead of
@@ -28,7 +28,9 @@ struct ExerciseProgressAggregator {
     ///   - liveExercises: the user's `Exercise` library, used to resolve load behaviour
     ///     and to decide whether a legacy name match is unambiguous.
     ///   - startDate: chart window lower bound. Only the chart series is windowed;
-    ///     the recent-session list is deliberately all-time, matching the previous behaviour.
+    ///     the recent-usage list is deliberately all-time, matching the previous behaviour.
+    ///   - recentSessionLimit: caps the recent-usage list by **sessions**, not by cards —
+    ///     a workout that trained the exercise twice contributes two cards but counts once.
     static func buildSnapshot(
         sessions: [WorkoutSession],
         liveExercises: [Exercise],
@@ -53,11 +55,12 @@ struct ExerciseProgressAggregator {
                 loadBehavior: behavior,
                 startDate: startDate
             ),
-            recentSessions: buildRecentSessions(
+            recentUsages: buildRecentUsages(
                 sessions: sessions,
                 exerciseName: exerciseName,
                 exerciseId: exerciseId,
                 nameIsUnique: nameIsUnique,
+                loadBehavior: behavior,
                 limit: recentSessionLimit
             )
         )
@@ -174,49 +177,100 @@ struct ExerciseProgressAggregator {
         )
     }
 
-    // MARK: - Recent sessions
+    // MARK: - Recent usages
 
-    /// The `limit` most recent sessions containing completed sets of the exercise.
+    /// Every usage of the exercise in each of the `limit` most recent sessions that
+    /// contain completed sets of it — one card per usage, newest session first.
     ///
-    /// Unlike the chart series this ignores the selected timeframe and does not filter
-    /// by load behaviour — it reproduces the list the exercise detail screen already
-    /// showed, which read the first matching `WorkoutExercise` per session.
-    static func buildRecentSessions(
+    /// **One card per usage, not per session.** This used to keep
+    /// `workoutExercisesList.first(where:)` and silently drop the rest, so a workout
+    /// that trained the exercise both heavy and light showed only one of the two blocks,
+    /// contradicting the chart above it (which takes the max across all of them) on the
+    /// same screen. Every matching instance now contributes its completed sets, tagged
+    /// with the `ExerciseUsage` they belong to.
+    ///
+    /// **Ordering is explicit, never inherited.** `workoutExercisesList` is the raw
+    /// SwiftData to-many array, whose order is undocumented, so the blocks of one session
+    /// are sorted by `WorkoutExercise.order` — the sequence the user actually performed —
+    /// with `id` as a tiebreak so the result is a total order even if two rows share an
+    /// `order`. Sets keep their existing `WorkoutSet.order` sort inside each block.
+    ///
+    /// **`loadBehavior` is filtered exactly as the chart filters it** (deliberate change:
+    /// this list used to apply no filter). Keeping a block the chart excluded is what
+    /// produced two panels disagreeing about the same workout, which is the defect this
+    /// ticket exists to end. It still ignores the selected timeframe — the list is all-time.
+    ///
+    /// - Parameter limit: a **session** cap. Showing every usage must not shrink how far
+    ///   back the list reaches, so a two-usage workout emits two cards and counts once.
+    ///   The rendered stack therefore scales with the routine's shape, not with history
+    ///   length, and stays small enough to remain non-lazy.
+    static func buildRecentUsages(
         sessions: [WorkoutSession],
         exerciseName: String,
         exerciseId: UUID?,
         nameIsUnique: Bool,
+        loadBehavior: ExerciseLoadBehavior,
         limit: Int
-    ) -> [ExerciseRecentSession] {
+    ) -> [ExerciseRecentUsage] {
         let ordered = sessions
             .filter { $0.endTime != nil }
             .sorted { $0.startTime > $1.startTime }
 
-        var collected: [ExerciseRecentSession] = []
+        var collected: [ExerciseRecentUsage] = []
+        var sessionsCollected = 0
         for session in ordered {
-            guard let exercise = session.workoutExercisesList.first(where: {
-                matches($0, exerciseId: exerciseId, exerciseName: exerciseName, nameIsUnique: nameIsUnique)
-            }) else { continue }
-
-            let usePlanned = exercise.progressiveOverloadApplied
-            let entries = exercise.setsList
-                .sorted { $0.order < $1.order }
-                .filter(\.isCompleted)
-                .map { set in
-                    ExerciseRecentSession.SetEntry(
-                        id: set.id,
-                        weight: usePlanned ? set.plannedWeight : set.actualWeight,
-                        reps: usePlanned ? set.plannedReps : set.actualReps
-                    )
+            let matching = session.workoutExercisesList
+                .filter {
+                    matches($0, exerciseId: exerciseId, exerciseName: exerciseName, nameIsUnique: nameIsUnique)
+                        && $0.loadBehavior == loadBehavior
                 }
-            guard !entries.isEmpty else { continue }
+                .sorted { $0.order != $1.order ? $0.order < $1.order : $0.id.uuidString < $1.id.uuidString }
 
-            collected.append(
-                ExerciseRecentSession(id: session.id, date: session.startTime, sets: entries)
-            )
-            if collected.count >= limit { break }
+            var cards: [ExerciseRecentUsage] = []
+            for exercise in matching {
+                let usePlanned = exercise.progressiveOverloadApplied
+                let entries = exercise.setsList
+                    .sorted { $0.order < $1.order }
+                    .filter(\.isCompleted)
+                    .map { set in
+                        ExerciseRecentUsage.SetEntry(
+                            id: set.id,
+                            weight: usePlanned ? set.plannedWeight : set.actualWeight,
+                            reps: usePlanned ? set.plannedReps : set.actualReps
+                        )
+                    }
+                guard !entries.isEmpty else { continue }
+
+                cards.append(
+                    ExerciseRecentUsage(
+                        id: exercise.id,
+                        workoutSessionId: session.id,
+                        date: session.startTime,
+                        usage: usage(of: exercise, in: session),
+                        sets: entries
+                    )
+                )
+            }
+
+            guard !cards.isEmpty else { continue }
+            collected.append(contentsOf: cards)
+            sessionsCollected += 1
+            if sessionsCollected >= limit { break }
         }
         return collected
+    }
+
+    /// The usage one history row belongs to: its routine slot, described by the rep-range
+    /// goal the row denormalized and the workout's routine name. A row with no
+    /// `routineExerciseId` — legacy history, or an exercise added ad hoc mid-workout —
+    /// resolves to the explicit `.unattributed` bucket rather than to some other usage.
+    static func usage(of exercise: WorkoutExercise, in session: WorkoutSession) -> ExerciseUsage {
+        ExerciseUsage(
+            slot: exercise.routineExerciseId.map(ExerciseUsage.Slot.routineSlot) ?? .unattributed,
+            targetRepMin: exercise.targetRepMin,
+            targetRepMax: exercise.targetRepMax,
+            routineName: session.routineName
+        )
     }
 
     // MARK: - Identity resolution

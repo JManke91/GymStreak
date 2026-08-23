@@ -816,6 +816,7 @@
 "history.exercise.recent" = "Recent Sets";
 "history.exercise.entries" = "%d entries";
 "history.exercise.best_set" = "Best: %@";
+"history.exercise.usage.unassigned" = "Unassigned";
 
 "switch" = "Switch";
 

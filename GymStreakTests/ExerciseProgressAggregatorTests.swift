@@ -121,11 +121,11 @@ struct ExerciseProgressAggregatorTests {
         )
 
         #expect(snapshot.data.dataPoints.isEmpty)
-        #expect(snapshot.recentSessions.isEmpty)
+        #expect(snapshot.recentUsages.isEmpty)
     }
 
     @Test
-    func recentSessionsAreNewestFirstAndCappedByTheLimit() throws {
+    func recentUsagesAreNewestFirstAndCappedByTheSessionLimit() throws {
         let context = ModelContext(InMemoryModelContainer.make())
         let exercise = Exercise(name: "Bench Press")
         context.insert(exercise)
@@ -140,11 +140,12 @@ struct ExerciseProgressAggregatorTests {
         }
         try context.save()
 
-        let result = ExerciseProgressAggregator.buildRecentSessions(
+        let result = ExerciseProgressAggregator.buildRecentUsages(
             sessions: try fetchSessions(context),
             exerciseName: "Bench Press",
             exerciseId: exercise.id,
             nameIsUnique: true,
+            loadBehavior: .resistance,
             limit: 3
         )
 
@@ -155,10 +156,10 @@ struct ExerciseProgressAggregatorTests {
         #expect(result[2].bestSet?.weight == 102)
     }
 
-    /// The recent-session list must never carry an entry with no completed sets:
+    /// The recent-sets list must never carry a card with no completed sets:
     /// the screen renders each as a card of set chips.
     @Test
-    func recentSessionsSkipSessionsWithoutCompletedSets() throws {
+    func recentUsagesSkipSessionsWithoutCompletedSets() throws {
         let context = ModelContext(InMemoryModelContainer.make())
         let exercise = Exercise(name: "Bench Press")
         context.insert(exercise)
@@ -177,17 +178,220 @@ struct ExerciseProgressAggregatorTests {
         )
         try context.save()
 
-        let result = ExerciseProgressAggregator.buildRecentSessions(
+        let result = ExerciseProgressAggregator.buildRecentUsages(
             sessions: try fetchSessions(context),
             exerciseName: "Bench Press",
             exerciseId: exercise.id,
             nameIsUnique: true,
+            loadBehavior: .resistance,
             limit: 8
         )
 
         #expect(result.count == 1)
         #expect(result[0].sets.count == 1)
         #expect(result[0].sets[0].weight == 80)
+    }
+
+    // MARK: - Recent usages: one card per usage
+
+    /// The reported contradiction: the chart plotted the heavy usage's 20 kg for a day
+    /// whose "recent sets" card showed the light usage's 14 kg × 12. The card kept
+    /// `workoutExercisesList.first(where:)` and dropped the rest of the session.
+    @Test
+    func aSessionTrainedTwiceYieldsOneCardPerUsageAgreeingWithTheChart() throws {
+        let context = ModelContext(InMemoryModelContainer.make())
+        let exercise = Exercise(name: "Biceps Curls")
+        context.insert(exercise)
+
+        let heavySlot = UUID()
+        let lightSlot = UUID()
+        let session = makeEmptySession(startTime: Date(timeIntervalSince1970: 1_000), context: context)
+        session.routineName = "Push A"
+        addExercise(
+            named: exercise.name, exerciseId: exercise.id,
+            sets: [(20, 5, true), (20, 5, true), (20, 4, true)],
+            to: session, context: context,
+            order: 0, routineExerciseId: heavySlot, targetRepMin: 4, targetRepMax: 6
+        )
+        addExercise(
+            named: exercise.name, exerciseId: exercise.id,
+            sets: [(14, 12, true), (14, 10, true), (14, 8, true)],
+            to: session, context: context,
+            order: 1, routineExerciseId: lightSlot, targetRepMin: 8, targetRepMax: 12
+        )
+        try context.save()
+
+        let snapshot = ExerciseProgressAggregator.buildSnapshot(
+            sessions: try fetchSessions(context),
+            liveExercises: try context.fetch(FetchDescriptor<Exercise>()),
+            exerciseName: exercise.name,
+            exerciseId: exercise.id,
+            startDate: .distantPast,
+            recentSessionLimit: 8
+        )
+
+        // Both blocks survive, and neither is interleaved with the other.
+        #expect(snapshot.recentUsages.count == 2)
+        #expect(snapshot.recentUsages.allSatisfy { $0.workoutSessionId == session.id })
+        #expect(snapshot.recentUsages[0].sets.map(\.weight) == [20, 20, 20])
+        #expect(snapshot.recentUsages[0].sets.map(\.reps) == [5, 5, 4])
+        #expect(snapshot.recentUsages[1].sets.map(\.weight) == [14, 14, 14])
+        #expect(snapshot.recentUsages[1].sets.map(\.reps) == [12, 10, 8])
+
+        // Each card names the usage behind it.
+        #expect(snapshot.recentUsages[0].usage.slot == .routineSlot(heavySlot))
+        #expect(snapshot.recentUsages[0].usage.repRangeText == "4–6")
+        #expect(snapshot.recentUsages[1].usage.slot == .routineSlot(lightSlot))
+        #expect(snapshot.recentUsages[1].usage.repRangeText == "8–12")
+        #expect(snapshot.recentUsages.allSatisfy { $0.usage.routineName == "Push A" })
+
+        // The panels no longer contradict each other about the same workout: the
+        // heaviest set the list shows is the value the chart plots for that day.
+        #expect(snapshot.data.dataPoints.count == 1)
+        let heaviestShown = snapshot.recentUsages.compactMap { $0.bestSet?.weight }.max()
+        #expect(heaviestShown == snapshot.data.dataPoints[0].maxWeight)
+        #expect(heaviestShown == 20)
+    }
+
+    /// Block order comes from `WorkoutExercise.order` — the sequence the user performed —
+    /// never from whatever order the `workoutExercises` to-many relationship materialises.
+    /// The two sessions here are inserted in opposite orders from their `order` values, so
+    /// the assertions cannot pass by inheriting the array.
+    @Test
+    func blockOrderFollowsWorkoutExerciseOrderNotTheRelationshipArray() throws {
+        let context = ModelContext(InMemoryModelContainer.make())
+        let exercise = Exercise(name: "Biceps Curls")
+        context.insert(exercise)
+
+        // Inserted light-first, but the user performed heavy first (order 0).
+        let newer = makeEmptySession(startTime: Date(timeIntervalSince1970: 2_000), context: context)
+        addExercise(named: exercise.name, exerciseId: exercise.id, sets: [(14, 12, true)],
+                    to: newer, context: context, order: 1, routineExerciseId: UUID())
+        addExercise(named: exercise.name, exerciseId: exercise.id, sets: [(20, 5, true)],
+                    to: newer, context: context, order: 0, routineExerciseId: UUID())
+
+        // Inserted heavy-first, but the user performed light first (order 0).
+        let older = makeEmptySession(startTime: Date(timeIntervalSince1970: 1_000), context: context)
+        addExercise(named: exercise.name, exerciseId: exercise.id, sets: [(20, 5, true)],
+                    to: older, context: context, order: 1, routineExerciseId: UUID())
+        addExercise(named: exercise.name, exerciseId: exercise.id, sets: [(14, 12, true)],
+                    to: older, context: context, order: 0, routineExerciseId: UUID())
+        try context.save()
+
+        let result = ExerciseProgressAggregator.buildRecentUsages(
+            sessions: try fetchSessions(context),
+            exerciseName: exercise.name,
+            exerciseId: exercise.id,
+            nameIsUnique: true,
+            loadBehavior: .resistance,
+            limit: 8
+        )
+
+        #expect(result.count == 4)
+        // Newest session first, and within it the performed order.
+        #expect(result.map { $0.bestSet?.weight } == [20, 14, 14, 20])
+        #expect(result[0].workoutSessionId == newer.id)
+        #expect(result[1].workoutSessionId == newer.id)
+        #expect(result[2].workoutSessionId == older.id)
+        #expect(result[3].workoutSessionId == older.id)
+    }
+
+    /// The cap bounds **sessions**, not cards: showing every usage must not shrink how
+    /// far back the list reaches.
+    @Test
+    func theLimitCapsSessionsWhileASessionMayContributeSeveralCards() throws {
+        let context = ModelContext(InMemoryModelContainer.make())
+        let exercise = Exercise(name: "Biceps Curls")
+        context.insert(exercise)
+
+        // Four sessions, each trained twice, plus one single-usage session in the middle.
+        for index in 0..<4 {
+            let session = makeEmptySession(
+                startTime: Date(timeIntervalSince1970: Double(1_000 * (index + 1))),
+                context: context
+            )
+            addExercise(named: exercise.name, exerciseId: exercise.id, sets: [(20, 5, true)],
+                        to: session, context: context, order: 0, routineExerciseId: UUID())
+            if index != 1 {
+                addExercise(named: exercise.name, exerciseId: exercise.id, sets: [(14, 12, true)],
+                            to: session, context: context, order: 1, routineExerciseId: UUID())
+            }
+        }
+        try context.save()
+
+        let result = ExerciseProgressAggregator.buildRecentUsages(
+            sessions: try fetchSessions(context),
+            exerciseName: exercise.name,
+            exerciseId: exercise.id,
+            nameIsUnique: true,
+            loadBehavior: .resistance,
+            limit: 3
+        )
+
+        // 3 sessions deep — the two-usage ones contribute two cards, the single one card.
+        #expect(Set(result.map(\.workoutSessionId)).count == 3)
+        #expect(result.count == 5)
+    }
+
+    /// Legacy history and ad-hoc exercises carry no `routineExerciseId`. They belong to
+    /// an explicit bucket — never dropped, never folded into a real slot.
+    @Test
+    func rowsWithoutARoutineSlotResolveToTheUnattributedBucket() throws {
+        let context = ModelContext(InMemoryModelContainer.make())
+        let exercise = Exercise(name: "Biceps Curls")
+        context.insert(exercise)
+
+        let session = makeEmptySession(startTime: Date(timeIntervalSince1970: 1_000), context: context)
+        session.routineName = "Push A"
+        // A pre-`routineExerciseId` row: no slot, and no rep-range goal either.
+        addExercise(named: exercise.name, exerciseId: exercise.id, sets: [(15, 12, true)],
+                    to: session, context: context, order: 0)
+        try context.save()
+
+        let result = ExerciseProgressAggregator.buildRecentUsages(
+            sessions: try fetchSessions(context),
+            exerciseName: exercise.name,
+            exerciseId: exercise.id,
+            nameIsUnique: true,
+            loadBehavior: .resistance,
+            limit: 8
+        )
+
+        #expect(result.count == 1)
+        #expect(result[0].usage.slot == .unattributed)
+        #expect(result[0].usage.repRangeText == nil)
+        #expect(result[0].usage.routineName == "Push A")
+    }
+
+    /// Deliberate change: the list applies the chart's `loadBehavior` filter, which it
+    /// used not to. A row the chart excluded must not reappear underneath it.
+    @Test
+    func recentUsagesApplyTheChartsLoadBehaviourFilter() throws {
+        let context = ModelContext(InMemoryModelContainer.make())
+        let exercise = Exercise(name: "Pull-Up")
+        context.insert(exercise)
+
+        let session = makeEmptySession(startTime: Date(timeIntervalSince1970: 1_000), context: context)
+        addExercise(named: exercise.name, exerciseId: exercise.id, sets: [(0, 8, true)],
+                    to: session, context: context, order: 0, routineExerciseId: UUID())
+        // Recorded back when the library exercise was still counterweight-assisted.
+        addExercise(named: exercise.name, exerciseId: exercise.id, sets: [(30, 8, true)],
+                    to: session, context: context, order: 1, routineExerciseId: UUID(),
+                    loadBehavior: .counterweightAssistance)
+        try context.save()
+
+        let snapshot = ExerciseProgressAggregator.buildSnapshot(
+            sessions: try fetchSessions(context),
+            liveExercises: try context.fetch(FetchDescriptor<Exercise>()),
+            exerciseName: exercise.name,
+            exerciseId: exercise.id,
+            startDate: .distantPast,
+            recentSessionLimit: 8
+        )
+
+        #expect(snapshot.recentUsages.count == 1)
+        #expect(snapshot.recentUsages[0].sets[0].weight == 0)
+        #expect(snapshot.data.dataPoints.count == 1)
     }
 
     @Test
@@ -226,6 +430,14 @@ struct ExerciseProgressAggregatorTests {
         )
     }
 
+    private func makeEmptySession(startTime: Date, context: ModelContext) -> WorkoutSession {
+        let session = WorkoutSession(routine: nil)
+        session.startTime = startTime
+        session.endTime = startTime.addingTimeInterval(600)
+        context.insert(session)
+        return session
+    }
+
     @discardableResult
     private func makeSession(
         startTime: Date,
@@ -247,19 +459,29 @@ struct ExerciseProgressAggregatorTests {
         return session
     }
 
+    @discardableResult
     private func addExercise(
         named name: String,
         exerciseId: UUID?,
         sets: [(Double, Int, Bool)],
         to session: WorkoutSession,
-        context: ModelContext
-    ) {
+        context: ModelContext,
+        order: Int = 0,
+        routineExerciseId: UUID? = nil,
+        targetRepMin: Int? = nil,
+        targetRepMax: Int? = nil,
+        loadBehavior: ExerciseLoadBehavior = .resistance
+    ) -> WorkoutExercise {
         let workoutExercise = WorkoutExercise(
             exerciseName: name,
             muscleGroups: ["Chest"],
-            order: 0,
-            exerciseId: exerciseId
+            order: order,
+            exerciseId: exerciseId,
+            routineExerciseId: routineExerciseId,
+            loadBehavior: loadBehavior
         )
+        workoutExercise.targetRepMin = targetRepMin
+        workoutExercise.targetRepMax = targetRepMax
         workoutExercise.workoutSession = session
         context.insert(workoutExercise)
 
@@ -276,5 +498,6 @@ struct ExerciseProgressAggregatorTests {
             set.workoutExercise = workoutExercise
             context.insert(set)
         }
+        return workoutExercise
     }
 }

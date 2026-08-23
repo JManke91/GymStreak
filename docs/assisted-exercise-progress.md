@@ -30,6 +30,10 @@ entry, so these sessions use the safe assistance-only history fallback.
   `ExerciseLoadMetrics.effectiveVolume(from:usePlannedValues:behavior:bodyWeightKg:)` — they
   run on different executors (audit P1.6), and duplicating it would let the current and
   previous sides of one comparison disagree about assisted load.
+- Direction also decides how a **workout that trains one assisted exercise twice** folds into
+  its single Fortschritt entry: effective-load sessions fold with `max` (higher 1RM), raw
+  assistance sessions with `min` (least assistance). See `docs/progress-charts.md`, "The
+  Fortschritt row counts sessions, not exercise instances".
 
 ## Migration and catalog behavior
 

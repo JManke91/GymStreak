@@ -6,7 +6,7 @@
 //  - Editorial header with muscle-group label + exercise name
 //  - 3-stat hero (PR / Trend / Workouts)
 //  - Chart card with metric tabs + headline + range pills
-//  - "Letzte Sätze" session list
+//  - "Letzte Sätze" list — one card per usage of the exercise per workout
 //
 
 import SwiftUI
@@ -104,7 +104,7 @@ private struct ExerciseProgressChartViewInternal: View {
                     statTriple
                     chartCard
                     coachSection
-                    recentSessionsSection
+                    recentUsagesSection
                     Color.clear.frame(height: 40)
                 }
             }
@@ -440,22 +440,22 @@ private struct ExerciseProgressChartViewInternal: View {
         .padding(.horizontal, 6)
     }
 
-    // MARK: - Recent sessions
+    // MARK: - Recent sets
 
-    private var recentSessionsSection: some View {
+    private var recentUsagesSection: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
                 Text("history.exercise.recent".localized)
                     .font(.system(size: 15, weight: .bold, design: .rounded))
                     .foregroundStyle(Color.white)
                 Spacer()
-                Text("history.exercise.entries".localized(viewModel.recentSessions.count))
+                Text("history.exercise.entries".localized(viewModel.recentUsages.count))
                     .font(.system(size: 11))
                     .foregroundStyle(Color.white.opacity(0.45))
             }
             .padding(.horizontal, 20)
 
-            if viewModel.recentSessions.isEmpty {
+            if viewModel.recentUsages.isEmpty {
                 Text("chart.empty.message".localized)
                     .font(.system(size: 12))
                     .foregroundStyle(Color.white.opacity(0.5))
@@ -463,10 +463,12 @@ private struct ExerciseProgressChartViewInternal: View {
                     .padding(.vertical, 16)
             } else {
                 // Plain stack on purpose: the view model caps this list at
-                // `recentSessionLimit` (8), so it is a bounded set, not user-scaled data.
+                // `recentSessionLimit` (8) **sessions**, and a session contributes one
+                // card per usage of the exercise — a handful at most. Bounded by the
+                // routine's shape, not by history length, so it is not user-scaled data.
                 VStack(spacing: 8) {
-                    ForEach(viewModel.recentSessions) { session in
-                        SessionCardView(session: session)
+                    ForEach(viewModel.recentUsages) { usage in
+                        RecentUsageCardView(entry: usage)
                     }
                 }
                 .padding(.horizontal, 16)
@@ -542,121 +544,6 @@ private struct ExerciseProgressChartViewInternal: View {
         // Reset deep-dive state when the user switches exercises
         deepDiveVM = ExerciseDeepDiveViewModel(allowanceGate: deepDiveAllowanceGate)
         hasTappedAskCoach = false
-    }
-}
-
-// MARK: - Session card
-
-struct SessionCardView: View {
-    let session: ExerciseRecentSession
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            header
-            setsRow
-        }
-        .padding(14)
-        .background(Color.white.opacity(0.035))
-        .overlay(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .stroke(Color.white.opacity(0.06), lineWidth: 1)
-        )
-        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-    }
-
-    private var header: some View {
-        HStack {
-            HStack(spacing: 10) {
-                dateBadge
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("history.card.sets".localized(session.sets.count))
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(Color.white)
-                    if let best = session.bestSet {
-                        Text(
-                            String(
-                                format: "history.exercise.best_set".localized,
-                                String(format: "%gkg × %d", best.weight, best.reps)
-                            )
-                        )
-                        .font(.system(size: 11))
-                        .foregroundStyle(Color.white.opacity(0.5))
-                    }
-                }
-            }
-            Spacer()
-            Text(relativeDate)
-                .font(.system(size: 11))
-                .foregroundStyle(Color.white.opacity(0.5))
-        }
-    }
-
-    private var dateBadge: some View {
-        VStack(spacing: 0) {
-            Text("\(dayNumber)")
-                .font(.system(size: 14, weight: .bold, design: .rounded))
-                .monospacedDigit()
-                .foregroundStyle(Color.white)
-            Text(monthLabel.uppercased())
-                .font(.system(size: 8, weight: .semibold))
-                .foregroundStyle(Color.white.opacity(0.5))
-        }
-        .frame(width: 38, height: 38)
-        .background(DesignSystem.Colors.tint.opacity(0.08))
-        .overlay(
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .stroke(DesignSystem.Colors.tint.opacity(0.2), lineWidth: 1)
-        )
-        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-    }
-
-    // Hoisted out of `body`'s read path: both used to be allocated per row per render.
-    // `Locale.current` is the default for both, so it does not need setting.
-    private static let monthFormatter: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.setLocalizedDateFormatFromTemplate("MMM")
-        return formatter
-    }()
-
-    private static let relativeFormatter: RelativeDateTimeFormatter = {
-        let formatter = RelativeDateTimeFormatter()
-        formatter.unitsStyle = .short
-        return formatter
-    }()
-
-    private var dayNumber: Int { Calendar.current.component(.day, from: session.date) }
-
-    private var monthLabel: String {
-        Self.monthFormatter.string(from: session.date)
-    }
-
-    private var relativeDate: String {
-        Self.relativeFormatter.localizedString(for: session.date, relativeTo: Date())
-    }
-
-    private var setsRow: some View {
-        HStack(spacing: 6) {
-            ForEach(session.sets) { set in
-                VStack(spacing: 2) {
-                    HStack(alignment: .firstTextBaseline, spacing: 1) {
-                        Text(String(format: "%g", set.weight))
-                            .font(.system(size: 13, weight: .bold, design: .rounded))
-                            .monospacedDigit()
-                            .foregroundStyle(Color.white)
-                        Text("kg")
-                            .font(.system(size: 9, weight: .medium))
-                            .foregroundStyle(Color.white.opacity(0.5))
-                    }
-                    Text("\(set.reps) \("history.detail.reps".localized)")
-                        .font(.system(size: 10))
-                        .foregroundStyle(Color.white.opacity(0.5))
-                }
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 6)
-                .background(Color.white.opacity(0.04))
-                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-            }
-        }
     }
 }
 
