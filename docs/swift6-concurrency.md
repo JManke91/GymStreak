@@ -2,7 +2,12 @@
 
 > Status: **the whole project compiles in Swift 6 language mode** (`SWIFT_VERSION = 6.0`)
 > with `SWIFT_APPROACHABLE_CONCURRENCY` on, zero warnings across all six targets in both
-> Debug and Release, and all 458 unit tests passing (verified 2026-08-12).
+> Debug and Release, and all unit tests passing — 728 iOS + 34 watch (verified
+> 2026-08-23; previously 458 on 2026-08-12).
+>
+> ⚠️ **A green build is not proof of correct isolation.** §4a records a `@MainActor`
+> closure that compiled without a single warning and trapped on every launch of
+> TestFlight build 1.1.10 (1001). Read it before handing any closure to an Apple API.
 >
 > This document is the reference for how concurrency is expressed in GymStreak,
 > which build settings are deliberate, and which mistakes are already paid for.
@@ -346,7 +351,10 @@ not a tidier alternative.
 
 ---
 
-## 4. The WatchConnectivity delegate boundary
+## 4. The WatchConnectivity delegate boundary (inbound)
+
+Callbacks WatchConnectivity delivers *to* us. For the closures we hand *to* it, see §4a
+— a separate hazard with a separate fix.
 
 `WCSessionDelegate` callbacks arrive on a **background queue**. The established
 pattern — keep it — is: `@MainActor final class` manager, each delegate requirement
@@ -424,6 +432,180 @@ completion handler for the same reason.
 `WatchWirePayload` is also `nonisolated` — it is constructed inside nonisolated
 callbacks, and the watch target's default isolation would otherwise make even its
 initializer main-actor-isolated.
+
+---
+
+## 4a. Outbound completion handlers — the direction that shipped a crash
+
+§4 covers callbacks WatchConnectivity delivers **to** us. This covers the closures we
+hand **to** it, which is a separate hazard with a separate fix — and the one that
+actually crashed a TestFlight build.
+
+### The incident
+
+GymStreak **1.1.10 (1001)** crashed a few seconds after every launch on iOS 26.6.
+Crash report `GymStreak-2026-08-23-120321.ips`:
+
+```
+EXC_BREAKPOINT (SIGTRAP)   faulting thread 2 — NSOperationQueue (QOS: UTILITY)
+
+_dispatch_assert_queue_fail
+dispatch_assert_queue
+_swift_task_checkIsolatedSwift
+swift_task_isCurrentExecutorWithFlagsImpl
+GymStreak                                    ← our errorHandler closure
+GymStreak                                    ← block→closure thunk
+-[WCSession _onqueue_notifyOfMessageError:messageID:withErrorHandler:]_block_invoke
+-[NSBlockOperation main]
+```
+
+Not a nil unwrap. An **actor-isolation precondition failure**: a `@MainActor`-isolated
+closure invoked on WatchConnectivity's private operation queue. (`EXC_BREAKPOINT` plus
+`swift_task_isCurrentExecutor*` / `dispatch_assert_queue` in the stack is the
+signature. How the report was pulled off the device in the first place:
+`docs/crash-report-retrieval.md`.)
+
+### Why it happens, and why nothing warned
+
+**`WatchConnectivity` is entirely un-annotated for concurrency.** `WCSession.h` in the
+iOS 26 SDK contains **zero** `NS_SWIFT_SENDABLE` and **zero** `NS_SWIFT_UI_ACTOR`, and
+`WatchConnectivity.apinotes` adds none. So `sendMessage`'s handler imports as a plain,
+non-`Sendable` `((any Error) -> Void)?`.
+
+Then two rules combine:
+
+1. **[SE-0461] closure isolation inference** (restating [SE-0306]): *if the contextual
+   type of the closure is neither `@Sendable` nor `sending`, the closure inherits the
+   enclosing context's isolation.* Our closures are literals inside a
+   `@MainActor final class`, so they are inferred `@MainActor`.
+2. **[SE-0423] dynamic actor isolation enforcement**: passing a synchronous
+   actor-isolated function value to an API that erases isolation and has not adopted
+   strict concurrency is **deliberately not diagnosed**. The compiler instead wraps the
+   body as `MainActor.assumeIsolated { … }`. Off the main actor that is a fatal
+   precondition, implemented for `MainActor` as `dispatch_assert_queue(main)`
+   ([SE-0424]).
+
+So it compiles with zero warnings in Swift 6 mode *by design* — SE-0423 exists
+precisely to trade a source break for a runtime check. **There is no build setting,
+`-strict-concurrency` level, or upcoming feature that turns this back into a warning.**
+
+It shipped because `errorHandler` is a failure-only path: nothing in development ever
+sends a message to an unreachable watch and waits for the timeout.
+
+### The rule
+
+> **Every closure literal handed to a WatchConnectivity API must be marked
+> `@Sendable`.** Then hop with `Task { @MainActor in … }` for anything touching
+> main-actor state, extracting `Sendable` values *before* the hop as in §4.
+
+```swift
+// @Sendable is load-bearing, not decoration.
+session?.sendMessage(payload, replyHandler: nil) { @Sendable [weak self] error in
+    WatchSyncDiagnostics.notice("… \(error.localizedDescription)")   // extract BEFORE the hop
+    Task { @MainActor in
+        self?.workoutQueueDrainRequester.messageSendFailed()
+    }
+}
+```
+
+`@Sendable` is not merely a capture-checking attribute: SE-0461's second rule makes a
+`@Sendable` closure **inferred `nonisolated`**, so no isolation is inferred, no
+`assumeIsolated` wrapper is emitted, and no check exists to fail. ([SE-0434] is
+one-directional — isolation implies `@Sendable`, not the reverse — so writing it
+explicitly does not pull isolation back in.)
+
+The three fixed sites (2026-08-23): `WatchConnectivityManager.sendAck` and
+`.sendWorkoutQueueDrainMessage` (iOS), `.sendWorkoutMessage` (watch). `sendMessage` is
+the only WCSession API the app calls that takes a block at all — `transferUserInfo`,
+`transferFile`, `updateApplicationContext` and `activate` are block-free, so the
+framework surface is fully covered.
+
+### Three traps around the fix
+
+**⚠️ `@Sendable` is NOT sufficient if the closure is `async`.** With
+`SWIFT_APPROACHABLE_CONCURRENCY` on (§1), a `@Sendable` *async* closure becomes
+`nonisolated(nonsending)` and inherits the **caller's** isolation at runtime — putting
+you straight back on WatchConnectivity's queue with main-actor expectations, or worse.
+All three handlers here are synchronous, which is why the fix holds. If one is ever
+made `async`, it needs `@concurrent` — the same SE-0461 trap as rule 1 in §1.
+
+**⚠️ `nonisolated` on a closure literal does not exist.** [SE-0449] allows
+`nonisolated` on declarations, extensions and types — not on closures. The "closure
+isolation control" pitch that would add it was never accepted and is not in Swift 6.2.
+`@Sendable` is the only spelling available.
+
+**⚠️ `@preconcurrency import WatchConnectivity` does NOT fix this.** It downgrades
+`Sendable`-conformance diagnostics; it does not change closure isolation inference. The
+SE-0423 check is inserted *because* the module is under-annotated, so the trap would
+survive the import while checking elsewhere got weaker. (Contrast §8, where the
+ActivityKit import addresses a real non-`Sendable` value crossing an `await`.) And
+**never** add `-disable-dynamic-actor-isolation`: it converts this crash into a silent
+main-actor data race.
+
+### Proving the fix — do not assume, check the mangling
+
+Unit tests cannot catch this: the handler is a failure-only path, and the check is
+fatal only when it actually runs. Two cheap ways to *verify* an isolation fix:
+
+**1. Look for `Yb` in the emitted symbol.** `Yb` is Swift's mangling for `@Sendable`.
+A closure without it inherited the enclosing isolation and carries the precondition:
+
+```bash
+nm "$(...)/GymStreak.app/GymStreak.debug.dylib" | grep sendWorkoutQueueDrainMessage
+# ...ys5Error_pYbcfU_   ✅ @Sendable — no check emitted
+# ...ys5Error_pcfU_     ❌ isolated  — will trap off-main
+```
+
+**2. A/B the two shapes at `-O`** and diff the emitted calls. This is how the fix was
+confirmed on 2026-08-23 — same file, both shapes, real `WCSession`:
+
+```bash
+xcrun -sdk iphonesimulator swiftc -swift-version 6 -O \
+  -target arm64-apple-ios26.1-simulator -emit-assembly repro.swift -o repro.s
+grep -E "isCurrentExecutor|checkIsolated|reportUnexpectedExecutor" repro.s
+```
+
+The un-annotated closure emits `swift_task_isCurrentExecutor` +
+`swift_task_reportUnexpectedExecutor`; the `@Sendable` one emits neither. **Both
+compile with zero warnings**, which is the whole point.
+
+⚠️ **Two traps when doing this.** Use a **real imported ObjC API** — a hand-written
+Swift stub with a non-`Sendable` closure parameter does *not* reproduce it, because
+SE-0423's check only appears at the boundary with non-strict-concurrency code. And do
+not test on a **Debug** build: Xcode enables `-enable-actor-data-race-checks` there,
+which puts `reportUnexpectedExecutor` at the head of *every* main-actor function and
+drowns the signal.
+
+### How to prevent a recurrence
+
+The attribute is invisible and easy to drop. Two stronger options, neither adopted yet —
+weigh them if a fourth call site ever appears. **The full decision, the rejected
+alternatives (including restructuring the adapter) and the triggers to reopen it are
+recorded in [ADR 0002](adr/0002-guard-watchconnectivity-outbound-closures-with-rules.md).**
+
+1. **A typed seam**, which makes the compiler reject a main-actor literal at every call
+   site instead of relying on the attribute being remembered:
+   ```swift
+   nonisolated extension WCSession {
+       func sendMessage(_ message: [String: Any], onError: @escaping @Sendable (any Error) -> Void)
+   }
+   ```
+2. **Pass a `nonisolated static func` reference** instead of a literal — its function
+   type is non-isolated by declaration, so it cannot silently regress, and the body
+   becomes directly testable by calling it from `Task.detached { }`.
+
+Verified against the iOS 26 SDK headers on 2026-08-23. Sibling frameworks are **not**
+affected: HealthKit annotates its handlers `NS_SWIFT_SENDABLE`
+(`HKObserverQuery.h:32`, `HKSampleQuery.h:57`) — which is exactly why
+`HealthKitWorkoutObserver` needed its `CompletionBox` — and so does `NSTimer.h:38`.
+WatchConnectivity is the outlier.
+
+[SE-0306]: https://github.com/swiftlang/swift-evolution/blob/main/proposals/0306-actors.md
+[SE-0423]: https://github.com/swiftlang/swift-evolution/blob/main/proposals/0423-dynamic-actor-isolation.md
+[SE-0424]: https://github.com/swiftlang/swift-evolution/blob/main/proposals/0424-custom-isolation-checking-for-serialexecutor.md
+[SE-0434]: https://github.com/swiftlang/swift-evolution/blob/main/proposals/0434-global-actor-isolated-types-usability.md
+[SE-0449]: https://github.com/swiftlang/swift-evolution/blob/main/proposals/0449-nonisolated-for-global-actor-cutoff.md
+[SE-0461]: https://github.com/swiftlang/swift-evolution/blob/main/proposals/0461-async-function-isolation.md
 
 ---
 
@@ -604,29 +786,36 @@ Recorded so nobody re-derives a confident answer from nothing (researched 2026-0
 4. **New Apple delegate conformance**: `@MainActor` class, each delegate method
    `nonisolated`, hop with `Task { @MainActor in … }`, and **extract `Sendable` values
    before the hop**. Never capture the framework object itself.
-5. **Reaching for an escape hatch?** Rank: `nonisolated` (checked — always prefer) →
+5. **Handing a closure literal to an Apple API whose block is not `NS_SWIFT_SENDABLE`?**
+   Mark it `@Sendable` (§4a). Inside a `@MainActor` type it is otherwise inferred
+   main-actor-isolated, compiles clean, and **traps at runtime** when the framework
+   calls it off-main. Check the header before assuming; WatchConnectivity annotates
+   nothing, HealthKit and Foundation annotate properly.
+6. **Reaching for an escape hatch?** Rank: `nonisolated` (checked — always prefer) →
    `Sendable` boundary projection → `@preconcurrency import` (Apple's gap) →
    `@unchecked Sendable` box (only with a written invariant) → `nonisolated(unsafe)`
    (avoid). The first two are not escape hatches at all; the last two must be
    justified in a comment.
-6. **An `async` boundary that must do its work off the caller's actor needs
+7. **An `async` boundary that must do its work off the caller's actor needs
    `@concurrent` on the concrete method** — `nonisolated async` alone does not
    guarantee it under SE-0461 (§1). Run
    `largeSnapshotBuildKeepsMainActorResponsive` after touching such a boundary, and
    add a case to `SwiftDataHistorySnapshotStoreTests` for each **new** boundary rather
    than writing a one-off test elsewhere.
-7. **A new method on `SwiftDataHistorySnapshotStore` must contain no internal `await`**
+8. **A new method on `SwiftDataHistorySnapshotStore` must contain no internal `await`**
    (§1). The shared-actor safety argument rests entirely on that.
-8. **Moving a read that takes a caller-supplied `@Model` off the main actor?** Do not
+9. **Moving a read that takes a caller-supplied `@Model` off the main actor?** Do not
    pass its id and re-fetch unless the object is provably saved (§1). Send `Sendable`
    values and keep the bounded live-object read on the caller — a re-fetch miss is
    silent, not an error.
-9. **Do not** "normalize" the build settings table in §1 — each deviation is measured.
+10. **Do not** "normalize" the build settings table in §1 — each deviation is measured.
 
 ## Sources
 
 - SE-0411 isolated default value expressions · SE-0412 strict concurrency for global
-  variables · SE-0431 task enqueue ordering · SE-0449 `nonisolated` on type
+  variables · SE-0423 dynamic actor isolation enforcement (§4a) · SE-0424 custom
+  isolation checking for `SerialExecutor` (§4a) · SE-0431 task enqueue ordering ·
+  SE-0434 usability of global-actor-isolated types · SE-0449 `nonisolated` on type
   declarations · SE-0461 `nonisolated(nonsending)` by default / `@concurrent` ·
   SE-0466 control default actor isolation · SE-0470 global-actor isolated conformances
   · SE-0371 isolated synchronous deinit
@@ -634,4 +823,4 @@ Recorded so nobody re-derives a confident answer from nothing (researched 2026-0
 - `os.Logger` is `Sendable` (Apple DTS, forums thread 747816); `FileManager.default`
   is documented thread-safe for the non-delegate operations used here.
 - Related in-repo docs: `docs/history-performance.md`, `docs/architecture.md`,
-  `docs/watch-sync.md`, `docs/ai-coach.md`.
+  `docs/watch-sync.md`, `docs/ai-coach.md`, `docs/crash-report-retrieval.md`.

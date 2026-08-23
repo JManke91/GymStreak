@@ -1,0 +1,1 @@
+- Absturz behoben, der die App wenige Sekunden nach dem Öffnen beenden konnte, während sie deine Apple Watch kontaktiert hat.

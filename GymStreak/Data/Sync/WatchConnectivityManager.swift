@@ -101,7 +101,13 @@ final class WatchConnectivityManager: NSObject, ObservableObject, WatchSyncServi
             return
         }
         if session.isReachable {
-            session.sendMessage(payload, replyHandler: nil) { error in
+            // `@Sendable` is load-bearing, not decoration. WCSession's
+            // `errorHandler` block is imported without `NS_SWIFT_SENDABLE`, so a
+            // closure literal formed in this `@MainActor` type would inherit
+            // main-actor isolation and trap (EXC_BREAKPOINT) the moment
+            // WatchConnectivity invokes it on its own operation queue. See
+            // docs/swift6-concurrency.md §4a.
+            session.sendMessage(payload, replyHandler: nil) { @Sendable error in
                 WatchSyncDiagnostics.notice("phone: ack sendMessage failed — \(error.localizedDescription) (transferUserInfo will still deliver)")
             }
         }
@@ -213,7 +219,10 @@ extension WatchConnectivityManager: WatchWorkoutQueueDrainRequestTransporting {
     }
 
     func sendWorkoutQueueDrainMessage(_ payload: [String: Any]) {
-        session?.sendMessage(payload, replyHandler: nil) { [weak self] error in
+        // `@Sendable` for the same reason as `sendAck` above: without it the
+        // closure inherits `@MainActor` and traps before the hop below can run.
+        // See docs/swift6-concurrency.md §4a.
+        session?.sendMessage(payload, replyHandler: nil) { @Sendable [weak self] error in
             WatchSyncDiagnostics.notice("phone: workout queue-drain fast path failed — \(error.localizedDescription)")
             Task { @MainActor in
                 self?.workoutQueueDrainRequester.messageSendFailed()

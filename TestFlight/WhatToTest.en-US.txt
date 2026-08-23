@@ -1,0 +1,1 @@
+- Fixed a crash that could close the app a few seconds after opening it while it was contacting your Apple Watch.

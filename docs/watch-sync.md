@@ -231,6 +231,24 @@ The activation callback's **load-bearing ordering** (challenge update before inb
 drain) is unchanged — extraction happens before the `Task`, the use order inside it is
 identical. Full rationale: `docs/swift6-concurrency.md` §4.
 
+### ⚠️ Outbound: every `sendMessage` handler must be `@Sendable`
+
+The delegate direction above is only half the boundary. `WCSession.h` carries **no**
+`NS_SWIFT_SENDABLE` anywhere, so a `sendMessage` `errorHandler` literal written inside
+either `@MainActor` manager is inferred main-actor-isolated, compiles with zero
+warnings, and **traps (`EXC_BREAKPOINT`) when WatchConnectivity invokes it on its own
+operation queue**. This shipped: TestFlight **1.1.10 (1001)** crashed a few seconds
+after every launch, on the queue-drain fast path fired by `scenePhase == .active`.
+
+Fixed 2026-08-23 by marking all three handlers `@Sendable` — `sendAck` and
+`sendWorkoutQueueDrainMessage` (iOS), `sendWorkoutMessage` (watch). `sendMessage` is the
+only WCSession API this app calls that takes a block, so that is the whole surface.
+Keep `error.localizedDescription` interpolated **before** the `Task { @MainActor in }`
+hop: `any Error` is not `Sendable`. Full analysis, including why
+`@preconcurrency import` does not help: `docs/swift6-concurrency.md` §4a. Why the
+adapter was **not** restructured in response, and what would reopen that:
+[ADR 0002](adr/0002-guard-watchconnectivity-outbound-closures-with-rules.md).
+
 ---
 
 ## Background lifecycle

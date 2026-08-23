@@ -393,7 +393,12 @@ extension WatchConnectivityManager: WatchWorkoutTransporting {
     }
 
     func sendWorkoutMessage(_ payload: [String: Any]) {
-        session?.sendMessage(payload, replyHandler: nil) { error in
+        // `@Sendable` is load-bearing: WCSession's `errorHandler` block is
+        // imported without `NS_SWIFT_SENDABLE`, so a closure formed here would
+        // inherit main-actor isolation (this module defaults to `MainActor`)
+        // and trap when WatchConnectivity invokes it on its own operation
+        // queue. See docs/swift6-concurrency.md §4a.
+        session?.sendMessage(payload, replyHandler: nil) { @Sendable error in
             WatchSyncDiagnostics.notice("transport: sendMessage fast path failed — \(error.localizedDescription) (transferUserInfo will still deliver)")
         }
     }

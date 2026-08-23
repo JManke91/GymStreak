@@ -482,7 +482,9 @@ These are judgements that the current design is **right**, not omissions:
   `WatchWorkoutRecoveryCoordinator`, both `WatchConnectivityManager`s.** All genuine
   process-wide identity: `AppIntent.perform()` and `WKApplicationDelegate` callbacks
   execute outside the SwiftUI environment, and WCSession delegate identity must be the
-  launch-time instance. **Hold.**
+  launch-time instance. **Hold.** (Re-examined 2026-08-23 after a shipped isolation
+  crash and held again, with reopen triggers recorded in
+  [ADR 0002](adr/0002-guard-watchconnectivity-outbound-closures-with-rules.md).)
 - **No-DTO and no-UseCase decisions.** Hold, except one narrow revisit: the
   routine-template-sync block has grown past "ViewModel → repository call" into real
   multi-step orchestration → P1.5.

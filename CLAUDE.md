@@ -229,12 +229,22 @@ concurrency build setting.** Binding rules:
    non-`Sendable` type will not compile.
 3. **`Domain/` stays isolation-agnostic.** Never add `@MainActor` to `Domain/Services/`
    pure logic — the `@ModelActor` History store calls it from its own executor.
-4. **Apple delegate conformances**: `@MainActor` class, each delegate method
-   `nonisolated`, hop with `Task { @MainActor in … }` (never `DispatchQueue.main.async`
-   — SE-0431 ordering is relied on by watch sync; never `MainActor.assumeIsolated` for
-   callbacks that are genuinely off-main). **Extract `Sendable` values before the hop**
-   — never let `WCSession`, `WCSessionFile`, an `NSPersistentCloudKitContainer.Event` or
-   a `[String: Any]` payload cross it.
+4. **Apple callback boundaries — both directions.**
+   *Inbound (delegates):* `@MainActor` class, each delegate method `nonisolated`, hop
+   with `Task { @MainActor in … }` (never `DispatchQueue.main.async` — SE-0431 ordering
+   is relied on by watch sync; never `MainActor.assumeIsolated` for callbacks that are
+   genuinely off-main). **Extract `Sendable` values before the hop** — never let
+   `WCSession`, `WCSessionFile`, an `NSPersistentCloudKitContainer.Event` or a
+   `[String: Any]` payload cross it.
+   *Outbound (completion handlers):* **any closure literal handed to an Apple API whose
+   block is not `NS_SWIFT_SENDABLE` must be marked `@Sendable`.** Inside a `@MainActor`
+   type it is otherwise inferred main-actor-isolated (SE-0461), the compiler silently
+   inserts a fatal executor precondition instead of a diagnostic (SE-0423), and the app
+   **traps at runtime** the first time the framework invokes it off-main. This is not
+   theoretical: it crashed TestFlight 1.1.10 on every launch. A green Swift 6 build
+   proves nothing here — grep the SDK header for `NS_SWIFT_SENDABLE` before assuming.
+   WatchConnectivity annotates *nothing*; HealthKit and Foundation annotate properly.
+   `@preconcurrency import` does **not** fix it. See `docs/swift6-concurrency.md` §4a.
 5. **Escape-hatch ranking** — prefer left, justify right in a comment:
    `nonisolated` (checked; the compiler still rejects mutable/non-`Sendable` state
    inside) → `Sendable` boundary projection → `@preconcurrency import` (Apple's
