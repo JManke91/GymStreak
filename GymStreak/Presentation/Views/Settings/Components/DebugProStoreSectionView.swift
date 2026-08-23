@@ -100,7 +100,7 @@ struct DebugProStoreSectionView: View {
     private func restore() {
         isBusy = true
         Task {
-            await entitlements.restorePurchases()
+            _ = await entitlements.restorePurchases()
             isBusy = false
         }
     }

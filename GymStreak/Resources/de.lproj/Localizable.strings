@@ -55,6 +55,18 @@
 "settings.subscription.lifetime.footer" = "Ein einmaliger Kauf. Nichts verlängert sich und nichts läuft ab.";
 "settings.subscription.free.title" = "Kostenlos";
 "settings.subscription.free.detail" = "Der komplette Workout-Tracker";
+"settings.subscription.upgrade.title" = "Gym Streak Pro holen";
+"settings.subscription.upgrade.subtitle" = "Tarife und Preise ansehen";
+"settings.subscription.restore.title" = "Käufe wiederherstellen";
+"settings.subscription.restore.subtitle" = "Schon abonniert? Pro auf diesem Gerät zurückholen";
+"settings.subscription.restore.subtitle.running" = "Dein Apple Account wird geprüft…";
+"settings.subscription.restore.restored.title" = "Pro wiederhergestellt";
+"settings.subscription.restore.restored.message" = "Dein Abo ist auf diesem Gerät wieder aktiv.";
+"settings.subscription.restore.none.title" = "Nichts wiederherzustellen";
+"settings.subscription.restore.none.message" = "Wir haben auf diesem Apple Account keinen Gym Streak Pro Kauf gefunden. Falls du mit einem anderen Apple Account abonniert hast, melde dich damit an und versuche es erneut.";
+"settings.subscription.restore.failed.title" = "Wiederherstellung nicht abgeschlossen";
+"settings.subscription.restore.failed.message" = "Wir konnten den App Store nicht erreichen. Prüfe deine Verbindung und versuche es erneut — an deinem Abo hat sich nichts geändert.";
+"common.ok" = "OK";
 "settings.subscription.manage.title" = "Abo verwalten";
 "settings.subscription.manage.subtitle" = "Wiederherstellen, ändern, kündigen oder Erstattung anfragen";
 "settings.subscription.free.footer" = "Tracke unbegrenzt viele Workouts kostenlos. Gym Streak Pro ergänzt unbegrenzte Routinen und die vollständige Fortschrittsanalyse.";
@@ -1108,6 +1120,7 @@
 "paywall.headline.period_recap" = "Unbegrenzte Rückblicke";
 "paywall.headline.exercise_deep_dive" = "Unbegrenzte Übungs-Analysen";
 "paywall.headline.weekday_schedule" = "Wochentag-Zeitpläne";
+"paywall.headline.settings_upgrade" = "Gym Streak Pro";
 // Shown when no offering could be resolved (offline, or the placement is not
 // configured in the dashboard). It never unlocks the gated capability.
 "paywall.unavailable.body" = "Das Angebot konnte nicht geladen werden. Prüfe deine Verbindung und versuche es erneut.";

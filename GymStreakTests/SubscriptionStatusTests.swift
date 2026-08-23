@@ -98,16 +98,16 @@ struct SubscriptionStatusTests {
         #expect(footers.count == ProEntitlementState.allCases.count)
     }
 
-    // MARK: - The Customer Center affordance
+    // MARK: - What each tier is offered
 
-    /// Guideline 3.1.1 requires restore to be reachable, and a user who
-    /// reinstalled reads as free until it succeeds — so the row cannot be
-    /// conditioned on the app already believing they paid.
-    @Test("Everyone but a Founder is offered the Customer Center")
-    func customerCenterIsOfferedToEveryoneButFounders() {
+    /// The Customer Center is for people with something to manage. Offering it
+    /// to a free user is what produced the "No subscriptions found" screen App
+    /// Review screenshotted (appstore-rejection-1.1.9.md §3.7).
+    @Test("Only entitled, non-Founder plans are offered the Customer Center")
+    func customerCenterIsOfferedToPayingPlansOnly() {
         for state in ProEntitlementState.allCases {
             let summary = SubscriptionStatusSummary(state: state, isGatingEnabled: true)
-            #expect(summary?.showsCustomerCenter == (state != .founder))
+            #expect(summary?.showsCustomerCenter == (state == .subscription || state == .lifetime))
         }
     }
 
@@ -118,6 +118,54 @@ struct SubscriptionStatusTests {
     func founderIsOfferedNoCustomerCenter() {
         let summary = SubscriptionStatusSummary(state: .founder, isGatingEnabled: true)
         #expect(summary?.showsCustomerCenter == false)
+    }
+
+    /// The two rejection fixes: a free user must be able to buy, and — Guideline
+    /// 3.1.1 — to restore, without the app first believing they paid.
+    @Test("Only a free user is offered the upgrade and restore rows")
+    func freeTierIsOfferedUpgradeAndRestore() {
+        for state in ProEntitlementState.allCases {
+            let summary = SubscriptionStatusSummary(state: state, isGatingEnabled: true)
+            #expect(summary?.showsUpgradeAction == (state == .free))
+            #expect(summary?.showsRestoreAction == (state == .free))
+        }
+    }
+
+    /// Every tier must offer *something*, or Settings has another dead end.
+    @Test("No tier is left with a status row and nothing to do")
+    func everyTierHasAnActionExceptFounder() {
+        for state in ProEntitlementState.allCases where state != .founder {
+            let summary = SubscriptionStatusSummary(state: state, isGatingEnabled: true)
+            let hasAction = (summary?.showsUpgradeAction ?? false)
+                || (summary?.showsRestoreAction ?? false)
+                || (summary?.showsCustomerCenter ?? false)
+            #expect(hasAction, "\(state) has no action in the subscription section")
+        }
+    }
+
+    @Test("The free tier's upgrade and restore copy resolves in en and de")
+    func freeTierCopyResolves() throws {
+        for language in ["en", "de"] {
+            let bundle = try #require(
+                Bundle.main.path(forResource: language, ofType: "lproj").flatMap(Bundle.init(path:))
+            )
+            for key in [
+                "settings.subscription.upgrade.title",
+                "settings.subscription.upgrade.subtitle",
+                "settings.subscription.restore.title",
+                "settings.subscription.restore.subtitle",
+                "settings.subscription.restore.subtitle.running",
+                "settings.subscription.restore.restored.title",
+                "settings.subscription.restore.restored.message",
+                "settings.subscription.restore.none.title",
+                "settings.subscription.restore.none.message",
+                "settings.subscription.restore.failed.title",
+                "settings.subscription.restore.failed.message",
+                "common.ok",
+            ] {
+                #expect(bundle.localizedString(forKey: key, value: nil, table: nil) != key)
+            }
+        }
     }
 
     @Test("The Customer Center row's copy resolves in en and de")

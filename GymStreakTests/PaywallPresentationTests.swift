@@ -305,6 +305,7 @@ private final class StubEntitlements: ProEntitlementProviding {
     var isPro: Bool { state.isPro }
 
     func refresh() async {}
+    func restorePurchases() async -> ProRestoreOutcome { .nothingFound }
 }
 
 @MainActor

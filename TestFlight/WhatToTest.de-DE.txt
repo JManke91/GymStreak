@@ -1,0 +1,2 @@
+- In den Einstellungen gibt es jetzt einen direkten Eintrag "Gym Streak Pro holen", der die Abo-Seite öffnet — bisher kam man nur über eine gesperrte Funktion dorthin.
+- Ebenfalls neu in den Einstellungen: "Käufe wiederherstellen" für alle ohne aktives Abo. Es sagt dir, ob ein Kauf gefunden wurde, statt dich auf einen Bildschirm mit "Keine Abos gefunden" zu schicken.

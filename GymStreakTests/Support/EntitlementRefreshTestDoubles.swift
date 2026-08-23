@@ -32,6 +32,7 @@ final class ObservableStubEntitlements: ProEntitlementProviding {
     var isPro: Bool { state.isPro }
 
     func refresh() async {}
+    func restorePurchases() async -> ProRestoreOutcome { .nothingFound }
 }
 
 /// Returns nothing at all. These tests never load a chart — they only assert

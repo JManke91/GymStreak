@@ -181,9 +181,24 @@ struct ProEntitlementTests {
         await waitUntil(provider.resolvedState == .lifetime)
 
         purchases.isUnreachable = true
-        await provider.restorePurchases()
+        let outcome = await provider.restorePurchases()
 
         #expect(provider.resolvedState == .lifetime)
+        // `.failed`, never `.nothingFound`: telling someone who paid that they
+        // own nothing is the worst thing a restore can say (ProRestoreOutcome).
+        #expect(outcome == .failed)
+    }
+
+    @Test("A restore that ran and found nothing says so, and is not an error")
+    func emptyRestoreReportsNothingFound() async {
+        let purchases = StubPurchaseGateway()
+        purchases.restored = .none
+        let provider = makeProvider(purchases: purchases)
+
+        let outcome = await provider.restorePurchases()
+
+        #expect(outcome == .nothingFound)
+        #expect(provider.resolvedState == .free)
     }
 
     @Test("An entitlement change propagates live, without a refresh or a restart")
@@ -242,9 +257,10 @@ struct ProEntitlementTests {
         purchases.restored = .subscription
         let provider = makeProvider(purchases: purchases)
 
-        await provider.restorePurchases()
+        let outcome = await provider.restorePurchases()
 
         #expect(provider.resolvedState == .subscription)
+        #expect(outcome == .restored)
     }
 
     // MARK: - Debug override

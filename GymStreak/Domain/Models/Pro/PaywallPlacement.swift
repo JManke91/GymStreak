@@ -24,6 +24,10 @@ import Foundation
 /// it is P9 in §5's gate matrix, a shipped contextual gate, and it behaves as a
 /// C placement in every respect.
 ///
+/// `settingsUpgrade` is the one case §8's table does not describe at all: it is
+/// not a gate and not a nudge, but the deliberate purchase entry point Settings
+/// was missing. See `appstore-rejection-1.1.9.md` §3.9.
+///
 /// Two §8 entries deliberately have no case:
 /// - **Placement D (cap-approach nudge)** is not a paywall. It is an inline,
 ///   non-blocking hint owned by the screen that shows it.
@@ -50,6 +54,20 @@ enum PaywallPlacement: String, CaseIterable, Identifiable, Sendable {
     case exerciseDeepDive = "exercise-deep-dive"
     case weekdaySchedule = "weekday-schedule"
 
+    // MARK: Not a gate — the one place the user asks for the paywall
+
+    /// Settings → Subscription → "Get Gym Streak Pro".
+    ///
+    /// The only placement no gate raises: the user went looking for the purchase
+    /// screen and tapped it. It exists because App Review twice failed to find
+    /// any way to buy (`appstore-rejection-1.1.9.md` §3.9) — every other
+    /// placement needs data a fresh install does not have, so Settings was a
+    /// dead end ending in the Customer Center's "No subscriptions found".
+    ///
+    /// Classed as a `contextualGate` so it is never one-shot: a user who
+    /// dismisses the paywall and comes back must find it again.
+    case settingsUpgrade = "settings-upgrade"
+
     var id: String { rawValue }
 
     /// The RevenueCat Placement identifier. Spelled as its own property so a
@@ -73,7 +91,8 @@ enum PaywallPlacement: String, CaseIterable, Identifiable, Sendable {
         case .firstRoutineCreated: .soft
         case .valueMoment: .valueMoment
         case .routineCap, .chartMetric, .chartWindow, .coachChat,
-             .periodRecap, .exerciseDeepDive, .weekdaySchedule: .contextualGate
+             .periodRecap, .exerciseDeepDive, .weekdaySchedule,
+             .settingsUpgrade: .contextualGate
         }
     }
 
@@ -99,6 +118,7 @@ enum PaywallPlacement: String, CaseIterable, Identifiable, Sendable {
         case .periodRecap: "paywall.headline.period_recap"
         case .exerciseDeepDive: "paywall.headline.exercise_deep_dive"
         case .weekdaySchedule: "paywall.headline.weekday_schedule"
+        case .settingsUpgrade: "paywall.headline.settings_upgrade"
         }
     }
 }

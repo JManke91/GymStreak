@@ -30,6 +30,19 @@ protocol ProEntitlementProviding: AnyObject {
 
     /// Re-resolves the entitlement from its underlying sources.
     func refresh() async
+
+    /// Re-syncs purchases made on another device or before a reinstall, and
+    /// reports what happened so the caller can say so.
+    ///
+    /// **On the shipping protocol, not the debug one.** Guideline 3.1.1 requires
+    /// a restore path that does not depend on the app already believing the user
+    /// paid, and until 1.1.10 the app's only one was RevenueCat's Customer
+    /// Center — which greets a free user with "No subscriptions found". App
+    /// Review screenshotted exactly that screen while rejecting the app for
+    /// having no working purchase (`appstore-rejection-1.1.9.md` §3.7).
+    ///
+    /// A restore that could not run never revokes: see `ProRestoreOutcome`.
+    func restorePurchases() async -> ProRestoreOutcome
 }
 
 #if DEBUG
@@ -73,7 +86,5 @@ protocol ProEntitlementDebugging: ProEntitlementProviding {
     func availableProducts() async -> [ProPurchaseOption]
 
     func purchase(_ option: ProPurchaseOption) async -> ProPurchaseResult
-
-    func restorePurchases() async
 }
 #endif

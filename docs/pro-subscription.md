@@ -1622,12 +1622,58 @@ One section at the top of the Settings tab that answers a single question: *what
 where did it come from?* `SubscriptionSettingsSectionView` renders it,
 `SubscriptionStatusSummary` decides what it says.
 
-**Status, plus one row.** Restore, manage-subscription, cancellation surveys and refund requests are
-not hand-built here — `CustomerCenterSettingsRow` opens `RevenueCatUI`'s `CustomerCenterView`, which
-handles all four (§5j). There is still **no purchase affordance anywhere on this screen, for
-anyone** — which is how the acceptance criterion "a Founder is offered no purchase" is met: not by a
-special case for Founders, but because the section sells nothing to anybody. The paywall is reached
-from a gate, never from Settings.
+**Three shapes, one per tier.**
+
+| Plan | Rows below the status row |
+|---|---|
+| `.subscription` / `.lifetime` | **Manage subscription** → `CustomerCenterView` (manage, change plan, cancel with its survey, request a refund) |
+| `.free` | **Get Gym Streak Pro** → the paywall · **Restore purchases** → `restorePurchases()` |
+| `.founder` | none — the grant is local and permanent, so there is nothing to buy, restore or manage |
+
+**The Customer Center is no longer offered to free users, and that is a correction.** It used to go
+to everyone but a Founder, on the reasoning that Guideline 3.1.1 needs a restore path that does not
+depend on the app already believing the user paid. The reasoning was right and still is; the surface
+was wrong. Offered to someone who has never bought anything, `CustomerCenterView` opens on
+**"No subscriptions found"** — and that is the screen App Review screenshotted while rejecting the
+app for having no working purchase (`appstore-rejection-1.1.9.md` §3.7).
+
+**The upgrade row is a reversal.** Through 1.1.10 this section sold nothing to anyone, deliberately:
+the paywall was reached from a gate, never from Settings. **App Review rejected the app twice for
+it.** Every gate needs data a fresh install does not have — three routines for `routineCap`, chart
+history for `chartMetric`/`chartWindow`, an exhausted allowance for the AI placements — so a reviewer
+who opened the section headed *Subscription* found exactly one action and it was a dead end. Full
+account in `appstore-rejection-1.1.9.md` §3.7 and §3.9.
+
+`showsUpgradeAction` is `true` for `.free` only, so the acceptance criterion "a Founder is offered no
+purchase" still holds — and now holds for the three entitled plans generally, rather than by the
+section selling to nobody. The row calls `paywalls.present(.settingsUpgrade)`, the same seam every
+gate uses, so the kill switch, Rule 3 (no paywall during an active workout) and the entitlement check
+all still apply: a Settings row is not a way around `PaywallPresenter`.
+
+`monetization-strategy.md` §8's rule survives intact: it forbids the app *interrupting* to sell, and
+a row the user has to go looking for does not interrupt anything.
+
+**Restore is now the app's own row, and it reports three outcomes.**
+`RestorePurchasesSettingsRow` calls `ProEntitlementProviding.restorePurchases()`, which was promoted
+from the DEBUG-only protocol to the shipping one. It reaches
+`RevenueCatPurchaseGateway.restorePurchases()` → `Purchases.shared.restorePurchases()`, composes the
+answer through the same provider every gate reads, and returns `ProRestoreOutcome`:
+
+| Outcome | When | What the alert says |
+|---|---|---|
+| `.restored` | the call succeeded and the account holds Pro | "Pro restored" — the gates are already open behind the alert |
+| `.nothingFound` | the call succeeded and the account holds nothing | "Nothing to restore", with the hint to try another Apple Account |
+| `.failed` | the call **threw** — offline, or the backend refused | "Restore didn't finish… nothing about your subscription has changed" |
+
+**The third case is why the type exists.** "Found nothing" and "could not ask" are the same silence
+to the entitlement layer — both leave the state untouched — but they are opposite messages to a
+person, and telling someone who paid that they never did is the worst thing a restore can produce.
+It is the same distinction §3d drew between `.none` and a thrown read, surfaced one layer up because
+here it is user-facing. `unreachableRestoreDoesNotRevoke` pins that a failed restore returns
+`.failed` and revokes nothing; `emptyRestoreReportsNothingFound` pins the other side.
+
+`isPro` is read **after** `recompose()`, so a Founder grant already on record counts as restored —
+the honest answer to "do I have Pro on this device".
 
 **The kill switch hides the section entirely** rather than softening its copy. While
 `ProGating.isEnabled` is off the app has no paid tier, and a Settings section announcing "Free" — or
@@ -1651,12 +1697,72 @@ one thing views may do with copy — look it up. The view reads `entitlements.st
 no relaunch; the read is free under the main-thread rules (no collection walk, no formatter, no
 SwiftData relationship).
 
-Strings: `settings.section.subscription` and `settings.subscription.<plan>.{title,detail,footer}`,
-en + de.
+Strings: `settings.section.subscription`, `settings.subscription.<plan>.{title,detail,footer}`,
+`settings.subscription.upgrade.{title,subtitle}`, `settings.subscription.restore.*` and `common.ok`,
+en + de. `freeTierCopyResolves` asserts every one of them resolves in both bundles.
 
 **A consequence worth knowing:** a Founder who somehow also held a subscription reads as `.founder`
 (§3b), so this section would show the grandfathered source rather than the paid one. Nothing in the
 app can produce that pairing — a Founder is never shown a paywall.
+
+## 5i-a. What the two products actually offer
+
+Verified in App Store Connect on 2026-08-23. Recorded here because the paywall's copy has to match it
+and twice has not — see `appstore-rejection-1.1.9.md` §3.10.
+
+| | Monatsabo `gymstreak.iap.pro.monthly.sub` | Jahresabo `gymstreak.iap.pro.yearly.sub` |
+|---|---|---|
+| Regular price (DE) | 4,99 €/Monat | 24,99 €/Jahr |
+| **Einführungsangebot** | 2,99 € für den ersten Monat | **Für die erste Woche kostenlos** |
+| Offer window | 14 Aug – 30 Sept 2026 | 23 Aug 2026 – no end date |
+| Aktionsangebot | none | `yearly_sub_seven_days_free` — first week free |
+
+**How the paywall states the offer.** Each package's text carries two variants. The `Default` variant
+is what an *ineligible* customer sees — `{{ product.price_per_period_abbreviated }}`, plus
+` ({{ product.price_per_month }}/Mon.)` on the annual. The `Introductory` variant is what an eligible
+one sees — `{{ product.offer_price }} für {{ product.offer_period_with_unit }}, dann
+{{ product.price_per_period_abbreviated }}`, which renders *"Gratis für 1 Woche, dann 24,99 €/J"* for
+the annual's trial and *"2,99 € für 1 Monat, dann 4,99 €/Mo"* for the monthly's paid offer. Because
+`offer_price` renders *gratis* for a trial and the price for a paid offer, one wording stays true
+through either kind of change.
+
+**The annual's badge deliberately says nothing about the offer.** It reads
+`SAVE`/`SPARE {{ product.relative_discount }}` (≈ 58%, comparing the two *regular* prices) on both the
+Default and Selected package states. It cannot say "FREE TRIAL": the offer-state override
+(`</> Introductory`) exists on **Text** components only, so a badge — a *property of the Package
+component* — is shown to everyone regardless of eligibility, and a lapsed subscriber who is no longer
+trial-eligible would be promised one. The trial is carried by the Introductory text alone, which falls
+back cleanly. See `appstore-rejection-1.1.9.md` §3.10 for the options that were weighed.
+
+**Introductory offers need no RevenueCat configuration.** The App Store applies them automatically to
+eligible customers and the SDK reads them off the StoreKit product; there is no dashboard field. The
+paywall reflects them through `{{ product.offer_price }}` and `{{ product.offer_period_with_unit }}`
+under the `Introductory` override.
+
+**Eligibility is per subscription group, not per product.** Both products sit in `gymstreak.pro.abos`,
+so a customer who takes the monthly's 2,99 € first month is thereafter ineligible for the annual's
+7-day trial, and vice versa. Testing the trial needs an Apple Account that has never subscribed to
+either — a Sandbox Apple Account on an **Xcode** build, since TestFlight forces the real account.
+
+**The Aktionsangebot remains dormant, and could never have served new users.** The 7-day promotional
+offer is an
+**Aktionsangebot** (*Promotional Offer*), which cannot serve as a new-user trial for two independent
+reasons: the Annual package's **Promotional Offer** field in the RevenueCat paywall editor is empty, so
+the SDK never requests it; and App Store promotional offers reach only customers with **prior purchase
+history** in the subscription group — existing and lapsed subscribers, never a first-time installer.
+It is unreachable configuration, and mistaking it for a live trial is what put a false free-trial claim
+on the paywall (`appstore-rejection-1.1.9.md` §3.10).
+
+**Only the introductory offer is worth naming on the acquisition paywall**, which is why the paywall's
+Introductory text uses `{{ product.offer_price }}` / `{{ product.offer_period_with_unit }}` — those
+resolve from the Einführungsangebot, and render *free/gratis* automatically if it ever becomes a trial.
+
+**The real trial was created as an Einführungsangebot on 2026-08-23**, replacing the yearly's
+19,99 €-first-year offer — a product can hold only one introductory offer at a time per territory and
+date range. A product edit like that can pull the subscription out of an open review, so the
+submission's status must be re-checked afterwards (`appstore-rejection-1.1.9.md` §6). The
+Aktionsangebot's remaining honest use is a **win-back** for lapsed subscribers, wired via the package's
+Promotional Offer field.
 
 ## 5j. The RevenueCat paywall and the Customer Center
 

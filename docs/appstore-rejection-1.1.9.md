@@ -1,14 +1,33 @@
-# App Store rejection — 1.1.9 (68), and the road back
+# App Store rejection — the monetization launch (1.1.9 → 1.1.10), and the road back
 
 **Living document.** It records why Apple rejected the monetization launch, everything the
 investigation has established or ruled out, what has already been fixed, and what is still open.
-Update it as things change; it is the file to re-read after a context reset.
+Update it as things change; it is the file to re-read after a context reset. The filename still says
+1.1.9 because that is the build that was first rejected; the file covers the whole episode.
 
-**Status: 2026-08-21 — not yet resubmitted.** Five faults are known. Four are fixed; the fifth (the
-subscriptions sitting outside review) is blocking. The purchase error is **narrowed but not solved**:
-the transaction never reached RevenueCat (§3.4), so the whole RevenueCat integration is exonerated
-and the failure lies in StoreKit or Apple's sandbox — where we have no further visibility until the
-reviewer answers or the new failure logging catches it. Do not resubmit until §7's checklist is clean.
+**Status: 2026-08-23 — second rejection *diagnosed*.** 1.1.10 (1002) came back with the same 2.1(b)
+purchase error. 3.1.2(c) was **not** re-cited, so §2's fixes landed.
+
+**The cause is now known, and it is ours.** Apple attached a screenshot this time (§3.7): it shows
+RevenueCat's **Customer Center** reading *"No subscriptions found"* — not the paywall, not an error
+alert, not a purchase sheet. The reviewer never reached a paywall, and RevenueCat confirms it from the
+other side: **no transaction was attempted in either review session** (§3.4, §3.4b). The paywall is
+only reachable behind gates that need data a fresh install does not have, and Settings — the one place
+headed *Subscription* — sells nothing (§3.9). Two rounds of 2.1(b) are fully explained by that.
+
+**§3.9's code fix is done** (2026-08-23): a free user's Settings now offers **Get Gym Streak Pro** and
+**Restore purchases**, and the Customer Center — the screen Apple screenshotted — is no longer shown to
+anyone who has never bought anything. It ships in the next build.
+
+A second, independent defect surfaced the same day: the paywall advertised a **free trial that did not
+exist for any new customer** (§3.10). Both introductory offers were *paid*; the only free trial was a
+Promotional Offer no user could reach. Resolved on two fronts the same day — the yearly's introductory
+offer is now a genuine **7-day free trial**, and the paywall's copy and badge were rewritten to state
+whatever the store actually offers.
+
+Seven faults are known and all seven are now addressed in substance. **What remains is mechanical:**
+press *Publish changes* on the RevenueCat paywall, ship a build carrying §3.9's Settings rows, and write
+the App Review notes.
 
 Durable engineering knowledge (why the code is shaped the way it is) lives in
 `docs/pro-subscription.md` §5k and §9.8. This file is the operational record: evidence, dead ends,
@@ -51,6 +70,37 @@ No error text, no screenshot, no reproduction steps were given.
 build on the store whose purchase flow errors, whose legal links are absent, and which (see §5) would
 have given every new user Pro for free.
 
+### 1b. The second rejection — 1.1.10 (1002), 2026-08-23
+
+| | |
+|---|---|
+| Submission ID | `5622461c-6906-418e-85ec-1a4b65a31281` |
+| Review date | 2026-08-23 |
+| Version reviewed | **1.1.10 (1002)** |
+| Review device | **iPad Air 11-inch (M3)**, iPadOS **26.6** |
+
+**Guideline 2.1(b) only.** 3.1.2(c) was *not* re-cited — §2's legal links satisfied it.
+
+> The In-App Purchase products in the app still exhibited one or more bugs which create a poor user
+> experience. Specifically, error occurred when we tried to buy the In App Purchase.
+
+Apple added the boilerplate about implementing StoreKit and confirming the Paid Applications
+Agreement (both long since verified, §3.1), plus one line that is *not* boilerplate:
+
+> Review the product configurations, complete any missing information, and test them in the sandbox.
+
+That points at App Store Connect product state — which is exactly what §6 was, and still was, at the
+time of this review.
+
+Two things are now confirmed by this round:
+
+- **The build-number fix held.** Apple named the build **1002**, not a low Xcode Cloud counter, so
+  Fault 3 (§4) is genuinely closed and `cutoffBuild` is safe.
+- **The device is not a coincidence.** Two reviews, two rejections, both on an iPad Air 11-inch (M3).
+  See §3.8.
+
+---
+
 ---
 
 ## 2. Fault 1 — no legal links anywhere · **FIXED**
@@ -76,9 +126,11 @@ why, and what changing that decision would cost.
 
 ---
 
-## 3. Fault 2 — the purchase error · **UNDIAGNOSED**
+## 3. Fault 2 — the "purchase error" · **DIAGNOSED 2026-08-23**
 
-The one Apple actually complained about, and the one still open.
+The one Apple complained about in both rounds. It is not a purchase that failed — it is a purchase
+that was never reachable. §3.7 is the evidence, §3.9 is the defect. Everything before those two
+sections is the investigation that got there, kept because its dead ends are worth not re-walking.
 
 ### 3.1 Ruled out
 
@@ -89,7 +141,7 @@ Each of these is a documented cause of this exact rejection elsewhere. None appl
 | Paid Applications Agreement | Active since 2026-01-09 | ✅ not it |
 | Tax forms | W-8BEN + U.S. Certificate of Foreign Status, both active since 2024-07-26 | ✅ not it |
 | Banking | Account active, DE, EUR | ✅ not it |
-| Product review state at review time | Both subscriptions were "In Prüfung", submitted with the binary | ✅ not it |
+| Product review state at review time (**1.1.9 only**) | Both subscriptions were "In Prüfung", submitted with the binary | ✅ not it for 1.1.9 — but see §6: for **1.1.10** they were developer-rejected, and that is the leading suspect |
 | Pricing coverage | All countries and regions, both products | ✅ not it |
 | Product localizations | de + en, group and both products | ✅ not it |
 | Subscription review screenshot | Attached | ✅ not it |
@@ -128,9 +180,10 @@ identifier the app compiles against. That link is correct.
 > `pro-subscription.md` §5j already flags that a contextual gate pointed at a sale offering shows
 > different prices than the same user sees elsewhere. Confirm that is intended.
 
-### 3.4 The reviewer's session — the purchase never reached RevenueCat
+### 3.4 The 2026-08-18 reviewer session — the purchase never reached RevenueCat
 
-**Established 2026-08-21, and it is the single most useful fact so far.**
+**Established 2026-08-21.** It was the single most useful fact until §3.7's screenshot arrived, and
+it still is until that screenshot is read. Whether it repeats for the 2026-08-23 session is open (§7a).
 
 The reviewer is `$RCAnonymousID:fad4b105e8f1438da24c05157db0c6cc` (`$RCA••••c6cc`):
 
@@ -181,6 +234,35 @@ every install a Founder, reviewer included? **No, and two independent guards eac
 reviewer reported. Fault 3 is a real and serious bug, but it could only ever have fired for
 **production** installs after approval. It is not the cause of the purchase error.
 
+### 3.4b The 2026-08-23 reviewer session — again, nothing reached RevenueCat
+
+`$RCAnonymousID:4aef15284bdb43a7ab34b49f1ca80308` (`$RCA••••0308`):
+
+| | |
+|---|---|
+| First seen / last opened | both **2026-08-23, 06:54 UTC** (screenshot at 09:02 local — same session) |
+| Last Seen App Version | **1.1.10** |
+| Last Seen Platform Version | **iOS 26.6 (Build 23G71)** — the iPad in compatibility mode |
+| Last Seen SDK | native **5.83.2** |
+| Last Seen Locale | **en-GB** |
+| Last Seen Storefront | **USA** |
+| Entitlements | none |
+| Current offering | `gymstreak_sale` — so offerings **did** resolve |
+| Customer history | *"First seen or purchased"* and *"Last opened the app"*. **Nothing else.** |
+| Sandbox-purchases banner | **absent** |
+
+The list view showed a 🇬🇧 flag for this record while the storefront is USA — the flag in the customer
+list is not the storefront, exactly as §3.4's trap says.
+
+**Product-side confirmation.** `GymStreak Pro – Jahresabo` → Recent Transactions with **Sandbox on**
+still shows only the five `Renewal` rows from `df06••••6585` on **2026-08-17**. Nothing on 18 August,
+nothing on 23 August.
+
+**Also cleared while there:** §3.3's "(Test Store)" ambiguity. The product page shows Associated
+Entitlements = **Gym Streak Pro**, Associated Offerings = **gymstreak_sale**, and a Subscription Group
+holding `gymstreak.iap.pro.yearly.sub` (current) and `gymstreak.iap.pro.monthly.sub`. These are real
+App Store products, correctly wired. Not a factor.
+
 ### 3.5 Why there was no evidence, and what now produces some
 
 `ProPaywallView` wired `onPurchaseCompleted`, `onRestoreCompleted` and `onRequestedDismissal` — but
@@ -192,23 +274,367 @@ the app logged nothing, so the rejection arrived undiagnosable.
 code, the underlying `SKError`, and the message — subsystem `app.gymstreak.pro`, category `Paywall`.
 Neither changes behaviour.
 
-### 3.6 Still open
+### 3.6 Superseded
 
-1. **RevenueCat In-App Purchase Key** — not yet confirmed present. Path: left sidebar (bottom)
-   **Apps** → click the app *name* **Gym Streak (App Store)** in the table → on the app's own
-   configuration page, the section/tab **"In-app purchase key configuration"** (it sits alongside
-   *App Store Connect API* and *App Store Server Notifications*; ⌘K → "in-app purchase key" also
-   finds it). Configured correctly it shows **"Valid credentials"** with every permission ticked.
-   RevenueCat's docs: on SDK 5.x with StoreKit 2, *"transactions will fail to be recorded without
-   this key being set."* The app configures `.with(storeKitVersion: .storeKit2)`.
-2. **Sandbox transactions for the annual product.** Product catalog → Products → *GymStreak Pro –
-   Jahresabo* → **Recent Transactions** → flip the **Sandbox** toggle on. The default view is
-   production-only, which is why it reads "No transactions yet". This is the fastest way to see
-   whether *any* sandbox purchase — the 2026-08-17 test or the reviewer's attempt — was ever recorded.
-3. **The reviewer's customer record** (§3.4).
-4. **Ask App Review for the error text.** Replying in App Store Connect and asking for a screenshot
-   would collapse this section to one line. Apple's sandbox being down that day (`STORE_PROBLEM`) is
-   a documented and entirely external possibility that no amount of configuration review can exclude.
+This section used to list what was still unknown. §3.7 answered all of it: the screenshot, the second
+reviewer session, and the TestFlight purchase (§7b) between them closed every open item. What remains
+is not diagnosis but repair — see §3.9, §3.10 and §7.
+
+### 3.7 The reviewer's screenshot — it is the **Customer Center**, not the paywall
+
+**Read 2026-08-23. This is the finding the whole investigation was missing.**
+
+The 1.1.10 rejection carried `Screenshot-0823-075757.png` (App Store Connect → submission page →
+Übermittelte Elemente → the `iOS-App 1.1.10` row → **Laden**). Taken at **09:02, Sun 23 Aug**, on an
+iPad, with the app in a portrait iPhone-compatibility window. It shows:
+
+> ✕ &nbsp;&nbsp; **No subscriptions found** — *We can check for previous purchases* — **[ Restore past purchases ]**
+
+That is **RevenueCat's Customer Center in its empty state**, presented by
+`CustomerCenterSettingsRow`. It is not `ProPaywallView`, not `PaywallView`, and not any error alert.
+There is no purchase sheet, no price, no package on that screen at all.
+
+**So Apple's evidence for "error occurred when we tried to buy" is a screenshot of a screen that
+cannot buy anything.** The reviewer went looking for the in-app purchase, landed in Settings →
+**Manage subscription** → "No subscriptions found", and reported that as the failure.
+
+Everything else lines up with that reading and with nothing else:
+
+- The 2026-08-23 customer record (§3.4b) has **no purchase event of any kind** — its entire history is
+  "First seen" and "Last opened", both 06:54 UTC. Nothing was ever attempted at the StoreKit layer.
+- No sandbox transaction exists on either product for 18 or 23 August (§3.4b).
+- Apple's added line, *"Review the product configurations, complete any missing information"*, is what
+  a reviewer writes when they could not find or reach a working purchase — not what they write about a
+  purchase that threw.
+
+**This reframes Fault 2 entirely.** For two rounds the working assumption was that a purchase was
+attempted and failed. The evidence now says **no purchase was ever attempted**, and the real defect is
+that the paywall is hard to reach on a fresh install (§3.9).
+
+### 3.8 Demoted: the device pattern (iPhone-only app on an iPad)
+
+`TARGETED_DEVICE_FAMILY = 1` for the iOS app target (`GymStreak.xcodeproj/project.pbxproj`), so on the
+reviewer's **iPad Air 11-inch (M3)** the app runs in **iPhone compatibility mode** — a scaled iPhone
+window, not a native iPad app. Both rejections came from that device; the one purchase that has ever
+succeeded (2026-08-17, five sandbox renewals on the annual) was a German **iPhone**.
+
+This is a live, unresolved pattern in Apple's own forums: [thread
+821419](https://developer.apple.com/forums/thread/821419) reports an IAP dialog that appears normally
+on a physical iPhone and fails to appear during App Review on an iPad Air 11-inch (M3) — rejected
+twice under 2.1(b), with no resolution from DTS beyond "review in the sandbox".
+
+**Demoted 2026-08-23, not refuted.** §3.7 explains both rejections without needing any iPad-specific
+mechanism, and §3.4b shows the reviewer never got as far as a purchase sheet on either occasion — so
+there is nothing for compatibility mode to have broken. Keep the theory on file: it stays untested
+until someone runs a sandbox purchase on an iPad, and if a *third* rejection arrives after §3.9 is
+fixed, this is where to look next.
+
+---
+
+### 3.9 Fault 6 — nothing leads a new user to the paywall · **CODE FIXED 2026-08-23**, ships in the next build
+
+This is the defect §3.7 points at, and it is entirely ours.
+
+**Settings sells nothing, by design.** `SubscriptionSettingsSectionView` says so in its own doc
+comment: *"The section still sells nothing; the paywall is the only surface that does, and it is
+reached from a gate, never from Settings."* A free user in Settings sees a status row reading *Free*
+and one action: **Manage subscription** → *"Restore, change, cancel or request a refund"* →
+`CustomerCenterView` → **"No subscriptions found"**. That is the screen Apple screenshotted.
+
+**Every purchase surface is behind a gate that needs data the reviewer does not have.**
+
+| Placement | What a fresh install must do first |
+|---|---|
+| `firstRoutineCreated` (§8 A, soft) | Create **1** routine — the only genuinely reachable one |
+| `routineCap` | Create **3** routines (`ProFeatureCaps.freeRoutineLimit = 3`), then tap ➕ a 4th time |
+| `chartMetric`, `chartWindow` | Log enough workouts for a chart to exist |
+| `coachChat`, `periodRecap`, `exerciseDeepDive` | Exhaust a monthly AI taster allowance |
+| `valueMoment` | Accumulate lifetime training totals |
+| `weekdaySchedule` | Reach the schedule editor |
+
+A reviewer with ten minutes, an unfamiliar fitness app, and an iPad does the obvious thing: opens
+Settings, finds the section literally headed *Subscription*, taps the only row in it, and is told
+**"No subscriptions found."** From there the app offers no route to a paywall at all.
+
+**Two rounds of 2.1(b) are fully explained by this** — and unlike §3.8's iPad theory or an Apple-side
+sandbox fault, it needs no unproven mechanism, it is consistent with the total absence of transactions
+in both sessions, and we can fix it ourselves.
+
+**The fix has two halves.**
+
+1. **Settings now carries both a purchase and a restore affordance** — done 2026-08-23, in code,
+   ships in the next build. A free user gets **"Get Gym Streak Pro"** (raises the paywall through the
+   new `PaywallPlacement.settingsUpgrade`, via `PaywallPresenter` like every gate, so the kill switch,
+   Rule 3 and the entitlement check all still apply) and **"Restore purchases"**
+   (`RestorePurchasesSettingsRow` → `Purchases.shared.restorePurchases()`, reporting restored /
+   nothing-found / failed as three distinct alerts).
+
+   **The Customer Center is no longer shown to free users at all**, which removes the exact screen
+   Apple screenshotted. It now goes only to `.subscription` and `.lifetime` — people with something
+   to manage. Guideline 3.1.1 is satisfied more directly than before, by a row that does one thing and
+   names it. See `pro-subscription.md` §5i.
+2. **App Review Information → Notes: the exact click path.** Still to do. Free, immediate, and it
+   should have been there for 1.1.9 — see §9.
+
+**What a free user's Settings looks like now**, and what each tier gets:
+
+| Plan | Rows below the status row |
+|---|---|
+| `.subscription` / `.lifetime` | Manage subscription → `CustomerCenterView` |
+| `.free` | **Get Gym Streak Pro** → paywall · **Restore purchases** → `restorePurchases()` |
+| `.founder` | none — a local, permanent grant has nothing to buy, restore or manage |
+
+**Shipped in this change:**
+
+| File | What |
+|---|---|
+| `Domain/Models/Pro/PaywallPlacement.swift` | new case `settingsUpgrade = "settings-upgrade"`, a contextual gate so it is never one-shot |
+| `Domain/Models/Pro/ProRestoreOutcome.swift` | **new** — `.restored` / `.nothingFound` / `.failed` |
+| `Domain/Interfaces/ProEntitlementProviding.swift` | `restorePurchases() async -> ProRestoreOutcome` promoted from the DEBUG-only protocol to the shipping one |
+| `Data/Purchases/ProEntitlementProvider.swift` | the restore implementation, moved out of the `#if DEBUG` extension and returning the outcome |
+| `Presentation/ViewModels/Pro/SubscriptionStatusSummary.swift` | `showsUpgradeAction` / `showsRestoreAction` (both `.free`-only); `showsCustomerCenter` narrowed from "everyone but a Founder" to `.subscription`/`.lifetime` |
+| `Presentation/Views/Pro/RestorePurchasesSettingsRow.swift` | **new** — the row, plus a three-way alert |
+| `Presentation/Views/Settings/Components/SubscriptionSettingsSectionView.swift` | composes the three shapes; takes `paywalls` |
+| `Presentation/Views/Settings/SettingsRootView.swift` | passes `dependencies.paywalls` |
+| `Resources/{en,de}.lproj/Localizable.strings` | 13 new keys, both languages |
+
+**Tests.** `freeTierIsOfferedUpgradeAndRestore`, `everyTierHasAnActionExceptFounder` (no tier may be
+left with a status row and nothing to do — the assertion that would have caught this), a rewritten
+`customerCenterIsOfferedToPayingPlansOnly`, `freeTierCopyResolves` over all 13 keys in en and de, and
+`emptyRestoreReportsNothingFound`. `unreachableRestoreDoesNotRevoke` was extended to assert the
+outcome is `.failed`, never `.nothingFound` — telling someone who paid that they own nothing is the
+worst thing a restore can say. Whole iOS suite green; the watch target is untouched.
+
+> **`monetization-strategy.md` §8 is not violated.** It forbids the app *interrupting* to sell; a row
+> the user has to go looking for does not interrupt. Recorded there as well as here.
+
+### 3.10 Fault 7 — the paywall advertises a free trial that does not exist · **OPEN**
+
+Found 2026-08-23 during the first successful TestFlight purchase, unrelated to how it was found. It
+is a second, independent rejection risk (Guideline 2.3.1 / 3.1.2) and must be fixed before
+resubmitting.
+
+#### What App Store Connect actually offers — verified 2026-08-23
+
+| | Monatsabo `…pro.monthly.sub` | Jahresabo `…pro.yearly.sub` |
+|---|---|---|
+| Regular price (DE) | 4,99 €/Monat | 24,99 €/Jahr |
+| **Einführungsangebot** (Introductory) | 2,99 € für den ersten Monat | **Für die erste Woche kostenlos** — *changed 2026-08-23, see B below* |
+| Offer window | 14 Aug – **30 Sept 2026** | 23 Aug 2026 – **kein Enddatum** |
+| Territories | 175 | 175 |
+| Aktionsangebot (Promotional) | none | `yearly_sub_seven_days_free` — "Für die erste Woche kostenlos", Im Voraus, 175 territories |
+
+**As originally found (18–23 Aug), neither product offered a free trial to a new customer** — both
+introductory offers were paid (the yearly's was 19,99 € für das erste Jahr). That is the state the
+paywall's copy was measured against, and the state both rejected builds shipped under. The yearly was
+changed to a real 7-day trial on 2026-08-23; the monthly's paid introductory offer stands.
+
+**The 7-day free trial is dead configuration, and structurally cannot be a new-user trial.** It is an
+**Aktionsangebot** — a *Promotional Offer* — and two things stop it independently:
+
+1. **It is not wired into the paywall.** RevenueCat's package component carries a dedicated
+   **Promotional Offer** field (separate App Store / Play Store identifiers) and the SDK applies the
+   offer at purchase time when the customer is eligible. The Annual package's field is empty, so
+   `yearly_sub_seven_days_free` is never requested. *(Signing is RevenueCat's job, not ours — an
+   earlier version of this section wrongly said the app had to request a signed offer in code.)*
+2. **A new customer is not eligible anyway.** App Store promotional offers reach only customers with
+   **prior purchase history** in that subscription group — existing and lapsed subscribers. Someone
+   installing the app for the first time can never receive one, whatever the paywall says.
+
+So the trial has never been shown to anyone, cannot be shown to a new user, and believing it was live
+is what put a false free-trial claim on the paywall.
+([Apple — introductory offers](https://developer.apple.com/help/app-store-connect/manage-subscriptions/set-up-introductory-offers-for-auto-renewable-subscriptions) ·
+[promotional offers](https://developer.apple.com/help/app-store-connect/manage-subscriptions/set-up-promotional-offers-for-auto-renewable-subscriptions))
+
+> **The monthly's introductory offer expires 30 September 2026**; the yearly's trial has no end date.
+> After 30 Sept the monthly has no offer, RevenueCat's Introductory override stops firing for it on its
+> own, and its Default text takes over — correct, once §3.10's fix is in. Nothing to schedule, but
+> worth knowing the monthly's launch pricing is a five-week window while the annual's trial is
+> permanent.
+
+#### What the paywall says, and why
+
+The text lives in the **RevenueCat Paywall Editor**, not the binary — a grep of `Localizable.strings`
+finds no trial copy. It sits in a per-component **override state**, which is why three passes over the
+editor missed it: the Default state shows only `{{ product.price_per_period_abbreviated }}`, and both
+localizations look clean. The offending text is under **Text properties → `</> Introductory`**:
+
+```
+{{ product.period_with_unit }} kostenlos testen, dann {{ product.price_per_period_abbreviated }}
+```
+
+Rendering, on a real device, as *"1 Monat kostenlos testen, dann 4,99 €/Mo"* and *"1 Jahr kostenlos
+testen, dann 24,99 €/J (2,08 €/Mon.)"* — while Apple's own purchase sheet for the same tap says
+**"2,99 € pro Monat — Angebot (1 Monat)"**. A user expecting €0 is charged €2,99.
+
+**Two distinct defects in that one line:**
+
+1. **`kostenlos testen` is simply false.** RevenueCat's Introductory state fires for *any* introductory
+   offer, free or paid, so hardcoding "free trial" into it was never safe. **This is the actual lie.**
+2. **`{{ product.period_with_unit }}` is the wrong variable** — it is the *subscription's billing
+   period*, not the offer's duration (`{{ product.offer_period_with_unit }}`). Today the two coincide,
+   because both offers happen to last exactly one billing period, so it renders correctly by accident.
+   It would start lying the moment an offer's length differs from the billing period — for instance if
+   the 7-day trial were ever made real.
+
+**A third, separate defect: the badge.** The Annual package carries a literal **`FREE TRIAL`** badge in
+the **English** localization while the German one carries `SPARE {{ product.relative_discount }}`. So
+the two languages make different claims about the same package, and the English one is false.
+
+#### The fix
+
+Dashboard only — no binary, no App Store Connect edit, no review risk. Four text edits plus a badge.
+
+**1. Both packages, both locales, with `</> Introductory` selected:**
+
+| Locale | Replace the Introductory text with |
+|---|---|
+| English | `{{ product.offer_price }} for {{ product.offer_period_with_unit }}, then {{ product.price_per_period_abbreviated }}` |
+| German | `{{ product.offer_price }} für {{ product.offer_period_with_unit }}, dann {{ product.price_per_period_abbreviated }}` |
+
+Keep the annual's existing ` ({{ product.price_per_month }}/Mon.)` tail. Result on a German device:
+
+- Monatlich — *"2,99 € für 1 Monat, dann 4,99 €/Mo"*
+- Jährlich — *"19,99 € für 1 Jahr, dann 24,99 €/J (2,08 €/Mon.)"*
+
+`{{ product.offer_price }}` renders the offer's actual price, and renders *free / gratis* if the offer
+ever becomes a trial — so this wording stays true through either change and needs no second pass.
+
+**2. Delete the `FREE TRIAL` badge** from the Annual package's English localization. There is no free
+trial for a new customer, so the badge is false in the only audience that sees the acquisition paywall.
+
+**3. Publish.** The editor has been sitting on **"Draft version"** throughout; nothing above is live
+until *Publish changes*. Check what the currently published version says as well — it may already
+differ from the draft.
+
+> **Editor-preview trap.** With the German locale selected, the preview still renders variables in
+> English ("1 month kostenlos testen") and uses mock prices ($9.99 / $79.99, SPARE 19%). The device
+> renders them localized and with real prices (4,99 € / 24,99 €, SPARE 58%). A preview that looks
+> half-English is not a bug.
+
+#### "But how do we tell users about the 7-day trial?" — we do not, and cannot
+
+The question is the right one and the answer is structural: `{{ product.offer_price }}` describes the
+**Einführungsangebot** only, which is correct, because that is the sole offer a new customer can
+receive. An Aktionsangebot can never be a new-user trial (see above). Three ways forward, and choosing
+between them is a pricing decision, not a bug fix:
+
+| | What | Cost | When |
+|---|---|---|---|
+| **A** | Ship truthfully: delete the badge, keep both paid intro offers | Dashboard only, no App Store Connect edit, **no review risk** | **Now — this resubmission** |
+| **B** | Make the trial real: replace the yearly's Einführungsangebot with a **Free Trial, 1 Woche** | An App Store Connect **product edit** → re-check the review state afterwards (§6) | **Chosen 2026-08-23** — see below |
+| **C** | Keep it as a win-back: put `yearly_sub_seven_days_free` in the Annual package's **Promotional Offer → App Store** field | Dashboard only, but reaches nobody until there are lapsed subscribers | Later, once there are subscribers to win back |
+
+#### B in detail — chosen 2026-08-23
+
+Julian's call: a free trial is expected to convert better than a first-year discount, and he is willing
+to edit the product and resubmit the subscription.
+
+**The trap this decision walks into, stated plainly.** The intuition is *"both offers are configured, so
+the Aktionsangebot is being downgraded to purchase-history-only; remove the Einführungsangebot and the
+trial opens up to everyone."* **That is wrong, and acting on it would make things worse.** The
+Aktionsangebot is restricted to existing and lapsed subscribers because it is a *Promotional Offer* —
+that is Apple's definition of the type, not a consequence of anything else being configured. The two
+offer types serve **disjoint audiences** and never compete:
+
+| | Einführungsangebot (Introductory) | Aktionsangebot (Promotional) |
+|---|---|---|
+| Audience | never subscribed in this group | currently or previously subscribed |
+| Applied by | the App Store, automatically | the paywall/SDK, on request |
+| Concurrent | **one** per territory per date range | several allowed |
+
+Deleting the Einführungsangebot would therefore not unlock the trial for new users. It would leave them
+with **no offer at all** — 24,99 €/Jahr at full price.
+
+**What actually has to happen:** create a *new* **Einführungsangebot** of type **Kostenlose Testversion
+(Free Trial), 1 Woche**. Same seven days, different object, different audience. Because only one
+introductory offer may be active per territory and date range, it must either replace the
+19,99 €-first-year offer or be scheduled to follow it (the current window ends 30 Sept 2026, so a trial
+could start 1 Oct). Replace it now if the trial is to be live for this review.
+
+The Aktionsangebot stays as-is — dormant, harmless, and later the honest home for option C's win-back.
+
+**Done 2026-08-23.** The Jahresabo's Einführungsangebote now reads a single row:
+**23. Aug. 2026 bis Kein Enddatum · 175 Länder oder Regionen · Für die erste Woche kostenlos · Im
+Voraus.** The 19,99 €-first-year offer is gone; the Aktionsangebot is untouched and still dormant.
+
+**Nothing needs wiring in RevenueCat.** Introductory offers are **store-managed**: the App Store
+applies them automatically to eligible customers and the SDK reads them off the StoreKit product at
+runtime. There is no dashboard field, no toggle and no product re-import. That is precisely the
+difference from the Aktionsangebot, which *would* have required the package's Promotional Offer field.
+The only remaining work is the paywall text, which was broken independently of this change.
+
+**Still to verify:** *Übermittelte Elemente* → the Jahresabo must still read **Bereit zur Prüfung**
+after the product edit. Whether an offer edit pulls a subscription out of review the way the
+display-name edit did (§6) is **not established** — check rather than assume, because assuming it was
+fine is what cost round two.
+
+**No further paywall work beyond §3.10's fix.** With `{{ product.offer_price }}` in place the yearly
+renders *"Gratis für 1 Woche, dann 24,99 €/J (2,08 €/Mon.)"* on its own, and the monthly
+*"2,99 € für 1 Monat, dann 4,99 €/Mo"*.
+
+**The badge cannot be made conditional — a Package component has no offer-state override.**
+
+An earlier revision of this section said to move `FREE TRIAL` under the `</> Introductory` override.
+**That is not possible, and the mistake is worth recording.** In the RevenueCat editor the offer-state
+dropdown (`</> Default | Introductory | …`) appears on **Text properties** only. Select the Package
+layer and the panel has no such dropdown at all — only a `Default | Selected` toggle, which keys off
+whether the *package is selected*, not off eligibility. The Annual badge is currently wired to exactly
+that: `SPARE {{ product.relative_discount }}` unselected, `FREE TRIAL` selected.
+
+So a badge on the Package component is shown to **everyone**, eligible or not. Three ways out:
+
+| | What | Trade-off |
+|---|---|---|
+| A | Delete the `FREE TRIAL` badge from the Annual package | The Introductory *text* already carries the trial and is self-correcting, but the package loses all visual emphasis |
+| **B** | **Set the badge to a discount claim in both states** | True for everyone — a price comparison, not an offer claim. Keeps the visual emphasis, drops the trial wording. **Chosen 2026-08-23.** |
+| C | Build the badge as a **separate Text component** overlaid on the package | Text components *do* get the Introductory override, so it could show only to eligible users. Correct mechanism, but editor layout work — revisit after approval |
+
+**Who a wrong badge actually harms:** a **lapsed subscriber**. They are the only people ineligible for
+the introductory offer who still reach the paywall — and they would see FREE TRIAL, tap, and be charged
+24,99 €. That is the Guideline 2.3.1 complaint exactly.
+
+**What B looks like as configured (2026-08-23):** the Annual package's badge reads
+`SAVE {{ product.relative_discount }}` in English and `SPARE {{ product.relative_discount }}` in
+German, set identically on **both** the `Default` and `Selected` package states so it no longer flips
+wording when the package is tapped. With real prices it renders **SPARE 58%** (24,99 €/Jahr against
+12 × 4,99 €/Monat = 59,88 €); the editor's 19% comes from its mock prices. `relative_discount` compares
+the two *regular* prices, so the offer change does not affect it and it stays true for eligible and
+ineligible customers alike.
+
+The trial is therefore carried by the Introductory **text** alone — *"Free for 1 week, then
+$79.99/yr"* — which is exactly the self-correcting surface: an ineligible customer falls through to the
+Default text and is promised nothing.
+
+**Two checks, both confirmed 2026-08-23:**
+
+1. ✅ With the toolbar `</> Offer` pill back on **Default**, the Annual's non-introductory text still
+   reads `{{ product.price_per_period_abbreviated }} ({{ product.price_per_month }}/Mon.)`. That state
+   is what ineligible customers see; the Introductory variant deliberately drops the per-month tail.
+2. ⚠️ The editor preview renders **mock offer data for both packages** ("$1.99 for 1 week") regardless
+   of what App Store Connect holds, and mock prices ($9.99 / $79.99, 19%). It is never confirmation.
+   Verify on device with an eligible Sandbox account.
+
+**Published 2026-08-23.** The draft is live. §3.10 is closed.
+
+#### Testing the trial: eligibility is per **subscription group**, not per product
+
+A customer qualifies for an introductory offer only if they have **never subscribed to any product in
+the group**. Both products live in `gymstreak.pro.abos`, so:
+
+- **Julian's own Apple Account is no longer eligible.** It bought the monthly in sandbox on 2026-08-23
+  (§7b), which makes it an existing subscriber in the group. Testing with it shows the **Default** text,
+  not the trial — and that looks exactly like the fix having failed. It has not.
+- **To see the trial**, use a Sandbox Apple Account that has never subscribed (App Store Connect →
+  Benutzer und Zugriffsrechte → Sandbox) **on an Xcode build** — TestFlight ignores the Sandbox Apple
+  Account and forces the Medien-&-Käufe account (§3.6).
+- **App Review will see it**: reviewers use a fresh sandbox account.
+- **Consequence for real users, by design:** anyone who takes the monthly's 2,99 € first month is then
+  ineligible for the annual's trial, and vice versa. One introductory offer per customer per group.
+
+**Open sub-decision:** the **monthly** keeps its 2,99 €-first-month introductory offer, so the paywall
+would read *"2,99 € für 1 Monat"* beside *"Gratis für 1 Woche"*. Legitimate and common, but if both
+packages should lead with a trial the monthly needs the same treatment.
 
 ---
 
@@ -297,16 +723,35 @@ independently of the resubmission.
 
 ---
 
-## 6. Fault 5 — the subscriptions are withdrawn from review · **OPEN, BLOCKING**
+## 6. Fault 5 — the subscriptions were withdrawn from review · **FIXED 2026-08-23**
 
 Editing the group's localized display name (fixing "RideStreak Pro Zugriff" → "GymStreak Pro Zugriff")
-required pulling the group out of the submission. The group and **both** products now read **"Vom
+required pulling the group out of the submission. The group and **both** products then read **"Vom
 Entwickler abgelehnt"**.
 
 **Apple reviews the app and its subscriptions together.** Resubmitting the binary while the products
-sit outside review is a documented cause of precisely the 2.1(b) rejection we already have — the
-reviewer reaches a paywall and cannot buy. **"Zur Prüfung hinzufügen" must be pressed and the products
-must be back in review before, or with, the next binary submission.**
+sit outside review is a documented cause of precisely the 2.1(b) rejection — the reviewer reaches a
+paywall and cannot buy.
+
+**And that is how 1.1.10 (1002) went in** — submitted with the subscriptions still developer-rejected.
+
+**It is not, however, the cause of either rejection.** §3.7's screenshot settled that: the reviewer
+never reached a purchase sheet, so product review state never came into play. It also cannot explain
+the *first* rejection, where §3.1 records both subscriptions as "In Prüfung" alongside the binary.
+Fix it because it is wrong and because it would eventually bite — not because it is the answer.
+
+**Current state — verified 2026-08-23.** All three items are back in the submission and read
+**"Bereit zur Prüfung"** under *Übermittelte Elemente*:
+
+| Element | Typ | Prüfungsstatus |
+|---|---|---|
+| `gymstreak.pro.abos` | Abo-Gruppe | 🕒 Bereit zur Prüfung |
+| GymStreak Pro – Jahresabo (1 Jahr) | Abo | 🕒 Bereit zur Prüfung |
+| GymStreak Pro – Monatsabo (1 Monat) | Abo | 🕒 Bereit zur Prüfung |
+| iOS-App 1.1.10 (1002) | App-Version | ❌ Abgelehnt — 2.1.0 Performance: App Completeness |
+
+They will go into review together with the next binary. **Re-read this table before every submission**
+— any edit to the group or a product can silently pull it back out.
 
 The rename itself is done and correct: Deutsch *GymStreak Pro Zugriff*, English (USA) *GymStreak Pro
 Access*, both with app name *GymStreak*.
@@ -322,49 +767,110 @@ Access*, both with app name *GymStreak*.
 - [x] `onPurchaseFailure` / `onRestoreFailure` logging (`ProPaywallView.swift`)
 - [x] Privacy Policy URL in App Store Connect
 - [x] Terms of Use link in the German App Description
-- [x] Xcode Cloud next build number → 1001
+- [x] Terms of Use link in the **English** App Description
+- [x] Xcode Cloud build number — **confirmed working**: Apple reviewed 1.1.10 as build **1002** (§1b)
 - [x] Subscription group display name: RideStreak → GymStreak
 - [x] Privacy nutrition labels: Käufe / Einkaufsverlauf, App-Funktionalität + Analyse, unlinked, no tracking — **published 2026-08-21**
-- [x] Terms of Use link in the **English** App Description
 - [x] In-App Purchase Key confirmed valid in RevenueCat
 - [x] Sandbox transactions checked — 2026-08-17 present, 2026-08-18 empty (§3.4)
 - [x] Reviewer's customer record identified: `$RCA••••c6cc` (§3.4)
-- [x] Documentation: `pro-subscription.md` §5k and §9.8, `settings-tab.md` §5a, TestFlight notes (en + de)
+- [x] 3.1.2(c) confirmed resolved — not re-cited in the 1.1.10 rejection (§1b)
+- [x] Subscriptions + group returned to review, "Bereit zur Prüfung" (§6) — **2026-08-23**
+- [x] `Screenshot-0823-075757.png` downloaded and read — it is the Customer Center (§3.7)
+- [x] 2026-08-23 reviewer session read in RevenueCat: no transaction, again (§3.4b)
+- [x] Products confirmed to be real App Store products, correctly wired to entitlement and offering (§3.4b)
+- [x] **A purchase completed end-to-end from a TestFlight build** (§7b) — the purchase path is proven
+- [x] **Settings purchase + restore rows** — `settingsUpgrade` placement, `RestorePurchasesSettingsRow`, Customer Center narrowed to entitled plans (§3.9) — **2026-08-23**, build green, iOS suite green
+- [x] App Store Connect offer configuration verified and recorded (§3.10) — **2026-08-23**
+- [x] Yearly's introductory offer changed to a real **7-day free trial**, no end date (§3.10 B) — **2026-08-23**
+- [x] Paywall Introductory text rewritten to `{{ product.offer_price }} … {{ product.offer_period_with_unit }}`, both packages, both locales, both selection states (§3.10) — **2026-08-23**, *draft, not yet published*
+- [x] Annual badge changed to `SAVE`/`SPARE {{ product.relative_discount }}` on both package states (§3.10) — **2026-08-23**
+- [x] **Paywall draft published** (§3.10) — **2026-08-23**
+- [x] **App Review Notes written** (§9a) — **2026-08-23**
+- [x] Documentation: `pro-subscription.md` §5i, §5k and §9.8, `settings-tab.md`, TestFlight notes (en + de)
 
 ### Open — one ordered list
 
-Diagnostics and fixes interleaved deliberately: the order is by payoff and latency, not by category.
-
 | # | Do | Why | Where |
 |---|---|---|---|
-| 1 | **Reply to App Review** asking for the exact error text or a screenshot | Highest payoff of anything on this list, and the only item with a turnaround delay — start it first | App Store Connect → the rejection message |
-| 2 | **"Zur Prüfung hinzufügen"** on the subscription group | Blocking. Apple reviews app and subscriptions together; submitting without them repeats the 2.1(b) rejection | App Store Connect → Abos → `gymstreak.pro.abos` |
-| 3 | Sandbox purchase test **on an iPad** | The one configuration never exercised — and the reviewer's device | Needs the next TestFlight build |
+| 1 | **Commit the working tree and run the merge chain** | 23 files of §3.9's fix are uncommitted, and `store-build` still points at `7150b19` — the *rejected* 1.1.10 binary. Archiving it today would upload the rejected build again | `main` → `testflight-beta` → `store-build` |
+| 2 | **Read the build number App Store Connect actually stamps** | 1.1.10 was reviewed as **1002** and `main` still carries `CURRENT_PROJECT_VERSION = 1002`. Xcode Cloud overrides it with its own counter (§4) — all that matters is **≥ 1000**, or every production install reads as a Founder | App Store Connect → Xcode Cloud |
+| 3 | **Re-check *Übermittelte Elemente*** | The yearly's introductory offer was edited *after* the subscriptions were re-added to review (§6). Group + both subs must read *Bereit zur Prüfung* | App Store Connect → submission page |
+| 4 | Verify the new Settings rows on a **TestFlight build**, iPhone then iPad | They *are* the fix for the rejection and have only been unit-tested and previewed. One cycle is cheap after two rounds | TestFlight |
+| 5 | **Record a screen capture of a completed purchase** and attach it | Apple asked for one; the flow is proven (§7b) | — |
+| 6 | **Submit binary + group + both subscriptions together** | Apple reviews them as one submission; splitting them is §6 | App Store Connect |
+| 7 | Sandbox purchase test **on an iPad** in compatibility mode | §3.8's theory is demoted, not refuted. Cheap to close once a build exists | TestFlight on iPad |
 
-Steps 2–5 of the original list closed on 2026-08-21; see §3.4 for what they established. Step 2
-here is best done at submission time, with the build — but its status must be checked before pressing
-submit either way.
+### 7a. Reading RevenueCat after a review session
+
+The exact click paths, because the defaults hide the sandbox data every time.
+
+**A — did a transaction reach RevenueCat on the review date?**
+
+1. RevenueCat → the **Gym Streak (App Store)** project → **Customers** in the left sidebar.
+2. Sort by **Last Seen**, descending. The reviewer sits at the top for that day.
+3. Identify the record by **Country = United States** + **First Seen = the review date**, early UTC.
+   Their app version must read the *submitted* build (1.1.10). Do **not** use the "Has made sandbox
+   purchase" filter — it excludes exactly the record wanted.
+4. Open it and look for the **"This Customer has sandbox purchases / Show sandbox data"** banner.
+   - **Absent** → no transaction was ever created; the failure is upstream of RevenueCat, in
+     StoreKit or Apple's sandbox. (This is what 2026-08-18 showed.)
+   - **Present** → a transaction existed; the failure is downstream and RevenueCat's own logs have it.
+
+**B — sandbox transactions on the products themselves.**
+
+1. **Product catalog → Products → GymStreak Pro – Jahresabo** (`gymstreak.iap.pro.yearly.sub`).
+2. Scroll to **Recent Transactions** and turn the **Sandbox** toggle **on**. The default view is
+   production-only and reads "No transactions yet" no matter what.
+3. Repeat for the **Monatsabo**. A sandbox subscription renews every few minutes, so one real test
+   purchase shows as several `Renewal` rows.
+
+**Before concluding anything, re-read §3.4's record-reading trap** — a local simulator record looks
+exactly like a reviewer's and already cost one round.
+
+### 7b. The purchase flow works — verified end to end, 2026-08-23
+
+**The first successful purchase from a distributed build.** TestFlight 1.1.10, iPhone, real Apple
+Account (`j.manke@icloud.com`), German storefront:
+
+1. Routines tab → ➕ → the paywall renders with both packages and correct prices.
+2. Monthly selected → **Pro freischalten** → Apple's native purchase sheet appears, headed
+   **TestFlight**, naming *GymStreak Pro – Monatsabo*, the intro price, the renewal price and date, and
+   *"Nur zu Testzwecken. Für die Bestätigung dieses Kaufs werden dir keine Gebühren in Rechnung
+   gestellt."*
+3. **Abonnieren** → *"Du bist jetzt startklar — Dein Kauf war erfolgreich."*
+4. The paywall dismissed and the entitlement applied.
+
+So `RevenueCatPurchaseGateway`, the offering, the entitlement wiring, `PaywallView` and
+`onPurchaseCompleted` are all proven against a real StoreKit transaction. **There was never a bug in
+the purchase path.** That is what makes §3.9 the answer.
+
+**Testing note:** a TestFlight build **ignores** Settings → Entwickler → Sandbox-Apple Account. It runs
+purchases in the sandbox *environment* but authenticates against the account signed into **Medien &
+Käufe** — the real one. Being prompted for the real Apple Account is expected; purchases stay free. If
+iOS says *"Gib das Passwort für … in den Einstellungen ein"*, that is a device account state, not an
+app fault — re-authenticate in Settings and the purchase proceeds.
 
 ### Before submitting
 
-**Build 68 must never ship.** The fix for Fault 3 lives in the *build number*, not in code, so
-resubmitting the existing binary would reintroduce it in full: 68 < `cutoffBuild`, every production
-install reads as a Founder, nobody can be charged. A **new build is mandatory**, and Xcode Cloud will
-stamp it 1001.
+1. ✅ **The paywall draft is published** (§3.10).
+2. ✅ **App Review Notes name the exact click path** (§9a).
+3. ✅ **Privacy labels published** (§5).
+4. ⬜ **The binary actually contains §3.9's Settings rows.** As of 2026-08-23 the fix is *uncommitted*
+   and `store-build` still points at `7150b19` — the rejected 1.1.10 binary. Commit, then
+   `main` → `testflight-beta` → `store-build`, then archive. **Archiving `store-build` as it stands
+   would re-upload the rejected build.**
+5. ⬜ **Build number in App Store Connect ≥ 1000** (§4). 1.1.10 was reviewed as 1002 and `main` still
+   carries `CURRENT_PROJECT_VERSION = 1002`; Xcode Cloud overrides it with its own counter, so read the
+   number rather than assuming it. Reusing 1002 under the new marketing version 1.1.11 is legal but
+   confusing — expect 1003.
+6. ⬜ **Subscriptions "Bereit zur Prüfung" alongside the binary** (§6). The yearly's introductory offer
+   was edited *after* they were re-added, so this must be re-read.
+7. ⬜ **Screen capture of a completed purchase** attached.
+8. ⬜ **Submit binary + group + both subscriptions as one submission.**
 
-Ship it as **1.1.10** — `main` already carries `MARKETING_VERSION = 1.1.10` and
-`CURRENT_PROJECT_VERSION = 1001`, the Settings Legal section and the failure logging are only in a new
-binary anyway, and 1.1.9's record is tainted with a rejection. The Legal-section work is on
-`feature/improvements` and has to reach `store-build` through the usual merge chain first.
-
-Then:
-
-1. Build number in App Store Connect ≥ 1000 (§4).
-2. Subscriptions in review alongside the binary (§6) — they are currently **"Vom Entwickler
-   abgelehnt"** and will not come back on their own.
-3. Privacy labels published (§5) — done.
-4. App Review Information → Notes: where the legal links are, and the 2.1(b) findings (§9).
-5. Attach the screen recording Apple asked for.
+**Ship it as 1.1.11.** `main` already carries `MARKETING_VERSION = 1.1.11`, and both 1.1.9 and 1.1.10
+have rejections on their record.
 
 ---
 
@@ -382,48 +888,67 @@ itself the test.
 
 ### The reply text
 
-Sent before resubmitting — the message thread closes once a new submission goes in. If the thread is
-already closed because the submission was withdrawn, the same text goes into App Review Information →
-Notes instead.
+**Rewritten 2026-08-23** — the earlier draft asked Apple for the error text, which they have since
+supplied unprompted (§3.7), and defended 3.1.2(c), which was not re-cited. Both asks are spent. The
+message now has one job: tell the reviewer where the paywall is.
 
 ```
 Hello,
 
-Thank you for the detailed feedback. We have addressed both issues and have one question about the
-second.
+Thank you for the screenshot — it identified the problem immediately, and we have fixed it.
 
-Guideline 3.1.2(c)
+The screen in your screenshot is our subscription *management* screen (restore, change, cancel,
+request a refund). It correctly reports "No subscriptions found" because no purchase had been made
+yet, but it is not where a purchase is started, and we can see why that was misleading. Our records
+confirm no purchase was ever attempted during either review session, so nothing failed — the purchase
+screen was simply never reached.
 
-The app now includes functional links to the Terms of Use (Apple's Standard EULA) and to our privacy
-policy in two places:
+We have made three changes:
 
-1. On the subscription purchase screen itself, directly below the purchase and restore buttons.
-2. In Settings > Legal, reachable at any time without starting a purchase.
+1. The Settings screen now offers a direct "Upgrade to Gym Streak Pro" option for users without a
+   subscription, which opens the purchase screen immediately.
+2. We have corrected the pricing text on the purchase screen. It previously described the
+   introductory offer as a free trial; it now states the actual introductory price and the price that
+   follows it.
+3. We have added step-by-step instructions below, and a screen recording of a completed purchase.
 
-The purchase screen also states, for each option, the subscription name, its length, and its price,
-including the price per month for the annual plan.
+To reach the purchase screen in this build:
 
-The metadata now carries both as well: the privacy policy URL is set in the Privacy Policy field, and
-the Terms of Use link appears at the end of the App Description in every localisation.
+  Settings tab > Subscription > Upgrade to Gym Streak Pro
 
-Guideline 2.1(b)
+or, from anywhere in the app:
 
-We have investigated thoroughly and cannot reproduce the error, and we would be grateful for one
-detail from you.
+  Routines tab > + (top right) > create a routine > the Pro screen appears
 
-Our subscription provider's logs show that no purchase transaction was created during your review
-session on 18 August - the app fetched the products and displayed the paywall with correct prices,
-but no transaction reached us, successfully or otherwise. Sandbox purchases from our own testing on
-17 August are recorded normally. On our side we have verified that the Paid Applications Agreement is
-active, tax and banking information is complete, both subscriptions are priced in all territories
-with complete localisations, and our App Store server credentials validate correctly.
-
-Could you please share the exact error message you saw, or a screenshot of it? Without it we cannot
-tell whether the failure was in the purchase sheet, the sandbox account, or a transient App Store
-issue, and we would rather fix the cause than guess at it.
-
-We are submitting an updated build that includes the changes above along with additional error
-logging for the purchase flow.
+Both subscriptions and the subscription group are submitted for review together with this build.
 
 Thank you for your time.
 ```
+
+Sent before resubmitting — the message thread closes once a new submission goes in. If the thread is
+already closed because the submission was withdrawn, the same text goes into App Review Information →
+Notes instead.
+
+---
+
+## 9a. The App Review notes — entered 2026-08-23
+
+App Store Connect → *Informationen zur App-Prüfung* → **Anmerkungen**. Verbatim:
+
+```
+To test purchases: Settings tab → Subscription → Get Gym Streak Pro. Alternatively: Routines tab → +
+→ create 3 routines, and for the next one the Pro screen appears.
+Settings → Manage subscription is for restoring/cancelling an existing subscription, not for
+purchasing.
+```
+
+*Anmeldung erforderlich* is unticked — the app needs no account (`monetization-strategy.md` §1).
+
+**This is the single cheapest thing that would have prevented both rejections.** Two reviewers went
+looking for the purchase, found only the Customer Center, and rejected the app; neither had anything
+telling them where to tap. It should have been in 1.1.9.
+
+> Minor and left as-is: the fallback path is more conservative than reality. The `firstRoutineCreated`
+> soft paywall fires after the **first** routine, not the fourth — a reviewer following the note
+> literally still reaches a paywall (at routine 1 via the soft placement, or at the 4th ➕ via
+> `routineCap`), so both routes work.

@@ -18,10 +18,15 @@ section/row blueprint documented here.
   (subscription or lifetime) or Free — and where it came from. **It renders nothing while the
   gating kill switch is off**, which is every build today, so the shipping Settings screen is
   unchanged. Below the status row it offers **Manage subscription**, which opens RevenueCat's
-  Customer Center (restore, manage, change plan, cancel, refund) — everyone but a Founder gets it,
-  since a Founder has no purchase to manage. There is still no *purchase* affordance here; the
-  paywall is reached from a gate, never from Settings. Documented in `docs/pro-subscription.md`
-  §5i and §5j; this file does not repeat its rules.
+  **Three shapes, one per tier.** A subscriber or lifetime buyer gets **Manage subscription**, which
+  opens RevenueCat's Customer Center (manage, change plan, cancel, refund). A free user gets **Get
+  Gym Streak Pro** (raises the paywall via `paywalls.present(.settingsUpgrade)`) and **Restore
+  purchases** (`RestorePurchasesSettingsRow`, which calls the entitlement provider and reports all
+  three outcomes in an alert). A Founder gets the status row alone — nothing to buy, restore or
+  manage. The free tier's two rows were added after App Review twice found no way to buy and
+  screenshotted the Customer Center's "No subscriptions found"
+  (`docs/appstore-rejection-1.1.9.md` §3.7). Documented in `docs/pro-subscription.md` §5i and §5j;
+  this file does not repeat its rules.
 - **Data** section: a single iCloud row that reports at a glance whether the user's data is
   safe — state-tinted icon tile, "Last: \<timestamp\>" subtitle and a status dot (or spinner)
   with a short label. Footnote: "Your training data syncs automatically via iCloud …".

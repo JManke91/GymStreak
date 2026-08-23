@@ -55,6 +55,18 @@
 "settings.subscription.lifetime.footer" = "A one-time purchase. Nothing renews and nothing expires.";
 "settings.subscription.free.title" = "Free";
 "settings.subscription.free.detail" = "The complete workout tracker";
+"settings.subscription.upgrade.title" = "Get Gym Streak Pro";
+"settings.subscription.upgrade.subtitle" = "See plans and pricing";
+"settings.subscription.restore.title" = "Restore purchases";
+"settings.subscription.restore.subtitle" = "Already subscribed? Get Pro back on this device";
+"settings.subscription.restore.subtitle.running" = "Checking your Apple Account…";
+"settings.subscription.restore.restored.title" = "Pro restored";
+"settings.subscription.restore.restored.message" = "Your subscription is active on this device again.";
+"settings.subscription.restore.none.title" = "Nothing to restore";
+"settings.subscription.restore.none.message" = "We found no Gym Streak Pro purchase on this Apple Account. If you subscribed with a different Apple Account, sign in with that one and try again.";
+"settings.subscription.restore.failed.title" = "Restore didn't finish";
+"settings.subscription.restore.failed.message" = "We couldn't reach the App Store. Check your connection and try again — nothing about your subscription has changed.";
+"common.ok" = "OK";
 "settings.subscription.manage.title" = "Manage subscription";
 "settings.subscription.manage.subtitle" = "Restore, change, cancel or request a refund";
 "settings.subscription.free.footer" = "Track unlimited workouts for free. Gym Streak Pro adds unlimited routines and full progress analytics.";
@@ -1108,6 +1120,7 @@
 "paywall.headline.period_recap" = "Unlimited recaps";
 "paywall.headline.exercise_deep_dive" = "Unlimited exercise analyses";
 "paywall.headline.weekday_schedule" = "Weekday schedules";
+"paywall.headline.settings_upgrade" = "Gym Streak Pro";
 // Shown when no offering could be resolved (offline, or the placement is not
 // configured in the dashboard). It never unlocks the gated capability.
 "paywall.unavailable.body" = "The offer couldn't be loaded. Check your connection and try again.";

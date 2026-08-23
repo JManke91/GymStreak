@@ -17,7 +17,10 @@ struct PaywallPlacementTests {
 
     @Test("Every §8 trigger has a placement, and each carries a headline key")
     func placementsCoverStrategy() {
-        #expect(PaywallPlacement.allCases.count == 9)
+        // Nine §8 triggers plus `settingsUpgrade`, which is not a §8 trigger at
+        // all — it is the Settings purchase entry point added after App Review
+        // could find no way to buy (appstore-rejection-1.1.9.md §3.9).
+        #expect(PaywallPlacement.allCases.count == 10)
 
         for placement in PaywallPlacement.allCases {
             #expect(placement.identifier == placement.rawValue)
@@ -33,5 +36,9 @@ struct PaywallPlacementTests {
 
         #expect(Set(oneShot) == [.firstRoutineCreated, .valueMoment])
         #expect(PaywallPlacement.routineCap.kind == .contextualGate)
+        // The Settings entry point must be re-openable: a user who dismisses the
+        // paywall and comes back has to find it again.
+        #expect(PaywallPlacement.settingsUpgrade.kind == .contextualGate)
+        #expect(!PaywallPlacement.settingsUpgrade.isOneShot)
     }
 }

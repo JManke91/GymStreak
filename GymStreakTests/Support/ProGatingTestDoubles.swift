@@ -24,6 +24,7 @@ final class StubProEntitlements: ProEntitlementProviding {
     var isPro: Bool { state.isPro }
 
     func refresh() async {}
+    func restorePurchases() async -> ProRestoreOutcome { .nothingFound }
 }
 
 /// Records every placement a gate raised. Presents nothing — the eligibility

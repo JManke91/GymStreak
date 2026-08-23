@@ -45,7 +45,8 @@ struct SettingsRootView: View {
                         // Renders nothing while the gating kill switch is off,
                         // which was every shipping build before ticket 15.
                         SubscriptionSettingsSectionView(
-                            entitlements: dependencies.proEntitlements
+                            entitlements: dependencies.proEntitlements,
+                            paywalls: dependencies.paywalls
                         )
 
                         SettingsSectionView(

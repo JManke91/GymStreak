@@ -64,20 +64,45 @@ struct SubscriptionStatusSummary: Equatable {
     /// `true` whenever the described plan grants Pro.
     var isPro: Bool { plan != .free }
 
+    /// Whether the section offers a way to *buy* Pro.
+    ///
+    /// **Free users only** — the other three plans already have it.
+    ///
+    /// This is the fix for the second App Store rejection
+    /// (`appstore-rejection-1.1.9.md` §3.9). Before it, the section headed
+    /// *Subscription* offered a free user exactly one action — the Customer
+    /// Center — which for someone who has never bought anything opens on
+    /// "No subscriptions found". App Review tapped it, found no way to purchase,
+    /// and rejected under 2.1(b); the screenshot they attached is that screen.
+    ///
+    /// It sits above `showsRestoreAction`, which is the free tier's Guideline
+    /// 3.1.1 path — buy first, restore second, and neither is a dead end.
+    var showsUpgradeAction: Bool { plan == .free }
+
     /// Whether the section offers the Customer Center (§5j).
     ///
-    /// **Everyone but a Founder.** A subscriber manages or cancels there, a
-    /// Lifetime buyer requests a refund or restores there, and a free user who
-    /// reinstalled restores there — Guideline 3.1.1 requires that path to exist
-    /// and it cannot be conditioned on the app already believing the user paid.
+    /// **Only plans that actually have something to manage.** It used to be
+    /// everyone but a Founder, on the reasoning that a free user who reinstalled
+    /// needs a restore path and Guideline 3.1.1 says that path cannot be
+    /// conditioned on the app already believing the user paid. The reasoning was
+    /// right; the surface was wrong. Offered to a free user, the Customer Center
+    /// opens on **"No subscriptions found"** — App Review took that path twice,
+    /// concluded the app had no working purchase, and attached a screenshot of
+    /// that very screen to the second rejection
+    /// (`appstore-rejection-1.1.9.md` §3.7).
     ///
-    /// A Founder is the one deliberate exclusion. The grant is decided locally
-    /// from `AppTransaction` and never round-trips to RevenueCat (§9.3), so a
-    /// Founder is not a RevenueCat customer at all: the Customer Center would
-    /// open on a customer with no purchase history and offer them "you don't
-    /// seem to have a subscription — restore?", which for a Founder is both
-    /// wrong and alarming. Their footer already says there is nothing to manage.
-    var showsCustomerCenter: Bool { plan != .founder }
+    /// A free user now gets `showsRestoreAction` instead: a row that does one
+    /// thing and names it. 3.1.1 is satisfied more directly than before.
+    ///
+    /// A Founder gets neither. The grant is decided locally from
+    /// `AppTransaction` and never round-trips to RevenueCat (§9.3), so they are
+    /// not a RevenueCat customer at all and have nothing to restore or manage.
+    var showsCustomerCenter: Bool { plan == .subscription || plan == .lifetime }
+
+    /// Whether the section offers a plain **Restore purchases** row.
+    ///
+    /// Free users only — the Guideline 3.1.1 path, see `showsCustomerCenter`.
+    var showsRestoreAction: Bool { plan == .free }
 
     /// SF Symbol for the row's icon tile.
     var icon: String {

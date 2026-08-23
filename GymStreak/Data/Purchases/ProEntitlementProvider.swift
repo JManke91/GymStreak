@@ -127,6 +127,38 @@ final class ProEntitlementProvider: ProEntitlementProviding {
         recompose()
     }
 
+    /// Runs a user-initiated restore and reports what it found.
+    ///
+    /// The three outcomes map exactly onto what the app may claim:
+    ///
+    /// - **`.failed`** — the call threw, so nothing is known and nothing is
+    ///   written. This is the case that must never be reported as "you own
+    ///   nothing": an offline restore telling a paying user they never bought
+    ///   anything is the same class of bug §3d fixed in `refresh()`.
+    /// - **`.restored` / `.nothingFound`** — the call succeeded, so its answer is
+    ///   a fact about the account and is composed in. `isPro` is read *after*
+    ///   `recompose()` so a Founder grant already on record counts as restored
+    ///   too, which is the honest answer to "do I have Pro on this device".
+    func restorePurchases() async -> ProRestoreOutcome {
+        let entitlement: PurchasedProEntitlement
+        do {
+            entitlement = try await purchases.restorePurchases()
+        } catch {
+            Self.logger.info(
+                """
+                Restore failed, keeping \
+                \(String(describing: self.purchased), privacy: .public) — \
+                \(String(describing: error), privacy: .public)
+                """
+            )
+            return .failed
+        }
+
+        purchased = entitlement
+        recompose()
+        return isPro ? .restored : .nothingFound
+    }
+
     /// Founder wins. The grant is local, permanent and offline-durable, so it
     /// takes precedence over anything the network says — including "no
     /// purchase". (A *failed* lookup no longer says anything at all: since §3d
@@ -199,12 +231,5 @@ extension ProEntitlementProvider: ProEntitlementDebugging {
         return result
     }
 
-    func restorePurchases() async {
-        // A restore that could not run found nothing to *report*, which is not
-        // the same as finding nothing — and must not revoke what is already held.
-        guard let entitlement = try? await purchases.restorePurchases() else { return }
-        purchased = entitlement
-        recompose()
-    }
 }
 #endif

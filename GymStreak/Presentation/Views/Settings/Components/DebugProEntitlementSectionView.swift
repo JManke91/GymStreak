@@ -131,7 +131,7 @@ final class PreviewProEntitlementProvider: ProEntitlementDebugging {
         return .purchased
     }
 
-    func restorePurchases() async {}
+    func restorePurchases() async -> ProRestoreOutcome { .nothingFound }
 }
 
 #Preview("Debug entitlement") {
