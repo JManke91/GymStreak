@@ -19,11 +19,16 @@ import SwiftUI
 @MainActor
 class ExerciseProgressViewModel: ObservableObject {
     /// Identity of a load. `ExerciseProgressChartView` feeds this to `.task(id:)`, which
-    /// cancels and restarts the load whenever the exercise or the timeframe changes.
+    /// cancels and restarts the load whenever the exercise, the timeframe or the selected
+    /// usage changes.
     struct LoadKey: Equatable {
         let exerciseName: String
         let exerciseId: UUID?
         let timeframe: ChartTimeframe
+        /// What the *user* asked for, not what was resolved — `nil` means "take the
+        /// default", and resolving it here would make the key change on its own once the
+        /// first load came back.
+        let usageSelection: ExerciseUsageSelection?
     }
 
     @Published var selectedTimeframe: ChartTimeframe = .month
@@ -34,6 +39,23 @@ class ExerciseProgressViewModel: ObservableObject {
     @Published private(set) var recentUsages: [ExerciseRecentUsage] = []
     @Published var selectedDataPoint: SelectedDataPoint?
     @Published private(set) var isLoading = true
+
+    /// The usages the picker offers, labelled. Empty until the first load returns; a
+    /// single entry means there is nothing to choose between and the picker stays hidden.
+    @Published private(set) var usageOptions: [ExerciseUsagePickerItem] = []
+    /// The usage the loaded data actually describes — resolved by the aggregator, which
+    /// only fills in the default when nothing has been requested yet. A chosen usage is
+    /// never swapped out: outside the window it draws the empty-chart state instead.
+    @Published private(set) var selectedUsage: ExerciseUsageSelection = .combined
+    /// What the user picked, or `nil` while they have not picked anything for this
+    /// exercise — which is what lets the aggregator open the screen on the most recently
+    /// trained usage instead of on the combined sawtooth.
+    ///
+    /// `@Published` because it is part of `loadKey`: the re-render it triggers is what
+    /// restarts `.task(id:)` and actually performs the reload. Leaving it a plain `var`
+    /// worked only because `updateUsage` also clears `selectedDataPoint`, which hung the
+    /// entire picker on an unrelated line.
+    @Published private(set) var requestedUsage: ExerciseUsageSelection?
 
     /// The last window this user was actually allowed to read. It is what the
     /// chart keeps drawing while a Pro-only window is selected — see
@@ -92,7 +114,12 @@ class ExerciseProgressViewModel: ObservableObject {
     /// Keyed on `chartTimeframe`, not on the selection: picking a Pro-only
     /// window must not widen the fetch just so the result can be blurred.
     var loadKey: LoadKey {
-        LoadKey(exerciseName: exerciseName, exerciseId: exerciseId, timeframe: chartTimeframe)
+        LoadKey(
+            exerciseName: exerciseName,
+            exerciseId: exerciseId,
+            timeframe: chartTimeframe,
+            usageSelection: requestedUsage
+        )
     }
 
     /// Mutates the load parameters only — `.task(id: viewModel.loadKey)` performs the reload.
@@ -100,6 +127,41 @@ class ExerciseProgressViewModel: ObservableObject {
         self.exerciseName = newExerciseName
         self.exerciseId = exerciseId
         selectedDataPoint = nil
+        // A different exercise has different usages: drop both the choice and the stale
+        // menu, so the picker never offers the previous exercise's slots during the load.
+        requestedUsage = nil
+        usageOptions = []
+        selectedUsage = .combined
+    }
+
+    /// Selects which usage the chart and the recent-sets list describe.
+    ///
+    /// Part of `loadKey`, so the reload runs through `.task(id:)` and the existing
+    /// generation guard — rather than filtering the loaded arrays here. Filtering after
+    /// the fact would silently shrink the recent-sets list, whose cap counts *sessions*:
+    /// eight workouts of alternating usages would leave four cards for whichever one is
+    /// selected. Reloading keeps "the last eight workouts of this usage".
+    /// A tap always becomes the request, even when it names the usage already on screen —
+    /// on first open `requestedUsage` is `nil` while `selectedUsage` already names the
+    /// default, and tapping that default has to be recorded as a choice.
+    func updateUsage(_ selection: ExerciseUsageSelection) {
+        guard selection != requestedUsage else { return }
+        requestedUsage = selection
+        selectedDataPoint = nil
+    }
+
+    /// Whether there is anything to choose between. One usage and the picker is noise:
+    /// its only entry would chart exactly what is already on screen.
+    var showsUsagePicker: Bool { usageOptions.count > 1 }
+
+    /// The picker's current label.
+    var selectedUsageLabel: String {
+        switch selectedUsage {
+        case .combined:
+            return "chart.usage.combined".localized
+        case .usage(let key):
+            return usageOptions.first { $0.key == key }?.label ?? "chart.usage.combined".localized
+        }
     }
 
     /// Selects a window. A Pro-only one is still *selected* — its pill highlights
@@ -130,11 +192,16 @@ class ExerciseProgressViewModel: ObservableObject {
                 exerciseName: exerciseName,
                 exerciseId: exerciseId,
                 startDate: startDate,
-                recentSessionLimit: Self.recentSessionLimit
+                recentSessionLimit: Self.recentSessionLimit,
+                usageSelection: requestedUsage
             )
             guard !Task.isCancelled, generation == self.generation else { return }
             progressData = snapshot.data
             recentUsages = snapshot.recentUsages
+            // Labelled once, here — the picker must not build localized strings or scan
+            // for duplicate labels while a view body is being evaluated.
+            usageOptions = ExerciseUsageLabeling.pickerItems(for: snapshot.availableUsages)
+            selectedUsage = snapshot.selectedUsage
             if !availableMetrics.contains(selectedMetric) {
                 selectedMetric = .maxWeight
             }
@@ -145,6 +212,8 @@ class ExerciseProgressViewModel: ObservableObject {
             guard generation == self.generation else { return }
             progressData = nil
             recentUsages = []
+            usageOptions = []
+            selectedUsage = .combined
             isLoading = false
         }
     }

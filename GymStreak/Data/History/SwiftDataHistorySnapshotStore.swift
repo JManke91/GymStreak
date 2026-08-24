@@ -75,14 +75,16 @@ struct SwiftDataHistorySnapshotProvider: HistorySnapshotProviding, LifetimeTrain
         exerciseName: String,
         exerciseId: UUID?,
         startDate: Date,
-        recentSessionLimit: Int
+        recentSessionLimit: Int,
+        usageSelection: ExerciseUsageSelection?
     ) async throws -> ExerciseProgressSnapshot {
         let store = await storeTask.value
         return try await store.fetchExerciseProgress(
             exerciseName: exerciseName,
             exerciseId: exerciseId,
             startDate: startDate,
-            recentSessionLimit: recentSessionLimit
+            recentSessionLimit: recentSessionLimit,
+            usageSelection: usageSelection
         )
     }
 
@@ -218,7 +220,8 @@ actor SwiftDataHistorySnapshotStore {
         exerciseName: String,
         exerciseId: UUID?,
         startDate: Date,
-        recentSessionLimit: Int
+        recentSessionLimit: Int,
+        usageSelection: ExerciseUsageSelection?
     ) async throws -> ExerciseProgressSnapshot {
         try Task.checkCancellation()
         let sessions = try measured("HistoryFetchSessions") {
@@ -236,7 +239,8 @@ actor SwiftDataHistorySnapshotStore {
                 exerciseName: exerciseName,
                 exerciseId: exerciseId,
                 startDate: startDate,
-                recentSessionLimit: recentSessionLimit
+                recentSessionLimit: recentSessionLimit,
+                requestedUsage: usageSelection
             )
         }
         try Task.checkCancellation()

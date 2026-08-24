@@ -818,6 +818,14 @@
 "history.exercise.best_set" = "Bester: %@";
 "history.exercise.usage.unassigned" = "Ohne Zuordnung";
 
+// Varianten-Auswahl — welche Trainingsvariante das Diagramm zeigt
+"chart.usage.title" = "Variante";
+"chart.usage.combined" = "Alle Varianten";
+"chart.usage.a11y" = "Variante, aktuell: %@";
+// Angehängt, wenn zwei Varianten sonst gleich hießen — das Datum des letzten Trainings
+// unterscheidet einen aktuellen Routine-Platz von einem übrig gebliebenen.
+"chart.usage.last_trained" = "zuletzt %@";
+
 "switch" = "Wechseln";
 
 // MARK: - AI Coach

@@ -31,19 +31,35 @@ struct ExerciseProgressAggregator {
     ///     the recent-usage list is deliberately all-time, matching the previous behaviour.
     ///   - recentSessionLimit: caps the recent-usage list by **sessions**, not by cards —
     ///     a workout that trained the exercise twice contributes two cards but counts once.
+    ///   - requestedUsage: which usage to chart, or `nil` on first open to take the
+    ///     default. Resolved here, and reported back as `snapshot.selectedUsage`, so the
+    ///     screen never has to fetch once to learn the options and again to apply one.
+    ///     The usage **options** are all-time, so neither the menu's contents nor the
+    ///     default selection move when the user changes the timeframe.
     static func buildSnapshot(
         sessions: [WorkoutSession],
         liveExercises: [Exercise],
         exerciseName: String,
         exerciseId: UUID?,
         startDate: Date,
-        recentSessionLimit: Int
+        recentSessionLimit: Int,
+        requestedUsage: ExerciseUsageSelection? = nil
     ) -> ExerciseProgressSnapshot {
         let nameIsUnique = isNameUnique(exerciseName, in: liveExercises)
         let behavior = loadBehavior(
             exerciseId: exerciseId,
             exerciseName: exerciseName,
             in: liveExercises
+        )
+        // All-time, not `windowedSessions`: a menu that reshuffles on every timeframe tap
+        // is what the reporter saw as the screen "suddenly showing different options".
+        let options = ExerciseUsageResolver.options(in: sessions) { exercise in
+            matches(exercise, exerciseId: exerciseId, exerciseName: exerciseName, nameIsUnique: nameIsUnique)
+                && exercise.loadBehavior == behavior
+        }
+        let selection = ExerciseUsageResolver.resolveSelection(
+            requested: requestedUsage,
+            options: options
         )
 
         return ExerciseProgressSnapshot(
@@ -53,7 +69,8 @@ struct ExerciseProgressAggregator {
                 exerciseId: exerciseId,
                 nameIsUnique: nameIsUnique,
                 loadBehavior: behavior,
-                startDate: startDate
+                startDate: startDate,
+                usageSelection: selection
             ),
             recentUsages: buildRecentUsages(
                 sessions: sessions,
@@ -61,31 +78,54 @@ struct ExerciseProgressAggregator {
                 exerciseId: exerciseId,
                 nameIsUnique: nameIsUnique,
                 loadBehavior: behavior,
-                limit: recentSessionLimit
-            )
+                limit: recentSessionLimit,
+                usageSelection: selection
+            ),
+            availableUsages: options,
+            selectedUsage: selection
         )
+    }
+
+    /// Completed sessions inside the chart window, oldest first. The chart series only —
+    /// the picker's options and the recent-sets list are both all-time.
+    static func windowedSessions(_ sessions: [WorkoutSession], startDate: Date) -> [WorkoutSession] {
+        sessions
+            .filter { $0.endTime != nil && $0.startTime >= startDate }
+            .sorted { $0.startTime < $1.startTime }
     }
 
     // MARK: - Chart series
 
-    /// One data point per session that contains at least one completed set of the exercise.
+    /// One data point per session that contains at least one completed set of the exercise
+    /// **in the selected usage**.
+    ///
+    /// - Parameter usageSelection: the routine slot to chart, or `.combined` for every usage folded
+    ///   together. Selecting a usage is what stops a workout trained heavy *and* light from
+    ///   collapsing into one `max`: each usage gets its own point for that session, so the
+    ///   series reads as a progression instead of alternating between two loads.
     static func buildProgress(
         sessions: [WorkoutSession],
         exerciseName: String,
         exerciseId: UUID?,
         nameIsUnique: Bool,
         loadBehavior: ExerciseLoadBehavior,
-        startDate: Date
+        startDate: Date,
+        usageSelection: ExerciseUsageSelection = .combined
     ) -> ExerciseProgressData {
-        let windowed = sessions
-            .filter { $0.endTime != nil && $0.startTime >= startDate }
-            .sorted { $0.startTime < $1.startTime }
+        let windowed = windowedSessions(sessions, startDate: startDate)
 
+        // Keyed by the resolver, so a workout holding two rows of one slot yields one
+        // series per row instead of collapsing both into a single session `max`.
         let matchedBySession = windowed.map { session in
-            (session, session.workoutExercisesList.filter {
-                matches($0, exerciseId: exerciseId, exerciseName: exerciseName, nameIsUnique: nameIsUnique)
-                    && $0.loadBehavior == loadBehavior
-            })
+            (
+                session,
+                ExerciseUsageResolver.keyedRows(in: session) {
+                    matches($0, exerciseId: exerciseId, exerciseName: exerciseName, nameIsUnique: nameIsUnique)
+                        && $0.loadBehavior == loadBehavior
+                }
+                .filter { ExerciseUsageResolver.belongs($0.key, to: usageSelection) }
+                .map(\.exercise)
+            )
         }
         let relevant = matchedBySession.filter { !$0.1.isEmpty }
         let usesEffectiveLoad = loadBehavior.isCounterweightAssistance
@@ -189,16 +229,22 @@ struct ExerciseProgressAggregator {
     /// same screen. Every matching instance now contributes its completed sets, tagged
     /// with the `ExerciseUsage` they belong to.
     ///
-    /// **Ordering is explicit, never inherited.** `workoutExercisesList` is the raw
-    /// SwiftData to-many array, whose order is undocumented, so the blocks of one session
-    /// are sorted by `WorkoutExercise.order` — the sequence the user actually performed —
-    /// with `id` as a tiebreak so the result is a total order even if two rows share an
-    /// `order`. Sets keep their existing `WorkoutSet.order` sort inside each block.
+    /// **Ordering is explicit, never inherited.** The blocks of one session come from
+    /// `ExerciseUsageResolver.keyedRows`, which sorts by `WorkoutExercise.order` — the
+    /// sequence the user actually performed — with `id` as a total-order tiebreak, rather
+    /// than trusting the raw to-many array. That is also where each block's usage key
+    /// (slot **and** occurrence within the session) is assigned, so this list and the
+    /// chart above it can never disagree about which rows are the same piece of work.
+    /// Sets keep their existing `WorkoutSet.order` sort inside each block.
     ///
     /// **`loadBehavior` is filtered exactly as the chart filters it** (deliberate change:
     /// this list used to apply no filter). Keeping a block the chart excluded is what
     /// produced two panels disagreeing about the same workout, which is the defect this
     /// ticket exists to end. It still ignores the selected timeframe — the list is all-time.
+    ///
+    /// **The picker filters this list too.** With a usage selected the cap still counts
+    /// sessions, so the list reaches back `limit` workouts *of that usage* rather than
+    /// showing whatever survives a post-hoc filter.
     ///
     /// - Parameter limit: a **session** cap. Showing every usage must not shrink how far
     ///   back the list reaches, so a two-usage workout emits two cards and counts once.
@@ -210,7 +256,8 @@ struct ExerciseProgressAggregator {
         exerciseId: UUID?,
         nameIsUnique: Bool,
         loadBehavior: ExerciseLoadBehavior,
-        limit: Int
+        limit: Int,
+        usageSelection: ExerciseUsageSelection = .combined
     ) -> [ExerciseRecentUsage] {
         let ordered = sessions
             .filter { $0.endTime != nil }
@@ -219,15 +266,14 @@ struct ExerciseProgressAggregator {
         var collected: [ExerciseRecentUsage] = []
         var sessionsCollected = 0
         for session in ordered {
-            let matching = session.workoutExercisesList
-                .filter {
-                    matches($0, exerciseId: exerciseId, exerciseName: exerciseName, nameIsUnique: nameIsUnique)
-                        && $0.loadBehavior == loadBehavior
-                }
-                .sorted { $0.order != $1.order ? $0.order < $1.order : $0.id.uuidString < $1.id.uuidString }
+            let matching = ExerciseUsageResolver.keyedRows(in: session) {
+                matches($0, exerciseId: exerciseId, exerciseName: exerciseName, nameIsUnique: nameIsUnique)
+                    && $0.loadBehavior == loadBehavior
+            }
+            .filter { ExerciseUsageResolver.belongs($0.key, to: usageSelection) }
 
             var cards: [ExerciseRecentUsage] = []
-            for exercise in matching {
+            for (exercise, key) in matching {
                 let usePlanned = exercise.progressiveOverloadApplied
                 let entries = exercise.setsList
                     .sorted { $0.order < $1.order }
@@ -246,7 +292,11 @@ struct ExerciseProgressAggregator {
                         id: exercise.id,
                         workoutSessionId: session.id,
                         date: session.startTime,
-                        usage: usage(of: exercise, in: session),
+                        usage: ExerciseUsageResolver.usage(
+                            of: exercise,
+                            in: session,
+                            occurrence: key.occurrence
+                        ),
                         sets: entries
                     )
                 )
@@ -260,18 +310,9 @@ struct ExerciseProgressAggregator {
         return collected
     }
 
-    /// The usage one history row belongs to: its routine slot, described by the rep-range
-    /// goal the row denormalized and the workout's routine name. A row with no
-    /// `routineExerciseId` — legacy history, or an exercise added ad hoc mid-workout —
-    /// resolves to the explicit `.unattributed` bucket rather than to some other usage.
-    static func usage(of exercise: WorkoutExercise, in session: WorkoutSession) -> ExerciseUsage {
-        ExerciseUsage(
-            slot: exercise.routineExerciseId.map(ExerciseUsage.Slot.routineSlot) ?? .unattributed,
-            targetRepMin: exercise.targetRepMin,
-            targetRepMax: exercise.targetRepMax,
-            routineName: session.routineName
-        )
-    }
+    // The usage a row belongs to, the slot-matching rule and the picker's options all
+    // live in `ExerciseUsageResolver` — `PreviousPerformanceResolver` shares them, so
+    // they may not live inside the chart's aggregator.
 
     // MARK: - Identity resolution
 

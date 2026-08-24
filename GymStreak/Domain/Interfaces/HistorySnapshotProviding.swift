@@ -43,11 +43,17 @@ protocol HistorySnapshotProviding: Sendable {
     ///   - recentSessionLimit: caps the recent-sets list by **sessions**, which is
     ///     all-time. A workout that trained the exercise twice returns two
     ///     `ExerciseRecentUsage` cards but counts once against the cap.
+    ///   - usageSelection: which usage to chart, or `nil` to take the default (the most
+    ///     recently trained usage, computed over all history so it does not move with the
+    ///     timeframe). A `Sendable` value — the
+    ///     available usages come back the same way, so no `@Model` crosses in either
+    ///     direction. The result reports which selection was actually applied.
     func fetchExerciseProgress(
         exerciseName: String,
         exerciseId: UUID?,
         startDate: Date,
-        recentSessionLimit: Int
+        recentSessionLimit: Int,
+        usageSelection: ExerciseUsageSelection?
     ) async throws -> ExerciseProgressSnapshot
 
     /// "What did I lift last time?" for every exercise of one workout (audit P1.6).

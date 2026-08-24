@@ -818,6 +818,14 @@
 "history.exercise.best_set" = "Best: %@";
 "history.exercise.usage.unassigned" = "Unassigned";
 
+// Usage picker — which way of training this exercise the chart describes
+"chart.usage.title" = "Usage";
+"chart.usage.combined" = "All usages";
+"chart.usage.a11y" = "Usage, currently showing %@";
+// Appended when two usages would otherwise read identically — the last-trained date
+// is what tells a live routine slot apart from a leftover one.
+"chart.usage.last_trained" = "last %@";
+
 "switch" = "Switch";
 
 // MARK: - AI Coach

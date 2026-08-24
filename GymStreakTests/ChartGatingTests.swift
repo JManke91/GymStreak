@@ -299,7 +299,8 @@ private actor StubHistorySnapshotProvider: HistorySnapshotProviding {
         exerciseName: String,
         exerciseId: UUID?,
         startDate: Date,
-        recentSessionLimit: Int
+        recentSessionLimit: Int,
+        usageSelection: ExerciseUsageSelection?
     ) async throws -> ExerciseProgressSnapshot {
         requestedStartDates.append(startDate)
         let sessionId = UUID()
@@ -331,7 +332,7 @@ private actor StubHistorySnapshotProvider: HistorySnapshotProviding {
                     workoutSessionId: sessionId,
                     date: Date(),
                     usage: ExerciseUsage(
-                        slot: .unattributed,
+                        key: .unattributed,
                         targetRepMin: nil,
                         targetRepMax: nil,
                         routineName: ""

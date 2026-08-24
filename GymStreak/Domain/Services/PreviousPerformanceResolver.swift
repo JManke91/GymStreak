@@ -118,8 +118,14 @@ enum PreviousPerformanceResolver {
                 .sorted { $0.order < $1.order }
 
             let exercise: WorkoutExercise
+            // The slot match — the same rule, from the same implementation, that the
+            // exercise-progress chart segments its series by. If these two ever diverge,
+            // the save sheet and the chart start disagreeing about what counts as the
+            // same piece of work (see `ExerciseUsageResolver`).
             if let routineExerciseId = query.routineExerciseId,
-               let exactMatch = matching.first(where: { $0.routineExerciseId == routineExerciseId }) {
+               let exactMatch = matching.first(where: {
+                   ExerciseUsageResolver.slot(of: $0) == .routineSlot(routineExerciseId)
+               }) {
                 exercise = exactMatch
             } else {
                 // Occurrence order is only meaningful inside a proven routine context. If

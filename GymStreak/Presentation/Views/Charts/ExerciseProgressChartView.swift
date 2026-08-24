@@ -146,7 +146,7 @@ private struct ExerciseProgressChartViewInternal: View {
     // MARK: - Top bar
 
     private var topBar: some View {
-        HStack {
+        HStack(spacing: 8) {
             Button {
                 HapticManager.shared.light()
                 dismiss()
@@ -159,7 +159,17 @@ private struct ExerciseProgressChartViewInternal: View {
                     .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
             }
             .buttonStyle(.plain)
-            Spacer()
+            Spacer(minLength: 8)
+            // Only when this exercise was actually trained more than one way — see
+            // `showsUsagePicker`. Next to the switcher because both answer "what am I
+            // looking at", and both are reached at the same moment.
+            if viewModel.showsUsagePicker {
+                ExerciseUsageMenu(
+                    options: viewModel.usageOptions,
+                    selection: viewModel.selectedUsage,
+                    selectedLabel: viewModel.selectedUsageLabel
+                ) { viewModel.updateUsage($0) }
+            }
             if !availableExercises.isEmpty {
                 ExerciseSwitcherMenu(
                     currentExercise: currentExerciseName,

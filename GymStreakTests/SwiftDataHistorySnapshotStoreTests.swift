@@ -75,7 +75,8 @@ struct SwiftDataHistorySnapshotStoreTests {
             exerciseName: "Exercise 0",
             exerciseId: nil,
             startDate: .distantPast,
-            recentSessionLimit: 8
+            recentSessionLimit: 8,
+            usageSelection: nil
         )
 
         heartbeatTask.cancel()

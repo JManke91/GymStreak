@@ -314,6 +314,232 @@ blocks present, in performed order, with the heaviest set shown equal to the val
 plots for that day), the explicit block ordering above, the session cap over a mix of one- and
 two-usage workouts, a legacy row resolving to `.unattributed`, and the load-behaviour filter.
 
+### The chart separates usages by routine slot (2026-08-23)
+
+The reported bug: a user trains Biceps Curls two ways — 20 kg for 4–6 reps in one routine,
+14 kg for 8–12 in another — and the chart plots a single series alternating between the two
+loads. Estimated 1RM does not rescue it either (20 × 5 ≈ 23.3 kg vs. 14 × 10 ≈ 18.7 kg still
+alternate), and a workout containing *both* usages collapses into one `max` describing neither.
+
+**Exercise usage is now a first-class concept.** A usage is a distinct way an exercise is
+trained, identified by the **routine slot** its history rows were recorded against and described
+to the user by the slot's rep range plus the routine name. Nothing new is persisted:
+`WorkoutExercise` already denormalises `routineExerciseId` and `targetRepMin`/`targetRepMax`
+precisely so they survive routine edits and deletion.
+
+**One matching rule, two surfaces.** The slot match lives in `ExerciseUsageResolver.slot(of:)`
+and `PreviousPerformanceResolver` calls it for the exact-match it applies when answering "what did I lift last time?". The save sheet's comparison
+had been segmenting by slot correctly all along while the chart had not; a second implementation
+would let the two surfaces drift apart about what counts as the same piece of work, which is
+exactly how the two panels of this screen came to contradict each other in the first place.
+
+**What the picker does.** `ExerciseUsageMenu` sits next to the exercise switcher in the detail
+screen's top bar and is rendered only when more than one usage exists (`showsUsagePicker`).
+Selecting *4–6 Wdh. · Pull* charts that slot alone and filters the recent-sets list to it;
+a combined entry, listed last, preserves the previous behaviour for anyone who wants it.
+
+| Value | Where | Meaning |
+|-------|-------|---------|
+| `ExerciseUsage.Key` | `Domain/Models/ExerciseUsage.swift` | What identifies a usage: the **slot** plus the row's **occurrence index inside one workout** (2026-08-24, see below). Not the whole `ExerciseUsage`: the rep range and routine name are denormalised per row, so editing a slot's goal would otherwise split one slot into two series mid-window. |
+| `ExerciseUsageSelection` | same | `.combined` or `.usage(key)`. |
+| `ExerciseUsageOption` | same | One picker entry — the key, its descriptor from its **most recent** row, when it was last trained, and that row's `order` (menu ordering only). |
+| `ExerciseUsagePickerItem` | same | The labelled entry the menu renders. Built once per load in the view model, never in `body`. |
+
+**Rules the implementation honours:**
+
+- **All-time options** (revised 2026-08-24 — they were window-scoped at first).
+  `ExerciseUsageResolver.options(in:matching:)` walks **all** completed sessions, so the menu holds
+  still while the user switches 1M / 1J / Alle. A usage with no completed sets anywhere is left
+  out — selecting it would show an empty chart.
+- **Default selection: the most recently trained usage**, not combined — computed over all
+  history, so it does not move with the timeframe either. Opening on combined would show the
+  reporter the exact sawtooth they filed. With one usage (or none) the selection resolves to
+  `.combined` — identical to that usage's own series — and the picker stays hidden.
+- **Resolution happens in `ExerciseUsageResolver.resolveSelection`**, and the snapshot reports
+  back `snapshot.selectedUsage`, so the screen never has to fetch once to learn the options and
+  again to apply one. A requested usage is **always kept**: since the options are all-time,
+  narrowing the timeframe past the selected usage draws the existing empty-chart state
+  (`chart.empty.title` / `chart.empty.message`) rather than silently swapping the user's choice.
+- **Rows with no slot are their own bucket.** `.unattributed` is selectable, appears in no other
+  series, and is never dropped — a chart that quietly omits real workouts is the failure mode
+  this whole feature exists to end.
+- **Two slots, same rep range stay separate series.** Their labels are disambiguated only when
+  they would actually collide (same routine *and* same rep range), by appending the
+  **last-trained date** — `8–12 Wdh. · Pull · zuletzt 12.07.` (`chart.usage.last_trained`). See
+  the label rule below for why the position in the workout was not enough.
+- **Selection is part of `LoadKey`, so changing it reloads** through `.task(id:)` and the
+  existing generation/cancellation guard. `requestedUsage` is `@Published` for exactly that
+  reason — the re-render it triggers *is* the reload path, and it must not depend on some other
+  published property happening to change in the same call. Filtering the already-loaded arrays instead would
+  silently shrink the recent-sets list, whose cap counts *sessions*: eight workouts of
+  alternating usages would leave four cards for whichever usage is selected. Reloading keeps the
+  cap meaning "the last eight workouts **of this usage**".
+- **Only `Sendable` values cross the boundary.** `fetchExerciseProgress` gained an
+  `ExerciseUsageSelection?` parameter and returns the options as values; no `@Model` crosses in
+  either direction, and the concrete provider method keeps its load-bearing `@concurrent`
+  annotation (`largeExerciseProgressBuildKeepsMainActorResponsive` still passes).
+- **The Pro gate is untouched.** The picker is not gated, and the stat triple still falls back to
+  the free metric while a Pro-only one is selected, so no locked value is printed in plain text
+  beside the blurred chart.
+
+**Boundary design, validated against primary sources (2026-08-23).** Passing the selection
+*into* the `@ModelActor` read as a `Sendable` value was checked against the proposals rather than
+assumed, so it does not need re-deriving:
+
+- A struct/enum is `Sendable` when every associated value is (`ExerciseUsageSelection` carries a
+  `UUID`), which is the whole requirement — [SE-0302](https://github.com/swiftlang/swift-evolution/blob/main/proposals/0302-concurrent-value-and-concurrent-closures.md).
+  Both types are internal, so the conformance would even be synthesised; it is written out because
+  this is a boundary type.
+- **`sending` is the wrong spelling here, not a stricter one.**
+  [SE-0430](https://github.com/swiftlang/swift-evolution/blob/main/proposals/0430-transferring-parameters-and-results.md)
+  exists to let **non-`Sendable`** values cross an isolation boundary by proving the value is in a
+  disconnected region. For an already-`Sendable` value it adds nothing. Same for region-based
+  isolation ([SE-0414](https://github.com/swiftlang/swift-evolution/blob/main/proposals/0414-region-based-isolation.md)),
+  which never engages for a plain `Sendable` parameter.
+- **The added parameter cannot weaken the `@concurrent` hop.**
+  [SE-0461](https://github.com/swiftlang/swift-evolution/blob/main/proposals/0461-async-function-isolation.md)
+  states the guarantee at function level — "`@concurrent` async functions switch to the generic
+  executor" — with no dependence on parameter count or type. What the parameter does add is
+  Sendable-checking at the call site, which a `Sendable` value passes with no extra hop. The
+  tripwire test passing is what the proposal predicts, not a lucky result.
+- **`@ModelActor` documents no parameter-type requirement** beyond the structural one:
+  [`PersistentModel`](https://developer.apple.com/documentation/swiftdata/persistentmodel)
+  conforms to `SendableMetatype`, **not** `Sendable`, so a model instance simply cannot cross the
+  boundary in either direction. Nothing is documented about a value-type parameter violating
+  `ModelContext` affinity — absence of a caveat, not a positive guarantee.
+- **Enum vs. a plain `UUID?` is a modelling choice, not a concurrency one.** No Apple or Evolution
+  guidance prefers primitives at actor boundaries; `Optional` is `Sendable` whenever its wrapped
+  type is, and `@frozen`/library-evolution concerns need a *public* type crossing a *module*
+  boundary, which this is not.
+
+**Why the fetch is windowed in Swift rather than in the `FetchDescriptor`** (see also
+`SwiftDataHistorySnapshotStore.fetchExerciseProgress`): narrowing it needs a `#Predicate`
+comparison across the **optional** `WorkoutExercise.workoutSession` relationship. Apple documents
+nothing about predicate support for that shape, and the Developer Forums carry repeated reports of
+it failing — [nil-relationship predicates](https://developer.apple.com/forums/thread/732111),
+[a "to-many key not allowed here" crash on optional to-many relationships](https://developer.apple.com/forums/thread/788624),
+[enum/relationship filters crashing `@Query`](https://developer.apple.com/forums/thread/738145).
+Forum evidence, not documentation — but the failure mode reported is silently wrong results or a
+runtime crash rather than a thrown `unsupportedPredicate`, which is why this side stays in Swift.
+
+**Rejected alternatives — recorded so they are not re-litigated as oversights:**
+
+1. **One line per usage.** Drawing every usage as its own series was considered and rejected for
+   now: it complicates the tap-to-inspect annotation and the Pro-gated blur, and one series at a
+   time is the clearer read.
+2. **Grouping by rep range instead of by slot.** Two slots sharing a rep range are different
+   pieces of work — often different equipment — and the rep range is editable, so the grouping
+   would silently re-partition history when a user changes a goal.
+3. **Filtering the loaded snapshot in the view model.** See the cap argument above.
+
+**Interaction with the recent-sets list (previous section).** Its guarantee — a session trained
+twice shows *both* blocks — is now the guarantee of the **combined** selection; with a usage
+selected the list shows that usage's blocks only, which is the point of the picker. The
+aggregator test that pins the two-block behaviour asks for `.combined` explicitly.
+
+`GymStreakTests/ExerciseProgressAggregatorTests.swift` covers: alternating usages across
+sessions (per-usage progression vs. the combined sawtooth), both usages inside one session, the
+default selection, a single usage resolving to combined, a slot whose routine was deleted, two
+slots sharing a rep range at the **same** position (separate series **and** distinguishable
+labels), two rows of one slot inside one session, a slot whose rep goal changed across sessions,
+two sessions sharing an identical `startTime`, rows with no slot as their own selectable bucket,
+history with no slot ids at all, a selected usage falling outside the window being kept, the
+filtered recent list keeping its session cap, and the label de-duplication rules.
+
+### A routine slot is not unique per workout (2026-08-24)
+
+Ticket 03's picker was verified on the reporter's own device and failed on their real history in
+three ways at once. All three came from the same wrong assumption — that one routine slot produces
+at most one history row per workout — which every test fixture written for ticket 03 obeyed.
+
+**The evidence** (exercise detail screen for Biceps Curls, 2026-08-24):
+
+1. The menu listed **two rows reading character-for-character identically**
+   (`4–6 Wdh. · Pull · #2` twice). Options are built in a dictionary keyed by the slot, so one slot
+   cannot appear twice — the two entries are slot A's alternative and the **`.unattributed`
+   bucket**, which is labelled identically whenever its rows carry a rep-range goal (see the
+   correction below).
+2. The same timeframe re-opened minutes later listed **different labels** for the same three
+   usages (`4–6 Wdh.` became `8–12 Wdh.`), with no edit in between.
+3. With one entry selected, the recent-sets list showed **both** Biceps Curls blocks of the
+   12 Jul workout — 20 kg × 5/4/4 and 13 kg × 14/12/12 — and the stat row read *9 Workouts /
+   10 Einträge*. The list filters by the selected usage, so both blocks share one usage: two rows,
+   one workout. (They share the `.unattributed` bucket rather than a routine slot — correction
+   below — which changes nothing about the fix.)
+
+That a slot's rows legitimately carry different rep ranges over time is **not** a bug: an
+alternative swap keeps the slot's `routineExerciseId` but adopts the *alternative's* rep-range
+goal (`WorkoutViewModel.swapExercise`). It is the reason a slot's label is not a constant, which
+is what defect 2 turned into visible nondeterminism.
+
+**What changed:**
+
+- **The usage key is `(slot, occurrence)`.** The occurrence index is the row's position among that
+  slot's *own* rows within one session, ordered by `WorkoutExercise.order` with `id` as a
+  total-order tiebreak. For normal history it is always 0 and nothing about the feature changes;
+  for the mixed slot it splits the heavy and the light work into two clean series instead of one
+  that `buildProgress`'s per-session `max` collapses — **the originally reported bug, alive inside
+  a single usage**. `ExerciseUsageResolver.keyedRows(in:matching:)` is the one place the index is
+  assigned, so the chart, the recent-sets list and the picker cannot disagree. It reuses an
+  identity the codebase already had: `PreviousPerformanceResolver.occurrenceIndex` applies the
+  same rule to legacy rows, and its caveat applies here too — if the user performs the two blocks
+  in the opposite order in some workout, that workout's rows swap series. Accepted, for the same
+  reason: it is the only ordering information the data carries.
+- **The descriptor is chosen by an explicit comparison** — the greatest
+  `(session.startTime, exercise.order, exercise.id)` — not by whichever row a loop visited last.
+  Two orderings feeding the old code were undefined: `sorted(by:)` is not stable for sessions
+  sharing a `startTime`, and a to-many relationship's order is undocumented. This is the same
+  class of defect the recent-sets list fixed one section above ("Ordering is explicit, never
+  inherited"), reintroduced in the new code path.
+- **Labels carry the last-trained date, not an ordinal.** `· #\(order + 1)` could not
+  disambiguate the reporter's two colliding slots because both sit at the same position in the
+  workout — the tiebreaker collided along with the label. The date (`chart.usage.last_trained`,
+  EN/DE) is also the more useful fact: it is how the user tells the slot their live routine still
+  holds from a leftover one. If two entries still collide after the date, the fallback is the
+  entry's **position in the menu**, which is unique by construction. The date is formatted by a
+  hoisted `Date.FormatStyle` — a `static let DateFormatter` cannot exist in isolation-agnostic
+  Domain code (non-`Sendable`), and the rendering rules forbid building one per row.
+- **The menu is all-time** (see the bullets above): scoping it to the window made it reshuffle on
+  every timeframe tap, which is what the user reported as the screen "suddenly showing different
+  options".
+
+**Dead slots are not merged into live ones.** Two entries can look like "the same" work to a human
+and there is no sound rule to prove it; guessing would fabricate a progression across a slot
+change, which is worse than showing two honest series. The consequence is accepted: this user's
+picker lists **four** usages plus "Alle Varianten", because their history genuinely contains that
+many distinct pieces of work. An explicit "archived" marker for slots no live routine holds any
+more is deliberately separate work (it needs the read to know which slots still exist).
+
+**Correction after on-device verification of the fix (2026-08-24): there is no duplicate slot id, and
+no dead third slot.** The third usage is the **`.unattributed` bucket**. With a single usage selected,
+the recent-sets list showed cards badged `4–6 Wdh. · Pull` (12 Jul, 7 Jul) *and* `Ohne Zuordnung ·
+Pull` (28 Jun, 11 Jun, 31 Mai) — the list is filtered to one key and "Ohne Zuordnung" renders only for
+`.unattributed`, so those July rows are unattributed rows that happen to carry a rep-range goal.
+`ExerciseUsage.repRangePart` prefers the rep range and falls through to the "Ohne Zuordnung" wording
+only when there is none, so an unattributed usage is named exactly like a routine slot.
+
+Every observation re-reads consistently under that: the two identical rows were slot A's alternative
+and the bucket; the label flip-flop was the bucket's descriptor racing between its two 12 Jul rows;
+and "one slot, two rows in one workout" was "the bucket, two rows in one workout" — ordinary for
+legacy and watch-recorded history, where every row has `routineExerciseId == nil`. The
+`(slot, occurrence)` key is unchanged by this: it is what splits those two rows, whichever bucket they
+share. What dissolves is the hunt for a code path minting duplicate slot ids — there is no such path
+to find.
+
+**Fixed with the same verification: the marker always leads for `.unattributed`.**
+`ExerciseUsage.displayLabel` prepends "Ohne Zuordnung" / "Unassigned" and keeps the rep goal after it
+— `Ohne Zuordnung · 4–6 Wdh. · Pull`. Marker first because the recent-sets badge is `lineLimit(1)`
+and truncates from the tail, so the half that survives is the one that says what this is; the goal is
+kept because it is what tells two slot-less usages of the same workout apart. A `.routineSlot` label
+is unchanged (`4–6 Wdh. · Pull`, or `Kein Ziel · Pull` with no goal set), so the two can no longer
+collide. No new strings — both keys already existed.
+
+**Loose end.** Slot A's primary reads "Biceps Curls" at 40 kg while its alternative and slot B are
+the dumbbell one, suggesting **two library exercises share the name "Biceps Curls"**. If so,
+`ExerciseProgressAggregator.isNameUnique` is false for that name and the legacy-row name fallback
+in `matches(...)` deliberately **drops** every row with `exerciseId == nil` rather than
+double-count it — which could be hiding old workouts from this screen entirely. Unverified.
+
 ### Components
 
 #### iOS Target
@@ -323,6 +549,7 @@ two-usage workouts, a legacy row resolving to `.unattributed`, and the load-beha
 | ExerciseProgressChartView | `Views/Charts/ExerciseProgressChartView.swift` | Main chart view with timeframe picker, metric picker + info button, and interactive chart |
 | ProgressChartContent | `Views/Charts/ExerciseProgressChartView.swift` | SwiftUI Charts rendering with line/point marks, axis formatting, tap overlay, and data point annotation |
 | ExerciseSwitcherMenu | `Views/Charts/ExerciseProgressChartView.swift` | Toolbar dropdown to switch between exercises grouped by muscle |
+| ExerciseUsageMenu | `Views/Charts/ExerciseUsageMenu.swift` | Usage picker beside the switcher — which routine slot the chart and the recent-sets list describe. Rendered only when the exercise has more than one usage; entries arrive pre-labelled from the view model |
 | ChartTimeframePicker | `Views/Charts/ChartTimeframePicker.swift` | Segmented button row for timeframe selection (1W, 1M, 3M, 1Y, All) |
 | ChartDataPointAnnotation | `Views/Charts/ChartDataPointAnnotation.swift` | Floating tooltip card showing exact value + date for a tapped data point |
 | MetricInfoPopover | `Views/Charts/MetricInfoPopover.swift` | Popover explaining what the selected metric measures and how it's calculated |
@@ -332,13 +559,15 @@ two-usage workouts, a legacy row resolving to `.unattributed`, and the load-beha
 | RecentUsageCardView | `Views/Charts/RecentUsageCardView.swift` | One recent-sets card — **one usage's sets within one workout**, badged with the usage it belongs to. Takes an `ExerciseRecentUsage` value, never a `@Model` |
 | ExerciseProgressViewModel | `ViewModels/ExerciseProgressViewModel.swift` | `async load()` behind a generation counter; owns timeframe, metric, selection and the loaded snapshot; computed display properties; owns the **P2 Pro gate** (which metric/window is locked, what a locked selection renders, which paywall it raises) |
 | ChartGatingPolicy | `Domain/Services/ChartGatingPolicy.swift` | **Pure, isolation-agnostic.** Which metrics and windows the free tier may read, from `ProFeatureCaps` — plus the widest free window a lapsed user's chart clamps back to |
-| ExerciseProgressModels | `Domain/Models/ExerciseProgressModels.swift` | Domain values: ChartTimeframe, ProgressMetric, ExerciseProgressDataPoint, ExerciseProgressData, **ExerciseUsage**, **ExerciseRecentUsage**, **ExerciseProgressSnapshot**, SelectedDataPoint. The five that cross the actor boundary are explicitly `Sendable`. |
-| ExerciseProgressAggregator | `Domain/Services/ExerciseProgressAggregator.swift` | **Pure, isolation-agnostic** chart + recent-sets aggregation. `buildRecentUsages` emits **one card per usage per session** — see "The recent-sets list shows every usage" above. `matches(_:exerciseId:exerciseName:nameIsUnique:)` resolves workout exercises to the chart target — an exact `exerciseId` match, OR a legacy row with `exerciseId == nil` whose name matches case-insensitively **and only when the name is unique in the live library**. Without the fallback, workouts logged before `WorkoutExercise.exerciseId` existed would be invisible and progress would look frozen; without the uniqueness gate, same-named equipment variants would double-count. |
+| ExerciseProgressModels | `Domain/Models/ExerciseProgressModels.swift` | Domain values: ChartTimeframe, ProgressMetric, ExerciseProgressDataPoint, ExerciseProgressData, **ExerciseRecentUsage**, **ExerciseProgressSnapshot**, SelectedDataPoint. Everything that crosses the actor boundary is explicitly `Sendable`. |
+| ExerciseUsage | `Domain/Models/ExerciseUsage.swift` | The usage cluster: **ExerciseUsage** (+ `Slot`, `repRangeText`, `displayLabel`), **ExerciseUsageSelection**, **ExerciseUsageOption**, **ExerciseUsagePickerItem**, **ExerciseUsageLabeling**. One label implementation for the recent-sets badge and the picker; all `Sendable`. |
+| ExerciseProgressAggregator | `Domain/Services/ExerciseProgressAggregator.swift` | **Pure, isolation-agnostic** chart + recent-sets aggregation. `buildRecentUsages` emits **one card per usage per session** — see "The recent-sets list shows every usage" above. The usage filter on `buildProgress` / `buildRecentUsages` comes from `ExerciseUsageResolver` — see "The chart separates usages by routine slot" above. `matches(_:exerciseId:exerciseName:nameIsUnique:)` resolves workout exercises to the chart target — an exact `exerciseId` match, OR a legacy row with `exerciseId == nil` whose name matches case-insensitively **and only when the name is unique in the live library**. Without the fallback, workouts logged before `WorkoutExercise.exerciseId` existed would be invisible and progress would look frozen; without the uniqueness gate, same-named equipment variants would double-count. |
 | FortschrittAggregator | `Domain/Services/FortschrittAggregator.swift` | **Pure, isolation-agnostic.** Builds the Fortschritt list's rows (count, sparkline, trend) from completed sessions + the live `Exercise` library. **One entry per session, not per `WorkoutExercise`** — see "The Fortschritt row counts sessions, not exercise instances" above. |
 | SwiftDataHistorySnapshotStore | `Data/History/SwiftDataHistorySnapshotStore.swift` | `@ModelActor` that performs the fetch and calls the aggregator off the main actor. `SwiftDataHistorySnapshotProvider.fetchExerciseProgress` is the `@concurrent` entry point. |
 | ExerciseProgressService | `Data/Progress/ExerciseProgressService.swift` | The vs-previous seam. Owns no `ModelContext`: `@MainActor` glue that runs `ExerciseComparisonBuilder` either side of one `@concurrent` boundary call. Does not feed the chart. |
 | ExerciseComparisonBuilder | `Domain/Services/ExerciseComparisonBuilder.swift` | **Pure, isolation-agnostic.** `makeLookup` reduces the current workout to `Sendable` values; `build` assembles the comparison rows from it plus the resolved predecessors. Runs on the main actor because the workout may be uncommitted. |
-| PreviousPerformanceResolver | `Domain/Services/PreviousPerformanceResolver.swift` | **Pure, isolation-agnostic.** Resolves every exercise of one workout against the most recent comparable session, in a single pass. Runs inside the model actor. |
+| ExerciseUsageResolver | `Domain/Services/ExerciseUsageResolver.swift` | **Pure, isolation-agnostic.** The single definition of "the same piece of work": `slot(of:)`, `usage(of:in:)`, `belongs(_:to:)`, the picker's `options(in:matching:)` and the default in `resolveSelection`. Shared by the chart aggregator and `PreviousPerformanceResolver`. |
+| PreviousPerformanceResolver | `Domain/Services/PreviousPerformanceResolver.swift` | **Pure, isolation-agnostic.** Resolves every exercise of one workout against the most recent comparable session, in a single pass. Its slot match calls `ExerciseUsageResolver.slot(of:)` — the same rule the chart segments usages by. Runs inside the model actor. |
 | PreviousPerformanceLookup | `Domain/Models/PreviousPerformanceLookup.swift` | The `Sendable` request: `before`, `routineId`, and one `Query` per exercise. Carries the workout's identity across the actor boundary without a `@Model` or a re-fetch. |
 
 #### watchOS Target

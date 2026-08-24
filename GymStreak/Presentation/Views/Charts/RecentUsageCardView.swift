@@ -76,32 +76,10 @@ struct RecentUsageCardView: View {
             .clipShape(Capsule())
     }
 
-    private var usageLabel: String {
-        var parts: [String] = [repRangePart]
-        if !entry.usage.routineName.isEmpty {
-            parts.append(entry.usage.routineName)
-        }
-        return parts.joined(separator: " · ")
-    }
-
-    /// The rep range is what usually names a usage. When it is missing the badge must
-    /// still say *which* usage this is — falling through to the routine name alone leaves
-    /// two usages of one routine both reading "Pull". The two ways it can be missing are
-    /// different facts and get different words: a slot whose rep-range goal the user has
-    /// not set yet, versus history that has no slot at all (pre-`routineExerciseId` rows
-    /// and exercises added ad hoc mid-workout).
-    private var repRangePart: String {
-        if let repRange = entry.usage.repRangeText {
-            // Same wording as the active-workout card's rep-range chip, on purpose.
-            return "workout.exercise.rep_goal".localized(repRange)
-        }
-        switch entry.usage.slot {
-        // "Kein Ziel" / "No goal" — the same wording the routine editor's rep-range
-        // picker offers, so the badge names the setting the user would go and change.
-        case .routineSlot: return "rep_range.no_goal".localized
-        case .unattributed: return "history.exercise.usage.unassigned".localized
-        }
-    }
+    /// The shared label — the same string the usage picker names this slot with. Two
+    /// names for one usage would make the picker unusable, so there is one implementation
+    /// (`ExerciseUsage.displayLabel`) rather than a copy per surface.
+    private var usageLabel: String { entry.usage.displayLabel }
 
     private var dateBadge: some View {
         VStack(spacing: 0) {

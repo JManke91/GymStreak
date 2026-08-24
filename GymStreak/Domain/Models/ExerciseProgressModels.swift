@@ -218,40 +218,6 @@ struct ExerciseProgressData: Sendable {
     }
 }
 
-// MARK: - Exercise Usage
-
-/// Which way an exercise was trained: the routine slot its history rows were
-/// recorded against, plus what a user needs to recognise that slot.
-///
-/// The identity already exists in history — `WorkoutExercise` denormalizes
-/// `routineExerciseId` and the slot's rep range precisely so they survive routine
-/// edits and deletion — so this persists nothing new. It is a `Sendable` value
-/// because it is built inside `SwiftDataHistorySnapshotStore`'s model actor.
-struct ExerciseUsage: Hashable, Sendable {
-    /// The routine slot behind a block of history.
-    enum Slot: Hashable, Sendable {
-        case routineSlot(UUID)
-        /// No slot at all: history recorded before `WorkoutExercise.routineExerciseId`
-        /// existed, and exercises added ad hoc during a workout. An explicit case so
-        /// these rows are never folded into an arbitrary real usage and never dropped.
-        case unattributed
-    }
-
-    let slot: Slot
-    let targetRepMin: Int?
-    let targetRepMax: Int?
-    /// `WorkoutSession.routineName`, denormalized — empty when the workout had no routine.
-    let routineName: String
-
-    /// "8–12", or "10" when the goal is a single number. Nil when the slot carries
-    /// no rep-range goal. Mirrors `WorkoutExerciseDisplay.repRangeText`, which formats
-    /// the same pair for the active-workout screen.
-    var repRangeText: String? {
-        guard let targetRepMin, let targetRepMax else { return nil }
-        return targetRepMin == targetRepMax ? "\(targetRepMin)" : "\(targetRepMin)–\(targetRepMax)"
-    }
-}
-
 // MARK: - Exercise Recent Usage
 
 /// One card of the exercise detail's "recent sets" list: the completed sets of **one
@@ -296,6 +262,27 @@ struct ExerciseRecentUsage: Identifiable, Sendable {
 struct ExerciseProgressSnapshot: Sendable {
     let data: ExerciseProgressData
     let recentUsages: [ExerciseRecentUsage]
+    /// Every usage found in **all completed history**, newest-trained first. Drives the
+    /// picker; independent of both `selectedUsage` and the charted window, so neither
+    /// choosing a usage nor switching timeframe reshuffles the menu under the user.
+    let availableUsages: [ExerciseUsageOption]
+    /// The selection the two halves above were actually built with. The caller asks
+    /// for one (or for nothing at all, on first open) and is told what it got — a
+    /// requested usage is always kept, and a window holding no rows for it draws the
+    /// empty chart rather than swapping the user's choice.
+    let selectedUsage: ExerciseUsageSelection
+
+    init(
+        data: ExerciseProgressData,
+        recentUsages: [ExerciseRecentUsage],
+        availableUsages: [ExerciseUsageOption] = [],
+        selectedUsage: ExerciseUsageSelection = .combined
+    ) {
+        self.data = data
+        self.recentUsages = recentUsages
+        self.availableUsages = availableUsages
+        self.selectedUsage = selectedUsage
+    }
 }
 
 // MARK: - Selected Data Point

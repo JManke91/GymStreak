@@ -54,7 +54,8 @@ actor SilentHistorySnapshotProvider: HistorySnapshotProviding {
         exerciseName: String,
         exerciseId: UUID?,
         startDate: Date,
-        recentSessionLimit: Int
+        recentSessionLimit: Int,
+        usageSelection: ExerciseUsageSelection?
     ) async throws -> ExerciseProgressSnapshot {
         ExerciseProgressSnapshot(
             data: ExerciseProgressData(exerciseName: exerciseName, dataPoints: []),

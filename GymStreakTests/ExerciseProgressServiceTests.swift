@@ -260,7 +260,8 @@ private struct FailingHistorySnapshotProvider: HistorySnapshotProviding {
         exerciseName: String,
         exerciseId: UUID?,
         startDate: Date,
-        recentSessionLimit: Int
+        recentSessionLimit: Int,
+        usageSelection: ExerciseUsageSelection?
     ) async throws -> ExerciseProgressSnapshot {
         throw Failure()
     }
