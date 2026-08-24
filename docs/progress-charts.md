@@ -305,9 +305,13 @@ previously did not apply at all. Keeping a block the chart excluded is exactly h
 up disagreeing about one workout, which is the defect this change exists to end. The list still
 ignores the selected timeframe — it remains all-time.
 
-**Not addressed here:** the card's "Best" line is still `max(by: weight)`, which on a
-counterweight-assisted exercise names the *most*-assisted set rather than the best one. That
-inversion predates this change and belongs to the record/trend work (ticket 04).
+The card's "Best" line inverts with the exercise's load behaviour (ticket 04): on a
+counterweight-assisted exercise the best set is the **least**-assisted one, so `bestSet` is a `min`
+there and a `max` everywhere else. `ExerciseRecentUsage` carries `loadBehavior` for exactly this —
+before it did, the line named the *most*-assisted set, i.e. the worst one, directly under a record
+card that said the opposite. Within one card every set shares the workout's body-mass snapshot, so
+the least-assisted set is also the highest effective load whether or not the series is expressed as
+effective load; no second rule is needed for the `usesEffectiveLoad` case.
 
 `GymStreakTests/ExerciseProgressAggregatorTests.swift` pins the rule: a two-usage session (both
 blocks present, in performed order, with the heaviest set shown equal to the value the chart
@@ -594,6 +598,163 @@ order untouched. Building that fixture required a second change: the routine exe
 refuse an exercise already in the routine, so the same exercise could not be added twice at all — see
 `docs/routines-exercises-redesign.md`.
 
+### The empty chart says which emptiness it means (2026-08-24)
+
+The exercise detail chart has two empty states with two different remedies, and until now both
+printed the same copy — `Noch keine Daten` / *"Absolviere Workouts mit dieser Übung"*. That copy is
+right for an exercise never trained and actively wrong for the other case: the reporter had **nine**
+recorded workouts of the selected usage and was told to go and do one.
+
+**Why the second state only just became reachable.** It is a direct consequence of the two sections
+above. The usage options are all-time and a chosen usage is **never** swapped out, so selecting a
+usage last trained on 12.07. and tapping **1M** legitimately charts nothing: the selection is kept,
+the menu keeps all four usages, the stat row reads `-` / `-` / `0 Workouts`. Before the picker
+existed, an empty window could essentially only mean "no history at all".
+
+**How the two are told apart — no second fetch.** `ExerciseProgressViewModel.emptyChartReason`
+returns `.neverTrained` when `usageOptions.isEmpty`, else `.outsideSelectedWindow`. That is sound
+because `ExerciseProgressSnapshot.availableUsages` is built from **all** completed history and never
+from the charted window: an empty menu means the exercise appears nowhere in history, so a populated
+menu beside an empty series *is* the windowed case. The enum owns its own two localization keys, and
+`emptyChart` in `ExerciseProgressChartView` reads them — one `isEmpty` check, no fetch and no
+collection walk in the render path (`docs/history-performance.md`).
+
+A failed load also renders `.neverTrained`: nothing is known about history then, so promising older
+workouts behind a wider range would be a guess.
+
+**New keys, not reworded ones.** `chart.empty.title` / `chart.empty.message` are shared with
+`ChartSupportViews.EmptyChartView` and with the recent-sets list's own empty line, where anything
+about a range would be nonsense — the recent-sets list is all-time and has no range to widen. So the
+windowed case got its own `chart.empty.window.*` keys, whose only call site is `emptyChart`. That is
+what later made the copy safe to reword in place (below) without touching the shared strings.
+
+**The windowed message names the date, and instructs nothing** (2026-08-24, ticket 03d). It reads
+EN *"Last trained on 07/12"* / DE *"Zuletzt trainiert am 12.07."* under the title *"No Data in This
+Range"* / *"Keine Daten in diesem Zeitraum"*.
+
+The date is the fact that makes the empty state actionable in one tap. Telling the user to "pick a
+wider range" left them pill-hopping: the reporter's usage was last trained on 12.07., which **both**
+1W and 1M miss — only the third pill along reaches it. Naming the date says which pill, without ever
+naming a pill. It is also why the copy can drop the imperative safely: with gating on the free
+windows end at 3M, so an instruction to widen can name an action a free user cannot complete, while a
+statement of when the data is stays true in every entitlement state and needs no branch (see the
+rejected gate-aware hint below). The **1J** / **Alle** pills carry lock badges, so which ranges are
+theirs is already on screen.
+
+- The date is resolved and formatted in `load()`, never in `body`: `ExerciseProgressViewModel`
+  stores the finished string in `datedWindowEmptyMessage`, and `emptyChartMessage` — what the view
+  reads — is a string lookup plus an optional read. `snapshot.availableUsages` carries
+  `lastPerformed` already, so this costs no fetch; the picker items it is built beside drop the date,
+  which is why one has to be kept separately.
+- For a selected usage it is that usage's `lastPerformed`; for **`.combined`** it is the **newest**
+  date across the usages — the combined series charts all of them, so the nearest one is the first
+  window that would show anything.
+- The formatting reuses `ExerciseUsageLabeling.lastTrainedDateText`, the same `Date.FormatStyle` the
+  picker appends when two labels collide (a `FormatStyle` rather than a `DateFormatter` because that
+  type is isolation-agnostic `Domain/` code). One rendering, so the date cannot read as two
+  different facts on one screen.
+- `chart.empty.window.message` survives as the **undated fallback**, reworded to drop its imperative
+  half: EN *"This exercise has older workouts"* / DE *"Für diese Übung gibt es ältere Workouts"*. It
+  renders when no date can be resolved. "Older" is always accurate: every window is "since X until
+  now", so data can only fall out of it on the old side.
+
+**What was deliberately not done.**
+
+- **No auto-widening and no re-selection.** Silently switching the timeframe or the usage to avoid
+  the empty state is exactly the behaviour removed two sections above — it is what made the picker
+  feel like it reshuffled itself. The range pills sit directly under the chart; one tap is the
+  remedy, and the named date is what tells the user which tap.
+- **The recent-sets list is not hidden to "match" the empty chart.** It stays all-time and stays
+  populated, which is also what keeps the empty chart from reading as a dead end.
+- **The icon is unchanged** in both states. This was a wording defect, not a broken flow.
+- **The windowed copy does not mention Pro** (decided 2026-08-24). With gating on, the free windows
+  end at 3M, so a usage last trained longer ago than that is only reachable through a locked pill —
+  and "pick a wider range" then names an action a free user cannot complete. A gate-aware branch was
+  considered and rejected: §8 would have allowed it (placement **C** already lists "scrub the chart
+  past 3 months", and placement **D** exists to "remove the surprise from placement C", so it would
+  have been a D-style hint in front of an existing C gate), but the **1J** / **Alle** pills already
+  carry lock badges, so the entitlement branch would restate what the badges say. The chosen fix is
+  to make the sentence **descriptive** and name the last-trained date instead of instructing a tap —
+  true in every entitlement state, no branch needed (shipped in ticket 03d, above). If this is ever
+  revisited, Rule 4 binds: the workouts stay readable in **Letzte Sätze** directly below, so no copy
+  may imply they are locked away, and placement C's own rule binds too: name the specific thing being
+  unlocked, never "Go Pro".
+
+Covered by `GymStreakTests/ExerciseProgressEmptyStateTests.swift`: all-time usages present with an
+empty series ⇒ the window case (including a single usage, where the picker is hidden but the remedy
+is the same), nothing anywhere ⇒ the never-trained case, a throwing load ⇒ the never-trained case,
+repeated reads ⇒ still one fetch, and both key pairs resolve to distinct localized strings. Ticket
+03d added: a known `lastPerformed` ⇒ the dated copy, `.combined` ⇒ the newest date across the usages
+(the stub's options are dated so the newest is deliberately *not* the first one), an unresolvable
+date ⇒ the undated fallback, and repeated reads of `emptyChartMessage` ⇒ the string stored by
+`load()`.
+
+Verified on device 2026-08-24 (DE, iPhone): the 12.07. usage on **1M** reads *"Keine Daten in diesem
+Zeitraum / Zuletzt trainiert am 12.07."*, and 3M then draws the series.
+
+### The stat cards describe the selected usage (2026-08-24)
+
+The reporter's screenshot: **REKORD 20.0 kg** and **TREND +42.9%** above a list of sessions that
+were mostly 14–15 kg work. Both numbers were arithmetically correct over the blended series and
+both were useless — the record belonged to a slot the user was not looking at, and the +42.9% was
+an artefact of a series alternating between two loads rather than any progression.
+
+**The cards read the plotted series, and the plotted series is the selection.** Nothing had to be
+recomputed for the first three criteria: `buildProgress` filters its rows by
+`ExerciseUsageResolver.belongs(_:to:)` (previous section), so `ExerciseProgressData.dataPoints`
+already holds exactly the points the chart draws. `personalRecord`, `progressPercentage(for:)` and
+`sessionCount` are all defined over that array, so switching usage moves all three at once and a
+stalling light day can no longer be masked by a heavy-day personal record.
+
+**What each card means, per view:**
+
+| Card | A usage selected | `.combined` (several usages) |
+|------|------------------|------------------------------|
+| **Rekord** | that usage's best — lowest number on a counterweight-assisted exercise | the exercise's all-time best across every usage. Defensible: it is the best this exercise was ever lifted, and the user asked for all of them |
+| **Trend** | that usage's own first-to-last change over the plotted window | **withheld** — the card prints `Gemischt` / *Mixed* instead of a percentage |
+| **Workouts** | the sessions plotted for that usage | every session plotted, i.e. every session that trained any usage |
+
+**Why the combined trend is withheld rather than labelled.** It is the very number this bug is
+about: with two usages the first-vs-last delta is decided by which usage happens to sit at each end
+of the window, so it can print +42.9% for a series that never progressed and a loss for one that
+did. Stating what it compares would make it honest and leave it useless — and it is rendered at the
+same size, in the same green, as a real trend. So `ExerciseProgressViewModel.trendPercentage`
+returns `nil` while `chartsSeveralUsagesTogether`, `trendValueString` prints `chart.trend.mixed`,
+and `hasTrendValue` turns the card's accent neutral (a red "Gemischt" would read as a loss). The
+chart headline's small trend badge reads the same optional, so it disappears with the number. The
+remedy is one tap on the picker directly above, which is why the word is *Mixed* rather than a bare
+dash.
+
+**`.combined` over a single usage keeps its trend.** `chartsSeveralUsagesTogether` is
+`selectedUsage == .combined && usageOptions.count > 1`; for an exercise with one usage, combined
+*is* that usage. Without that clause the change would have removed a correct trend from nearly
+every exercise in the app.
+
+**Counterweight semantics are untouched by the selection.** The inversion lives in
+`ExerciseProgressData` and keys off `loadBehavior`/`usesEffectiveLoad`, which describe the
+*exercise*, not the usage: a selected assistance usage still reports its lowest number as the record
+and reads a falling series as progress. The recent-sets card's "Best" line was brought in line with
+it here too (see the section above).
+
+**The Pro gate is unchanged and composes.** The cards still read `statMetric`, which falls back to
+the free metric while a Pro-only one is selected, so no Pro number is printed beside the blurred
+chart. The blend rule applies after that fallback: a combined view withholds the trend of whichever
+metric the cards are reporting on.
+
+Verified on device 2026-08-24 (DE, iPhone): `4–6 Wdh. · Pull` reads 20.0 kg / +0.0% / 5 Workouts,
+`Ohne Zuordnung · 8–12 Wdh. · Pull` reads 13.0 kg / +0.0% / 2 Workouts, and `Alle Varianten` reads
+20.0 kg / **Gemischt** / 5 Workouts with no trend badge beside the headline. The Workouts card
+counting *sessions* is visible there: those days hold both a `4–6 Wdh.` and a `Kein Ziel` block, so
+the combined count is 5 while **Letzte Sätze** lists 16 entries.
+
+Covered by `GymStreakTests/ExerciseProgressStatCardTests.swift`: a two-usage history (20 kg in a 4–6
+slot, 14 → 15 kg in an 8–12 slot, alternating) asserting record, trend and count per usage and for
+`.combined`; the same history as a counterweight exercise, asserting the inverted record and a
+negative trend for a rising assistance number; `bestSet` inverting with `loadBehavior` and the
+aggregator propagating it; and the view-model rules — combined-with-two-usages prints the localized
+*Mixed*, a selected usage and a single-usage combined view both print their percentage, and a locked
+metric under gating still yields *Mixed* rather than a blended free number.
+
 ### Components
 
 #### iOS Target
@@ -611,7 +772,7 @@ refuse an exercise already in the routine, so the same exercise could not be add
 | StatCard | `Views/Charts/ChartSupportViews.swift` | Reusable stat card with icon, value, and label |
 | EmptyChartView | `Views/Charts/ChartSupportViews.swift` | Placeholder shown when no workout data exists |
 | RecentUsageCardView | `Views/Charts/RecentUsageCardView.swift` | One recent-sets card — **one usage's sets within one workout**, badged with the usage it belongs to. Takes an `ExerciseRecentUsage` value, never a `@Model` |
-| ExerciseProgressViewModel | `ViewModels/ExerciseProgressViewModel.swift` | `async load()` behind a generation counter; owns timeframe, metric, selection and the loaded snapshot; computed display properties; owns the **P2 Pro gate** (which metric/window is locked, what a locked selection renders, which paywall it raises) |
+| ExerciseProgressViewModel | `ViewModels/ExerciseProgressViewModel.swift` | `async load()` behind a generation counter; owns timeframe, metric, selection and the loaded snapshot; computed display properties; owns the **P2 Pro gate** (which metric/window is locked, what a locked selection renders, which paywall it raises), `emptyChartReason`, which tells "never trained" apart from "nothing inside this window", and `emptyChartMessage`, whose dated windowed line is formatted in `load()` |
 | ChartGatingPolicy | `Domain/Services/ChartGatingPolicy.swift` | **Pure, isolation-agnostic.** Which metrics and windows the free tier may read, from `ProFeatureCaps` — plus the widest free window a lapsed user's chart clamps back to |
 | ExerciseProgressModels | `Domain/Models/ExerciseProgressModels.swift` | Domain values: ChartTimeframe, ProgressMetric, ExerciseProgressDataPoint, ExerciseProgressData, **ExerciseRecentUsage**, **ExerciseProgressSnapshot**, SelectedDataPoint. Everything that crosses the actor boundary is explicitly `Sendable`. |
 | ExerciseUsage | `Domain/Models/ExerciseUsage.swift` | The usage cluster: **ExerciseUsage** (+ `Slot`, `repRangeText`, `displayLabel`), **ExerciseUsageSelection**, **ExerciseUsageOption** (+ `isArchived`), **ExerciseUsagePickerItem**, **ExerciseUsageLabeling**. One label implementation for the recent-sets badge and the picker; the "not in a routine" marker is added by `pickerItems` only. All `Sendable`. |
@@ -678,7 +839,9 @@ volume, 1Y and All are Pro. The rules live in `ChartGatingPolicy` and the full r
   free path costs. A locked *metric* costs nothing either — every `ExerciseProgressDataPoint`
   already carries all three values from the one fetch.
 - The PR and Trend stat cards fall back to the free metric while the selected one is locked, so no
-  Pro number is printed in plain text beside the blurred chart.
+  Pro number is printed in plain text beside the blurred chart. The usage rules apply after that
+  fallback: with several usages charted together the Trend card prints *Mixed* whichever metric the
+  gate left it reporting on.
 - Entitlement changes are live: the gate reads the `@Observable` provider during `body`, so a
   purchase unblurs the chart and reloads the wider window through the existing `.task(id:)` with no
   refresh gesture, and a lapse blurs it and clamps the rendered window back to 3M. No workout,

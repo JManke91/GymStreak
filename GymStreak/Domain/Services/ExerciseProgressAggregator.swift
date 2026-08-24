@@ -303,7 +303,8 @@ struct ExerciseProgressAggregator {
                             in: session,
                             occurrence: key.occurrence
                         ),
-                        sets: entries
+                        sets: entries,
+                        loadBehavior: loadBehavior
                     )
                 )
             }

@@ -704,6 +704,12 @@
 "chart.tooltip.date_label" = "Date";
 "chart.empty.title" = "No Data Yet";
 "chart.empty.message" = "Complete workouts with this exercise to see your progress";
+"chart.empty.window.title" = "No Data in This Range";
+// Descriptive, never instructing: with gating on the free windows end at 3M, so
+// "pick a wider range" could name an action the user cannot complete. The date is
+// what makes the right pill obvious; the lock badges say which pills are theirs.
+"chart.empty.window.message" = "This exercise has older workouts";
+"chart.empty.window.message.dated" = "Last trained on %@";
 "chart.personal_record" = "Personal Record";
 "chart.trend" = "Trend";
 "chart.sessions" = "Sessions";
@@ -832,6 +838,10 @@
 // Leads the label when a usage's routine slot exists in no routine any more — the usage
 // stays selectable and part of "All usages", it just says what it is.
 "chart.usage.archived" = "Not in a routine";
+// The trend card's value while "All usages" charts several usages at once: their
+// first-to-last change describes no progression, so a number is withheld and the card
+// says why — pick a single usage to get one.
+"chart.trend.mixed" = "Mixed";
 
 "switch" = "Switch";
 

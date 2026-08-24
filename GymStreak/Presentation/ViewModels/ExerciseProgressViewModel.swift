@@ -57,6 +57,16 @@ class ExerciseProgressViewModel: ObservableObject {
     /// entire picker on an unrelated line.
     @Published private(set) var requestedUsage: ExerciseUsageSelection?
 
+    /// The empty chart's message for the windowed case, with the selected usage's
+    /// last-trained date already named and formatted — "Zuletzt trainiert am 12.07.".
+    ///
+    /// That date is the fact that turns "no data in this range" into a single correct
+    /// range tap: the reporter's usage was last trained on 12.07., which neither 1W nor
+    /// 1M reaches, so copy without it leaves the user hopping pills. Built in `load()`
+    /// and `nil` when no date can be resolved (nothing in history, or a failed load),
+    /// which falls back to the undated copy.
+    @Published private(set) var datedWindowEmptyMessage: String?
+
     /// The last window this user was actually allowed to read. It is what the
     /// chart keeps drawing while a Pro-only window is selected — see
     /// `chartTimeframe`.
@@ -132,6 +142,7 @@ class ExerciseProgressViewModel: ObservableObject {
         requestedUsage = nil
         usageOptions = []
         selectedUsage = .combined
+        datedWindowEmptyMessage = nil
     }
 
     /// Selects which usage the chart and the recent-sets list describe.
@@ -162,6 +173,89 @@ class ExerciseProgressViewModel: ObservableObject {
         case .usage(let key):
             return usageOptions.first { $0.key == key }?.label ?? "chart.usage.combined".localized
         }
+    }
+
+    /// Which of the two emptinesses the chart is currently showing. They need
+    /// different copy because they have different remedies: one asks for a workout,
+    /// the other for one tap on a wider range pill.
+    ///
+    /// `usageOptions` is built from **all** completed history
+    /// (`ExerciseProgressSnapshot.availableUsages`), never from the charted window, so it
+    /// is empty only when this exercise was never trained at all. A non-empty menu with
+    /// an empty series therefore *is* the windowed case — the history exists, the selected
+    /// window simply does not reach it. That is exactly the state ticket 03a made
+    /// reachable by keeping a chosen usage instead of swapping it out.
+    ///
+    /// Derived from already-loaded state on purpose: no second fetch, and an `isEmpty`
+    /// check rather than a collection walk, so `body` may read it (docs/history-performance.md).
+    /// Meaningful only while the chart has no data to draw.
+    var emptyChartReason: EmptyChartReason {
+        usageOptions.isEmpty ? .neverTrained : .outsideSelectedWindow
+    }
+
+    /// The empty chart's two states, each owning its own copy.
+    enum EmptyChartReason: Equatable {
+        /// No completed set of this exercise anywhere in history.
+        case neverTrained
+        /// History exists for the selected usage, just not inside the selected window.
+        case outsideSelectedWindow
+
+        var titleKey: String {
+            switch self {
+            case .neverTrained: return "chart.empty.title"
+            case .outsideSelectedWindow: return "chart.empty.window.title"
+            }
+        }
+
+        var messageKey: String {
+            switch self {
+            case .neverTrained: return "chart.empty.message"
+            case .outsideSelectedWindow: return "chart.empty.window.message"
+            }
+        }
+    }
+
+    /// The message line the empty chart renders.
+    ///
+    /// Purely descriptive in both states — it never instructs an action and never
+    /// branches on the entitlement (2026-08-24). With gating on, the free windows end at
+    /// 3M, so "pick a wider range" named an action a free user cannot always complete;
+    /// naming the date is true for a free and a Pro user alike, and the lock badges on
+    /// the 1Y and All pills already say which ranges are theirs.
+    ///
+    /// A string lookup and an optional read — the date was formatted during `load()`, so
+    /// `body` may read this (docs/history-performance.md).
+    var emptyChartMessage: String {
+        switch emptyChartReason {
+        case .neverTrained:
+            return EmptyChartReason.neverTrained.messageKey.localized
+        case .outsideSelectedWindow:
+            return datedWindowEmptyMessage
+                ?? EmptyChartReason.outsideSelectedWindow.messageKey.localized
+        }
+    }
+
+    /// The dated windowed-empty line for one selection, or `nil` when the snapshot holds
+    /// no usage to take a date from.
+    ///
+    /// `.combined` is described by the **newest** date across the usages: it charts all
+    /// of them, so the nearest one is the window that would first show something.
+    /// Walks the options once, in `load()`.
+    private static func datedWindowEmptyMessage(
+        for selection: ExerciseUsageSelection,
+        in options: [ExerciseUsageOption]
+    ) -> String? {
+        let lastPerformed: Date?
+        switch selection {
+        case .combined:
+            lastPerformed = options.map(\.lastPerformed).max()
+        case .usage(let key):
+            lastPerformed = options.first { $0.key == key }?.lastPerformed
+        }
+        guard let lastPerformed else { return nil }
+        return "chart.empty.window.message.dated".localized(
+            ExerciseUsageLabeling.lastTrainedDateText(lastPerformed)
+        )
     }
 
     /// Selects a window. A Pro-only one is still *selected* — its pill highlights
@@ -202,6 +296,12 @@ class ExerciseProgressViewModel: ObservableObject {
             // for duplicate labels while a view body is being evaluated.
             usageOptions = ExerciseUsageLabeling.pickerItems(for: snapshot.availableUsages)
             selectedUsage = snapshot.selectedUsage
+            // Formatted here for the same reason the labels are: the empty chart's copy
+            // must not build a date string while `body` is being evaluated.
+            datedWindowEmptyMessage = Self.datedWindowEmptyMessage(
+                for: snapshot.selectedUsage,
+                in: snapshot.availableUsages
+            )
             if !availableMetrics.contains(selectedMetric) {
                 selectedMetric = .maxWeight
             }
@@ -214,6 +314,7 @@ class ExerciseProgressViewModel: ObservableObject {
             recentUsages = []
             usageOptions = []
             selectedUsage = .combined
+            datedWindowEmptyMessage = nil
             isLoading = false
         }
     }
@@ -367,19 +468,50 @@ class ExerciseProgressViewModel: ObservableObject {
         return nil
     }
 
+    /// Whether the loaded series folds several usages into one line — `.combined` on an
+    /// exercise that has more than one usage.
+    ///
+    /// Two comparisons on already-loaded state, so `body` may read it
+    /// (docs/history-performance.md). It is `false` for an exercise with a single usage,
+    /// where `.combined` *is* that usage and every card means exactly what it says.
+    var chartsSeveralUsagesTogether: Bool {
+        selectedUsage == .combined && usageOptions.count > 1
+    }
+
+    /// First-to-last change of the plotted series, or `nil` when there is no such number
+    /// to state.
+    ///
+    /// `nil` while several usages are charted together: the combined series alternates
+    /// between two loads, so its first-vs-last delta is an artefact of which usage
+    /// happens to sit at each end — the reporter's screen read **+42.9%** off a series
+    /// that never progressed. Arithmetically correct, and a claim about progression that
+    /// the data does not support, so it is withheld rather than dressed up.
+    private var trendPercentage: Double? {
+        guard !chartsSeveralUsagesTogether else { return nil }
+        return progressData?.progressPercentage(for: statMetric)
+    }
+
     var trendPercentageString: String? {
-        guard let percentage = progressData?.progressPercentage(for: statMetric) else {
-            return nil
-        }
+        guard let percentage = trendPercentage else { return nil }
 
         let sign = percentage >= 0 ? "+" : ""
         return String(format: "%@%.1f%%", sign, percentage)
     }
 
+    /// What the trend card prints. A percentage when there is one; "Gemischt" / "Mixed"
+    /// when the series mixes usages, which says *why* no number is shown and points at
+    /// the picker; the plain placeholder when a single usage simply has too few points.
+    var trendValueString: String {
+        if let trendPercentageString { return trendPercentageString }
+        return chartsSeveralUsagesTogether ? "chart.trend.mixed".localized : "-"
+    }
+
+    /// `false` when the trend card is printing something other than a percentage — the
+    /// card then renders in a neutral tone, because red for "no number" reads as a loss.
+    var hasTrendValue: Bool { trendPercentage != nil }
+
     var trendIsPositive: Bool {
-        guard let percentage = progressData?.progressPercentage(for: statMetric) else {
-            return false
-        }
+        guard let percentage = trendPercentage else { return false }
         return percentage >= 0
     }
 

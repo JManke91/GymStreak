@@ -145,6 +145,15 @@ enum ExerciseUsageLabeling {
     /// formatter is ever built per row or in a view body.
     private static let lastTrainedStyle = Date.FormatStyle.dateTime.day(.twoDigits).month(.twoDigits)
 
+    /// The last-trained date as the user reads it — "12.07." / "07/12".
+    ///
+    /// Exposed for the empty chart's dated copy, which names the same date the picker
+    /// appends when two labels collide. One style, one rendering: a date that read
+    /// differently in the two places would look like two different facts.
+    static func lastTrainedDateText(_ date: Date) -> String {
+        date.formatted(lastTrainedStyle)
+    }
+
     /// Picker entries for one exercise's usages, in the order given.
     ///
     /// Labels that would collide get the usage's **last-trained date** appended
@@ -171,7 +180,7 @@ enum ExerciseUsageLabeling {
 
         let dated = zip(options, bases).map { option, base -> String in
             guard (baseCounts[base] ?? 0) > 1 else { return base }
-            let date = option.lastPerformed.formatted(lastTrainedStyle)
+            let date = lastTrainedDateText(option.lastPerformed)
             return base + separator + "chart.usage.last_trained".localized(date)
         }
 

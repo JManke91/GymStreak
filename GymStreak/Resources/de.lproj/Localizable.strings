@@ -704,6 +704,12 @@
 "chart.tooltip.date_label" = "Datum";
 "chart.empty.title" = "Noch keine Daten";
 "chart.empty.message" = "Absolviere Workouts mit dieser Übung, um deinen Fortschritt zu sehen";
+"chart.empty.window.title" = "Keine Daten in diesem Zeitraum";
+// Beschreibend, nie auffordernd: mit aktivem Gating enden die freien Zeiträume bei 3M —
+// "wähle einen größeren Zeitraum" könnte also eine Aktion nennen, die der Nutzer nicht
+// ausführen kann. Das Datum zeigt den richtigen Pill; die Schlösser zeigen, welche frei sind.
+"chart.empty.window.message" = "Für diese Übung gibt es ältere Workouts";
+"chart.empty.window.message.dated" = "Zuletzt trainiert am %@";
 "chart.personal_record" = "Persönlicher Rekord";
 "chart.trend" = "Trend";
 "chart.sessions" = "Workouts";
@@ -832,6 +838,10 @@
 // Vorangestellt, wenn der Routine-Platz einer Variante in keiner Routine mehr existiert —
 // die Variante bleibt wählbar und Teil von "Alle Varianten", sie sagt nur, was sie ist.
 "chart.usage.archived" = "Nicht mehr im Plan";
+// Wert der Trend-Kachel, solange "Alle Varianten" mehrere Varianten zugleich zeigt: deren
+// Veränderung von der ersten zur letzten Einheit beschreibt keinen Fortschritt, deshalb
+// wird keine Zahl genannt — eine einzelne Variante wählen ergibt eine.
+"chart.trend.mixed" = "Gemischt";
 
 "switch" = "Wechseln";
 

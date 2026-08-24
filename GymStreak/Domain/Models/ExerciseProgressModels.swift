@@ -239,6 +239,28 @@ struct ExerciseRecentUsage: Identifiable, Sendable {
     let date: Date
     let usage: ExerciseUsage
     let sets: [SetEntry]
+    /// How the exercise is loaded, taken from the live library by the aggregator — the
+    /// same value the chart above filters and inverts on. It is here so `bestSet` can
+    /// invert with it; without it the card's "Best" line named the *most*-assisted set of
+    /// a counterweight-assisted exercise, i.e. the worst one, directly under a chart
+    /// whose record card said the opposite.
+    let loadBehavior: ExerciseLoadBehavior
+
+    init(
+        id: UUID,
+        workoutSessionId: UUID,
+        date: Date,
+        usage: ExerciseUsage,
+        sets: [SetEntry],
+        loadBehavior: ExerciseLoadBehavior = .resistance
+    ) {
+        self.id = id
+        self.workoutSessionId = workoutSessionId
+        self.date = date
+        self.usage = usage
+        self.sets = sets
+        self.loadBehavior = loadBehavior
+    }
 
     struct SetEntry: Identifiable, Sendable {
         let id: UUID
@@ -246,8 +268,15 @@ struct ExerciseRecentUsage: Identifiable, Sendable {
         let reps: Int
     }
 
+    /// The best set of this block — the heaviest, or the **least assisted** on a
+    /// counterweight-assisted exercise, where a lower number on the machine is the
+    /// better set. Within one card every set shares the workout's body-mass snapshot, so
+    /// the least-assisted set is also the highest effective load whether or not the
+    /// series is expressed as effective load.
     var bestSet: SetEntry? {
-        sets.max(by: { $0.weight < $1.weight })
+        loadBehavior.isCounterweightAssistance
+            ? sets.min(by: { $0.weight < $1.weight })
+            : sets.max(by: { $0.weight < $1.weight })
     }
 }
 

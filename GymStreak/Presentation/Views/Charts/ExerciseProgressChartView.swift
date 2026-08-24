@@ -212,8 +212,13 @@ private struct ExerciseProgressChartViewInternal: View {
             )
             hexStatCard(
                 icon: "arrow.up.right",
-                color: viewModel.trendIsPositive ? DesignSystem.Colors.tint : Color(red: 1, green: 0.42, blue: 0.42),
-                value: viewModel.trendPercentageString ?? "-",
+                // Neutral while the card prints something other than a percentage: with
+                // several usages charted together there is no trend to call good or bad,
+                // and a red "Gemischt" would read as a loss.
+                color: viewModel.hasTrendValue
+                    ? (viewModel.trendIsPositive ? DesignSystem.Colors.tint : Color(red: 1, green: 0.42, blue: 0.42))
+                    : Color.white.opacity(0.4),
+                value: viewModel.trendValueString,
                 label: "history.exercise.trend".localized
             )
             hexStatCard(
@@ -397,15 +402,20 @@ private struct ExerciseProgressChartViewInternal: View {
         }
     }
 
+    /// Two emptinesses, two lines of copy — both resolved by the view model, which
+    /// reads one already-loaded `isEmpty` to tell "never trained" apart from "not
+    /// inside the selected window". The windowed line names the date that usage was
+    /// last trained (formatted during `load()`), so the range pills sitting directly
+    /// below can be tapped once, correctly.
     private var emptyChart: some View {
         VStack(spacing: 10) {
             Image(systemName: "chart.line.uptrend.xyaxis")
                 .font(.system(size: 32))
                 .foregroundStyle(Color.white.opacity(0.25))
-            Text("chart.empty.title".localized)
+            Text(viewModel.emptyChartReason.titleKey.localized)
                 .font(.system(size: 13, weight: .semibold))
                 .foregroundStyle(Color.white.opacity(0.55))
-            Text("chart.empty.message".localized)
+            Text(viewModel.emptyChartMessage)
                 .font(.system(size: 11))
                 .multilineTextAlignment(.center)
                 .foregroundStyle(Color.white.opacity(0.35))
