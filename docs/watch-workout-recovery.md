@@ -192,6 +192,19 @@ once, so the app guards it itself:
   active.
 - The finalizer rejects reentrancy, and enqueue is idempotent by workout id.
 
+### iPhone-recorded workouts also reach this ledger (since 2026-08-24)
+
+The HealthKit-orphan half of this feature is no longer fed by watch workouts alone.
+`HealthKitAnchoredWorkoutDrain.facts(from:)` admits any GymStreak-authored workout carrying
+`HKMetadataKeyExternalUUID`; iPhone-written workouts were previously excluded only because the
+iOS save path failed to stamp that metadata at all. That defect was fixed
+([healthkit-ios-workout-save.md](./healthkit-ios-workout-save.md)), so phone workouts now flow
+through the same ledger. They reconcile to `.resolvedByHistory` on the normal path, have **no**
+`WorkoutIngestReceipt` fallback (only `WatchWorkoutIngestionCoordinator` writes receipts), and
+`fromWatch` cannot be used to tell them apart — a watch-recorded workout carries the iPhone app's
+bundle identifier, so that flag is diagnostics-only. See the linked doc for the residual duplicate
+window.
+
 ## Official API research (verified 2026-07-23)
 
 - `HKHealthStore.recoverActiveWorkoutSession()` — async form used; returns the

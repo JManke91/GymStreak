@@ -6,6 +6,7 @@
 //
 
 import Foundation
+import HealthKit
 import SwiftData
 import Testing
 @testable import GymStreak
@@ -679,6 +680,84 @@ struct WorkoutViewModelTests {
 
         #expect(sessionRepository.fetchAll().isEmpty)
         #expect(viewModel.healthKitDeleteFailed == false)
+    }
+
+    // MARK: - Completing a workout stamps its Apple Health counterpart
+
+    /// The external UUID is the ONLY link between a session and its Apple Health
+    /// workout: it decides whether the delete confirmation offers to remove the
+    /// Health copy, and it is what `deleteWorkout(externalUUID:)` looks up.
+    /// iPhone-recorded workouts lost it while completion went through a live
+    /// `HKWorkoutSession`, so they were saved to Health with neither the routine
+    /// name nor the UUID (docs/healthkit-ios-workout-save.md).
+    @Test
+    func completingWorkoutStampsExternalUUIDAndRoutineNameForItsHealthCounterpart() async throws {
+        let context = ModelContext(InMemoryModelContainer.make())
+        let sessionRepository = SwiftDataWorkoutSessionRepository(modelContext: context)
+        let routineRepository = SwiftDataRoutineRepository(modelContext: context)
+        let exerciseRepository = SwiftDataExerciseRepository(modelContext: context)
+        let healthKit = MockHealthKitWorkoutServicing()
+        healthKit.isHealthKitAvailable = true
+        healthKit.isAuthorized = true
+        let routine = Routine(name: "Push")
+        routineRepository.insert(routine)
+        try sessionRepository.save()
+        let viewModel = makeViewModel(
+            sessionRepository: sessionRepository, routineRepository: routineRepository,
+            exerciseRepository: exerciseRepository, healthKitManager: healthKit
+        )
+
+        viewModel.startWorkout(routine: routine)
+        let session = try #require(viewModel.currentSession)
+        viewModel.pauseForCompletion()
+        viewModel.completeWorkout(updateTemplate: false, notes: "")
+        // The Health write is a detached Task with several suspension points.
+        for _ in 0..<20 where healthKit.savedWorkouts.isEmpty {
+            await Task.yield()
+        }
+
+        let saved = try #require(healthKit.savedWorkouts.first)
+        #expect(healthKit.savedWorkouts.count == 1)
+        // Correlated: the delete confirmation offers Apple Health only when this holds.
+        #expect(session.healthKitWorkoutId == saved.healthKitWorkoutId)
+        // Named after the routine, so Fitness shows "Push" and not the generic
+        // "Traditional Strength Training".
+        #expect(saved.metadata?[HKMetadataKeyWorkoutBrandName] as? String == "Push")
+        #expect(saved.endDate == session.endTime)
+    }
+
+    /// A refused or failed Apple Health write is never allowed to cost the user
+    /// their workout: the session is already committed and stays committed. It
+    /// just carries no external UUID, which is what makes the delete
+    /// confirmation offer a single *Delete* rather than a no-op Health option.
+    @Test
+    func failedHealthKitWriteLeavesTheWorkoutCommittedWithoutAnExternalUUID() async throws {
+        let context = ModelContext(InMemoryModelContainer.make())
+        let sessionRepository = SwiftDataWorkoutSessionRepository(modelContext: context)
+        let routineRepository = SwiftDataRoutineRepository(modelContext: context)
+        let healthKit = MockHealthKitWorkoutServicing()
+        healthKit.isHealthKitAvailable = true
+        healthKit.saveError = HealthKitError.notAuthorized
+        let routine = Routine(name: "Push")
+        routineRepository.insert(routine)
+        try sessionRepository.save()
+        let viewModel = makeViewModel(
+            sessionRepository: sessionRepository, routineRepository: routineRepository,
+            exerciseRepository: SwiftDataExerciseRepository(modelContext: context),
+            healthKitManager: healthKit
+        )
+
+        viewModel.startWorkout(routine: routine)
+        let session = try #require(viewModel.currentSession)
+        viewModel.pauseForCompletion()
+        viewModel.completeWorkout(updateTemplate: false, notes: "")
+        for _ in 0..<20 where viewModel.healthKitSyncStatus == .syncing {
+            await Task.yield()
+        }
+
+        #expect(healthKit.savedWorkouts.isEmpty)
+        #expect(session.healthKitWorkoutId == nil)
+        #expect(sessionRepository.fetchAll().contains { $0.id == session.id })
     }
 
     /// The mid-workout increase belongs to the NEXT workout. It is only offered

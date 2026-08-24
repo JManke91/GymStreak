@@ -290,8 +290,10 @@ final class AppDependencies: ObservableObject {
         recovery.start()
     }
 
-    /// Each `WorkoutViewModel` owns its own HealthKit workout session — unlike
-    /// WatchConnectivity there is no cross-instance state to share, and the previous
+    /// Each `WorkoutViewModel` owns its own `HealthKitWorkoutManager` instance — unlike
+    /// WatchConnectivity there is no cross-instance state to share (the only per-instance
+    /// state left is the derived `isAuthorized` flag; the phone runs no live workout
+    /// session), and the previous
     /// code created a fresh `HealthKitWorkoutManager()` per WorkoutViewModel (there are
     /// two concurrently: one on the Routines tab for active workouts, one on the
     /// History tab). A factory preserves that instead of collapsing them into one.

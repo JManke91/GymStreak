@@ -508,36 +508,31 @@ class WorkoutViewModel: ObservableObject {
 
         startTimer()
 
-        // Start HealthKit workout session
-        startHealthKitSession()
+        // Ask for HealthKit permission now so the completion save can go through
+        prepareHealthKitAuthorization()
     }
 
-    private func startHealthKitSession() {
+    /// Primes HealthKit share authorization at workout start, so the save at
+    /// completion is not the first thing to ask for it.
+    ///
+    /// It deliberately does **not** start an `HKWorkoutSession`. iPhone-side live
+    /// sessions (iOS 26+) need the `workout-processing` background mode, which
+    /// this target does not declare, and they earn nothing here — the phone has
+    /// no heart-rate sensor and calories are estimated anyway. The workout is
+    /// written once, after the fact, by `saveWorkoutToHealthKit`. See
+    /// `docs/healthkit-ios-workout-save.md`.
+    private func prepareHealthKitAuthorization() {
         // Skip HealthKit during UI testing to avoid authorization alert in screenshots
-        guard !isUITesting, healthKitSyncEnabled, healthKitManager.isHealthKitAvailable else {
+        guard !isUITesting, healthKitSyncEnabled, healthKitManager.isHealthKitAvailable,
+              !healthKitManager.isAuthorized else {
             return
         }
 
         Task {
-            // Check if we need authorization
-            if !healthKitManager.isAuthorized {
-                do {
-                    try await healthKitManager.requestAuthorization()
-                } catch {
-                    print("HealthKit authorization failed: \(error)")
-                    return
-                }
-            }
-
-            // Start the workout session
-            if healthKitManager.isAuthorized {
-                do {
-                    try await healthKitManager.startWorkoutSession()
-                    print("HealthKit workout session started successfully")
-                } catch {
-                    print("Failed to start HealthKit session: \(error)")
-                    // Continue with workout even if HealthKit fails
-                }
+            do {
+                try await healthKitManager.requestAuthorization()
+            } catch {
+                print("HealthKit authorization failed: \(error)")
             }
         }
     }
@@ -545,9 +540,6 @@ class WorkoutViewModel: ObservableObject {
     func cancelWorkout() {
         stopTimer()
         stopRestTimer()
-
-        // Cancel HealthKit session without saving
-        healthKitManager.cancelWorkoutSession()
 
         if let session = currentSession {
             workoutSessionRepository.delete(session)
@@ -639,25 +631,17 @@ class WorkoutViewModel: ObservableObject {
                     metadata["Notes"] = session.notes
                 }
 
-                let healthKitWorkoutId: UUID
-
-                // Try to end the active session first
-                if healthKitManager.isWorkoutActive {
-                    let result = try await healthKitManager.endWorkoutSession(
-                        totalEnergyBurned: estimatedCalories,
-                        metadata: metadata
-                    )
-                    healthKitWorkoutId = result.healthKitWorkoutId
-                } else {
-                    // Fall back to direct save if no active session
-                    let result = try await healthKitManager.saveWorkoutDirectly(
-                        startDate: session.startTime,
-                        endDate: session.endTime ?? Date(),
-                        totalEnergyBurned: estimatedCalories,
-                        metadata: metadata
-                    )
-                    healthKitWorkoutId = result.healthKitWorkoutId
-                }
+                // One write path, after the fact: the builder stamps the brand
+                // name and the external UUID *before* `endCollection`, which is
+                // what makes the workout show its routine name in Fitness and
+                // stay correlatable — and therefore deletable — from here.
+                let result = try await healthKitManager.saveWorkoutDirectly(
+                    startDate: session.startTime,
+                    endDate: session.endTime ?? Date(),
+                    totalEnergyBurned: estimatedCalories,
+                    metadata: metadata
+                )
+                let healthKitWorkoutId = result.healthKitWorkoutId
 
                 // Store the HealthKit workout ID in the session for correlation
                 session.healthKitWorkoutId = healthKitWorkoutId

@@ -6,19 +6,24 @@ import HealthKit
 final class MockHealthKitWorkoutServicing: HealthKitWorkoutServicing {
     var isHealthKitAvailable = false
     var isAuthorized = false
-    var isWorkoutActive = false
 
     func requestAuthorization() async throws {}
     func checkAuthorizationStatus() {}
-    func startWorkoutSession() async throws {}
-    func cancelWorkoutSession() {}
 
-    func endWorkoutSession(
-        totalEnergyBurned: Double?,
-        metadata: [String: Any]?
-    ) async throws -> (workout: HKWorkout?, healthKitWorkoutId: UUID) {
-        (nil, UUID())
+    // MARK: - Save
+
+    /// One record per `saveWorkoutDirectly` call, in order.
+    struct SavedWorkout {
+        let startDate: Date
+        let endDate: Date
+        let totalEnergyBurned: Double?
+        let metadata: [String: Any]?
+        let healthKitWorkoutId: UUID
     }
+
+    private(set) var savedWorkouts: [SavedWorkout] = []
+    /// When set, `saveWorkoutDirectly(...)` throws it instead of saving.
+    var saveError: Error?
 
     func saveWorkoutDirectly(
         startDate: Date,
@@ -26,7 +31,16 @@ final class MockHealthKitWorkoutServicing: HealthKitWorkoutServicing {
         totalEnergyBurned: Double?,
         metadata: [String: Any]?
     ) async throws -> (workout: HKWorkout?, healthKitWorkoutId: UUID) {
-        (nil, UUID())
+        if let saveError { throw saveError }
+        let id = UUID()
+        savedWorkouts.append(SavedWorkout(
+            startDate: startDate,
+            endDate: endDate,
+            totalEnergyBurned: totalEnergyBurned,
+            metadata: metadata,
+            healthKitWorkoutId: id
+        ))
+        return (nil, id)
     }
 
     // MARK: - Delete

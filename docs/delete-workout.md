@@ -17,7 +17,14 @@ Confirming pops the detail screen and removes the session from history.
 
 Target: **iOS app only** (`GymStreak`). No changes to the watch target.
 
-Related: [History (Verlauf) Redesign](./history-redesign.md), [Edit a Past Workout](./edit-past-workout.md), [Watch Workout Recovery](./watch-workout-recovery.md).
+Related: [History (Verlauf) Redesign](./history-redesign.md), [Edit a Past Workout](./edit-past-workout.md), [Watch Workout Recovery](./watch-workout-recovery.md), [Saving an iPhone Workout to Apple Health](./healthkit-ios-workout-save.md).
+
+> **The Apple Health choice is only as good as `healthKitWorkoutId`.** Until 2026-08-24,
+> iPhone-recorded workouts were written to Health *without* the app's metadata, so they carried no
+> external UUID and this confirmation correctly — but confusingly — showed a single *Delete*, while
+> watch-recorded workouts offered both options. That was a defect in the **save** path, not here;
+> root cause and fix in [healthkit-ios-workout-save.md](./healthkit-ios-workout-save.md). Workouts
+> the phone recorded before that fix stay un-correlatable and are still single-*Delete*.
 
 ## Why it exists
 Before this feature, the only way to delete a recorded workout was a hidden long-press `.contextMenu` on a history card in `TrainingsTabView`'s list mode. Calendar mode had **no** delete path at all, and neither did the detail screen. Because both list mode and the calendar's selected-day card push the same `WorkoutDetailView`, adding the affordance there closes both gaps with one control.
@@ -216,7 +223,7 @@ The removed swipe gesture had previously passed functional device testing, but f
 
 ## Edge cases and decisions
 - **Undo:** none. The confirmation copy states the action cannot be undone, matching the pre-existing context-menu delete.
-- **A workout whose HealthKit save failed or was denied** has `healthKitWorkoutId == nil`. That is normal, never blocks deletion, and suppresses the Apple Health option rather than offering a no-op.
+- **A workout whose HealthKit save failed or was denied** has `healthKitWorkoutId == nil`. That is normal, never blocks deletion, and suppresses the Apple Health option rather than offering a no-op. Note the failure mode this hides: a workout can be *present* in Health and still have `healthKitWorkoutId == nil` if the write did not stamp `HKMetadataKeyExternalUUID` — which is exactly what happened to iPhone-recorded workouts until 2026-08-24 ([healthkit-ios-workout-save.md](./healthkit-ios-workout-save.md)). The suppressed option is then correct given what the app knows, but wrong from the user's point of view.
 - **Exercise minutes:** deliberately called out in the confirmation copy rather than silently omitted, because the app cannot remove them and a promise of complete erasure would be false.
 - **Detail screen size:** `WorkoutDetailView` is ~484 lines, over the repo's 200–300 line guideline; `WorkoutViewModel` is ~1990. Neither is materially worsened here, and no refactor was undertaken. The next structural touch of the detail view should extract the toolbar/confirmation and the section builders (`statsGrid`, `coachSection`, `exercisesSection`).
 - **AI Coach analysis cache:** `AICoachCache` stores workout analyses on disk keyed by `workout.id`. Deleting a session does **not** purge its entry; the orphaned entry is unreachable (a new session gets a new UUID) and only costs a little disk. Purging it is a candidate cleanup, not a correctness issue.

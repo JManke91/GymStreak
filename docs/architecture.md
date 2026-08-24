@@ -81,7 +81,9 @@ GymStreak/
   `exerciseProgressService`, and `watchSync` (the `WatchConnectivityManager.shared` singleton —
   WCSession delegate identity must be the launch-time instance), and exposes
   `makeHealthKitWorkoutService()` as a **factory** (the two independent `WorkoutViewModel`
-  instances each get their own HealthKit session — pre-existing behavior, kept deliberately).
+  instances each get their own `HealthKitWorkoutManager` instance — pre-existing behavior, kept
+  deliberately; there is no live HealthKit session on iOS, so the only per-instance state is the
+  derived `isAuthorized` flag — see [healthkit-ios-workout-save.md](./healthkit-ios-workout-save.md)).
 - ViewModels receive dependencies via initializer injection, typed as protocols.
 - History receives AI-coach preference, availability and proactive-prompt dependencies through
   Domain protocols wired in `AppDependencies` (`aiCoachPreferences`, `aiCoachAvailability`).

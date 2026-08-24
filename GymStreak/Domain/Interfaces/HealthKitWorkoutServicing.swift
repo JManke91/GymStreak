@@ -14,19 +14,19 @@ import HealthKit
 protocol HealthKitWorkoutServicing: AnyObject {
     var isHealthKitAvailable: Bool { get }
     var isAuthorized: Bool { get }
-    var isWorkoutActive: Bool { get }
 
     func requestAuthorization() async throws
     func checkAuthorizationStatus()
 
-    func startWorkoutSession() async throws
-    func cancelWorkoutSession()
-    func endWorkoutSession(
-        totalEnergyBurned: Double?,
-        metadata: [String: Any]?
-    ) async throws -> (workout: HKWorkout?, healthKitWorkoutId: UUID)
-
-    /// Fallback: save a completed workout directly without an active session.
+    /// Writes a completed workout after the fact, stamping `metadata` (brand
+    /// name + `HKMetadataKeyExternalUUID`) before collection ends.
+    ///
+    /// This is the *only* write path on iOS. Recording through a live
+    /// `HKWorkoutSession` on iPhone was removed: it needs the
+    /// `workout-processing` background mode this target does not declare, and
+    /// its finalization order dropped the metadata, leaving workouts in Health
+    /// with the generic activity name and no external UUID to correlate or
+    /// delete by (`docs/healthkit-ios-workout-save.md`).
     func saveWorkoutDirectly(
         startDate: Date,
         endDate: Date,
