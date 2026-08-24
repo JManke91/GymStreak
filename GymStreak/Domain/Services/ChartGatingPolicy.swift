@@ -52,6 +52,50 @@ enum ChartGatingPolicy {
             && !freeTimeframes.contains(timeframe)
     }
 
+    /// The narrowest window this user is allowed to read that still reaches the given
+    /// date — what the exercise detail screen opens on, instead of always opening on 1M.
+    ///
+    /// The caller decides *which* date matters and in what order; this only answers
+    /// "narrowest unlocked window reaching it" for one of them (see
+    /// `ExerciseProgressViewModel.applyOpeningTimeframe`).
+    ///
+    /// `ChartTimeframe.allCases` is narrowest-first, so `first(where:)` *is* the
+    /// "narrowest that works" rule: someone who trained yesterday opens on 1W rather
+    /// than on the widest window that happens to contain the data, which would flatten
+    /// the curve they came to see.
+    ///
+    /// `.all` is a legitimate candidate for a user entitled to it — its `startDate` is
+    /// `distantPast`, so it is the last resort that matches anything, and for an exercise
+    /// last trained over a year ago it is the only window that draws the curve at all. It
+    /// costs no more to fetch than any other: the exercise fetch is unbounded by design
+    /// and the window is applied in Swift afterwards (see `docs/progress-charts.md`).
+    ///
+    /// A locked window is skipped, never widened into: auto-selecting a Pro window
+    /// would open a free user on a blurred paywall chart, which is worse than an empty
+    /// one. With gating on the search therefore stops at the widest free window and
+    /// returns `nil` for anything older — the caller keeps its own default and the dated
+    /// empty copy explains what it is looking at.
+    ///
+    /// `now` is a parameter rather than a `Date()` read inside the loop, so this stays a
+    /// pure function of its arguments like everything else here and its boundaries can be
+    /// pinned exactly.
+    static func narrowestUnlockedTimeframe(
+        reaching date: Date,
+        isPro: Bool,
+        isGatingEnabled: Bool,
+        now: Date = Date(),
+        freeTimeframes: [ChartTimeframe] = ProFeatureCaps.freeChartTimeframes
+    ) -> ChartTimeframe? {
+        ChartTimeframe.allCases.first { timeframe in
+            !isTimeframeLocked(
+                timeframe,
+                isPro: isPro,
+                isGatingEnabled: isGatingEnabled,
+                freeTimeframes: freeTimeframes
+            ) && timeframe.startDate(from: now) <= date
+        }
+    }
+
     /// The widest window a gated user may read — what a chart falls back to when
     /// the window it was last showing is no longer allowed (the lapse case).
     ///

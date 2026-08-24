@@ -11,6 +11,10 @@
 //  over exactly the points the chart plots for a selection; the view-model half pins that
 //  the combined view withholds the trend rather than presenting a blend as progression.
 //
+//  The view-model half drives `loadUntilSettled` rather than a bare `load()`: since ticket
+//  05b the screen may spend one extra load moving onto the window its data is actually in,
+//  and this stub dates its usages far in the past.
+//
 
 import Foundation
 import SwiftData
@@ -120,7 +124,7 @@ struct ExerciseProgressStatCardTests {
     func combinedViewWithholdsTheTrend() async {
         let harness = makeHarness(usageCount: 2, selection: .combined)
 
-        await harness.viewModel.load()
+        await loadUntilSettled(harness.viewModel)
 
         #expect(harness.viewModel.chartsSeveralUsagesTogether)
         #expect(harness.viewModel.trendPercentageString == nil)
@@ -139,7 +143,7 @@ struct ExerciseProgressStatCardTests {
     func selectedUsagePrintsItsTrend() async {
         let harness = makeHarness(usageCount: 2, selection: .usage(.routineSlot(UUID())))
 
-        await harness.viewModel.load()
+        await loadUntilSettled(harness.viewModel)
 
         #expect(harness.viewModel.chartsSeveralUsagesTogether == false)
         #expect(harness.viewModel.hasTrendValue)
@@ -154,7 +158,7 @@ struct ExerciseProgressStatCardTests {
         // remove a correct trend from almost every exercise in the app.
         let harness = makeHarness(usageCount: 1, selection: .combined)
 
-        await harness.viewModel.load()
+        await loadUntilSettled(harness.viewModel)
 
         #expect(harness.viewModel.chartsSeveralUsagesTogether == false)
         #expect(harness.viewModel.trendPercentageString == "+12.5%")
@@ -164,7 +168,7 @@ struct ExerciseProgressStatCardTests {
     func blendedTrendIsWithheldUnderTheProGate() async {
         let harness = makeHarness(usageCount: 2, selection: .combined, isGatingEnabled: true)
 
-        await harness.viewModel.load()
+        await loadUntilSettled(harness.viewModel)
         harness.viewModel.updateMetric(.estimated1RM)
 
         // The gate falls the stat cards back to the free metric; the blend rule still
@@ -341,6 +345,11 @@ private actor StubUsageSeriesProvider: HistorySnapshotProviding {
                     targetRepMax: 6 + index,
                     routineName: "Pull"
                 ),
+                // Dated in 2023 while the data points above are dated today: this stub
+                // ignores `startDate`, so the opening-window rule (05b) settles the screen
+                // on its widest unlocked window and the series is returned either way.
+                // Synthetic, and deliberately so — these cases pin the stat cards, not the
+                // window.
                 lastPerformed: Date(timeIntervalSince1970: 1_700_000_000 + Double(index)),
                 lastPerformedOrder: index
             )

@@ -6,8 +6,13 @@
 //  of them only became reachable once the usage picker stopped swapping the
 //  user's selection (03a): a usage last trained in July, charted over 1M, draws
 //  nothing while nine real workouts of it sit in history. These pin which copy
-//  each emptiness gets, and that the distinction is derived from state the one
-//  load already returned.
+//  each emptiness gets, and that the distinction is derived from state the load
+//  already returned rather than from a second fetch.
+//
+//  They drive `loadUntilSettled` rather than a bare `load()`: since ticket 05b the screen
+//  may spend one extra load moving onto the window its data is actually in, and these
+//  stubs date their usages far in the past, so a single `load()` would leave the view
+//  model unpublished.
 //
 //  Ticket 03d added the second half: the windowed copy names the date that usage was
 //  last trained and stops instructing a range change — an instruction a free user
@@ -28,7 +33,7 @@ struct ExerciseProgressEmptyStateTests {
     func windowedEmptinessNamesTheWindow() async {
         let harness = makeHarness(mode: .historyButNoneInWindow)
 
-        await harness.viewModel.load()
+        await loadUntilSettled(harness.viewModel)
 
         // The state the user actually reported: an empty series with a populated menu.
         #expect(harness.viewModel.progressData?.dataPoints.isEmpty == true)
@@ -46,7 +51,7 @@ struct ExerciseProgressEmptyStateTests {
         // on a wider range — so the flag must not be keyed on `showsUsagePicker`.
         let harness = makeHarness(mode: .oneUsageNoneInWindow)
 
-        await harness.viewModel.load()
+        await loadUntilSettled(harness.viewModel)
 
         #expect(harness.viewModel.showsUsagePicker == false)
         #expect(harness.viewModel.emptyChartReason == .outsideSelectedWindow)
@@ -56,7 +61,7 @@ struct ExerciseProgressEmptyStateTests {
     func noHistoryAnywhereKeepsTheOriginalCopy() async {
         let harness = makeHarness(mode: .neverTrained)
 
-        await harness.viewModel.load()
+        await loadUntilSettled(harness.viewModel)
 
         #expect(harness.viewModel.usageOptions.isEmpty)
         #expect(harness.viewModel.emptyChartReason == .neverTrained)
@@ -71,7 +76,7 @@ struct ExerciseProgressEmptyStateTests {
         // wider range would be a guess.
         let harness = makeHarness(mode: .failing)
 
-        await harness.viewModel.load()
+        await loadUntilSettled(harness.viewModel)
 
         #expect(harness.viewModel.progressData == nil)
         #expect(harness.viewModel.emptyChartReason == .neverTrained)
@@ -83,14 +88,18 @@ struct ExerciseProgressEmptyStateTests {
     func distinctionIsDerivedFromTheOneLoad() async {
         let harness = makeHarness(mode: .historyButNoneInWindow)
 
-        await harness.viewModel.load()
+        await loadUntilSettled(harness.viewModel)
+        // Counted after the screen has settled: the opening-window rule (05b) may spend
+        // one extra load deciding which window to open on, and this test is about the
+        // *reads*, not about that.
+        let afterLoading = await harness.provider.fetchCount
         // Reading the flag repeatedly — as `body` does, twice per render — must not
         // reach the provider again.
         for _ in 0..<5 {
             #expect(harness.viewModel.emptyChartReason == .outsideSelectedWindow)
         }
 
-        #expect(await harness.provider.fetchCount == 1)
+        #expect(await harness.provider.fetchCount == afterLoading)
     }
 
     // MARK: - Copy
@@ -121,7 +130,7 @@ struct ExerciseProgressEmptyStateTests {
     func windowedEmptinessNamesTheLastTrainedDate() async {
         let harness = makeHarness(mode: .historyButNoneInWindow)
 
-        await harness.viewModel.load()
+        await loadUntilSettled(harness.viewModel)
 
         let expectedDate = ExerciseUsageLabeling.lastTrainedDateText(
             StubEmptyStateProvider.lastPerformed(forOptionAt: 0)
@@ -137,7 +146,7 @@ struct ExerciseProgressEmptyStateTests {
     func combinedNamesTheNewestDate() async {
         let harness = makeHarness(mode: .combinedNoneInWindow)
 
-        await harness.viewModel.load()
+        await loadUntilSettled(harness.viewModel)
 
         #expect(harness.viewModel.selectedUsage == .combined)
         // The third option is the most recently trained one; the first is the oldest.
@@ -155,7 +164,7 @@ struct ExerciseProgressEmptyStateTests {
     func unresolvableDateKeepsTheUndatedCopy() async {
         let harness = makeHarness(mode: .selectionMissingFromOptions)
 
-        await harness.viewModel.load()
+        await loadUntilSettled(harness.viewModel)
 
         #expect(harness.viewModel.datedWindowEmptyMessage == nil)
         #expect(harness.viewModel.emptyChartReason == .outsideSelectedWindow)
@@ -166,7 +175,7 @@ struct ExerciseProgressEmptyStateTests {
     func neverTrainedKeepsItsOwnMessage() async {
         let harness = makeHarness(mode: .neverTrained)
 
-        await harness.viewModel.load()
+        await loadUntilSettled(harness.viewModel)
 
         #expect(harness.viewModel.emptyChartMessage == "chart.empty.message".localized)
     }
@@ -184,16 +193,17 @@ struct ExerciseProgressEmptyStateTests {
     func dateIsFormattedDuringLoad() async {
         let harness = makeHarness(mode: .historyButNoneInWindow)
 
-        await harness.viewModel.load()
+        await loadUntilSettled(harness.viewModel)
 
         // Stored, not derived on read: `body` reads `emptyChartMessage` twice per
         // render and must not format a date or walk the options (docs/history-performance.md).
         let stored = harness.viewModel.datedWindowEmptyMessage
+        let afterLoading = await harness.provider.fetchCount
         #expect(stored != nil)
         for _ in 0..<5 {
             #expect(harness.viewModel.emptyChartMessage == stored)
         }
-        #expect(await harness.provider.fetchCount == 1)
+        #expect(await harness.provider.fetchCount == afterLoading)
     }
 
     // MARK: - Harness
@@ -243,7 +253,11 @@ private actor StubEmptyStateProvider: HistorySnapshotProviding {
     }
 
     /// Fixed so the expected date string can be built the same way the screen does.
-    /// Well before any window the screen can select, so the series stays empty.
+    ///
+    /// Far enough back that the opening-window rule (05b) moves the screen onto its widest
+    /// unlocked window — with this harness ungated, that is `.all`. The series stays empty
+    /// regardless because this stub ignores `startDate` and always returns no data points:
+    /// these cases pin which *copy* an empty window gets, not which window is empty.
     static let oldestLastPerformed = Date(timeIntervalSince1970: 1_700_000_000)
     /// Each further usage was trained 30 days later than the one before, so the
     /// *newest* date is never the first option's — which is what `.combined` must pick.

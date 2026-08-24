@@ -48,9 +48,15 @@ enum ChartTimeframe: String, CaseIterable, Identifiable {
         }
     }
 
-    var startDate: Date {
+    var startDate: Date { startDate(from: Date()) }
+
+    /// The window's lower bound relative to a given "now".
+    ///
+    /// Injectable so the rules built on it stay pure functions of their arguments —
+    /// `ChartGatingPolicy.narrowestUnlockedTimeframe` compares against this, and a rule
+    /// that reads the clock internally cannot be pinned at its boundaries.
+    func startDate(from now: Date) -> Date {
         let calendar = Calendar.current
-        let now = Date()
 
         switch self {
         case .week:

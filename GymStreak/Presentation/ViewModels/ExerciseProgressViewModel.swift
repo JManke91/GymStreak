@@ -31,7 +31,10 @@ class ExerciseProgressViewModel: ObservableObject {
         let usageSelection: ExerciseUsageSelection?
     }
 
-    @Published var selectedTimeframe: ChartTimeframe = .month
+    /// `private(set)` so `updateTimeframe` stays the only writer — it is what records the
+    /// user's choice, and a direct write from a view would bypass that and let the opening
+    /// default overrule a tap.
+    @Published private(set) var selectedTimeframe: ChartTimeframe = .month
     @Published var selectedMetric: ProgressMetric = .maxWeight
     @Published private(set) var progressData: ExerciseProgressData?
     /// One card per usage per session — a workout that trained the exercise twice
@@ -72,6 +75,18 @@ class ExerciseProgressViewModel: ObservableObject {
     /// `chartTimeframe`.
     @Published private(set) var lastUnlockedTimeframe: ChartTimeframe = .month
 
+    /// `true` once the user has tapped a range pill. Their choice then stands for the
+    /// rest of the screen's life: the opening default is a default, not a lock, so it
+    /// must not re-assert itself on a reload, a metric change, a usage switch or an
+    /// exercise switch.
+    private var hasUserChosenTimeframe = false
+
+    /// `true` once the opening window has been decided for the exercise on screen.
+    /// Reset by `updateExercise`, so switching exercise inside the screen lands on
+    /// *that* exercise's narrowest window with data — the same thing tapping its
+    /// Fortschritt row would have done.
+    private var hasResolvedOpeningTimeframe = false
+
     /// Bounded so the recent-sets list stays a small, non-lazy stack. It caps
     /// **sessions**, not cards: a session that trained the exercise twice renders two
     /// cards, so the stack scales with the routine's shape rather than with history length.
@@ -98,8 +113,11 @@ class ExerciseProgressViewModel: ObservableObject {
 
     /// - Parameter isGatingEnabled: injected rather than read from `ProGating`
     ///   inside the gate, for the same reason `PaywallPresenter` and
-    ///   `RoutinesViewModel` inject it: the shipped switch is off, so a test
-    ///   baking it in would prove the gate is inert rather than correct.
+    ///   `RoutinesViewModel` inject it — a test that baked in whatever the switch
+    ///   currently ships as would prove the shipped configuration rather than the
+    ///   rule. Gating has shipped **on** since 2026-08-17
+    ///   (`ProGating.shippedValue`), so the view's own construction takes the
+    ///   gated branch: for a free user the opening-window search stops at 3M.
     /// - Parameter initialUsage: the usage the Fortschritt row that pushed this screen
     ///   summarised, or `nil` to take the default. It becomes a *requested* selection so
     ///   the two surfaces cannot open on different usages; a key this exercise's history
@@ -148,8 +166,27 @@ class ExerciseProgressViewModel: ObservableObject {
         exerciseId: UUID?,
         initialUsage: ExerciseUsage.Key? = nil
     ) {
+        // Re-picking the exercise already on screen is a no-op, and must stay one. The
+        // switcher menu lists the current exercise (checkmarked) and fires `onSelect`
+        // unconditionally, so this method is reachable with nothing to change — and
+        // everything below is destructive: it would clear the picker, reset the selection
+        // to `.combined`, and retire an in-flight load that `.task(id:)` will not restart,
+        // because `loadKey` did not move. That last one is a permanent spinner.
+        guard newExerciseName != exerciseName
+                || exerciseId != self.exerciseId
+                || initialUsage.map(ExerciseUsageSelection.usage) != requestedUsage else {
+            return
+        }
         self.exerciseName = newExerciseName
         self.exerciseId = exerciseId
+        // Retires any load still in flight for the *previous* exercise. Without it, one
+        // that resumes between here and SwiftUI restarting `.task(id:)` still passes the
+        // generation guard, and would spend the freshly reset one-shot flag below on the
+        // old exercise's `lastPerformed` — leaving the switched-to exercise on whatever
+        // window happened to be selected, i.e. the empty chart this ticket removes.
+        // Only here: `updateTimeframe` and `updateUsage` keep no per-load flag, so a
+        // superseded load there is simply overwritten by the newer one.
+        generation += 1
         selectedDataPoint = nil
         // A different exercise has different usages: replace the choice with the
         // switched-to exercise's own headline usage (`nil` clears it and takes the
@@ -159,6 +196,9 @@ class ExerciseProgressViewModel: ObservableObject {
         usageOptions = []
         selectedUsage = .combined
         datedWindowEmptyMessage = nil
+        // A different exercise gets its own opening window — unless the user has
+        // already picked one, in which case `hasUserChosenTimeframe` keeps it.
+        hasResolvedOpeningTimeframe = false
     }
 
     /// Selects which usage the chart and the recent-sets list describe.
@@ -251,25 +291,60 @@ class ExerciseProgressViewModel: ObservableObject {
         }
     }
 
-    /// The dated windowed-empty line for one selection, or `nil` when the snapshot holds
-    /// no usage to take a date from.
+    /// When the selected usage was last trained, or `nil` when the snapshot holds no
+    /// usage to take a date from.
     ///
-    /// `.combined` is described by the **newest** date across the usages: it charts all
-    /// of them, so the nearest one is the window that would first show something.
-    /// Walks the options once, in `load()`.
-    private static func datedWindowEmptyMessage(
+    /// One date answers both of this screen's "the window is wrong" problems: it is what
+    /// the empty copy names, and what the opening window has to reach. `.combined` is
+    /// described by the **newest** date across the usages: it charts all of them, so the
+    /// nearest one is the window that would first show something. Walks the options once,
+    /// in `load()`.
+    private static func lastPerformed(
         for selection: ExerciseUsageSelection,
         in options: [ExerciseUsageOption]
-    ) -> String? {
-        let lastPerformed: Date?
+    ) -> Date? {
         switch selection {
         case .combined:
-            lastPerformed = options.map(\.lastPerformed).max()
+            return options.map(\.lastPerformed).max()
         case .usage(let key):
-            lastPerformed = options.first { $0.key == key }?.lastPerformed
+            return options.first { $0.key == key }?.lastPerformed
         }
-        guard let lastPerformed else { return nil }
-        return "chart.empty.window.message.dated".localized(
+    }
+
+    /// The **second**-most-recent workout of the selected usage — the date the opening
+    /// window would ideally reach, so the window it lands on can draw a line and a trend
+    /// rather than a lone dot. `nil` when the usage has been trained only once.
+    ///
+    /// One point is a chart only in the arithmetic sense — no line, no percentage, and an
+    /// axis invented around a single value. Verified on device: Biceps Curls, trained once
+    /// in the last week, opened on 1W showing exactly that while 1M held the progression.
+    /// So "the narrowest window that works" prefers two points to one.
+    ///
+    /// It is a *preference*, never a requirement — see `applyOpeningTimeframe`. Making it a
+    /// requirement re-broke the very bug this ticket exists to fix.
+    ///
+    /// `recentUsages` is all-time, already filtered to the selected usage and capped by
+    /// **sessions**, so the second distinct session is the second chart point and costs no
+    /// extra fetch. It is a sound proxy because both halves of the snapshot select sessions
+    /// identically — `endTime != nil`, the same `ExerciseUsageResolver.keyedRows` predicate,
+    /// the same selection filter, and at least one *completed* set — so a session here
+    /// always has a point on the chart. Walks at most `recentSessionLimit` entries, in
+    /// `load()`.
+    private static func secondMostRecentWorkout(in recentUsages: [ExerciseRecentUsage]) -> Date? {
+        // Keyed by session, which is what a chart point is: `.combined` lists one card per
+        // usage, so a workout that trained the exercise twice appears twice while
+        // `buildProgress` still folds it into a single point.
+        var seen = Set<UUID>()
+        let dates = recentUsages
+            .filter { seen.insert($0.workoutSessionId).inserted }
+            .map(\.date)
+            .sorted(by: >)
+        return dates.count >= 2 ? dates[1] : nil
+    }
+
+    /// The dated windowed-empty line for one last-trained date.
+    private static func datedWindowEmptyMessage(lastPerformed: Date) -> String {
+        "chart.empty.window.message.dated".localized(
             ExerciseUsageLabeling.lastTrainedDateText(lastPerformed)
         )
     }
@@ -278,6 +353,9 @@ class ExerciseProgressViewModel: ObservableObject {
     /// and the chart blurs behind the lock — but it raises `chartWindow` and
     /// leaves the loaded window alone.
     func updateTimeframe(_ timeframe: ChartTimeframe) {
+        // From here on the window is the user's, including a locked one they tapped
+        // to see the paywall: the opening default never overrides it again.
+        hasUserChosenTimeframe = true
         selectedTimeframe = timeframe
         selectedDataPoint = nil
         if isTimeframeLocked(timeframe) {
@@ -285,6 +363,63 @@ class ExerciseProgressViewModel: ObservableObject {
         } else {
             lastUnlockedTimeframe = timeframe
         }
+    }
+
+    /// Moves the screen onto the narrowest unlocked window that actually holds a readable
+    /// series for the usage being charted — once per exercise, and never once the user has
+    /// picked a window themselves.
+    ///
+    /// The screen used to open on 1M unconditionally, so any exercise last trained more
+    /// than a month ago opened on an empty chart while its own recent-sets list sat
+    /// underneath listing eight entries. The data was never the problem, the default was.
+    ///
+    /// Two dates, in order of preference — the second reached is the floor, not a
+    /// consolation prize.
+    ///
+    /// - Parameter preferred: the second-most-recent workout, so the window can draw a
+    ///   line. `nil` when the usage has only ever been trained once.
+    /// - Parameter orAtLeast: the most recent workout. Reached whenever `preferred` cannot
+    ///   be: a **gated** user's windows end at 3M, so a usage last trained 80 days ago
+    ///   whose previous workout was 100 days ago has no unlocked window reaching the
+    ///   preferred date — and requiring it would leave that user on an empty 1M chart with
+    ///   their sets listed underneath, which is verbatim the bug 05b exists to remove. One
+    ///   real point beats none.
+    /// - Returns: `true` when the window changed, i.e. when a second load is about to run.
+    private func applyOpeningTimeframe(preferring preferred: Date?, orAtLeast lastPerformed: Date?) -> Bool {
+        guard !hasUserChosenTimeframe, !hasResolvedOpeningTimeframe else { return false }
+        // One shot per exercise either way: a usage switch or a plain reload must not
+        // move a window again once this screen has opened.
+        hasResolvedOpeningTimeframe = true
+        guard let opening = openingTimeframe(reaching: preferred)
+                ?? openingTimeframe(reaching: lastPerformed) else {
+            // Nothing found (never trained, or *every* workout older than the widest
+            // unlocked window) keeps the existing default, so the never-trained empty state
+            // is unchanged and 03d's dated copy explains the windowed one.
+            return false
+        }
+        // Compared on `chartTimeframe`, never on `selectedTimeframe`: the second load is
+        // driven by `loadKey`, which carries `chartTimeframe`. The two coincide only while
+        // the selection is unlocked — true today because 1M is free, but
+        // `ProFeatureCaps.freeChartTimeframes` is an explicit tuning knob. Keying the
+        // handshake on the other one would, the first time that knob is narrowed, suppress
+        // `isLoading = false` for a reload that `loadKey` never asks for: a permanent
+        // spinner, with a green build.
+        let previousWindow = chartTimeframe
+        selectedTimeframe = opening
+        // Always an unlocked window, so it is also the last one this user could read.
+        lastUnlockedTimeframe = opening
+        return chartTimeframe != previousWindow
+    }
+
+    /// The narrowest window this user may read that reaches `date`, or `nil` — for no date,
+    /// or for a date older than every window they are entitled to.
+    private func openingTimeframe(reaching date: Date?) -> ChartTimeframe? {
+        guard let date else { return nil }
+        return ChartGatingPolicy.narrowestUnlockedTimeframe(
+            reaching: date,
+            isPro: proEntitlements.isPro,
+            isGatingEnabled: isGatingEnabled
+        )
     }
 
     func load() async {
@@ -306,6 +441,22 @@ class ExerciseProgressViewModel: ObservableObject {
                 usageSelection: requestedUsage
             )
             guard !Task.isCancelled, generation == self.generation else { return }
+            let lastPerformed = Self.lastPerformed(
+                for: snapshot.selectedUsage,
+                in: snapshot.availableUsages
+            )
+            // Resolved **before** anything is published. Deciding the opening window needs
+            // a load first — the narrowest window with data cannot be known before the
+            // charted usage is — so when it moves, this snapshot describes a window the
+            // screen is about to abandon. Publishing it would render one frame of it:
+            // `chartContent` is gated on `isLoading`, but the stat triple is not, so the
+            // stats would flash "- / - / 0 Workouts", which is the exact symptom this rule
+            // exists to remove. `loadKey` moves with the window, `.task(id:)` runs the
+            // second load, and `isLoading` stays up until that one lands.
+            if applyOpeningTimeframe(
+                preferring: Self.secondMostRecentWorkout(in: snapshot.recentUsages),
+                orAtLeast: lastPerformed
+            ) { return }
             progressData = snapshot.data
             recentUsages = snapshot.recentUsages
             // Labelled once, here — the picker must not build localized strings or scan
@@ -314,10 +465,7 @@ class ExerciseProgressViewModel: ObservableObject {
             selectedUsage = snapshot.selectedUsage
             // Formatted here for the same reason the labels are: the empty chart's copy
             // must not build a date string while `body` is being evaluated.
-            datedWindowEmptyMessage = Self.datedWindowEmptyMessage(
-                for: snapshot.selectedUsage,
-                in: snapshot.availableUsages
-            )
+            datedWindowEmptyMessage = lastPerformed.map(Self.datedWindowEmptyMessage(lastPerformed:))
             if !availableMetrics.contains(selectedMetric) {
                 selectedMetric = .maxWeight
             }

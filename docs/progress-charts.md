@@ -663,10 +663,19 @@ theirs is already on screen.
 
 **What was deliberately not done.**
 
-- **No auto-widening and no re-selection.** Silently switching the timeframe or the usage to avoid
-  the empty state is exactly the behaviour removed two sections above — it is what made the picker
-  feel like it reshuffled itself. The range pills sit directly under the chart; one tap is the
-  remedy, and the named date is what tells the user which tap.
+- **No re-selection once the screen is open.** Silently switching the timeframe or the usage *in
+  response to what the user just did* is exactly the behaviour removed two sections above — it is
+  what made the picker feel like it reshuffled itself. The range pills sit directly under the
+  chart; one tap is the remedy, and the named date is what tells the user which tap. What ticket
+  05b later added is a different thing and does not contradict this: the **opening** window is
+  chosen once, before the user has expressed any preference, and never again (see "The screen opens
+  on a range that has data" below). A tap on a pill still stands, permanently.
+- **The opening window is not re-decided when the entitlement changes mid-session.** A free user
+  parked on an empty 1M chart who buys Pro from another placement keeps that window: `chartTimeframe`
+  does not move, so `loadKey` does not either, and the one-shot flag is already spent. It is one pill
+  tap away, the newly unlocked pills lose their lock badges immediately, and 03d's copy names the
+  date — whereas re-selecting a window under someone mid-session is the reshuffling this feature
+  spent three tickets removing.
 - **The recent-sets list is not hidden to "match" the empty chart.** It stays all-time and stays
   populated, which is also what keeps the empty chart from reading as a dead end.
 - **The icon is unchanged** in both states. This was a wording defect, not a broken flow.
@@ -952,6 +961,138 @@ would break vertical scrolling and the horizontal chip rows. If the content-area
 not fire on device, that is the remaining gap and the next thing to investigate — the edge swipe
 this ticket was about is restored either way.
 
+### The screen opens on a range that has data (2026-08-24)
+
+The detail screen opened on `ChartTimeframe.month` unconditionally, so **any exercise last trained
+more than a month ago opened empty**. Verified on device: **Chest Press** showed `REKORD -`,
+`TREND -`, `0 Workouts` and *"Keine Daten in diesem Zeitraum / Zuletzt trainiert am 27.06."* — while
+*Letzte Sätze* directly underneath listed **8 Einträge** and the Fortschritt row that pushed the
+screen read `17 Workouts · vor 1 Monat` with a full sparkline. The screen held the data, drew none of
+it, and said so in three places at once. One tap on **3M** fixed it, which is exactly why the
+default was wrong rather than the data or the copy.
+
+This is not about usages. Chest Press has a single usage and no picker, and it behaved identically
+before the picker existed — every exercise was affected, so the fix belongs to the timeframe default.
+
+**The rule.** `ChartGatingPolicy.narrowestUnlockedTimeframe(reaching:isPro:isGatingEnabled:now:)`
+returns the first window in `ChartTimeframe.allCases` — declared narrowest-first — that is both
+**unlocked for this user** and reaches back to the given date.
+`ExerciseProgressViewModel.applyOpeningTimeframe(preferring:orAtLeast:)` asks it twice — for the
+second-most-recent workout of the charted usage, then for the most recent one as a floor — and moves
+`selectedTimeframe` to the first hit.
+
+- **Two points where possible, one where not** (corrected 2026-08-24 after the device check). The
+  window is asked to reach the **second**-most-recent workout of the charted usage, falling back to
+  the most recent one. Anchoring only on the last workout shipped a chart that was non-empty just
+  arithmetically: Biceps Curls, trained once in the past week, opened on **1W** showing a lone dot,
+  `TREND -` and an axis invented around a single value, while 1M held the actual progression. This
+  screen exists to show a curve, and a curve needs two points.
+
+  **The two-point date is a preference, never a requirement**, and the distinction is load-bearing:
+  a *gated* user's windows end at 3M, so a usage last trained 80 days ago whose previous workout
+  was 100 days ago has no unlocked window reaching the preferred date. Requiring it would leave
+  that user on an empty 1M chart with their sets listed underneath — verbatim the bug this section
+  exists to remove. So the search runs twice, preferred date then last-workout date, and one real
+  point beats none. The same fallback covers a usage trained exactly **once in all of history**.
+- **Narrowest that works, not widest available.** 1W → 1M → 3M, first hit wins. Someone who trained
+  twice this week still opens on the tightest window that holds both; widening past what is needed
+  flattens the curve they came to see.
+- **Only unlocked windows.** With gating on the search stops at 3M and returns `nil` for anything
+  older, because auto-selecting **1J** / **Alle** would open a free user on a *blurred paywall*
+  chart — worse than an empty one. For a Pro user (or with gating off) the unlocked set is all five,
+  so an exercise last trained 200 days ago opens on **1J**, and one last trained over a year ago
+  opens on **Alle** — its `startDate` is `distantPast`, so it is the last resort that matches
+  anything, and for that exercise it is the only window that draws a curve at all. That costs no
+  more to fetch than any other window: the exercise fetch is unbounded by design and the window is
+  applied in Swift afterwards (see "Why the fetch is still unbounded, deliberately" above), so the
+  only difference is how many sessions the aggregation folds.
+- **1M stays the fallback** when nothing is found — never trained, a failed load, or data older than
+  the widest unlocked window. The never-trained empty state is therefore unchanged, and 03d's dated
+  copy remains the answer for a gated user whose data predates 3M. "1M" is precise only on first
+  open: `updateExercise` resets the one-shot flag but deliberately does not reset the window, so
+  switching to a never-trained exercise inside the screen keeps the window already on screen rather
+  than snapping back — nothing is found, so nothing moves.
+- **The window it tests is the window it will chart**: the *selected usage's* own workout dates, not
+  the exercise's whole history. Otherwise the screen could still open empty on the very usage
+  ticket 05 just handed down to it.
+
+**Why it needs a second load, and why that is cheap.** The snapshot is fetched per window
+(`startDate` is part of `LoadKey`), so "which is the narrowest window with a readable series" cannot
+be answered before a load has happened. It does not need a probe fetch either — the first load
+already carries both dates the rule needs:
+
+- the **last**-workout date from `snapshot.availableUsages`, which is all-time (see the picker
+  sections above) and is the same date 03d formats into the empty copy, resolved by the same
+  `ExerciseProgressViewModel.lastPerformed(for:in:)` helper;
+- the **second**-to-last from `snapshot.recentUsages`, which is likewise all-time, already filtered
+  to the selected usage and capped by *sessions* — so its second distinct date is the second chart
+  point. That is a sound proxy because both halves of the snapshot select sessions identically
+  (completed sets of the selected usage, keyed by the same resolver), so a session there always has
+  a point on the chart. `secondMostRecentWorkout(in:)` walks at most `recentSessionLimit` entries,
+  in `load()`, deduplicating by session id — which is what a chart point is.
+
+So the first load answers the question, and the window only moves when 1M is not already the right
+answer:
+
+- window already correct (trained inside the last month) ⇒ **one** fetch, the common case;
+- window moves ⇒ **two**, and `isLoading` deliberately stays up across the swap so the screen shows
+  its spinner instead of flashing the 1M state it is in the middle of replacing. The second load
+  runs through the existing `.task(id: viewModel.loadKey)`, not through a nested call.
+
+The window is resolved **before** the first snapshot is published, not after. `chartContent` is
+gated on `isLoading`, but the **stat triple is not** — it reads `personalRecordString` /
+`trendValueString` / `sessionCountString` unconditionally — so publishing the abandoned window's
+snapshot would render one frame of `-` / `-` / `0 Workouts`, which is the exact screenshot this
+ticket exists to remove. The handshake also compares `chartTimeframe`, never `selectedTimeframe`:
+the second load is driven by `loadKey`, which carries `chartTimeframe`, and the two coincide only
+while the selection is unlocked. Keying it on the selection would, the first time
+`ProFeatureCaps.freeChartTimeframes` is retuned, suppress `isLoading = false` for a reload
+`loadKey` never asks for — a permanent spinner behind a green build.
+
+**It is a default, not a lock.** Two flags, and both are needed:
+
+- `hasUserChosenTimeframe` is set by `updateTimeframe`, i.e. by a pill tap — including a tap on a
+  locked pill, which is still a choice. From then on the default never fires again, for the life of
+  the screen: not on a reload, not on a metric change, not on a usage switch, not on an exercise
+  switch.
+- `hasResolvedOpeningTimeframe` makes it one-shot **per exercise**, so a usage switch or a plain
+  reload cannot move a window the screen has already opened on, while the in-screen exercise
+  switcher (`updateExercise`, which resets it) still lands on the switched-to exercise's own
+  narrowest window — the same thing tapping that exercise's Fortschritt row would have done.
+
+**What was deliberately not done.** No widening in response to a user tap that lands on an empty
+window: that tap is a choice, and 03d's dated copy is what explains the result. No probe fetch over
+all-time history to find the exact narrowest window with data — the two dates already in the
+snapshot bound it: the second distinct `recentUsages` session for the preferred window, and
+`lastPerformed` as the floor.
+
+`ChartGatingPolicy.narrowestUnlockedTimeframe` takes `now` as a parameter and compares against
+`ChartTimeframe.startDate(from:)` rather than the clock-reading `startDate`, so it stays a pure
+function of its arguments like the rest of that type and its boundaries are pinned exactly (one
+second either side of the 1W and 1M bounds).
+
+Covered by `GymStreakTests/ExerciseProgressOpeningRangeTests.swift`: two workouts inside 1W ⇒ opens
+on 1W; one workout this week and the one before it 20 days back ⇒ opens on **1M** (the device
+finding); a usage trained exactly once ever ⇒ the tightest window holding that single point;
+data only inside 3M ⇒ opens on 3M with a drawn series and populated stat cards; a window that
+already fits ⇒ kept, with no second fetch; a moving window ⇒ exactly one extra fetch and
+`isLoading` still up in between; nothing anywhere ⇒ 1M and the never-trained copy; a gated free user
+past 3M ⇒ 1M plus the dated windowed copy, never a locked pill; a Pro user past 3M ⇒ 1J; a gated
+user whose *previous* workout is out of reach ⇒ the window that reaches the last one, with its
+single honest point, while the same history charts a full curve on 1J for a Pro user; the policy
+itself never returning a locked window across both gating states; and the "user's choice wins" cases
+— chosen before the first load, and surviving a reload, a metric change and a usage switch.
+
+**Verified on device 2026-08-24 (DE, iPhone).** Chest Press — the reported case, last trained
+27.06. — opens on **3M** with the full curve, `90.0 kg` / `+12.5%` / `5 Workouts`, against the
+`-` / `-` / `0 Workouts` of the bug report. An exercise trained 2–3 weeks ago still opens on 1M, the
+in-screen switcher lands on the switched-to exercise's own window, a tapped pill survives metric and
+usage changes, and with the entitlement simulated as free no locked pill is ever auto-selected.
+
+That same check is what produced the two-point correction above — and the correction was then
+verified in its own right: Biceps Curls, which had opened on 1W with a single dot, now opens on
+**1M** with a multi-point series, while Chest Press stays on 3M.
+
 ### Components
 
 #### iOS Target
@@ -1019,10 +1160,13 @@ exercise's selected chart range lacks a snapshot, the chart safely falls back to
 
 ## Pro gating (P2)
 
-While `ProGating.isEnabled` is `false` — which is how the app ships until ticket 15 of
-`.scratch/pro-entitlements/` — **none of this is active and the screen behaves exactly as described
-above**. With gating on, a free user reads max weight over 1W / 1M / 3M; estimated 1RM, total
-volume, 1Y and All are Pro. The rules live in `ChartGatingPolicy` and the full rationale in
+Gating **ships on** — `ProGating.shippedValue` has been `true` since the Phase 2 launch release
+(2026-08-17, ticket 15 of `.scratch/pro-entitlements/`). A free user reads max weight over
+1W / 1M / 3M; estimated 1RM, total volume, 1Y and All are Pro. With gating off (`-PRO_GATING_OFF`
+in a Debug scheme, or a rollback per §9.6) none of this is active and the screen behaves exactly as
+described above. That distinction matters for the opening-window rule: on the shipped
+configuration, a free user whose data predates 3M takes the `nil` → keep-1M branch with 03d's dated
+copy, **not** the `.all` branch — that one is reached only by a Pro user or with gating off. The rules live in `ChartGatingPolicy` and the full rationale in
 `docs/pro-subscription.md` §5d; what matters for this screen:
 
 - The metric tabs and the range pills **stay interactive** while the chart is locked. Only the
@@ -1040,6 +1184,11 @@ volume, 1Y and All are Pro. The rules live in `ChartGatingPolicy` and the full r
   Pro number is printed in plain text beside the blurred chart. The usage rules apply after that
   fallback: with several usages charted together the Trend card prints *Mixed* whichever metric the
   gate left it reporting on.
+- **The opening window respects the gate.** The screen picks the narrowest window that has data
+  when it opens (see "The screen opens on a range that has data"), and that search skips locked
+  windows entirely: a free user is never auto-selected onto **1J** / **Alle**, which would open them
+  on a blurred paywall chart. With gating on the search stops at 3M and falls back to 1M, where
+  03d's dated empty copy explains what they are looking at.
 - Entitlement changes are live: the gate reads the `@Observable` provider during `body`, so a
   purchase unblurs the chart and reloads the wider window through the existing `.task(id:)` with no
   refresh gesture, and a lapse blurs it and clamps the rendered window back to 3M. No workout,
