@@ -506,6 +506,10 @@
 
 // MARK: - Add to Routine View
 "add_to_routine.already_added" = "Bereits in Routine";
+// VoiceOver für die Zeilen dieses Abschnitts — sie sind auswählbar: dieselbe Übung darf
+// mehrfach in einer Routine stehen (z. B. schwer 4–6 und leicht 8–12).
+"add_to_routine.already_added.a11y_label" = "%@, %@, bereits in der Routine";
+"add_to_routine.already_added.a11y_hint" = "Bereits in deiner Routine. Erneut hinzufügen legt einen zweiten Eintrag mit eigenen Sätzen und eigenem Wiederholungsziel an";
 "add_to_routine.available" = "Verfügbare Übungen";
 "add_to_routine.create_new" = "Neue Übung erstellen";
 "add_to_routine.title" = "Übung auswählen";
@@ -825,6 +829,9 @@
 // Angehängt, wenn zwei Varianten sonst gleich hießen — das Datum des letzten Trainings
 // unterscheidet einen aktuellen Routine-Platz von einem übrig gebliebenen.
 "chart.usage.last_trained" = "zuletzt %@";
+// Vorangestellt, wenn der Routine-Platz einer Variante in keiner Routine mehr existiert —
+// die Variante bleibt wählbar und Teil von "Alle Varianten", sie sagt nur, was sie ist.
+"chart.usage.archived" = "Nicht mehr im Plan";
 
 "switch" = "Wechseln";
 

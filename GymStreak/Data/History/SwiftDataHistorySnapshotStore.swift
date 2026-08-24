@@ -230,6 +230,9 @@ actor SwiftDataHistorySnapshotStore {
         let exercises = try measured("HistoryFetchExercises") {
             try modelContext.fetch(FetchDescriptor<Exercise>())
         }
+        let liveSlotIds = try measured("HistoryFetchRoutineSlots") {
+            try fetchLiveRoutineSlotIds()
+        }
 
         try Task.checkCancellation()
         let snapshot = measured("HistoryBuildExerciseProgress") {
@@ -240,6 +243,7 @@ actor SwiftDataHistorySnapshotStore {
                 exerciseId: exerciseId,
                 startDate: startDate,
                 recentSessionLimit: recentSessionLimit,
+                liveRoutineSlotIds: liveSlotIds,
                 requestedUsage: usageSelection
             )
         }
@@ -321,6 +325,22 @@ actor SwiftDataHistorySnapshotStore {
     /// undocumented identity-map bet it makes is written down in exactly one place.
     private func fetchCompletedSessions() throws -> [WorkoutSession] {
         try CompletedSessionFetch.withFullGraph(in: modelContext)
+    }
+
+    /// Every routine slot the user still holds — what tells a usage the chart can still
+    /// be trained apart from one only history remembers.
+    ///
+    /// Fetched from `Routine` rather than from `RoutineExercise` so "live" means what the
+    /// user sees: a slot belongs to a routine that exists. `routineExercises` is
+    /// prefetched because this walks it for every routine, and returning ids alone keeps
+    /// the boundary `Sendable` — no `@Model` leaves this actor.
+    ///
+    /// Bounded by the routine library (dozens of slots), not by history, so it is a far
+    /// smaller fetch than the completed-session graph it sits next to.
+    private func fetchLiveRoutineSlotIds() throws -> Set<UUID> {
+        var descriptor = FetchDescriptor<Routine>()
+        descriptor.relationshipKeyPathsForPrefetching = [\.routineExercises]
+        return Set(try modelContext.fetch(descriptor).flatMap { $0.routineExercisesList.map(\.id) })
     }
 
     private func measured<Result>(

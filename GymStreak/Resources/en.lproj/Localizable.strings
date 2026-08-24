@@ -506,6 +506,10 @@
 
 // MARK: - Add to Routine View
 "add_to_routine.already_added" = "Already in Routine";
+// VoiceOver for this section's rows — they are selectable: the same exercise may appear in a
+// routine more than once (e.g. a heavy 4–6 block and a light 8–12 one).
+"add_to_routine.already_added.a11y_label" = "%@, %@, already in routine";
+"add_to_routine.already_added.a11y_hint" = "Already in your routine. Adding it again creates a second entry with its own sets and rep goal";
 "add_to_routine.available" = "Available Exercises";
 "add_to_routine.create_new" = "Create New Exercise";
 "add_to_routine.title" = "Choose Exercise";
@@ -825,6 +829,9 @@
 // Appended when two usages would otherwise read identically — the last-trained date
 // is what tells a live routine slot apart from a leftover one.
 "chart.usage.last_trained" = "last %@";
+// Leads the label when a usage's routine slot exists in no routine any more — the usage
+// stays selectable and part of "All usages", it just says what it is.
+"chart.usage.archived" = "Not in a routine";
 
 "switch" = "Switch";
 

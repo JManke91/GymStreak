@@ -326,6 +326,110 @@ struct SwiftDataHistorySnapshotStoreTests {
         }
     }
 
+    /// Which usages the user can still train is decided against the live routine library,
+    /// inside the model actor — the only place that can see it.
+    ///
+    /// Every way a slot can die is covered here, because they arrive by different routes:
+    /// the exercise removed from a routine the user still has, a slot orphaned from every
+    /// routine, and a routine deleted outright (SwiftData cascades to its slots). The
+    /// live slot and the slot-less bucket are the controls: neither may be marked.
+    @Test
+    func archivedUsagesAreMarkedAgainstTheLiveRoutineLibrary() async throws {
+        let container = InMemoryModelContainer.make()
+        let context = ModelContext(container)
+
+        let exercise = Exercise(name: "Biceps Curls")
+        context.insert(exercise)
+
+        // A routine the user still has, holding one slot.
+        let routine = Routine(name: "Pull")
+        context.insert(routine)
+        let liveSlot = RoutineExercise(exercise: exercise, order: 0)
+        context.insert(liveSlot)
+        liveSlot.routine = routine
+        routine.routineExercises?.append(liveSlot)
+
+        // A slot attached to no routine at all.
+        let orphanSlot = RoutineExercise(exercise: exercise, order: 0)
+        context.insert(orphanSlot)
+
+        // A routine deleted after being trained — its slot goes with it.
+        let doomed = Routine(name: "Old Pull")
+        context.insert(doomed)
+        let doomedSlot = RoutineExercise(exercise: exercise, order: 0)
+        context.insert(doomedSlot)
+        doomedSlot.routine = doomed
+        doomed.routineExercises?.append(doomedSlot)
+        let doomedSlotID = doomedSlot.id
+        try context.save()
+        context.delete(doomed)
+        try context.save()
+
+        // One workout per usage, plus a slot-less row, all of the same exercise.
+        let cases: [(slotID: UUID?, weight: Double)] = [
+            (liveSlot.id, 20),
+            (orphanSlot.id, 22),
+            (doomedSlotID, 24),
+            (nil, 26)
+        ]
+        for (index, entry) in cases.enumerated() {
+            let start = Date(timeIntervalSince1970: Double(index + 1) * 1_000)
+            let session = WorkoutSession(routine: nil)
+            session.routineName = "Pull"
+            session.startTime = start
+            session.endTime = start.addingTimeInterval(3_600)
+            context.insert(session)
+
+            let row = WorkoutExercise(
+                exerciseName: exercise.name,
+                muscleGroups: ["Arms"],
+                order: 0,
+                exerciseId: exercise.id
+            )
+            row.routineExerciseId = entry.slotID
+            row.workoutSession = session
+            context.insert(row)
+
+            let set = WorkoutSet(
+                plannedReps: 10,
+                actualReps: 10,
+                plannedWeight: entry.weight,
+                actualWeight: entry.weight,
+                restTime: 60,
+                order: 0
+            )
+            set.isCompleted = true
+            set.workoutExercise = row
+            context.insert(set)
+            row.sets?.append(set)
+            session.workoutExercises?.append(row)
+        }
+        try context.save()
+
+        // Existential on purpose — see the note in the training-snapshot test above.
+        let provider: any HistorySnapshotProviding =
+            SwiftDataHistorySnapshotProvider(modelContainer: container)
+        let snapshot = try await provider.fetchExerciseProgress(
+            exerciseName: exercise.name,
+            exerciseId: exercise.id,
+            startDate: .distantPast,
+            recentSessionLimit: 8,
+            usageSelection: .combined
+        )
+
+        func isArchived(_ slot: ExerciseUsage.Slot) throws -> Bool {
+            try #require(snapshot.availableUsages.first { $0.slot == slot }).isArchived
+        }
+
+        #expect(snapshot.availableUsages.count == 4)
+        #expect(try isArchived(.routineSlot(liveSlot.id)) == false)
+        #expect(try isArchived(.routineSlot(orphanSlot.id)))
+        #expect(try isArchived(.routineSlot(doomedSlotID)))
+        #expect(try isArchived(.unattributed) == false)
+        // Marked, never dropped: the combined series still holds all four workouts.
+        #expect(snapshot.data.dataPoints.count == 4)
+    }
+
     /// - Parameter routineSlotIDs: when non-empty, stamps each exercise index with the
     ///   corresponding routine-slot id. Only the previous-performance case needs it, so
     ///   it defaults to off and the other cases keep their exact seeded shape.

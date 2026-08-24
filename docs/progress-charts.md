@@ -507,8 +507,7 @@ is what defect 2 turned into visible nondeterminism.
 and there is no sound rule to prove it; guessing would fabricate a progression across a slot
 change, which is worse than showing two honest series. The consequence is accepted: this user's
 picker lists **four** usages plus "Alle Varianten", because their history genuinely contains that
-many distinct pieces of work. An explicit "archived" marker for slots no live routine holds any
-more is deliberately separate work (it needs the read to know which slots still exist).
+many distinct pieces of work. They are instead **marked** — see the next section.
 
 **Correction after on-device verification of the fix (2026-08-24): there is no duplicate slot id, and
 no dead third slot.** The third usage is the **`.unattributed` bucket**. With a single usage selected,
@@ -540,6 +539,61 @@ the dumbbell one, suggesting **two library exercises share the name "Biceps Curl
 in `matches(...)` deliberately **drops** every row with `exerciseId == nil` rather than
 double-count it — which could be hiding old workouts from this screen entirely. Unverified.
 
+### A usage you can no longer train says so (2026-08-24)
+
+History legitimately holds routine slots that exist in no routine any more: `routineExerciseId` is
+denormalized into `WorkoutExercise` precisely so a workout survives its routine being edited or
+deleted. Those workouts are real, so such a usage can never be hidden — but with several
+similarly-named entries, nothing on screen distinguished "the slot I trained yesterday" from "a slot
+I deleted in June". The last-trained date added one section above only hints at it.
+
+**What it looks like.** `ExerciseUsageOption.isArchived` is set when the usage's slot is absent from
+the live routine library, and `ExerciseUsageLabeling.pickerItems` **leads** the label with
+`chart.usage.archived` — `Nicht mehr im Plan` / `Not in a routine`. Leading, not trailing, for the
+same reason `.unattributed` leads: the picker's collapsed button is `maxWidth: 150` and truncates
+from the tail, so an appended marker is exactly the part the user never sees. The wording names what
+was actually checked (the slot is in no routine) rather than implying a user action ("archived"),
+and stays true whether the whole routine was deleted or just this exercise removed from it. The
+marker is part of the **base** label, so a marked and an unmarked usage of the same rep range no
+longer collide and neither needs the date suffix.
+
+**Where the read happens.** `SwiftDataHistorySnapshotStore.fetchLiveRoutineSlotIds()` — one
+`FetchDescriptor<Routine>` with `relationshipKeyPathsForPrefetching = [\.routineExercises]`, inside
+the model actor, feeding `Set<UUID>` into `buildSnapshot(… liveRoutineSlotIds:)`. Fetching from
+`Routine` rather than `RoutineExercise` makes "live" mean what the user sees — a slot belongs to a
+routine that exists — so a slot orphaned from every routine counts as archived too. The set is
+bounded by the routine library (dozens of slots), not by history; the boundary is unchanged (a
+`Bool` on an existing `Sendable` value, no `@Model` and no relationship walk crossing it), and
+`largeExerciseProgressBuildKeepsMainActorResponsive` still passes with the extra fetch. If it ever
+regresses, make the fetch cheaper (ids only) — never drop the `@concurrent` annotation.
+
+`liveRoutineSlotIds` is optional on purpose: `nil` means the caller did not look and nothing is
+marked; an empty set means it looked and found nothing live. A required parameter defaulting to `[]`
+would silently mark *every* usage archived wherever it was forgotten.
+
+**Rules this marker obeys — all four are load-bearing:**
+
+- **Never hides an archived usage, and never excludes it from `Alle Varianten`.** It holds real
+  workouts; a chart that quietly omits them is the failure mode this whole feature exists to end.
+- **`.unattributed` is never archived.** Slot-less rows (legacy history, ad-hoc exercises, watch
+  recordings) have no slot to look up, so the routine library can say nothing about them. They keep
+  their own `Ohne Zuordnung` labelling.
+- **Never reorders the picker.** The sort stays last-trained-first; an archived usage trained
+  yesterday belongs where its date puts it.
+- **Never offers to delete or merge.** No rule can prove two slots are "the same" work — see the
+  previous section.
+
+Not shown on the **recent-sets badge**: a card describes one past workout, where "not in a routine"
+is noise. The badge keeps `ExerciseUsage.displayLabel`, which is why the marker lives in
+`pickerItems` rather than in `displayLabel`.
+
+**Verified on device (2026-08-24, DE).** A routine holding one exercise twice (4–6 and 8–12), trained
+once: both entries unmarked. Removing the 8–12 slot from the routine marked exactly that entry
+(`Nicht mehr im Plan · 8–12 Wdh. · Archivtest`) and left the live entry, the other usages and the
+order untouched. Building that fixture required a second change: the routine exercise picker used to
+refuse an exercise already in the routine, so the same exercise could not be added twice at all — see
+`docs/routines-exercises-redesign.md`.
+
 ### Components
 
 #### iOS Target
@@ -560,13 +614,13 @@ double-count it — which could be hiding old workouts from this screen entirely
 | ExerciseProgressViewModel | `ViewModels/ExerciseProgressViewModel.swift` | `async load()` behind a generation counter; owns timeframe, metric, selection and the loaded snapshot; computed display properties; owns the **P2 Pro gate** (which metric/window is locked, what a locked selection renders, which paywall it raises) |
 | ChartGatingPolicy | `Domain/Services/ChartGatingPolicy.swift` | **Pure, isolation-agnostic.** Which metrics and windows the free tier may read, from `ProFeatureCaps` — plus the widest free window a lapsed user's chart clamps back to |
 | ExerciseProgressModels | `Domain/Models/ExerciseProgressModels.swift` | Domain values: ChartTimeframe, ProgressMetric, ExerciseProgressDataPoint, ExerciseProgressData, **ExerciseRecentUsage**, **ExerciseProgressSnapshot**, SelectedDataPoint. Everything that crosses the actor boundary is explicitly `Sendable`. |
-| ExerciseUsage | `Domain/Models/ExerciseUsage.swift` | The usage cluster: **ExerciseUsage** (+ `Slot`, `repRangeText`, `displayLabel`), **ExerciseUsageSelection**, **ExerciseUsageOption**, **ExerciseUsagePickerItem**, **ExerciseUsageLabeling**. One label implementation for the recent-sets badge and the picker; all `Sendable`. |
+| ExerciseUsage | `Domain/Models/ExerciseUsage.swift` | The usage cluster: **ExerciseUsage** (+ `Slot`, `repRangeText`, `displayLabel`), **ExerciseUsageSelection**, **ExerciseUsageOption** (+ `isArchived`), **ExerciseUsagePickerItem**, **ExerciseUsageLabeling**. One label implementation for the recent-sets badge and the picker; the "not in a routine" marker is added by `pickerItems` only. All `Sendable`. |
 | ExerciseProgressAggregator | `Domain/Services/ExerciseProgressAggregator.swift` | **Pure, isolation-agnostic** chart + recent-sets aggregation. `buildRecentUsages` emits **one card per usage per session** — see "The recent-sets list shows every usage" above. The usage filter on `buildProgress` / `buildRecentUsages` comes from `ExerciseUsageResolver` — see "The chart separates usages by routine slot" above. `matches(_:exerciseId:exerciseName:nameIsUnique:)` resolves workout exercises to the chart target — an exact `exerciseId` match, OR a legacy row with `exerciseId == nil` whose name matches case-insensitively **and only when the name is unique in the live library**. Without the fallback, workouts logged before `WorkoutExercise.exerciseId` existed would be invisible and progress would look frozen; without the uniqueness gate, same-named equipment variants would double-count. |
 | FortschrittAggregator | `Domain/Services/FortschrittAggregator.swift` | **Pure, isolation-agnostic.** Builds the Fortschritt list's rows (count, sparkline, trend) from completed sessions + the live `Exercise` library. **One entry per session, not per `WorkoutExercise`** — see "The Fortschritt row counts sessions, not exercise instances" above. |
-| SwiftDataHistorySnapshotStore | `Data/History/SwiftDataHistorySnapshotStore.swift` | `@ModelActor` that performs the fetch and calls the aggregator off the main actor. `SwiftDataHistorySnapshotProvider.fetchExerciseProgress` is the `@concurrent` entry point. |
+| SwiftDataHistorySnapshotStore | `Data/History/SwiftDataHistorySnapshotStore.swift` | `@ModelActor` that performs the fetch and calls the aggregator off the main actor. `SwiftDataHistorySnapshotProvider.fetchExerciseProgress` is the `@concurrent` entry point. Also reads the live routine slots (`fetchLiveRoutineSlotIds`) that mark archived usages. |
 | ExerciseProgressService | `Data/Progress/ExerciseProgressService.swift` | The vs-previous seam. Owns no `ModelContext`: `@MainActor` glue that runs `ExerciseComparisonBuilder` either side of one `@concurrent` boundary call. Does not feed the chart. |
 | ExerciseComparisonBuilder | `Domain/Services/ExerciseComparisonBuilder.swift` | **Pure, isolation-agnostic.** `makeLookup` reduces the current workout to `Sendable` values; `build` assembles the comparison rows from it plus the resolved predecessors. Runs on the main actor because the workout may be uncommitted. |
-| ExerciseUsageResolver | `Domain/Services/ExerciseUsageResolver.swift` | **Pure, isolation-agnostic.** The single definition of "the same piece of work": `slot(of:)`, `usage(of:in:)`, `belongs(_:to:)`, the picker's `options(in:matching:)` and the default in `resolveSelection`. Shared by the chart aggregator and `PreviousPerformanceResolver`. |
+| ExerciseUsageResolver | `Domain/Services/ExerciseUsageResolver.swift` | **Pure, isolation-agnostic.** The single definition of "the same piece of work": `slot(of:)`, `usage(of:in:)`, `belongs(_:to:)`, the picker's `options(in:liveSlotIds:matching:)` — which also flags a usage whose slot no live routine holds — and the default in `resolveSelection`. Shared by the chart aggregator and `PreviousPerformanceResolver`. |
 | PreviousPerformanceResolver | `Domain/Services/PreviousPerformanceResolver.swift` | **Pure, isolation-agnostic.** Resolves every exercise of one workout against the most recent comparable session, in a single pass. Its slot match calls `ExerciseUsageResolver.slot(of:)` — the same rule the chart segments usages by. Runs inside the model actor. |
 | PreviousPerformanceLookup | `Domain/Models/PreviousPerformanceLookup.swift` | The `Sendable` request: `before`, `routineId`, and one `Query` per exercise. Carries the workout's identity across the actor boundary without a `@Model` or a re-fetch. |
 

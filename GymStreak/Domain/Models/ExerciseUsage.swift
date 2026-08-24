@@ -157,17 +157,22 @@ enum ExerciseUsageLabeling {
     /// If the date does not settle it either, the entry's position in this menu is
     /// appended. That is the one suffix guaranteed unique, since it is drawn from the
     /// list being rendered rather than from anything in the data.
+    ///
+    /// A usage whose slot no longer lives in any routine leads with a marker instead —
+    /// see `baseLabel(for:)`. It is part of the base label, so a marked and an unmarked
+    /// usage of the same rep range no longer collide and neither needs the date.
     static func pickerItems(for options: [ExerciseUsageOption]) -> [ExerciseUsagePickerItem] {
+        let bases = options.map(baseLabel)
+
         var baseCounts: [String: Int] = [:]
-        for option in options {
-            baseCounts[option.usage.displayLabel, default: 0] += 1
+        for base in bases {
+            baseCounts[base, default: 0] += 1
         }
 
-        let dated = options.map { option -> String in
-            let base = option.usage.displayLabel
+        let dated = zip(options, bases).map { option, base -> String in
             guard (baseCounts[base] ?? 0) > 1 else { return base }
             let date = option.lastPerformed.formatted(lastTrainedStyle)
-            return "\(base) · " + "chart.usage.last_trained".localized(date)
+            return base + separator + "chart.usage.last_trained".localized(date)
         }
 
         var datedCounts: [String: Int] = [:]
@@ -179,10 +184,32 @@ enum ExerciseUsageLabeling {
             let (option, label) = pair
             return ExerciseUsagePickerItem(
                 key: option.key,
-                label: (datedCounts[label] ?? 0) > 1 ? "\(label) · #\(index + 1)" : label
+                label: (datedCounts[label] ?? 0) > 1 ? label + separator + "#\(index + 1)" : label
             )
         }
     }
+
+    /// A usage's name in the picker, before any disambiguating suffix.
+    ///
+    /// An archived usage — one whose routine slot no longer exists anywhere — **leads**
+    /// with its marker, for the same reason `.unattributed` does: the picker's collapsed
+    /// button is narrow and tail-truncated, so a marker appended after the rep range and
+    /// the routine name is exactly the part the user never sees. It says "not in a
+    /// routine" rather than "archived" because that is literally what was checked, and it
+    /// stays true whether the whole routine was deleted or just this exercise removed
+    /// from it.
+    ///
+    /// The marker only names a usage; it never removes, reorders or merges one. See
+    /// `ExerciseUsageOption.isArchived`.
+    private static func baseLabel(for option: ExerciseUsageOption) -> String {
+        let label = option.usage.displayLabel
+        guard option.isArchived else { return label }
+        return "chart.usage.archived".localized + separator + label
+    }
+
+    /// The one separator every part of a usage label is joined with, matching
+    /// `ExerciseUsage.displayLabel`.
+    private static let separator = " · "
 }
 
 // MARK: - Exercise Usage Selection
@@ -225,6 +252,29 @@ struct ExerciseUsageOption: Identifiable, Hashable, Sendable {
     /// It is **not** a disambiguator: two slots can share a position (see
     /// `ExerciseUsageLabeling.pickerItems`).
     let lastPerformedOrder: Int
+    /// Whether this usage's routine slot exists in no live routine any more — the user
+    /// deleted the routine, or removed (or replaced) this exercise inside it.
+    ///
+    /// Purely descriptive: an archived usage is never hidden, never reordered and never
+    /// merged into a live one. Its workouts happened, so it stays selectable and stays
+    /// part of `.combined`; what it needs is to say that the user cannot train it again
+    /// without editing a routine (see `docs/progress-charts.md`).
+    ///
+    /// `.unattributed` is never archived — it has no slot to look up, and its own
+    /// "Ohne Zuordnung" marker already says what it is.
+    let isArchived: Bool
+
+    init(
+        usage: ExerciseUsage,
+        lastPerformed: Date,
+        lastPerformedOrder: Int,
+        isArchived: Bool = false
+    ) {
+        self.usage = usage
+        self.lastPerformed = lastPerformed
+        self.lastPerformedOrder = lastPerformedOrder
+        self.isArchived = isArchived
+    }
 
     var key: ExerciseUsage.Key { usage.key }
     var slot: ExerciseUsage.Slot { usage.slot }

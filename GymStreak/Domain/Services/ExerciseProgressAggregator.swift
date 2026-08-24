@@ -31,6 +31,11 @@ struct ExerciseProgressAggregator {
     ///     the recent-usage list is deliberately all-time, matching the previous behaviour.
     ///   - recentSessionLimit: caps the recent-usage list by **sessions**, not by cards —
     ///     a workout that trained the exercise twice contributes two cards but counts once.
+    ///   - liveRoutineSlotIds: the ids of every routine slot the user still holds, used
+    ///     only to mark a usage whose slot exists in no routine any more. `nil` when the
+    ///     caller has not looked, and then nothing is marked. Never filters: an archived
+    ///     usage's workouts happened, so it stays listed, stays selectable and stays part
+    ///     of the combined series.
     ///   - requestedUsage: which usage to chart, or `nil` on first open to take the
     ///     default. Resolved here, and reported back as `snapshot.selectedUsage`, so the
     ///     screen never has to fetch once to learn the options and again to apply one.
@@ -43,6 +48,7 @@ struct ExerciseProgressAggregator {
         exerciseId: UUID?,
         startDate: Date,
         recentSessionLimit: Int,
+        liveRoutineSlotIds: Set<UUID>? = nil,
         requestedUsage: ExerciseUsageSelection? = nil
     ) -> ExerciseProgressSnapshot {
         let nameIsUnique = isNameUnique(exerciseName, in: liveExercises)
@@ -53,7 +59,7 @@ struct ExerciseProgressAggregator {
         )
         // All-time, not `windowedSessions`: a menu that reshuffles on every timeframe tap
         // is what the reporter saw as the screen "suddenly showing different options".
-        let options = ExerciseUsageResolver.options(in: sessions) { exercise in
+        let options = ExerciseUsageResolver.options(in: sessions, liveSlotIds: liveRoutineSlotIds) { exercise in
             matches(exercise, exerciseId: exerciseId, exerciseName: exerciseName, nameIsUnique: nameIsUnique)
                 && exercise.loadBehavior == behavior
         }

@@ -1,7 +1,12 @@
 import SwiftUI
 
 struct RoutineExercisePickerView: View {
-    /// Exercises already part of the target routine/draft; shown dimmed and unselectable.
+    /// Exercises already part of the target routine/draft. Listed in their own section
+    /// so the user knows, but **selectable like any other**: one exercise legitimately
+    /// belongs in a routine twice — a heavy 4–6 block and a light 8–12 block are two
+    /// different pieces of work, which is exactly what the chart's usage picker separates
+    /// (see docs/progress-charts.md). Adding one again creates a second slot with its own
+    /// rep-range goal and sets.
     let alreadyAddedExercises: [Exercise]
     @ObservedObject var exercisesViewModel: ExercisesViewModel
     /// Name of the routine being added to — the configure screen's CTA names it.
@@ -71,7 +76,7 @@ struct RoutineExercisePickerView: View {
                             VStack(spacing: 7) {
                                 ForEach(availableExercises) { exercise in
                                     NavigationLink(value: exercise) {
-                                        pickerRow(exercise, disabled: false)
+                                        pickerRow(exercise)
                                     }
                                     .buttonStyle(.plain)
                                     .accessibilityLabel("\(exercise.name), \(MuscleGroups.displayString(for: exercise.muscleGroups))")
@@ -87,9 +92,15 @@ struct RoutineExercisePickerView: View {
                             pickerSectionLabel("add_to_routine.already_added".localized)
                             VStack(spacing: 7) {
                                 ForEach(alreadyAddedExercises) { exercise in
-                                    pickerRow(exercise, disabled: true)
-                                        .accessibilityLabel("\(exercise.name), \(MuscleGroups.displayString(for: exercise.muscleGroups)), already in routine")
-                                        .accessibilityHint("This exercise is already in your routine")
+                                    NavigationLink(value: exercise) {
+                                        pickerRow(exercise)
+                                    }
+                                    .buttonStyle(.plain)
+                                    .accessibilityLabel("add_to_routine.already_added.a11y_label".localized(
+                                        exercise.name,
+                                        MuscleGroups.displayString(for: exercise.muscleGroups)
+                                    ))
+                                    .accessibilityHint("add_to_routine.already_added.a11y_hint".localized)
                                 }
                             }
                             .padding(.horizontal, 18)
@@ -171,7 +182,9 @@ struct RoutineExercisePickerView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    private func pickerRow(_ exercise: Exercise, disabled: Bool) -> some View {
+    /// One tappable exercise row. Identical in both sections: an exercise already in the
+    /// routine is still addable, so dimming it would say the opposite.
+    private func pickerRow(_ exercise: Exercise) -> some View {
         HStack(spacing: 12) {
             ExerciseAvatarView(
                 muscleGroups: exercise.muscleGroups,
@@ -194,9 +207,9 @@ struct RoutineExercisePickerView: View {
 
             Spacer(minLength: 8)
 
-            Image(systemName: disabled ? "checkmark" : "plus")
+            Image(systemName: "plus")
                 .font(.system(size: 15, weight: .bold))
-                .foregroundStyle(disabled ? Color.white.opacity(0.4) : DesignSystem.Colors.tint)
+                .foregroundStyle(DesignSystem.Colors.tint)
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 11)
@@ -206,7 +219,6 @@ struct RoutineExercisePickerView: View {
                 .stroke(Color.white.opacity(0.06), lineWidth: 1)
         )
         .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-        .opacity(disabled ? 0.45 : 1)
     }
 }
 

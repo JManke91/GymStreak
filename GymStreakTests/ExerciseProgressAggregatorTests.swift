@@ -1059,13 +1059,125 @@ struct ExerciseProgressAggregatorTests {
         )
     }
 
+    /// A usage the user can no longer train says so — and nothing else about it changes.
+    ///
+    /// The routine slot is denormalized into history precisely so it survives the routine
+    /// being edited or deleted, so a chart may legitimately hold slots that exist nowhere
+    /// any more. Those workouts happened: the entry is marked, never hidden.
+    @Test
+    func usagesWhoseSlotNoLongerExistsAreMarkedAsNotInARoutine() throws {
+        let context = ModelContext(InMemoryModelContainer.make())
+        let exercise = Exercise(name: "Biceps Curls")
+        context.insert(exercise)
+
+        let liveSlot = UUID()
+        let deadSlot = UUID()
+        let old = makeEmptySession(startTime: Date(timeIntervalSince1970: 1_000), context: context)
+        addExercise(named: exercise.name, exerciseId: exercise.id, sets: [(20, 5, true)],
+                    to: old, context: context, order: 0, routineExerciseId: deadSlot)
+        let recent = makeEmptySession(startTime: Date(timeIntervalSince1970: 2_000), context: context)
+        addExercise(named: exercise.name, exerciseId: exercise.id, sets: [(24, 5, true)],
+                    to: recent, context: context, order: 0, routineExerciseId: liveSlot)
+        // Ad-hoc history: no slot at all, so the routine library can say nothing about it.
+        addExercise(named: exercise.name, exerciseId: exercise.id, sets: [(14, 12, true)],
+                    to: recent, context: context, order: 1)
+        try context.save()
+        let sessions = try fetchSessions(context)
+        let live = try context.fetch(FetchDescriptor<Exercise>())
+
+        func snapshot(
+            liveRoutineSlotIds: Set<UUID>?,
+            requesting selection: ExerciseUsageSelection? = nil
+        ) -> ExerciseProgressSnapshot {
+            ExerciseProgressAggregator.buildSnapshot(
+                sessions: sessions, liveExercises: live,
+                exerciseName: exercise.name, exerciseId: exercise.id,
+                startDate: .distantPast, recentSessionLimit: 8,
+                liveRoutineSlotIds: liveRoutineSlotIds,
+                requestedUsage: selection
+            )
+        }
+
+        let marked = snapshot(liveRoutineSlotIds: [liveSlot])
+        let archived = try #require(marked.availableUsages.first { $0.slot == .routineSlot(deadSlot) })
+        #expect(archived.isArchived)
+        #expect(marked.availableUsages.first { $0.slot == .routineSlot(liveSlot) }?.isArchived == false)
+        // The slot-less bucket has no slot to look up — it keeps its own "Ohne Zuordnung"
+        // labelling and is never swept into the marker.
+        #expect(marked.availableUsages.first { $0.slot == .unattributed }?.isArchived == false)
+
+        // The marker is descriptive only: same entries, same order as an unmarked build…
+        let unmarked = snapshot(liveRoutineSlotIds: nil)
+        #expect(unmarked.availableUsages.allSatisfy { !$0.isArchived })
+        #expect(marked.availableUsages.map(\.slot) == unmarked.availableUsages.map(\.slot))
+
+        // …still chartable on its own, and still part of the combined series.
+        #expect(
+            snapshot(liveRoutineSlotIds: [liveSlot], requesting: .usage(.routineSlot(deadSlot)))
+                .data.dataPoints.map(\.maxWeight) == [20]
+        )
+        #expect(
+            snapshot(liveRoutineSlotIds: [liveSlot], requesting: .combined)
+                .data.dataPoints.map(\.maxWeight) == [20, 24]
+        )
+    }
+
+    /// An empty live-slot set is "looked, found nothing" — every routine slot is archived,
+    /// and the slot-less bucket still is not.
+    @Test
+    func anEmptyLiveSlotSetArchivesEverySlotButNeverTheUnattributedBucket() throws {
+        let context = ModelContext(InMemoryModelContainer.make())
+        let exercise = Exercise(name: "Biceps Curls")
+        context.insert(exercise)
+
+        let session = makeEmptySession(startTime: Date(timeIntervalSince1970: 1_000), context: context)
+        addExercise(named: exercise.name, exerciseId: exercise.id, sets: [(20, 5, true)],
+                    to: session, context: context, order: 0, routineExerciseId: UUID())
+        addExercise(named: exercise.name, exerciseId: exercise.id, sets: [(14, 12, true)],
+                    to: session, context: context, order: 1)
+        try context.save()
+
+        let snapshot = ExerciseProgressAggregator.buildSnapshot(
+            sessions: try fetchSessions(context),
+            liveExercises: try context.fetch(FetchDescriptor<Exercise>()),
+            exerciseName: exercise.name, exerciseId: exercise.id,
+            startDate: .distantPast, recentSessionLimit: 8,
+            liveRoutineSlotIds: []
+        )
+
+        #expect(snapshot.availableUsages.count == 2)
+        #expect(snapshot.availableUsages.filter(\.isArchived).map(\.slot).count == 1)
+        #expect(snapshot.availableUsages.first { $0.slot == .unattributed }?.isArchived == false)
+    }
+
+    /// The marker leads the label — the picker's collapsed button is tail-truncated, so a
+    /// suffix is the part the user never sees. It also separates two otherwise identical
+    /// usages without either needing the last-trained date.
+    @Test
+    func anArchivedUsageLeadsWithItsMarker() {
+        let sameDay = Date(timeIntervalSince1970: 2_000)
+        let live = option(repMin: 8, repMax: 12, lastPerformed: sameDay)
+        let archived = option(repMin: 8, repMax: 12, lastPerformed: sameDay, isArchived: true)
+
+        let items = ExerciseUsageLabeling.pickerItems(for: [live, archived])
+
+        // A live usage reads exactly as it did before the marker existed.
+        #expect(items[0].label == live.usage.displayLabel)
+        #expect(items[1].label.hasPrefix("chart.usage.archived".localized))
+        #expect(items[1].label.hasSuffix(items[0].label))
+        // The marker did the disambiguating, so neither entry needs a date or an index.
+        #expect(Set(items.map(\.label)).count == 2)
+        #expect(items.allSatisfy { !$0.label.contains("#") })
+    }
+
     // MARK: - Fixtures
 
     private func option(
         repMin: Int,
         repMax: Int,
         lastPerformed: Date,
-        order: Int = 0
+        order: Int = 0,
+        isArchived: Bool = false
     ) -> ExerciseUsageOption {
         ExerciseUsageOption(
             usage: ExerciseUsage(
@@ -1075,7 +1187,8 @@ struct ExerciseProgressAggregatorTests {
                 routineName: "Pull"
             ),
             lastPerformed: lastPerformed,
-            lastPerformedOrder: order
+            lastPerformedOrder: order,
+            isArchived: isArchived
         )
     }
 

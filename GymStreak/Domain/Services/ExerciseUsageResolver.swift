@@ -94,6 +94,13 @@ enum ExerciseUsageResolver {
     ///     reshuffled on every 1M / 1J / Alle tap; a usage the window has no rows for now
     ///     stays listed and renders the empty-chart state, which one tap on a wider range
     ///     recovers from.
+    ///   - liveSlotIds: the ids of every `RoutineExercise` currently held by a routine,
+    ///     as fetched inside the model actor. A usage whose slot is absent from this set
+    ///     is flagged `isArchived` — the user cannot train it again without editing a
+    ///     routine. **Only a flag**: it never removes, reorders or merges a usage, whose
+    ///     workouts really happened. `nil` means the caller did not look, and nothing is
+    ///     flagged; an empty set means it looked and found no live slots, so every
+    ///     routine-slot usage is archived.
     ///   - isMatch: whether a row belongs to the exercise being charted. Passed in rather
     ///     than reconstructed here so this stays one rule away from
     ///     `ExerciseProgressAggregator.matches`, never a second copy of it.
@@ -110,6 +117,7 @@ enum ExerciseUsageResolver {
     /// `8–12 Wdh.` on the next.
     static func options(
         in sessions: [WorkoutSession],
+        liveSlotIds: Set<UUID>? = nil,
         matching isMatch: (WorkoutExercise) -> Bool
     ) -> [ExerciseUsageOption] {
         var best: [ExerciseUsage.Key: (option: ExerciseUsageOption, rank: DescriptorRank)] = [:]
@@ -127,7 +135,8 @@ enum ExerciseUsageResolver {
                     ExerciseUsageOption(
                         usage: usage(of: row.exercise, in: session, occurrence: row.key.occurrence),
                         lastPerformed: session.startTime,
-                        lastPerformedOrder: row.exercise.order
+                        lastPerformedOrder: row.exercise.order,
+                        isArchived: isArchived(row.key.slot, liveSlotIds: liveSlotIds)
                     ),
                     rank
                 )
@@ -180,6 +189,16 @@ enum ExerciseUsageResolver {
             if lhs.order != rhs.order { return lhs.order < rhs.order }
             return lhs.id.uuidString < rhs.id.uuidString
         }
+    }
+
+    /// Whether a slot exists in no live routine any more.
+    ///
+    /// `.unattributed` is never archived: it has no slot to look up, so the routine
+    /// library can say nothing about it. Sweeping it in would relabel every ad-hoc and
+    /// pre-`routineExerciseId` row as a dead routine slot, which it never was.
+    private static func isArchived(_ slot: ExerciseUsage.Slot, liveSlotIds: Set<UUID>?) -> Bool {
+        guard let liveSlotIds, case .routineSlot(let id) = slot else { return false }
+        return !liveSlotIds.contains(id)
     }
 
     private static func sortKey(_ slot: ExerciseUsage.Slot) -> String {
