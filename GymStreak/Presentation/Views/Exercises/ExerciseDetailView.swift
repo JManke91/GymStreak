@@ -28,6 +28,7 @@ struct ExerciseDetailView: View {
             }
         }
         .toolbar(.hidden, for: .navigationBar)
+        .swipeBackEnabled()
         .sheet(isPresented: $showingEdit) {
             AddExerciseView(viewModel: viewModel, exerciseToEdit: exercise)
         }

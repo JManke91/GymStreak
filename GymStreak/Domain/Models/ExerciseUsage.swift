@@ -83,11 +83,16 @@ struct ExerciseUsage: Hashable, Sendable {
 
 // MARK: - Exercise Usage Labelling
 
-/// One entry of the exercise detail screen's usage picker, already labelled.
+/// One labelled usage: an entry of the exercise detail screen's usage picker, or the
+/// usage a Fortschritt row headlines.
 ///
-/// Built once per load in `ExerciseProgressViewModel` rather than in `body`: the label
-/// is a localized string plus a duplicate check across the option array, which the
-/// rendering rules keep out of a view's read path.
+/// Built off the view's read path — in `ExerciseProgressViewModel` for the picker, in
+/// `FortschrittAggregator` for the row — rather than in `body`: the label is a localized
+/// string plus a duplicate check across the option array, which the rendering rules keep
+/// out of a view's read path. One type and one labeller for both, so a usage is not named
+/// one thing in the list and another on the screen that list opens — with one documented
+/// exception: the list cannot mark an archived usage, because it does not fetch the live
+/// routine slots (`docs/progress-charts.md`).
 struct ExerciseUsagePickerItem: Identifiable, Hashable, Sendable {
     let key: ExerciseUsage.Key
     let label: String

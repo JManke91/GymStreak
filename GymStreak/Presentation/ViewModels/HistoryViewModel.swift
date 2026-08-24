@@ -209,7 +209,9 @@ final class FortschrittListViewModel {
             muscleGroups: exercise.muscleGroups,
             exerciseId: exercise.exerciseId,
             workoutCount: exercise.workoutCount,
-            lastPerformed: exercise.lastPerformed
+            lastPerformed: exercise.lastPerformed,
+            // Carried through so the pushed screen opens on the usage this row summarised.
+            initialUsage: exercise.headlineUsage?.key
         )
     }
 }

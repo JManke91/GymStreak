@@ -9,6 +9,8 @@ import SwiftData
 /// Pure aggregator that turns completed WorkoutSessions into the row models used by the
 /// Fortschritt tab. Pulled into its own type so the heavy per-exercise computation can be
 /// called from a background task and the tests can drive it directly.
+///
+/// The accumulators and the set-level reduction live in `FortschrittAggregator+Fold.swift`.
 struct FortschrittAggregator {
 
     /// Builds one row per *live* exercise in the user's Exercise library.
@@ -19,7 +21,25 @@ struct FortschrittAggregator {
     /// - Workout exercises that don't resolve to any live exercise are dropped — this is what
     ///   keeps deleted exercises from leaking into the Progress tab.
     ///
-    /// Trend is the % change between the first and last session's max estimated 1RM.
+    /// The label a headline carries is built by `ExerciseUsageLabeling.pickerItems` — the
+    /// picker's own labeller — so a usage reads the same in the list and on the screen the
+    /// list opens. One part does differ: this aggregator has no live routine slot ids, so
+    /// its labels never carry the "not in a routine" marker (see `docs/progress-charts.md`),
+    /// and where that marker is what separates two otherwise identical usages the row's
+    /// label falls back to the date suffix the picker would have used without it.
+    ///
+    /// The row **summarises one usage**: an exercise trained two ways (heavy in one
+    /// routine slot, light in another) would otherwise get one sparkline and one
+    /// percentage blended across both, which is the number that read +0.0% over the
+    /// reporter's 21 entries. `sparkline` and `trendPct` describe the **most recently
+    /// trained** usage — `ExerciseUsageResolver.resolveSelection` decides it, the same call
+    /// the detail screen makes — while `workoutCount` stays the exercise's total, because
+    /// the list is one row per exercise and that count is what the user reads it as.
+    /// See `docs/progress-charts.md`.
+    ///
+    /// Trend is the % change between the first and last session's heaviest effective
+    /// weight, within that one usage — the same metric the detail chart draws by default,
+    /// and the only one a free user may read.
     static func build(
         sessions: [WorkoutSession],
         liveExercises: [Exercise]
@@ -35,49 +55,17 @@ struct FortschrittAggregator {
             .filter { $0.endTime != nil }
             .sorted { $0.startTime < $1.startTime }
 
-        struct Accumulator {
-            var displayName: String
-            var muscleGroups: [String]
-            var liveId: UUID
-            var loadBehavior: ExerciseLoadBehavior
-            var sessionValues: [(date: Date, value: Double, isEffectiveLoad: Bool)] = []
-        }
-
-        /// A single session's folded value for one exercise. `hasValue` distinguishes
-        /// "no comparable set yet" from a legitimately recorded 0 (an assisted set
-        /// performed with no counterweight at all), which the min-fold must keep.
-        struct SessionFold {
-            var value: Double = 0
-            var hasValue = false
-            let isEffectiveLoad: Bool
-
-            mutating func record(_ newValue: Double) {
-                value = newValue
-                hasValue = true
-            }
-        }
-
         var map: [UUID: Accumulator] = [:]
 
         for session in finished {
-            // One entry per *session*, not per exercise instance. A routine that trains
-            // the same exercise twice in a workout (heavy + light) used to append two
-            // entries carrying the same date: the row reported 21 "workouts" for 14
-            // sessions, the sparkline alternated between both usages at zero horizontal
-            // distance, and first-vs-last trend cancelled to 0.0% because both ends
-            // sampled the same usage. The fold below mirrors the *within-session*
-            // reduction `ExerciseProgressAggregator.buildProgress` applies to its
-            // per-session data point, so the two surfaces cannot disagree about how
-            // many workouts they summarise. They can still disagree about the values
-            // of a counterweight series whose history only partly carries body-mass
-            // snapshots: `buildProgress` picks its value space series-wide, this
-            // aggregator per session. Pre-existing and documented in
-            // `docs/progress-charts.md`.
-            var folds: [UUID: SessionFold] = [:]
+            // Which rows of this workout belong to which live exercise, resolved once.
+            // Keying happens per exercise below rather than over the whole workout: the
+            // `.unattributed` bucket is shared by every slot-less row, so keying them
+            // together would number two different ad-hoc exercises 0 and 1, and the
+            // detail screen — which only ever sees one exercise — would disagree.
+            var rowIdsByLive: [UUID: Set<UUID>] = [:]
 
             for workoutExercise in session.workoutExercisesList {
-                let completed = workoutExercise.setsList.filter(\.isCompleted)
-                guard !completed.isEmpty else { continue }
                 guard let live = resolveLive(
                     workoutExercise: workoutExercise,
                     byId: liveById,
@@ -88,56 +76,122 @@ struct FortschrittAggregator {
                 // with a different meaning for the entered number.
                 guard workoutExercise.loadBehavior == live.loadBehavior else { continue }
 
-                var acc = map[live.id] ?? Accumulator(
-                    displayName: live.name,
-                    muscleGroups: live.muscleGroups,
-                    liveId: live.id,
-                    loadBehavior: live.loadBehavior
-                )
-                acc.displayName = live.name
-                acc.muscleGroups = live.muscleGroups
-                acc.loadBehavior = workoutExercise.loadBehavior
-                map[live.id] = acc
-
-                let behavior = workoutExercise.loadBehavior
-                let canUseEffectiveLoad = !behavior.isCounterweightAssistance || session.bodyWeightKg != nil
-                var fold = folds[live.id] ?? SessionFold(isEffectiveLoad: canUseEffectiveLoad)
-
-                let usePlanned = workoutExercise.progressiveOverloadApplied
-                for set in completed {
-                    let w = usePlanned ? set.plannedWeight : set.actualWeight
-                    let r = usePlanned ? set.plannedReps   : set.actualReps
-                    guard r > 0,
-                          w > 0 || behavior.isCounterweightAssistance else { continue }
-                    if canUseEffectiveLoad,
-                       let effective = ExerciseLoadMetrics.effectiveWeight(
-                        enteredWeight: w,
-                        behavior: behavior,
-                        bodyWeightKg: session.bodyWeightKg
-                       ) {
-                        // Higher estimated 1RM is the better usage. `value` starts at 0
-                        // and an estimate is never negative, so plain max also covers
-                        // the first recorded set.
-                        fold.record(max(fold.value, ExerciseLoadMetrics.estimatedOneRepMax(weight: effective, reps: r)))
-                    } else if behavior.isCounterweightAssistance {
-                        // Raw assistance without a body-mass snapshot: *least*
-                        // assistance is the better usage, so fold with min.
-                        fold.record(fold.hasValue ? min(fold.value, w) : w)
-                    }
-                }
-                folds[live.id] = fold
+                rowIdsByLive[live.id, default: []].insert(workoutExercise.id)
             }
 
-            for (id, fold) in folds {
-                map[id]?.sessionValues.append((session.startTime, fold.value, fold.isEffectiveLoad))
+            for (liveId, rowIds) in rowIdsByLive {
+                guard let live = liveById[liveId] else { continue }
+                var accumulator = map[liveId] ?? Accumulator(
+                    displayName: live.name,
+                    muscleGroups: live.muscleGroups,
+                    loadBehavior: live.loadBehavior
+                )
+                var didRecordAnything = false
+
+                // One value per *usage* per session. Before usages existed this folded a
+                // workout's repeats of an exercise into a single value, which counted the
+                // workout once but still blended two different pieces of work; the keyed
+                // rows separate them instead, and a session still contributes at most one
+                // value to any one usage because the occurrence index makes a slot's
+                // second row a usage of its own.
+                for (workoutExercise, key) in ExerciseUsageResolver.keyedRows(in: session, matching: {
+                    rowIds.contains($0.id)
+                }) {
+                    // Filtered **after** keying, exactly as `ExerciseUsageResolver.options`
+                    // does it. Dropping a set-less row before the occurrence index is
+                    // assigned would shift every later row of that slot by one, so a
+                    // workout whose first block was left uncompleted would give the row
+                    // occurrence 0 and the picker occurrence 1 — the handed-down usage
+                    // would then be absent from the menu and silently fall back.
+                    guard workoutExercise.setsList.contains(where: \.isCompleted) else { continue }
+
+                    let fold = foldSets(of: workoutExercise, in: session)
+                    let rank = ExerciseUsageResolver.DescriptorRank(
+                        startTime: session.startTime,
+                        order: workoutExercise.order,
+                        id: workoutExercise.id
+                    )
+                    let descriptor = ExerciseUsageResolver.usage(
+                        of: workoutExercise,
+                        in: session,
+                        occurrence: key.occurrence
+                    )
+
+                    var usage = accumulator.usages[key] ?? UsageAccumulator(
+                        descriptor: descriptor,
+                        descriptorRank: rank,
+                        lastPerformed: session.startTime,
+                        lastPerformedOrder: workoutExercise.order
+                    )
+                    // Described by its most recent row, by explicit comparison — the same
+                    // rule `ExerciseUsageResolver.options` applies, so the label the row
+                    // carries is the label the picker shows for that usage. Taking
+                    // whichever row arrived last would make a slot whose rep-range goal
+                    // changed read differently in the two places.
+                    if rank > usage.descriptorRank {
+                        usage.descriptor = descriptor
+                        usage.descriptorRank = rank
+                        usage.lastPerformed = session.startTime
+                        usage.lastPerformedOrder = workoutExercise.order
+                    }
+                    usage.sessionValues.append(
+                        (session.startTime, fold.value, fold.isEffectiveLoad)
+                    )
+                    accumulator.usages[key] = usage
+                    didRecordAnything = true
+                }
+
+                // A workout whose rows were all left uncompleted is not a workout of this
+                // exercise, and must not create a row for it either.
+                guard didRecordAnything else { continue }
+
+                accumulator.displayName = live.name
+                accumulator.muscleGroups = live.muscleGroups
+                accumulator.loadBehavior = live.loadBehavior
+                // The workout count is the exercise's, across usages: one entry per
+                // session, never one per exercise instance (the defect that reported 21
+                // workouts for 14 sessions).
+                accumulator.sessionCount += 1
+                accumulator.lastPerformed = session.startTime
+                map[liveId] = accumulator
             }
         }
 
-        let models: [FortschrittExerciseModel] = map.map { id, acc in
-            let values = acc.sessionValues.sorted { $0.date < $1.date }
-            let usesEffectiveLoad = !acc.loadBehavior.isCounterweightAssistance || values.allSatisfy(\.isEffectiveLoad)
+        let models: [FortschrittExerciseModel] = map.map { id, accumulator in
+            let options = ExerciseUsageResolver.sorted(
+                accumulator.usages.map { key, usage in
+                    ExerciseUsageOption(
+                        usage: usage.descriptor,
+                        lastPerformed: usage.lastPerformed,
+                        lastPerformedOrder: usage.lastPerformedOrder
+                    )
+                }
+            )
+            // The headline is whatever the detail screen opens on by itself — the same
+            // call, not a second rule — so the row and that screen cannot disagree.
+            let headlineKey: ExerciseUsage.Key?
+            switch ExerciseUsageResolver.resolveSelection(requested: nil, options: options) {
+            case .usage(let key):
+                headlineKey = key
+            case .combined:
+                // Nothing to choose between: that one usage *is* the exercise.
+                headlineKey = options.first?.key
+            }
+            // Labelled through the picker's own labeller, not from the raw descriptor, so
+            // two usages sharing a rep range are told apart in the row exactly as they are
+            // in the menu ("· zuletzt 12.07.", "· #2"). See below for the one part that
+            // still differs.
+            // Only when a headline will actually be published — a single-usage row names
+            // no usage, so labelling it is work thrown away for every such exercise.
+            let labelled = options.count > 1
+                ? ExerciseUsageLabeling.pickerItems(for: options)
+                : []
+            let values = (headlineKey.flatMap { accumulator.usages[$0]?.sessionValues } ?? [])
+                .sorted { $0.date < $1.date }
+            let usesEffectiveLoad = !accumulator.loadBehavior.isCounterweightAssistance
+                || values.allSatisfy(\.isEffectiveLoad)
             let sparkline: [Double]
-            if acc.loadBehavior.isCounterweightAssistance && !usesEffectiveLoad {
+            if accumulator.loadBehavior.isCounterweightAssistance && !usesEffectiveLoad {
                 let baseline = values.map(\.value).max() ?? 0
                 sparkline = values.map { baseline - $0.value }
             } else {
@@ -146,21 +200,29 @@ struct FortschrittAggregator {
             let trend: Double? = {
                 guard let first = values.first, let last = values.last,
                       first.value > 0, values.count >= 2 else { return nil }
-                let delta = acc.loadBehavior.isCounterweightAssistance && !usesEffectiveLoad
+                let delta = accumulator.loadBehavior.isCounterweightAssistance && !usesEffectiveLoad
                     ? first.value - last.value
                     : last.value - first.value
                 return (delta / first.value) * 100
             }()
             return FortschrittExerciseModel(
                 id: id.uuidString,
-                name: acc.displayName,
-                primaryMuscleGroup: acc.muscleGroups.first ?? "General",
-                muscleGroups: acc.muscleGroups,
+                name: accumulator.displayName,
+                primaryMuscleGroup: accumulator.muscleGroups.first ?? "General",
+                muscleGroups: accumulator.muscleGroups,
                 exerciseId: id,
-                workoutCount: values.count,
-                lastPerformed: values.last?.date,
+                workoutCount: accumulator.sessionCount,
+                lastPerformed: accumulator.lastPerformed,
                 trendPct: trend,
-                sparkline: sparkline.isEmpty ? [0] : sparkline
+                sparkline: sparkline.isEmpty ? [0] : sparkline,
+                usageCount: options.count,
+                // Only when there is something behind the headline. A single usage *is*
+                // the exercise, and naming it would put a picker label on every row.
+                headlineUsage: options.count > 1
+                    ? headlineKey.flatMap { key in labelled.first { $0.key == key } }
+                    : nil,
+                chartsAssistance: accumulator.loadBehavior.isCounterweightAssistance
+                    && !usesEffectiveLoad
             )
         }
 

@@ -143,10 +143,22 @@ enum ExerciseUsageResolver {
             }
         }
 
-        // The key tie-break is what makes this a total order: the values come out of a
-        // dictionary, so two usages agreeing on both date and order would otherwise sort
-        // differently run to run.
-        return best.values.map(\.option).sorted {
+        return sorted(best.values.map(\.option))
+    }
+
+    /// The one order usages are presented in: newest-trained first, then the sequence they
+    /// were performed in within that workout.
+    ///
+    /// Shared with `FortschrittAggregator`, which breaks a tie between two equally-trained
+    /// usages by taking the first entry of this order — so the Fortschritt row's headline
+    /// and the detail screen's default land on the same usage whenever the row has no
+    /// most-trained usage to point at.
+    ///
+    /// The key tie-break is what makes this a total order: the values come out of a
+    /// dictionary, so two usages agreeing on both date and order would otherwise sort
+    /// differently run to run.
+    static func sorted(_ options: [ExerciseUsageOption]) -> [ExerciseUsageOption] {
+        options.sorted {
             if $0.lastPerformed != $1.lastPerformed { return $0.lastPerformed > $1.lastPerformed }
             if $0.lastPerformedOrder != $1.lastPerformedOrder { return $0.lastPerformedOrder < $1.lastPerformedOrder }
             if $0.key.occurrence != $1.key.occurrence { return $0.key.occurrence < $1.key.occurrence }
@@ -163,9 +175,16 @@ enum ExerciseUsageResolver {
     /// A single usage (or none) resolves to `.combined`, which is then identical to that
     /// usage's own series — the picker has nothing to offer and stays hidden.
     ///
-    /// A requested usage is **always kept**. The options are all-time, so anything the user
-    /// can have picked is still listed; narrowing the timeframe past it draws the
-    /// empty-chart state rather than silently swapping the selection out from under them.
+    /// A requested usage the options **do** hold is always kept. The options are all-time,
+    /// so anything the user can have picked from the menu is still listed; narrowing the
+    /// timeframe past it draws the empty-chart state rather than silently swapping the
+    /// selection out from under them.
+    ///
+    /// A requested usage the options do **not** hold falls back to the default. It cannot
+    /// be a menu choice — the menu is all-time — so it can only arrive from outside the
+    /// screen: the Fortschritt row hands its headline usage down so both surfaces open on
+    /// the same one. Honouring an unknown key would chart nothing while the picker read
+    /// "all usages".
     ///
     /// - Parameter options: as returned by `options(in:matching:)`, newest-trained first.
     static func resolveSelection(
@@ -173,13 +192,25 @@ enum ExerciseUsageResolver {
         options: [ExerciseUsageOption]
     ) -> ExerciseUsageSelection {
         guard options.count > 1 else { return .combined }
+        let fallback = options.first.map { ExerciseUsageSelection.usage($0.key) } ?? .combined
         // Nothing requested — first open, or straight after an exercise switch.
-        guard let requested else { return options.first.map { .usage($0.key) } ?? .combined }
-        return requested
+        guard let requested else { return fallback }
+        // A usage this exercise's history does not hold is not a choice the user can have
+        // made in the menu, which is all-time: it can only arrive from outside the screen
+        // — the Fortschritt row hands its headline usage down so the two surfaces open on
+        // the same one. Honouring an unknown key would chart nothing while the picker
+        // reported "all usages", so it falls back to the default instead.
+        guard case .usage(let key) = requested,
+              !options.contains(where: { $0.key == key }) else { return requested }
+        return fallback
     }
 
     /// Which of two rows describes its usage: the greatest `(startTime, order, id)`.
-    private struct DescriptorRank: Comparable {
+    ///
+    /// Not private: `FortschrittAggregator` resolves usages in its own single pass over
+    /// history and must rank descriptors by the identical rule, or the same slot could be
+    /// labelled from one row in the list and from another on the detail screen.
+    struct DescriptorRank: Comparable {
         let startTime: Date
         let order: Int
         let id: UUID

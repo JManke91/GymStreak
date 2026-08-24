@@ -676,6 +676,9 @@
 "progress.empty.description" = "Absolviere dein erstes Workout um deinen Fortschritt zu verfolgen";
 "progress.search" = "Übungen suchen";
 "progress.workout_count" = "%d Workouts";
+// Die Fortschritt-Zeile zeigt eine Variante; das nennt, welche von wie vielen.
+"progress.row.curve_usage" = "Kurve: %@";
+"progress.row.usage_of_total" = "von %d Varianten";
 
 // MARK: - Progress Comparison
 "progress.compared_to_previous" = "Verglichen mit";

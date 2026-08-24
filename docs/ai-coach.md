@@ -175,6 +175,7 @@ GymStreak/
   - `CoachEntryCard` — compact gradient-bordered card shown above `WeekHeroView` in `TrainingsTabView`. Pushes `PeriodRecapView` via `NavigationLink(value: PeriodRecapDestination)`.
   - `ProactivePeriodPromptCard` — shown once per month boundary (first app open after month rollover) by `ProactivePromptCoordinator.shouldShow`. Dismissed permanently for the current period on either CTA tap.
 - **Time range selector**: `PeriodRange` enum with 6 cases (`.thisWeek`, `.lastWeek`, `.thisMonth`, `.lastMonth`, `.lastThreeMonths`, `.thisYear`); chip strip at top of `PeriodRecapView`.
+- **Navigation**: `PeriodRecapView` hides the system navigation bar (`.toolbar(.hidden, for: .navigationBar)`) for its custom top bar, which also disables the native leading-edge swipe-back. It therefore applies `.swipeBackEnabled()` (2026-08-24) — see `docs/progress-charts.md` § "The screen keeps the native swipe-back gesture" for the root cause, why no pure-SwiftUI fix exists, and the iOS 26 second recognizer.
 - **Editorial layout**: headline (large bold text) → stat strip (sessions / volume / new PRs) → `AISurface` trends section → correlation card (orange gradient border, `PATTERN` label) → closing `AISurface` → `AIPrivacyFooter(.full)`.
 - **Skeleton loading**: full layout skeleton shown while `.loading` state is active; transitions to partial content as fields arrive.
 - **Cache key**: `"\(range.rawValue)|\(rangeStartISO)|\(lastWorkoutInPeriodISO)"`, filename prefix `period_recap_v2_` (bumped with the fact-based redesign so old entries regenerate).

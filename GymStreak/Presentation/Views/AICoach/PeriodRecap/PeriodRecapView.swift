@@ -89,6 +89,7 @@ private struct PeriodRecapViewInternal: View {
             .safeAreaPadding(.bottom, 24)
         }
         .toolbar(.hidden, for: .navigationBar)
+        .swipeBackEnabled()
         // Keyed, not bare: `.gated` and `.offer` are stored states, so a purchase
         // made from this screen's own paywall would otherwise leave the lock up
         // with a dead Unlock button (docs/pro-subscription.md §3c).

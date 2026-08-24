@@ -170,7 +170,8 @@ struct HistoryView: View {
                 ExerciseProgressChartView(
                     exerciseName: exercise.name,
                     exerciseId: exercise.exerciseId,
-                    availableExercises: exercise.allExercises
+                    availableExercises: exercise.allExercises,
+                    initialUsage: exercise.initialUsage
                 )
             }
             .navigationDestination(for: PeriodRecapDestination.self) { dest in

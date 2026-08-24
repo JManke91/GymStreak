@@ -100,9 +100,14 @@ class ExerciseProgressViewModel: ObservableObject {
     ///   inside the gate, for the same reason `PaywallPresenter` and
     ///   `RoutinesViewModel` inject it: the shipped switch is off, so a test
     ///   baking it in would prove the gate is inert rather than correct.
+    /// - Parameter initialUsage: the usage the Fortschritt row that pushed this screen
+    ///   summarised, or `nil` to take the default. It becomes a *requested* selection so
+    ///   the two surfaces cannot open on different usages; a key this exercise's history
+    ///   does not hold falls back to the default in `ExerciseUsageResolver`.
     init(
         exerciseName: String,
         exerciseId: UUID? = nil,
+        initialUsage: ExerciseUsage.Key? = nil,
         provider: HistorySnapshotProviding,
         proEntitlements: any ProEntitlementProviding,
         paywalls: any PaywallPresenting,
@@ -110,6 +115,7 @@ class ExerciseProgressViewModel: ObservableObject {
     ) {
         self.exerciseName = exerciseName
         self.exerciseId = exerciseId
+        self.requestedUsage = initialUsage.map(ExerciseUsageSelection.usage)
         self.provider = provider
         self.proEntitlements = proEntitlements
         self.paywalls = paywalls
@@ -133,13 +139,23 @@ class ExerciseProgressViewModel: ObservableObject {
     }
 
     /// Mutates the load parameters only — `.task(id: viewModel.loadKey)` performs the reload.
-    func updateExercise(_ newExerciseName: String, exerciseId: UUID?) {
+    ///
+    /// - Parameter initialUsage: the switched-to exercise's own Fortschritt headline
+    ///   usage, so switching lands where tapping that exercise's row would have. `nil`
+    ///   takes the default.
+    func updateExercise(
+        _ newExerciseName: String,
+        exerciseId: UUID?,
+        initialUsage: ExerciseUsage.Key? = nil
+    ) {
         self.exerciseName = newExerciseName
         self.exerciseId = exerciseId
         selectedDataPoint = nil
-        // A different exercise has different usages: drop both the choice and the stale
-        // menu, so the picker never offers the previous exercise's slots during the load.
-        requestedUsage = nil
+        // A different exercise has different usages: replace the choice with the
+        // switched-to exercise's own headline usage (`nil` clears it and takes the
+        // default) and drop the stale menu, so the picker never offers the previous
+        // exercise's slots during the load.
+        requestedUsage = initialUsage.map(ExerciseUsageSelection.usage)
         usageOptions = []
         selectedUsage = .combined
         datedWindowEmptyMessage = nil

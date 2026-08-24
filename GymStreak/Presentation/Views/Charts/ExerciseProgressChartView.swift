@@ -17,18 +17,28 @@ struct ExerciseProgressChartView: View {
     let exerciseName: String
     let exerciseId: UUID?
     let availableExercises: [ExerciseWithHistory]
+    /// The usage the Fortschritt row that pushed this screen summarised, or `nil` to take
+    /// the screen's own default (the most recently trained usage).
+    let initialUsage: ExerciseUsage.Key?
     @EnvironmentObject private var dependencies: AppDependencies
 
-    init(exerciseName: String, exerciseId: UUID?, availableExercises: [ExerciseWithHistory]) {
+    init(
+        exerciseName: String,
+        exerciseId: UUID?,
+        availableExercises: [ExerciseWithHistory],
+        initialUsage: ExerciseUsage.Key? = nil
+    ) {
         self.exerciseName = exerciseName
         self.exerciseId = exerciseId
         self.availableExercises = availableExercises
+        self.initialUsage = initialUsage
     }
 
     init(exerciseName: String, exerciseId: UUID? = nil) {
         self.exerciseName = exerciseName
         self.exerciseId = exerciseId
         self.availableExercises = []
+        self.initialUsage = nil
     }
 
     var body: some View {
@@ -36,6 +46,7 @@ struct ExerciseProgressChartView: View {
             exerciseName: exerciseName,
             exerciseId: exerciseId,
             availableExercises: availableExercises,
+            initialUsage: initialUsage,
             snapshotProvider: dependencies.historySnapshotProvider,
             proEntitlements: dependencies.proEntitlements,
             paywalls: dependencies.paywalls,
@@ -69,6 +80,7 @@ private struct ExerciseProgressChartViewInternal: View {
         exerciseName: String,
         exerciseId: UUID?,
         availableExercises: [ExerciseWithHistory],
+        initialUsage: ExerciseUsage.Key?,
         snapshotProvider: HistorySnapshotProviding,
         proEntitlements: any ProEntitlementProviding,
         paywalls: any PaywallPresenting,
@@ -84,6 +96,7 @@ private struct ExerciseProgressChartViewInternal: View {
         self._viewModel = StateObject(wrappedValue: ExerciseProgressViewModel(
             exerciseName: exerciseName,
             exerciseId: exerciseId,
+            initialUsage: initialUsage,
             provider: snapshotProvider,
             proEntitlements: proEntitlements,
             paywalls: paywalls
@@ -110,6 +123,7 @@ private struct ExerciseProgressChartViewInternal: View {
             }
         }
         .toolbar(.hidden, for: .navigationBar)
+        .swipeBackEnabled()
         // Anchor for the floating coach bar's contextual suggestion chip.
         .onAppear {
             CoachScreenContext.shared.anchor = .exercise(name: currentExerciseName)
@@ -559,8 +573,14 @@ private struct ExerciseProgressChartViewInternal: View {
     private func switchToExercise(_ exercise: ExerciseWithHistory) {
         currentExerciseName = exercise.name
         currentExerciseId = exercise.exerciseId
-        // Changes `viewModel.loadKey`, which restarts the `.task(id:)` load.
-        viewModel.updateExercise(exercise.name, exerciseId: exercise.exerciseId)
+        // Changes `viewModel.loadKey`, which restarts the `.task(id:)` load. The switched-to
+        // exercise carries its own Fortschritt headline usage, so switching lands where
+        // tapping that exercise's row would have.
+        viewModel.updateExercise(
+            exercise.name,
+            exerciseId: exercise.exerciseId,
+            initialUsage: exercise.initialUsage
+        )
         // Reset deep-dive state when the user switches exercises
         deepDiveVM = ExerciseDeepDiveViewModel(allowanceGate: deepDiveAllowanceGate)
         hasTappedAskCoach = false

@@ -17,6 +17,12 @@ struct ExerciseWithHistory: Identifiable, Hashable {
     let exerciseId: UUID?
     let workoutCount: Int
     let lastPerformed: Date?
+    /// The usage the Fortschritt row summarised, handed down so the detail screen opens
+    /// on the same one — a row whose sparkline describes the most-trained usage must not
+    /// push a screen that opens on a different one. `nil` when the exercise has a single
+    /// usage (the screen's own default is then identical) or when the push came from
+    /// somewhere without a row behind it.
+    var initialUsage: ExerciseUsage.Key?
     var allExercises: [ExerciseWithHistory] = []
 
     var primaryMuscleGroup: String {

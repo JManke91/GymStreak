@@ -6,10 +6,41 @@
 import SwiftUI
 
 /// A single exercise row in the Fortschritt tab: muscle-group badge + name + count + sparkline + trend %.
+///
+/// The sparkline and the trend are **max weight** — the metric the detail chart draws by
+/// default, named in the caption beside them — over that usage's whole history.
+///
+/// When the exercise is trained in more than one way, they describe
+/// the **most recently trained** usage rather than a blend of all of them, and the row says
+/// so on a full-width line beneath the rest —
+/// otherwise it would present one coherent-looking progression built from two different
+/// pieces of work, which is the defect this row's numbers came from. The list stays one
+/// row per exercise; splitting it per usage would bury it under near-duplicate entries
+/// (see `docs/progress-charts.md`).
 struct FortschrittExerciseRowView: View {
     let model: FortschrittExerciseModel
 
     var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            content
+            // Its own full-width line, not part of the row above: a usage label is the
+            // marker plus a rep goal plus a routine name, which shares a line with the
+            // count and the sparkline only by truncating to "Ohne Zuordnung · 4–…".
+            if let headline = model.headlineUsage {
+                usageLine(headline)
+            }
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 12)
+        .background(Color.white.opacity(0.035))
+        .overlay(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .stroke(Color.white.opacity(0.06), lineWidth: 1)
+        )
+        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+    }
+
+    private var content: some View {
         HStack(spacing: 12) {
             badge
             VStack(alignment: .leading, spacing: 3) {
@@ -28,11 +59,20 @@ struct FortschrittExerciseRowView: View {
                 .foregroundStyle(Color.white.opacity(0.5))
             }
             Spacer()
-            VStack(alignment: .trailing, spacing: 4) {
+            VStack(alignment: .trailing, spacing: 3) {
                 MiniSparkline(
                     data: model.sparkline,
                     color: trendColor
                 )
+                // What the curve and the percentage measure. Same caption, same wording and
+                // the same assistance exception as the headline above the detail screen's
+                // chart (`ExerciseProgressViewModel.selectedMetricTitle`), so the list and
+                // that screen name one metric rather than two.
+                Text(metricTitle.uppercased())
+                    .font(.system(size: 8, weight: .semibold))
+                    .tracking(0.4)
+                    .foregroundStyle(Color.white.opacity(0.4))
+                    .lineLimit(1)
                 if let trend = model.trendPct {
                     Text(trendLabel(trend))
                         .font(.system(size: 11, weight: .bold))
@@ -43,14 +83,41 @@ struct FortschrittExerciseRowView: View {
                 .font(.system(size: 12, weight: .semibold))
                 .foregroundStyle(Color.white.opacity(0.3))
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 12)
-        .background(Color.white.opacity(0.035))
-        .overlay(
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .stroke(Color.white.opacity(0.06), lineWidth: 1)
-        )
-        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+    }
+
+    /// Which usage the sparkline and the trend describe, and how many there are in total.
+    ///
+    /// The label comes from the picker's own labeller (`ExerciseUsageLabeling.pickerItems`,
+    /// run inside `FortschrittAggregator`), so a usage reads here as it reads in the menu,
+    /// disambiguating suffix included. The one exception is the "not in a routine" marker,
+    /// which the list has no live routine slots to derive — see `docs/progress-charts.md`.
+    /// The picker's icon repeats here for the same reason the label is shared.
+    private func usageLine(_ headline: ExerciseUsagePickerItem) -> some View {
+        HStack(spacing: 4) {
+            Image(systemName: "line.3.horizontal.decrease")
+                .font(.system(size: 9, weight: .semibold))
+            Text("progress.row.curve_usage".localized(headline.label))
+                .lineLimit(1)
+                .truncationMode(.tail)
+            Spacer(minLength: 8)
+            Text("progress.row.usage_of_total".localized(model.usageCount))
+                .foregroundStyle(Color.white.opacity(0.45))
+                .layoutPriority(1)
+        }
+        .font(.system(size: 10, weight: .medium))
+        // Metadata grey, not the tint: on device the tinted line read as a control, and
+        // it is not one — the whole cell is the tap target and it already opens this very
+        // usage, so a separate tap could not do anything different.
+        .foregroundStyle(Color.white.opacity(0.55))
+    }
+
+    /// The metric the sparkline and the trend describe. A counterweight series with no
+    /// body-mass snapshot carries assistance rather than load — inverted, so that less is
+    /// better — and must say so instead of claiming a max weight.
+    private var metricTitle: String {
+        model.chartsAssistance
+            ? "exercise.assistance".localized
+            : ProgressMetric.maxWeight.localizedTitle
     }
 
     private var badge: some View {

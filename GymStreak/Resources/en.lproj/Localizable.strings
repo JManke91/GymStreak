@@ -676,6 +676,9 @@
 "progress.empty.description" = "Complete your first workout to start tracking progress";
 "progress.search" = "Search exercises";
 "progress.workout_count" = "%d workouts";
+// The Fortschritt row shows one usage's sparkline and trend; this says which one of how many.
+"progress.row.curve_usage" = "Curve: %@";
+"progress.row.usage_of_total" = "of %d usages";
 
 // MARK: - Progress Comparison
 "progress.compared_to_previous" = "Compared to";

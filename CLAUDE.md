@@ -28,7 +28,7 @@ Project MCP servers (context7, things) are declared in `.mcp.json` at the repo r
 
 When the user asks to implement or break down a Things task, first fetch the explicitly named or identified to-do from the **Gym Streak** Things project. Treat it as the parent work item: do not complete, edit, or duplicate it in Things unless the user explicitly asks (moving it to the "Plan is ready in Claude Code" heading is a sanctioned exception — see below).
 
-Before drafting tickets, check whether the fetched description is sufficient and consistent: if it's thin, ambiguous, or conflicts with `CONTEXT.md`/existing code, run `/grill-with-docs` first to sharpen it and resolve the conflict (escalate to `/wayfinder` instead if the effort turns out too large or foggy for a single session). Only once the idea is sharp, invoke `/to-tickets` using the parent task's title, notes, checklist, and relevant codebase context. Draft tracer-bullet vertical slices, show their blocking edges, and ask the user to approve the granularity before publishing. On approval, create one local ticket per slice under `.scratch/<feature-slug>/issues/` in dependency order, then move the parent Things to-do under the **"Plan is ready in Claude Code"** heading in the Gym Streak project (`update_todo` with `id: <parent UUID>, heading: "Plan is ready in Claude Code"`). This heading move is a sanctioned Things edit specific to this pipeline — it only relocates the to-do to signal a ready plan and never changes its title, notes, checklist, or completion state. If the heading doesn't exist or the move fails, tell the user and continue — it never blocks ticket publication.
+Before drafting tickets, check whether the fetched description is sufficient and consistent: if it's thin, ambiguous, or conflicts with `CONTEXT.md`/existing code, run `/grill-with-docs` first to sharpen it and resolve the conflict (escalate to `/wayfinder` instead if the effort turns out too large or foggy for a single session). Only once the idea is sharp, invoke `/to-tickets` using the parent task's title, notes, checklist, and relevant codebase context. Before showing the slices, run the **Monetization Gate** (see below) and present its verdict alongside the granularity question — a Pro verdict changes what the tickets contain. Draft tracer-bullet vertical slices, show their blocking edges, and ask the user to approve the granularity before publishing. On approval, create one local ticket per slice under `.scratch/<feature-slug>/issues/` in dependency order, then move the parent Things to-do under the **"Plan is ready in Claude Code"** heading in the Gym Streak project (`update_todo` with `id: <parent UUID>, heading: "Plan is ready in Claude Code"`). This heading move is a sanctioned Things edit specific to this pipeline — it only relocates the to-do to signal a ready plan and never changes its title, notes, checklist, or completion state. If the heading doesn't exist or the move fails, tell the user and continue — it never blocks ticket publication.
 
 For a clearly atomic task, `/to-tickets` should still create a single `01` local ticket so its acceptance criteria and source remain recorded.
 
@@ -59,6 +59,7 @@ Principles for how to work in this repo. They apply to every model; they matter 
 - After building a new feature, make sure the app still compiles
 - When building a new feature make sure to create a .md file in the /docs folder that summarizes all the important details inlcuding what the feature does, how it works, how it's architecutlly structured, what components are involved etc. make sure to include the ios and watch target for documentation. the goal is to be able to reference this file later for quick context
 - For every code change check if an existing feature is modified and if there already is a corresponsing .md file in the /docs folder make sure to update according to the criteria stated for building new .md files.
+- **Run the Monetization Gate** (see "Monetization Gate" below) before reporting a new or extended user-facing capability as done — re-check that what shipped matches the tier verdict made at planning
 - **Run the risk-based architecture review** (see "Architecture Review (risk-based)" below) before reporting work as done — mandatory when the change has architectural surface, skippable with a one-line justification for trivial edits.
 
 This is an iOS app built with Xcode:
@@ -126,6 +127,70 @@ When it runs: **CRITICAL findings must be fixed** and the reviewer re-run until 
 **Skip the reviewer** for changes with no architectural surface: localization/strings, comments/docs, asset or config tweaks, TestFlight notes, and small in-place edits inside existing function or view bodies (copy/layout/value tweaks, guard fixes, threshold changes) that add no files, types, imports, or dependencies. **The size-based skip does not apply to rendering surface** — a one-line edit that puts a formatter, a loop, or a relationship read into a view body is exactly the mistake this gate exists to catch, so it goes to review however small it is. When skipping, self-check the diff against the Hard rules and the main-thread rules above, and state in your final report that the review was skipped and why (one line).
 
 This remains a second review layer — it does not replace compiling the app or self-review.
+
+## Monetization Gate (mandatory, free by default)
+
+The app is live with active Pro gating (Phase 3 — tuning). **`docs/monetization-strategy.md` is the
+strategy; `docs/pro-subscription.md` is the shipped mechanism.** Every new user-facing capability
+gets a tier decision, and it is **not** an afterthought: a gated feature needs a cap constant, a
+`PaywallPlacement` case, `en`+`de` headline strings, a RevenueCat dashboard Placement and a
+cheap-to-render preview, so deciding after the feature works means rebuilding it.
+
+**Fires at two points:**
+
+1. **At planning** — inside `/to-tickets` (or before the first implementation ticket if there was no
+   breakdown), produce the verdict block below and put a gated feature's cap/placement/localization
+   work into the tickets. Present the verdict together with the ticket granularity for approval.
+2. **Before reporting the feature done** — one-line re-check that what shipped still matches the
+   verdict. If implementation drifted, say so and re-decide.
+
+**Free is the default.** State which §3 rule *permits* a gate, never which one fails to forbid it.
+Three classes are auto-free and skip the discussion with one line:
+
+- **Rule 3** — anything inside an active workout, on the watch app, or on the rest-timer Live
+  Activity. This covers the `OnyxProBadge`, not just paywalls.
+- **Rule 4** — anything that reads, retains or exports the user's own logged data.
+- **Rule 1** — anything on the aha path: build a routine → train it → see it logged → see the
+  number go up.
+
+**Founder check (§7).** The grant is a permanent binary flag, so every future Pro feature also ships
+free to the entire pre-cutoff base. A feature whose audience is mostly existing users has close to
+zero gating upside — gate where a *new* user's progression hits a wall, or don't gate at all.
+
+**Mechanism ranking** (§2: usage caps convert 1.5–2× better than feature locks) — prefer left,
+justify right:
+
+`usage cap` (countable unit + `ProFeatureCaps` constant) → `monthly taster`
+(`MonthlyAllowanceStore`; right for zero-marginal-cost on-device AI) → `depth/window gate` (free
+version genuinely works, shallower) → `blurred preview` (`.proLocked(_:placement:onUnlock:)` — blur
+never hide, so the loss is against the user's *own* numbers) → `hard lock` (last resort; only when
+there is no countable unit and no shallow version).
+
+Never lead with a bare paywall on a feature whose output the user has never seen — a taster or a
+real, personalized preview comes first. A gate must name the specific capability being unlocked
+(§8 C), never "Go Pro".
+
+**Verdict format** (six lines when free; a discussion with the user when Pro):
+
+```
+Monetization verdict — <feature>
+  Tier          Free | Free-with-cap | Pro
+  Derivation    §3 Rule N / §4.1 row / §4.2b P<n>
+  Mechanism     usage cap | monthly taster | depth-window | blurred preview | hard lock
+  Placement     PaywallPlacement.<case>   (new? + headline key en+de)
+  Nudge         OnyxCapNudge at cap−1, or none
+  Free residue  what a free user still gets   ← must be non-zero
+  Founder note  does this convert anyone, given §7?
+```
+
+**When the verdict is Pro, stop and discuss it** — mechanism, placement and free residue — before
+building the gate. Do not gate on your own initiative.
+
+**Guardrails outrank revenue** (§10): free-user D30 retention and the App Store rating, both against
+their pre-paywall baselines. Word-of-mouth is this app's only acquisition channel, so if a gate is
+arguable, it stays free. A shipped gating decision also updates `docs/monetization-strategy.md` §4
+(and `docs/pro-subscription.md` if a new placement or cap exists), per the Feature Documentation
+rules.
 
 ## iOS API Research (mandatory)
 

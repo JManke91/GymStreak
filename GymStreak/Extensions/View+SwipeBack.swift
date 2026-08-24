@@ -19,9 +19,16 @@ private struct SwipeBackEnabler: UIViewControllerRepresentable {
         // delegate around push/pop transitions, so a one-time assignment
         // isn't reliable.
         DispatchQueue.main.async {
-            guard let navigationController = uiViewController.navigationController,
-                  let popGesture = navigationController.interactivePopGestureRecognizer else { return }
+            guard let navigationController = uiViewController.navigationController else { return }
             context.coordinator.navigationController = navigationController
+            // iOS 26 added a second recognizer for the "pan anywhere in the content area
+            // to go back" gesture, independent of the edge-only one below — hence its own
+            // statement rather than a branch of that guard. Only re-enabled here: its
+            // delegate is left alone on purpose, because that delegate is what arbitrates
+            // a content-area pan against scroll views, and a permissive replacement would
+            // break them. Unverified on device — see docs/progress-charts.md.
+            navigationController.interactiveContentPopGestureRecognizer?.isEnabled = true
+            guard let popGesture = navigationController.interactivePopGestureRecognizer else { return }
             popGesture.delegate = context.coordinator
             popGesture.isEnabled = true
         }

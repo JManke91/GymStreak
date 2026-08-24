@@ -1170,6 +1170,37 @@ struct ExerciseProgressAggregatorTests {
         #expect(items.allSatisfy { !$0.label.contains("#") })
     }
 
+    /// A requested usage this exercise's history does not hold can only arrive from
+    /// outside the screen — the Fortschritt row hands its headline usage down. Charting
+    /// nothing for it while the picker read "all usages" would be the worst of both, so
+    /// it falls back to the default the screen would have opened on.
+    @Test
+    func aRequestedUsageTheHistoryDoesNotHoldFallsBackToTheDefault() throws {
+        let context = ModelContext(InMemoryModelContainer.make())
+        let exercise = Exercise(name: "Biceps Curls")
+        context.insert(exercise)
+
+        let newerSlot = UUID()
+        let older = makeEmptySession(startTime: Date(timeIntervalSince1970: 1_000), context: context)
+        addExercise(named: exercise.name, exerciseId: exercise.id, sets: [(20, 5, true)],
+                    to: older, context: context, order: 0, routineExerciseId: UUID())
+        let newer = makeEmptySession(startTime: Date(timeIntervalSince1970: 2_000), context: context)
+        addExercise(named: exercise.name, exerciseId: exercise.id, sets: [(14, 12, true)],
+                    to: newer, context: context, order: 0, routineExerciseId: newerSlot)
+        try context.save()
+
+        let snapshot = ExerciseProgressAggregator.buildSnapshot(
+            sessions: try fetchSessions(context),
+            liveExercises: try context.fetch(FetchDescriptor<Exercise>()),
+            exerciseName: exercise.name, exerciseId: exercise.id,
+            startDate: .distantPast, recentSessionLimit: 8,
+            requestedUsage: .usage(.routineSlot(UUID()))
+        )
+
+        #expect(snapshot.selectedUsage == .usage(.routineSlot(newerSlot)))
+        #expect(snapshot.data.dataPoints.map(\.maxWeight) == [14])
+    }
+
     // MARK: - Fixtures
 
     private func option(
