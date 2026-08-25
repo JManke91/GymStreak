@@ -679,6 +679,19 @@
 // Die Fortschritt-Zeile zeigt eine Variante; das nennt, welche von wie vielen.
 "progress.row.curve_usage" = "Kurve: %@";
 "progress.row.usage_of_total" = "von %d Varianten";
+// Zwei Übungen dürfen denselben Namen tragen (Lang- vs. Kurzhantel-Curls). Nur dann wird
+// die Ausrüstung angehängt, sonst bleibt der Name unverändert.
+"progress.exercise.with_equipment" = "%1$@ · %2$@";
+
+// Alte Workouts ohne exerciseId werden über den Namen zugeordnet — aber nur, solange der
+// Name eindeutig ist. Sonst werden sie aus allen Fortschritts-Ansichten herausgehalten,
+// statt sie auf eine Variante zu raten. Diese Texte machen das sichtbar und auflösbar.
+"progress.legacy.unattributed.title" = "Ältere Workouts fehlen";
+"progress.legacy.unattributed.message" = "Aus %2$@ sind %1$d Workouts mit diesem Namen unten nicht enthalten. Sie wurden aufgezeichnet, bevor Workouts einer bestimmten Übung zugeordnet wurden, und zwei Übungen heißen gleich — deshalb ist nicht eindeutig, zu welcher sie gehören.";
+"progress.legacy.unattributed.action" = "Dieser Übung zuordnen";
+"progress.legacy.unattributed.confirm.title" = "%1$d Workouts „%2$@“ zuordnen?";
+"progress.legacy.unattributed.confirm.message" = "Sie erscheinen dann in Diagramm, Rekorden und letzten Sätzen dieser Übung. Sonst ändert sich nichts an diesen Workouts. In der App lässt sich das nicht rückgängig machen.";
+"progress.legacy.unattributed.confirm.action" = "Zuordnen";
 
 // MARK: - Progress Comparison
 "progress.compared_to_previous" = "Verglichen mit";
@@ -826,6 +839,10 @@
 "history.exercise.pr" = "Rekord";
 "history.exercise.trend" = "Trend";
 "history.exercise.workouts" = "Workouts";
+// Alle drei Statistik-Karten beziehen sich auf den gewählten Zeitraum, nie auf die
+// gesamte Historie - deshalb steht der Zeitraum auf jeder Karte, sonst liest man sie
+// gegen die Liste "Letzte Sätze" darunter, die alle Trainings zeigt.
+"history.exercise.stat_in_range" = "%1$@ · %2$@";
 "history.exercise.recent" = "Letzte Sätze";
 "history.exercise.entries" = "%d Einträge";
 "history.exercise.best_set" = "Bester: %@";

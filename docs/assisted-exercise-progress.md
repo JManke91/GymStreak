@@ -10,7 +10,10 @@ provide more help. GymStreak models this explicitly so reducing assistance is tr
 **iOS:** Users select an exercise load behavior in the library. New workouts snapshot that behavior
 onto `WorkoutExercise`; counterweight workouts expose one optional body-weight entry per session.
 The History Progress tab uses effective load when every displayed assisted session has a body-weight
-snapshot, otherwise it presents assistance only and treats lower values as better.
+snapshot, otherwise it presents assistance only and treats lower values as better. That decision is
+made **once per series, never per session** — both on the exercise detail chart and on the
+Fortschritt list row — so a history that carries the snapshot on some workouts only reads as one
+unit throughout instead of mixing estimated physical load with the machine's own numbers.
 
 **watchOS:** Routine and completed-workout sync payloads carry the load behavior so watch-completed
 counterweight exercises retain their direction on iPhone. The watch currently has no body-weight
@@ -30,10 +33,13 @@ entry, so these sessions use the safe assistance-only history fallback.
   `ExerciseLoadMetrics.effectiveVolume(from:usePlannedValues:behavior:bodyWeightKg:)` — they
   run on different executors (audit P1.6), and duplicating it would let the current and
   previous sides of one comparison disagree about assisted load.
-- Direction also decides how a **workout that trains one assisted exercise twice** folds into
-  its single Fortschritt entry: effective-load sessions fold with `max` (higher 1RM), raw
-  assistance sessions with `min` (least assistance). See `docs/progress-charts.md`, "The
-  Fortschritt row counts sessions, not exercise instances".
+- Direction also decides how an assisted exercise's completed sets fold into one Fortschritt
+  entry: an effective-load series folds with `max` (the heavier effective weight is the better
+  set), a raw-assistance series with `min` (least assistance). Which of the two the series is
+  in is resolved after every session has been seen — one missing `bodyWeightKg` puts the whole
+  series into raw assistance — so `FortschrittAggregator.foldSets` reduces a counterweight row
+  in both spaces and `SessionFold.value(usingEffectiveLoad:)` picks one afterwards. See
+  `docs/progress-charts.md`, "The value space is a property of the series, not of a session".
 
 ## Migration and catalog behavior
 

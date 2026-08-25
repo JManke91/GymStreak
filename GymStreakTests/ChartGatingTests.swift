@@ -261,6 +261,7 @@ struct ChartGatingTests {
                 exerciseName: "Bankdrücken",
                 exerciseId: UUID(),
                 provider: provider,
+                legacyAttribution: RecordingLegacyHistoryAttribution(),
                 proEntitlements: entitlements,
                 paywalls: paywalls,
                 isGatingEnabled: isGatingEnabled

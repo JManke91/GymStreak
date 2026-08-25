@@ -210,6 +210,9 @@ final class FortschrittListViewModel {
             exerciseId: exercise.exerciseId,
             workoutCount: exercise.workoutCount,
             lastPerformed: exercise.lastPerformed,
+            // Same qualifier the row printed, so the switcher names the exercise the way
+            // the list did.
+            equipmentQualifier: exercise.equipmentQualifier,
             // Carried through so the pushed screen opens on the usage this row summarised.
             initialUsage: exercise.headlineUsage?.key
         )

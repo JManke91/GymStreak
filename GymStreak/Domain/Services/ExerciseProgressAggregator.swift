@@ -88,8 +88,73 @@ struct ExerciseProgressAggregator {
                 usageSelection: selection
             ),
             availableUsages: options,
-            selectedUsage: selection
+            selectedUsage: selection,
+            // Only where the name fallback was actually refused. A unique name matches
+            // its legacy rows already, and a screen opened without an `exerciseId` has
+            // no exercise to attribute them *to*.
+            unattributedLegacy: (nameIsUnique || exerciseId == nil)
+                ? nil
+                : unattributedLegacyHistory(in: sessions, exerciseName: exerciseName)
         )
+    }
+
+    /// The workouts the ambiguity rule is currently withholding from every progress
+    /// surface for one exercise name.
+    ///
+    /// Deliberately **not** filtered by `loadBehavior`: that filter is a separate rule
+    /// about the meaning of the entered number, and a row it would exclude is excluded
+    /// for a reason the user cannot fix by attributing it. Reporting only what
+    /// attribution can actually recover keeps the promised count honest — see
+    /// `docs/progress-charts.md`.
+    ///
+    /// - Returns: `nil` when nothing is being withheld.
+    static func unattributedLegacyHistory(
+        in sessions: [WorkoutSession],
+        exerciseName: String
+    ) -> UnattributedLegacyHistory? {
+        let target = exerciseName.lowercased()
+        var sessionCount = 0
+        var earliest: Date?
+        var latest: Date?
+
+        for session in sessions where session.endTime != nil {
+            let holdsRow = session.workoutExercisesList.contains { row in
+                isUnattributedLegacyRow(row, matching: target)
+                    && row.setsList.contains(where: \.isCompleted)
+            }
+            guard holdsRow else { continue }
+            sessionCount += 1
+            if earliest == nil || session.startTime < earliest! { earliest = session.startTime }
+            if latest == nil || session.startTime > latest! { latest = session.startTime }
+        }
+
+        guard sessionCount > 0, let earliest, let latest else { return nil }
+        return UnattributedLegacyHistory(
+            sessionCount: sessionCount,
+            earliest: earliest,
+            latest: latest
+        )
+    }
+
+    /// The single definition of "a legacy row this exercise name could claim".
+    ///
+    /// Shared with the write side (`LegacyHistoryAttributing`) on purpose, so the two can
+    /// never disagree about what "legacy row of this exercise" means — a banner that
+    /// survived its own resolution would be the failure mode.
+    ///
+    /// It is the *row* predicate only. Each side adds its own session-level condition and
+    /// they are deliberately not identical: the count above requires a completed set,
+    /// because a row without one renders nowhere even once linked, while the write links
+    /// every matching row of a finished workout. Both restrict themselves to finished
+    /// sessions, which is what keeps the banner from outliving the write.
+    ///
+    /// - Parameter lowercasedName: the exercise name, already lowercased by the caller —
+    ///   this runs once per row and must not lowercase the needle every time.
+    static func isUnattributedLegacyRow(
+        _ row: WorkoutExercise,
+        matching lowercasedName: String
+    ) -> Bool {
+        row.exerciseId == nil && row.exerciseName.lowercased() == lowercasedName
     }
 
     /// Completed sessions inside the chart window, oldest first. The chart series only —

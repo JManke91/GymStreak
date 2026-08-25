@@ -12,8 +12,9 @@ import Foundation
 protocol WorkoutSessionRepository: AnyObject {
     /// All sessions, most recently started first.
     func fetchAll() -> [WorkoutSession]
-    /// Completed sessions only (`endTime != nil`), most recently started first.
-    func fetchCompleted() -> [WorkoutSession]
+    /// Most recent completed-session start date for each of the given routines.
+    /// Bounded to one `LIMIT 1` query per routine — never a whole-history scan.
+    func lastCompletedStartDates(forRoutineIds routineIds: [UUID]) -> [UUID: Date]
     /// Finds a session matching the watch-generated id, or (secondarily) the given
     /// HealthKit workout id. Used to detect duplicate/retried watch deliveries.
     func findSession(id: UUID, healthKitWorkoutId: UUID?) -> WorkoutSession?

@@ -209,27 +209,37 @@ unchanged either way — it now reduces one usage's row rather than all of a ses
   or invert the pair. Inverting the sparkline against the series maximum, and inverting the
   trend's delta, both happen after the fold and are unchanged.
 
-Whether a session's value is effective load or raw assistance is decided per session (it
-depends on `WorkoutSession.bodyWeightKg`), and it is constant across the instances *within*
-one session, so the fold never has to mix the two directions.
+**The value space is a property of the series, not of a session (ticket 08, 2026-08-25).**
+Whether a counterweight exercise's numbers are read as physical load or as the machine's raw
+assistance is decided **once for the whole series**, exactly as
+`ExerciseProgressAggregator.buildProgress` decides it: if *any* session in the series lacks
+`WorkoutSession.bodyWeightKg`, *every* session is valued as raw assistance. That is the
+conservative direction — it never manufactures a load from a body weight the user did not
+record — and it is the rule `ExerciseLoadMetrics` was written around
+(`docs/assisted-exercise-progress.md`).
+
+It used to be decided per session, and the row for a partly snapshotted assisted exercise then
+mixed units: a snapshotted workout contributed an estimated physical load (tens of kg), a
+snapshot-less one the raw assistance entered on the machine, and the series-wide flag —
+`allSatisfy` over the per-session flags — then inverted *both* against one common
+`baseline − value`. The sparkline shape and the trend percentage were arithmetic over two
+incompatible quantities, and the direction was wrong for one of them (a higher physical load is
+better; a higher assistance number is worse). This predated the per-session fold and the usage
+split; the divergence is now closed and the two surfaces pick the same space for the same
+history.
+
+**How it stays one traversal.** The decision needs the whole series, but the fold runs inside
+the session loop, so `FortschrittAggregator.foldSets` reduces a counterweight row in **both**
+spaces at once — `effectiveValue` (max effective weight, only when the session can be read as
+load) and `assistanceValue` (min raw assistance, always) — and `SessionFold.value(usingEffectiveLoad:)`
+picks one after the loop, when the series-wide flag is known. Re-reading the sets afterwards
+would mean a second walk of the session graph inside the History `@ModelActor`, which is the
+expensive part; folding both costs one extra `min` per set. A resistance exercise never reaches
+the decision at all — `usesEffectiveLoad` is unconditionally true for it.
 
 This slice deliberately did **not** separate the two usages into their own series — that is
 "The Fortschritt row headlines one usage" below. It only stopped the row from misreporting how
 many workouts it covers.
-
-**What this rule does *not* make identical: the value space of a partly-snapshotted
-counterweight series.** The two surfaces now agree on the *count* and on the within-session
-reduction, but not necessarily on the numbers of an assisted exercise whose history carries
-`WorkoutSession.bodyWeightKg` on some sessions only. `ExerciseProgressAggregator.buildProgress`
-decides `usesEffectiveLoad` **series-wide** (`relevant.allSatisfy { $0.0.bodyWeightKg != nil }`)
-and so values *every* session as raw assistance the moment one snapshot is missing;
-`FortschrittAggregator` decides `canUseEffectiveLoad` **per session**, so such a series mixes
-estimated-1RM numbers with raw kilograms and then subtracts both from one common baseline. This
-divergence predates the per-session fold and is untouched by it — the row's sparkline for that
-narrow case was already mixing units. Closing it means making the Fortschritt flag series-wide
-too — tracked as ticket 08 of `.scratch/exercise-usage-progress/`, whose resolution is to value
-every session as raw assistance as soon as one snapshot is missing, matching the chart. It is an
-open item, not a property of the fold.
 
 One pre-existing quirk in this aggregator, recorded so it is not mistaken for the fold's
 doing: a session whose completed sets all fail the weight guard still contributes an entry
@@ -239,9 +249,13 @@ with the 1RM fold when the metric was aligned — reps no longer enter the row a
 
 `GymStreakTests/FortschrittAggregatorTests.swift` pins it: a session with two usages, a mix
 of single- and double-usage sessions (asserting a real +30% trend where the bug reported
-+0.0%), the count agreeing with `ExerciseProgressAggregator.buildProgress`, and both assisted
-paths — least-assistance with an inverted sparkline/trend, and highest-effective-1RM once a
-body-mass snapshot exists.
++0.0%), the count agreeing with `ExerciseProgressAggregator.buildProgress`, and every assisted
+path — least-assistance with an inverted sparkline/trend, highest-effective-weight once every
+session carries a body-mass snapshot, and the partly snapshotted series in three shapes
+(plain, trained twice in one workout, and asserted against the detail screen's own
+`usesEffectiveLoad` for the all-time window) so tapping the row cannot change the unit under
+the user. A resistance exercise across a snapshotted and a snapshot-less workout is pinned
+too, because it must never see the decision.
 
 ### The recent-sets list shows every usage (2026-08-23)
 
@@ -850,11 +864,11 @@ to the best **estimated 1RM** of each session. That is a Pro-gated metric —
 number derived from something the screen it opens keeps locked, unlabelled. The fold is now the
 **heaviest effective weight** of each session, the same reduction `buildProgress` applies to
 `ExerciseProgressDataPoint.maxWeight`, which makes a row's sparkline the chart's own series for
-that usage (pinned by an equality assertion, not a shape check) — with one exception, unchanged
-by this ticket: a *partly* snapshotted counterweight series, where this aggregator picks the
-value space per session and `buildProgress` picks it series-wide (see the ticket-08 note above). Two consequences:
+that usage (pinned by an equality assertion, not a shape check). Two consequences:
 reps no longer move the row at all, and the old `reps > 0` set guard — which `buildProgress`
-never had — is gone.
+never had — is gone. The last remaining disagreement, a *partly* snapshotted counterweight
+series whose value space the two aggregators picked differently, was closed by ticket 08 —
+see "The value space is a property of the series" above.
 
 The metric is **named in the row**, in the caption style the detail screen already uses above
 its headline number (`chart.metric.max_weight`, uppercased, 8pt). It carries the same
@@ -864,10 +878,29 @@ with no body-mass snapshot charts *assistance*, inverted, so the caption reads
 carries that fact out of the aggregator so the view does not have to know about load
 behaviour.
 
+**The row does not remember a usage the user picked on the detail screen.** Nothing persists that
+choice — the headline is recomputed from history (most recently trained) on every load, so a user
+who selects a different variant on the detail screen and comes back to the list sees the default
+again. Making the row follow it would mean a per-exercise stored preference fed into the
+aggregator; that was offered during ticket 05 and deferred as a slice of its own, not dropped.
+
 **What is deliberately *not* aligned: the window.** The row is all-time; the detail screen is
 windowed (1M by default). The same usage can therefore read +2.9% in the list and +0.0% on the
 screen. The list's job is long-run direction — a windowed sparkline would go blank for anything
 not trained this month — so the difference stays, and is recorded here rather than papered over.
+
+**One consequence for an assisted exercise, recorded rather than fixed.** The value-space rule
+above ("The value space is a property of the series") is the same rule on both surfaces, but each
+applies it to the history *it* covers — all-time for the row, the selected window for the chart.
+So a counterweight exercise whose *only* snapshot-less workout falls outside the opened window
+reads as raw assistance in the list and as effective load on the screen it opens. The parity test
+pins the two together for the all-time window only (`partlySnapshottedRowMatchesTheDetailScreensValueSpace`).
+Aligning them would mean windowing the row, which is exactly what the paragraph above refuses.
+A second, narrower residual has the same shape: `buildProgress` counts a session into `relevant`
+as soon as a matching row exists, while the row skips a row with no completed set before folding,
+so a workout that holds the assisted exercise but completes nothing in it moves the chart's
+decision and not the row's. (Of the two, the chart is arguably the one in the wrong.) Both are
+narrow enough that they are documented, not coded around.
 
 **In the row.** On its **own full-width line** beneath the rest of the row (not sharing the
 count line), `FortschrittExerciseRowView` renders the picker's own
@@ -1093,16 +1126,233 @@ That same check is what produced the two-point correction above — and the corr
 verified in its own right: Biceps Curls, which had opened on 1W with a single dot, now opens on
 **1M** with a multi-point series, while Chest Press stays on 3M.
 
+### Two exercises with the same name are told apart (2026-08-24)
+
+The reporter's library legitimately holds **two** "Biceps Curls": a barbell one and a dumbbell one.
+The Fortschritt tab drew them as two visually identical rows — one `21 Workouts / +0.0%`, the other
+`7 Workouts / +11.2%` — with nothing saying which was which, and the detail screen's exercise
+switcher listed the same name twice. The data was right; the user simply could not navigate it.
+
+This is **not** the usage work. A usage is two ways of training *one* library exercise; this is two
+*different* library exercises that happen to share a display name. Both problems produce
+"same-looking rows, different numbers", which is why they were reported as one bug, and they are
+fixed in different places.
+
+**The rule.** Where two or more **live** exercises share a display name case-insensitively, every
+one of them prints its equipment as a qualifier. An exercise whose name is unique in the library
+prints none — the overwhelmingly common case stays uncluttered, and a redundant "· Kurzhantel" on
+every row would be noise.
+
+- **Resolved once per list build.** `FortschrittAggregator.build` already indexes the library by
+  lowercased name (`liveByName`, used for the legacy name fallback); the qualifier map is one extra
+  pass over the buckets holding more than one exercise, keyed by exercise id. No view scans the
+  library, and nothing about it is per row — `FortschrittExerciseModel.equipmentQualifier` arrives
+  already decided, `nil` for the common case (main-thread rules 3 and 4).
+- **The library decides, not the history.** The collision is computed over every live `Exercise`,
+  including ones with no workouts yet, so a row's qualifier does not appear and disappear as the
+  other variant is trained for the first time.
+- **Two surfaces, one qualifier.** The Fortschritt row prints it as a small capsule beside the name;
+  the switcher menu prints `"%1$@ · %2$@"` (`progress.exercise.with_equipment`) via
+  `ExerciseWithHistory.displayName`, because a `Menu` entry is one line of text. The value is carried
+  down the existing navigation payload, so the detail screen never re-derives it.
+- **The detail screen's eyebrow, not its title.** With the switcher closed the headline is the
+  only thing naming the exercise, so a bare "Biceps Curls" says nothing about which one. The
+  qualifier joins the small tinted muscle-group line above the title — `BICEPS · LANGHANTEL` —
+  rather than the 28pt headline, which would wrap. `currentEntry` (id-first, name as fallback)
+  resolves the list entry once per title build and feeds both the muscle group and the qualifier;
+  a screen pushed without a list behind it shows neither, exactly as before.
+- **The switcher moved to its own file.** `ExerciseSwitcherMenu` is self-contained and
+  `ExerciseProgressChartView.swift` was already far past this project's size convention, so it now
+  lives in `Views/Charts/ExerciseSwitcherMenu.swift` beside `ExerciseUsageMenu`. Its grouping pass
+  and its current-selection key are resolved in `init` — once per construction instead of twice per
+  menu `body`. That is a reduction, not an escape from the render path: the owning screen's `body`
+  still reconstructs the menu on its own invalidations.
+- **The switcher was keyed by name.** `ForEach(…, id: \.name)` gave two same-named entries the same
+  identity, and the checkmark matched on name too — so with the qualifier alone both entries would
+  still have shown as selected. Both now key on `stableKey` (the exercise id). The screen's
+  muscle-group label likewise resolves by id first, or a collision labelled the screen with the
+  other exercise's muscle group.
+
+**Known limitation.** Two same-named exercises that *also* share equipment stay indistinguishable —
+the qualifier would print the same word twice. That combination is a duplicate the user can rename
+or merge, and inventing an ordinal ("#2") would name nothing the user can recognise. If it turns out
+to occur in real libraries, the next disambiguator is the muscle group, then the creation date.
+
+### Unattributable legacy history stops disappearing silently (2026-08-25)
+
+**The problem.** `WorkoutExercise.exerciseId` did not always exist. A row recorded before it
+is matched to the live library **by name**, and both aggregators gate that fallback on the
+name being unique — `ExerciseProgressAggregator.matches(…nameIsUnique:)` and
+`FortschrittAggregator.resolveLive`. Where two live exercises share a name, every such row
+is ambiguous and is **dropped** from the chart, the recent-sets list, the sparkline, the
+trend and the record.
+
+**Why dropping, and not guessing.** Only the user knows whether a 2024 "Biceps Curls"
+session was the barbell or the dumbbell. Attaching it to one variant would silently rewrite
+what they trained, and the number they then read would be wrong in a way nothing can
+detect afterwards. Omitting it only hides work that is still in the database. Between an
+unrecoverable wrong answer and a recoverable missing one, the missing one wins — that rule
+stands and is not up for revision.
+
+**What was actually wrong** was doing it in silence. The reporter created their own "Biceps
+Curls" before the app shipped its predefined exercise library. Their library now holds two
+exercises with that name, so every pre-`exerciseId` session against it is discarded, with no
+indication anywhere that history is missing. The reasonable conclusion from that screen is
+that the app lost their data.
+
+**The change: say so, and offer the one action that resolves it.**
+
+- `ExerciseProgressAggregator.unattributedLegacyHistory(in:exerciseName:)` counts the
+  completed sessions holding at least one *completed* set of a matching legacy row, and
+  reports them as `ExerciseProgressSnapshot.unattributedLegacy`. It is computed only when
+  the name is ambiguous **and** the screen has an `exerciseId` — with no target exercise
+  there is nothing to attribute to.
+- `LegacyHistoryAttributionBanner` sits directly under the title, **above** the stat triple:
+  every number below it is computed without the workouts it names, so the user has to read
+  it first. It states how many workouts and from which period
+  (`UnattributedLegacyHistory.periodText`, "Mär 2024 – Jul 2025"), because *when* is what
+  lets a user decide *which* exercise those workouts were.
+- Tapping the action opens a confirmation naming both the count and the exercise. On
+  confirmation `LegacyHistoryAttributing.attributeLegacyRows(named:to:)` sets the missing
+  link, the ViewModel posts `.historySourceDataDidChange` and reloads — and the same
+  workouts then appear in the chart, the recent-sets list, the sparkline, the trend and the
+  record, because they now match by id like any other row.
+
+**What attribution may touch.** Exactly one field: `WorkoutExercise.exerciseId`. History is
+denormalised on purpose so it survives routine and exercise edits — `exerciseName`,
+`muscleGroups` and `loadBehaviorRaw` are a snapshot of what was performed, and re-deriving
+them from today's library is how an old session would change meaning retroactively. A row
+that already carries an `exerciseId` is never rewritten, which also makes the write
+idempotent and makes it impossible to move a row the user resolved differently.
+
+**No `@Model` change, so no CloudKit deploy.** `exerciseId` has existed on `WorkoutExercise`
+since before this ticket; attribution only fills it in. The schema is untouched, so the
+`-INITIALIZE_CLOUDKIT_SCHEMA` step in `docs/cloudkit-schema-automation.md` does not apply.
+
+**Where the write lives, and why it is not on the read boundary.**
+`HistorySnapshotProviding` is documented as a read boundary over the completed-session
+graph, and its `@ModelActor` context is shared by several screens; committing a `save()`
+through it would put a write on the context those reads run against. Attribution gets its
+own seam — `Domain/Interfaces/LegacyHistoryAttributing.swift`, implemented by
+`SwiftDataLegacyHistoryAttributionProvider` + `…Store` in `Data/History/`, wired in
+`AppDependencies` — with the same `Task.detached` construction and the same **load-bearing
+`@concurrent`**, since under `SWIFT_APPROACHABLE_CONCURRENCY` a plain `nonisolated async`
+would run the fetch and the save on the calling `@MainActor` ViewModel's actor
+(`docs/swift6-concurrency.md` §1). Its fetch is narrowed in the store to rows with no
+`exerciseId`, so it never walks the full session graph; the case-insensitive name
+comparison happens in Swift because `#Predicate` has no case-insensitive equality.
+
+**Deliberate decisions.**
+
+- **Confirmed, not undoable.** The ticket allowed either. Undo would mean persisting which
+  rows a given attribution touched — a second record to keep in step with history, for an
+  action a user performs approximately once. The dialog instead names the count, the
+  exercise and the fact that it cannot be undone in the app. To restore, clear
+  `exerciseId` on the affected `WorkoutExercise` rows.
+- **Only the detail screen carries the banner.** It is where the withheld numbers are read
+  in full and where the resolution target is unambiguous — the screen *is* one specific
+  library exercise. The Fortschritt row has no such target to offer.
+- **The count and the write have deliberately different scopes.** Both are restricted to
+  **finished** workouts — a session still being performed is not history, and its rows are
+  left alone. Within a finished session the count requires at least one *completed* set,
+  because a row without one renders nowhere even once linked and promising it would be a
+  second wrong number; the write links every matching row, because a row is a row and
+  leaving one behind would keep the same workout half-legacy.
+  `ExerciseProgressAggregator.isUnattributedLegacyRow` is the shared *row* predicate; each
+  side adds its own session-level condition on top.
+- **`loadBehavior` is not part of the finding.** The homogeneity filter (a library setting
+  only describes future workouts) is a separate rule, and a row it excludes stays excluded
+  after attribution. Folding it in here would make the banner's number depend on a rule the
+  user cannot act on — but note the consequence: a legacy row whose `loadBehaviorRaw`
+  differs from the target exercise's current behaviour is attributed and still not charted.
+- **The finding is cleared on exercise switch.** `updateExercise` drops it along with the
+  usage menu; keeping it would offer to attribute one exercise's legacy rows to another.
+
+**One surface was applying the fallback ungated, and was fixed with this work.**
+`ExerciseDeepDiveAggregator` (the AI Coach panel on this very screen) carried its own copy of
+the matching rule *without* the uniqueness gate, so it claimed every ambiguous legacy row for
+**both** same-named exercises instead of neither. That is worse than the drop documented here,
+and attribution does not repair it — see `docs/ai-coach.md` §3. It now calls
+`ExerciseProgressAggregator.matches` like everything else. Four copies of one rule is how three
+stayed correct while the fourth drifted; the rule now has one implementation and three callers.
+
+**Tests.** `GymStreakTests/LegacyHistoryAttributionTests.swift` — detection with its count
+and period (and the set-less session that must not be counted), a unique name reporting
+nothing, the write touching only the link while leaving an already-attributed row and
+another exercise's legacy row alone, the attributed workouts entering the chart while the
+other variant's screen sees nothing, idempotence, and the two ViewModel paths (resolved,
+and a failed write that keeps the banner).
+
+### The stat cards name the range they describe (2026-08-25)
+
+**Found on the device check for ticket 07.** The Biceps Curls (Langhantel) screen read
+`4 WORKOUTS` on 3M while *Letzte Sätze* directly beneath it announced `7 Einträge`. Both
+numbers were correct and the screen looked like it was contradicting itself.
+
+The two answer different questions, and neither said so:
+
+- The **stat triple and the chart are windowed** by the selected range.
+  `ExerciseProgressData.sessionCount` is `dataPoints.count`, and `buildProgress` filters by
+  `startDate`. The record and the trend read the same windowed `progressData`, so **all
+  three** cards are range-scoped, not just the count.
+- ***Letzte Sätze* is deliberately all-time**, capped at
+  `ExerciseProgressViewModel.recentSessionLimit` **sessions** — see "The recent-sets list
+  shows every usage" above.
+
+`ExerciseProgressViewModel.statLabel(_:)` now appends the loaded range to every card's
+label — `REKORD · 3M`, `TREND · 3M`, `WORKOUTS · 3M`. **All three, not only the count:**
+qualifying one would have implied the other two were all-time, which is the opposite of the
+truth.
+
+**The label must never move ahead of the numbers, and that decides where the range lives.**
+`load()` deliberately keeps the previous snapshot published for the whole duration of a
+reload — the stat triple is not gated on `isLoading`, and clearing `progressData` would flash
+"- / - / 0 Workouts" (the defect ticket 05b removed). So between a range tap and its result
+landing, the cards still show the *old* window's record, trend and count. Reading the label
+off `chartTimeframe`, which `updateTimeframe` moves synchronously, therefore captioned those
+numbers with the new range for that whole interval — the exact mismatch the qualifier exists
+to remove, inverted, and caught in review rather than on the device.
+
+The range is published instead: `statRange` is set beside `progressData = snapshot.data` from
+a window captured at the top of `load()` alongside `startDate`, so caption and numbers move
+together and cannot come apart. It is reset in the failure branch for the same reason. Nothing
+else may write it — in particular it must not be cleared in `updateExercise`, which does not
+clear `progressData` either.
+
+A Pro-locked window needs no special case: a locked tap moves neither `chartTimeframe` nor
+`loadKey`, so no reload starts and `statRange` still names the window the chart kept drawing.
+
+The interpolation itself stays on the read side — three `String(format:)` calls at a fixed
+three-card `HStack`, no `ForEach` over user data, no formatter *object* allocated and no
+collection traversal, so the rendering rules are satisfied; correctness comes from `statRange`
+being published, not from where the string is built. The card label is `lineLimit(1)` +
+`minimumScaleFactor(0.7)` so the longest composed label ("WORKOUTS · ALLE") cannot wrap one
+card taller than its neighbours.
+
+**The banner's copy was reworded at the same time.** With the legacy-history banner directly
+above the cards, the screen briefly showed "4 Workouts (Feb. 2026 – Apr. 2026)" immediately
+over a `4 WORKOUTS` card — two different facts wearing the same shape. The banner now leads
+with the period ("Aus Feb. 2026 – Apr. 2026 sind 4 Workouts … nicht enthalten"), so the count
+sits mid-sentence and no longer parallels the card. The format string reorders its arguments
+(`%2$@` before `%1$d`), which is pinned by an assertion on both the count *and* the period in
+`LegacyHistoryAttributionTests`.
+
+**Tests.** `ExerciseProgressStatCardTests` — every label carries the loaded range and still
+contains its base label; a **pending** range change does not relabel the numbers still on
+screen (this one fails against the `chartTimeframe` version); and a locked range labels the
+*charted* window rather than the tapped one.
+
 ### Components
 
 #### iOS Target
 
 | Component | File | Purpose |
 |-----------|------|---------|
-| ExerciseProgressChartView | `Views/Charts/ExerciseProgressChartView.swift` | Main chart view with timeframe picker, metric picker + info button, and interactive chart |
+| ExerciseProgressChartView | `Views/Charts/ExerciseProgressChartView.swift` | Main chart view with timeframe picker, metric picker + info button, and interactive chart. Its title eyebrow resolves the current list entry by id first, so a shared display name neither mislabels the muscle group nor hides which variant is charted |
 | ProgressChartContent | `Views/Charts/ExerciseProgressChartView.swift` | SwiftUI Charts rendering with line/point marks, axis formatting, tap overlay, and data point annotation |
-| ExerciseSwitcherMenu | `Views/Charts/ExerciseProgressChartView.swift` | Toolbar dropdown to switch between exercises grouped by muscle |
+| ExerciseSwitcherMenu | `Views/Charts/ExerciseSwitcherMenu.swift` | Toolbar dropdown to switch between exercises grouped by muscle. Entries print `ExerciseWithHistory.displayName` (equipment-qualified only where the name collides) and are keyed/checkmarked by `stableKey`, never by name. Grouping and the current key are resolved in `init` — once per construction rather than twice per menu `body` |
 | ExerciseUsageMenu | `Views/Charts/ExerciseUsageMenu.swift` | Usage picker beside the switcher — which routine slot the chart and the recent-sets list describe. Rendered only when the exercise has more than one usage; entries arrive pre-labelled from the view model |
+| LegacyHistoryAttributionBanner | `Views/Charts/LegacyHistoryAttributionBanner.swift` | Warns that legacy workouts sharing this exercise's name are withheld from every number below it, and confirms the one-way write that resolves them. Takes pre-composed strings — no formatter, no history scan in `body` |
 | ChartTimeframePicker | `Views/Charts/ChartTimeframePicker.swift` | Segmented button row for timeframe selection (1W, 1M, 3M, 1Y, All) |
 | ChartDataPointAnnotation | `Views/Charts/ChartDataPointAnnotation.swift` | Floating tooltip card showing exact value + date for a tapped data point |
 | MetricInfoPopover | `Views/Charts/MetricInfoPopover.swift` | Popover explaining what the selected metric measures and how it's calculated |
@@ -1110,14 +1360,16 @@ verified in its own right: Biceps Curls, which had opened on 1W with a single do
 | StatCard | `Views/Charts/ChartSupportViews.swift` | Reusable stat card with icon, value, and label |
 | EmptyChartView | `Views/Charts/ChartSupportViews.swift` | Placeholder shown when no workout data exists |
 | RecentUsageCardView | `Views/Charts/RecentUsageCardView.swift` | One recent-sets card — **one usage's sets within one workout**, badged with the usage it belongs to. Takes an `ExerciseRecentUsage` value, never a `@Model` |
-| ExerciseProgressViewModel | `ViewModels/ExerciseProgressViewModel.swift` | `async load()` behind a generation counter; owns timeframe, metric, selection and the loaded snapshot; computed display properties; owns the **P2 Pro gate** (which metric/window is locked, what a locked selection renders, which paywall it raises), `emptyChartReason`, which tells "never trained" apart from "nothing inside this window", and `emptyChartMessage`, whose dated windowed line is formatted in `load()` |
+| ExerciseProgressViewModel | `ViewModels/ExerciseProgressViewModel.swift` | `async load()` behind a generation counter; `statLabel(_:)` scopes each stat card's label to `statRange` — the window the **published** numbers were computed over, not the tapped one (see "The stat cards name the range they describe" above); owns timeframe, metric, selection and the loaded snapshot; computed display properties; owns the **P2 Pro gate** (which metric/window is locked, what a locked selection renders, which paywall it raises), `emptyChartReason`, which tells "never trained" apart from "nothing inside this window", and `emptyChartMessage`, whose dated windowed line is formatted in `load()` |
 | ChartGatingPolicy | `Domain/Services/ChartGatingPolicy.swift` | **Pure, isolation-agnostic.** Which metrics and windows the free tier may read, from `ProFeatureCaps` — plus the widest free window a lapsed user's chart clamps back to |
-| ExerciseProgressModels | `Domain/Models/ExerciseProgressModels.swift` | Domain values: ChartTimeframe, ProgressMetric, ExerciseProgressDataPoint, ExerciseProgressData, **ExerciseRecentUsage**, **ExerciseProgressSnapshot**, SelectedDataPoint. Everything that crosses the actor boundary is explicitly `Sendable`. |
+| ExerciseProgressModels | `Domain/Models/ExerciseProgressModels.swift` | Domain values: ChartTimeframe, ProgressMetric, ExerciseProgressDataPoint, ExerciseProgressData, **ExerciseRecentUsage**, **ExerciseProgressSnapshot** (incl. `unattributedLegacy`), **UnattributedLegacyHistory**, SelectedDataPoint. Everything that crosses the actor boundary is explicitly `Sendable`. |
 | ExerciseUsage | `Domain/Models/ExerciseUsage.swift` | The usage cluster: **ExerciseUsage** (+ `Slot`, `repRangeText`, `displayLabel`), **ExerciseUsageSelection**, **ExerciseUsageOption** (+ `isArchived`), **ExerciseUsagePickerItem** (the picker's entries *and* a Fortschritt row's headline), **ExerciseUsageLabeling**. One label implementation for the recent-sets badge and the picker; the "not in a routine" marker is added by `pickerItems` only. All `Sendable`. |
-| ExerciseProgressAggregator | `Domain/Services/ExerciseProgressAggregator.swift` | **Pure, isolation-agnostic** chart + recent-sets aggregation. `buildRecentUsages` emits **one card per usage per session** — see "The recent-sets list shows every usage" above. The usage filter on `buildProgress` / `buildRecentUsages` comes from `ExerciseUsageResolver` — see "The chart separates usages by routine slot" above. `matches(_:exerciseId:exerciseName:nameIsUnique:)` resolves workout exercises to the chart target — an exact `exerciseId` match, OR a legacy row with `exerciseId == nil` whose name matches case-insensitively **and only when the name is unique in the live library**. Without the fallback, workouts logged before `WorkoutExercise.exerciseId` existed would be invisible and progress would look frozen; without the uniqueness gate, same-named equipment variants would double-count. |
-| FortschrittAggregator | `Domain/Services/FortschrittAggregator.swift` (+ `FortschrittAggregator+Fold.swift`, the accumulators and the set-level reduction) | **Pure, isolation-agnostic.** Builds the Fortschritt list's rows (count, sparkline, trend, usage headline) from completed sessions + the live `Exercise` library. **One entry per session, not per `WorkoutExercise`** — see "The Fortschritt row counts sessions, not exercise instances" above — and the sparkline/trend describe the **most recently trained usage**, in **max weight**, while the count stays the exercise's total — see "The Fortschritt row headlines one usage" above. |
-| FortschrittExerciseRowView | `Views/History/FortschrittExerciseRowView.swift` | One Fortschritt list row: badge, name, workout count, sparkline, trend %, and — only when the exercise has several usages — which usage the curve describes and how many there are. Takes a `FortschrittExerciseModel` value; no `@Model`, no string building, no formatter in `body`. |
+| ExerciseProgressAggregator | `Domain/Services/ExerciseProgressAggregator.swift` | **Pure, isolation-agnostic** chart + recent-sets aggregation. `buildRecentUsages` emits **one card per usage per session** — see "The recent-sets list shows every usage" above. The usage filter on `buildProgress` / `buildRecentUsages` comes from `ExerciseUsageResolver` — see "The chart separates usages by routine slot" above. `matches(_:exerciseId:exerciseName:nameIsUnique:)` resolves workout exercises to the chart target — an exact `exerciseId` match, OR a legacy row with `exerciseId == nil` whose name matches case-insensitively **and only when the name is unique in the live library**. Without the fallback, workouts logged before `WorkoutExercise.exerciseId` existed would be invisible and progress would look frozen; without the uniqueness gate, same-named equipment variants would double-count. `unattributedLegacyHistory(in:exerciseName:)` reports what that gate is currently withholding, and `isUnattributedLegacyRow` is the one definition the write side shares — see "Unattributable legacy history stops disappearing silently" above. |
+| FortschrittAggregator | `Domain/Services/FortschrittAggregator.swift` (+ `FortschrittAggregator+Fold.swift`, the accumulators and the set-level reduction) | **Pure, isolation-agnostic.** Builds the Fortschritt list's rows (count, sparkline, trend, usage headline) from completed sessions + the live `Exercise` library. **One entry per session, not per `WorkoutExercise`** — see "The Fortschritt row counts sessions, not exercise instances" above — and the sparkline/trend describe the **most recently trained usage**, in **max weight**, while the count stays the exercise's total — see "The Fortschritt row headlines one usage" above. It also resolves the **equipment qualifier** for names shared by several live exercises, once per build — see "Two exercises with the same name are told apart" above. |
+| FortschrittExerciseRowView | `Views/History/FortschrittExerciseRowView.swift` | One Fortschritt list row: badge, name (with an equipment capsule only when another live exercise shares that name), workout count, sparkline, trend %, and — only when the exercise has several usages — which usage the curve describes and how many there are. Takes a `FortschrittExerciseModel` value; no `@Model`, no string building, no formatter in `body`. |
 | SwiftDataHistorySnapshotStore | `Data/History/SwiftDataHistorySnapshotStore.swift` | `@ModelActor` that performs the fetch and calls the aggregator off the main actor. `SwiftDataHistorySnapshotProvider.fetchExerciseProgress` is the `@concurrent` entry point. Also reads the live routine slots (`fetchLiveRoutineSlotIds`) that mark archived usages. |
+| LegacyHistoryAttributing | `Domain/Interfaces/LegacyHistoryAttributing.swift` | The write seam, deliberately separate from the `HistorySnapshotProviding` read boundary. Sets `WorkoutExercise.exerciseId` on legacy rows and nothing else; idempotent, because a row that already has one is skipped |
+| SwiftDataLegacyHistoryAttributionStore | `Data/History/SwiftDataLegacyHistoryAttributionStore.swift` | `@ModelActor` owning its own `ModelContext` for that one write. `SwiftDataLegacyHistoryAttributionProvider.attributeLegacyRows` is the **`@concurrent`** entry point — without it the fetch and the `save()` would run on the calling ViewModel's main actor |
 | ExerciseProgressService | `Data/Progress/ExerciseProgressService.swift` | The vs-previous seam. Owns no `ModelContext`: `@MainActor` glue that runs `ExerciseComparisonBuilder` either side of one `@concurrent` boundary call. Does not feed the chart. |
 | ExerciseComparisonBuilder | `Domain/Services/ExerciseComparisonBuilder.swift` | **Pure, isolation-agnostic.** `makeLookup` reduces the current workout to `Sendable` values; `build` assembles the comparison rows from it plus the resolved predecessors. Runs on the main actor because the workout may be uncommitted. |
 | ExerciseUsageResolver | `Domain/Services/ExerciseUsageResolver.swift` | **Pure, isolation-agnostic.** The single definition of "the same piece of work": `slot(of:)`, `usage(of:in:)`, `belongs(_:to:)`, the picker's `options(in:liveSlotIds:matching:)` — which also flags a usage whose slot no live routine holds — the shared `sorted(_:)` order and `DescriptorRank`, and the default (plus the unknown-usage fallback) in `resolveSelection`. Shared by the chart aggregator, `FortschrittAggregator` and `PreviousPerformanceResolver`. |
@@ -1145,6 +1397,38 @@ exercise's selected chart range lacks a snapshot, the chart safely falls back to
 | Max Weight | Max Weight | Max. Gewicht | Highest weight lifted in any completed set during the session |
 | Est. 1RM | Est. 1RM | Gesch. 1RM | Epley formula: weight × (1 + reps ÷ 30), best across all sets |
 | Total Volume | Total Volume | Gesamtvolumen | Sum of (weight × reps) across all completed sets in the session |
+
+### What each metric tab is named
+
+`ExerciseProgressViewModel.title(for:)` is the single rule for naming a metric on the detail
+screen, and it is **per metric, not per selection**. It returns `metric.localizedTitle` except in
+one case: on a counterweight-assisted exercise charted in *entered* weight
+(`loadBehavior.isCounterweightAssistance && !usesEffectiveLoad`), the max-weight axis carries
+assistance rather than load, so `.maxWeight` reads `Unterstützung` / `Assistance`
+(`exercise.assistance`). Charted in effective load, that same tab keeps the plain
+`Max. Gewicht` / `Max Weight` wording. Nothing about the rename depends on which tab the user has
+selected.
+
+Both the tab row and the stat headline above the chart call through it — the headline via
+`selectedMetricTitle`, which is now just `title(for: selectedMetric)`, so the assistance exception
+exists in one place. Wiring the tab row through `selectedMetricTitle` instead is what produced the
+bug fixed on 2026-08-25: selecting *Gesch. 1RM* made the tab row read
+`Gesch. 1RM | Gesch. 1RM | Gesamtvolumen`, because the max-weight tab renamed itself to whatever
+was selected and the first metric became unreachable by name. (Introduced in `d0e9727`, which
+rewrote that line to add the Pro badge.) The Fortschritt row's caption applies the same exception
+from its own precomputed `FortschrittExerciseModel.chartsAssistance` flag, so the list and the
+detail screen name one metric rather than two. Pinned by
+`GymStreakTests/ExerciseProgressMetricTitleTests.swift`.
+
+**Known gap, deliberately left.** The ⓘ popover is the one surface on the detail screen that still
+names a metric without `title(for:)`: `MetricInfoPopover(metric: viewModel.selectedMetric)` renders
+`metric.localizedTitle` and `metric.localizedDescription`. On a counterweight-assisted exercise
+charted in entered weight the single tab therefore reads `Unterstützung` while the popover header
+reads `Max. Gewicht` and explains max weight. Fixing it properly needs an assistance-specific
+description string, not just a title parameter, which is why it was left out of the 2026-08-25 tab
+fix. To pick it up: give `MetricInfoPopover` a `title:` parameter fed by
+`viewModel.title(for: viewModel.selectedMetric)` plus an `exercise.assistance.description` string
+in `en`+`de`.
 
 ## Chart Interaction
 

@@ -679,6 +679,20 @@
 // The Fortschritt row shows one usage's sparkline and trend; this says which one of how many.
 "progress.row.curve_usage" = "Curve: %@";
 "progress.row.usage_of_total" = "of %d usages";
+// Two library exercises can legitimately share a name (barbell vs. dumbbell curls). Only
+// then is the equipment appended, so the name stays clean everywhere else.
+"progress.exercise.with_equipment" = "%1$@ · %2$@";
+
+// Legacy workouts recorded before WorkoutExercise carried an exerciseId are matched by
+// name — and only while that name is unique. Where it is not, they are withheld from
+// every progress surface rather than guessed onto one variant; these strings are what
+// makes that withholding visible and resolvable.
+"progress.legacy.unattributed.title" = "Older workouts aren’t counted";
+"progress.legacy.unattributed.message" = "From %2$@, %1$d workouts with this name are not included below. They were recorded before workouts were linked to a specific exercise, and two exercises share this name — so it is not clear which one they belong to.";
+"progress.legacy.unattributed.action" = "Assign to this exercise";
+"progress.legacy.unattributed.confirm.title" = "Assign %1$d workouts to “%2$@”?";
+"progress.legacy.unattributed.confirm.message" = "They will appear in this exercise’s chart, records and recent sets. Nothing else about those workouts changes. This can’t be undone in the app.";
+"progress.legacy.unattributed.confirm.action" = "Assign";
 
 // MARK: - Progress Comparison
 "progress.compared_to_previous" = "Compared to";
@@ -826,6 +840,9 @@
 "history.exercise.pr" = "Record";
 "history.exercise.trend" = "Trend";
 "history.exercise.workouts" = "Workouts";
+// All three stat cards read the selected range, never all-time - the range is named on
+// each one so they cannot be misread against the all-time "Recent sets" list below.
+"history.exercise.stat_in_range" = "%1$@ · %2$@";
 "history.exercise.recent" = "Recent Sets";
 "history.exercise.entries" = "%d entries";
 "history.exercise.best_set" = "Best: %@";

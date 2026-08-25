@@ -24,7 +24,9 @@ private final class FailingSaveWorkoutSessionRepository: WorkoutSessionRepositor
     init(wrapping wrapped: WorkoutSessionRepository) { self.wrapped = wrapped }
 
     func fetchAll() -> [WorkoutSession] { wrapped.fetchAll() }
-    func fetchCompleted() -> [WorkoutSession] { wrapped.fetchCompleted() }
+    func lastCompletedStartDates(forRoutineIds routineIds: [UUID]) -> [UUID: Date] {
+        wrapped.lastCompletedStartDates(forRoutineIds: routineIds)
+    }
     func findSession(id: UUID, healthKitWorkoutId: UUID?) -> WorkoutSession? {
         wrapped.findSession(id: id, healthKitWorkoutId: healthKitWorkoutId)
     }

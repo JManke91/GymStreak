@@ -17,6 +17,11 @@ struct ExerciseWithHistory: Identifiable, Hashable {
     let exerciseId: UUID?
     let workoutCount: Int
     let lastPerformed: Date?
+    /// Set only when another library exercise carries the same display name — see
+    /// `FortschrittExerciseModel.equipmentQualifier`, which is where it is resolved.
+    /// Carried through so the exercise switcher can tell two same-named entries apart
+    /// without scanning the library itself.
+    var equipmentQualifier: EquipmentType?
     /// The usage the Fortschritt row summarised, handed down so the detail screen opens
     /// on the same one — a row whose sparkline describes the most-trained usage must not
     /// push a screen that opens on a different one. `nil` when the exercise has a single
@@ -27,6 +32,13 @@ struct ExerciseWithHistory: Identifiable, Hashable {
 
     var primaryMuscleGroup: String {
         muscleGroups.first ?? "General"
+    }
+
+    /// The name as the switcher prints it: qualified with the equipment only where the
+    /// name is shared with another library exercise.
+    var displayName: String {
+        guard let equipmentQualifier else { return name }
+        return "progress.exercise.with_equipment".localized(name, equipmentQualifier.displayName)
     }
 
     /// Stable key matching WorkoutExercise.stableKey for filtering across sessions.

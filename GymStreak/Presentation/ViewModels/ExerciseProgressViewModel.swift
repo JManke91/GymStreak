@@ -70,6 +70,35 @@ class ExerciseProgressViewModel: ObservableObject {
     /// which falls back to the undated copy.
     @Published private(set) var datedWindowEmptyMessage: String?
 
+    /// Legacy workouts this exercise's name matches that every progress surface is
+    /// currently withholding, because another live exercise shares that name. `nil`
+    /// whenever nothing is being withheld, which is the normal case.
+    ///
+    /// Dropping an ambiguous legacy row is deliberate — guessing which of two same-named
+    /// exercises a 2024 session meant would silently rewrite what the user trained. Doing
+    /// it *silently* is the defect: the reporter read their own chart as the app having
+    /// lost their data. See `docs/progress-charts.md`.
+    @Published private(set) var unattributedLegacy: UnattributedLegacyHistory?
+    /// The banner's sentence, with the count and the period already interpolated and
+    /// formatted. Built in `load()` so no date formatting happens in a view body.
+    @Published private(set) var unattributedLegacyMessage: String?
+    /// `true` while the attribution write is in flight, so the button cannot be tapped
+    /// twice into two concurrent writes over the same rows.
+    @Published private(set) var isAttributingLegacyHistory = false
+
+    /// The window the numbers currently on screen were actually computed over.
+    ///
+    /// **It must move with `progressData` and with nothing else.** `load()` deliberately
+    /// keeps the previous snapshot published for the whole duration of a reload — the stat
+    /// triple is not gated on `isLoading`, and clearing it would flash "- / - / 0 Workouts"
+    /// (see `load()`). So between a range tap and its reload landing, the cards still show
+    /// the *old* window's record, trend and count. A label derived from `chartTimeframe`
+    /// — which `updateTimeframe` moves synchronously — would caption those numbers with the
+    /// new range for that whole interval, which is precisely the mismatch the range
+    /// qualifier exists to remove, inverted. Published here instead, beside the snapshot it
+    /// describes, so the caption and the numbers cannot come apart.
+    @Published private(set) var statRange: ChartTimeframe = .month
+
     /// The last window this user was actually allowed to read. It is what the
     /// chart keeps drawing while a Pro-only window is selected — see
     /// `chartTimeframe`.
@@ -95,6 +124,9 @@ class ExerciseProgressViewModel: ObservableObject {
     private var exerciseName: String
     private var exerciseId: UUID?
     private let provider: HistorySnapshotProviding
+    /// The one write path this screen owns. Separate from `provider` because that one is
+    /// a documented read boundary — see `LegacyHistoryAttributing`.
+    private let legacyAttribution: any LegacyHistoryAttributing
     private let proEntitlements: any ProEntitlementProviding
     private let paywalls: any PaywallPresenting
     private let isGatingEnabled: Bool
@@ -127,6 +159,7 @@ class ExerciseProgressViewModel: ObservableObject {
         exerciseId: UUID? = nil,
         initialUsage: ExerciseUsage.Key? = nil,
         provider: HistorySnapshotProviding,
+        legacyAttribution: any LegacyHistoryAttributing,
         proEntitlements: any ProEntitlementProviding,
         paywalls: any PaywallPresenting,
         isGatingEnabled: Bool = ProGating.isEnabled
@@ -135,6 +168,7 @@ class ExerciseProgressViewModel: ObservableObject {
         self.exerciseId = exerciseId
         self.requestedUsage = initialUsage.map(ExerciseUsageSelection.usage)
         self.provider = provider
+        self.legacyAttribution = legacyAttribution
         self.proEntitlements = proEntitlements
         self.paywalls = paywalls
         self.isGatingEnabled = isGatingEnabled
@@ -196,6 +230,10 @@ class ExerciseProgressViewModel: ObservableObject {
         usageOptions = []
         selectedUsage = .combined
         datedWindowEmptyMessage = nil
+        // The finding belongs to the exercise it was computed for. Keeping it across a
+        // switch would offer to attribute another exercise's legacy rows to this one.
+        unattributedLegacy = nil
+        unattributedLegacyMessage = nil
         // A different exercise gets its own opening window — unless the user has
         // already picked one, in which case `hasUserChosenTimeframe` keeps it.
         hasResolvedOpeningTimeframe = false
@@ -431,6 +469,9 @@ class ExerciseProgressViewModel: ObservableObject {
         // `Calendar.current` and `Date()`, so only the resulting cutoff crosses the hop.
         // `chartTimeframe`, not the selection: a Pro-only window never widens the fetch.
         let startDate = chartTimeframe.startDate
+        // Captured with `startDate`, from the same read: this is the window the results
+        // about to come back describe, whatever the user taps while the fetch is in flight.
+        let loadedRange = chartTimeframe
 
         do {
             let snapshot = try await provider.fetchExerciseProgress(
@@ -458,6 +499,7 @@ class ExerciseProgressViewModel: ObservableObject {
                 orAtLeast: lastPerformed
             ) { return }
             progressData = snapshot.data
+            statRange = loadedRange
             recentUsages = snapshot.recentUsages
             // Labelled once, here — the picker must not build localized strings or scan
             // for duplicate labels while a view body is being evaluated.
@@ -466,6 +508,10 @@ class ExerciseProgressViewModel: ObservableObject {
             // Formatted here for the same reason the labels are: the empty chart's copy
             // must not build a date string while `body` is being evaluated.
             datedWindowEmptyMessage = lastPerformed.map(Self.datedWindowEmptyMessage(lastPerformed:))
+            unattributedLegacy = snapshot.unattributedLegacy
+            // Composed here, for the same reason: the banner must not format a date
+            // range while `body` is being evaluated.
+            unattributedLegacyMessage = snapshot.unattributedLegacy.map(Self.unattributedLegacyMessage(for:))
             if !availableMetrics.contains(selectedMetric) {
                 selectedMetric = .maxWeight
             }
@@ -475,12 +521,61 @@ class ExerciseProgressViewModel: ObservableObject {
         } catch {
             guard generation == self.generation else { return }
             progressData = nil
+            statRange = loadedRange
             recentUsages = []
             usageOptions = []
             selectedUsage = .combined
             datedWindowEmptyMessage = nil
+            unattributedLegacy = nil
+            unattributedLegacyMessage = nil
             isLoading = false
         }
+    }
+
+    // MARK: - Unattributable legacy history
+
+    /// Whether the screen should offer to resolve the withheld workouts.
+    ///
+    /// Gated on `exerciseId` as well as on the finding: attribution has to write *some*
+    /// exercise id, and a screen pushed by name alone has none to write.
+    var canAttributeLegacyHistory: Bool {
+        unattributedLegacy != nil && exerciseId != nil
+    }
+
+    /// Links the withheld workouts to the exercise on screen, permanently.
+    ///
+    /// Only ever called from an explicit confirmation — this writes to workout history,
+    /// which is otherwise append-only. It sets the missing library link and nothing else;
+    /// the denormalised name, muscle groups and load behaviour of each historical row stay
+    /// exactly as they were recorded (see `LegacyHistoryAttributing`).
+    ///
+    /// The reload afterwards is what makes the result visible: the same rows now match by
+    /// id, so they enter the chart, the recent-sets list, the trend and the record. The
+    /// notification does the same for the Fortschritt list behind this screen.
+    func attributeLegacyHistory() async {
+        guard let exerciseId, unattributedLegacy != nil, !isAttributingLegacyHistory else { return }
+        isAttributingLegacyHistory = true
+        defer { isAttributingLegacyHistory = false }
+        do {
+            _ = try await legacyAttribution.attributeLegacyRows(
+                named: exerciseName,
+                to: exerciseId
+            )
+        } catch {
+            // Nothing was written, so the banner stays and the user can retry. There is
+            // no partial state to explain: the write is a single `save()`.
+            return
+        }
+        NotificationCenter.default.post(name: .historySourceDataDidChange, object: nil)
+        await load()
+    }
+
+    /// The banner's sentence: how many workouts are being withheld, and from when.
+    private static func unattributedLegacyMessage(for finding: UnattributedLegacyHistory) -> String {
+        "progress.legacy.unattributed.message".localized(
+            finding.sessionCount,
+            finding.periodText
+        )
     }
 
     /// Selects a metric. A Pro-only one is still *selected* — the tab highlights
@@ -603,13 +698,52 @@ class ExerciseProgressViewModel: ObservableObject {
         return [.maxWeight]
     }
 
-    var selectedMetricTitle: String {
-        guard selectedMetric == .maxWeight,
+    /// The display name of a metric on *this* exercise.
+    ///
+    /// A counterweight-assisted exercise charted in entered weight plots assistance on the
+    /// max-weight axis, so that one metric is renamed — a property of the metric and the
+    /// exercise, never of what is currently selected. Wiring the rename through the
+    /// selection instead made every tab rename itself to the selected metric, so two tabs
+    /// carried the same name (see `docs/progress-charts.md`).
+    func title(for metric: ProgressMetric) -> String {
+        guard metric == .maxWeight,
               progressData?.loadBehavior.isCounterweightAssistance == true,
               progressData?.usesEffectiveLoad == false else {
-            return selectedMetric.localizedTitle
+            return metric.localizedTitle
         }
         return "exercise.assistance".localized
+    }
+
+    var selectedMetricTitle: String { title(for: selectedMetric) }
+
+    /// A stat card's label, scoped to the window the card actually describes.
+    ///
+    /// **All three cards read `progressData`, which is windowed by the selected range** —
+    /// the record, the trend and the workout count are "within this range", never all-time.
+    /// The bare labels did not say so, and the screen puts them directly above an all-time
+    /// *Letzte Sätze* list carrying a larger number, which reads as the two disagreeing
+    /// (reported from a device check, 2026-08-25). Naming the range on every card is what
+    /// makes the two counts legible as answers to different questions; qualifying only the
+    /// workout count would have implied the other two are all-time.
+    ///
+    /// It names `statRange` — the window the published numbers were computed over — and
+    /// **not** `chartTimeframe`, which `updateTimeframe` moves the instant the user taps a
+    /// pill, while the previous snapshot is still the one on screen. See `statRange`.
+    ///
+    /// A Pro-locked window needs no special case here: a locked tap moves neither
+    /// `chartTimeframe` nor `loadKey`, so no reload starts and `statRange` still names the
+    /// window the chart kept drawing.
+    ///
+    /// Composed on read. That is three `String(format:)` calls and six table lookups at a
+    /// fixed three-card `HStack` — no `ForEach` over user data, no formatter *object*
+    /// allocated, no collection traversal — so the rendering rules in CLAUDE.md are
+    /// satisfied; correctness comes from `statRange` being published, not from where the
+    /// interpolation happens.
+    func statLabel(_ baseKey: String) -> String {
+        "history.exercise.stat_in_range".localized(
+            baseKey.localized,
+            statRange.localizedTitle
+        )
     }
 
     var personalRecordString: String? {

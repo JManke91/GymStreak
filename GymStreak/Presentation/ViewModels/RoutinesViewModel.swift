@@ -137,13 +137,12 @@ class RoutinesViewModel: ObservableObject {
     /// Drives the "Als Nächstes" hero (least recently trained) and the relative
     /// dates on routine cards.
     private func refreshLastPerformedDates() {
-        var dates: [UUID: Date] = [:]
-        for session in workoutSessionRepository.fetchCompleted() {
-            guard let routineId = session.routine?.id else { continue }
-            if let existing = dates[routineId], existing >= session.startTime { continue }
-            dates[routineId] = session.startTime
-        }
-        lastPerformedByRoutine = dates
+        // Bounded per routine rather than a scan of the whole completed history:
+        // this runs on every fetch and on every CloudKit remote change, and the
+        // history grows forever while the routine list does not.
+        lastPerformedByRoutine = workoutSessionRepository.lastCompletedStartDates(
+            forRoutineIds: routines.map(\.id)
+        )
     }
 
     /// The routine surfaced as the "Als Nächstes" hero card. When any routine is

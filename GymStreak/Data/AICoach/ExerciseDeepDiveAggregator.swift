@@ -35,7 +35,17 @@ struct ExerciseDeepDiveAggregator {
         now: Date = Date()
     ) -> ExerciseDeepDiveInput? {
         let sessions = fetchSessions(exercise: exercise, modelContext: modelContext)
-        let dataPoints = buildDataPoints(exercise: exercise, sessions: sessions)
+        // Whether the legacy name fallback may be used at all — see the matching note below.
+        // Resolved from the live library, once, exactly as the chart resolves it.
+        let nameIsUnique = ExerciseProgressAggregator.isNameUnique(
+            exercise.name,
+            in: (try? modelContext.fetch(FetchDescriptor<Exercise>())) ?? []
+        )
+        let dataPoints = buildDataPoints(
+            exercise: exercise,
+            sessions: sessions,
+            nameIsUnique: nameIsUnique
+        )
 
         // Insufficient data guard: require at least 4 completed sets
         let totalSets = dataPoints.reduce(0) { $0 + $1.setCount }
@@ -85,11 +95,26 @@ struct ExerciseDeepDiveAggregator {
 
     // MARK: - Cache Key Query
 
-    /// Returns the most recent session date containing a completed set matching
-    /// `exerciseId` (or a legacy entry with no stored `exerciseId`), used by
-    /// `ExerciseDeepDiveViewModel` to build its cache key. Returns `nil` when no
+    /// Returns the most recent session date containing a completed set of this exercise,
+    /// used by `ExerciseDeepDiveViewModel` to build its cache key. Returns `nil` when no
     /// matching completed set is found.
+    ///
+    /// **Matches with the same identity rule as `buildDataPoints`.** It used to accept
+    /// `we.exerciseId == exerciseId || we.exerciseId == nil` — no name check at all — so
+    /// *any* legacy row with a completed set in the newest session advanced this
+    /// exercise's cache key, however unrelated. The cost lands on the user: a moved key is
+    /// a cache miss, and for a free user a miss spends a monthly allowance unit
+    /// (`docs/pro-subscription.md` §5e) to regenerate a narrative that had not changed.
     func lastCompletedSetTimestamp(exerciseId: UUID, modelContext: ModelContext) -> Date? {
+        let library = (try? modelContext.fetch(FetchDescriptor<Exercise>())) ?? []
+        // Without the live entry there is no name to match on, so only the id can be
+        // matched — which is the conservative half of the rule, never the guessing half.
+        let exercise = library.first { $0.id == exerciseId }
+        let exerciseName = exercise?.name ?? ""
+        let nameIsUnique = exercise.map {
+            ExerciseProgressAggregator.isNameUnique($0.name, in: library)
+        } ?? false
+
         let descriptor = FetchDescriptor<WorkoutSession>(
             predicate: #Predicate { $0.endTime != nil },
             sortBy: [SortDescriptor(\.startTime, order: .reverse)]
@@ -99,7 +124,12 @@ struct ExerciseDeepDiveAggregator {
         var latestTimestamp: Date?
         for session in sessions {
             for we in session.workoutExercisesList {
-                guard we.exerciseId == exerciseId || we.exerciseId == nil else { continue }
+                guard ExerciseProgressAggregator.matches(
+                    we,
+                    exerciseId: exerciseId,
+                    exerciseName: exerciseName,
+                    nameIsUnique: nameIsUnique
+                ) else { continue }
                 let completedSets = we.setsList.filter(\.isCompleted)
                 if !completedSets.isEmpty {
                     latestTimestamp = session.startTime
@@ -121,10 +151,15 @@ struct ExerciseDeepDiveAggregator {
         let setCount: Int
     }
 
-    private func buildDataPoints(exercise: Exercise, sessions: [WorkoutSession]) -> [SessionDataPoint] {
-        // Resolve by exerciseId (primary) or unique name fallback, matching ExerciseProgressService.matches.
+    private func buildDataPoints(
+        exercise: Exercise,
+        sessions: [WorkoutSession],
+        nameIsUnique: Bool
+    ) -> [SessionDataPoint] {
+        // Resolve by exerciseId (primary) or unique-name fallback — the same rule the
+        // chart on the same screen applies. See the matching note below.
         let exerciseId = exercise.id
-        let exerciseName = exercise.name.lowercased()
+        let exerciseName = exercise.name
 
         var points: [SessionDataPoint] = []
 
@@ -135,7 +170,12 @@ struct ExerciseDeepDiveAggregator {
             var setCount = 0
 
             for we in session.workoutExercisesList {
-                guard Self.matchesExercise(we, exerciseId: exerciseId, nameLower: exerciseName) else { continue }
+                guard ExerciseProgressAggregator.matches(
+                    we,
+                    exerciseId: exerciseId,
+                    exerciseName: exerciseName,
+                    nameIsUnique: nameIsUnique
+                ) else { continue }
                 let usePlanned = we.progressiveOverloadApplied
                 let completed = we.setsList.filter(\.isCompleted)
                 setCount += completed.count
@@ -166,17 +206,26 @@ struct ExerciseDeepDiveAggregator {
         return points
     }
 
-    /// Matches a `WorkoutExercise` to the target exercise by id (primary) or lowercased name (fallback).
-    private static func matchesExercise(
-        _ we: WorkoutExercise,
-        exerciseId: UUID,
-        nameLower: String
-    ) -> Bool {
-        if we.exerciseId == exerciseId { return true }
-        // Legacy name fallback only if no exerciseId stored on the workout entry
-        if we.exerciseId == nil, we.exerciseName.lowercased() == nameLower { return true }
-        return false
-    }
+    // Matching is `ExerciseProgressAggregator.matches(_:exerciseId:exerciseName:nameIsUnique:)`,
+    // deliberately not a local copy.
+    //
+    // This type used to carry its own version that applied the legacy name fallback
+    // **without** the uniqueness gate: `we.exerciseId == nil && name matches`. Where two
+    // live exercises share a name, that claimed every ambiguous pre-`exerciseId` row for
+    // *both* of them — so the coach narrated a trend over a series blended across two
+    // different exercises, and did it on a screen whose chart deliberately drops those
+    // rows. Reported from a device check: the coach read "in den letzten 19 Sitzungen …
+    // -43%" beside a chart and a row that both said 15 workouts. Attribution does not save
+    // this path either — double-counting survives what dropping does not.
+    //
+    // `ExerciseProgressAggregator`, `FortschrittAggregator` and `PeriodRecapAggregator`
+    // all gate the fallback. Four copies of one rule is how three of them stayed right
+    // while this one drifted, so this one is now a call, not a copy — in both places this
+    // type resolves identity: here and in `lastCompletedSetTimestamp`.
+    //
+    // Identity only. `buildProgress` additionally filters by `loadBehavior` and by the
+    // selected usage; this aggregator does neither, so a coach session count may still
+    // exceed the chart's for reasons that have nothing to do with the name.
 
     // MARK: - Peak
 

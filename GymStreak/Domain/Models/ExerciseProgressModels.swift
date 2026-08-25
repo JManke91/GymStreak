@@ -286,6 +286,49 @@ struct ExerciseRecentUsage: Identifiable, Sendable {
     }
 }
 
+// MARK: - Unattributable Legacy History
+
+/// Completed workouts that name this exercise but carry no `exerciseId`, at a moment
+/// where the name alone cannot say which library exercise they mean.
+///
+/// `WorkoutExercise.exerciseId` did not always exist. Rows recorded before it are
+/// matched to the live library **by name**, and only while that name is unique — two
+/// live "Biceps Curls" (barbell and dumbbell) make every such row ambiguous, and an
+/// ambiguous row is dropped from every progress surface rather than guessed onto one
+/// variant. Guessing would silently rewrite what the user trained; dropping only
+/// omits it. Both are bad, but only one is recoverable.
+///
+/// This value is what makes the omission visible: it is non-`nil` only where rows were
+/// actually dropped for ambiguity, and it carries what the screen needs to say so in a
+/// sentence. Resolution is the user's — see `LegacyHistoryAttributing`.
+struct UnattributedLegacyHistory: Sendable, Equatable {
+    /// How many completed workouts would join the charted history once attributed.
+    /// Counts **sessions holding at least one completed set**, not rows: a session
+    /// whose only matching row was left uncompleted never renders anywhere, so
+    /// promising it would be a second wrong number.
+    let sessionCount: Int
+    /// Oldest and newest of those workouts, so the copy can name a period rather than
+    /// an abstract count.
+    let earliest: Date
+    let latest: Date
+
+    /// A `Date.FormatStyle`, not a `DateFormatter`: this is isolation-agnostic Domain
+    /// code, and a `static let DateFormatter` is not `Sendable`. Year-bearing on
+    /// purpose — these workouts are old, and that is the whole point of naming them.
+    private static let monthYearStyle = Date.FormatStyle.dateTime.month(.abbreviated).year()
+
+    /// "Mär 2024 – Jul 2025", or a single month where both ends fall in one.
+    ///
+    /// Which period the missing workouts come from is what lets the user decide *which*
+    /// exercise they were: "back then I only had the barbell". Read by the ViewModel
+    /// when it composes the banner copy, never from a view body.
+    var periodText: String {
+        let from = earliest.formatted(Self.monthYearStyle)
+        let to = latest.formatted(Self.monthYearStyle)
+        return from == to ? from : "\(from) – \(to)"
+    }
+}
+
 // MARK: - Exercise Progress Snapshot
 
 /// Everything the exercise detail screen renders, built in a single pass over one
@@ -306,17 +349,23 @@ struct ExerciseProgressSnapshot: Sendable {
     /// requested usage is always kept, and a window holding no rows for it draws the
     /// empty chart rather than swapping the user's choice.
     let selectedUsage: ExerciseUsageSelection
+    /// Legacy history this exercise's name matches but which stayed out of everything
+    /// above, because the name is shared with another live exercise. `nil` whenever
+    /// there is nothing being withheld — the overwhelmingly common case.
+    let unattributedLegacy: UnattributedLegacyHistory?
 
     init(
         data: ExerciseProgressData,
         recentUsages: [ExerciseRecentUsage],
         availableUsages: [ExerciseUsageOption] = [],
-        selectedUsage: ExerciseUsageSelection = .combined
+        selectedUsage: ExerciseUsageSelection = .combined,
+        unattributedLegacy: UnattributedLegacyHistory? = nil
     ) {
         self.data = data
         self.recentUsages = recentUsages
         self.availableUsages = availableUsages
         self.selectedUsage = selectedUsage
+        self.unattributedLegacy = unattributedLegacy
     }
 }
 

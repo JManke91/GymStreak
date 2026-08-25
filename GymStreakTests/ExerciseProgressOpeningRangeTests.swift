@@ -360,6 +360,7 @@ struct ExerciseProgressOpeningRangeTests {
                 exerciseName: "Bankdrücken",
                 exerciseId: UUID(),
                 provider: provider,
+                legacyAttribution: RecordingLegacyHistoryAttribution(),
                 proEntitlements: StubProEntitlements(state: state),
                 paywalls: RecordingPaywallPresenter(),
                 isGatingEnabled: isGatingEnabled

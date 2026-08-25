@@ -220,6 +220,7 @@ struct ExerciseProgressEmptyStateTests {
                 exerciseName: "Bankdrücken",
                 exerciseId: UUID(),
                 provider: provider,
+                legacyAttribution: RecordingLegacyHistoryAttribution(),
                 proEntitlements: StubProEntitlements(),
                 paywalls: RecordingPaywallPresenter(),
                 isGatingEnabled: false

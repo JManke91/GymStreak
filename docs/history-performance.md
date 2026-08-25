@@ -245,6 +245,56 @@ related model"
 Measure whether adding `\.workoutExercises.sets` helps further or merely inflates the
 fetch — `totalVolume` needs the sets, so it probably helps.
 
+**1.2a Don't scan a whole table for one value per group.** Found while diagnosing the crash
+in `docs/cloudkit-sync-suspension.md`. `RoutinesViewModel.refreshLastPerformedDates()` used
+to call `fetchCompleted()` — every completed session, hydrated on the main actor — and then
+read `session.routine?.id` per row (a to-one fault each) purely to compute one max
+`startTime` per routine. Both costs scaled with history; the answer's size scales with the
+routine count. That is a growth-direction argument, not a hard bound: a routine library grows
+by user curation and stays in the tens (`ProFeatureCaps.freeRoutineLimit` caps the free tier;
+Pro is uncapped), while completed sessions accumulate forever.
+
+Replaced (2026-08-25) with `WorkoutSessionRepository.lastCompletedStartDates(forRoutineIds:)`:
+one `FetchDescriptor` per routine, `#Predicate { $0.endTime != nil && $0.routine?.id == routineId }`,
+sorted by `startTime` descending with `fetchLimit = 1`. `fetchLimit` compiles to SQL
+`ORDER BY … LIMIT 1`, so each query returns one row instead of hydrating the history.
+Main-actor work is now O(routines) rather than O(sessions) — and this path runs on every
+routine fetch *and* every CloudKit remote change, so the difference compounds.
+
+Known caveat: `fetchRoutines()` runs after every `updateRoutine()` — i.e. every stepper tap
+and rest-time edit in routine detail — so a large library now issues one round-trip per
+routine per tap instead of one fold. Much cheaper than the old scan once history is
+non-trivial, but the cost is now proportional to routine count on a per-mutation path. Note
+also that last-trained dates cannot change as a result of editing a routine, so this refresh
+is redundant on that path entirely. If it ever measures badly, the fixes in order of
+preference are: only refresh on history change rather than on every routine fetch; then a
+denormalised `Routine.lastPerformedAt` maintained at session completion (a schema change, so
+it needs a CloudKit Console deploy). Not a bigger fetch.
+
+Why N queries rather than one aggregate: **SwiftData has no `MAX(...) GROUP BY` surface**
+through iOS 26 — no aggregate functions in `#Predicate`, no `#Expression` equivalent. The
+only true GROUP BY route is Core Data's `NSExpressionDescription` + `propertiesToGroupBy` on
+a raw `NSFetchRequest`, which needs the `NSManagedObjectContext` that `ModelContext` does not
+expose; the one community library that reaches it does so by `Mirror` reflection into a
+private `_nsContext` and has already broken across an OS cycle. **Rejected** — private-API
+adjacent, not shippable. `propertiesToFetch` was also considered and rejected: it narrows
+columns per row, not the row count, and Apple's docs point relationships at
+`relationshipKeyPathsForPrefetching` instead.
+
+Single-level optional-chain relationship traversal in `#Predicate` (`$0.routine?.id`) is
+supported and translates to a SQL join. Multi-level chains (`$0.a?.b?.c`) silently returned
+wrong results before iOS 17.5, and passing a *pre-built* multi-component key path throws
+"Predicate does not support keypaths with multiple components" — neither affects the
+single-level inline form used here.
+
+`#Index<WorkoutSession>([\.endTime], [\.startTime])` (iOS 18+) would let SQLite's planner
+serve each `WHERE endTime IS NOT NULL ORDER BY startTime DESC LIMIT 1` from an index.
+Deliberately **not** added: the gain is unmeasured, and an index changes the local model hash
+and triggers a lightweight migration. Measure with `EXPLAIN QUERY PLAN` per §5 first. It
+should not require a CloudKit Console deploy — `#Index` compiles to `NSFetchIndexDescription`,
+a local SQLite artifact adding no CKRecord field — but confirm with `cktool export-schema`
+if you add it.
+
 **1.3 Kill the per-item `DateFormatter` allocations.** WWDC23 "Demystify SwiftUI
 performance" calls out formatters allocated per body evaluation as a thing to hoist.
 

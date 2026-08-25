@@ -157,7 +157,7 @@ The wire DTO `CompletedWatchWorkout` never crosses into Presentation. `WatchConn
 
 | Notification | Posted by | Handled by |
 |---|---|---|
-| `.cloudKitDataDidChange` | CloudSyncObserver | RoutinesViewModel, ExercisesViewModel (refetch) |
+| `.cloudKitDataDidChange` | CloudSyncObserver, DefaultContentSeeder | RoutinesViewModel, ExercisesViewModel (refetch), ExerciseCatalogSyncCoordinator (refetch + watch catalogue sync), WorkoutViewModel (refresh history) |
 | `.watchAppBecameAvailable` | WatchConnectivityManager | RoutinesViewModel (sync routines) |
 | `.workoutHistoryDidChange` | Domain ingestion services | WorkoutViewModel (refresh history) |
 | `.historySourceDataDidChange` | RoutinesViewModel, ExercisesViewModel after successful local saves | WorkoutViewModel (invalidate actor-owned History snapshot) |

@@ -18,6 +18,9 @@ final class AppDependencies: ObservableObject {
     let exerciseRepository: ExerciseRepository
     let workoutSessionRepository: WorkoutSessionRepository
     let historySnapshotProvider: HistorySnapshotProviding
+    /// The one write path into workout history outside of recording a workout: linking
+    /// pre-`exerciseId` rows to the library exercise the user says they meant.
+    let legacyHistoryAttribution: LegacyHistoryAttributing
     let workoutHistoryCorrelation: WorkoutHistoryCorrelationProviding
     let restTimerReminders: RestTimerReminderScheduling
     /// The rest timer's Lock Screen / Dynamic Island surface. One instance for
@@ -165,6 +168,9 @@ final class AppDependencies: ObservableObject {
             modelContainer: modelContext.container
         )
         self.historySnapshotProvider = historySnapshotProvider
+        self.legacyHistoryAttribution = SwiftDataLegacyHistoryAttributionProvider(
+            modelContainer: modelContext.container
+        )
         self.workoutHistoryCorrelation = SwiftDataWorkoutHistoryCorrelationProvider(
             container: modelContext.container
         )

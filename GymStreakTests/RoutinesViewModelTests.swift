@@ -185,4 +185,39 @@ struct RoutinesViewModelTests {
         #expect(members[2].supersetId == nil)
         _ = routine
     }
+
+    @Test
+    func fetchRoutinesPublishesLastPerformedDatesAndPicksLeastRecentlyTrainedHero() throws {
+        // Pins the call site of lastCompletedStartDates(forRoutineIds:): a bug that
+        // published an empty dictionary would otherwise ship green, because
+        // WorkoutPlanningService.nextDue falls back to schedule.startDate when
+        // lastCompleted is nil.
+        let (viewModel, _, context) = makeViewModel()
+        let routines = SwiftDataRoutineRepository(modelContext: context)
+
+        let trainedRecently = Routine(name: "Push Day")
+        let trainedLongAgo = Routine(name: "Pull Day")
+        routines.insert(trainedRecently)
+        routines.insert(trainedLongAgo)
+
+        let recent = WorkoutSession(routine: trainedRecently)
+        recent.startTime = Date(timeIntervalSince1970: 9_000)
+        recent.endTime = Date(timeIntervalSince1970: 9_500)
+
+        let old = WorkoutSession(routine: trainedLongAgo)
+        old.startTime = Date(timeIntervalSince1970: 1_000)
+        old.endTime = Date(timeIntervalSince1970: 1_500)
+
+        context.insert(recent)
+        context.insert(old)
+        try context.save()
+
+        viewModel.fetchRoutines()
+
+        #expect(viewModel.lastPerformedByRoutine[trainedRecently.id] == recent.startTime)
+        #expect(viewModel.lastPerformedByRoutine[trainedLongAgo.id] == old.startTime)
+        // Neither routine is planned, so the hero falls back to least-recently-trained.
+        #expect(viewModel.upNextRoutine?.id == trainedLongAgo.id)
+    }
+
 }

@@ -73,6 +73,7 @@ struct EntitlementRefreshTests {
         let viewModel = ExerciseProgressViewModel(
             exerciseName: "Bench Press",
             provider: SilentHistorySnapshotProvider(),
+            legacyAttribution: RecordingLegacyHistoryAttribution(),
             proEntitlements: entitlements,
             paywalls: RecordingPaywallPresenter(),
             isGatingEnabled: true

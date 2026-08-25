@@ -48,6 +48,7 @@ struct ExerciseProgressChartView: View {
             availableExercises: availableExercises,
             initialUsage: initialUsage,
             snapshotProvider: dependencies.historySnapshotProvider,
+            legacyAttribution: dependencies.legacyHistoryAttribution,
             proEntitlements: dependencies.proEntitlements,
             paywalls: dependencies.paywalls,
             deepDiveAllowanceGate: dependencies.makeAICoachAllowanceGate(for: .exerciseDeepDive)
@@ -82,6 +83,7 @@ private struct ExerciseProgressChartViewInternal: View {
         availableExercises: [ExerciseWithHistory],
         initialUsage: ExerciseUsage.Key?,
         snapshotProvider: HistorySnapshotProviding,
+        legacyAttribution: any LegacyHistoryAttributing,
         proEntitlements: any ProEntitlementProviding,
         paywalls: any PaywallPresenting,
         deepDiveAllowanceGate: AICoachAllowanceGate
@@ -98,13 +100,19 @@ private struct ExerciseProgressChartViewInternal: View {
             exerciseId: exerciseId,
             initialUsage: initialUsage,
             provider: snapshotProvider,
+            legacyAttribution: legacyAttribution,
             proEntitlements: proEntitlements,
             paywalls: paywalls
         ))
     }
 
-    private var primaryMuscleGroup: String {
-        availableExercises.first(where: { $0.name == currentExerciseName })?.primaryMuscleGroup ?? ""
+    /// The list entry for the exercise on screen, matched by id first: two library
+    /// exercises may share a display name, and a name match would then describe the other
+    /// one. `nil` when the screen was pushed without a list behind it.
+    private var currentEntry: ExerciseWithHistory? {
+        currentExerciseId.flatMap { id in
+            availableExercises.first { $0.exerciseId == id }
+        } ?? availableExercises.first { $0.name == currentExerciseName }
     }
 
     var body: some View {
@@ -114,6 +122,7 @@ private struct ExerciseProgressChartViewInternal: View {
                 VStack(alignment: .leading, spacing: 16) {
                     topBar
                     titleBlock
+                    legacyAttributionBanner
                     statTriple
                     chartCard
                     coachSection
@@ -187,6 +196,7 @@ private struct ExerciseProgressChartViewInternal: View {
             if !availableExercises.isEmpty {
                 ExerciseSwitcherMenu(
                     currentExercise: currentExerciseName,
+                    currentExerciseId: currentExerciseId,
                     exercises: availableExercises
                 ) { switchToExercise($0) }
             }
@@ -197,13 +207,29 @@ private struct ExerciseProgressChartViewInternal: View {
 
     // MARK: - Title
 
+    /// Resolved once per title build, not once per line: `currentEntry` scans the list.
+    ///
+    /// The eyebrow carries the equipment as well as the muscle group where another live
+    /// exercise shares this name. With the switcher closed the title is the only thing
+    /// naming the exercise, and a bare "Biceps Curls" cannot say which of the two it is —
+    /// the same rule the Fortschritt row and the switcher apply.
     private var titleBlock: some View {
-        VStack(alignment: .leading, spacing: 2) {
-            if !primaryMuscleGroup.isEmpty {
-                Text(primaryMuscleGroup.localized.uppercased())
+        let entry = currentEntry
+        let muscleGroup = entry?.primaryMuscleGroup ?? ""
+        let eyebrow: String = {
+            guard let equipment = entry?.equipmentQualifier else { return muscleGroup.localized }
+            return "progress.exercise.with_equipment".localized(
+                muscleGroup.localized,
+                equipment.displayName
+            )
+        }()
+        return VStack(alignment: .leading, spacing: 2) {
+            if !muscleGroup.isEmpty {
+                Text(eyebrow.uppercased())
                     .font(.system(size: 11, weight: .bold))
                     .tracking(0.6)
                     .foregroundStyle(DesignSystem.Colors.tint)
+                    .lineLimit(1)
             }
             Text(currentExerciseName)
                 .font(.system(size: 28, weight: .bold, design: .rounded))
@@ -214,15 +240,41 @@ private struct ExerciseProgressChartViewInternal: View {
         .padding(.horizontal, 20)
     }
 
+    // MARK: - Unattributable legacy history
+
+    /// Above the numbers it is about. Everything below this line — the record, the trend,
+    /// the workout count, the chart and the recent sets — is computed *without* the
+    /// workouts it names, so the user has to read it before, not after.
+    ///
+    /// The whole block is absent whenever nothing is being withheld, which is the case for
+    /// every uniquely-named exercise.
+    @ViewBuilder
+    private var legacyAttributionBanner: some View {
+        if viewModel.canAttributeLegacyHistory,
+           let finding = viewModel.unattributedLegacy,
+           let message = viewModel.unattributedLegacyMessage {
+            LegacyHistoryAttributionBanner(
+                message: message,
+                exerciseName: currentExerciseName,
+                sessionCount: finding.sessionCount,
+                isAttributing: viewModel.isAttributingLegacyHistory
+            ) {
+                Task { await viewModel.attributeLegacyHistory() }
+            }
+        }
+    }
+
     // MARK: - Stat triple
 
+    /// Every card here describes the **selected range**, not all of history — see
+    /// `ExerciseProgressViewModel.statLabel(_:)` for why each label says so.
     private var statTriple: some View {
         HStack(spacing: 8) {
             hexStatCard(
                 icon: "trophy.fill",
                 color: Color(red: 1, green: 0.8, blue: 0),
                 value: viewModel.personalRecordString ?? "-",
-                label: "history.exercise.pr".localized
+                label: viewModel.statLabel("history.exercise.pr")
             )
             hexStatCard(
                 icon: "arrow.up.right",
@@ -233,13 +285,13 @@ private struct ExerciseProgressChartViewInternal: View {
                     ? (viewModel.trendIsPositive ? DesignSystem.Colors.tint : Color(red: 1, green: 0.42, blue: 0.42))
                     : Color.white.opacity(0.4),
                 value: viewModel.trendValueString,
-                label: "history.exercise.trend".localized
+                label: viewModel.statLabel("history.exercise.trend")
             )
             hexStatCard(
                 icon: "dumbbell.fill",
                 color: Color(red: 90/255, green: 180/255, blue: 255/255),
                 value: viewModel.sessionCountString ?? "-",
-                label: "history.exercise.workouts".localized
+                label: viewModel.statLabel("history.exercise.workouts")
             )
         }
         .padding(.horizontal, 16)
@@ -262,10 +314,14 @@ private struct ExerciseProgressChartViewInternal: View {
                 .foregroundStyle(Color.white)
                 .lineLimit(1)
                 .minimumScaleFactor(0.6)
+            // The label now carries the range ("REKORD · 3M"), so it must stay on one
+            // line: a card that wrapped would grow taller than the two beside it.
             Text(label.uppercased())
                 .font(.system(size: 10, weight: .semibold))
                 .tracking(0.4)
                 .foregroundStyle(Color.white.opacity(0.45))
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(12)
@@ -314,7 +370,7 @@ private struct ExerciseProgressChartViewInternal: View {
                     viewModel.updateMetric(metric)
                 } label: {
                     HStack(spacing: 4) {
-                        Text(metric == .maxWeight ? viewModel.selectedMetricTitle : metric.localizedTitle)
+                        Text(viewModel.title(for: metric))
                             .font(.system(size: 13, weight: viewModel.selectedMetric == metric ? .bold : .medium, design: .rounded))
                             .foregroundStyle(viewModel.selectedMetric == metric ? Color.white : Color.white.opacity(0.45))
                         // Honest before the tap: the tab still works, it just
@@ -584,57 +640,6 @@ private struct ExerciseProgressChartViewInternal: View {
         // Reset deep-dive state when the user switches exercises
         deepDiveVM = ExerciseDeepDiveViewModel(allowanceGate: deepDiveAllowanceGate)
         hasTappedAskCoach = false
-    }
-}
-
-// MARK: - Exercise Switcher Menu
-
-struct ExerciseSwitcherMenu: View {
-    let currentExercise: String
-    let exercises: [ExerciseWithHistory]
-    let onSelect: (ExerciseWithHistory) -> Void
-
-    private var groupedExercises: [String: [ExerciseWithHistory]] {
-        Dictionary(grouping: exercises) { $0.primaryMuscleGroup }
-    }
-
-    private var sortedMuscleGroups: [String] {
-        groupedExercises.keys.sorted()
-    }
-
-    var body: some View {
-        Menu {
-            ForEach(sortedMuscleGroups, id: \.self) { muscleGroup in
-                Section(muscleGroup.localized) {
-                    ForEach(groupedExercises[muscleGroup] ?? [], id: \.name) { exercise in
-                        Button {
-                            onSelect(exercise)
-                        } label: {
-                            HStack {
-                                Text(exercise.name)
-                                if exercise.name == currentExercise {
-                                    Spacer()
-                                    Image(systemName: "checkmark")
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        } label: {
-            HStack(spacing: 4) {
-                Image(systemName: "chevron.up.chevron.down")
-                    .font(.system(size: 12, weight: .semibold))
-                Text("switch".localized)
-                    .font(.system(size: 12, weight: .semibold))
-            }
-            .foregroundStyle(Color.white)
-            .padding(.horizontal, 12)
-            .frame(height: 38)
-            .background(Color.white.opacity(0.08))
-            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-        }
-        .accessibilityLabel("chart.switch_exercise".localized(currentExercise))
     }
 }
 

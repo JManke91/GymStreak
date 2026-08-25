@@ -23,22 +23,29 @@ extension FortschrittAggregator {
     ///
     /// This is deliberately the same reduction `ExerciseProgressAggregator.buildProgress`
     /// applies to `ExerciseProgressDataPoint.maxWeight`, so a row's sparkline is the chart's
-    /// own series for the same usage — except for a partly snapshotted counterweight series,
-    /// where the two pick the value space differently (per session here, series-wide there;
-    /// pre-existing, see `docs/progress-charts.md` and ticket 08). It used to fold to the best estimated
+    /// own series for the same usage. It used to fold to the best estimated
     /// 1RM — which is a **Pro-gated metric** (`ProFeatureCaps.freeChartMetric` is
     /// `.maxWeight`), so the list handed every free user a number they could not read on
     /// the screen it opens. See `docs/progress-charts.md`.
     ///
-    /// A row whose sets carry nothing comparable still yields a value of 0 with
-    /// `hasValue == false`, which is what keeps the workout counted.
+    /// A counterweight row is folded in **both** value spaces at once, because which one
+    /// its series ends up in is a property of the whole series and is not knowable here:
+    /// one snapshot-less session drops every point of that series to raw assistance
+    /// (`FortschrittAggregator.build`). Deciding here instead is what used to put an
+    /// estimated physical load and a machine's assistance number into one sparkline.
+    /// Folding both now costs one `min` per set and keeps the decision to a single
+    /// traversal of the session graph.
+    ///
+    /// A row whose sets carry nothing comparable still yields a value of 0. The workout is
+    /// counted regardless — `FortschrittAggregator.build` counts it off `didRecordAnything`,
+    /// which only asks whether the row had a completed set at all.
     static func foldSets(
         of workoutExercise: WorkoutExercise,
         in session: WorkoutSession
     ) -> SessionFold {
         let behavior = workoutExercise.loadBehavior
         let canUseEffectiveLoad = !behavior.isCounterweightAssistance || session.bodyWeightKg != nil
-        var fold = SessionFold(isEffectiveLoad: canUseEffectiveLoad)
+        var fold = SessionFold(canUseEffectiveLoad: canUseEffectiveLoad)
 
         let usePlanned = workoutExercise.progressiveOverloadApplied
         for set in workoutExercise.setsList where set.isCompleted {
@@ -53,13 +60,15 @@ extension FortschrittAggregator {
                 behavior: behavior,
                 bodyWeightKg: session.bodyWeightKg
                ) {
-                // Heavier is the better set. `value` starts at 0 and an effective weight is
-                // never negative, so plain max also covers the first recorded set.
-                fold.record(max(fold.value, effective))
-            } else if behavior.isCounterweightAssistance {
-                // Raw assistance without a body-mass snapshot: *least*
-                // assistance is the better set, so fold with min.
-                fold.record(fold.hasValue ? min(fold.value, weight) : weight)
+                // Heavier is the better set. `effectiveValue` starts at 0 and an effective
+                // weight is never negative, so plain max also covers the first recorded set.
+                fold.effectiveValue = max(fold.effectiveValue, effective)
+            }
+            if behavior.isCounterweightAssistance {
+                // Raw assistance: *least* assistance is the better set, so fold with min.
+                fold.recordAssistance(
+                    fold.hasAssistanceValue ? min(fold.assistanceValue, weight) : weight
+                )
             }
         }
         return fold
@@ -84,20 +93,36 @@ extension FortschrittAggregator {
         var descriptorRank: ExerciseUsageResolver.DescriptorRank
         var lastPerformed: Date
         var lastPerformedOrder: Int
-        var sessionValues: [(date: Date, value: Double, isEffectiveLoad: Bool)] = []
+        var sessionValues: [(date: Date, fold: SessionFold)] = []
     }
 
-    /// A single session's folded value for one usage. `hasValue` distinguishes
-    /// "no comparable set yet" from a legitimately recorded 0 (an assisted set
-    /// performed with no counterweight at all), which the min-fold must keep.
+    /// A single session's folded value for one usage, carried in both value spaces so
+    /// the series can pick one afterwards.
     struct SessionFold {
-        var value: Double = 0
-        var hasValue = false
-        let isEffectiveLoad: Bool
+        /// Heaviest effective weight across the completed sets. Only filled when the
+        /// session can be read as physical load at all. Needs no "was it set" flag: the
+        /// max-fold seeded at 0 is correct, because an effective weight is never negative.
+        var effectiveValue: Double = 0
+        /// Least raw assistance entered — filled for every counterweight row, snapshot
+        /// or not, because a snapshot-less session elsewhere in the series can still
+        /// force this space on it.
+        var assistanceValue: Double = 0
+        /// Whether `assistanceValue` holds a set's number yet. The min-fold needs this to
+        /// tell "nothing recorded" from a legitimately recorded 0 (an assisted set
+        /// performed with no counterweight at all), which is a best value it must keep.
+        var hasAssistanceValue = false
+        /// Whether this session carried what it takes to express its work as physical
+        /// load: a body-mass snapshot, or a behaviour that never needed one.
+        let canUseEffectiveLoad: Bool
 
-        mutating func record(_ newValue: Double) {
-            value = newValue
-            hasValue = true
+        /// The number this session contributes once the *series* has picked its space.
+        func value(usingEffectiveLoad: Bool) -> Double {
+            usingEffectiveLoad ? effectiveValue : assistanceValue
+        }
+
+        mutating func recordAssistance(_ newValue: Double) {
+            assistanceValue = newValue
+            hasAssistanceValue = true
         }
     }
 }

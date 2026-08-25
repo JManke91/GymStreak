@@ -178,6 +178,76 @@ struct ExerciseProgressStatCardTests {
         #expect(harness.viewModel.trendValueString == "chart.trend.mixed".localized)
     }
 
+    // MARK: - The cards say which window they describe
+
+    /// All three cards read the windowed `progressData`, and the screen puts them directly
+    /// above an all-time recent-sets list whose count is usually larger. Naming the range
+    /// on every label is what keeps the two from reading as a contradiction — a device
+    /// check reported exactly that misreading ("4 Workouts" over "7 Einträge").
+    @Test("Every stat label names the range the numbers came from")
+    func statLabelsCarryTheLoadedRange() async {
+        let harness = makeHarness(usageCount: 1, selection: .combined)
+        await loadUntilSettled(harness.viewModel)
+        harness.viewModel.updateTimeframe(.threeMonths)
+        // The reload is what publishes the new range — see
+        // `statLabelsDoNotMoveAheadOfTheReload` for why the label must wait for it.
+        await loadUntilSettled(harness.viewModel)
+
+        let range = ChartTimeframe.threeMonths.localizedTitle
+        for key in ["history.exercise.pr", "history.exercise.trend", "history.exercise.workouts"] {
+            #expect(harness.viewModel.statLabel(key).hasSuffix(range))
+        }
+        // The base label is still in there — the range qualifies it, never replaces it.
+        #expect(harness.viewModel.statLabel("history.exercise.workouts")
+            .contains("history.exercise.workouts".localized))
+    }
+
+    /// **The label may not move ahead of the numbers.** `load()` keeps the previous
+    /// snapshot published for the whole reload (the stat triple is not gated on
+    /// `isLoading`), so between the tap and the result the cards still show the old
+    /// window's record, trend and count. A label derived from the *tapped* range would
+    /// caption them with a window they were not computed over — the same defect the
+    /// qualifier exists to remove, only harder to spot.
+    @Test("A pending range change does not relabel the numbers still on screen")
+    func statLabelsDoNotMoveAheadOfTheReload() async {
+        let harness = makeHarness(usageCount: 1, selection: .combined)
+        await loadUntilSettled(harness.viewModel)
+        let settled = harness.viewModel.chartTimeframe
+        // The fixture must actually change window, or this test proves nothing.
+        #expect(settled != .week)
+
+        harness.viewModel.updateTimeframe(.week)
+
+        // Tapped, reload not yet run: the caption still describes what is displayed.
+        #expect(harness.viewModel.chartTimeframe == .week)
+        #expect(harness.viewModel.statLabel("history.exercise.workouts")
+            .hasSuffix(settled.localizedTitle))
+
+        await loadUntilSettled(harness.viewModel)
+
+        #expect(harness.viewModel.statLabel("history.exercise.workouts")
+            .hasSuffix(ChartTimeframe.week.localizedTitle))
+    }
+
+    /// A Pro-locked window keeps drawing the last unlocked one, so the label has to name
+    /// **that** window. Naming the tapped one would caption the numbers with a range they
+    /// were not computed over — the precise failure the qualifier exists to prevent.
+    @Test("A locked range labels the window the numbers actually came from")
+    func statLabelsNameTheChartedWindowNotTheTappedOne() async {
+        let harness = makeHarness(usageCount: 1, selection: .combined, isGatingEnabled: true)
+        await loadUntilSettled(harness.viewModel)
+        let charted = harness.viewModel.chartTimeframe
+
+        harness.viewModel.updateTimeframe(.all)
+
+        #expect(harness.viewModel.isTimeframeLocked(.all))
+        #expect(harness.viewModel.chartTimeframe == charted)
+        #expect(harness.viewModel.statLabel("history.exercise.workouts")
+            .hasSuffix(charted.localizedTitle))
+        #expect(!harness.viewModel.statLabel("history.exercise.workouts")
+            .hasSuffix(ChartTimeframe.all.localizedTitle))
+    }
+
     // MARK: - Harness
 
     private struct Harness {
@@ -196,6 +266,7 @@ struct ExerciseProgressStatCardTests {
                 exerciseName: "Bizeps Curls",
                 exerciseId: UUID(),
                 provider: provider,
+                legacyAttribution: RecordingLegacyHistoryAttribution(),
                 proEntitlements: StubProEntitlements(),
                 paywalls: RecordingPaywallPresenter(),
                 isGatingEnabled: isGatingEnabled

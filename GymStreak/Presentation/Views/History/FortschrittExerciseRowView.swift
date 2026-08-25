@@ -17,6 +17,9 @@ import SwiftUI
 /// pieces of work, which is the defect this row's numbers came from. The list stays one
 /// row per exercise; splitting it per usage would bury it under near-duplicate entries
 /// (see `docs/progress-charts.md`).
+///
+/// A row whose exercise shares its display name with another library exercise also prints
+/// that exercise's equipment beside the name; a uniquely named one does not.
 struct FortschrittExerciseRowView: View {
     let model: FortschrittExerciseModel
 
@@ -44,10 +47,17 @@ struct FortschrittExerciseRowView: View {
         HStack(spacing: 12) {
             badge
             VStack(alignment: .leading, spacing: 3) {
-                Text(model.name)
-                    .font(.system(size: 15, weight: .semibold, design: .rounded))
-                    .foregroundStyle(Color.white)
-                    .lineLimit(1)
+                HStack(spacing: 6) {
+                    Text(model.name)
+                        .font(.system(size: 15, weight: .semibold, design: .rounded))
+                        .foregroundStyle(Color.white)
+                        .lineLimit(1)
+                    // Only where the name collides with another library exercise — the
+                    // qualifier is what separates two rows reading "Biceps Curls".
+                    if let equipment = model.equipmentQualifier {
+                        equipmentChip(equipment)
+                    }
+                }
                 HStack(spacing: 8) {
                     Text("progress.workout_count".localized(model.workoutCount))
                     if model.lastPerformed != nil {
@@ -66,7 +76,7 @@ struct FortschrittExerciseRowView: View {
                 )
                 // What the curve and the percentage measure. Same caption, same wording and
                 // the same assistance exception as the headline above the detail screen's
-                // chart (`ExerciseProgressViewModel.selectedMetricTitle`), so the list and
+                // chart (`ExerciseProgressViewModel.title(for:)`), so the list and
                 // that screen name one metric rather than two.
                 Text(metricTitle.uppercased())
                     .font(.system(size: 8, weight: .semibold))
@@ -109,6 +119,21 @@ struct FortschrittExerciseRowView: View {
         // it is not one — the whole cell is the tap target and it already opens this very
         // usage, so a separate tap could not do anything different.
         .foregroundStyle(Color.white.opacity(0.55))
+    }
+
+    /// The equipment that tells this row apart from another exercise of the same name.
+    /// Present only when `FortschrittAggregator` found that collision while building the
+    /// list, so no view here scans the exercise library.
+    private func equipmentChip(_ equipment: EquipmentType) -> some View {
+        Text(equipment.displayName)
+            .font(.system(size: 9, weight: .semibold))
+            .foregroundStyle(Color.white.opacity(0.65))
+            .lineLimit(1)
+            .padding(.horizontal, 6)
+            .padding(.vertical, 2)
+            .background(Color.white.opacity(0.1))
+            .clipShape(Capsule())
+            .layoutPriority(1)
     }
 
     /// The metric the sparkline and the trend describe. A counterweight series with no

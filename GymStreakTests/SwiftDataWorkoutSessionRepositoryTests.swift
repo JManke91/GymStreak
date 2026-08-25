@@ -2,9 +2,10 @@
 //  SwiftDataWorkoutSessionRepositoryTests.swift
 //  GymStreakTests
 //
-//  Covers SwiftDataWorkoutSessionRepository: the `fetchCompleted` filter and
-//  the id/healthKitWorkoutId dedup semantics used by RoutinesViewModel to
-//  detect duplicate or retried watch deliveries.
+//  Covers SwiftDataWorkoutSessionRepository: the id/healthKitWorkoutId dedup
+//  semantics used by RoutinesViewModel to detect duplicate or retried watch
+//  deliveries, and the bounded per-routine `lastCompletedStartDates` query that
+//  replaced a whole-history scan.
 //
 
 import Testing
@@ -30,26 +31,6 @@ struct SwiftDataWorkoutSessionRepositoryTests {
             SwiftDataWorkoutSessionRepository(modelContext: context),
             SwiftDataRoutineRepository(modelContext: context)
         )
-    }
-
-    @Test
-    func fetchCompletedOnlyReturnsSessionsWithEndTime() throws {
-        let (_, sessions, routines) = makeRepositories()
-        let routine = Routine(name: "Push Day")
-        routines.insert(routine)
-
-        let completed = WorkoutSession(routine: routine)
-        completed.endTime = Date()
-
-        let inProgress = WorkoutSession(routine: routine)
-        inProgress.endTime = nil
-
-        sessions.insert(completed)
-        sessions.insert(inProgress)
-        try sessions.save()
-
-        let result = sessions.fetchCompleted()
-        #expect(result.map(\.id) == [completed.id])
     }
 
     @Test
@@ -87,6 +68,97 @@ struct SwiftDataWorkoutSessionRepositoryTests {
         let (_, sessions, _) = makeRepositories()
         let found = sessions.findSession(id: UUID(), healthKitWorkoutId: UUID())
         #expect(found == nil)
+    }
+
+    @Test
+    func lastCompletedStartDatesReturnsTheNewestCompletedSessionPerRoutine() throws {
+        let (_, sessions, routines) = makeRepositories()
+        let push = Routine(name: "Push Day")
+        let pull = Routine(name: "Pull Day")
+        routines.insert(push)
+        routines.insert(pull)
+
+        let older = WorkoutSession(routine: push)
+        older.startTime = Date(timeIntervalSince1970: 1_000)
+        older.endTime = Date(timeIntervalSince1970: 2_000)
+
+        let newest = WorkoutSession(routine: push)
+        newest.startTime = Date(timeIntervalSince1970: 5_000)
+        newest.endTime = Date(timeIntervalSince1970: 6_000)
+
+        let otherRoutine = WorkoutSession(routine: pull)
+        otherRoutine.startTime = Date(timeIntervalSince1970: 3_000)
+        otherRoutine.endTime = Date(timeIntervalSince1970: 4_000)
+
+        for session in [older, newest, otherRoutine] { sessions.insert(session) }
+        try sessions.save()
+
+        let dates = sessions.lastCompletedStartDates(forRoutineIds: [push.id, pull.id])
+        #expect(dates[push.id] == newest.startTime)
+        #expect(dates[pull.id] == otherRoutine.startTime)
+    }
+
+    @Test
+    func lastCompletedStartDatesIgnoresSessionsWithNoRoutine() throws {
+        // Orphaned history is a first-class case: a session whose routine was
+        // deleted keeps its denormalized copy but loses the relationship. It must
+        // not be attributed to any routine.
+        let (_, sessions, routines) = makeRepositories()
+        let routine = Routine(name: "Push Day")
+        routines.insert(routine)
+
+        let orphaned = WorkoutSession(routine: nil)
+        orphaned.startTime = Date(timeIntervalSince1970: 9_000)
+        orphaned.endTime = Date(timeIntervalSince1970: 9_500)
+
+        let attributed = WorkoutSession(routine: routine)
+        attributed.startTime = Date(timeIntervalSince1970: 1_000)
+        attributed.endTime = Date(timeIntervalSince1970: 2_000)
+
+        sessions.insert(orphaned)
+        sessions.insert(attributed)
+        try sessions.save()
+
+        let dates = sessions.lastCompletedStartDates(forRoutineIds: [routine.id])
+        #expect(dates[routine.id] == attributed.startTime)
+        #expect(dates.count == 1)
+    }
+
+    @Test
+    func lastCompletedStartDatesIgnoresInProgressSessionsAndUnaskedRoutines() throws {
+        let (_, sessions, routines) = makeRepositories()
+        let push = Routine(name: "Push Day")
+        let untrained = Routine(name: "Leg Day")
+        let notAskedAbout = Routine(name: "Pull Day")
+        routines.insert(push)
+        routines.insert(untrained)
+        routines.insert(notAskedAbout)
+
+        // Newer than the completed one, but still running — must not win.
+        let inProgress = WorkoutSession(routine: push)
+        inProgress.startTime = Date(timeIntervalSince1970: 9_000)
+        inProgress.endTime = nil
+
+        let completed = WorkoutSession(routine: push)
+        completed.startTime = Date(timeIntervalSince1970: 1_000)
+        completed.endTime = Date(timeIntervalSince1970: 2_000)
+
+        let excluded = WorkoutSession(routine: notAskedAbout)
+        excluded.startTime = Date(timeIntervalSince1970: 8_000)
+        excluded.endTime = Date(timeIntervalSince1970: 8_500)
+
+        for session in [inProgress, completed, excluded] { sessions.insert(session) }
+        try sessions.save()
+
+        let dates = sessions.lastCompletedStartDates(
+            forRoutineIds: [push.id, untrained.id]
+        )
+        #expect(dates[push.id] == completed.startTime)
+        // A routine that was never completed simply has no entry.
+        #expect(dates[untrained.id] == nil)
+        // Routines outside the requested set are never queried.
+        #expect(dates[notAskedAbout.id] == nil)
+        #expect(dates.count == 1)
     }
 
     @Test

@@ -174,6 +174,137 @@ struct FortschrittAggregatorTests {
         #expect(row.chartsAssistance == false)
     }
 
+    /// Every session snapshotted: the series stays in effective load across workouts,
+    /// and a *rising* effective weight is a gain like any resistance exercise.
+    @Test
+    func fullySnapshottedAssistedSeriesStaysInEffectiveLoad() throws {
+        let context = ModelContext(InMemoryModelContainer.make())
+        let pullUp = Exercise(name: "Assisted Pull-Up", loadBehavior: .counterweightAssistance)
+        context.insert(pullUp)
+
+        for (index, assistance) in [30.0, 20.0].enumerated() {
+            let session = makeSession(
+                startTime: Date(timeIntervalSince1970: Double(1_000 * (index + 1))),
+                context: context
+            )
+            session.bodyWeightKg = 80
+            addExercise(pullUp, order: 0, sets: [(assistance, 5, true)], to: session, context: context)
+        }
+        try context.save()
+
+        let row = try #require(try build(context).first)
+
+        #expect(row.chartsAssistance == false)
+        // 80 − 30 = 50 kg, then 80 − 20 = 60 kg of effective load.
+        #expect(row.sparkline == [50, 60])
+        let trend = try #require(row.trendPct)
+        #expect(abs(trend - 20) < 0.001)
+    }
+
+    /// **Ticket 08.** One workout carries a body-mass snapshot and the next does not.
+    /// The series must pick a single value space — raw assistance, the conservative one —
+    /// rather than putting an estimated 50 kg of physical load and a 20 kg machine
+    /// number into the same sparkline and inverting both against one baseline.
+    @Test
+    func partlySnapshottedAssistedSeriesValuesEverySessionAsRawAssistance() throws {
+        let context = ModelContext(InMemoryModelContainer.make())
+        let pullUp = Exercise(name: "Assisted Pull-Up", loadBehavior: .counterweightAssistance)
+        context.insert(pullUp)
+
+        let snapshotted = makeSession(startTime: Date(timeIntervalSince1970: 1_000), context: context)
+        snapshotted.bodyWeightKg = 80
+        addExercise(pullUp, order: 0, sets: [(30, 5, true)], to: snapshotted, context: context)
+        let bare = makeSession(startTime: Date(timeIntervalSince1970: 2_000), context: context)
+        addExercise(pullUp, order: 0, sets: [(20, 5, true)], to: bare, context: context)
+        try context.save()
+
+        let row = try #require(try build(context).first)
+
+        #expect(row.chartsAssistance)
+        // Raw assistance 30 → 20, inverted against the 30 kg baseline. The 1RM-scale
+        // 50 kg (80 − 30) that the snapshotted session *could* have produced must not
+        // appear anywhere in the series.
+        #expect(row.sparkline == [0, 10])
+        #expect(row.sparkline.allSatisfy { $0 < 50 })
+        let trend = try #require(row.trendPct)
+        // 30 kg → 20 kg of assistance is a 33.3% improvement. Mixing the two spaces
+        // reported 60% here, computed from (50 − 20) / 50.
+        #expect(abs(trend - (100.0 / 3.0)) < 0.001)
+    }
+
+    /// The same mixed history, with the exercise trained twice in the snapshotted
+    /// workout: the second block is its own usage, the headline usage still takes one
+    /// entry per workout, and the resolved value space applies to all of them.
+    @Test
+    func partlySnapshottedSeriesKeepsOneEntryPerWorkoutWhenTrainedTwice() throws {
+        let context = ModelContext(InMemoryModelContainer.make())
+        let pullUp = Exercise(name: "Assisted Pull-Up", loadBehavior: .counterweightAssistance)
+        context.insert(pullUp)
+
+        let snapshotted = makeSession(startTime: Date(timeIntervalSince1970: 1_000), context: context)
+        snapshotted.bodyWeightKg = 80
+        addExercise(pullUp, order: 0, sets: [(30, 5, true)], to: snapshotted, context: context)
+        addExercise(pullUp, order: 1, sets: [(25, 8, true)], to: snapshotted, context: context)
+        let bare = makeSession(startTime: Date(timeIntervalSince1970: 2_000), context: context)
+        addExercise(pullUp, order: 0, sets: [(20, 5, true)], to: bare, context: context)
+        try context.save()
+
+        let row = try #require(try build(context).first)
+
+        #expect(row.workoutCount == 2)
+        #expect(row.usageCount == 2)
+        // The headline usage is the first block, the only one trained in both workouts.
+        #expect(row.sparkline == [0, 10])
+        #expect(row.chartsAssistance)
+    }
+
+    /// Tapping the row must not change the unit under the user: the list and the detail
+    /// screen's all-time window resolve the same value space for the same history.
+    @Test
+    func partlySnapshottedRowMatchesTheDetailScreensValueSpace() throws {
+        let context = ModelContext(InMemoryModelContainer.make())
+        let pullUp = Exercise(name: "Assisted Pull-Up", loadBehavior: .counterweightAssistance)
+        context.insert(pullUp)
+
+        let snapshotted = makeSession(startTime: Date(timeIntervalSince1970: 1_000), context: context)
+        snapshotted.bodyWeightKg = 80
+        addExercise(pullUp, order: 0, sets: [(30, 5, true)], to: snapshotted, context: context)
+        let bare = makeSession(startTime: Date(timeIntervalSince1970: 2_000), context: context)
+        addExercise(pullUp, order: 0, sets: [(20, 5, true)], to: bare, context: context)
+        try context.save()
+
+        let row = try #require(try build(context).first)
+        let detail = detailSnapshot(pullUp, context: context, requesting: nil).data
+
+        #expect(row.chartsAssistance == !detail.usesEffectiveLoad)
+        let charted = detail.dataPoints.map(\.maxWeight)
+        let baseline = try #require(charted.max())
+        #expect(row.sparkline == charted.map { baseline - $0 })
+    }
+
+    /// A resistance exercise never reaches the value-space decision: a workout without a
+    /// body-mass snapshot is the normal case there and must stay a plain max weight.
+    @Test
+    func resistanceSeriesIsUnaffectedByMissingBodyWeightSnapshots() throws {
+        let context = ModelContext(InMemoryModelContainer.make())
+        let press = Exercise(name: "Bench Press")
+        context.insert(press)
+
+        let first = makeSession(startTime: Date(timeIntervalSince1970: 1_000), context: context)
+        first.bodyWeightKg = 80
+        addExercise(press, order: 0, sets: [(60, 5, true)], to: first, context: context)
+        let second = makeSession(startTime: Date(timeIntervalSince1970: 2_000), context: context)
+        addExercise(press, order: 0, sets: [(70, 5, true)], to: second, context: context)
+        try context.save()
+
+        let row = try #require(try build(context).first)
+
+        #expect(row.chartsAssistance == false)
+        #expect(row.sparkline == [60, 70])
+        let trend = try #require(row.trendPct)
+        #expect(abs(trend - (100.0 / 6.0)) < 0.001)
+    }
+
     // MARK: - Several usages behind one row
 
     /// The row's sparkline and trend describe the **most recently trained** usage rather
@@ -486,6 +617,87 @@ struct FortschrittAggregatorTests {
         #expect(row.sparkline == [20, 20, 20])
         #expect(row.trendPct == 0)
         #expect(row.chartsAssistance == false)
+    }
+
+    // MARK: - Same-named exercises (ticket 06)
+
+    /// The reporter's library: two genuinely different exercises that share a name. Both
+    /// rows must name their equipment, or the user reads two identical rows carrying
+    /// different numbers.
+    @Test
+    func twoLibraryExercisesSharingANameBothCarryTheirEquipment() throws {
+        let context = ModelContext(InMemoryModelContainer.make())
+        let barbell = Exercise(name: "Biceps Curls", equipmentType: .barbell)
+        // Case-insensitively the same name — the collision must not depend on casing.
+        let dumbbell = Exercise(name: "biceps curls", equipmentType: .dumbbell)
+        context.insert(barbell)
+        context.insert(dumbbell)
+
+        let session = makeSession(startTime: Date(timeIntervalSince1970: 1_000), context: context)
+        addExercise(barbell, order: 0, sets: [(40, 8, true)], to: session, context: context)
+        addExercise(dumbbell, order: 1, sets: [(14, 12, true)], to: session, context: context)
+        try context.save()
+
+        let rows = try build(context)
+
+        #expect(rows.count == 2)
+        let barbellRow = try #require(rows.first { $0.exerciseId == barbell.id })
+        let dumbbellRow = try #require(rows.first { $0.exerciseId == dumbbell.id })
+        #expect(barbellRow.equipmentQualifier == .barbell)
+        #expect(dumbbellRow.equipmentQualifier == .dumbbell)
+    }
+
+    /// The overwhelmingly common case: a unique name gets no qualifier, so the list is
+    /// not cluttered with a redundant one.
+    @Test
+    func aUniquelyNamedExerciseCarriesNoQualifier() throws {
+        let context = ModelContext(InMemoryModelContainer.make())
+        let curls = Exercise(name: "Biceps Curls", equipmentType: .barbell)
+        let press = Exercise(name: "Bench Press", equipmentType: .barbell)
+        context.insert(curls)
+        context.insert(press)
+
+        let session = makeSession(startTime: Date(timeIntervalSince1970: 1_000), context: context)
+        addExercise(curls, order: 0, sets: [(40, 8, true)], to: session, context: context)
+        try context.save()
+
+        let row = try #require(try build(context).first)
+
+        #expect(row.exerciseId == curls.id)
+        #expect(row.equipmentQualifier == nil)
+    }
+
+    /// Three entries under one name: every one of them is qualified, not just the two
+    /// that a pairwise check would find.
+    @Test
+    func threeExercisesSharingANameAreAllQualified() throws {
+        let context = ModelContext(InMemoryModelContainer.make())
+        let variants: [(Exercise, Double)] = [
+            (Exercise(name: "Biceps Curls", equipmentType: .barbell), 40),
+            (Exercise(name: "Biceps Curls", equipmentType: .dumbbell), 14),
+            (Exercise(name: "Biceps Curls", equipmentType: .cable), 25)
+        ]
+        for (exercise, _) in variants { context.insert(exercise) }
+
+        let session = makeSession(startTime: Date(timeIntervalSince1970: 1_000), context: context)
+        for (index, variant) in variants.enumerated() {
+            addExercise(
+                variant.0,
+                order: index,
+                sets: [(variant.1, 8, true)],
+                to: session,
+                context: context
+            )
+        }
+        try context.save()
+
+        let rows = try build(context)
+
+        #expect(rows.count == 3)
+        #expect(rows.allSatisfy { $0.equipmentQualifier != nil })
+        #expect(
+            Set(rows.compactMap(\.equipmentQualifier)) == Set([.barbell, .dumbbell, .cable])
+        )
     }
 
     // MARK: - Fixtures

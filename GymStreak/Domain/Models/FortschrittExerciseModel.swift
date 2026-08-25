@@ -35,8 +35,17 @@ struct FortschrittExerciseModel: Identifiable, Hashable, Sendable {
     /// exercise whose history has no body-mass snapshot to turn the entered kilograms into
     /// an effective weight. The series is inverted (less assistance reads as progress), so
     /// the row must name it as assistance — the same rule
-    /// `ExerciseProgressViewModel.selectedMetricTitle` applies on the detail screen.
+    /// `ExerciseProgressViewModel.title(for:)` applies on the detail screen.
     let chartsAssistance: Bool
+    /// The equipment to print beside the name, set **only** when another live exercise
+    /// carries the same display name (case-insensitively). Two library entries both
+    /// called "Biceps Curls" are otherwise two identical-looking rows with different
+    /// numbers, and the user cannot tell the barbell one from the dumbbell one. A
+    /// uniquely named exercise keeps `nil` so the common case stays uncluttered.
+    ///
+    /// The collision is resolved once per list build in `FortschrittAggregator`, never
+    /// per row — see `docs/progress-charts.md`.
+    let equipmentQualifier: EquipmentType?
 
     init(
         id: String,
@@ -50,7 +59,8 @@ struct FortschrittExerciseModel: Identifiable, Hashable, Sendable {
         sparkline: [Double],
         usageCount: Int = 1,
         headlineUsage: ExerciseUsagePickerItem? = nil,
-        chartsAssistance: Bool = false
+        chartsAssistance: Bool = false,
+        equipmentQualifier: EquipmentType? = nil
     ) {
         self.id = id
         self.name = name
@@ -64,5 +74,6 @@ struct FortschrittExerciseModel: Identifiable, Hashable, Sendable {
         self.usageCount = usageCount
         self.headlineUsage = headlineUsage
         self.chartsAssistance = chartsAssistance
+        self.equipmentQualifier = equipmentQualifier
     }
 }
