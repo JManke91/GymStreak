@@ -1,0 +1,3 @@
+- Die Einstellungen zeigen jetzt an, wenn die iCloud-Synchronisierung wirklich fehlschlägt, statt still „Wartet“ anzuzeigen
+- Du wirst jetzt informiert, wenn eine Routine-Änderung nicht gespeichert werden konnte, statt dass sie unbemerkt verloren geht
+- Behoben: Mit eingerichtetem VPN konnte der iCloud-Status offline auf „Lädt …“ hängen bleiben, statt „Wartet“ anzuzeigen

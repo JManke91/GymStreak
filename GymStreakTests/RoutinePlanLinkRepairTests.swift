@@ -205,6 +205,29 @@ struct RoutinePlanLinkRepairGatingTests {
         #expect(fixture.defaults.integer(forKey: Self.flagKey) == 0)
     }
 
+    /// `.failing` is grouped with `.off` on purpose: with mirroring broken there
+    /// is nothing to re-export and nothing will import later either, so churning
+    /// the store would only risk the rows it is meant to protect.
+    @Test("With sync broken nothing is touched and the flag stays clear")
+    func syncFailingDoesNothing() async throws {
+        let fixture = try makeFixture(
+            sync: StubCloudSyncStatus(
+                initial: CloudSyncStatus(state: .failing, lastSuccessfulSync: nil)
+            )
+        )
+        let routine = Routine(name: "Push")
+        fixture.context.insert(routine)
+        let schedule = RoutineSchedule(type: .everyNDays, intervalDays: 7)
+        schedule.routine = routine
+        fixture.context.insert(schedule)
+        try fixture.context.save()
+
+        await fixture.repair.runIfNeeded()
+
+        #expect(try #require(routine.schedule) === schedule)
+        #expect(fixture.defaults.integer(forKey: Self.flagKey) == 0)
+    }
+
     // The gate must be the *state*, not `lastSuccessfulSync`: the monitor restores
     // that timestamp from UserDefaults at launch, so on any device that has ever
     // synced it is non-nil before this session transfers anything. Gating on it

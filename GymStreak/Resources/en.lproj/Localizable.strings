@@ -21,9 +21,11 @@
 "settings.icloud.row.subtitle.last" = "Last: %@";
 "settings.icloud.row.subtitle.never" = "Not synced yet";
 "settings.icloud.row.subtitle.off" = "Not synced";
+"settings.icloud.row.subtitle.failing" = "Changes aren't reaching iCloud";
 "settings.icloud.status.up_to_date" = "Up to date";
 "settings.icloud.status.syncing" = "Syncing…";
 "settings.icloud.status.waiting" = "Waiting";
+"settings.icloud.status.failing" = "Error";
 "settings.icloud.status.off" = "Off";
 "settings.section.support" = "Support";
 "settings.section.support.footer" = "Ratings help other people discover Gym Streak.";
@@ -108,6 +110,8 @@
 "routine.edit" = "Edit Routine";
 "routine.delete" = "Delete Routine";
 "routine.delete.confirm" = "Are you sure you want to delete this routine?";
+"routine.save_failed.title" = "Changes couldn't be saved";
+"routine.save_failed.message" = "Your last change may not have been kept. Please try again.";
 "routine.empty.title" = "No Exercises";
 "routine.empty.description" = "Add exercises to build your routine";
 "routine.sets_count" = "%d sets";

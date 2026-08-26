@@ -153,9 +153,17 @@ final class AppDependencies: ObservableObject {
 
     /// - Parameter isCloudKitStoreEnabled: whether the app is running on the
     ///   CloudKit-backed store. `false` when `GymStreakApp` had to fall back to a
-    ///   local-only store (or in ephemeral UI-test runs), which the sync status
-    ///   must report as "off".
-    init(modelContext: ModelContext, isCloudKitStoreEnabled: Bool) {
+    ///   local-only store, and in ephemeral UI-test runs, which the sync status
+    ///   must never report as "up to date".
+    /// - Parameter cloudKitStoreFailure: why the CloudKit store could not be
+    ///   built, when that is what forced the fallback. Reported as `.failing`
+    ///   rather than `.off` — a broken store is not a store that is local on
+    ///   purpose. `nil` in UI-test runs and whenever CloudKit is fine.
+    init(
+        modelContext: ModelContext,
+        isCloudKitStoreEnabled: Bool,
+        cloudKitStoreFailure: String? = nil
+    ) {
         self.modelContainer = modelContext.container
         self.routineRepository = SwiftDataRoutineRepository(modelContext: modelContext)
         self.exerciseRepository = SwiftDataExerciseRepository(modelContext: modelContext)
@@ -178,6 +186,7 @@ final class AppDependencies: ObservableObject {
         self.restTimerLiveActivity = ActivityKitRestTimerPresenter()
         self.cloudSyncStatus = CloudKitSyncStatusMonitor(
             isCloudKitStoreEnabled: isCloudKitStoreEnabled,
+            storeFailureDescription: cloudKitStoreFailure,
             containerIdentifier: GymStreakSchema.cloudKitContainerIdentifier
         )
         self.deviceDiagnostics = SystemDeviceDiagnosticsProvider()

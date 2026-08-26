@@ -328,5 +328,13 @@ struct ProPaywallView: View {
         )
     }
 
-    private static let logger = Logger(subsystem: "app.gymstreak.pro", category: "Paywall")
+    /// `nonisolated` for the same reason `log(_:during:)` above is: `View`
+    /// conformance makes this type `@MainActor`, which isolated this property
+    /// out of reach of that nonisolated function and left a standing build
+    /// warning. Safe as the checked escape hatch — `Logger` is `Sendable` and a
+    /// `static let` is immutable.
+    nonisolated private static let logger = Logger(
+        subsystem: "app.gymstreak.pro",
+        category: "Paywall"
+    )
 }

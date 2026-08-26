@@ -68,9 +68,9 @@ final class DefaultContentSeeder {
     /// device of an existing user starts empty and fills in from CloudKit moments
     /// later, and seeding into that window would upload 96 rows just to delete
     /// them again on the next dedup pass. So the recovery waits for CloudKit to
-    /// declare itself: either it can never deliver (`.off` — signed out, or the
-    /// local-only store fallback), or a transfer has completed and the store is
-    /// *still* empty. Anything the sync brings down cancels the recovery.
+    /// declare itself: either it can never deliver (`.off` — signed out; or
+    /// `.failing` — the local-only store fallback, or an export CloudKit keeps
+    /// rejecting), or a transfer has completed and the store is *still* empty. Anything the sync brings down cancels the recovery.
     ///
     /// - Returns: `true` when the catalog was actually re-seeded.
     @discardableResult
@@ -81,7 +81,10 @@ final class DefaultContentSeeder {
         for await status in cloudSyncStatus.statusUpdates() {
             guard isStoreEmpty else { return false }
             switch status.state {
-            case .off:
+            case .off, .failing:
+                // Nothing is going to arrive: signed out, the local-only
+                // fallback, or a rejected export. Re-seeding locally is the
+                // right move for the same reason it is under `.off`.
                 return seedStrandedLibrary()
             case .upToDate, .syncing, .waiting:
                 // `lastSuccessfulSync` is nil until a transfer has finished, which

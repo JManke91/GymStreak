@@ -1,4 +1,5 @@
 import Foundation
+import OSLog
 import SwiftUI
 
 /// Everything the routines list needs to draw the §8 placement D cap nudge,
@@ -18,6 +19,14 @@ class RoutinesViewModel: ObservableObject {
     @Published var selectedRoutine: Routine?
     /// Most recent completed-session start date per routine id (nil = never trained).
     @Published var lastPerformedByRoutine: [UUID: Date] = [:]
+    /// Set when persisting a routine change threw. The list presents it as an
+    /// alert: an edit that never reached the store looks identical to a saved
+    /// one on screen, which is the silence this replaces.
+    @Published var didFailToSave = false
+
+    /// Same subsystem as the mirroring log, so one Console filter shows both a
+    /// failed local save and a failed export for the same launch.
+    private static let logger = Logger(subsystem: LogSubsystem.sync, category: "RoutineSave")
 
     private let routineRepository: RoutineRepository
     private let workoutSessionRepository: WorkoutSessionRepository
@@ -987,7 +996,13 @@ class RoutinesViewModel: ObservableObject {
             try routineRepository.save()
             NotificationCenter.default.post(name: .historySourceDataDidChange, object: nil)
         } catch {
-            print("Error saving context: \(error)")
+            // Logged as well as shown: the alert tells the user their change may
+            // be gone, the log is what makes the failure diagnosable afterwards
+            // on a TestFlight build.
+            Self.logger.error(
+                "saving routine changes failed: \(String(describing: error), privacy: .public)"
+            )
+            didFailToSave = true
         }
     }
 }

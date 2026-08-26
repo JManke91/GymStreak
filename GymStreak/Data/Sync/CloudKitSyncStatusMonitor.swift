@@ -4,7 +4,7 @@
 //
 //  The only place that knows how iCloud sync status is derived. Combines the
 //  CloudKit account status, the mirroring events of the SwiftData-created
-//  NSPersistentCloudKitContainer and network reachability into the four states
+//  NSPersistentCloudKitContainer and network reachability into the five states
 //  the Settings row shows. See docs/settings-tab.md.
 //
 
@@ -41,10 +41,15 @@ final class CloudKitSyncStatusMonitor: CloudSyncStatusProviding {
         }
     }
 
-    /// `false` when the app fell back to a local-only store because the CloudKit
-    /// container could not be built — nothing will ever sync, so the row must
-    /// report `.off` rather than a stale "up to date".
+    /// `false` when the app is not on the CloudKit-backed store — either the
+    /// deliberate local-only store of an ephemeral UI-test run, or the fallback
+    /// taken because the container could not be built. Nothing will ever sync,
+    /// so the row must not show a stale "up to date".
     private let isCloudKitStoreEnabled: Bool
+    /// Set when the local-only store was a *failure* rather than a choice: the
+    /// reason `ModelContainer(cloudKitDatabase:.private)` threw. Separates the
+    /// broken store (`.failing`) from a store that is local on purpose (`.off`).
+    private let storeFailureDescription: String?
     private let defaults: UserDefaults
     private let container: CKContainer?
 
@@ -55,6 +60,9 @@ final class CloudKitSyncStatusMonitor: CloudSyncStatusProviding {
     private var eventsInFlight: Set<UUID> = []
     /// Set when a finished transfer failed for a recoverable reason (queued work).
     private var hasQueuedChanges = false
+    /// Set when an export failed for a reason a retry cannot fix. Cleared by the
+    /// next successful export, so a fixed schema heals the row without a relaunch.
+    private var hasPersistentExportFailure = false
     private var hasNetwork = true
     private var lastSuccessfulExport: Date?
     private var lastSuccessfulImport: Date?
@@ -65,10 +73,12 @@ final class CloudKitSyncStatusMonitor: CloudSyncStatusProviding {
 
     init(
         isCloudKitStoreEnabled: Bool,
+        storeFailureDescription: String? = nil,
         containerIdentifier: String,
         defaults: UserDefaults = .standard
     ) {
         self.isCloudKitStoreEnabled = isCloudKitStoreEnabled
+        self.storeFailureDescription = storeFailureDescription
         self.defaults = defaults
         self.container = isCloudKitStoreEnabled
             ? CKContainer(identifier: containerIdentifier)
@@ -79,7 +89,14 @@ final class CloudKitSyncStatusMonitor: CloudSyncStatusProviding {
             state: isCloudKitStoreEnabled ? .upToDate : .off,
             lastSuccessfulSync: nil
         )
-        self.currentStatus = makeStatus()
+        self.currentStatus = CloudSyncStatus(
+            state: makeState(),
+            lastSuccessfulSync: lastSuccessfulSync
+        )
+
+        if let storeFailureDescription {
+            Self.logStoreFallback(storeFailureDescription)
+        }
 
         guard isCloudKitStoreEnabled else { return }
         observeMirroringEvents()
@@ -157,10 +174,8 @@ final class CloudKitSyncStatusMonitor: CloudSyncStatusProviding {
     private func observeNetworkPath() {
         let monitor = NWPathMonitor()
         monitor.pathUpdateHandler = { [weak self] path in
-            let isSatisfied = path.status == .satisfied
-            #if DEBUG
-            print("☁️ [CloudKitSyncStatusMonitor] path status=\(path.status) satisfied=\(isSatisfied) expensive=\(path.isExpensive) constrained=\(path.isConstrained) interfaces=\(path.availableInterfaces.map { "\($0.type)" })")
-            #endif
+            let isSatisfied = Self.isOnline(path)
+            Self.logNetworkPath(path, isSatisfied: isSatisfied)
             Task { @MainActor in
                 guard let self, self.hasNetwork != isSatisfied else { return }
                 self.hasNetwork = isSatisfied
@@ -180,12 +195,7 @@ final class CloudKitSyncStatusMonitor: CloudSyncStatusProviding {
     // MARK: - State machine
 
     private func handle(_ event: SyncEventSummary) {
-        #if DEBUG
-        // Whether SwiftData's container emits these events at all can only be
-        // confirmed on a device signed into iCloud — this log is how that check
-        // is made (see docs/settings-tab.md §"Verification record").
-        print("☁️ [CloudKitSyncStatusMonitor] event type=\(event.type.rawValue) ended=\(event.endDate != nil) succeeded=\(event.succeeded) error=\(event.errorDescription ?? "none")")
-        #endif
+        Self.log(event)
 
         guard let endDate = event.endDate else {
             eventsInFlight.insert(event.identifier)
@@ -199,8 +209,10 @@ final class CloudKitSyncStatusMonitor: CloudSyncStatusProviding {
             case .export:
                 lastSuccessfulExport = endDate
                 defaults.set(endDate, forKey: DefaultsKey.lastExport)
-                // A completed export means nothing is left queued.
+                // A completed export means nothing is left queued, and whatever
+                // was rejected before evidently is not being rejected now.
                 hasQueuedChanges = false
+                hasPersistentExportFailure = false
             case .import:
                 lastSuccessfulImport = endDate
                 defaults.set(endDate, forKey: DefaultsKey.lastImport)
@@ -211,7 +223,11 @@ final class CloudKitSyncStatusMonitor: CloudSyncStatusProviding {
             }
         } else {
             if event.type == .export {
-                hasQueuedChanges = true
+                if event.isPersistentFailure {
+                    hasPersistentExportFailure = true
+                } else {
+                    hasQueuedChanges = true
+                }
             }
             if event.isAccountProblem {
                 // An authentication/permission failure may mean the account went
@@ -226,21 +242,24 @@ final class CloudKitSyncStatusMonitor: CloudSyncStatusProviding {
     }
 
     private func publish() {
-        #if DEBUG
-        // Prints the whole input vector, not just the result: the airplane-mode
-        // regression (row returns to "Aktuell" while offline) can only come from
-        // `hasNetwork` or `hasQueuedChanges` being wrong, and this is what tells
-        // the two apart on a device. See docs/settings-tab.md §7.
-        print("☁️ [CloudKitSyncStatusMonitor] state=\(makeState()) hasNetwork=\(hasNetwork) inFlight=\(eventsInFlight.count) queued=\(hasQueuedChanges) account=\(accountStatus.map(String.init(describing:)) ?? "unqueried")")
-        #endif
-        currentStatus = makeStatus()
-    }
-
-    private func makeStatus() -> CloudSyncStatus {
-        CloudSyncStatus(state: makeState(), lastSuccessfulSync: lastSuccessfulSync)
+        // Computed once and reused, so logging the input vector costs nothing
+        // beyond the log call itself.
+        let state = makeState()
+        Self.logStateVector(
+            state: state,
+            hasNetwork: hasNetwork,
+            inFlight: eventsInFlight.count,
+            queued: hasQueuedChanges,
+            persistentFailure: hasPersistentExportFailure,
+            account: accountStatus
+        )
+        currentStatus = CloudSyncStatus(state: state, lastSuccessfulSync: lastSuccessfulSync)
     }
 
     private func makeState() -> CloudSyncState {
+        // A store that failed to build outranks everything: nothing this monitor
+        // could observe afterwards would make sync work.
+        if storeFailureDescription != nil { return .failing }
         guard isCloudKitStoreEnabled else { return .off }
         // `nil` = not yet queried; every known non-available status means the
         // user's data is not going anywhere.
@@ -251,6 +270,9 @@ final class CloudKitSyncStatusMonitor: CloudSyncStatusProviding {
         // (measured on device: `state=syncing hasNetwork=false inFlight=1`).
         // A transfer that cannot reach the network is queued, not progressing.
         if !hasNetwork { return .waiting }
+        // Ahead of `eventsInFlight`: CloudKit keeps retrying a rejected export,
+        // so a permanent failure otherwise hides behind a perpetual "Syncing…".
+        if hasPersistentExportFailure { return .failing }
         if !eventsInFlight.isEmpty { return .syncing }
         if hasQueuedChanges { return .waiting }
         return .upToDate

@@ -86,6 +86,25 @@ struct DefaultContentSeederRecoveryTests {
         #expect(try exerciseCount(context) == SeedExerciseCatalog.entries.count)
     }
 
+    /// `.failing` is grouped with `.off` on purpose: a broken store or a rejected
+    /// export means nothing is arriving, so an empty library must be re-seeded
+    /// rather than waited on forever.
+    @Test
+    func recoversWhenSyncIsBroken() async throws {
+        let status = StubCloudSyncStatus(
+            initial: CloudSyncStatus(state: .failing, lastSuccessfulSync: nil)
+        )
+        let (context, seeder, _) = makeSeeder(
+            storedVersion: SeedExerciseCatalog.currentVersion,
+            status: status
+        )
+
+        let didSeed = await seeder.recoverStrandedLibraryIfNeeded()
+
+        #expect(didSeed)
+        #expect(try exerciseCount(context) == SeedExerciseCatalog.entries.count)
+    }
+
     @Test
     func recoversOnceASyncCompletedAndTheStoreIsStillEmpty() async throws {
         let status = StubCloudSyncStatus()

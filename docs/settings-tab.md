@@ -61,10 +61,17 @@ section/row blueprint documented here.
 | `Presentation/Views/Settings/Components/ICloudSyncRowView.swift` | iCloud row: subscribes to the status stream, maps state → icon/tint/label |
 | `Domain/Interfaces/CloudSyncStatusProviding.swift` | `CloudSyncState`, `CloudSyncStatus`, the provider protocol |
 | `Data/Sync/CloudKitSyncStatusMonitor.swift` | The status source (CloudKit account status + mirroring events + network path) |
+| `Data/Sync/CloudKitSyncStatusMonitor+Logging.swift` | Where a sync failure gets recorded: the OSLog `.error` entries and the DEBUG event/state prints (§4.2a) |
+| `Data/Sync/CloudKitSyncStatusMonitor+NetworkPath.swift` | `isOnline` — the "actually online" predicate two device measurements produced |
+| `GymStreakTests/CloudSyncNetworkPathTests.swift` | Pins both VPN cases, plus loopback, Ethernet and the unsatisfied edge |
+| `Data/Sync/SyncEventSummary.swift` | The `Sendable` projection of a mirroring event, including the transient-vs-persistent verdict |
+| `GymStreakTests/SyncEventSummaryClassificationTests.swift` | Which `CKError`s count as "a retry cannot fix this" |
+| `Extensions/LogSubsystem.swift` | The shared OSLog subsystem string, so Data and Presentation log under one filter |
+| `Presentation/Views/Routines/RoutineSaveFailureAlert.swift` | The `routineSaveFailureAlert(_:)` modifier: one application, on the `NavigationStack` |
 | `App/AppDependencies.swift` | Owns the monitor (`cloudSyncStatus: CloudSyncStatusProviding`) and the diagnostics provider (`deviceDiagnostics: any DeviceDiagnosticsProviding`) |
 | `GymStreakTests/SupportMailComposerTests.swift` | URL-builder contract: recipient, subject, body layout, percent-encoding |
 | `GymStreakTests/SystemDeviceDiagnosticsProviderTests.swift` | Metadata gateway: bundle fields, OS version shape, and the simulator model-identifier trap |
-| `App/GymStreakApp.swift` | `Store` struct: container **plus** whether it is CloudKit-backed |
+| `App/GymStreakApp.swift` | `Store` struct: container, whether it is CloudKit-backed, and why it is not when the fallback was forced |
 | `App/ContentView.swift` | Tab wiring (`SettingsRootView` + `tab.settings` label) |
 | `Presentation/Views/History/Components/HistoryHeaderView.swift` | Gear button removed |
 | `Presentation/Views/History/HistoryView.swift` | `AICoachSettingsDestination` + its `navigationDestination` removed |
@@ -121,14 +128,22 @@ wrapper, no chevron and no tap target.
 
 ## 4. iCloud sync status
 
-### 4.1 The four states
+### 4.1 The five states
 
 | State | Colour (design `toneColor`) | Icon | Label EN/DE | Subtitle |
 | --- | --- | --- | --- | --- |
 | `.upToDate` | accent green (`DesignSystem.Colors.tint`) | `checkmark.icloud` | Up to date / Aktuell | `Last: <timestamp>` |
 | `.syncing` | blue `#5AB4FF` | `icloud` + spinner instead of the dot | Syncing… / Lädt … | `Last: <timestamp>` |
 | `.waiting` | amber `#FFC53D` | `icloud.slash` | Waiting / Wartet | `Last: <timestamp>` |
+| `.failing` | red `#FF6B6B` | `exclamationmark.icloud` | Error / Fehler | Changes aren't reaching iCloud / Änderungen erreichen iCloud nicht |
 | `.off` | red `#FF6B6B` | `exclamationmark.triangle` | Off / Aus | Not synced / Nicht synchronisiert |
+
+**`.failing` vs `.off` vs `.waiting`** — the distinction is what the *user* can do
+about it, not what CloudKit reported. `.off` is fixable by signing in; `.waiting` fixes
+itself when the network or CloudKit's own retry comes back; `.failing` will not heal on
+its own and means the data on this device is not leaving it. The subtitle says exactly
+that and never shows an error code — the code goes to the log (§4.2a), which is where it
+is useful.
 
 The timestamp uses a `static let DateFormatter` with `doesRelativeDateFormatting = true`
 (→ "Today at 14:32" / "Heute, 14:32"), hoisted out of `body` per the main-thread rules.
@@ -148,19 +163,27 @@ result through `AsyncStream`; there is no polling and no timer anywhere in the f
    finished event carries `succeeded` and `error`:
    - succeeded `.export`/`.import` → its `endDate` becomes the persisted last-success stamp,
      and a successful export clears the "queued" flag;
-   - a failed `.export` → sets the "queued changes" flag ⇒ `.waiting`;
+   - a failed `.export` → `SyncEventSummary.isPersistentFailure` decides between the
+     "queued changes" flag ⇒ `.waiting` and the "persistent export failure" flag ⇒
+     `.failing` (see §4.2a). The persistent flag is cleared by the next *successful*
+     export, so a repaired schema heals the row without a relaunch;
    - additionally, a failure carrying a `CKError` of `.notAuthenticated`,
      `.managedAccountRestricted` or `.permissionFailure` triggers a fresh
      `accountStatus()` query, which may then move the row to `.off`. The query is
      deliberate: writing a synthetic "signed out" straight into the state would pin the
      row to `.off` for the rest of the session after a transient permission failure,
      because nothing but `.CKAccountChanged` or a relaunch would ever clear it.
-3. **Network path** — `NWPathMonitor`. `path.status != .satisfied` ⇒ `.waiting` on its own,
+3. **Network path** — `NWPathMonitor()` filtered by `CloudKitSyncStatusMonitor.isOnline(_:)`. Not online ⇒ `.waiting` on its own,
    because a user who pulls the network expects the row to say so even when nothing happens
    to be queued. When the path comes back, the state recomputes immediately, and CloudKit's
    own retry produces a fresh successful export event ⇒ back to `.upToDate` without a restart.
 
-Precedence: `off` → **no network** → `syncing` → queued changes → `upToDate`.
+Precedence: **store failure** → `off` → **no network** → **persistent export failure** →
+`syncing` → queued changes → `upToDate`.
+
+The persistent export failure sits *ahead* of `eventsInFlight` deliberately: CloudKit keeps
+retrying a rejected export, so each retry opens a fresh in-flight event and the row would
+otherwise sit at "Lädt …" forever while nothing ever lands.
 
 **Why "no network" outranks `syncing`, and not the other way round** (device-measured bug,
 2026-08-12). CloudKit opens a mirroring event and then simply *never ends it* while the device
@@ -173,13 +196,110 @@ reach the network is queued, not progressing, so `!hasNetwork` is now checked be
 `eventsInFlight`. Note this is a genuinely different case from a *failed* export, which is what
 `hasQueuedChanges` covers — offline produces no event failure at all.
 
-**The local-only fallback counts as `.off`.** `GymStreakApp` silently falls back to a
-`cloudKitDatabase: .none` store when the CloudKit container cannot be built (and UI-test runs
-use an ephemeral store). That fact used to be invisible, so the app's store construction now
-returns a `GymStreakApp.Store` (container **plus** `isCloudKitEnabled`), which
-`AppDependencies` forwards to the monitor. With it `false`, the monitor reports `.off`
-permanently and registers no observers at all — otherwise the row would show a stale
-"up to date" for a store that never syncs.
+**A VPN silently defeated that fix, and `.other` is why** (device-measured, 2026-08-25). The
+ordering above only helps if `hasNetwork` actually goes false, and with a VPN configured it did
+not: a VPN's `utun` tunnel is classified as `NWInterface.InterfaceType.other`, it stays up in
+airplane mode, and a plain `NWPathMonitor()` therefore kept reporting `.satisfied` with
+`interfaces=["other", "other"]` after Wi-Fi and cellular had dropped out. `hasNetwork` stayed
+`true`, the offline branch never fired, and the never-ending in-flight import pinned the row to
+"Lädt …" for the whole outage — the exact symptom this section had already claimed to fix. The
+discriminator was decisive and takes seconds: **VPN on ⇒ stuck at "Lädt …"; VPN off ⇒ correct
+"Wartet" immediately.**
+
+**`prohibitedInterfaceTypes: [.other]` looked like the fix and is not** (device-measured,
+2026-08-26). It made airplane mode correct but broke the *online* case: with an always-on VPN the
+row read "Wartet" on a fully-connected device. That initializer asks "is there a route that
+**excludes** virtual interfaces" — and when the VPN routes everything through `utun`, there is
+none, so the path is genuinely `.unsatisfied` by that definition while the device is online. It
+answers a different question from the one we have.
+
+**The predicate, not the monitor, is what needed changing.** `CloudKitSyncStatusMonitor.isOnline`
+keeps the plain `NWPathMonitor()` and asks whether a *physical* interface is present:
+
+```swift
+status == .satisfied
+    && interfaceTypes.contains { $0 == .wifi || $0 == .cellular || $0 == .wiredEthernet }
+```
+
+An **allowlist**, not `!= .other`: `.loopback` is not `.other` and is not connectivity either, and
+a virtual interface type Apple adds later is then excluded by default rather than silently
+counting as real.
+
+The device log separates the cases cleanly, and both directions are pinned by
+`GymStreakTests/CloudSyncNetworkPathTests.swift`:
+
+| Situation | `availableInterfaces` | `status` | Verdict |
+| --- | --- | --- | --- |
+| Online, VPN up | `[other, other, wifi, cellular]` | `.satisfied` | online ✓ |
+| Airplane mode, VPN up | `[other, other]` | `.satisfied` | offline ✓ |
+
+The underlying lesson is that
+**`NWPath.Status.satisfied` is documented as "the path is available to establish connections" —
+a local routing-table judgment, never a promise that the internet is reachable.** Any virtual
+interface (VPN `utun`, and per Apple's TN3158 the CoreDevice/RemoteXPC tunnel an attached Xcode
+session creates) satisfies it. Sources:
+[`init(prohibitedInterfaceTypes:)`](https://developer.apple.com/documentation/network/nwpathmonitor/init(prohibitedinterfacetypes:)),
+[`NWInterface.InterfaceType.other`](https://developer.apple.com/documentation/network/nwinterface/interfacetype/other),
+[`NWPath.Status.satisfied`](https://developer.apple.com/documentation/network/nwpath/status-swift.enum/satisfied),
+[TN3158](https://developer.apple.com/documentation/technotes/tn3158-resolving-xcode-15-device-connection-issues).
+
+**Why a false offline was worth a second round rather than being left alone.** `hasNetwork` feeds
+nothing but `makeState()`, so the direct damage is a wrong label and not broken sync — but
+`!hasNetwork` is checked *before* `hasPersistentExportFailure`, so a device stuck on a false
+offline would also mask a genuine `.failing` schema rejection, which is the signal §4.2a exists
+to deliver.
+
+**Coverage.** The decision is now a pure static function taking `NWPath`'s two inputs, so
+`CloudSyncNetworkPathTests` pins both device-measured cases plus the unsatisfied and
+empty-interface edges. The `NWPathMonitor` wiring around it still has no injection seam and no
+test — the device procedures above remain the only gate for that part.
+
+*Considered and not taken — `NWPath.usesInterfaceType(_:)` (iOS 13+).* It is arguably the better
+API: Apple documents it as true for a path that routes "through a tunnel that goes over a physical
+interface", which is this exact case stated in one call, and it allocates nothing where
+`availableInterfaces` builds an array per update. It was not adopted because `NWPath` has no
+public initializer, so a predicate expressed through it cannot be unit-tested, and the two
+device-measured cases are worth more here than the marginal robustness — the interface list from
+the same device shows the two forms agreeing on every case we have evidence for. Switch to it if a
+path is ever observed where they disagree.
+
+*Residual edge case, accepted.* A device whose **only** route is a tunnel not backed by any
+physical interface — some enterprise Always-On VPN configurations — reads "Wartet" while
+technically online. The failure direction is deliberately conservative: this predicate can say
+offline when online, never "Aktuell" when nothing is reachable, and `hasNetwork` feeds nothing
+but the label.
+
+*Rejected alternatives:* `NWPathMonitor(requiredInterfaceType:)` takes one type, so covering
+Wi-Fi + cellular + Ethernet would need three monitors and a merge; filtering
+`path.availableInterfaces` by hand re-implements what `prohibitedInterfaceTypes` already does and
+would need updating whenever Apple adds a physical interface type. `path.unsatisfiedReason`
+(iOS 14.2+) is orthogonal — it explains *why* a path is unsatisfied and would not have stopped a
+falsely-satisfied one; it is the right tool only if the row ever needs to distinguish "no signal"
+from "permission denied".
+
+*Not built, deliberately:* a staleness timeout on in-flight events. It would make "spinning
+forever" structurally impossible rather than fixing one cause of it, but every observed instance
+so far traces to this network-detection bug, and inventing a timeout threshold with no second
+cause to calibrate against is guesswork. Revisit if the row is ever seen stuck with
+`hasNetwork=true` and a genuinely reachable network.
+
+**Why this took several rounds to find, and what changed as a result.** The state-vector and
+network-path diagnostics were `print`-only, so they existed exclusively on a build with Xcode
+attached — and attaching Xcode adds an `.other` interface of its own, muddying the very signal
+being read. Both now also emit an OSLog `.debug` entry under `LogSubsystem.sync`, so the same
+vector is readable from Console.app on an untethered device:
+`log stream --device --level debug --predicate 'subsystem == "app.gymstreak.sync"'`.
+
+**The local-only fallback counts as `.failing`, the deliberate local store as `.off`.**
+`GymStreakApp` falls back to a `cloudKitDatabase: .none` store when the CloudKit container
+cannot be built (and UI-test runs use an ephemeral local store on purpose). The app's store
+construction returns a `GymStreakApp.Store` — container, `isCloudKitEnabled`, **and
+`cloudKitFailure`**, the thrown error's description when the fallback was forced — which
+`AppDependencies` forwards to the monitor as `storeFailureDescription`. With
+`isCloudKitEnabled` false the monitor registers no observers at all, so the row can never
+show a stale "up to date" for a store that never syncs; with a failure description present
+it reports `.failing` instead of `.off`, because a store that broke is not a store that is
+local by choice. The description itself is never shown — it is logged (§4.2a).
 
 **Cold launch.** The last successful export and import dates are persisted in `UserDefaults`
 (`cloudSync.lastSuccessfulExport` / `…Import`; the row shows the newer of the two), so the
@@ -187,6 +307,39 @@ subtitle is correct on the first frame after launch instead of blank until the s
 event happens to arrive. The account status is unknown for the first few milliseconds and is
 deliberately treated as *available* during that window — the alternative flashes a red "Off"
 row on every launch.
+
+### 4.2a Failure signals: what is recorded and where it surfaces
+
+Added 2026-08-25 (ticket 03 of `routine-plan-icloud-sync`). The plan-mirroring bug
+(`docs/workout-planning.md`) survived a month as a wrong hypothesis because **every failure
+path in it was silent**: a `print` on a TestFlight build goes nowhere, and a rejected export
+was indistinguishable from a queued one. Three signals close that.
+
+| Failure | Recorded as | Surfaced to the user as |
+| --- | --- | --- |
+| CloudKit store could not be built → local-only fallback | `Logger(subsystem: LogSubsystem.sync, category: "Mirroring")` `.error`, once at monitor init, carrying the thrown error | Settings iCloud row `.failing` |
+| A mirroring transfer finished unsuccessfully | same logger, `.error`, for **every** failed event — type, the persistent/transient verdict, the error | `.failing` if persistent, `.waiting` if transient |
+| Saving a routine change threw | `Logger(subsystem: LogSubsystem.sync, category: "RoutineSave")` `.error` | Alert ("Changes couldn't be saved") via `RoutinesViewModel.didFailToSave` and the `routineSaveFailureAlert(_:)` modifier |
+
+`LogSubsystem.sync` (`Extensions/LogSubsystem.swift`) is written once so the two categories
+cannot drift apart. One `subsystem: app.gymstreak.sync` filter in Console therefore shows the
+whole sync story
+for a launch, on a TestFlight build as well as in Xcode. Values are logged `.public` — none
+of them contain user content, and a redacted `<private>` would defeat the purpose.
+
+**Transient vs persistent** (`SyncEventSummary.isPersistentFailure`, unit-tested in
+`GymStreakTests/SyncEventSummaryClassificationTests.swift`). Permanent: `.invalidArguments`,
+`.serverRejectedRequest`, `.unknownItem`, `.constraintViolation`, `.incompatibleVersion`,
+`.badContainer`, `.badDatabase`, `.missingEntitlement`, `.quotaExceeded`, and a
+`.partialFailure` containing any of those. Everything else — including every non-`CKError`
+— stays transient. The list is deliberately conservative: a false "sync is broken" cries
+wolf on a row users are meant to trust, while a false "waiting" only delays the truth. The
+listed codes are the ones a missing record type or a schema drift raises, which is exactly
+the class of failure that hid the plan bug.
+
+**Deliberately not built.** No diagnostics screen, no error code in the UI, no retry button,
+and no signal for anything not observed in ticket 02 or named above. The row says whether
+the user's data is leaving the device; the log says why.
 
 ### 4.3 API findings (research, 2026-08-12)
 
@@ -226,9 +379,10 @@ for `.NSPersistentStoreRemoteChange` — the notification DTS endorses, already 
 `CloudSyncObserver` — and keep signals 1 and 3. That still supports all four states
 (`.syncing` = a debounce window after a remote change), but loses the `succeeded`/`error`
 granularity and therefore the clean upload/download split that ticket 03's "Letzte Aktivität"
-section wants. The DEBUG `print` in `CloudKitSyncStatusMonitor.handle(event:)` (prefix
-`☁️ [CloudKitSyncStatusMonitor]`) is what proves which world we are in — it logs every event
-with its type, end state and error.
+section wants. `CloudKitSyncStatusMonitor+Logging.swift` is what proves which world we are
+in — the DEBUG `print` (prefix `☁️ [CloudKitSyncStatusMonitor]`) logs every event with its
+type, end state and error, and the OSLog `.error` alongside it (§4.2a) does the same for
+failures on a build with no console attached.
 
 ### 4.4 Discarded approaches
 
@@ -412,6 +566,24 @@ section-agnostic.
   right without its gear, coach bar visible on the settings tab. Screenshot of the Data
   section in the `off` state confirms the design (red tile with warning triangle, red dot,
   "Aus", footnote below the card).
+
+**Failure signals and the VPN network-detection fix (2026-08-25/26):**
+
+- Full iOS unit suite → 925 tests, 0 failures, including `SyncEventSummaryClassificationTests`
+  (transient vs. persistent `CKError`s) and `CloudSyncNetworkPathTests` (the online predicate).
+- `SettingsTabUITests.testICloudRowReportsOffWithoutICloudAccount` re-run after the `.failing`
+  state was added → still passes, i.e. the deliberate local-only store still reports `.off` and
+  only a genuine container failure reports `.failing`.
+- **On device, iPhone with a VPN configured — both directions confirmed:** airplane mode ⇒
+  "Wartet"; back online with the VPN still up ⇒ "Aktuell". This closes the two dead ends in
+  §4.2: `.satisfied` alone left the row spinning at "Lädt …" for the whole outage, and
+  `prohibitedInterfaceTypes: [.other]` reported offline on a fully-online device. Note the
+  automated suite covers the *predicate* only — the `NWPathMonitor` wiring has no injection
+  seam, so this device run is the sole evidence for it.
+- A change-token reset (`CKError` 21, `ServerChangeTokenExpired`) was observed in the same
+  session and correctly classified as **transient**: the row stayed on "Lädt …"/"Aktuell"
+  through a full re-import rather than turning red. That is the conservative `CKError` list of
+  §4.2a doing its job on a real error.
 
 **Support section (2026-08-14):**
 

@@ -39,6 +39,12 @@ struct GymStreakApp: App {
     struct Store {
         let container: ModelContainer
         let isCloudKitEnabled: Bool
+        /// Why the CloudKit store could not be built, when that is what forced
+        /// the local-only fallback. `nil` when the store is CloudKit-backed or
+        /// local on purpose (ephemeral UI-test runs). The sync monitor turns it
+        /// into a `.failing` row and an OSLog entry — this runs before any
+        /// dependency exists, so it cannot be logged here.
+        var cloudKitFailure: String? = nil
     }
 
     let store: Store = {
@@ -74,8 +80,9 @@ struct GymStreakApp: App {
                 isCloudKitEnabled: true
             )
         } catch {
-            // If CloudKit container fails (e.g., no iCloud account), fall back to local-only storage
-            print("Failed to create CloudKit container: \(error). Falling back to local storage.")
+            // The CloudKit container could not be built — fall back to a
+            // local-only store so the app still runs, and carry the reason so
+            // the Settings row can say sync is broken instead of staying silent.
             let localConfig = ModelConfiguration(
                 schema: schema,
                 isStoredInMemoryOnly: false,
@@ -84,7 +91,8 @@ struct GymStreakApp: App {
             do {
                 return Store(
                     container: try ModelContainer(for: schema, configurations: [localConfig]),
-                    isCloudKitEnabled: false
+                    isCloudKitEnabled: false,
+                    cloudKitFailure: String(describing: error)
                 )
             } catch {
                 fatalError("Could not create ModelContainer: \(error)")
@@ -99,7 +107,8 @@ struct GymStreakApp: App {
         _dependencies = StateObject(
             wrappedValue: AppDependencies(
                 modelContext: store.container.mainContext,
-                isCloudKitStoreEnabled: store.isCloudKitEnabled
+                isCloudKitStoreEnabled: store.isCloudKitEnabled,
+                cloudKitStoreFailure: store.cloudKitFailure
             )
         )
 

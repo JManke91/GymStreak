@@ -78,10 +78,11 @@ final class RoutinePlanLinkRepair {
 
         for await status in cloudSyncStatus.statusUpdates() {
             switch status.state {
-            case .off:
-                // No mirroring — signed out, restricted, or the local-only
-                // fallback. There is nothing to re-export and nothing will
-                // import later either, so churning the store would be pointless.
+            case .off, .failing:
+                // No mirroring — signed out, restricted, the local-only
+                // fallback, or an export CloudKit keeps rejecting. There is
+                // nothing to re-export and nothing will import later either,
+                // so churning the store would be pointless.
                 // The flag stays clear so a launch with iCloud available repairs.
                 return
             case .upToDate:

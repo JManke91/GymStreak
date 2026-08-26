@@ -8,7 +8,7 @@
 
 import Foundation
 
-/// The four states the Settings iCloud row distinguishes.
+/// The five states the Settings iCloud row distinguishes.
 enum CloudSyncState: Sendable, Equatable {
     /// Everything the app knows about has been exported and imported successfully.
     case upToDate
@@ -17,8 +17,13 @@ enum CloudSyncState: Sendable, Equatable {
     /// Changes are queued but the last transfer failed for a recoverable reason
     /// (typically no network).
     case waiting
-    /// iCloud is not available for this app: signed out, restricted, or the
-    /// CloudKit store failed to build and the app fell back to a local-only store.
+    /// Sync is broken in a way that will not heal on its own: the CloudKit store
+    /// could not be built and the app fell back to local-only storage, or an
+    /// export was rejected for a reason a retry cannot fix (a schema mismatch,
+    /// for instance). Distinct from `.waiting`, which is a transfer that will be
+    /// retried, and from `.off`, which the user can fix by signing in.
+    case failing
+    /// iCloud is not available for this app: signed out or restricted.
     case off
 }
 

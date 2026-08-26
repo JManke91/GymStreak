@@ -85,6 +85,7 @@ struct ICloudSyncRowView: View {
         case .upToDate: "checkmark.icloud"
         case .syncing: "icloud"
         case .waiting: "icloud.slash"
+        case .failing: "exclamationmark.icloud"
         case .off: "exclamationmark.triangle"
         }
     }
@@ -96,7 +97,7 @@ struct ICloudSyncRowView: View {
         case .upToDate: DesignSystem.Colors.tint
         case .syncing: Color(red: 90/255, green: 180/255, blue: 255/255)
         case .waiting: Color(red: 255/255, green: 197/255, blue: 61/255)
-        case .off: Color(red: 255/255, green: 107/255, blue: 107/255)
+        case .failing, .off: Color(red: 255/255, green: 107/255, blue: 107/255)
         }
     }
 
@@ -105,11 +106,17 @@ struct ICloudSyncRowView: View {
         case .upToDate: "settings.icloud.status.up_to_date".localized
         case .syncing: "settings.icloud.status.syncing".localized
         case .waiting: "settings.icloud.status.waiting".localized
+        case .failing: "settings.icloud.status.failing".localized
         case .off: "settings.icloud.status.off".localized
         }
     }
 
     private var subtitle: String {
+        // Both failure subtitles say what it means for the user's data rather
+        // than what CloudKit reported — an error code helps nobody here.
+        if status.state == .failing {
+            return "settings.icloud.row.subtitle.failing".localized
+        }
         if status.state == .off {
             return "settings.icloud.row.subtitle.off".localized
         }
@@ -135,7 +142,7 @@ struct ICloudSyncRowView: View {
         }
     }
 
-    let states: [CloudSyncState] = [.upToDate, .syncing, .waiting, .off]
+    let states: [CloudSyncState] = [.upToDate, .syncing, .waiting, .failing, .off]
 
     return ZStack {
         DesignSystem.Colors.background.ignoresSafeArea()

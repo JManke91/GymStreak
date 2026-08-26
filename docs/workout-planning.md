@@ -166,7 +166,9 @@ This contradicts Apple's own documentation, which states one-to-one relationship
 
 *Why the parent side, and why this is migration-safe:* the app has **no `VersionedSchema`/`SchemaMigrationPlan`**, so it relies on SwiftData lightweight migration and only purely additive or storage-preserving changes are safe. A one-to-one is stored on both sides locally — verified in the simulator store, `ZROUTINE.ZSCHEDULE` and `ZROUTINESCHEDULE.ZROUTINE` both exist — and `setSchedule` has always set both. Dropping the parent column therefore loses nothing: the child's `ZROUTINE` column becomes the sole storage and the parent's to-many derives from it, so existing local plans survive. Renaming the parent to-one *into* a to-many would instead have been a semantic transformation lightweight migration cannot infer, requiring a custom migration stage.
 
-**Repairing already-synced records (`RoutinePlanLinkRepair`).** Remodelling fixes plans created or edited from now on but not records already in CloudKit: mirroring exports from persistent history, so an object nobody touches is never re-uploaded, and **no Apple API forces a bulk re-export** (confirmed — the closest documented precedent is the dedup pattern in "Sharing Core Data objects between iCloud users", which is structurally the same delete-old/keep-new shape but is not a sanctioned force-re-export technique). The repair deletes each existing schedule row and inserts an identical replacement (same `id`, `createdAt`, `isActive` and settings) linked to its routine, which registers a create transaction, exports a correct record, and tombstones the broken one. It runs at most once per device behind a `UserDefaults` version flag set only after the save commits, so a failed save retries next launch instead of being skipped.
+**Repairing already-synced records (`RoutinePlanLinkRepair`).** Remodelling fixes plans created or edited from now on but not records already in CloudKit: mirroring exports from persistent history, so an object nobody touches is never re-uploaded, and **no Apple API forces a bulk re-export** (confirmed — the closest documented precedent is the dedup pattern in "Sharing Core Data objects between iCloud users", which is structurally the same delete-old/keep-new shape but is not a sanctioned force-re-export technique). The repair deletes each existing schedule row and inserts an identical replacement (same `id`, `createdAt`, `isActive` and settings) linked to its routine, which registers a create transaction, exports a correct record, and tombstones the broken one. It runs at most once behind a `UserDefaults` version flag set only after the save commits, so a failed save retries next launch instead of being skipped.
+
+That is once per **install**, not once per device: `UserDefaults` is destroyed when the app is deleted, so a reinstall clears the flag and the pass runs again over the store it rebuilds from CloudKit. Observed on 2026-08-25 and harmless — the second run re-exports records that were already correct, preserving every value, and the delete/insert pair tombstones the old record rather than duplicating it (confirmed by query: four routines, four schedule records, no routine holding two). Left as-is deliberately; a flag that survived reinstall would have to live in `NSUbiquitousKeyValueStore`, which would then suppress the repair on a device that genuinely still needs it.
 
 It **waits for the sync status to reach `.upToDate`** before touching anything (`CloudSyncStatusProviding.statusUpdates()`), because deleting a row while the importer is mid-flight could race the importer's merge on the same context or delete a record being materialized. Hence it runs from a `.task`, not `onAppear`. With iCloud off it does nothing and leaves the flag clear, so a later launch with iCloud available still repairs; a session that never quiesces likewise retries next launch.
 
@@ -197,9 +199,66 @@ It also **defers entirely if anything else has unsaved work on the shared `mainC
 
 *Confirmed against live CloudKit (2026-08-18).* A Debug build on a real iCloud-signed-in iPhone wrote a plan, and `cktool query-records` against the Development private database shows the new `CD_RoutineSchedule` records carrying a **populated `CD_routine`** (e.g. `00DAE846… → routine A4280A60…`, `intervalDays = 3`), while every record written before the fix still shows the field absent. The relationship mirrors. In the same pass the Development and Production schema exports came back byte-identical and Development unchanged from the pre-fix export, so **the no-deploy expectation held** — nothing needs deploying in the Console.
 
-*Not exercised in the wild: the repair pass.* On that phone it correctly found nothing to do, and `CD_createdAt` is how to tell — the repair copies `createdAt` verbatim, so a re-exported record shows an old creation date with a recent server timestamp, whereas both new records carried today's date and were therefore fresh `setSchedule` writes. The phone's routines appeared unplanned, i.e. it only ever imported the pre-fix plans as orphans and holds none of them linked, so `plannedRoutines` was empty. The repair remains covered by unit tests and by the simulator migration run (`Z_PK` 1 → 2), but has not yet re-exported a real record.
+*Confirmed against Production CloudKit, end to end (2026-08-25).* This is the run the bug report asked for, and it closes the feature. A TestFlight build (containing `78fed30`, so a **Production** container — a Debug or simulator build writes to Development and cannot reproduce the reported bug) on an iCloud-signed-in iPhone:
+
+- **Export.** `cktool query-records` against the Production private database returns **4 `CD_RoutineSchedule` records, every one carrying a populated `CD_routine`**. On 2026-08-18 not one of the four carried it. The four references are four *distinct* routine record names, so no routine holds a duplicate plan.
+- **Import.** A plan set on one device appears on a second, and after a delete-and-reinstall — the path the user actually hit — plans come back attached to their routines instead of returning as invisible orphans.
+- **Edit and removal propagate**, not just creation: changing a cadence on the second device updates the first, and removing a plan removes it there too. Record `A8AEBD09…` shows the edit as a `modified` timestamp 20 minutes after its `created`.
+- **Control held.** A routine with a plan and a routine without one were exercised in the same session and behaved identically as far as sync is concerned — the unplanned routine syncs, and the planned one now syncs *with* its plan. That was the discriminating case: before the fix, plans stalled while everything else moved.
+
+*The repair pass is now exercised in the wild* — this corrects the earlier note that it had never re-exported a real record. The evidence is the `CD_createdAt` signature described above: the repair copies `createdAt` verbatim, so a re-exported record shows an old creation date under a recent server `created` timestamp, whereas a fresh `setSchedule` write shows both as today. Two batches match, each written as a single transaction (identical server timestamps to the millisecond, which a hand-set plan cannot produce):
+
+| Server `created` | `CD_createdAt` | Reading |
+| --- | --- | --- |
+| 2026-08-23 10:03:21.103Z ×2 | 2026-08-18 17:42 | first repair run — re-exported the two pre-fix orphaned plans |
+| 2026-08-25 13:39:49.879Z ×2 | 2026-08-23 16:09 | second run after the reinstall cleared the `UserDefaults` flag |
+
+The first batch is also the designed retry working: on 2026-08-18 the pass ran over a store that had imported nothing, correctly declined to act, and left the flag clear — so a later launch that *did* hold linked plans picked the work up. Note this is inference from record timestamps rather than from logs; mirroring debug logging is a scheme launch argument and therefore unavailable on a Production build (see below).
+
+*Why no mirroring debug log accompanies this run.* `-com.apple.CoreData.CloudKitDebug 1` only reaches a build Xcode launches, and those write to **Development**. Production and scheme-based logging are mutually exclusive, so the `cktool` record query is the primary evidence here. If a future Production sync failure needs logs, it needs a Release-configuration run driven from Xcode, not a launch argument on TestFlight.
 
 **Consequence for pre-fix plans — they were unrecoverable here.** A plan that reached CloudKit unlinked can only be repaired from a device that still holds it linked locally, because the record itself does not say which routine it belonged to. On this account the only device had been reinstalled, so every pre-fix plan was already an orphan before the fix shipped and nothing could relink them; the plans were re-created by hand. Deleting the orphans is deliberately not attempted by *code* (see the dead end above), but once it is established that no device holds the link — as here — removing them manually is safe. The four stale records (2026-07-07 and 2026-08-10) were deleted on 2026-08-19 with `cktool delete-record` from both environments, after confirming that no `CD_Routine` record in either carried a `CD_schedule` value. Development now holds only the two live linked plans; Production holds none, since the only schedules that ever reached it were the broken ones.
+
+## Making the next failure of this kind visible (2026-08-25)
+
+This bug survived a month as a wrong hypothesis because **every failure path in it was
+silent**, not because it was hard to diagnose. Three silences were closed; the mechanism and
+the exact `CKError` classification live in `docs/settings-tab.md` §4.2a, and only what is
+specific to this bug is repeated here.
+
+1. **The local-only fallback.** `GymStreakApp` falls back to a `cloudKitDatabase: .none`
+   store when the CloudKit container cannot be built, and used to announce it with a `print`
+   — invisible on the TestFlight build where it would matter. The thrown error now travels
+   with the store (`GymStreakApp.Store.cloudKitFailure`) into `CloudKitSyncStatusMonitor`,
+   which logs it once and reports the Settings iCloud row as **`.failing`** rather than
+   `.off`: a store that broke is not a store that is local by choice.
+2. **The swallowed save.** `RoutinesViewModel.save()` — the path every plan write ends in,
+   `setSchedule` and `removeSchedule` included — turned a throw into a `print`, so a plan
+   that never reached the store looked exactly like one that did. It now logs the error and
+   raises `didFailToSave`, which the `routineSaveFailureAlert(_:)` modifier
+   (`Presentation/Views/Routines/RoutineSaveFailureAlert.swift`) presents. It goes on the
+   `NavigationStack`, not on its root content: a pushed destination does not reliably
+   present an alert bound to the content underneath it, and `RoutineDetailView` — pushed —
+   is where most editing happens. One application covers everything, because the surfaces
+   with their own presentation context (`CreateRoutineView`, `SchedulePlanningSheet` and
+   the other detail sheets) all dismiss immediately after saving and the flag outlives the
+   dismissal. *Deliberately not* a second copy on those surfaces: two `.alert`s bound to
+   one flag risk SwiftUI writing `false` back as the surface tears down, which swallows the
+   alert instead of duplicating it.
+3. **Export errors that never changed the state.** A failed export set the "queued changes"
+   flag, so a *rejected* export was indistinguishable from an upload waiting for a network —
+   the row said "Waiting" indefinitely. Failures a retry cannot fix (a missing record type
+   raises exactly these) now flag `.failing` instead, and every failed transfer is logged
+   with its error regardless.
+
+**What this would have shown on 2026-08-18.** Nothing, in this particular case — the export
+of the schedule *records* succeeded; only the reference was omitted, which CloudKit does not
+consider an error. That is the honest limit of these signals: they catch a rejected or
+impossible export, not a silently incomplete one, which is why the record query in
+`docs/cloudkit-schema-automation.md` remains the diagnostic of record for "is what I expect
+actually in CloudKit". What they do change is the *next* failure of the class originally
+suspected here — a missing or drifted record type — which would now announce itself on the
+Settings row instead of hiding behind "Waiting".
 
 ## Edge cases
 - **Never-trained cadence routine**: anchors on the reference date (default today); its `reference + k·N` grid is counted, `k = 0` included.

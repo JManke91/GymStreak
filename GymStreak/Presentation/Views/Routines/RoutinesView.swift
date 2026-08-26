@@ -93,6 +93,10 @@ private struct RoutinesViewInternal: View {
                 Text("routine.delete.confirm".localized)
             }
         }
+        // On the stack, not on its content: an alert bound to the root content
+        // is not reliably presented once a destination is pushed over it, and
+        // `RoutineDetailView` is where most edits are made.
+        .routineSaveFailureAlert(viewModel)
         .onAppear {
             viewModel.fetchRoutines()
         }
