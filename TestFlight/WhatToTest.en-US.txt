@@ -1,3 +1,4 @@
 - Settings now shows when iCloud sync is actually broken instead of quietly saying "Waiting"
 - You now get told when a routine change couldn't be saved, instead of it silently disappearing
 - Fixed: with a VPN configured, the iCloud status could stay stuck on "Syncing…" while offline instead of showing "Waiting"
+- Fixed: a device whose exercise library came up empty and stayed empty now restores the built-in exercises by itself, instead of waiting forever for an iCloud sync that had already happened

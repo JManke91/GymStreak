@@ -400,6 +400,14 @@ failures on a build with no console attached.
   the Domain type carries only the aggregate `lastSuccessfulSync` this ticket needs; ticket 03
   widens it when it actually shows the two rows.
 
+Note that `CloudSyncStatus` carries one field the Settings row never displays:
+`hasCompletedImportThisSession`, set by the monitor on the first `.import` event that finishes
+successfully in this session and deliberately never persisted. It exists for
+`DefaultContentSeeder`'s stranded-library recovery, which needs "an import actually landed *now*"
+rather than "no event is in flight" — see docs/starter-exercise-library.md. `lastSuccessfulSync`
+stays display-only for the reason recorded there: restored from `UserDefaults`, it describes a
+past session of this install and must never be used as a gate.
+
 ## 5. Support section
 
 Two action rows: "App bewerten" / "Rate app" (`star.bubble`, §5.1) and "Support kontaktieren" /

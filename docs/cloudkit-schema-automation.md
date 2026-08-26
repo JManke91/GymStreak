@@ -8,6 +8,7 @@
 
 Deploying Development → Production in the CloudKit Console **remains a manual step** — Apple provides no supported API for it (re-confirmed 2026-08-17, see "Verifying the deployed schema headlessly" below). The release checklist is now:
 
+0. **A new `@Model` type is never done until it is both registered and deployed.** Adding the class is step one of three: it must be added to `GymStreakSchema.modelTypes` (or no container in the project — app, previews, tests, this initializer — will ever see it), *and* its record type must be deployed to the CloudKit **Production** environment before the build ships, or every device running the release stores it locally only. `SchemaRegistrationTests` fails the build if the registration is missing (see `docs/unit-testing.md` → "Schema drift"); nothing but the manual Console deploy below covers the second half.
 1. Check whether the release changed the persisted model at all — see "Which changes produce a Console diff" below. If no `@Model` declaration and no `GymStreakSchema.modelTypes` entry changed, there is nothing to deploy and steps 2–5 are a no-op.
 2. Run the app once with the `-INITIALIZE_CLOUDKIT_SCHEMA` launch argument (Debug build, device/simulator **signed into iCloud**).
 3. Watch the Xcode console for `✅ [CloudKitSchemaInitializer]`.
@@ -32,7 +33,9 @@ The app launches normally; the schema upload runs concurrently in the background
 
 | Component | Location | Role |
 |---|---|---|
-| `GymStreakSchema` | `GymStreak/Domain/Models/GymStreakSchema.swift` | Single source of truth for the model-type list; used by both the app's `ModelContainer` and the initializer. **New `@Model` types must be added here.** |
+| `GymStreakSchema` | `GymStreak/Domain/Models/GymStreakSchema.swift` | Single source of truth for the model-type list; used by the app's `ModelContainer`, this initializer, `PreviewModelContainer`, and both test containers. **New `@Model` types must be added here.** |
+| `SchemaRegistrationTests` | `GymStreakTests/SchemaRegistrationTests.swift` | Guardrail: scans the app binary for `PersistentModel` classes and fails if one is missing from `GymStreakSchema.modelTypes`. |
+| `PreviewModelContainer` | `GymStreak/App/PreviewModelContainer.swift` | In-memory container for SwiftUI previews, built from the same list so previews cannot run on a stale subset. |
 | `CloudKitSchemaInitializer` | `GymStreak/Data/Sync/CloudKitSchemaInitializer.swift` | `#if DEBUG`-only utility: builds the model, loads the throwaway store, calls `initializeCloudKitSchema`, tears down. |
 | Trigger | `GymStreak/App/GymStreakApp.swift` (`init`) | Checks the launch argument and runs the initializer in a detached task. |
 
@@ -109,7 +112,7 @@ An empty `records` array is trustworthy evidence of absence only once zone, toke
 
 **Schema-affecting:**
 
-- A new `@Model` type → a new `CD_<TypeName>` record type. It must also be registered in `GymStreakSchema.modelTypes`, or neither the app's `ModelContainer` nor this initializer will ever see it.
+- A new `@Model` type → a new `CD_<TypeName>` record type. It must also be registered in `GymStreakSchema.modelTypes`, or neither the app's `ModelContainer` nor this initializer will ever see it — `SchemaRegistrationTests` enforces this. Note that registration alone is not enough to make a *test* fail loudly: `Schema` follows relationships, so a model reachable from a registered one is pulled into the graph regardless, which is how the omission of `RoutineSchedule` from the test container went unnoticed for a month.
 - A new persisted property → a new `CD_<propertyName>` field.
 - A new relationship → a new reference field. CloudKit requires every synced relationship to be **optional** and cannot honour `.deny` delete rules.
 

@@ -61,4 +61,20 @@ final class StubCloudSyncStatus: CloudSyncStatusProviding {
             continuation.yield(status)
         }
     }
+
+    /// Ends every subscription, so a consumer that loops over `statusUpdates()`
+    /// returns instead of suspending for the rest of the test.
+    ///
+    /// This is what makes a "must not act" assertion real: `emit(…)` →
+    /// `finish()` → `await task.value` asserts on the consumer's *return value*,
+    /// where a `Task.yield()` plus a count check only asserts that nothing has
+    /// happened yet — which is also true of a consumer that was simply still
+    /// suspended. The stream buffers unbounded, so the emitted status is
+    /// delivered before the termination; the ordering is deterministic, not racy.
+    func finish() {
+        for continuation in continuations.values {
+            continuation.finish()
+        }
+        continuations.removeAll()
+    }
 }

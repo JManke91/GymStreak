@@ -33,7 +33,36 @@ struct CloudSyncStatus: Sendable, Equatable {
     /// Most recent successful export or import. Persisted across launches, so the
     /// row shows a real timestamp on a cold launch instead of staying blank until
     /// the first event of the session arrives. `nil` means "never synced".
+    ///
+    /// Displayable, but **never usable as a gate**: because it is restored from
+    /// `UserDefaults`, it describes some past session of this install, not this
+    /// one. Anything that needs "an import landed" wants
+    /// `hasCompletedImportThisSession`.
     let lastSuccessfulSync: Date?
+    /// `true` once an import has finished successfully **in this session** —
+    /// i.e. mirroring has actually delivered whatever the account holds.
+    ///
+    /// The one signal in this app that separates "everything has arrived" from
+    /// "nothing has happened yet". `state == .upToDate` cannot: it means no
+    /// mirroring event is in flight, which is also true at cold launch before
+    /// the first one opens. A consumer whose action is conditioned on the store
+    /// being *empty* — `DefaultContentSeeder`'s stranded-library recovery — must
+    /// gate on this rather than on the state or the timestamp.
+    ///
+    /// Never restored across launches: a flag that survived would say "arrived"
+    /// about a session that is over, which is exactly the trap
+    /// `lastSuccessfulSync` falls into.
+    let hasCompletedImportThisSession: Bool
+
+    init(
+        state: CloudSyncState,
+        lastSuccessfulSync: Date?,
+        hasCompletedImportThisSession: Bool = false
+    ) {
+        self.state = state
+        self.lastSuccessfulSync = lastSuccessfulSync
+        self.hasCompletedImportThisSession = hasCompletedImportThisSession
+    }
 
     static let off = CloudSyncStatus(state: .off, lastSuccessfulSync: nil)
 }

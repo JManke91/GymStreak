@@ -254,5 +254,5 @@ private struct RoutinesViewInternal: View {
 
 #Preview {
     RoutinesView()
-        .modelContainer(for: [Routine.self, Exercise.self, RoutineExercise.self, ExerciseSet.self], inMemory: true)
+        .modelContainer(PreviewModelContainer.shared)
 }

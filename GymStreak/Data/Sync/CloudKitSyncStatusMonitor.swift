@@ -66,6 +66,12 @@ final class CloudKitSyncStatusMonitor: CloudSyncStatusProviding {
     private var hasNetwork = true
     private var lastSuccessfulExport: Date?
     private var lastSuccessfulImport: Date?
+    /// Set by the first import that finishes successfully in this session, and
+    /// never restored from `UserDefaults` — see `CloudSyncStatus`. This is the
+    /// only evidence the app has that mirroring actually delivered something
+    /// *now*, which is what the stranded-library recovery needs before it may
+    /// read an empty store as empty for good.
+    private var hasCompletedImportThisSession = false
 
     private var observers: [NSObjectProtocol] = []
     private var pathMonitor: NWPathMonitor?
@@ -91,7 +97,8 @@ final class CloudKitSyncStatusMonitor: CloudSyncStatusProviding {
         )
         self.currentStatus = CloudSyncStatus(
             state: makeState(),
-            lastSuccessfulSync: lastSuccessfulSync
+            lastSuccessfulSync: lastSuccessfulSync,
+            hasCompletedImportThisSession: false
         )
 
         if let storeFailureDescription {
@@ -216,6 +223,7 @@ final class CloudKitSyncStatusMonitor: CloudSyncStatusProviding {
             case .import:
                 lastSuccessfulImport = endDate
                 defaults.set(endDate, forKey: DefaultsKey.lastImport)
+                hasCompletedImportThisSession = true
             case .setup:
                 break
             @unknown default:
@@ -253,7 +261,11 @@ final class CloudKitSyncStatusMonitor: CloudSyncStatusProviding {
             persistentFailure: hasPersistentExportFailure,
             account: accountStatus
         )
-        currentStatus = CloudSyncStatus(state: state, lastSuccessfulSync: lastSuccessfulSync)
+        currentStatus = CloudSyncStatus(
+            state: state,
+            lastSuccessfulSync: lastSuccessfulSync,
+            hasCompletedImportThisSession: hasCompletedImportThisSession
+        )
     }
 
     private func makeState() -> CloudSyncState {

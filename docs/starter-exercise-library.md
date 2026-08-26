@@ -43,7 +43,78 @@ How it happens: the KV record lives outside the app container and survives delet
 The recovery runs once per launch from `GymStreakApp`'s `.task` and re-seeds only when both hold:
 
 - **The store is completely empty** — no exercises, no routines, no history. Deliberately stricter than "no seeded exercises": a user who deleted the built-ins but kept their own content made a choice, and the append-only rule ("deleted seeds are never resurrected") still governs that case. The cost is that a partially-populated stranded store is not recovered; erasing/reinstalling is the way back for those.
-- **CloudKit has proved it cannot explain the emptiness** — either `CloudSyncStatus.state == .off` (signed out, or the local-only store fallback), or a transfer has completed (`lastSuccessfulSync != nil`) and the store is *still* empty. Waiting for that signal is what keeps the recovery off a new device of an existing user, which starts empty and fills in from CloudKit moments later; seeding into that window would upload 96 rows only for the next dedup pass to delete them.
+- **CloudKit has proved it cannot explain the emptiness** — see the gate below. Waiting for that signal is what keeps the recovery off a new device of an existing user, which starts empty and fills in from CloudKit moments later; seeding into that window would upload 96 rows only for the next dedup pass to delete them.
+
+#### The gate (fixed 2026-08-26)
+
+The two failure modes are **asymmetric**, and that is what decides the design:
+
+| Failure | Consequence | Self-healing? |
+| --- | --- | --- |
+| Seeded too eagerly | Duplicate catalog, uploaded, then collapsed deterministically by the next launch's `deduplicate()` pass (imported originals win on `createdAt`). Visible in the UI and pushed to the watch until that next launch. | Yes |
+| Seeded too conservatively | Empty library forever, with no way out from inside the app. | **No** |
+
+So the gate biases towards seeding, but never before mirroring has had a real chance:
+
+| Status | Decision |
+| --- | --- |
+| `.off` / `.failing` | Seed at once — nothing will ever arrive (signed out, the local-only store fallback, an export CloudKit keeps rejecting). |
+| `.syncing` | Never seed, however long it takes. A mirroring event is genuinely in flight; this is the new device of an existing user, mid-import. Outranks both timers below. |
+| `.upToDate` / `.waiting` | Seed once **either** `hasCompletedImportThisSession` is true **or** the settle window has elapsed — then wait out the import-burst grace and re-read the store before committing. |
+
+`CloudSyncStatus.hasCompletedImportThisSession` was added for this (`CloudKitSyncStatusMonitor` sets it on the first `.import` event with `endDate != nil && succeeded`). It is the real signal and is deliberately **never persisted**: a flag restored from `UserDefaults` would say "arrived" about a session that is over, which is precisely the trap `lastSuccessfulSync` falls into. Two timers back it up:
+
+- **`settleWindow` (45 s, injectable)** — how long the recovery waits for CloudKit to report *anything at all* before it stops waiting for proof. Covers the device where no event ever arrives.
+- **`importBurstGrace` (3 s, injectable)** — waited out after the import flag fires, before acting on it, because import events arrive in bursts. After the grace the recovery re-reads live state and store emptiness rather than trusting the event that woke it; a follow-up batch that opened meanwhile (`.syncing`) sends it back to waiting.
+
+**The offline case is handled, not omitted.** `makeState()` returns `.waiting` whenever `NWPathMonitor` reports no network, and offline never quiesces, so waiting for quiescence would strand an offline device for the session. `.waiting` is therefore treated exactly like `.upToDate`: recovered on the settle window. That is the asymmetry argument applied literally — the user gets a usable library now, and a later import merges through the same dedup pass.
+
+The whole cost of both timers is one launch's delay on a device that is about to be re-seeded anyway; every later launch is handled by `run()` and waits for nothing.
+
+#### Two gates that look right and are not (both tried, both reverted)
+
+- **`lastSuccessfulSync != nil`** (shipped 2026-08-13, defect found 2026-08-18, fixed 2026-08-26). It cannot mean "this session's transfer finished": `CloudKitSyncStatusMonitor` restores it from `UserDefaults.standard` in `init`, so it describes some past session of this *install*. It was wrong in **both** directions — it never fired on a device that had never completed a transfer (the exact dead end the recovery exists to escape) and it passed mid-import on a device whose defaults survived a store rebuild.
+- **Bare `state == .upToDate`**, matching `RoutinePlanLinkRepair`. Reverted 2026-08-26. `makeState()` returns `.upToDate` whenever no mirroring event is in flight, and `statusUpdates()` yields the current status synchronously on subscribe — so at cold launch, with no events opened yet, the *first* status of every session is `.upToDate`. Since the recovery's trigger is an empty store, it would seed all 96 rows on loop iteration one, straight into an existing user's import window; the `guard isStoreEmpty` at the top of the loop cannot save it because there is no second iteration. **`RoutinePlanLinkRepair` is not a precedent**: it tolerates an optimistic `.upToDate` only because it *no-ops* on an empty store (`guard !schedules.isEmpty`), whereas this recovery's action is *conditioned* on emptiness — the same gate means the opposite thing here.
+- Also rejected: a **fixed settle delay alone**, with no real signal behind it. It closes the iteration-one hole, but it never becomes more certain no matter how long it waits. It survives only as the backstop.
+
+#### What is documented fact and what is community measurement
+
+Researched 2026-08-26 via the `ios-api-researcher` agent, because the timer values depend on it:
+
+- **Fact (Apple docs).** `NSPersistentCloudKitContainer.Event` shape: `type`, `endDate`, `succeeded`, `error`; `endDate != nil` means finished. Apple's own WWDC22 test helper uses `endDate != nil` as the completion gate.
+- **Fact (Apple staff forum reply, [thread 744709](https://developer.apple.com/forums/thread/744709)).** A successful `.import` event means the device is "current" with what is in iCloud. This is what makes `hasCompletedImportThisSession` a real signal rather than a heuristic.
+- **Community consensus, not Apple-documented.** `.import` events **burst** — several consecutive events within a few seconds ([crunchybagel](https://crunchybagel.com/nspersistentcloudkitcontainer/)); debouncing a few seconds is common practice. This is why `importBurstGrace` exists.
+- **Community measurement, not Apple-published.** Mirroring does not *begin* until roughly **20–30 s after launch**, and a large dataset can take 1–2 minutes to surface ([fatbobman](https://fatbobman.com/en/posts/coredatawithcloudkit-4/)). This is why `settleWindow` is 45 s and not 10 s: a window inside that start latency is the reverted `.upToDate` bug on a delay — it expires while a perfectly healthy importing device has simply not posted its first event yet.
+- **Genuinely undocumented.** Whether an `.import` event fires and succeeds at all when the private database holds no records of the app's types, and whether an early batch can complete successfully while data-bearing batches are still pending. Both are why the design never relies on the flag alone: the settle window covers the first, the burst grace plus the post-grace store re-read cover the second.
+- **Undocumented by Apple, confirmed by our own measurement.** Offline, CloudKit opens a mirroring event and never ends it (`state=syncing hasNetwork=false inFlight=1`), which is why `makeState()` lets `!hasNetwork` outrank `eventsInFlight`.
+
+**Accepted residual risk.** If an import event ever completes having applied zero records while more are pending beyond the burst grace, the recovery seeds and the catalog is duplicated for one session. That is the self-healing side of the asymmetry and is accepted deliberately.
+
+#### Main-actor cost of the recovery
+
+Small but real, and worth knowing before this loop grows. `recoverStrandedLibraryIfNeeded()` runs
+from a launch `.task`, and its first statement reads `storedCatalogVersion`, which calls
+`NSUbiquitousKeyValueStore.default.synchronize()` **synchronously on the main actor before the
+first `await`** — `.task` does not save you from that (CLAUDE.md concurrency rule 7). Then
+`isStoreEmpty` runs three `fetchCount`s per status event rather than once. Both are bounded and
+cheap today: the loop only stays alive while the store is empty, so on a normal device it ends
+after one or two events. If this ever gains per-event work beyond a count, move it off the main
+actor first.
+
+#### Unverified in production (2026-08-26)
+
+Whether `hasCompletedImportThisSession` actually flips on a real device is the one link with no
+automated coverage — the unit tests drive a stubbed status provider, and whether an `.import`
+event fires and succeeds against a private database holding no records of the app's types is
+undocumented (see above). **The failure mode is graceful:** if it never flips, the settle window
+recovers the device anyway, just more slowly, so the gate is strictly better than the old one in
+every case rather than conditionally better. To check it, run on a device signed into iCloud and
+watch the Xcode console for the `#if DEBUG` line in `CloudKitSyncStatusMonitor+Logging.swift`:
+`☁️ [CloudKitSyncStatusMonitor] event type=import ended=true succeeded=true`.
+
+#### Test shape (load-bearing)
+
+`GymStreakTests/DefaultContentSeederRecoveryTests.swift`. A "must not seed" assertion drives `StubCloudSyncStatus.finish()` and asserts on the recovery's **return value**; a "seeds only after waiting" assertion asserts an elapsed-time **lower bound**. Neither `Task.yield()` nor a bare count check proves anything — both are equally satisfied by a recovery that is merely still suspended, and two tests written that way during the reverted attempt passed against the broken gate and the fixed one alike. All five tests added with the fix were verified to fail against the old gate before being accepted (2026-08-26: 5 failed, the 4 pre-existing tests still passed).
 
 After a successful recovery the seeder posts `.cloudKitDataDidChange`, which is what makes the already-loaded view models refetch and carries the catalog to the watch via `ExerciseCatalogSyncCoordinator` — `run()` needs neither, because it commits before any view model reads the store.
 

@@ -6,17 +6,20 @@
 //  repository/view-model tests exercise real SwiftData behavior (predicates,
 //  cascade rules, sorting) without touching disk or CloudKit.
 //
-//  Schema list must be kept in sync with GymStreak/App/GymStreakApp.swift.
+//  The type list comes from `GymStreakSchema.modelTypes` — the single source of
+//  truth shared with the app's own ModelContainer — never a hand-copied list.
+//  This file used to hand-copy one, and it silently drifted: it omitted
+//  `RoutineSchedule` for over a month. `SchemaRegistrationTests` now fails if a
+//  new @Model type escapes the shared list.
 //
 //  `cloudKitDatabase` must be explicit here: the in-memory `ModelConfiguration`
-//  initializer defaults it to `.automatic`, which makes SwiftData validate the
-//  schema against CloudKit's stricter rules. That validation genuinely fails
-//  for this schema (`RoutineExerciseAlternative.exercise` has no declared
-//  inverse), so an implicit `.automatic` container throws
-//  `SwiftDataError._Error.loadIssueModelContainer` — surfaced here as tests
-//  crashing intermittently depending on whether CloudKit validation happened
-//  to run before the failure was hit. Passing `.none` opts these purely local,
-//  in-memory test containers out of that validation entirely.
+//  initializer defaults it to `.automatic`, which makes SwiftData run CloudKit's
+//  schema validation and container setup on a store that can never sync. `.none`
+//  opts these purely local containers out of that entirely. (Historically this was
+//  load-bearing for a second reason — the schema itself failed that validation
+//  while `RoutineExerciseAlternative.exercise` had no declared inverse, which made
+//  container creation fail intermittently. That inverse exists now; keep `.none`
+//  for the first reason. See docs/unit-testing.md §2.)
 //
 
 import Foundation
@@ -26,17 +29,7 @@ import SwiftData
 enum InMemoryModelContainer {
     @MainActor
     static func make() -> ModelContainer {
-        let schema = Schema([
-            Routine.self,
-            Exercise.self,
-            RoutineExercise.self,
-            ExerciseSet.self,
-            RoutineExerciseAlternative.self,
-            AlternativeExerciseSet.self,
-            WorkoutSession.self,
-            WorkoutExercise.self,
-            WorkoutSet.self
-        ])
+        let schema = Schema(GymStreakSchema.modelTypes)
         let configuration = ModelConfiguration(
             schema: schema,
             isStoredInMemoryOnly: true,
