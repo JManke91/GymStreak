@@ -23,7 +23,7 @@ final class HistoryResponsivenessUITests: XCTestCase {
             "-UI_TESTING", "1",
             "-UI_TEST_EPHEMERAL_STORE", "1",
             "-UI_TEST_HISTORY_SESSION_COUNT", "60",
-            "-UI_TEST_HISTORY_STALL_PROBE", "1",
+            "-UI_TEST_STALL_PROBE", "1",
             "-DISABLE_NOTIFICATIONS", "1",
             "-AppleLanguages", "(en)"
         ]

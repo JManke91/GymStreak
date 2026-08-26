@@ -2,3 +2,6 @@
 - You now get told when a routine change couldn't be saved, instead of it silently disappearing
 - Fixed: with a VPN configured, the iCloud status could stay stuck on "Syncing…" while offline instead of showing "Waiting"
 - Fixed: a device whose exercise library came up empty and stayed empty now restores the built-in exercises by itself, instead of waiting forever for an iCloud sync that had already happened
+- The app stays noticeably smoother while a large iCloud sync is running, for example on a new device or right after reinstalling
+- The Routines tab opens and scrolls noticeably faster, especially with many routines
+- Fixed: after reinstalling the app and syncing from iCloud, deleting a workout with "Delete in GymStreak and Apple Health" always failed. The app now asks for Apple Health permission again at that moment, and says what to do if you decline

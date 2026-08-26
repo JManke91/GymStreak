@@ -326,60 +326,74 @@ struct EditWorkoutSessionCommitTests {
 
     // MARK: - Template propagation
 
+    /// Observes the watch-sync notification for the duration of a
+    /// `confirmation` block.
+    ///
+    /// Two details matter here and are easy to regress:
+    ///
+    /// - `queue: nil` — Foundation only guarantees same-call-stack delivery when
+    ///   no `OperationQueue` is given. With `queue: .main` the block is handed to
+    ///   the main queue, so a synchronous test body can return before it runs and
+    ///   the confirmation count would be read too early.
+    /// - The block is imported as `@Sendable` (`NS_SWIFT_SENDABLE` in
+    ///   `NSNotification.h`), so it cannot mutate a captured `var` in Swift 6.
+    ///   `Confirmation` is `Sendable` and counts through an atomic, which is why
+    ///   `confirmation` is the right recording mechanism rather than a flag plus
+    ///   an escape hatch.
+    private func observeTemplateChange(_ onPost: @escaping @Sendable () -> Void) -> NSObjectProtocol {
+        NotificationCenter.default.addObserver(
+            forName: .routineTemplateDidChange,
+            object: nil,
+            queue: nil
+        ) { _ in onPost() }
+    }
+
     @Test
-    func updatingTheTemplatePushesTheEditedValuesOntoTheRoutineAndNotifiesTheWatch() throws {
+    func updatingTheTemplatePushesTheEditedValuesOntoTheRoutineAndNotifiesTheWatch() async throws {
         let fixture = makeFixture()
         let recorded = makeRecordedWorkout(fixture, setCount: 1)
         let original = try #require(recorded.workoutExercise.setsList.first)
         let slot = try #require(recorded.slot)
 
-        var notified = false
-        let observer = NotificationCenter.default.addObserver(
-            forName: .routineTemplateDidChange,
-            object: nil,
-            queue: .main
-        ) { _ in notified = true }
-        defer { NotificationCenter.default.removeObserver(observer) }
+        await confirmation("watch sync notification posted") { notified in
+            let observer = observeTemplateChange { notified() }
+            defer { NotificationCenter.default.removeObserver(observer) }
 
-        fixture.viewModel.saveEditedWorkout(
-            recorded.session,
-            exerciseDrafts: [draft(for: recorded.workoutExercise, sets: [keptSet(original, reps: 12, weight: 65)])],
-            updateTemplate: true
-        )
+            fixture.viewModel.saveEditedWorkout(
+                recorded.session,
+                exerciseDrafts: [draft(for: recorded.workoutExercise, sets: [keptSet(original, reps: 12, weight: 65)])],
+                updateTemplate: true
+            )
+        }
 
         let templateSet = try #require(slot.setsList.first)
         #expect(templateSet.reps == 12)
         #expect(templateSet.weight == 65)
         #expect(recorded.session.didUpdateTemplate)
-        #expect(notified)
     }
 
     @Test
-    func decliningTheTemplateUpdateLeavesTheRoutineAloneAndSendsNoNotification() throws {
+    func decliningTheTemplateUpdateLeavesTheRoutineAloneAndSendsNoNotification() async throws {
         let fixture = makeFixture()
         let recorded = makeRecordedWorkout(fixture, setCount: 1)
         let original = try #require(recorded.workoutExercise.setsList.first)
         let slot = try #require(recorded.slot)
 
-        var notified = false
-        let observer = NotificationCenter.default.addObserver(
-            forName: .routineTemplateDidChange,
-            object: nil,
-            queue: .main
-        ) { _ in notified = true }
-        defer { NotificationCenter.default.removeObserver(observer) }
+        await confirmation("no watch sync notification posted", expectedCount: 0) { notified in
+            let observer = observeTemplateChange { notified() }
+            defer { NotificationCenter.default.removeObserver(observer) }
 
-        fixture.viewModel.saveEditedWorkout(
-            recorded.session,
-            exerciseDrafts: [draft(for: recorded.workoutExercise, sets: [keptSet(original, reps: 12, weight: 65)])],
-            updateTemplate: false
-        )
+            fixture.viewModel.saveEditedWorkout(
+                recorded.session,
+                exerciseDrafts: [draft(for: recorded.workoutExercise, sets: [keptSet(original, reps: 12, weight: 65)])],
+                updateTemplate: false
+            )
+        }
 
         let templateSet = try #require(slot.setsList.first)
         #expect(templateSet.reps == 8)
         #expect(templateSet.weight == 50)
         #expect(recorded.session.didUpdateTemplate == false)
-        #expect(notified == false)
     }
 
     /// Regression for a latent bug the P1.5 extraction exposed: the template

@@ -157,7 +157,7 @@ The wire DTO `CompletedWatchWorkout` never crosses into Presentation. `WatchConn
 
 | Notification | Posted by | Handled by |
 |---|---|---|
-| `.cloudKitDataDidChange` | CloudSyncObserver, DefaultContentSeeder | RoutinesViewModel, ExercisesViewModel (refetch), ExerciseCatalogSyncCoordinator (refetch + watch catalogue sync), WorkoutViewModel (refresh history) |
+| `.cloudKitDataDidChange` | CloudSyncObserver (**coalesced**: leading-edge, then at most one fan-out per 2 s window — see `docs/sync-refresh-performance.md`), DefaultContentSeeder (direct, not coalesced) | RoutinesViewModel, ExercisesViewModel (refetch), ExerciseCatalogSyncCoordinator (refetch + watch catalogue sync), WorkoutViewModel (refresh history) |
 | `.watchAppBecameAvailable` | WatchConnectivityManager | RoutinesViewModel (sync routines) |
 | `.workoutHistoryDidChange` | Domain ingestion services | WorkoutViewModel (refresh history) |
 | `.historySourceDataDidChange` | RoutinesViewModel, ExercisesViewModel after successful local saves | WorkoutViewModel (invalidate actor-owned History snapshot) |
@@ -191,7 +191,7 @@ Cleaner, smaller architecture — keep it that way:
 
 ### Concurrency (Swift 6 language mode) — **`docs/swift6-concurrency.md` is the reference**
 
-The project compiles in Swift 6 language mode with zero warnings. Binding rules:
+The project compiles in Swift 6 language mode with zero warnings from first-party sources — one expected RevenueCat deprecation aside (`docs/swift6-concurrency.md` §9c). Binding rules:
 
 - **Shared service** = `@MainActor final class X { static let shared = X() }` behind a `@MainActor` Domain protocol. A `static let` of a non-`Sendable` type is global shared mutable state and will not compile.
 - **`Domain/Services/` stays isolation-free.** Never add `@MainActor` to the pure services — the `@ModelActor` History store calls them from its own executor, off main.

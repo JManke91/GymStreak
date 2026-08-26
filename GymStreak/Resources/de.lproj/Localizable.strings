@@ -277,6 +277,7 @@
 "workout.history.delete.gymstreak_only" = "Nur in GymStreak löschen";
 "workout.history.delete.with_health" = "In GymStreak und Apple Health löschen";
 "history.delete.health_failed" = "Das Workout wurde in GymStreak gelöscht, konnte aber nicht aus Apple Health entfernt werden. Es erscheint möglicherweise weiterhin in der Health-App, wo du es manuell löschen kannst.";
+"history.delete.health_access_denied" = "Das Workout wurde in GymStreak gelöscht. Apple Health hat das Entfernen dort nicht erlaubt — aktiviere „Workouts“ für GymStreak unter Health › Profil › Apps, oder lösche es in der Health-App.";
 
 // MARK: - Create Routine Flow
 "create_routine.title" = "Routine erstellen";

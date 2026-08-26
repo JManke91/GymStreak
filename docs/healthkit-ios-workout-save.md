@@ -221,9 +221,12 @@ the source bundle id.
   ownership from timestamps, which is worse than leaving them.
 - `WorkoutDetailView.loadHealthKitKcal()` still constructs its own `HKHealthStore()` inline — a
   pre-existing layer violation, untouched here (also noted in [delete-workout.md](./delete-workout.md)).
-- Read authorization for `HKObjectType.workoutType()` is still requested. `deleteWorkout(externalUUID:)`
-  needs it to *find* the workout; a denied read makes the lookup return zero rows, which the app
-  treats as success (see delete-workout.md).
+- Read authorization for `HKObjectType.workoutType()` is still requested, but the delete path no
+  longer depends on it: since 2026-08-26 `deleteWorkout(externalUUID:)` uses
+  `deleteObjects(of:predicate:)`, which needs only *share* authorization. It also re-requests that
+  authorization in place when this install has never been asked — the state a reinstalled app is in,
+  because `healthKitWorkoutId` comes back over CloudKit while the grant does not. Root cause and
+  fix in [delete-workout.md](./delete-workout.md).
 
 ## HealthKit research findings (iOS 26)
 Verified against Apple's documentation and WWDC25 before the fix. **Do not re-research these.**

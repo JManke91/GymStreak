@@ -27,6 +27,24 @@ or, to run just the unit tests via the main scheme:
 xcodebuild test -scheme GymStreak -destination 'platform=iOS Simulator,name=<device>' -only-testing:GymStreakTests
 ```
 
+### Auditing the build for warnings
+
+**Grepping a fastlane log for `warning:` finds nothing — xcbeautify rewrites compiler
+warnings with a `⚠️` marker.** A zero-warning check against a `bundle exec fastlane
+test_unit` log therefore has to grep `⚠️`, or grep the diagnostic text itself
+(`mutation of captured var`, `is redundant because`, …). This silently hid 58 warnings until
+2026-08-26. To get raw, greppable diagnostics, run `xcodebuild` without the formatter.
+
+Two more traps when auditing:
+
+- **An incremental build reports nothing** — only recompiled files re-emit their warnings. A
+  full inventory needs `clean`, or at minimum `touch` on the files in question.
+- **`-only-testing:` takes a suite, not a file.** A file holding two suites (as
+  `RoutinePlanLinkRepairTests.swift` does, with `RoutinePlanLinkRepairTests` *and*
+  `RoutinePlanLinkRepairGatingTests`) only runs the suite you name, so a change verified
+  that way can leave half the file untested. Check the file for a second `@Suite` before
+  concluding a run covered it.
+
 ## Current coverage
 
 As of 2026-07-30 the target holds **383 tests across 40 suites** (8.0 s of actual execution
@@ -148,6 +166,63 @@ was understood, intermittent parallel failures looked like a concurrency bug). W
 `cloudKitDatabase: .none` fix in place this is probably no longer necessary, but it was left in
 place since it costs nothing at this test count and guarantees determinism; revisit if the
 suite grows large enough that serial execution becomes slow.
+
+### 5. Asserting on a `NotificationCenter` post — use `confirmation`, never a captured `var`
+
+The obvious spelling does not compile clean in Swift 6:
+
+```swift
+var notified = false
+let observer = NotificationCenter.default.addObserver(forName: .x, object: nil, queue: .main) { _ in
+    notified = true          // ⚠️ mutation of captured var 'notified' in concurrently-executing code
+}
+```
+
+`addObserverForName:object:queue:usingBlock:` marks its block `NS_SWIFT_SENDABLE` in
+`NSNotification.h`, so the closure imports as `@Sendable` and cannot mutate captured state.
+Reach for Swift Testing's `Confirmation` instead of an escape hatch — it is `Sendable` and
+counts through an atomic, so the observer block may call it freely:
+
+```swift
+await confirmation("notification posted") { notified in
+    let observer = NotificationCenter.default.addObserver(
+        forName: .x, object: nil, queue: nil
+    ) { _ in notified() }
+    defer { NotificationCenter.default.removeObserver(observer) }
+
+    subject.doTheThing()
+}
+```
+
+The negative assertion is `confirmation(..., expectedCount: 0)`, which is the documented way
+to assert an event never happened — not a deleted assertion. The count is checked when the
+closure returns, with no polling, so a synchronously posted notification is deterministic.
+The test function becomes `async` (every public `confirmation` overload is `async`).
+
+Two things to keep:
+
+- **`queue: nil`, not `queue: .main`.** Foundation only guarantees same-call-stack delivery
+  when no `OperationQueue` is given. With a queue the block is scheduled onto it, so a
+  synchronous test body can return before the block runs and the count is read too early.
+- **Do not reach for `nonisolated(unsafe)`** or an `@unchecked Sendable` box — both sit at the
+  bottom of the escape-hatch ranking in `docs/swift6-concurrency.md` §10.6, and neither is
+  needed here.
+
+`EditWorkoutSessionCommitTests` is the worked example.
+
+### 6. Do not nest `#require` inside `#expect`
+
+`#expect(try #require(routine.schedule) === schedule)` compiles but warns —
+`'#require(_:_:)' is redundant because 'routine.schedule' never equals 'nil'` — because the
+`#expect` expansion re-checks an already-unwrapped value. Hoist the unwrap:
+
+```swift
+let planned = try #require(routine.schedule)
+#expect(planned === schedule)
+```
+
+Same assertion, no warning, and the failure message names which half failed.
+`RoutinePlanLinkRepairGatingTests` is the worked example.
 
 ## Verification performed when this target was added
 

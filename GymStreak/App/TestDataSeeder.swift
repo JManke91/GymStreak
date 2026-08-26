@@ -75,49 +75,88 @@ class TestDataSeeder {
     private static func seedRoutines(modelContext: ModelContext, exercises: [String: Exercise]) {
         let pushDay = Routine(name: "testdata.routine.push_day".localized)
         modelContext.insert(pushDay)
+        let pushDayExercises: [(nameKey: String, sets: Int, reps: Int, weight: Double, restTime: TimeInterval)] = [
+            ("testdata.exercise.bench_press", 4, 8, 185.0, 120),
+            ("testdata.exercise.incline_dumbbell_press", 3, 10, 70.0, 90),
+            ("testdata.exercise.cable_flyes", 3, 12, 40.0, 60),
+            ("testdata.exercise.overhead_press", 4, 8, 115.0, 120),
+            ("testdata.exercise.lateral_raises", 3, 12, 20.0, 60),
+            ("testdata.exercise.tricep_pushdowns", 3, 12, 60.0, 60)
+        ]
         addExercisesToRoutine(
             pushDay,
-            exercises: [
-                ("testdata.exercise.bench_press", 4, 8, 185.0, 120),
-                ("testdata.exercise.incline_dumbbell_press", 3, 10, 70.0, 90),
-                ("testdata.exercise.cable_flyes", 3, 12, 40.0, 60),
-                ("testdata.exercise.overhead_press", 4, 8, 115.0, 120),
-                ("testdata.exercise.lateral_raises", 3, 12, 20.0, 60),
-                ("testdata.exercise.tricep_pushdowns", 3, 12, 60.0, 60)
-            ],
+            exercises: pushDayExercises,
             exerciseMap: exercises,
             modelContext: modelContext
         )
 
         let pullDay = Routine(name: "testdata.routine.pull_day".localized)
         modelContext.insert(pullDay)
+        let pullDayExercises: [(nameKey: String, sets: Int, reps: Int, weight: Double, restTime: TimeInterval)] = [
+            ("testdata.exercise.deadlift", 4, 5, 315.0, 180),
+            ("testdata.exercise.pull_ups", 4, 10, 0.0, 90),
+            ("testdata.exercise.barbell_rows", 4, 8, 155.0, 120),
+            ("testdata.exercise.face_pulls", 3, 15, 40.0, 60),
+            ("testdata.exercise.hammer_curls", 3, 10, 40.0, 60)
+        ]
         addExercisesToRoutine(
             pullDay,
-            exercises: [
-                ("testdata.exercise.deadlift", 4, 5, 315.0, 180),
-                ("testdata.exercise.pull_ups", 4, 10, 0.0, 90),
-                ("testdata.exercise.barbell_rows", 4, 8, 155.0, 120),
-                ("testdata.exercise.face_pulls", 3, 15, 40.0, 60),
-                ("testdata.exercise.hammer_curls", 3, 10, 40.0, 60)
-            ],
+            exercises: pullDayExercises,
             exerciseMap: exercises,
             modelContext: modelContext
         )
 
         let legDay = Routine(name: "testdata.routine.leg_day".localized)
         modelContext.insert(legDay)
+        let legDayExercises: [(nameKey: String, sets: Int, reps: Int, weight: Double, restTime: TimeInterval)] = [
+            ("testdata.exercise.back_squat", 4, 8, 225.0, 150),
+            ("testdata.exercise.romanian_deadlift", 3, 10, 185.0, 120),
+            ("testdata.exercise.leg_press", 3, 12, 360.0, 90),
+            ("testdata.exercise.leg_curls", 3, 12, 90.0, 60),
+            ("testdata.exercise.calf_raises", 4, 15, 100.0, 45)
+        ]
         addExercisesToRoutine(
             legDay,
-            exercises: [
-                ("testdata.exercise.back_squat", 4, 8, 225.0, 150),
-                ("testdata.exercise.romanian_deadlift", 3, 10, 185.0, 120),
-                ("testdata.exercise.leg_press", 3, 12, 360.0, 90),
-                ("testdata.exercise.leg_curls", 3, 12, 90.0, 60),
-                ("testdata.exercise.calf_raises", 4, 15, 100.0, 45)
-            ],
+            exercises: legDayExercises,
             exerciseMap: exercises,
             modelContext: modelContext
         )
+
+        seedStressRoutines(
+            modelContext: modelContext,
+            exercises: exercises,
+            templates: [pushDayExercises, pullDayExercises, legDayExercises]
+        )
+    }
+
+    /// Clones the three fixture routines until the library reaches
+    /// `-UI_TEST_ROUTINE_COUNT` routines. Opt-in from `RoutinesResponsivenessUITests`,
+    /// which needs the many-routines library a Pro user can build — the free cap is the
+    /// only thing bounding that list (docs/history-performance.md, "Routinen tab").
+    private static func seedStressRoutines(
+        modelContext: ModelContext,
+        exercises: [String: Exercise],
+        templates: [[(nameKey: String, sets: Int, reps: Int, weight: Double, restTime: TimeInterval)]]
+    ) {
+        let arguments = ProcessInfo.processInfo.arguments
+        guard let target = arguments
+            .firstIndex(of: "-UI_TEST_ROUTINE_COUNT")
+            .flatMap({ index in
+                arguments.indices.contains(index + 1) ? Int(arguments[index + 1]) : nil
+            }),
+            target > templates.count
+        else { return }
+
+        for index in templates.count..<target {
+            let routine = Routine(name: "Routine \(index + 1)")
+            modelContext.insert(routine)
+            addExercisesToRoutine(
+                routine,
+                exercises: templates[index % templates.count],
+                exerciseMap: exercises,
+                modelContext: modelContext
+            )
+        }
     }
 
     private static func addExercisesToRoutine(

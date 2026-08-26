@@ -38,13 +38,51 @@ protocol HealthKitWorkoutServicing: AnyObject {
     /// `HKMetadataKeyExternalUUID` metadata — the same id stored on
     /// `WorkoutSession.healthKitWorkoutId`.
     ///
-    /// - Returns: `true` when a matching workout was found and deleted, `false`
-    ///   when nothing matched. A zero-result lookup is indistinguishable from a
-    ///   silently denied read or a workout the user already removed in the Health
-    ///   app; in all three cases the desired end state already holds, so it is a
+    /// Deleting requires *share* authorization for the workout type, which does
+    /// not survive the app being deleted and reinstalled even though the id
+    /// does (it comes back over CloudKit). Implementations therefore re-ask for
+    /// it in place and throw `HealthKitError.healthAccessDenied` when it is not
+    /// granted — a state with a user remedy, distinct from `deleteFailed`.
+    ///
+    /// - Returns: `true` when a matching workout was deleted, `false` when
+    ///   nothing matched — the user already removed it in the Health app, or it
+    ///   was never there. The desired end state holds either way, so that is a
     ///   success and never an error.
     @discardableResult
     func deleteWorkout(externalUUID: UUID) async throws -> Bool
 
     func estimateCaloriesBurned(durationInSeconds: TimeInterval) -> Double
+}
+
+// MARK: - Error Types
+
+/// The failure vocabulary of the HealthKit gateway.
+///
+/// Declared alongside the protocol rather than with its implementation so
+/// callers in `Presentation/` can classify a failure without reaching into
+/// `Data/`.
+enum HealthKitError: LocalizedError {
+    case notAvailable
+    case notAuthorized
+    case saveFailed(String)
+    case deleteFailed(String)
+    /// Apple Health will not let the app change workouts — the user declined the
+    /// prompt, or revoked write access in Health. Distinct from `deleteFailed`
+    /// because the remedy is a permission the user controls, not a retry.
+    case healthAccessDenied
+
+    var errorDescription: String? {
+        switch self {
+        case .notAvailable:
+            return "HealthKit is not available on this device"
+        case .notAuthorized:
+            return "HealthKit authorization not granted"
+        case .saveFailed(let message):
+            return "Failed to save workout: \(message)"
+        case .deleteFailed(let message):
+            return "Failed to delete workout: \(message)"
+        case .healthAccessDenied:
+            return "GymStreak is not allowed to change workouts in Apple Health"
+        }
+    }
 }

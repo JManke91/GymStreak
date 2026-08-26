@@ -19,6 +19,14 @@ class RoutinesViewModel: ObservableObject {
     @Published var selectedRoutine: Routine?
     /// Most recent completed-session start date per routine id (nil = never trained).
     @Published var lastPerformedByRoutine: [UUID: Date] = [:]
+    /// The "Als Nächstes" hero card, precomputed. Nil only when there are no routines.
+    @Published private(set) var heroCard: RoutineCardModel?
+    /// Every other routine's card, in fetch order — the hero is already excluded, so the
+    /// list does not `filter` in its `body`.
+    @Published private(set) var otherCards: [RoutineCardModel] = []
+    /// Most recent training across all routines, for the header subline. Precomputed for the
+    /// same reason: `.values.max()` is an aggregation and belonged nowhere near a `body`.
+    @Published private(set) var mostRecentTraining: Date?
     /// Set when persisting a routine change threw. The list presents it as an
     /// alert: an edit that never reached the store looks identical to a saved
     /// one on screen, which is the silence this replaces.
@@ -134,12 +142,44 @@ class RoutinesViewModel: ObservableObject {
     private func refreshRoutinesWithoutWatchSync() {
         routines = routineRepository.fetchAll()
         refreshLastPerformedDates()
+        rebuildCardModels()
     }
 
     func fetchRoutines() {
         routines = routineRepository.fetchAll()
         refreshLastPerformedDates()
+        rebuildCardModels()
         syncRoutinesToWatch()
+    }
+
+    /// Rebuilds the precomputed card models the list renders.
+    ///
+    /// Every mutation path in this ViewModel funnels through `updateRoutine` (or `save()` +
+    /// `fetchRoutines()`), so this is the single place the cards can go stale — precomputing
+    /// removes the SwiftData observation the cards used to get for free by reading the
+    /// `@Model` in their `body`, which is exactly the staleness class the History screen hit
+    /// (docs/history-performance.md, Phase 2).
+    private func rebuildCardModels() {
+        let hero = upNextRoutine
+        heroCard = hero.map(makeCardModel)
+        otherCards = routines
+            .filter { $0.id != hero?.id }
+            .map(makeCardModel)
+        mostRecentTraining = lastPerformedByRoutine.values.max()
+    }
+
+    private func makeCardModel(for routine: Routine) -> RoutineCardModel {
+        RoutineMetricsService.cardModel(
+            for: routine,
+            nextDue: nextDueDate(for: routine),
+            lastPerformed: lastPerformedByRoutine[routine.id]
+        )
+    }
+
+    /// Resolves a card back to its routine. The list holds value structs, so the destructive
+    /// and duplicating actions look their subject up here rather than capturing a `@Model`.
+    func routine(withId id: UUID) -> Routine? {
+        routines.first { $0.id == id }
     }
 
     /// Rebuilds the routine → last-trained lookup from completed workout history.

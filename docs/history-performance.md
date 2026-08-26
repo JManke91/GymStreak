@@ -700,10 +700,14 @@ indicative and judge the fix on **relative before/after deltas**.
 - `PersonalRecordServiceTests` was the only existing test over these services;
   `HistoryStatsServiceStreakTests` (added with Phase 1) now covers `streakWeeks`. Phase 2
   changes call sites, not service semantics, so both must stay green.
-- Phases 1–2 touch `Presentation/` plus one line in `Data/Repositories/`. New value types
-  (`WorkoutCardModel`, the snapshot struct) belong in `Presentation/` — they are display
-  models, not domain models, consistent with the "DTOs only at real external boundaries"
-  decision in `docs/architecture.md`.
+- Phases 1–2 touch `Presentation/` plus one line in `Data/Repositories/`. The new value types
+  (`HistorySnapshot`, `WorkoutCardModel`, and later `RoutineCardModel`) ended up in
+  `Domain/Models/`, not `Presentation/` as originally planned: a `Domain/` or `Data/` producer
+  cannot return a Presentation type, and both have one — the `@ModelActor` snapshot provider in
+  `Data/` and `RoutineMetricsService` in `Domain/Services/`. They are computed aggregates, not a
+  DTO mirror of the stored rows, so they do not contradict the "DTOs only at real external
+  boundaries" decision in `docs/architecture.md`. What keeps them honest is that they carry no
+  localized strings and import only `Foundation`.
 - **`architecture-reviewer` pass is required** (new types, multi-layer diff). CRITICAL
   findings must be fixed and the reviewer re-run until PASS.
 - App must still compile before the work is reported as done.
@@ -726,3 +730,104 @@ indicative and judge the fix on **relative before/after deltas**.
   established visual design; the dividers are deliberately inline.
 - **Starting with the `@ModelActor` rewrite (3.1)** — a large architectural change whose
   necessity is unproven until Phases 1–2 are measured.
+
+---
+
+## 7. The Routinen tab — same two rules, same fix (2026-08-26)
+
+The Routinen tab broke the same two rules this document exists for, and was found by two
+independent architecture reviews before it was fixed
+(`.scratch/sync-refresh-performance/issues/02-routines-list-render-cost.md`). It matters more
+than the routine count suggests: **the free-tier cap is the only thing bounding this list**, so
+the Pro users who pay are the ones who hit the unbounded version.
+
+**Two defects, one screen:**
+
+1. **Eager container.** `RoutinesView` rendered user-scaled routines as
+   `ScrollView { VStack { ForEach(rest) … } }` — every card the user owns constructed and laid
+   out, offscreen ones included, before the first frame (rule 1).
+2. **Aggregation in `body`.** Each `RoutineCardView` ran `RoutineMetricsService.primaryMuscleGroups`,
+   `.totalSets` and `.estimatedDurationMinutes`, a `sorted().prefix(3)` over
+   `routineExercisesList`, and `WorkoutPlanningService.nextDue`, all from computed properties
+   `body` reads — four walks of the `routineExercises → sets` graph per card per render, each
+   faulting `RoutineExercise.exercise` per preview avatar (rule 3, rule 4). `RoutinesView`
+   additionally ran `viewModel.routines.filter { … }` and `lastPerformedByRoutine.values.max()`
+   inside `body`, and `TimeFormatting.lastTrainedLabel` allocated a `RelativeDateTimeFormatter`
+   per call (rule 2).
+
+**The fix, both halves together.** `RoutineCardModel` + `RoutineCardAvatar`
+(`Domain/Models/RoutineCardModel.swift`) carry everything a card draws;
+`RoutineMetricsService.cardModel(for:nextDue:lastPerformed:)` builds one from a **single**
+traversal; `RoutinesViewModel` publishes `heroCard`, `otherCards` (hero already excluded — the
+`filter` is gone) and `mostRecentTraining`, rebuilt in `rebuildCardModels()`; and the `ForEach`
+moved into a `LazyVStack`. `RoutineCardView` takes the value struct and is `Equatable`.
+`TimeFormatting`'s relative formatter is hoisted to a `@MainActor static let`.
+
+Ordering was not optional: Phase 1 above is the record of laziness landing *before* the row
+models and making the screen worse. Both halves are in the same change here.
+
+**Staleness is the price of precomputing**, exactly as in Phase 2. The cards no longer read the
+`@Model`, so SwiftData observation no longer refreshes them. Every mutation path in
+`RoutinesViewModel` funnels through `updateRoutine` → `save()` + `fetchRoutines()`, and
+`fetchRoutines()` / `refreshRoutinesWithoutWatchSync()` are the only two places that rebuild —
+which is what makes the funnel load-bearing rather than incidental. `RoutineCardModelTests`
+pins it with a set edit and a rename.
+
+`nextDue` is now fixed at build time rather than recomputed per render. `onAppear` refetches,
+so entering the tab is what advances it across a day boundary.
+
+### Measured before/after
+
+Method: the same main-run-loop stall probe as §5, generalized to
+`Presentation/Views/Components/MainThreadStallProbe.swift` and given a per-screen accessibility
+identifier. `RoutinesResponsivenessUITests` launches with `-UI_TEST_ROUTINE_COUNT 40` (a
+40-routine library of 5–6 exercises × 3–4 sets each, seeded by `TestDataSeeder`), taps away to
+History and back — Routines is the initial tab, so a launch-anchored figure would be dominated
+by seeding rather than by rendering — then fast-scrolls twice. Debug build, iPhone 17 Pro
+simulator, iOS 26.1, two runs each.
+
+| Interaction (40 routines) | Before | After |
+|---|---|---|
+| Re-entering the Routinen tab | 39 / 37 ms | **3 / 1 / 4 ms** |
+| Two fast scrolls of the list | 143 / 140 ms | **52 / 27 / 32 ms** |
+
+Numbers are the probe's maximum delayed main-run-loop service since the screen appeared, i.e.
+the user's actual "touches are not being dispatched" condition. Treat absolute milliseconds as
+indicative (Debug build, simulator) and the deltas as the result: ~13× on entry, ~3–5× on
+scroll. The scroll figure is also the one that was closest to shipping a visible stall — the
+pre-fix 143/140 ms sat just under the 150 ms assertion at only 40 routines, and nothing bounds
+that number for a Pro user.
+
+### Two things the architecture review caught, both non-obvious
+
+- **`Equatable` on a row view does nothing without `.equatable()`.** SwiftUI only consults a
+  custom `==` through `EquatableView`, and a view that stores a closure (`onStart`) cannot be
+  short-circuited by the default structural comparison either — so the conformance was inert and
+  every visible card re-evaluated its body on any republish. The call site now reads
+  `RoutineCardView(…).equatable()`. `WorkoutCardView` in Phase 2 has the same problem — neither
+  `TrainingsTabView.swift:216` nor `HistoryCalendarView.swift:303` applies `.equatable()`. It
+  stores no closure, so the default structural comparison still applies and the cost is smaller,
+  but its "lets SwiftUI skip unchanged rows outright" comment is not true as written. Not fixed
+  here (out of the routines ticket's scope); a one-line change at each call site.
+- **Precomputing moves staleness to whoever mutates from another screen.** Deleting an exercise
+  in the Übungen tab deletes the `RoutineExercise` rows referencing it, so routine templates
+  change from a screen that never touches a routine — and `ExercisesViewModel` posted only
+  `.historySourceDataDidChange`, which `RoutinesViewModel` does not observe. While the cards read
+  the `@Model` this self-corrected; precomputing made it visible. `performDeleteExercise` and
+  `confirmDeleteAllExercises` now post `.routineTemplateDidChange` (the variant that also syncs
+  the watch, which was likewise left with a stale template), pinned by
+  `RoutineCardModelTests.deletingAnExerciseRefreshesTheRoutineCards`. `.routineTemplateDidChangeLocally`
+  would have been the wrong one of the pair: it deliberately skips the watch sync because it exists
+  for committed watch transactions that already staged their own snapshot, and using it here would
+  leave the watch holding a template referencing a deleted exercise. Side effect, and correct:
+  deleting the whole library now pushes the resulting empty templates to the watch too. **The general lesson: after
+  precomputing a screen, sweep for mutators outside its own ViewModel, not just inside it.**
+
+**Not re-done, already in place:** `SwiftDataRoutineRepository.fetchAll()` sets
+`relationshipKeyPathsForPrefetching = [\.schedules]`, which removes the per-row plan fault.
+That was a mitigation of one cause, never a fix for either defect.
+
+**Compounding with the sync-refresh work:** every remote-change notification calls
+`fetchRoutines()`. Before this change that was an eager rebuild of every card; it is now a
+rebuild of the value structs plus a lazy re-render of what is on screen. Coalescing those
+notifications (ticket 01 of the same set) and this fix are independent and multiply.

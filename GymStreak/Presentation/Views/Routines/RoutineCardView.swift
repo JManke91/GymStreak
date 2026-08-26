@@ -9,23 +9,24 @@
 
 import SwiftUI
 
-struct RoutineCardView: View {
-    let routine: Routine
-    let lastPerformed: Date?
+/// Takes a `RoutineCardModel`, never a `Routine`.
+///
+/// It previously called `RoutineMetricsService.primaryMuscleGroups`, `.totalSets` and
+/// `.estimatedDurationMinutes`, plus a `sorted().prefix(3)` over `routineExercisesList` and
+/// `WorkoutPlanningService.nextDue`, from computed properties `body` reads — four walks of the
+/// `routineExercises → sets` graph per card per render, each faulting SwiftData relationships,
+/// re-paid every time a lazy row is rebuilt. Being `Equatable` over plain values also lets
+/// SwiftUI skip unchanged cards outright. See docs/history-performance.md.
+struct RoutineCardView: View, Equatable {
+    let card: RoutineCardModel
     var isHero: Bool = false
     let onStart: () -> Void
 
-    private var muscles: [String] { RoutineMetricsService.primaryMuscleGroups(for: routine) }
-    private var setCount: Int { RoutineMetricsService.totalSets(for: routine) }
-    private var duration: Int { RoutineMetricsService.estimatedDurationMinutes(for: routine) }
-
-    /// Next due date when the routine is planned; nil otherwise.
-    private var nextDue: Date? {
-        guard let schedule = routine.schedule, schedule.isActive else { return nil }
-        return WorkoutPlanningService.nextDue(for: schedule, lastCompleted: lastPerformed)
-    }
-    private var previewExercises: [RoutineExercise] {
-        Array(routine.routineExercisesList.sorted(by: { $0.order < $1.order }).prefix(3))
+    /// The rendered output depends only on the model and the variant; `onStart` captures
+    /// nothing that can change what is drawn (it forwards `card.id` to the ViewModel), so it
+    /// is deliberately excluded rather than making the whole card non-`Equatable`.
+    static func == (lhs: RoutineCardView, rhs: RoutineCardView) -> Bool {
+        lhs.card == rhs.card && lhs.isHero == rhs.isHero
     }
 
     var body: some View {
@@ -78,21 +79,21 @@ struct RoutineCardView: View {
         HStack(spacing: 12) {
             // Overlapping avatars of the first exercises
             HStack(spacing: -10) {
-                ForEach(Array(previewExercises.enumerated()), id: \.element.id) { index, entry in
+                ForEach(Array(card.avatars.enumerated()), id: \.element.id) { index, avatar in
                     ExerciseAvatarView(
-                        muscleGroups: entry.exercise?.muscleGroups ?? ["General"],
-                        equipmentType: entry.exercise?.equipmentType ?? .dumbbell,
+                        muscleGroups: avatar.muscleGroups,
+                        equipmentType: avatar.equipmentType,
                         size: isHero ? 44 : 38,
                         radius: isHero ? 14 : 12
                     )
                     .background(DesignSystem.Colors.background)
                     .clipShape(RoundedRectangle(cornerRadius: isHero ? 14 : 12, style: .continuous))
-                    .zIndex(Double(previewExercises.count - index))
+                    .zIndex(Double(card.avatars.count - index))
                 }
             }
 
             VStack(alignment: .leading, spacing: 3) {
-                Text(routine.name)
+                Text(card.name)
                     .font(.system(size: isHero ? 19 : 16.5, weight: .bold, design: .rounded))
                     .kerning(-0.4)
                     .foregroundStyle(.white)
@@ -135,7 +136,7 @@ struct RoutineCardView: View {
     private var metaRow: some View {
         HStack(alignment: .top, spacing: 10) {
             FlowLayout(spacing: 6) {
-                ForEach(muscles.prefix(3), id: \.self) { muscle in
+                ForEach(card.muscleGroups, id: \.self) { muscle in
                     MuscleChipView(muscleGroup: muscle, small: true)
                 }
             }
@@ -146,7 +147,7 @@ struct RoutineCardView: View {
 
     @ViewBuilder
     private var scheduleStatus: some View {
-        if let dueLabel = ScheduleFormatter.nextDueLabel(for: nextDue) {
+        if let dueLabel = ScheduleFormatter.nextDueLabel(for: card.nextDue) {
             HStack(spacing: 4) {
                 Image(systemName: "calendar")
                     .font(.system(size: 9, weight: .bold))
@@ -161,7 +162,7 @@ struct RoutineCardView: View {
             .background(DesignSystem.Colors.tint.opacity(0.14))
             .clipShape(Capsule())
         } else {
-            Text(TimeFormatting.lastTrainedLabel(for: lastPerformed))
+            Text(TimeFormatting.lastTrainedLabel(for: card.lastPerformed))
                 .font(.system(size: 11, weight: .medium))
                 .foregroundStyle(Color.white.opacity(0.4))
                 .lineLimit(1)
@@ -172,7 +173,7 @@ struct RoutineCardView: View {
     private var metaText: String {
         String(
             format: "routines.card_meta".localized,
-            routine.routineExercisesList.count, setCount, duration
+            card.exerciseCount, card.setCount, card.estimatedDurationMinutes
         )
     }
 

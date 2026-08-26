@@ -201,7 +201,8 @@ struct RoutinePlanLinkRepairGatingTests {
         await fixture.repair.runIfNeeded()
 
         // Same object, so no delete/re-insert happened at all.
-        #expect(try #require(routine.schedule) === schedule)
+        let planned = try #require(routine.schedule)
+        #expect(planned === schedule)
         #expect(fixture.defaults.integer(forKey: Self.flagKey) == 0)
     }
 
@@ -224,7 +225,8 @@ struct RoutinePlanLinkRepairGatingTests {
 
         await fixture.repair.runIfNeeded()
 
-        #expect(try #require(routine.schedule) === schedule)
+        let planned = try #require(routine.schedule)
+        #expect(planned === schedule)
         #expect(fixture.defaults.integer(forKey: Self.flagKey) == 0)
     }
 
@@ -248,14 +250,16 @@ struct RoutinePlanLinkRepairGatingTests {
         let task = Task { await fixture.repair.runIfNeeded() }
         await sync.waitForSubscriber()
 
-        #expect(try #require(routine.schedule) === schedule)
+        let plannedWhileSyncing = try #require(routine.schedule)
+        #expect(plannedWhileSyncing === schedule)
         #expect(fixture.defaults.integer(forKey: Self.flagKey) == 0)
 
         // Quiescence arrives: now it repairs.
         sync.emit(CloudSyncStatus(state: .upToDate, lastSuccessfulSync: Date()))
         await task.value
 
-        #expect(try #require(routine.schedule) !== schedule)
+        let plannedAfterRepair = try #require(routine.schedule)
+        #expect(plannedAfterRepair !== schedule)
         #expect(fixture.defaults.integer(forKey: Self.flagKey) == 1)
     }
 
@@ -277,7 +281,8 @@ struct RoutinePlanLinkRepairGatingTests {
 
         await fixture.repair.runIfNeeded()
 
-        #expect(try #require(routine.schedule) === schedule)
+        let planned = try #require(routine.schedule)
+        #expect(planned === schedule)
         #expect(fixture.defaults.integer(forKey: Self.flagKey) == 0)
         // Still pending — neither committed nor rolled back by the repair.
         #expect(fixture.context.hasChanges)

@@ -13,7 +13,15 @@ import SwiftUI
 /// the Health app, which they can remove there — so this informs and gets out
 /// of the way rather than demanding a dismissal.
 struct HealthDeleteFailureBanner: View {
+    let reason: HealthKitDeleteFailure
     var onDismiss: () -> Void = {}
+
+    private var message: String {
+        switch reason {
+        case .accessDenied: return "history.delete.health_access_denied".localized
+        case .failed: return "history.delete.health_failed".localized
+        }
+    }
 
     var body: some View {
         HStack(alignment: .top, spacing: 10) {
@@ -22,7 +30,7 @@ struct HealthDeleteFailureBanner: View {
                 .foregroundStyle(DesignSystem.Colors.warning)
                 .padding(.top, 1)
 
-            Text("history.delete.health_failed".localized)
+            Text(message)
                 .font(.system(size: 13, design: .rounded))
                 .foregroundStyle(Color.white.opacity(0.8))
                 .fixedSize(horizontal: false, vertical: true)

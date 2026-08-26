@@ -581,7 +581,7 @@ struct WorkoutViewModelTests {
 
         #expect(sessionRepository.fetchAll().isEmpty)
         #expect(healthKit.deletedExternalUUIDs == [externalUUID])
-        #expect(viewModel.healthKitDeleteFailed == false)
+        #expect(viewModel.healthKitDeleteFailure == nil)
     }
 
     @Test
@@ -629,7 +629,7 @@ struct WorkoutViewModelTests {
 
         #expect(sessionRepository.fetchAll().isEmpty)
         #expect(healthKit.deletedExternalUUIDs.isEmpty)
-        #expect(viewModel.healthKitDeleteFailed == false)
+        #expect(viewModel.healthKitDeleteFailure == nil)
     }
 
     @Test
@@ -654,7 +654,36 @@ struct WorkoutViewModelTests {
 
         // The local delete stands; the failure only raises the non-blocking flag.
         #expect(sessionRepository.fetchAll().isEmpty)
-        #expect(viewModel.healthKitDeleteFailed)
+        #expect(viewModel.healthKitDeleteFailure == .failed)
+    }
+
+    /// The state a reinstalled app lands in: the CloudKit-synced
+    /// `healthKitWorkoutId` is valid, but Apple Health write access was never
+    /// re-granted in this install, so the delete is refused. It must be told
+    /// apart from a genuine failure — the remedy is a permission, not a retry
+    /// (docs/delete-workout.md).
+    @Test
+    func healthAccessDenialIsReportedSeparatelyFromAFailedDelete() async throws {
+        let context = ModelContext(InMemoryModelContainer.make())
+        let sessionRepository = SwiftDataWorkoutSessionRepository(modelContext: context)
+        let routineRepository = SwiftDataRoutineRepository(modelContext: context)
+        let healthKit = MockHealthKitWorkoutServicing()
+        healthKit.deleteError = HealthKitError.healthAccessDenied
+        let session = try makeDeletableSession(
+            sessionRepository: sessionRepository,
+            routineRepository: routineRepository, healthKitWorkoutId: UUID()
+        )
+        let viewModel = makeViewModel(
+            sessionRepository: sessionRepository, routineRepository: routineRepository,
+            exerciseRepository: SwiftDataExerciseRepository(modelContext: context),
+            healthKitManager: healthKit
+        )
+
+        viewModel.deleteWorkout(session, alsoFromHealthKit: true)
+        await Task.yield()
+
+        #expect(sessionRepository.fetchAll().isEmpty)
+        #expect(viewModel.healthKitDeleteFailure == .accessDenied)
     }
 
     @Test
@@ -663,7 +692,7 @@ struct WorkoutViewModelTests {
         let sessionRepository = SwiftDataWorkoutSessionRepository(modelContext: context)
         let routineRepository = SwiftDataRoutineRepository(modelContext: context)
         let healthKit = MockHealthKitWorkoutServicing()
-        // No match: already deleted in the Health app, or the read was denied.
+        // No match: the user already removed it in the Health app.
         healthKit.deleteResult = false
         let session = try makeDeletableSession(
             sessionRepository: sessionRepository,
@@ -679,7 +708,7 @@ struct WorkoutViewModelTests {
         await Task.yield()
 
         #expect(sessionRepository.fetchAll().isEmpty)
-        #expect(viewModel.healthKitDeleteFailed == false)
+        #expect(viewModel.healthKitDeleteFailure == nil)
     }
 
     // MARK: - Completing a workout stamps its Apple Health counterpart

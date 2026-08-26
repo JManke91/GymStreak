@@ -275,7 +275,8 @@ targets and a before/after comparison method.
 ## Concurrency (hard rules)
 
 The project compiles in **Swift 6 language mode** (`SWIFT_VERSION = 6.0`, project level)
-with zero warnings across all six targets. **`docs/swift6-concurrency.md` is the
+with zero warnings from first-party sources across all six targets — one expected RevenueCat
+deprecation aside (`docs/swift6-concurrency.md` §9c); any other warning is a regression. **`docs/swift6-concurrency.md` is the
 reference — read it before changing isolation, adding a singleton, or touching a
 concurrency build setting.** Binding rules:
 

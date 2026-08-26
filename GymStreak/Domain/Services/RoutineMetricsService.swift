@@ -10,6 +10,76 @@
 import Foundation
 
 enum RoutineMetricsService {
+    /// How many muscle chips and preview avatars a routine card shows. Owned here rather than
+    /// in the view so the card model carries exactly what is rendered and the view needs no
+    /// `prefix` in its `body`.
+    static let cardMuscleLimit = 3
+    static let cardAvatarLimit = 3
+
+    /// Display values for one routine card, from a **single** traversal of
+    /// `routineExercises → sets`.
+    ///
+    /// The card used to call `totalSets`, `estimatedDurationMinutes` and `primaryMuscleGroups`
+    /// plus a `sorted().prefix(3)` from computed properties `body` reads — four walks of the
+    /// same graph per card per render, each one faulting SwiftData relationships. This does the
+    /// work once, off the render path. See docs/history-performance.md.
+    ///
+    /// - Parameters:
+    ///   - nextDue: the routine's next due date, or nil when unplanned. Passed in rather than
+    ///     derived here so this stays free of planning semantics — `WorkoutPlanningService`
+    ///     owns those, and the caller already holds the live last-completion anchor.
+    ///   - lastPerformed: most recent completed session, nil when never trained.
+    static func cardModel(
+        for routine: Routine,
+        nextDue: Date?,
+        lastPerformed: Date?
+    ) -> RoutineCardModel {
+        var setCount = 0
+        var seconds = 0.0
+        var muscles: [String] = []
+        var avatars: [RoutineCardAvatar] = []
+
+        let exercises = routine.routineExercisesList.sorted(by: { $0.order < $1.order })
+        for entry in exercises {
+            let sets = entry.setsList
+            let exercise = entry.exercise
+
+            setCount += sets.count
+            if !sets.isEmpty {
+                let rest = sets.first?.restTime ?? 60
+                seconds += Double(sets.count) * 40
+                seconds += Double(max(0, sets.count - 1)) * rest
+                seconds += 60
+            }
+
+            if let muscle = exercise?.primaryMuscleGroup,
+               muscles.count < cardMuscleLimit,
+               !muscles.contains(muscle) {
+                muscles.append(muscle)
+            }
+
+            if avatars.count < cardAvatarLimit {
+                avatars.append(RoutineCardAvatar(
+                    id: entry.id,
+                    muscleGroups: exercise?.muscleGroups ?? ["General"],
+                    equipmentType: exercise?.equipmentType ?? .dumbbell
+                ))
+            }
+        }
+
+        return RoutineCardModel(
+            id: routine.id,
+            name: routine.name,
+            exerciseCount: exercises.count,
+            setCount: setCount,
+            estimatedDurationMinutes: max(1, Int((seconds / 60).rounded())),
+            muscleGroups: muscles,
+            avatars: avatars,
+            nextDue: nextDue,
+            lastPerformed: lastPerformed
+        )
+    }
+
     /// Total number of planned sets across all exercises.
     static func totalSets(for routine: Routine) -> Int {
         routine.routineExercisesList.reduce(0) { $0 + $1.setsList.count }

@@ -173,10 +173,24 @@ class HealthKitWorkoutManager: ObservableObject, HealthKitWorkoutServicing {
 
     /// Delete the HKWorkout carrying `externalUUID` in its external-UUID metadata.
     ///
-    /// The workout is located by our own metadata rather than a persisted
-    /// `HKWorkout.uuid`, so no additional SwiftData field is needed. Scoping the
-    /// query to our own source is unnecessary — HealthKit enforces the ownership
-    /// rule on delete regardless of what the query matched.
+    /// **Deletion is governed by *current* share authorization for the workout
+    /// type, not by a stored ownership token.** Apple: "Your app can delete only
+    /// those objects that it has previously saved to the HealthKit store. If the
+    /// user revokes sharing permission, you can no longer delete the object."
+    /// Ownership itself is keyed on the bundle identifier and survives a
+    /// reinstall — the *authorization* does not, while
+    /// `WorkoutSession.healthKitWorkoutId` comes back over CloudKit. A
+    /// reinstalled app therefore holds a perfectly valid id for a workout it is
+    /// momentarily not allowed to touch, which is why this asks in place rather
+    /// than assuming the grant from a previous install is still there.
+    ///
+    /// `deleteObjects(of:predicate:)` matches on our own metadata and deletes in
+    /// one call, so no read query — and therefore no *read* authorization — is
+    /// involved. A returned count of zero is an unambiguous "already gone", not
+    /// the "gone, or the read was blocked" ambiguity a lookup query would leave.
+    ///
+    /// Scoping the predicate to our own source is unnecessary: HealthKit only
+    /// ever deletes objects this app saved, whatever the predicate matched.
     ///
     /// Deleting the workout also removes the quantity samples its builder
     /// associated with it (active energy, distance, heart rate). Activity Ring
@@ -187,24 +201,55 @@ class HealthKitWorkoutManager: ObservableObject, HealthKitWorkoutServicing {
             throw HealthKitError.notAvailable
         }
 
+        let workoutType = HKObjectType.workoutType()
+
+        if healthStore.authorizationStatus(for: workoutType) == .notDetermined {
+            // Scoped to the workout type so a prompt raised while the user is
+            // deleting something does not also drag in energy and heart rate;
+            // those are still asked for at workout start. Read is asked for
+            // alongside share not for this method — `deleteObjects` needs share
+            // only — but for `WorkoutDetailView.loadHealthKitKcal()`, which
+            // reads the same workouts and is dark for the same reason after a
+            // reinstall. Requesting types the user already decided does not
+            // re-prompt, and the result flag does not report the grant, so the
+            // guard below re-reads the status and is the real decision point.
+            do {
+                try await healthStore.requestAuthorization(
+                    toShare: [workoutType], read: [workoutType]
+                )
+            } catch {
+                // Falls through to the guard on purpose; logged so an
+                // unexpected failure is not indistinguishable from a decline.
+                print("HealthKit authorization request failed: \(error)")
+            }
+            checkAuthorizationStatus()
+        }
+
+        guard healthStore.authorizationStatus(for: workoutType) == .sharingAuthorized else {
+            throw HealthKitError.healthAccessDenied
+        }
+
         let predicate = HKQuery.predicateForObjects(
             withMetadataKey: HKMetadataKeyExternalUUID,
             allowedValues: [externalUUID.uuidString]
         )
-        let descriptor = HKSampleQueryDescriptor(
-            predicates: [.workout(predicate)],
-            sortDescriptors: [],
-            limit: 1
-        )
 
         do {
-            let matches = try await descriptor.result(for: healthStore)
-            // Nothing to delete: already gone, or the read was silently denied.
-            // Either way the desired end state holds.
-            guard let workout = matches.first else { return false }
-            try await healthStore.delete(workout)
-            print("HealthKit workout deleted for external ID: \(externalUUID)")
-            return true
+            let deletedCount = try await healthStore.deleteObjects(
+                of: workoutType, predicate: predicate
+            )
+            print("HealthKit workouts deleted for external ID \(externalUUID): \(deletedCount)")
+            return deletedCount > 0
+        } catch let error as HKError {
+            switch error.code {
+            case .errorAuthorizationNotDetermined, .errorAuthorizationDenied:
+                // The status check above passed, so this is a revoke that
+                // landed between the check and the delete — same user remedy.
+                throw HealthKitError.healthAccessDenied
+            default:
+                print("Failed to delete HealthKit workout: \(error)")
+                throw HealthKitError.deleteFailed(error.localizedDescription)
+            }
         } catch {
             print("Failed to delete HealthKit workout: \(error)")
             throw HealthKitError.deleteFailed(error.localizedDescription)
@@ -219,27 +264,5 @@ class HealthKitWorkoutManager: ObservableObject, HealthKitWorkoutServicing {
         let minutes = durationInSeconds / 60.0
         let caloriesPerMinute = 4.5 // Average for moderate strength training
         return minutes * caloriesPerMinute
-    }
-}
-
-// MARK: - Error Types
-
-enum HealthKitError: LocalizedError {
-    case notAvailable
-    case notAuthorized
-    case saveFailed(String)
-    case deleteFailed(String)
-
-    var errorDescription: String? {
-        switch self {
-        case .notAvailable:
-            return "HealthKit is not available on this device"
-        case .notAuthorized:
-            return "HealthKit authorization not granted"
-        case .saveFailed(let message):
-            return "Failed to save workout: \(message)"
-        case .deleteFailed(let message):
-            return "Failed to delete workout: \(message)"
-        }
     }
 }

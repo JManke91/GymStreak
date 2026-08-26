@@ -24,13 +24,22 @@ struct TimeFormatting {
 
     /// Relative "last trained" label: "Today", "Yesterday", short relative
     /// ("3 days ago"), or the localized never-trained placeholder for nil.
+    /// Hoisted per main-thread rule 2: this label is rendered once per routine card, so
+    /// allocating a `RelativeDateTimeFormatter` per call ran once per row per render.
+    /// `MainActor`-isolated because the formatter is not `Sendable` and every caller is a view.
+    @MainActor
+    private static let relativeFormatter: RelativeDateTimeFormatter = {
+        let formatter = RelativeDateTimeFormatter()
+        formatter.locale = Locale.current
+        formatter.unitsStyle = .short
+        return formatter
+    }()
+
+    @MainActor
     static func lastTrainedLabel(for date: Date?) -> String {
         guard let date else { return "routines.last_done.never".localized }
         if Calendar.current.isDateInToday(date) { return "date.today".localized }
         if Calendar.current.isDateInYesterday(date) { return "date.yesterday".localized }
-        let formatter = RelativeDateTimeFormatter()
-        formatter.locale = Locale.current
-        formatter.unitsStyle = .short
-        return formatter.localizedString(for: date, relativeTo: Date())
+        return relativeFormatter.localizedString(for: date, relativeTo: Date())
     }
 }

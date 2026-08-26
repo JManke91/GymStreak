@@ -180,7 +180,20 @@ class ExercisesViewModel: ObservableObject {
         exerciseRepository.delete(exercise)
         let saved = save()
         fetchExercises()
-        if saved { catalogSync.requestCatalogSync() }
+        if saved {
+            catalogSync.requestCatalogSync()
+            notifyRoutineTemplatesChanged()
+        }
+    }
+
+    /// Deleting an exercise deletes the `RoutineExercise` rows referencing it, so routine
+    /// templates changed here even though this screen never touches a routine directly.
+    /// `RoutinesViewModel` renders precomputed card models rather than reading the `@Model`
+    /// live (docs/history-performance.md §7), so without this the routine cards keep the
+    /// deleted exercise's counts and avatars until the next fetch — and the watch keeps the
+    /// stale template.
+    private func notifyRoutineTemplatesChanged() {
+        NotificationCenter.default.post(name: .routineTemplateDidChange, object: nil)
     }
 
     /// Cancels the delete operation
@@ -212,7 +225,10 @@ class ExercisesViewModel: ObservableObject {
         }
         let saved = save()
         fetchExercises()
-        if saved { catalogSync.requestCatalogSync() }
+        if saved {
+            catalogSync.requestCatalogSync()
+            notifyRoutineTemplatesChanged()
+        }
         showingDeleteAllConfirmation = false
     }
 

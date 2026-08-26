@@ -3,6 +3,22 @@ import SwiftUI
 import Combine
 import HealthKit
 
+// MARK: - HealthKit Delete Failure
+
+/// Why the Apple Health half of a workout deletion did not happen.
+///
+/// The two cases differ in what the user can do about it, which is the only
+/// reason they are told apart: `accessDenied` has a remedy inside Settings,
+/// `failed` leaves them nothing but the Health app.
+enum HealthKitDeleteFailure: Equatable, Sendable {
+    /// Apple Health will not let the app write workouts — the permission prompt
+    /// was declined, or write access was revoked in Health. Common after the app
+    /// is reinstalled: the workout id comes back over iCloud, the grant does not.
+    case accessDenied
+    /// Anything else — the delete reached HealthKit and was refused or errored.
+    case failed
+}
+
 // MARK: - HealthKit Sync Status
 
 enum HealthKitSyncStatus: Equatable {
@@ -58,7 +74,7 @@ class WorkoutViewModel: ObservableObject {
     /// Set when a requested Apple Health delete failed for a reason other than
     /// "already gone". Purely informational — the local delete is already
     /// committed — and surfaced without blocking the user.
-    @Published var healthKitDeleteFailed = false
+    @Published var healthKitDeleteFailure: HealthKitDeleteFailure?
 
     var restTimerReminderWarning: String? {
         switch restTimerReminderOutcome {
@@ -1859,7 +1875,7 @@ class WorkoutViewModel: ObservableObject {
     ///
     /// SwiftData is the source of truth, so the local delete happens first and is
     /// never gated on, blocked by, or rolled back for HealthKit. A HealthKit
-    /// failure only raises `healthKitDeleteFailed`, which the History screen
+    /// failure only raises `healthKitDeleteFailure`, which the History screen
     /// surfaces non-blockingly — the user may still see the workout in Health.
     func deleteWorkout(_ session: WorkoutSession, alsoFromHealthKit: Bool) {
         let healthKitWorkoutId = session.healthKitWorkoutId
@@ -1871,16 +1887,23 @@ class WorkoutViewModel: ObservableObject {
                 // A `false` result means the workout was already absent from
                 // HealthKit — the desired end state, not a failure.
                 _ = try await healthKitManager.deleteWorkout(externalUUID: healthKitWorkoutId)
+            } catch HealthKitError.healthAccessDenied {
+                // Not a malfunction: Apple Health write access was declined or
+                // revoked. Separated so the notice can name the remedy — this is
+                // the state a reinstalled app lands in, because the id survives
+                // over iCloud while the authorization does not.
+                print("HealthKit workout delete refused: no Apple Health write access")
+                healthKitDeleteFailure = .accessDenied
             } catch {
                 print("HealthKit workout delete failed: \(error)")
-                healthKitDeleteFailed = true
+                healthKitDeleteFailure = .failed
             }
         }
     }
 
     /// Clears the non-blocking Apple Health delete notice once the user has seen it.
     func dismissHealthKitDeleteNotice() {
-        healthKitDeleteFailed = false
+        healthKitDeleteFailure = nil
     }
 
     // MARK: - Helper Methods

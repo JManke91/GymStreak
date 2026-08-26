@@ -1,9 +1,11 @@
 # Swift 6 Concurrency
 
 > Status: **the whole project compiles in Swift 6 language mode** (`SWIFT_VERSION = 6.0`)
-> with `SWIFT_APPROACHABLE_CONCURRENCY` on, zero warnings across all six targets in both
-> Debug and Release, and all unit tests passing — 728 iOS + 34 watch (verified
-> 2026-08-23; previously 458 on 2026-08-12).
+> with `SWIFT_APPROACHABLE_CONCURRENCY` on, zero warnings from first-party sources across
+> all six targets in both Debug and Release, and all unit tests passing — 728 iOS + 34
+> watch (verified 2026-08-23; previously 458 on 2026-08-12). One warning does come out of
+> the build and is expected: a RevenueCat deprecation with no non-SPI replacement, recorded
+> in §9c. Anything beyond it is a regression.
 >
 > ⚠️ **A green build is not proof of correct isolation.** §4a records a `@MainActor`
 > closure that compiled without a single warning and trapped on every launch of
@@ -775,6 +777,39 @@ Recorded so nobody re-derives a confident answer from nothing (researched 2026-0
 | Is `LanguageModelSession` `Sendable`; are `init()` / `prewarm(promptPrefix:)` safe off the main actor; must the session be retained for `prewarm()` to take effect? | **Not documented / unretrievable.** Hence `prewarm()` was left on the main actor. |
 | Does `@ModelActor`'s synthesised executor guarantee off-main execution? Is construction-site affinity contractual? | **Not documented by Apple**; secondary evidence says no (see §1). |
 | Does `FoundationModels.Tool.call(arguments:)` run off the main actor? | The **requirement** is declared `@concurrent` in the iOS 26 SDK (documented, researched 2026-08-13). Whether that governs our *unannotated* witnesses is the same undocumented witness question as above — so `ChatFactProvider` does not depend on it and carries its own `@concurrent`. Apple's own `FindContacts` sample leaves `call` unannotated. |
+
+## 9c. The one warning the build does emit
+
+The zero-warning invariant is about *our* code. As of 2026-08-26 exactly one warning
+survives a clean build, and it is not fixable from here:
+
+```
+GymStreak/Presentation/Views/Pro/ProPaywallView.swift:203:21: warning: 'paywallComponents'
+is deprecated: Use hasPaywall to check whether the Offering has a paywall.
+```
+
+`paywallPayloadState(of:)` logs three states — `present`, `declared-but-absent`, `none` —
+and the middle one only exists because RevenueCat can serve a paywall *marker* without the
+components payload (remote config resolves components from `/v1/config`, so a launch that
+could not reach that endpoint keeps the marker and loses the payload). Telling that apart
+from a real payload is the entire point of the function: in Release those two are the
+difference between the authored paywall and a blank-looking default template.
+
+The SDK's suggested replacement cannot express it. `Offering`'s public, non-deprecated
+surface is only `paywall` and `hasPaywall`, and `hasPaywall` is `true` for both states.
+The property that *does* draw the line — `hasPrunedPaywallComponents` — lives in an
+extension marked `@_spi(Internal)` (`Sources/Purchasing/Offering.swift`), as does
+`internalPaywallComponents`. Reading either needs `@_spi(Internal) import RevenueCat`,
+which would be the project's first SPI import and would break on SDK upgrades without
+warning.
+
+So the options are: keep one deprecation warning, take on an SPI import, or collapse the
+diagnostic to two states. **Keeping the warning is the deliberate choice** — the log label
+is worth more than the clean build line, and the alternatives are each worse. Swift has no
+per-expression deprecation suppression, and the wrap-in-a-deprecated-helper trick only
+moves the warning to the helper's call site.
+
+Revisit when RevenueCat promotes `hasPrunedPaywallComponents` out of `@_spi`.
 
 ## 10. Rules for new code
 

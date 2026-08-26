@@ -13,9 +13,15 @@ private struct RoutinesViewInternal: View {
     @StateObject private var viewModel: RoutinesViewModel
     @StateObject private var exercisesViewModel: ExercisesViewModel
     @StateObject private var workoutViewModel: WorkoutViewModel
-    @State private var routinePendingDeletion: Routine?
+    /// The routine the delete alert is about, by id — the list renders value structs, so the
+    /// alert holds an identifier and resolves it when the user confirms.
+    @State private var routinePendingDeletion: UUID?
     @State private var showingDeleteAlert = false
     @State private var showingActiveWorkout = false
+#if DEBUG
+    /// UI-test-only responsiveness measurement; inert without the launch argument.
+    @StateObject private var stallProbe = MainThreadStallProbe()
+#endif
 
     init(dependencies: AppDependencies) {
         self._viewModel = StateObject(wrappedValue: RoutinesViewModel(
@@ -81,10 +87,11 @@ private struct RoutinesViewInternal: View {
             }
             .alert("routine.delete".localized, isPresented: $showingDeleteAlert) {
                 Button("action.delete".localized, role: .destructive) {
-                    if let routine = routinePendingDeletion {
+                    if let id = routinePendingDeletion,
+                       let routine = viewModel.routine(withId: id) {
                         viewModel.deleteRoutine(routine)
-                        routinePendingDeletion = nil
                     }
+                    routinePendingDeletion = nil
                 }
                 Button("action.cancel".localized, role: .cancel) {
                     routinePendingDeletion = nil
@@ -99,31 +106,50 @@ private struct RoutinesViewInternal: View {
         .routineSaveFailureAlert(viewModel)
         .onAppear {
             viewModel.fetchRoutines()
+#if DEBUG
+            stallProbe.reset()
+#endif
         }
+#if DEBUG
+        .overlay(alignment: .bottomLeading) {
+            MainThreadStallProbeOverlay(
+                probe: stallProbe,
+                identifier: "routines-main-thread-max-delay-ms"
+            )
+        }
+#endif
     }
 
     // MARK: - List
 
+    /// A single `LazyVStack` carrying the one-off leading content and the routine `ForEach`.
+    ///
+    /// Lazy because the plain `VStack` this replaces constructed and laid out every card the
+    /// user owns — offscreen ones included — before the first frame (main-thread rule 1), and
+    /// the routine count is unbounded for Pro users. Mixing the header, the hero and the
+    /// section label into the same lazy stack is Apple's own documented shape; laziness only
+    /// matters for the repeating content. The cards are precomputed value structs, which is
+    /// the half that has to land *with* the laziness rather than after it — see
+    /// docs/history-performance.md, where laziness alone made the History screen worse.
     private var routineList: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 10) {
+            LazyVStack(alignment: .leading, spacing: 10) {
                 header
 
-                if let hero = viewModel.upNextRoutine {
+                if let hero = viewModel.heroCard {
                     routineCard(hero, isHero: true)
+                }
 
-                    let rest = viewModel.routines.filter { $0.id != hero.id }
-                    if !rest.isEmpty {
-                        Text("routines.all".localized.uppercased())
-                            .font(.system(size: 12, weight: .semibold))
-                            .kerning(0.7)
-                            .foregroundStyle(Color.white.opacity(0.45))
-                            .padding(.horizontal, 4)
-                            .padding(.top, 10)
+                if !viewModel.otherCards.isEmpty {
+                    Text("routines.all".localized.uppercased())
+                        .font(.system(size: 12, weight: .semibold))
+                        .kerning(0.7)
+                        .foregroundStyle(Color.white.opacity(0.45))
+                        .padding(.horizontal, 4)
+                        .padding(.top, 10)
 
-                        ForEach(rest) { routine in
-                            routineCard(routine, isHero: false)
-                        }
+                    ForEach(viewModel.otherCards) { card in
+                        routineCard(card, isHero: false)
                     }
                 }
 
@@ -156,25 +182,33 @@ private struct RoutinesViewInternal: View {
         }
     }
 
-    private func routineCard(_ routine: Routine, isHero: Bool) -> some View {
-        NavigationLink(value: routine.id) {
+    /// The row holds a value struct and an id; the destructive and duplicating actions resolve
+    /// that id back to the `@Model` in their closure, off the render path.
+    private func routineCard(_ card: RoutineCardModel, isHero: Bool) -> some View {
+        NavigationLink(value: card.id) {
+            // `.equatable()` is what actually engages `RoutineCardView`'s `==`: SwiftUI
+            // only consults a custom one through `EquatableView`, and the stored
+            // `onStart` closure blocks the default structural comparison. Without it
+            // every visible card re-evaluates its body on any republish of `otherCards`.
             RoutineCardView(
-                routine: routine,
-                lastPerformed: viewModel.lastPerformedByRoutine[routine.id],
+                card: card,
                 isHero: isHero,
-                onStart: { startWorkout(routine) }
+                onStart: { startWorkout(card.id) }
             )
+            .equatable()
         }
         .buttonStyle(.plain)
         .simultaneousGesture(TapGesture().onEnded { HapticManager.shared.light() })
         .contextMenu {
             Button {
-                viewModel.duplicateRoutine(routine)
+                if let routine = viewModel.routine(withId: card.id) {
+                    viewModel.duplicateRoutine(routine)
+                }
             } label: {
                 Label("routine.duplicate".localized, systemImage: "plus.square.on.square")
             }
             Button(role: .destructive) {
-                routinePendingDeletion = routine
+                routinePendingDeletion = card.id
                 showingDeleteAlert = true
             } label: {
                 Label("routine.delete".localized, systemImage: "trash")
@@ -218,11 +252,10 @@ private struct RoutinesViewInternal: View {
     }
 
     private var headerSubtitle: String {
-        let mostRecent = viewModel.lastPerformedByRoutine.values.max()
-        return String(
+        String(
             format: "routines.header_meta".localized,
             viewModel.routines.count,
-            TimeFormatting.lastTrainedLabel(for: mostRecent).lowercased()
+            TimeFormatting.lastTrainedLabel(for: viewModel.mostRecentTraining).lowercased()
         )
     }
 
@@ -245,7 +278,8 @@ private struct RoutinesViewInternal: View {
 
     // MARK: - Actions
 
-    private func startWorkout(_ routine: Routine) {
+    private func startWorkout(_ routineId: UUID) {
+        guard let routine = viewModel.routine(withId: routineId) else { return }
         HapticManager.shared.medium()
         workoutViewModel.startWorkout(routine: routine)
         showingActiveWorkout = true

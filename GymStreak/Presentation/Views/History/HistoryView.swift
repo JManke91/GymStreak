@@ -11,7 +11,7 @@ struct HistoryView: View {
     @ObservedObject var viewModel: WorkoutViewModel
     @Environment(\.scenePhase) private var scenePhase
 #if DEBUG
-    @State private var stallProbe = HistoryMainThreadStallProbe()
+    @State private var stallProbe = MainThreadStallProbe()
 #endif
     private let aiCoachPreferences: AICoachPreferencesProviding
     private let aiCoachAvailability: AICoachAvailabilityProviding
@@ -106,8 +106,8 @@ struct HistoryView: View {
                             .padding(.top, 4)
                             .disabled(isRecovering)
                         }
-                        if viewModel.healthKitDeleteFailed {
-                            HealthDeleteFailureBanner {
+                        if let healthDeleteFailure = viewModel.healthKitDeleteFailure {
+                            HealthDeleteFailureBanner(reason: healthDeleteFailure) {
                                 viewModel.dismissHealthKitDeleteNotice()
                             }
                             .padding(.horizontal, 20)
@@ -145,7 +145,7 @@ struct HistoryView: View {
 
                         Color.clear.frame(height: 60)
                     }
-                    .animation(.easeInOut(duration: 0.25), value: viewModel.healthKitDeleteFailed)
+                    .animation(.easeInOut(duration: 0.25), value: viewModel.healthKitDeleteFailure)
                 }
                 .refreshable {
                     viewModel.refreshHistory()
@@ -218,7 +218,7 @@ struct HistoryView: View {
             )
 #if DEBUG
             .overlay(alignment: .bottomLeading) {
-                HistoryMainThreadStallProbeOverlay(probe: stallProbe)
+                MainThreadStallProbeOverlay(probe: stallProbe, identifier: "history-main-thread-max-delay-ms")
             }
 #endif
         }
