@@ -100,6 +100,12 @@ final class AppDependencies: ObservableObject {
     /// Presentation only ever sees `CloudSyncStatusProviding`.
     let cloudSyncStatus: CloudSyncStatusProviding
 
+    /// The unit weights are shown and entered in (docs/weight-unit-preference.md).
+    /// App-lifetime because the app root publishes it into the environment and
+    /// every weight on screen reads it; kilograms stay the stored unit whatever
+    /// it says. Presentation only ever sees `WeightUnitPreferenceProviding`.
+    let weightUnitPreference: WeightUnitPreferenceProviding
+
     /// The Pro entitlement every gate reads (docs/pro-subscription.md): the
     /// Founder grant composed with the RevenueCat entitlement. This is the only
     /// place the purchase layer is named — Presentation only ever sees
@@ -197,6 +203,7 @@ final class AppDependencies: ObservableObject {
             containerIdentifier: GymStreakSchema.cloudKitContainerIdentifier
         )
         self.deviceDiagnostics = SystemDeviceDiagnosticsProvider()
+        self.weightUnitPreference = WeightUnitPreference.shared
         // Constructing the gateway configures the RevenueCat SDK — this runs in
         // `GymStreakApp.init()`, so it happens once, before any UI exists and
         // before anything can read an entitlement.

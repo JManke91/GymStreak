@@ -813,6 +813,7 @@ private struct WorkoutBodyWeightCard: View {
     let session: WorkoutSession
     @ObservedObject var viewModel: WorkoutViewModel
     @State private var bodyWeight: Double = 0
+    @Environment(\.weightUnit) private var weightUnit
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -822,7 +823,10 @@ private struct WorkoutBodyWeightCard: View {
             Text("exercise.body_weight.detail".localized)
                 .font(.system(size: 11.5, weight: .medium))
                 .foregroundStyle(DesignSystem.Colors.textSecondary)
-            WeightInput(title: "exercise.body_weight.input".localized, weight: $bodyWeight) { value in
+            WeightInput(
+                title: "exercise.body_weight.input".localized(WeightFormatting.unitWord(weightUnit)),
+                weight: $bodyWeight
+            ) { value in
                 viewModel.updateBodyWeight(value > 0 ? value : nil)
             }
         }

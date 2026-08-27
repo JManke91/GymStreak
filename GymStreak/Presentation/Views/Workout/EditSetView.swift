@@ -5,6 +5,7 @@ struct EditSetView: View {
     let routineExercise: RoutineExercise
     @ObservedObject var viewModel: RoutinesViewModel
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.weightUnit) private var weightUnit
     
     @State private var reps: Int
     @State private var weight: Double
@@ -31,9 +32,8 @@ struct EditSetView: View {
                     )
 
                     WeightInput(
-                        title: "set.weight_label".localized,
-                        weight: $weight,
-                        increment: 0.25
+                        title: "set.weight_label".localized(WeightFormatting.unitWord(weightUnit)),
+                        weight: $weight
                     )
 
                     VStack(spacing: 8) {

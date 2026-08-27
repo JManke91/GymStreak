@@ -6,8 +6,11 @@
 //  expand inside the set list: the list stays still, nothing below it jumps,
 //  and the value is changed where the user was already looking.
 //
-//  It carries its own keypad rather than a system keyboard so the sheet height
-//  is fixed and the quick-step buttons stay reachable next to the digits.
+//  The digit pad itself lives in `SetValueKeypad`.
+//
+//  Everything inside works in the *displayed* unit — the digits, the base
+//  value, the quick steps. Only `onSave` crosses back into canonical
+//  kilograms, so nothing converted is ever persisted.
 //
 
 import SwiftUI
@@ -23,34 +26,38 @@ struct SetValueKeypadSheet: View {
     let onSave: (_ reps: Int, _ weight: Double, _ applyToFollowing: Bool) -> Void
 
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.weightUnit) private var weightUnit
 
     /// Typed digits. Empty means "untouched" — the current value is shown instead.
     @State private var buffer = ""
     @State private var applyToFollowing = false
 
     private var isReps: Bool { field == .reps }
-    private static let decimalSeparator = Locale.current.decimalSeparator ?? "."
 
+    /// The current value, in the unit the sheet is editing in.
     private var baseValue: Double {
-        isReps ? Double(display.reps) : display.weight
+        isReps ? Double(display.reps) : weightUnit.converting(fromKilograms: display.weight)
     }
 
     /// The value that would be saved right now.
     private var value: Double {
         guard !buffer.isEmpty else { return baseValue }
-        return Double(buffer.replacingOccurrences(of: Self.decimalSeparator, with: ".")) ?? 0
+        return Double(buffer.replacingOccurrences(of: SetValueKeypad.decimalSeparator, with: ".")) ?? 0
     }
 
     private var displayedValue: String {
-        buffer.isEmpty ? WorkoutValueFormatting.weight(baseValue) : buffer
+        buffer.isEmpty ? format(baseValue) : buffer
     }
 
     private var unit: String {
         if isReps { return "set.reps_unit".localized }
-        return display.isAssistance ? "exercise.assistance".localized : "set.weight_unit".localized
+        return display.isAssistance
+            ? "exercise.assistance".localized
+            : WeightFormatting.unitWord(weightUnit)
     }
 
-    private var step: Double { isReps ? 1 : 2.5 }
+    /// One quick-step, in the displayed unit — ±2.5/±5 kg becomes ±5/±10 lb.
+    private var step: Double { isReps ? 1 : weightUnit.coarseIncrement }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -105,7 +112,10 @@ struct SetValueKeypadSheet: View {
 
             // The planned value stays visible: it is the reference the logged
             // value is judged against, and the old expanded editor showed it too.
-            Text("set.planned_detail".localized(display.plannedReps, display.plannedWeight))
+            Text("set.planned_detail".localized(
+                display.plannedReps,
+                WeightFormatting.label(display.plannedWeight, in: weightUnit)
+            ))
                 .font(.system(size: 11.5, weight: .medium))
                 .foregroundStyle(Color.white.opacity(0.35))
         }
@@ -121,7 +131,7 @@ struct SetValueKeypadSheet: View {
                     HapticManager.shared.light()
                     buffer = format(max(0, value + delta))
                 } label: {
-                    Text((delta > 0 ? "+" : "−") + WorkoutValueFormatting.weight(abs(delta)))
+                    Text((delta > 0 ? "+" : "−") + format(abs(delta)))
                         .font(.system(size: 13, weight: .bold))
                         .monospacedDigit()
                         .foregroundStyle(DesignSystem.Colors.tint)
@@ -143,52 +153,7 @@ struct SetValueKeypadSheet: View {
     // MARK: - Keypad
 
     private var keypad: some View {
-        Grid(horizontalSpacing: 7, verticalSpacing: 7) {
-            ForEach(0..<3, id: \.self) { row in
-                GridRow {
-                    ForEach(1...3, id: \.self) { column in
-                        let digit = String(row * 3 + column)
-                        keypadKey(digit) { push(digit) }
-                    }
-                }
-            }
-            GridRow {
-                if isReps {
-                    Color.clear.frame(height: 50)
-                } else {
-                    keypadKey(Self.decimalSeparator) { push(Self.decimalSeparator) }
-                }
-                keypadKey("0") { push("0") }
-                keypadKey(symbol: "delete.backward") {
-                    buffer = String(buffer.dropLast())
-                }
-            }
-        }
-    }
-
-    private func keypadKey(_ label: String? = nil, symbol: String? = nil, action: @escaping () -> Void) -> some View {
-        Button {
-            HapticManager.shared.light()
-            action()
-        } label: {
-            Group {
-                if let symbol {
-                    Image(systemName: symbol)
-                        .font(.system(size: 18, weight: .medium))
-                } else {
-                    Text(label ?? "")
-                        .font(.system(size: 21, weight: .semibold, design: .rounded))
-                }
-            }
-            .foregroundStyle(.white)
-            .frame(maxWidth: .infinity)
-            .frame(height: 50)
-            .background(Color.white.opacity(0.06))
-            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel(symbol == nil ? (label ?? "") : "action.delete".localized)
+        SetValueKeypad(buffer: $buffer, allowsDecimalSeparator: !isReps)
     }
 
     // MARK: - Apply to following
@@ -237,7 +202,9 @@ struct SetValueKeypadSheet: View {
             if isReps {
                 onSave(Int(value.rounded()), display.weight, applyToFollowing)
             } else {
-                onSave(display.reps, value, applyToFollowing)
+                // Back to canonical kilograms, clamped there — the ceiling is a
+                // kilogram magnitude, not a pound one.
+                onSave(display.reps, weightUnit.clampedKilograms(fromDisplay: value), applyToFollowing)
             }
             dismiss()
         } label: {
@@ -253,21 +220,12 @@ struct SetValueKeypadSheet: View {
         .padding(.top, 12)
     }
 
-    // MARK: - Buffer editing
+    // MARK: - Formatting
 
-    private func push(_ character: String) {
-        // One separator only, and never as the leading character.
-        if character == Self.decimalSeparator {
-            guard !buffer.contains(Self.decimalSeparator) else { return }
-            buffer = buffer.isEmpty ? "0" + character : buffer + character
-            return
-        }
-        guard buffer.count < 6 else { return }
-        buffer += character
-    }
-
+    /// Formats a value that is already in the sheet's unit — never canonical
+    /// kilograms, which is why this goes to `displayNumber`.
     private func format(_ value: Double) -> String {
-        isReps ? String(Int(value.rounded())) : WorkoutValueFormatting.weight(value)
+        isReps ? String(Int(value.rounded())) : WeightFormatting.displayNumber(value, in: weightUnit)
     }
 }
 

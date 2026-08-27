@@ -7,3 +7,4 @@
 - Fixed: after reinstalling the app and syncing from iCloud, deleting a workout with "Delete in GymStreak and Apple Health" always failed. The app now asks for Apple Health permission again at that moment, and says what to do if you decline
 - If you have no routines yet, the Routines tab now starts you off with a ready-made full-body routine that shows rep ranges, a superset and per-exercise rest times. Edit it, start it or delete it like any other routine — once deleted, it stays gone
 - The ready-made starter routine does not use up one of your three free routines — you can still create three of your own
+- New in Settings → Units: you can now switch weights between kilograms and pounds. Everything in an active workout follows, including the +/− steps, and switching back leaves your logged numbers exactly as they were

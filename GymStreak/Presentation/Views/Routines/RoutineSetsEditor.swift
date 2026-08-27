@@ -100,7 +100,10 @@ struct RoutineSetStepperRow: View {
                     minimum: 0,
                     maximum: 999,
                     fieldWidth: 42,
-                    unit: "set.weight_unit".localized,
+                    // Pinned: ticket 02 converts this editor and routes it
+                    // through the environment. Its numbers are kilograms, so
+                    // its unit word has to be too.
+                    unit: WeightFormatting.unitWord(.kilograms),
                     valueColor: .white,
                     keyboard: .decimalPad,
                     fieldBinding: Binding(
@@ -116,7 +119,12 @@ struct RoutineSetStepperRow: View {
         .background(Color.white.opacity(0.03))
         .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
         .accessibilityElement(children: .contain)
-        .accessibilityLabel("accessibility.set.label".localized(index + 1, reps, weight))
+        .accessibilityLabel("accessibility.set.label".localized(
+            index + 1,
+            reps,
+            // Pinned with the values above — see the unit word.
+            WeightFormatting.spokenLabel(weight, in: .kilograms)
+        ))
     }
 
     /// − [typable value] unit + — the number is a `TextField` styled as text, so

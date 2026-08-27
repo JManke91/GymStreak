@@ -121,7 +121,8 @@ struct ConfigureExerciseSetsView: View {
             )
             summaryDivider
             summaryColumn(
-                value: volume > 0 ? WeightFormatting.label(volume) : "—",
+                // Pinned to kilograms: ticket 03 owns volume formatting.
+                value: volume > 0 ? WeightFormatting.label(volume, in: .kilograms) : "—",
                 label: "configure_exercise.summary.volume".localized
             )
             summaryDivider

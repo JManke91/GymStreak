@@ -171,6 +171,9 @@ struct EditWorkoutSessionView: View {
 private struct SetEditorRow: View {
     let index: Int
     @Binding var set: WorkoutSetDraft
+    /// The row's field converts on its own (`WeightInput` takes kilograms); the
+    /// unit is read here only to label it.
+    @Environment(\.weightUnit) private var weightUnit
 
     var body: some View {
         VStack(spacing: 12) {
@@ -192,9 +195,8 @@ private struct SetEditorRow: View {
             )
 
             WeightInput(
-                title: "set.weight_label".localized,
-                weight: $set.weight,
-                increment: 0.25
+                title: "set.weight_label".localized(WeightFormatting.unitWord(weightUnit)),
+                weight: $set.weight
             )
 
             VStack(spacing: 8) {

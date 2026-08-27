@@ -12,7 +12,15 @@ struct ContentView: View {
     @EnvironmentObject private var dependencies: AppDependencies
 
     var body: some View {
+        // Read here, in `body`: the preference store is `@Observable`, so this
+        // access is what registers the observer that re-publishes the
+        // environment value — and with it every weight on screen — when the
+        // Settings picker changes the unit.
         ContentViewInternal(dependencies: dependencies)
+            // Injected once, at the root: ~40 call sites render a weight, and
+            // prop-drilling the unit through every row initializer is the wrong
+            // trade (docs/weight-unit-preference.md).
+            .environment(\.weightUnit, dependencies.weightUnitPreference.weightUnit)
     }
 }
 

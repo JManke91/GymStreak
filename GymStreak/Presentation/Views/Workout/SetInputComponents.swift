@@ -87,24 +87,30 @@ struct HorizontalStepper: View {
     }
 }
 
-/// A weight input with TextField for keyboard entry and stepper buttons for quick adjustments
+/// A weight input with TextField for keyboard entry and stepper buttons for quick adjustments.
+///
+/// The binding is always **canonical kilograms**; the field edits a display-space
+/// mirror of it, so a pounds user types and steps in pounds while the store keeps
+/// kilograms. `weightDisplayMirror` owns that whole invariant.
 struct WeightInput: View {
     let title: String
+    /// Canonical kilograms.
     @Binding var weight: Double
-    let increment: Double
+    /// Called with canonical kilograms.
     let onUpdate: (Double) -> Void
+
+    @Environment(\.weightUnit) private var weightUnit
     @FocusState private var isFocused: Bool
-    @State private var lastReportedValue: Double?
+    /// `weight` expressed in `weightUnit` — the value the field actually edits.
+    @State private var displayValue: Double = 0
 
     init(
-        title: String = "Weight (kg)",
+        title: String,
         weight: Binding<Double>,
-        increment: Double = 0.25,
         onUpdate: @escaping (Double) -> Void = { _ in }
     ) {
         self.title = title
         self._weight = weight
-        self.increment = increment
         self.onUpdate = onUpdate
     }
 
@@ -119,27 +125,24 @@ struct WeightInput: View {
 
             // Minus button
             Button {
-                let newWeight = max(0, weight - increment)
+                let next = max(0, displayValue - weightUnit.fineIncrement)
                 withAnimation(.snappy(duration: 0.3)) {
-                    weight = newWeight
+                    displayValue = next
                 }
                 UIImpactFeedbackGenerator(style: .light).impactOccurred()
-                // Directly call onUpdate for button clicks
-                lastReportedValue = newWeight
-                onUpdate(newWeight)
             } label: {
                 Image(systemName: "minus.circle.fill")
                     .font(.title)
                     .symbolRenderingMode(.hierarchical)
-                    .foregroundStyle(weight <= 0 ? DesignSystem.Colors.textDisabled : DesignSystem.Colors.tint)
+                    .foregroundStyle(displayValue <= 0 ? DesignSystem.Colors.textDisabled : DesignSystem.Colors.tint)
                     .frame(width: 44, height: 44)
                     .contentShape(Rectangle())
             }
             .buttonStyle(.borderless)
-            .disabled(weight <= 0)
+            .disabled(displayValue <= 0)
 
-            // Editable weight field
-            TextField("0.0", value: $weight, format: .number.precision(.fractionLength(0...2)))
+            // Editable weight field, in the displayed unit
+            TextField("0", value: $displayValue, format: WeightFormatting.inputStyle(for: weightUnit))
                 .keyboardType(.decimalPad)
                 .multilineTextAlignment(.center)
                 .font(.onyxNumber)
@@ -151,31 +154,14 @@ struct WeightInput: View {
                 .clipShape(RoundedRectangle(cornerRadius: DesignSystem.Dimensions.cornerRadiusSM))
                 .focused($isFocused)
                 .selectAllOnFocus()
-                .onChange(of: weight) { oldValue, newValue in
-                    // Round to nearest increment (e.g., 0.25kg)
-                    let rounded = round(newValue / increment) * increment
-
-                    // Only update if this is a new value we haven't reported yet
-                    // This prevents feedback loops from external updates
-                    if rounded != lastReportedValue {
-                        if rounded != newValue {
-                            weight = rounded
-                        }
-                        lastReportedValue = rounded
-                        onUpdate(rounded)
-                    }
-                }
 
             // Plus button
             Button {
-                let newWeight = weight + increment
+                let next = min(displayValue + weightUnit.fineIncrement, weightUnit.maximumDisplay)
                 withAnimation(.snappy(duration: 0.3)) {
-                    weight = newWeight
+                    displayValue = next
                 }
                 UIImpactFeedbackGenerator(style: .light).impactOccurred()
-                // Directly call onUpdate for button clicks
-                lastReportedValue = newWeight
-                onUpdate(newWeight)
             } label: {
                 Image(systemName: "plus.circle.fill")
                     .font(.title)
@@ -195,6 +181,11 @@ struct WeightInput: View {
                 .fontWeight(.semibold)
             }
         }
+        .weightDisplayMirror(
+            kilograms: $weight,
+            displayValue: $displayValue,
+            onUpdate: onUpdate
+        )
     }
 }
 
@@ -232,8 +223,7 @@ struct WeightInput: View {
                 Section {
                     WeightInput(
                         title: "Weight (kg)",
-                        weight: $weight,
-                        increment: 0.25
+                        weight: $weight
                     ) { newValue in
                         print("Weight updated to \(newValue)")
                     }
@@ -286,8 +276,7 @@ extension View {
 
                     WeightInput(
                         title: "Weight (kg)",
-                        weight: $weight,
-                        increment: 0.25
+                        weight: $weight
                     )
                 }
             }

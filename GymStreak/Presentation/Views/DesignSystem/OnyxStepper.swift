@@ -78,20 +78,25 @@ struct OnyxStepper: View {
     }
 }
 
-/// A weight stepper with decimal support
+/// A weight stepper with decimal support, in the Onyx Design System styling.
+///
+/// Same contract as `WeightInput`: the binding is canonical kilograms and the
+/// field edits a display-space mirror of it, owned by `weightDisplayMirror`.
 struct OnyxWeightStepper: View {
     let title: String
+    /// Canonical kilograms.
     @Binding var weight: Double
-    let increment: Double
+
+    @Environment(\.weightUnit) private var weightUnit
+    /// `weight` expressed in `weightUnit` — the value the field actually edits.
+    @State private var displayValue: Double = 0
 
     init(
-        title: String = "Weight (kg)",
-        weight: Binding<Double>,
-        increment: Double = 0.25
+        title: String,
+        weight: Binding<Double>
     ) {
         self.title = title
         self._weight = weight
-        self.increment = increment
     }
 
     var body: some View {
@@ -106,22 +111,21 @@ struct OnyxWeightStepper: View {
 
             // Minus button
             Button {
-                let newWeight = max(0, weight - increment)
-                weight = newWeight
+                displayValue = max(0, displayValue - weightUnit.fineIncrement)
                 UIImpactFeedbackGenerator(style: .light).impactOccurred()
             } label: {
                 Image(systemName: "minus.circle.fill")
                     .font(.title)
                     .symbolRenderingMode(.hierarchical)
-                    .foregroundStyle(weight <= 0 ? DesignSystem.Colors.textDisabled : DesignSystem.Colors.tint)
+                    .foregroundStyle(displayValue <= 0 ? DesignSystem.Colors.textDisabled : DesignSystem.Colors.tint)
                     .frame(width: 44, height: 44)
                     .contentShape(Rectangle())
             }
             .buttonStyle(.borderless)
-            .disabled(weight <= 0)
+            .disabled(displayValue <= 0)
 
-            // Editable weight field
-            TextField("0.0", value: $weight, format: .number.precision(.fractionLength(0...2)))
+            // Editable weight field, in the displayed unit
+            TextField("0", value: $displayValue, format: WeightFormatting.inputStyle(for: weightUnit))
                 .keyboardType(.decimalPad)
                 .multilineTextAlignment(.center)
                 .font(.onyxNumber)
@@ -135,7 +139,7 @@ struct OnyxWeightStepper: View {
 
             // Plus button
             Button {
-                weight += increment
+                displayValue = min(displayValue + weightUnit.fineIncrement, weightUnit.maximumDisplay)
                 UIImpactFeedbackGenerator(style: .light).impactOccurred()
             } label: {
                 Image(systemName: "plus.circle.fill")
@@ -147,6 +151,7 @@ struct OnyxWeightStepper: View {
             }
             .buttonStyle(.borderless)
         }
+        .weightDisplayMirror(kilograms: $weight, displayValue: $displayValue)
     }
 }
 

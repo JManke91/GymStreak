@@ -137,7 +137,11 @@ struct ConfigureExerciseView: View {
                                     }
 
                                     HStack {
-                                        Text("set.weight_label".localized + ":")
+                                        // Pinned to kilograms: ticket 02 converts
+                                        // this flow's fields.
+                                        Text("set.weight_label".localized(
+                                            WeightFormatting.unitWord(.kilograms)
+                                        ) + ":")
                                         Spacer()
                                         TextField("0.0", value: weightBinding(at: index), format: .number)
                                             .keyboardType(.decimalPad)

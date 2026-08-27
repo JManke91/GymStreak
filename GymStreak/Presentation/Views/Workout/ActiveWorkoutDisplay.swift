@@ -172,17 +172,12 @@ struct WorkoutSetRowItem: Identifiable {
 
 /// Formatting shared by the set rows, the value keypad and the exercise headers.
 /// Kept as static members so no formatter is allocated inside a `body`.
+///
+/// Weights are *not* here: they go through `WeightFormatting`, the app's single
+/// weight seam. This type used to carry its own hand-rolled decimal-separator
+/// swap, which is how the same number could read "137.8" here and "137,8" one
+/// screen over — and how it stayed unit-blind.
 enum WorkoutValueFormatting {
-    /// Trims trailing zeros: 90 → "90", 37.5 → "37,5" (locale separator).
-    static func weight(_ value: Double) -> String {
-        let rounded = (value * 100).rounded() / 100
-        if rounded == rounded.rounded() {
-            return String(Int(rounded))
-        }
-        return String(format: "%g", rounded)
-            .replacingOccurrences(of: ".", with: Locale.current.decimalSeparator ?? ".")
-    }
-
     /// mm:ss for the rest countdown, h:mm:ss once a workout passes the hour —
     /// without the hour branch a 75-minute session would read "75:23".
     static func clock(_ seconds: TimeInterval) -> String {

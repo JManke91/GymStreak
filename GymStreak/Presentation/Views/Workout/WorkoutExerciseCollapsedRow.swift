@@ -16,6 +16,8 @@ struct WorkoutExerciseCollapsedRow: View {
     let supersetBadge: (position: Int, total: Int, color: Color)?
     let onOpen: () -> Void
 
+    @Environment(\.weightUnit) private var weightUnit
+
     var body: some View {
         Button(action: onOpen) {
             HStack(spacing: 12) {
@@ -83,9 +85,10 @@ struct WorkoutExerciseCollapsedRow: View {
         // Bodyweight exercises log 0 kg; "0 kg" reads as missing data, so the
         // weight is simply left off.
         guard display.leadWeight > 0 else { return sets }
+        let label = WeightFormatting.label(display.leadWeight, in: weightUnit)
         let weight = display.isAssistance
-            ? "exercise.assistance.value".localized(WorkoutValueFormatting.weight(display.leadWeight))
-            : "set.weight_compact".localized(WorkoutValueFormatting.weight(display.leadWeight))
+            ? "exercise.assistance.value".localized(label)
+            : label
         return "\(sets) · \(weight)"
     }
 }

@@ -121,7 +121,10 @@ struct WeightIncreaseSheet: View {
                         .foregroundStyle(.orange)
                     Text(
                         isAssistance
-                            ? String(format: "exercise.assistance.value".localized, String(format: "%.1f", resultingWeight))
+                            // Pinned to kilograms with the rest of this sheet.
+                            ? "exercise.assistance.value".localized(
+                                WeightFormatting.label(resultingWeight, in: .kilograms)
+                            )
                             : "rep_range.new_state".localized(String(format: "%.1f", resultingWeight), targetMin)
                     )
                     .font(.subheadline.weight(.medium))

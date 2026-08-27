@@ -56,6 +56,10 @@ struct SettingsRootView: View {
                             ICloudSyncRowView(provider: dependencies.cloudSyncStatus)
                         }
 
+                        UnitsSettingsSectionView(
+                            preference: dependencies.weightUnitPreference
+                        )
+
                         SettingsSectionView(
                             header: "settings.section.ai_coach".localized,
                             footer: "settings.section.ai_coach.footer".localized

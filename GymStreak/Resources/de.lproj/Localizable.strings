@@ -17,6 +17,10 @@
 "settings.ai_coach.row.subtitle" = "Rückblicke, Chat und Datenschutz";
 "settings.section.data" = "Daten";
 "settings.section.data.footer" = "Deine Trainingsdaten werden automatisch über iCloud auf allen deinen Geräten synchronisiert.";
+"settings.section.units" = "Einheiten";
+"settings.section.units.footer" = "Gewichte werden in Kilogramm gespeichert und nur in deiner Einheit angezeigt — Umschalten ändert also keinen protokollierten Wert.";
+"settings.units.weight.row.title" = "Gewichtseinheit";
+"settings.units.weight.row.subtitle" = "Gilt überall, wo Gewichte angezeigt und eingegeben werden";
 "settings.icloud.row.title" = "iCloud";
 "settings.icloud.row.subtitle.last" = "Zuletzt: %@";
 "settings.icloud.row.subtitle.never" = "Noch nicht synchronisiert";
@@ -187,17 +191,25 @@
 "exercise.sets_completed" = "%d/%d Sätze";
 "exercise.add_set" = "Satz hinzufügen";
 
+// MARK: - Units
+// The unit word lives here and nowhere else: every compound string below takes
+// a preformatted weight via %@. Baking "kg" into twenty values is what made the
+// pounds support a localization change rather than a code change.
+"unit.weight.kg" = "kg";
+"unit.weight.lb" = "lb";
+// Spoken forms, for VoiceOver — a screen reader saying "kay gee" is why.
+"unit.weight.kg.spoken" = "Kilogramm";
+"unit.weight.lb.spoken" = "Pfund";
+
 // MARK: - Workout Set
 "set.number" = "Satz %d";
 "set.reps" = "%d Wdh.";
-"set.weight" = "%.2f kg";
-"set.weight_compact" = "%@ kg";
+"set.weight_compact" = "%1$@ %2$@";
 "set.reps_unit" = "Wdh.";
-"set.weight_unit" = "kg";
 "set.reps_label" = "Wiederholungen";
-"set.weight_label" = "Gewicht (kg)";
+"set.weight_label" = "Gewicht (%@)";
 "set.planned" = "Geplant:";
-"set.planned_detail" = "%d Wdh. × %.2f kg";
+"set.planned_detail" = "%1$d Wdh. × %2$@";
 "set.delete" = "Satz löschen";
 "set.delete.title" = "Satz löschen?";
 "set.delete.message" = "Möchtest du diesen Satz wirklich löschen? Diese Aktion kann nicht rückgängig gemacht werden.";
@@ -332,10 +344,9 @@
 "exercise.load_behavior.resistance.detail" = "Mehr Gewicht macht diese Übung schwerer.";
 "exercise.load_behavior.assistance.detail" = "Für Gegengewichtsmaschinen: Mehr Kilogramm unterstützen stärker.";
 "exercise.assistance" = "Unterstützung";
-"exercise.assistance.value" = "Unterstützung: %@ kg";
-"exercise.assistance.input" = "Unterstützung (kg)";
+"exercise.assistance.value" = "Unterstützung: %@";
 "exercise.body_weight" = "Körpergewicht";
-"exercise.body_weight.input" = "Körpergewicht (kg)";
+"exercise.body_weight.input" = "Körpergewicht (%@)";
 "exercise.body_weight.detail" = "Wird verwendet, um die effektive Last bei unterstützten Übungen zu berechnen.";
 "exercise.reduce_assistance" = "Unterstützung reduzieren";
 
@@ -420,7 +431,7 @@
 "rep_range.overload_card.routine_unavailable" = "Diese Routine ist nicht mehr verfügbar";
 
 // MARK: - Accessibility
-"accessibility.set.label" = "Satz %d: %d Wiederholungen, %.2f Kilogramm";
+"accessibility.set.label" = "Satz %1$d: %2$d Wiederholungen, %3$@";
 "accessibility.set.hint.collapsed" = "Zum Erweitern und Bearbeiten tippen";
 "accessibility.set.hint.expanded" = "Zum Minimieren tippen";
 "accessibility.add_set" = "Neuen Satz zu %@ hinzufügen";

@@ -20,6 +20,8 @@ struct WorkoutSetRowView: View {
     let onDuplicate: () -> Void
     let onDelete: () -> Void
 
+    @Environment(\.weightUnit) private var weightUnit
+
     private var borderColor: Color {
         if display.isCompleted { return DesignSystem.Colors.tint.opacity(0.22) }
         if isNext { return DesignSystem.Colors.tint.opacity(0.38) }
@@ -71,8 +73,10 @@ struct WorkoutSetRowView: View {
                     .foregroundStyle(Color.white.opacity(0.2))
 
                 valueChip(
-                    value: WorkoutValueFormatting.weight(display.weight),
-                    unit: display.isAssistance ? "exercise.assistance".localized : "set.weight_unit".localized,
+                    value: WeightFormatting.number(display.weight, in: weightUnit),
+                    unit: display.isAssistance
+                        ? "exercise.assistance".localized
+                        : WeightFormatting.unitWord(weightUnit),
                     valueColor: nil,
                     field: .weight
                 )
