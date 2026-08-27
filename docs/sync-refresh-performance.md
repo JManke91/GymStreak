@@ -126,10 +126,11 @@ shown itself — a count checked too early also passes against a coalescer that 
 
 ## 5. Related, still open
 
-Each fan-out invalidates `RoutinesView`, which rebuilds every routine card eagerly with
-three `RoutineMetricsService` calls apiece. Coalescing reduces how *often* that happens;
-the per-refresh cost is `.scratch/sync-refresh-performance/issues/02`. The two multiply
-each other; neither blocks the other.
+Each fan-out invalidates `RoutinesView`. That used to rebuild every routine card eagerly with
+three `RoutineMetricsService` calls apiece; coalescing cut how *often* it happens and the
+companion fix cut what each one costs — the cards are now precomputed value structs in a
+`LazyVStack`. Before/after numbers in `docs/history-performance.md` §7. The two changes were
+independent and multiply.
 
 A second per-fan-out cost sits at the root: `GymStreakApp` holds
 `@StateObject private var cloudSyncObserver = CloudSyncObserver.shared`, so every

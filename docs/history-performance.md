@@ -831,3 +831,15 @@ That was a mitigation of one cause, never a fix for either defect.
 `fetchRoutines()`. Before this change that was an eager rebuild of every card; it is now a
 rebuild of the value structs plus a lazy re-render of what is on screen. Coalescing those
 notifications (ticket 01 of the same set) and this fix are independent and multiply.
+
+### Known-open after the Routinen fix (deliberately not done)
+
+- **`rebuildCardModels()` is still main-actor work.** It is O(routines × exercises × sets) and
+  runs inside `fetchRoutines()` — the aggregation moved out of `body`, not off the main thread.
+  3–4 ms at 40 routines, which is why it was left; a `@ModelActor` (the Phase 3 shape above) is
+  the next step if a Pro library grows an order of magnitude.
+- **`RoutinesViewModel` is ~1050 lines**, far past the 300-line guidance. This change added ~40
+  cohesive lines; the card-model plumbing is the natural seed for an extraction.
+- **`WorkoutCardView` still lacks `.equatable()`** at both call sites — see the bullet above for
+  why its cost is smaller than the routine card's, and why the comment on its `==` is untrue as
+  written. A one-line change at `TrainingsTabView.swift:216` and `HistoryCalendarView.swift:303`.
