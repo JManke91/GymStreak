@@ -5,3 +5,5 @@
 - Die App bleibt spürbar flüssiger, während eine große iCloud-Synchronisierung läuft, etwa auf einem neuen Gerät oder direkt nach einer Neuinstallation
 - Der Routinen-Tab öffnet und scrollt spürbar schneller, besonders bei vielen Routinen
 - Behoben: Nach einer Neuinstallation und iCloud-Synchronisierung schlug „In GymStreak und Apple Health löschen“ immer fehl. Die App fragt jetzt in diesem Moment erneut nach der Apple-Health-Berechtigung und erklärt, was zu tun ist, wenn du sie ablehnst
+- Wenn du noch keine Routinen hast, startet der Routinen-Tab jetzt mit einer fertigen Ganzkörper-Routine, die Wiederholungsbereiche, einen Supersatz und unterschiedliche Pausenzeiten zeigt. Du kannst sie bearbeiten, starten oder löschen wie jede andere Routine — einmal gelöscht, bleibt sie weg
+- Die fertige Einsteiger-Routine verbraucht keine deiner drei kostenlosen Routinen — du kannst weiterhin drei eigene anlegen

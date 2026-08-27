@@ -22,6 +22,12 @@ final class Routine {
     /// `RoutinesViewModel.setSchedule`. See docs/workout-planning.md.
     @Relationship(deleteRule: .cascade, inverse: \RoutineSchedule.routine)
     var schedules: [RoutineSchedule]? = []
+    /// Stable identity of a built-in (seeded) routine — the catalog row's key,
+    /// e.g. "seed.routine.full_body_starter". Empty for user-created routines.
+    /// CloudKit can't enforce uniqueness, so two devices seeding the example
+    /// routine before they sync both upload it; `ExampleRoutineSeeder`
+    /// deduplicates on this key. See docs/example-starter-routine.md.
+    var seedKey: String = ""
     var createdAt: Date = Date()
     var updatedAt: Date = Date()
 

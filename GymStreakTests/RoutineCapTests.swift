@@ -243,6 +243,124 @@ struct RoutineCapTests {
         ) == nil)
     }
 
+    // MARK: - The built-in example routine (docs/example-starter-routine.md)
+    //
+    // We put it there, so it never eats a free slot the user could have used.
+    // Shipping it without this exclusion would have turned "3 free routines"
+    // into 2 for every new free user — a gate tightening arriving as a side
+    // effect of an onboarding feature (§10).
+
+    @Test("The example routine leaves all three free slots for the user's own")
+    func exampleRoutineDoesNotConsumeAFreeSlot() {
+        let harness = makeHarness()
+        harness.seedExampleRoutine()
+
+        harness.fill(count: limit - 1)
+        #expect(harness.viewModel.isRoutineCapReached == false)
+
+        harness.fill(count: 1)
+
+        // Three of their own saved, and only now does the gate close.
+        #expect(harness.viewModel.isRoutineCapReached)
+        #expect(harness.viewModel.countableRoutineCount == limit)
+        #expect(harness.viewModel.routines.count == limit + 1)
+    }
+
+    @Test("The nudge counts the user's own routines, not ours")
+    func nudgeIgnoresTheExampleRoutine() throws {
+        let harness = makeHarness()
+        harness.seedExampleRoutine()
+
+        // One routine in the list, none of them the user's: silence.
+        #expect(harness.viewModel.routineCapNudge == nil)
+
+        harness.fill(count: limit - 2)
+        #expect(harness.viewModel.routineCapNudge == nil)
+
+        harness.fill(count: 1)
+        let approaching = try #require(harness.viewModel.routineCapNudge)
+        #expect(approaching.used == limit - 1)
+
+        harness.fill(count: 1)
+        let reached = try #require(harness.viewModel.routineCapNudge)
+        #expect(reached.used == limit)
+    }
+
+    @Test("Editing or renaming the example routine keeps it off the cap")
+    func editingTheExampleRoutineChangesNothing() {
+        let harness = makeHarness()
+        let seeded = harness.seedExampleRoutine()
+
+        seeded.name = "My Monday session"
+        harness.viewModel.updateRoutine(seeded)
+        harness.fill(count: limit - 1)
+
+        // The rule is permanent: `seedKey` survives the edit, so the routine
+        // stays outside the count rather than starting to charge the user for
+        // engaging with the very thing it is teaching.
+        #expect(harness.viewModel.isRoutineCapReached == false)
+        #expect(harness.viewModel.countableRoutineCount == limit - 1)
+        harness.viewModel.requestAddRoutine()
+        #expect(harness.viewModel.showingAddRoutine)
+        #expect(harness.paywalls.presentedPlacements.isEmpty)
+    }
+
+    @Test("Deleting the example routine leaves the allowance exactly as it was")
+    func deletingTheExampleRoutineChangesNothing() {
+        let harness = makeHarness()
+        let seeded = harness.seedExampleRoutine()
+        harness.fill(count: limit - 1)
+
+        harness.viewModel.deleteRoutine(seeded)
+
+        #expect(harness.viewModel.countableRoutineCount == limit - 1)
+        #expect(harness.viewModel.isRoutineCapReached == false)
+
+        harness.fill(count: 1)
+        #expect(harness.viewModel.isRoutineCapReached)
+    }
+
+    @Test("A duplicate of the example routine is the user's own, and counts")
+    func duplicatingTheExampleRoutineCounts() throws {
+        let harness = makeHarness()
+        let seeded = harness.seedExampleRoutine()
+
+        let copy = try #require(harness.viewModel.duplicateRoutine(seeded))
+
+        #expect(copy.seedKey.isEmpty)
+        #expect(harness.viewModel.countableRoutineCount == 1)
+    }
+
+    @Test("A lapsed user above the cap is unaffected by a seeded routine")
+    func lapsedUserWithSeededRoutineStaysBlocked() {
+        let harness = makeHarness(state: .subscription)
+        harness.seedExampleRoutine()
+        harness.fill(count: limit + 3)
+        harness.entitlements.state = .free
+
+        harness.viewModel.requestAddRoutine()
+
+        #expect(harness.viewModel.isRoutineCapReached)
+        #expect(harness.viewModel.showingAddRoutine == false)
+        // The count they are shown is their own, not inflated by ours.
+        #expect(harness.viewModel.countableRoutineCount == limit + 3)
+        #expect(harness.viewModel.routineCapNudge?.used == limit + 3)
+        #expect(harness.viewModel.routines.count == limit + 4)
+    }
+
+    @Test("The counting rule, at the policy boundary")
+    func policyCountingRule() {
+        let own = Routine(name: "Mine")
+        let seeded = Routine(name: "Ours")
+        seeded.seedKey = SeedRoutineCatalog.entries[0].seedKey
+
+        #expect(RoutineCapPolicy.countsTowardCap(own))
+        #expect(RoutineCapPolicy.countsTowardCap(seeded) == false)
+        #expect(RoutineCapPolicy.countableRoutineCount(in: []) == 0)
+        #expect(RoutineCapPolicy.countableRoutineCount(in: [seeded]) == 0)
+        #expect(RoutineCapPolicy.countableRoutineCount(in: [seeded, own, seeded]) == 1)
+    }
+
     // MARK: - Harness
 
     @MainActor
@@ -250,6 +368,20 @@ struct RoutineCapTests {
         let viewModel: RoutinesViewModel
         let entitlements: StubProEntitlements
         let paywalls: RecordingPaywallPresenter
+        let context: ModelContext
+
+        /// Puts the built-in example routine in the store, the way
+        /// `ExampleRoutineSeeder` does — a routine like any other, marked by a
+        /// non-empty `seedKey`.
+        @discardableResult
+        func seedExampleRoutine() -> Routine {
+            let seeded = Routine(name: "Example routine")
+            seeded.seedKey = SeedRoutineCatalog.entries[0].seedKey
+            context.insert(seeded)
+            try? context.save()
+            viewModel.fetchRoutines()
+            return seeded
+        }
 
         /// Saves `count` further routine templates, bypassing the entry point —
         /// this is the state a user arrives in, not the thing under test.
@@ -287,6 +419,11 @@ struct RoutineCapTests {
             paywalls: paywalls,
             isGatingEnabled: isGatingEnabled
         )
-        return Harness(viewModel: viewModel, entitlements: entitlements, paywalls: paywalls)
+        return Harness(
+            viewModel: viewModel,
+            entitlements: entitlements,
+            paywalls: paywalls,
+            context: context
+        )
     }
 }

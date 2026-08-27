@@ -17,18 +17,38 @@ import Foundation
 /// user-facing text** — the copy each state needs is a Presentation concern, and
 /// `Domain/` has no business holding localization keys.
 ///
-/// The counting unit is a **saved routine template**. Starting a workout from a
+/// The counting unit is a **saved routine template the user made**. Built-in
+/// seeded routines are excluded by `countsTowardCap`. Starting a workout from a
 /// routine is unlimited, always, so nothing on the workout path ever calls this.
 enum RoutineCapPolicy {
 
     /// What the nudge should say, without saying it. `used` is the raw routine
     /// count, so a lapsed Pro user legitimately reports more than `limit`.
     enum NudgeState: Equatable {
-        /// The last free slot — "2 of 3 routines used".
+        /// The last free slot — "2 of 3 free routines used".
         case approaching(used: Int, limit: Int)
         /// At or above the cap. Carries no numbers to phrase, because a user
         /// who lapsed from Pro can be at 6 of 3 and "all 3 used" would be false.
         case reached(used: Int, limit: Int)
+    }
+
+    /// The routines that count against the cap: the user's **own**.
+    ///
+    /// A built-in routine we put in the store (non-empty `seedKey`) is never
+    /// counted, and that stays true after the user edits or renames it. The
+    /// alternative — clearing `seedKey` on first edit so it starts counting —
+    /// was rejected: it charges the user for engaging with the very thing the
+    /// example routine is teaching, and it makes the cap depend on invisible
+    /// edit history. Without this, shipping the example routine would silently
+    /// turn "3 free routines" into 2 (docs/example-starter-routine.md).
+    static func countsTowardCap(_ routine: Routine) -> Bool {
+        routine.seedKey.isEmpty
+    }
+
+    /// How many of `routines` count against the cap. The only counting rule
+    /// there is — every cap and nudge input goes through it.
+    static func countableRoutineCount(in routines: [Routine]) -> Int {
+        routines.count(where: countsTowardCap)
     }
 
     /// `true` when the cap applies to this user at all. A Founder is Pro, so

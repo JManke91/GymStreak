@@ -89,7 +89,7 @@
 // Placement D — an inline hint, never a paywall (docs/monetization-strategy.md §8).
 // The "reached" variant carries no numbers: a lapsed Pro user can hold more
 // routines than the free cap and keeps every one of them.
-"routines.cap.nudge" = "%1$d of %2$d routines used";
+"routines.cap.nudge" = "%1$d of %2$d free routines used";
 "routines.cap.nudge.reached" = "Routine limit reached. Gym Streak Pro unlocks unlimited routines.";
 "date.today" = "Today";
 "date.yesterday" = "Yesterday";
@@ -1200,3 +1200,9 @@
 "founder.celebration.included3.detail" = "New Pro features are included as they arrive.";
 "founder.celebration.footer" = "Thank you for being here early.";
 "founder.celebration.cta" = "Let's train";
+
+// MARK: - Built-in Example Routine
+// Name of the routine seeded for users who have none of their own. Resolved
+// once at seed time into the mutable Routine.name — see
+// docs/example-starter-routine.md.
+"seed.routine.full_body_starter" = "Full Body Starter";

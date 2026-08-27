@@ -89,7 +89,7 @@
 // Placement D — ein Inline-Hinweis, kein Paywall (docs/monetization-strategy.md §8).
 // Die "reached"-Variante nennt bewusst keine Zahlen: Wer Pro hatte, darf mehr
 // Routinen behalten als das Gratis-Limit erlaubt.
-"routines.cap.nudge" = "%1$d von %2$d Routinen belegt";
+"routines.cap.nudge" = "%1$d von %2$d kostenlosen Routinen belegt";
 "routines.cap.nudge.reached" = "Routinen-Limit erreicht. Mit Gym Streak Pro sind es unbegrenzt viele.";
 "date.today" = "Heute";
 "date.yesterday" = "Gestern";
@@ -1200,3 +1200,9 @@
 "founder.celebration.included3.detail" = "Neue Pro-Funktionen sind automatisch dabei.";
 "founder.celebration.footer" = "Danke, dass du von Anfang an dabei bist.";
 "founder.celebration.cta" = "Los geht's";
+
+// MARK: - Built-in Example Routine
+// Name of the routine seeded for users who have none of their own. Resolved
+// once at seed time into the mutable Routine.name — see
+// docs/example-starter-routine.md.
+"seed.routine.full_body_starter" = "Ganzkörper-Starter";

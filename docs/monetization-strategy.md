@@ -150,7 +150,7 @@ launch with.**
 
 | # | Pro feature | Free equivalent | Why this converts |
 |---|---|---|---|
-| P1 | 🔒 **Unlimited routines** | 3 | The primary usage cap. Fires exactly when a user graduates from a simple split to real programming — the clearest possible commitment signal. |
+| P1 | 🔒 **Unlimited routines** | 3 **of the user's own** (the built-in example routine is not counted) | The primary usage cap. Fires exactly when a user graduates from a simple split to real programming — the clearest possible commitment signal. |
 | P2 | 🔒 **Full progress analytics**: est. 1RM + training-volume metrics, and all timeframes (6M / 1Y / all-time) | Max weight only, 3-month window | The user *generated* this data. Loss aversion is maximal against your own training history, and the wall gets more painful every month you keep training. Reversible — no data deleted. |
 | P3 | 🔒 **AI Coach Chat** | 5 messages / month | Highest perceived value in the app; the taster cap is what makes it convert rather than sit unnoticed. |
 | P4 | 🔒 **AI Period Recap** (week / month / quarter / year) | 1 per month | Cross-session scope (§4.3). |
@@ -158,6 +158,36 @@ launch with.**
 | P9 | 🔒 **Fixed-weekday schedules** | Simple every-N-days cadence | Programming depth signals a committed lifter. |
 
 *(P9 keeps its number for cross-reference stability; it is shipped, not future.)*
+
+**P1 counting rule (2026-08-27).** The free three are three routines the user *made*. The built-in
+example routine (`docs/example-starter-routine.md`, `Routine.seedKey` non-empty) is outside the
+count, permanently — editing, renaming or restructuring it never makes it start counting, and
+deleting it never gives the user a slot back, because it never took one. Counting it would have
+turned "3 free routines" into 2 the day that onboarding feature shipped and moved the paywall one
+routine earlier for every new free user; §10's guardrails (free-user D30 retention and the App
+Store rating outrank revenue) settle that against us. Duplicating the example produces an ordinary
+user routine, which counts. The rule lives in `RoutineCapPolicy.countsTowardCap(_:)`; the shipped
+mechanism is `docs/pro-subscription.md` §5c.
+
+**The accepted consequence: the effective free ceiling is four routines**, not three, for a user
+who keeps the example and adapts it to their own training. This is deliberate, not a leak to close
+later. It is bounded at exactly **+1, once per iCloud account, and cannot be farmed**: the seeder
+only runs against a store with zero routines and stamps `seedRoutineVersion` in
+`NSUbiquitousKeyValueStore`, so a deleted example never returns and a second one can never exist;
+duplicating it yields `seedKey == ""` and counts; and every creation path funnels through
+`requestAddRoutine()` / `duplicateRoutine(_:)`, with no routine-template creation on the watch at
+all. The three ways to close it are all worse — counting the example returns every new free user to
+two own routines (§10), clearing `seedKey` on first edit charges the user for engaging with the
+onboarding artifact and has no honest definition of "edit", and deleting the example once the user
+reaches three of their own takes something away (§7 Rule 4). The error direction decides it: +1
+costs at most a marginal conversion from someone who wanted exactly four routines and reshaped a
+generic full-body template into their fourth split — and the gate still fires on their next
+creation — while −1 would hit every new free user at the moment they judge whether the app is
+generous, on the only acquisition channel this app has.
+
+The nudge copy says "**free** routines" for this reason: the header subline counts all four and the
+nudge counts the three that are the user's, so naming the allowance is what keeps the two lines from
+contradicting each other (`docs/pro-subscription.md` §5c).
 
 **P9 scope correction (2026-08-15).** An earlier draft described P9 as "fixed-weekday schedules,
 multiple routines per day, plan preview". Only the first is a real gateable surface. The

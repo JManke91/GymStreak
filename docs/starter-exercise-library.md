@@ -146,6 +146,6 @@ After a successful recovery the seeder posts `.cloudKitDataDidChange`, which is 
 
 ## Deliberate omissions / Phase 2
 
-- **Starter routines** (3-day full body, upper/lower, PPL built from seeded exercises) deliberately deferred — needs the same seedKey/versioning treatment on `Routine` and is a more opinionated product call.
+- **Starter routines** — shipped, in reduced form: one built-in full-body example routine for users with no routines of their own, seeded from these catalog rows. `Routine` got the same `seedKey`/versioning treatment as `Exercise`, with one difference that matters — the version flag is the *correctness* mechanism there rather than an optimisation, because an empty routine list gives the seeder nothing to check a `seedKey` against. See `docs/example-starter-routine.md`. The wider set (upper/lower, PPL) remains deferred as a more opinionated product call.
 - No exercise images/instructions — text-only catalog keeps app size unchanged; media would go through ODR/lazy loading if ever added.
 - No "built-in" badge or read-only treatment in the UI — seeded and custom exercises are intentionally indistinguishable to the user.

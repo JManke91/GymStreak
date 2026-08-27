@@ -57,6 +57,13 @@ final class AppDependencies: ObservableObject {
     /// docs/starter-exercise-library.md). Invoked once from GymStreakApp at launch.
     let defaultContentSeeder: DefaultContentSeeder
 
+    /// Launch-time seeder for the built-in example routine — gives a user with
+    /// no routines of their own one ready-made routine instead of an empty
+    /// state, and dedups CloudKit sync races on it (see
+    /// docs/example-starter-routine.md). Invoked once from GymStreakApp at
+    /// launch, after `defaultContentSeeder`, whose exercises it resolves.
+    let exampleRoutineSeeder: ExampleRoutineSeeder
+
     /// One-shot repair that re-exports training plans whose CloudKit records
     /// were written without their owning routine, back when the link was a
     /// to-one ↔ to-one relationship CloudKit does not mirror (see
@@ -247,6 +254,7 @@ final class AppDependencies: ObservableObject {
             modelContext: modelContext,
             cloudSyncStatus: cloudSyncStatus
         )
+        self.exampleRoutineSeeder = ExampleRoutineSeeder(modelContext: modelContext)
         self.routinePlanLinkRepair = RoutinePlanLinkRepair(
             modelContext: modelContext,
             cloudSyncStatus: cloudSyncStatus

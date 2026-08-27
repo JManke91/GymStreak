@@ -128,6 +128,13 @@ struct GymStreakApp: App {
                         seedTestData()
                     } else {
                         dependencies.defaultContentSeeder.run()
+                        // After the catalog: the example routine resolves its
+                        // exercises out of the library the seeder just
+                        // committed. `RoutinesView` is the first tab and has
+                        // already read an empty list by now, so the seeder
+                        // announces what it changed rather than relying on
+                        // ordering — that post is also what reaches the watch.
+                        dependencies.exampleRoutineSeeder.run()
                         // Stage the first catalogue snapshot only after
                         // seeding/dedup committed, so it can't race ahead of
                         // the built-in library.

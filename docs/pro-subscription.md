@@ -814,11 +814,11 @@ the wordmark for tight rows). Typography is `onyxCaption2`, so it scales with Dy
 of staying a fixed 10pt. **§8's absolute prohibition covers the badge, not just paywalls**: no Pro
 badge inside an active workout session, on the watch app, or on the rest-timer Live Activity.
 
-**`OnyxCapNudge`** — §8 placement D. An inline "2 of 3 routines used" hint with a linear meter; it
+**`OnyxCapNudge`** — §8 placement D. An inline "2 of 3 free routines used" hint with a linear meter; it
 turns `warning`-coloured at the cap. It is **not a paywall**: no CTA, and `allowsHitTesting(false)`
 so it cannot swallow a tap meant for the content beside it. It takes its `text` **already
 localized from the caller** rather than formatting one generic string, because each gate phrases
-its allowance differently ("2 of 3 routines used" vs. "1 message left today") and a single format
+its allowance differently ("2 of 3 free routines used" vs. "1 message left today") and a single format
 string does not survive German translation; `used`/`limit` (clamped) drive only the meter and the
 colour.
 
@@ -833,10 +833,26 @@ The first shipped gate (`monetization-strategy.md` §4.2a P1, §4.4). A free use
 `ProFeatureCaps.freeRoutineLimit` saved routine templates; asking for another raises
 `.routineCap`.
 
-**What is counted, and what is never counted.** The unit is a **saved routine template**.
-Starting a workout from any routine is unlimited, always — the cap is on programming, never on
-training. This is why the gate lives at the *creation entry points* and nowhere near
+**What is counted, and what is never counted.** The unit is a **saved routine template the user
+made**. Starting a workout from any routine is unlimited, always — the cap is on programming, never
+on training. This is why the gate lives at the *creation entry points* and nowhere near
 `WorkoutViewModel`: there is no cap check anywhere on the workout path, by construction.
+
+**The built-in example routine is outside the count** (`docs/example-starter-routine.md`). A
+routine carrying a non-empty `seedKey` is one *we* put in the store, so it never consumes a slot
+the user could have used: with only the example routine present a free user still creates three
+routines of their own, exactly as they could before that feature shipped. Counting it would have
+turned "3 free routines" into 2 for every new free user and moved the paywall one routine earlier
+— a gate tightening arriving as a side effect of an onboarding feature, which §10's guardrails
+(free-user retention and the rating outrank revenue) exist to prevent.
+
+The exclusion is **permanent**: `seedKey` survives editing, renaming and restructuring, so the
+routine stays uncounted forever. Clearing `seedKey` on first edit — so an adopted example starts
+counting — was considered and rejected: it charges the user for engaging with the very thing the
+routine is teaching, and it makes the cap depend on invisible edit history. Deleting the example
+routine changes nothing about the user's own allowance, and *duplicating* it produces an ordinary
+user routine (`seedKey` empty) that counts like any other. The rule is one place —
+`RoutineCapPolicy.countsTowardCap(_:)` / `countableRoutineCount(in:)`.
 
 **Lapse behaviour is the load-bearing rule** (§7's table, Rule 4). A user who built six routines
 as a subscriber and then lapsed keeps all six, fully usable, editable and trainable. Nothing is
@@ -849,7 +865,8 @@ only thing refused.
 **Where the decision lives.** Split in two. The *rules* are `Domain/Services/RoutineCapPolicy.swift`
 — pure functions over three scalars (`routineCount`, `isPro`, `isGatingEnabled`) plus an
 overridable `limit`, returning `isCapReached` and a `NudgeState` (`.approaching` / `.reached` /
-`nil`). It produces **no user-facing text**: copy is Presentation's, and `Domain/` holds no
+`nil`), together with the counting rule (`countsTowardCap(_:)`, `countableRoutineCount(in:)`) that
+decides *what* those scalars are counted from. It produces **no user-facing text**: copy is Presentation's, and `Domain/` holds no
 localization keys. Being pure is what lets the boundary math — including the retune §4.4 expects —
 be asserted without a SwiftData container.
 
@@ -874,18 +891,28 @@ entered the flow under the cap and crossed it mid-flight (watch sync, iCloud) ke
 covered by `inFlightCreationIsNeverLost`.
 
 **The nudge (§8 placement D).** `routineCapNudge` returns a `RoutineCapNudge` value struct —
-finished string, `used`, `limit` — or `nil`. It appears on the last free slot ("2 of 3 routines
-used") and *stays* once the cap is reached, which is exactly what removes the surprise from the
-gate. The at-cap copy (`routines.cap.nudge.reached`) is deliberately **number-free**: a lapsed
-user can be at 6 of 3, and "all 3 used" would be a visible lie. At the cap the dashed create tile
+finished string, `used`, `limit` — or `nil`. It appears on the last free slot ("2 of 3 free
+routines used") and *stays* once the cap is reached, which is exactly what removes the surprise
+from the gate. The at-cap copy (`routines.cap.nudge.reached`) is deliberately **number-free**: a
+lapsed user can be at 6 of 3, and "all 3 used" would be a visible lie.
+
+The word **"free"** in that copy (2026-08-27) is what reconciles it with the header subline above
+it. `routines.header_meta` states what the user *has* ("4 routines · last Tuesday") while the nudge
+states what they have used of their *allowance* — and since the example routine is outside the
+count, those two numbers legitimately differ by one. "%d of %d routines used" directly under
+"4 routines" reads like a bug; naming the allowance fixes it without inventing a second class of
+routine. "Custom routines" was considered and rejected: nothing else in the app is "custom", and
+the user regards all four as theirs — it would introduce a concept to explain rather than removing
+one. At the cap the dashed create tile
 also carries an `OnyxProBadge(style: .icon)`, so the gate is honest before the tap.
 
 It is a **computed** property, not stored state refreshed in `fetchRoutines()`. Reading the
 `@Observable` entitlement provider inside it — during the list's `body` evaluation — is what makes
 a purchase or a lapse remove or restore the nudge live, with no refetch; stored state would go
-stale until the next fetch. It stays inside the main-thread rules because it counts nothing
-(`routines.count` on an array the ViewModel already holds), allocates no formatter, and touches no
-SwiftData relationship. `nudgeFollowsTheEntitlement` is the regression test for the live half.
+stale until the next fetch. It stays inside the main-thread rules because it counts nothing,
+allocates no formatter, and touches no SwiftData relationship: the count it reads is
+`countableRoutineCount`, a `@Published` value recomputed in `rebuildCardModels()` alongside the
+card models, precisely so that excluding seeded routines does not put a `filter` in a `body`. `nudgeFollowsTheEntitlement` is the regression test for the live half.
 
 **With the kill switch off nothing changes** — no nudge, no badge, no gate, no paywall — which is
 its own test (`killSwitchOffBehavesAsBefore`) rather than an inspection.
@@ -2458,7 +2485,9 @@ process: the debug path bypasses the coordinator entirely, and the coordinator i
   (a fresh presenter over the same defaults); contextual gates repeat; a second request does not
   swap a sheet already on screen, but one that never appeared is replaced rather than wedging the
   seam, and a one-shot raised without appearing is not spent.
-- `RoutineCapTests` (14 tests, 17 cases with parameterization, green 2026-08-15) covers P1 (§5c).
+- `RoutineCapTests` (21 tests, 24 cases with parameterization, green 2026-08-27) covers P1 (§5c),
+  including the example routine's exclusion from the count — untouched by editing or deleting it,
+  and correct for a lapsed Pro user sitting above the cap with a seeded routine in the store.
   Eleven run against the real SwiftData repositories: under the cap, at the cap, duplication,
   deleting back under, a lapsed user above the cap (routines survive, stay editable, only creation
   is refused), work already inside the create flow, subscription / lifetime / Founder, the kill

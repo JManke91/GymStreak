@@ -24,6 +24,11 @@ class RoutinesViewModel: ObservableObject {
     /// Every other routine's card, in fetch order — the hero is already excluded, so the
     /// list does not `filter` in its `body`.
     @Published private(set) var otherCards: [RoutineCardModel] = []
+    /// Routines that count against the free cap — the user's own, excluding any
+    /// built-in seeded routine. Stored rather than computed because the cap and
+    /// the §8 D nudge are read during the list's `body`, and counting there is
+    /// exactly the aggregation-in-`body` this ViewModel precomputes away.
+    @Published private(set) var countableRoutineCount: Int = 0
     /// Most recent training across all routines, for the header subline. Precomputed for the
     /// same reason: `.values.max()` is an aggregation and belonged nowhere near a `body`.
     @Published private(set) var mostRecentTraining: Date?
@@ -166,6 +171,7 @@ class RoutinesViewModel: ObservableObject {
             .filter { $0.id != hero?.id }
             .map(makeCardModel)
         mostRecentTraining = lastPerformedByRoutine.values.max()
+        countableRoutineCount = RoutineCapPolicy.countableRoutineCount(in: routines)
     }
 
     private func makeCardModel(for routine: Routine) -> RoutineCardModel {
@@ -252,17 +258,20 @@ class RoutinesViewModel: ObservableObject {
     // MARK: - Routine cap (P1)
     //
     // The rules live in `RoutineCapPolicy`; this end owns only the inputs (the
-    // routine count and the live entitlement) and the copy. The cap is consulted
-    // at the creation entry points and nowhere else — per §7's lapse table a
-    // user who dropped from Pro keeps every routine they made, fully usable and
-    // trainable, and starting a workout is never capped at all.
+    // countable routine count and the live entitlement) and the copy. The count
+    // excludes the built-in example routine — we put it there, so it never eats
+    // a free slot the user could have used (docs/example-starter-routine.md).
+    // The cap is consulted at the creation entry points and nowhere else — per
+    // §7's lapse table a user who dropped from Pro keeps every routine they
+    // made, fully usable and trainable, and starting a workout is never capped
+    // at all.
 
     /// `true` when saving another routine template would go past the free cap.
     /// Also `true` for a lapsed user sitting above it — they keep what they
     /// have, they just cannot add to it.
     var isRoutineCapReached: Bool {
         RoutineCapPolicy.isCapReached(
-            routineCount: routines.count,
+            routineCount: countableRoutineCount,
             isPro: proEntitlements.isPro,
             isGatingEnabled: isGatingEnabled
         )
@@ -277,7 +286,7 @@ class RoutinesViewModel: ObservableObject {
     /// no formatter.
     var routineCapNudge: RoutineCapNudge? {
         switch RoutineCapPolicy.nudgeState(
-            routineCount: routines.count,
+            routineCount: countableRoutineCount,
             isPro: proEntitlements.isPro,
             isGatingEnabled: isGatingEnabled
         ) {

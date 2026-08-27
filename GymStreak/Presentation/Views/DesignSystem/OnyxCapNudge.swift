@@ -9,7 +9,7 @@
 import SwiftUI
 
 /// An inline hint showing how much of a free-tier allowance is consumed
-/// ("2 of 3 routines used"). **This is not a paywall**: it blocks nothing, opens
+/// ("2 of 3 free routines used"). **This is not a paywall**: it blocks nothing, opens
 /// nothing and has no CTA.
 ///
 /// §8 placement D: showing the consumed proportion of an allowance measurably
@@ -17,7 +17,7 @@ import SwiftUI
 /// follows it.
 ///
 /// `text` is supplied already localized by the caller, because each gate phrases
-/// its own allowance ("2 of 3 routines used", "1 message left today") and a
+/// its own allowance ("2 of 3 free routines used", "1 message left today") and a
 /// single generic format string does not survive translation into German.
 /// `used` and `limit` drive the meter and the colour.
 struct OnyxCapNudge: View {
@@ -79,8 +79,8 @@ struct OnyxCapNudge: View {
         DesignSystem.Colors.background.ignoresSafeArea()
 
         VStack(spacing: DesignSystem.Spacing.lg) {
-            OnyxCapNudge(text: "2 of 3 routines used", used: 2, limit: 3)
-            OnyxCapNudge(text: "3 of 3 routines used", used: 3, limit: 3)
+            OnyxCapNudge(text: "2 of 3 free routines used", used: 2, limit: 3)
+            OnyxCapNudge(text: "3 of 3 free routines used", used: 3, limit: 3)
             OnyxCapNudge(text: "1 of 5 Coach messages left today", used: 4, limit: 5)
         }
         .padding()
@@ -92,7 +92,7 @@ struct OnyxCapNudge: View {
     ZStack {
         DesignSystem.Colors.background.ignoresSafeArea()
 
-        OnyxCapNudge(text: "2 of 3 routines used", used: 2, limit: 3)
+        OnyxCapNudge(text: "2 of 3 free routines used", used: 2, limit: 3)
             .padding()
     }
     .preferredColorScheme(.light)

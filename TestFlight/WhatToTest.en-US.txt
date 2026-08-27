@@ -5,3 +5,5 @@
 - The app stays noticeably smoother while a large iCloud sync is running, for example on a new device or right after reinstalling
 - The Routines tab opens and scrolls noticeably faster, especially with many routines
 - Fixed: after reinstalling the app and syncing from iCloud, deleting a workout with "Delete in GymStreak and Apple Health" always failed. The app now asks for Apple Health permission again at that moment, and says what to do if you decline
+- If you have no routines yet, the Routines tab now starts you off with a ready-made full-body routine that shows rep ranges, a superset and per-exercise rest times. Edit it, start it or delete it like any other routine — once deleted, it stays gone
+- The ready-made starter routine does not use up one of your three free routines — you can still create three of your own
