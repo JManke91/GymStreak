@@ -73,12 +73,12 @@ final class AICoachCache: AICoachCaching {
 
     // MARK: - Exercise Deep-Dive
 
-    func loadExerciseDeepDive(key: String) -> ExerciseDeepDiveOutput? {
-        load(ExerciseDeepDiveOutput.self, from: exerciseDeepDiveURL(key))
+    func loadExerciseDeepDive(key: String) -> ExerciseDeepDiveNarrative? {
+        load(ExerciseDeepDiveNarrative.self, from: exerciseDeepDiveURL(key))
     }
 
-    func saveExerciseDeepDive(key: String, output: ExerciseDeepDiveOutput) {
-        save(output, to: exerciseDeepDiveURL(key))
+    func saveExerciseDeepDive(key: String, narrative: ExerciseDeepDiveNarrative) {
+        save(narrative, to: exerciseDeepDiveURL(key))
     }
 
     func invalidateExerciseDeepDive(key: String) {
@@ -114,7 +114,14 @@ final class AICoachCache: AICoachCaching {
 
     private func exerciseDeepDiveURL(_ key: String) -> URL {
         let safe = key.components(separatedBy: CharacterSet.alphanumerics.union(.init(charactersIn: "-_")).inverted).joined(separator: "_")
-        return root.appending(path: "exercise_deep_dive_\(safe).json", directoryHint: .notDirectory)
+        // v2 (2026-08-28): one `narrative` string became per-paragraph fields plus the
+        // Swift-composed peak sentence (`ExerciseDeepDiveNarrative`). The prefix is bumped
+        // **deliberately** rather than letting the decode fail: a decode failure is a
+        // silent cache miss, and for a free user a miss spends a monthly allowance unit
+        // (`docs/pro-subscription.md` §5e). Bumping makes the one-off regeneration an
+        // intended, documented cost instead of an accident, and orphans the stale files
+        // under a name that says which format they hold.
+        return root.appending(path: "exercise_deep_dive_v2_\(safe).json", directoryHint: .notDirectory)
     }
 
     private func workoutAnalysisURL(_ id: UUID) -> URL {

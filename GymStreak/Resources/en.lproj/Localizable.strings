@@ -1015,6 +1015,9 @@
 "ai_coach.deep_dive.error_retry" = "Try again";
 "ai_coach.deep_dive.scope.all_time" = "all time";
 "ai_coach.deep_dive.scope.all_time_only" = "All time";
+// Composed in Swift, never generated — see ExerciseDeepDiveInput.peakSentence.
+// %1$@ weight, %2$d reps, %3$@ estimated 1RM, %4$@ month.
+"ai_coach.deep_dive.peak" = "Best: %1$@ kg × %2$d reps (est. 1RM %3$@ kg), %4$@.";
 
 // Workout analysis (workout detail)
 "ai_coach.workout_analysis.button_title" = "Ask the Coach";

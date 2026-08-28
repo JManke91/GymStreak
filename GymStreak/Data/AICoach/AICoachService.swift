@@ -142,12 +142,20 @@ final class AICoachService: AICoachServicing {
             promptText: input.toPromptText(),
             outputType: ExerciseDeepDiveOutput.self,
             useCase: "exercise_deep_dive",
-            maximumResponseTokens: 400,
-            // Deterministic decoding for a surface whose whole job is to restate figures
-            // it was given. `.greedy` always takes the most likely token; Apple uses it
-            // for its own must-not-hallucinate classification sample. Only this surface
-            // opts in — the others are unchanged and unverified.
-            sampling: .greedy
+            maximumResponseTokens: 400
+            // **No `.greedy` here — removed 2026-08-29, deliberately.** This surface opted
+            // into greedy decoding as "deterministic decoding for a surface whose whole
+            // job is to restate figures". It never delivered that: the invented date, the
+            // invented timeframe and the fabricated `87,5 kg` all happened under `.greedy`.
+            // And Apple documents its cost outright — responses "are statistically likely,
+            // but may lack the human-like quality and variety of other sampling
+            // strategies" (`GenerationOptions.SamplingMode.greedy`). Every Apple example
+            // pairs `.greedy` with a categorical or structured task (the `ImageLabel` enum
+            // classification sample), never with free narration. The German prose showed
+            // exactly the documented symptom — an invented compound noun ("Zuwächssumme")
+            // and broken agreement — so this surface takes the system default, and
+            // grounding is carried by the structure instead: facts pre-resolved in Swift,
+            // shape in the `@Generable` type, and prompts holding no data-shaped literal.
         )
     }
 

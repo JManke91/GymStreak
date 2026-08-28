@@ -20,7 +20,7 @@ import os
 /// Lifecycle:
 /// 1. `checkCache(exerciseId:usage:)` runs from the screen's `.task(id:)`. If a cached
 ///    result exists for the current exercise + usage + last-set timestamp, the state
-///    transitions straight to `.success(text:isCached:true)`.
+///    transitions straight to `.success(narrative:isCached:true)`.
 /// 2. If no cache hit, the view renders `CoachDeepDiveButton`. Tapping it calls
 ///    `generate(exerciseId:exerciseName:usage:locale:)`.
 /// 3. `regenerate(...)` bypasses the cache and forces a fresh generation.
@@ -49,10 +49,10 @@ final class ExerciseDeepDiveViewModel {
         case idle
         /// Generation kicked off but no tokens received yet — surface shows a skeleton.
         case preparing
-        /// Model is streaming; associated text grows incrementally.
-        case streaming(text: String)
-        /// Generation complete; text contains the full narrative.
-        case success(text: String, isCached: Bool)
+        /// Model is streaming; the narrative fills paragraph by paragraph.
+        case streaming(narrative: ExerciseDeepDiveNarrative)
+        /// Generation complete; the narrative holds every paragraph.
+        case success(narrative: ExerciseDeepDiveNarrative, isCached: Bool)
         /// Device ineligible or Apple Intelligence disabled, or preference off.
         case unavailable
         /// Aggregator returned nil — exercise has fewer than 4 completed sets.
@@ -139,7 +139,7 @@ final class ExerciseDeepDiveViewModel {
         )
         if let cached = cache.loadExerciseDeepDive(key: key) {
             logger.debug("Cache hit for exercise deep-dive \(exerciseId, privacy: .private)")
-            state = .success(text: cached.narrative, isCached: true)
+            state = .success(narrative: cached, isCached: true)
         }
     }
 
@@ -306,7 +306,7 @@ final class ExerciseDeepDiveViewModel {
             if let key { cache.invalidateExerciseDeepDive(key: key) }
         } else if let key, let cached = cache.loadExerciseDeepDive(key: key) {
             logger.debug("Cache hit for exercise deep-dive \(exerciseId, privacy: .private)")
-            state = .success(text: cached.narrative, isCached: true)
+            state = .success(narrative: cached, isCached: true)
             return
         }
 
@@ -360,26 +360,36 @@ final class ExerciseDeepDiveViewModel {
                 return false
             }
 
-            var finalText = ""
+            // Composed in Swift from the same aggregate, and available before the first
+            // token — so the surface has one real line while the paragraphs are still
+            // skeletons. The model never receives the facts behind it.
+            let peakSentence = input.peakSentence
+            // A blended view has no progression, so it gets no progression paragraph —
+            // whatever the model returns for that field. The prompt and the field's
+            // `@Guide` both tell it to omit the field; this is the half of the guarantee
+            // that does not depend on it obeying.
+            let statesProgression = input.blendedUsageCount <= 1
+
+            var narrative = ExerciseDeepDiveNarrative(peakSentence: peakSentence)
             for try await snapshot in responseStream {
                 guard !Task.isCancelled else { break }
-                let partial = snapshot.content.narrative ?? ""
-                finalText = partial
-                state = .streaming(text: partial)
+                narrative = ExerciseDeepDiveNarrative(
+                    partial: snapshot.content,
+                    peakSentence: peakSentence,
+                    statesProgression: statesProgression
+                )
+                state = .streaming(narrative: narrative)
             }
 
             // If cancelled mid-stream, do not surface partial output.
             guard !Task.isCancelled else { return false }
 
             // Stream complete
-            state = .success(text: finalText, isCached: false)
+            state = .success(narrative: narrative, isCached: false)
 
             // Persist to cache keyed by (exerciseId, usage, last-set timestamp)
             if let cacheKey {
-                cache.saveExerciseDeepDive(
-                    key: cacheKey,
-                    output: ExerciseDeepDiveOutput(narrative: finalText)
-                )
+                cache.saveExerciseDeepDive(key: cacheKey, narrative: narrative)
             }
 
             let elapsed = ContinuousClock.now - start

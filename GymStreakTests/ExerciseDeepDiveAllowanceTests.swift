@@ -29,12 +29,12 @@ struct ExerciseDeepDiveAllowanceTests {
             Issue.record("a seeded exercise must produce a cache key")
             return
         }
-        harness.cache.deepDives[key] = ExerciseDeepDiveOutput(narrative: "Already yours.")
+        harness.cache.deepDives[key] = ExerciseDeepDiveNarrative(workload: "Already yours.")
         harness.spend()
 
         await harness.viewModel.checkCache(exerciseId: exercise.id, usage: .combined)
 
-        #expect(harness.viewModel.state == .success(text: "Already yours.", isCached: true))
+        #expect(harness.viewModel.state == .success(narrative: ExerciseDeepDiveNarrative(workload: "Already yours."), isCached: true))
         #expect(harness.allowance.consumeCount == 0)
         #expect(harness.paywalls.presentedPlacements.isEmpty)
     }
@@ -102,7 +102,7 @@ struct ExerciseDeepDiveAllowanceTests {
             Issue.record("a seeded exercise must produce a cache key")
             return
         }
-        harness.cache.deepDives[key] = ExerciseDeepDiveOutput(narrative: "Already yours.")
+        harness.cache.deepDives[key] = ExerciseDeepDiveNarrative(workload: "Already yours.")
         harness.spend()
 
         let didStart = harness.viewModel.regenerate(
@@ -116,7 +116,7 @@ struct ExerciseDeepDiveAllowanceTests {
         #expect(harness.paywalls.presentedPlacements == [.exerciseDeepDive])
         // The gate is asked before the cache is invalidated, so the cached
         // narrative survives the refusal.
-        #expect(harness.cache.deepDives[key]?.narrative == "Already yours.")
+        #expect(harness.cache.deepDives[key]?.workload == "Already yours.")
     }
 
     @Test("With the kill switch off the deep-dive generates unmetered, exactly as before")

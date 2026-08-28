@@ -304,9 +304,25 @@ struct ExerciseDeepDiveUsageTests {
         ] {
             #expect(!blended.contains(forbidden), "blended prompt must not mention \(forbidden)")
         }
-        // And it says so outright.
+        // And it says so outright, and tells the model to return no progression field.
         #expect(blended.contains("There is no progression data"))
-        #expect(blended.contains("2 short paragraphs"))
+        #expect(blended.contains("LEAVE THIS FIELD OUT ENTIRELY"))
+
+        // Neither prompt asks for a paragraph count any more: the shape is
+        // `ExerciseDeepDiveOutput`'s one-field-per-paragraph layout. Three rounds of
+        // asking for it in prose were ignored on every device check.
+        for prompt in [blended, single] {
+            #expect(!prompt.contains("paragraphs covering"))
+            #expect(!prompt.contains("Output exactly"))
+        }
+
+        // Neither prompt names a control on the screen. Told to point at "the variant
+        // menu at the top of the screen", the model wrote "in der Variantsuche oben auf
+        // dem Bildschirm" — not a German word, and not what the control is called.
+        for prompt in [blended, single] {
+            #expect(!prompt.contains("at the top of the screen"))
+            #expect(!prompt.contains("variant menu"))
+        }
 
         // Neither prompt uses Markdown emphasis. The model mirrors the style of its
         // instructions, and the narrative is rendered as plain text — asterisks in the
@@ -359,7 +375,11 @@ struct ExerciseDeepDiveUsageTests {
                 usage: .combined
             ).input
         )
-        #expect(german.toPromptText().contains("26,5 kg"))
+        // The est-1RM delta the model is handed: 26.5 × 5 minus 20.0 × 5 in Epley terms.
+        #expect(german.toPromptText().contains("7,6 kg"))
+        // And the peak sentence the surface renders — composed in Swift, never prompted.
+        #expect(german.peakSentence.contains("26,5"))
+        #expect(!german.toPromptText().contains("26,5"))
 
         let english = try #require(
             aggregator.buildAggregate(
@@ -370,7 +390,9 @@ struct ExerciseDeepDiveUsageTests {
                 usage: .combined
             ).input
         )
-        #expect(english.toPromptText().contains("26.5 kg"))
+        #expect(english.toPromptText().contains("7.6 kg"))
+        #expect(english.peakSentence.contains("26.5"))
+        #expect(!english.toPromptText().contains("26.5"))
     }
 
     // MARK: - Load behaviour homogeneity

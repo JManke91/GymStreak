@@ -71,7 +71,7 @@ struct ExerciseDeepDiveInput: Sendable {
     @Guide(description: "Total number of sessions in which this exercise was performed")
     let totalSessions: Int
 
-    @Guide(description: "Date range of recorded history for this exercise, e.g. '2024-05 to 2026-04'")
+    @Guide(description: "Date range of recorded history for this exercise, in localized month names, e.g. 'May 2024 – April 2026'")
     let historyRange: String
 
     /// `nil` when `blendedUsageCount > 1`: a first-to-last comparison across several
@@ -81,7 +81,11 @@ struct ExerciseDeepDiveInput: Sendable {
     @Guide(description: "Overall progression from first to most recent session. Absent when the analysis blends several variants")
     let overallProgression: ProgressionSummary?
 
-    @Guide(description: "The single best performance point across all history")
+    /// **Rendered, never narrated.** `toPromptText()` emits nothing from this — the
+    /// figures and the month are composed into `peakSentence` in Swift and drawn by
+    /// `CoachDeepDiveSurface`. It is here because it is a fact of the described body of
+    /// work, not because a model is meant to see it.
+    @Guide(description: "The single best performance point across all history. Rendered to the reader and never used in generated text")
     let peak: PerformancePoint
 
     /// `nil` for the same reason as `overallProgression`: a segment's magnitude is a
@@ -128,30 +132,59 @@ struct ProgressionSegment {
     @Guide(description: "Average number of sessions per week during this segment")
     let avgSessionsPerWeek: Double
 
-    @Guide(description: "Human-readable magnitude of change during this segment, e.g. '+5kg est. 1RM' or 'stable'")
+    @Guide(description: "Human-readable magnitude of change during this segment, e.g. '+5.0 kg est. 1RM' or 'stable'")
     let magnitude: String
 }
 
 // MARK: - Prompt Serialisation
 
 extension ExerciseDeepDiveInput {
+
+    /// One figure, written in the reader's own convention — "20,0" for a German reader,
+    /// "20.0" for an English one — so the model only ever copies it. Asking it to convert
+    /// separators would be one more transformation it can get wrong, and a coach writing
+    /// "20.0 kg" beside a UI that says "44,1 lb" reads as foreign.
+    private func decimal(_ value: Double) -> String {
+        String(format: "%.1f", locale: Locale(identifier: locale), value)
+    }
+
+    /// The all-time peak as one finished sentence in the reader's language — **composed
+    /// here, never generated**.
+    ///
+    /// The peak used to reach the model as labelled facts, month included, and the model
+    /// decorated the month into a day: *"erreicht am 20.08.2026"* for an input whose only
+    /// date was `August 2026`, with the "20" lifted from the `20,0 kg` beside it. Three
+    /// rounds of "never state a date more precise than the input gives" did not stop it.
+    /// A month is a date a language model can make more precise, so no month reaches one:
+    /// `toPromptText()` emits no peak at all and `CoachDeepDiveSurface` renders this
+    /// sentence directly, the same move that fixed the variant label.
+    ///
+    /// The localized template is resolved from the app's language rather than `locale`,
+    /// which is what every other user-facing string on this screen does — the two agree
+    /// because `locale` is the reader's current locale.
+    ///
+    /// **Still kg, deliberately.** The whole AI Coach input layer is kg and the unit fix
+    /// is its own ticket, so this sentence keeps the divergence the model's prose already
+    /// had rather than closing it here in isolation. It is now the cheapest place to close
+    /// it, though: once `WeightUnit` reaches `ExerciseDeepDiveInput`, this is one
+    /// `String` and one strings key, not a prompt rule.
+    var peakSentence: String {
+        "ai_coach.deep_dive.peak".localized(
+            decimal(peak.weightKg),
+            peak.reps,
+            decimal(peak.estimatedOneRMKg),
+            peak.monthLabel
+        )
+    }
+
     /// Produces a plain-text serialisation suitable for use as the user-turn prompt
     /// in a `LanguageModelSession`.
     ///
     /// **A blended view emits no progression figures at all** — not a hedged one, not a
     /// labelled one. The model is told the figure is unavailable and why, because the
     /// only reliable way to stop a language model stating a number is to not give it the
-    /// number.
+    /// number. **No peak reaches it either**, for the same reason — see `peakSentence`.
     func toPromptText() -> String {
-        // Numbers are written in the reader's own convention here — "20,0" for a German
-        // reader, "20.0" for an English one — so the model only ever copies them. Asking
-        // it to convert separators would be one more transformation it can get wrong, and
-        // a coach writing "20.0 kg" beside a UI that says "44,1 lb" reads as foreign.
-        let readerLocale = Locale(identifier: locale)
-        func decimal(_ value: Double) -> String {
-            String(format: "%.1f", locale: readerLocale, value)
-        }
-
         var lines: [String] = []
         lines.append("Locale: \(locale)")
         lines.append("Exercise: \(exerciseName)")
@@ -173,34 +206,43 @@ extension ExerciseDeepDiveInput {
             lines.append("No progression figure is available for it, and none may be stated or inferred: comparing the first session with the most recent one across several variants measures which variant happened to fall at each end of the range, not progress.")
         } else {
             if let overallProgression {
-                lines.append("Overall progression (first → most recent session):")
+                // Labelled as a change, and explicitly as the *only* thing available.
+                // `Overall progression (first → most recent session):` named two endpoints
+                // the input does not carry, and the model supplied them: it wrote "von
+                // 87,5 kg im ersten Training auf 88,2 kg im letzten Training" — the 87,5
+                // lifted from a worked example in the instructions, the 88,2 derived by
+                // adding this real delta to it. Never describe a shape that presupposes
+                // data the prompt does not hold.
+                lines.append("Overall progression across the whole history — a change only; no starting or ending 1RM value is available:")
                 let deltaSign = overallProgression.estimatedOneRMDeltaKg >= 0 ? "+" : ""
-                lines.append("  Estimated 1RM delta: \(deltaSign)\(decimal(overallProgression.estimatedOneRMDeltaKg)) kg")
+                lines.append("  Estimated 1RM change: \(deltaSign)\(decimal(overallProgression.estimatedOneRMDeltaKg)) kg")
                 lines.append("  Percent change: \(overallProgression.percentChange >= 0 ? "+" : "")\(overallProgression.percentChange)%")
                 lines.append("")
             }
         }
 
-        lines.append("All-time peak performance:")
-        lines.append("  Weight: \(decimal(peak.weightKg)) kg × \(peak.reps) reps")
-        lines.append("  Estimated 1RM: \(decimal(peak.estimatedOneRMKg)) kg")
-        lines.append("  When: \(peak.monthLabel)")
-
         if let strongestSegment {
-            lines.append("")
             lines.append("Strongest improvement segment:")
             lines.append("  Period: \(strongestSegment.range)")
             lines.append("  Classification: \(strongestSegment.classification)")
             lines.append("  Change: \(strongestSegment.magnitude)")
-            lines.append("  Avg sessions/week: \(decimal(strongestSegment.avgSessionsPerWeek))")
+            // Spelled out, not left as a bare ratio under an `Avg sessions/week` label:
+            // handed `1.3` under that label the model wrote "1,3 Wochen pro Sitzung" —
+            // the ratio inverted. It now has the phrase to copy rather than a direction
+            // to work out.
+            lines.append("  Training frequency: \(decimal(strongestSegment.avgSessionsPerWeek)) sessions per week")
         }
         if let currentSegment {
             lines.append("")
-            lines.append("Current segment (last 4–8 weeks):")
+            // Labelled without its window. It used to read `Current segment (last 4–8
+            // weeks):` and the model copied the label into prose — "in den letzten 4–8
+            // Wochen" — presenting the app's own bucketing parameter to the reader as a
+            // period. The `Period:` line below carries the real range.
+            lines.append("Recent segment:")
             lines.append("  Period: \(currentSegment.range)")
             lines.append("  Classification: \(currentSegment.classification)")
             lines.append("  Change: \(currentSegment.magnitude)")
-            lines.append("  Avg sessions/week: \(decimal(currentSegment.avgSessionsPerWeek))")
+            lines.append("  Training frequency: \(decimal(currentSegment.avgSessionsPerWeek)) sessions per week")
         }
         return lines.joined(separator: "\n")
     }

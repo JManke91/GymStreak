@@ -551,7 +551,10 @@ struct ExerciseDeepDiveAggregator {
         let sign = delta >= 0 ? "+" : ""
         let magnitude = abs(delta) < 0.5
             ? "stable"
-            : "\(sign)\(String(format: "%.1f", delta))kg est. 1RM"
+            // The reader's own separator, like every other figure in the prompt — this
+            // one bypassed it, so a German narrative had the model converting "0.7" to
+            // "0,7" itself rather than copying it.
+            : "\(sign)\(String(format: "%.1f", locale: locale, delta)) kg est. 1RM"
 
         return ProgressionSegment(
             classification: classification,

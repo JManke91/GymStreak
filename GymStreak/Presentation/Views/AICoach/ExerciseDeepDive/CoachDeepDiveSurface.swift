@@ -36,13 +36,13 @@ struct CoachDeepDiveSurface: View {
             EmptyView()
 
         case .preparing:
-            streamingSurface(text: "")
+            streamingSurface(narrative: ExerciseDeepDiveNarrative())
 
-        case .streaming(let text):
-            streamingSurface(text: text)
+        case .streaming(let narrative):
+            streamingSurface(narrative: narrative)
 
-        case .success(let text, _):
-            successSurface(text: text)
+        case .success(let narrative, _):
+            successSurface(narrative: narrative)
 
         case .unavailable:
             FallbackHintLine(
@@ -67,62 +67,111 @@ struct CoachDeepDiveSurface: View {
 
     // MARK: - Streaming variant
 
-    private func streamingSurface(text: String) -> some View {
+    private func streamingSurface(narrative: ExerciseDeepDiveNarrative) -> some View {
         AISurface(
             isStreaming: true,
             showFooter: false,
             headerLabel: "COACH · \(exerciseName.uppercased())"
         ) {
-            if text.isEmpty {
-                skeletonBody
-            } else {
-                narrativeBody(text: text, isStreaming: true)
-            }
+            narrativeBody(narrative: narrative, isStreaming: true)
         }
         .frame(minHeight: 260, alignment: .topLeading)
     }
 
-    /// Placeholder shown between tapping "Ask the Coach" and the first token,
-    /// so the surface never sits visually empty.
-    private var skeletonBody: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            AISkeletonBar(height: 12)
-            AISkeletonBar(height: 12)
-            AISkeletonBar(width: 200, height: 12)
-            Spacer(minLength: 0)
-        }
-    }
-
     // MARK: - Success variant
 
-    private func successSurface(text: String) -> some View {
+    private func successSurface(narrative: ExerciseDeepDiveNarrative) -> some View {
         AISurface(
             isStreaming: false,
             showFooter: true,
             headerLabel: "COACH · \(exerciseName.uppercased())",
             onRegenerate: onRegenerate
         ) {
-            narrativeBody(text: text, isStreaming: false)
+            narrativeBody(narrative: narrative, isStreaming: false)
         }
         .frame(minHeight: 260, alignment: .topLeading)
     }
 
     // MARK: - Narrative body
 
-    /// Renders the full narrative as a single `StreamingTextView`.
-    /// SwiftUI's `Text` renders `\n\n` natively as a paragraph break, so
-    /// splitting into multiple views is unnecessary and caused layout growth
-    /// as double-newline separators appeared mid-stream.
-    private func narrativeBody(text: String, isStreaming: Bool) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
+    /// One slot per paragraph, each filling independently as the stream delivers its
+    /// field — the shape `CoachWorkoutAnalysisSurface` already uses. A paragraph that has
+    /// not arrived yet shows skeleton bars inside the same layout, so the card neither
+    /// sits visually empty between the tap and the first token nor jumps as fields land.
+    ///
+    /// The paragraphs used to be one `String` split on `\n\n`, which is why the surface
+    /// once rendered a single `StreamingTextView`: the model was asked in prose for "3 to
+    /// 4 short paragraphs" and returned one undivided block on every device check. The
+    /// shape now lives in `ExerciseDeepDiveOutput`'s fields instead.
+    private func narrativeBody(narrative: ExerciseDeepDiveNarrative, isStreaming: Bool) -> some View {
+        let progression = narrative.progression ?? ""
+        // The blinking cursor belongs to the paragraph being written — the last one that
+        // has any text — so three slots never blink in three places at once. A fixed
+        // three-element literal, not a collection that grows with the user's data.
+        let cursorSlot: Int? = isStreaming
+            ? [narrative.workload, progression, narrative.closing].lastIndex { !$0.isEmpty }
+            : nil
+
+        return VStack(alignment: .leading, spacing: 12) {
             scopeCaption
+            paragraphSlot(narrative.workload, showsCursor: cursorSlot == 0, placeholderLines: isStreaming ? 3 : 0)
+            // No placeholder for the progression: it is legitimately absent on a blended
+            // view, so reserving a slot would promise a paragraph that is never coming.
+            // The two slots around it already keep the card from sitting empty.
+            paragraphSlot(progression, showsCursor: cursorSlot == 1, placeholderLines: 0)
+            paragraphSlot(narrative.closing, showsCursor: cursorSlot == 2, placeholderLines: isStreaming ? 2 : 0)
+            peakLine(narrative.peakSentence)
+        }
+        // Keyed on which slots are filled, never on the narrative itself: FoundationModels
+        // snapshots arrive at ~30 Hz, so `value: narrative` would open an animated
+        // transaction over the whole stack on every token. `StreamingTextView` suppresses
+        // exactly that for its own `Text` (`.animation(nil)` + `disablesAnimations`), but
+        // that does not cover this `VStack`'s layout, the skeleton bars or the peak line.
+        // What is worth animating is the skeleton→text swap, which happens three times.
+        .animation(
+            .easeOut(duration: 0.25),
+            value: [narrative.workload.isEmpty, (narrative.progression ?? "").isEmpty, narrative.closing.isEmpty]
+        )
+    }
+
+    /// A generated paragraph, or shimmer bars while the field is still empty and one is
+    /// worth reserving. An empty field with no placeholder renders nothing at all, so a
+    /// finished narrative never leaves a bar shimmering forever.
+    @ViewBuilder
+    private func paragraphSlot(_ text: String, showsCursor: Bool, placeholderLines: Int) -> some View {
+        if text.isEmpty {
+            if placeholderLines > 0 { skeletonLines(placeholderLines) }
+        } else {
             StreamingTextView(
                 text: text,
-                isStreaming: isStreaming,
+                isStreaming: showsCursor,
                 font: .system(size: 14),
                 color: .white.opacity(0.88),
                 lineSpacing: 4
             )
+        }
+    }
+
+    private func skeletonLines(_ count: Int) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            ForEach(0..<count, id: \.self) { index in
+                AISkeletonBar(width: index == count - 1 ? 200 : nil, height: 12)
+            }
+        }
+    }
+
+    /// The all-time peak, composed in Swift and never generated — see
+    /// `ExerciseDeepDiveInput.peakSentence`. Rendered in the caption's weight so it reads
+    /// as a fact of the record rather than as part of the coach's prose, and rendered
+    /// from the first frame because it does not have to be waited for.
+    @ViewBuilder
+    private func peakLine(_ sentence: String) -> some View {
+        if !sentence.isEmpty {
+            Text(sentence)
+                .font(.system(size: 13))
+                .foregroundStyle(Color.white.opacity(0.6))
+                .lineSpacing(3)
+                .fixedSize(horizontal: false, vertical: true)
         }
     }
 
@@ -162,11 +211,17 @@ struct CoachDeepDiveSurface: View {
 
 // MARK: - Previews
 
+private let previewPeak = "Bestwert: 26,0 kg × 5 Wdh. (geschätztes 1RM 30,3 kg), April 1970."
+
 #Preview("Streaming") {
     ZStack {
         DesignSystem.Colors.background.ignoresSafeArea()
         CoachDeepDiveSurface(
-            state: .streaming(text: "Du hast deine Curl-Kraft in den letzten sechs Monaten deutlich gesteigert."),
+            state: .streaming(narrative: ExerciseDeepDiveNarrative(
+                workload: "Du hast diese Variante in 15 Sitzungen trainiert, verteilt über Juli 2026 – August 2026.",
+                closing: "",
+                peakSentence: previewPeak
+            )),
             exerciseName: "Bizeps Curl",
             usageLabel: "4–6 Wdh. · Pull",
             onRegenerate: {}
@@ -180,11 +235,37 @@ struct CoachDeepDiveSurface: View {
         DesignSystem.Colors.background.ignoresSafeArea()
         CoachDeepDiveSurface(
             state: .success(
-                text: "Deine Curl-Progression zeigt einen konstanten Aufwärtstrend über 8 Monate.\n\nDein stärkster Zeitraum war Februar bis April mit +4 kg geschätztem 1RM.\n\nDerzeit befindest du dich in einem Plateau — die Frequenz ist leicht zurückgegangen.",
+                narrative: ExerciseDeepDiveNarrative(
+                    workload: "Du hast diese Variante in 15 Sitzungen trainiert, verteilt über Juli 2026 – August 2026.",
+                    progression: "Dein geschätztes 1RM ist in diesem Zeitraum um 4,0 kg gestiegen, das sind +18 %. Der stärkste Abschnitt lag zwischen Juli 2026 und August 2026.",
+                    closing: "Aktuell befindest du dich in einem Plateau. In diesem Abschnitt trainierst du 1,5 Mal pro Woche, im stärksten Abschnitt waren es 2,0.",
+                    peakSentence: previewPeak
+                ),
                 isCached: false
             ),
             exerciseName: "Bizeps Curl",
             usageLabel: "4–6 Wdh. · Pull",
+            onRegenerate: {}
+        )
+        .padding(16)
+    }
+}
+
+/// The blended view: no progression paragraph at all, and none reserved for it.
+#Preview("Success — blended") {
+    ZStack {
+        DesignSystem.Colors.background.ignoresSafeArea()
+        CoachDeepDiveSurface(
+            state: .success(
+                narrative: ExerciseDeepDiveNarrative(
+                    workload: "Du hast diese Übung in 21 Sitzungen trainiert, verteilt über Juli 2026 – August 2026, in 3 verschiedenen Varianten.",
+                    closing: "Diese Varianten verfolgen unterschiedliche Ziele. Eine Progression lässt sich nur für eine einzelne ausgewählte Variante auswerten.",
+                    peakSentence: previewPeak
+                ),
+                isCached: false
+            ),
+            exerciseName: "Bizeps Curl",
+            usageLabel: "Alle Varianten",
             onRegenerate: {}
         )
         .padding(16)

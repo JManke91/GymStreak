@@ -93,7 +93,7 @@ final class FakeAICoachService: AICoachServicing {
 final class FakeAICoachCache: AICoachCaching {
 
     var periodRecap: PeriodRecapOutput?
-    var deepDives: [String: ExerciseDeepDiveOutput] = [:]
+    var deepDives: [String: ExerciseDeepDiveNarrative] = [:]
     private(set) var invalidatedDeepDiveKeys: [String] = []
 
     func loadPostWorkout(workoutId: UUID) -> PostWorkoutRecapOutput? { nil }
@@ -104,8 +104,8 @@ final class FakeAICoachCache: AICoachCaching {
     func savePeriodRecap(key: String, output: PeriodRecapOutput) { periodRecap = output }
     func invalidatePeriodRecap(key: String) { periodRecap = nil }
 
-    func loadExerciseDeepDive(key: String) -> ExerciseDeepDiveOutput? { deepDives[key] }
-    func saveExerciseDeepDive(key: String, output: ExerciseDeepDiveOutput) { deepDives[key] = output }
+    func loadExerciseDeepDive(key: String) -> ExerciseDeepDiveNarrative? { deepDives[key] }
+    func saveExerciseDeepDive(key: String, narrative: ExerciseDeepDiveNarrative) { deepDives[key] = narrative }
     func invalidateExerciseDeepDive(key: String) {
         invalidatedDeepDiveKeys.append(key)
         deepDives[key] = nil

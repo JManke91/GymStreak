@@ -31,8 +31,8 @@ protocol AICoachCaching: AnyObject {
 
     // MARK: - Exercise Deep-Dive
 
-    func loadExerciseDeepDive(key: String) -> ExerciseDeepDiveOutput?
-    func saveExerciseDeepDive(key: String, output: ExerciseDeepDiveOutput)
+    func loadExerciseDeepDive(key: String) -> ExerciseDeepDiveNarrative?
+    func saveExerciseDeepDive(key: String, narrative: ExerciseDeepDiveNarrative)
     func invalidateExerciseDeepDive(key: String)
 
     // MARK: - Workout Analysis
