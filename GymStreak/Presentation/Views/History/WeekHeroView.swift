@@ -11,6 +11,8 @@ struct WeekHeroView: View {
     let weekStats: HistoryStatsService.WeekStats
     let weekDays: [HistoryStatsService.WeekDayStatus]
 
+    @Environment(\.weightUnit) private var weightUnit
+
     private var progress: Double {
         guard weekStats.goal > 0 else { return 0 }
         return min(1.0, Double(weekStats.completedCount) / Double(weekStats.goal))
@@ -170,7 +172,7 @@ struct WeekHeroView: View {
             Spacer(minLength: 0)
             statColumn(
                 label: "history.stat.volume".localized,
-                value: formatTons(weekStats.weekVolume),
+                value: WeightFormatting.volume(weekStats.weekVolume, in: weightUnit),
                 suffix: nil,
                 accent: weekStats.volumeTrendPct.map { trendLabel($0) }
             )
@@ -206,14 +208,6 @@ struct WeekHeroView: View {
                         .foregroundStyle(accent.1)
                 }
             }
-        }
-    }
-
-    private func formatTons(_ kg: Double) -> String {
-        if kg >= 1000 {
-            return String(format: "%.1ft", kg / 1000)
-        } else {
-            return "\(Int(kg))kg"
         }
     }
 

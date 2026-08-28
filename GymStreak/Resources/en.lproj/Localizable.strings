@@ -153,7 +153,7 @@
 "exercise.detail.not_used" = "This exercise isn't in any routine yet.";
 "exercise.detail.alternative" = "Alternative";
 "exercise.detail.as_alternative" = "As alternative";
-"exercise.detail.set_scheme" = "%d × %d reps · %.1f kg";
+"exercise.detail.set_scheme" = "%d × %d reps · %@";
 
 // MARK: - Exercise Deletion Confirmation
 "exercises.delete.confirmation.title" = "Delete Exercise?";
@@ -200,10 +200,20 @@
 // Spoken forms, for VoiceOver — a screen reader saying "kay gee" is why.
 "unit.weight.kg.spoken" = "kilograms";
 "unit.weight.lb.spoken" = "pounds";
+// Tonnage rollup, for the volume figures on the history cards, the week hero and
+// the month summaries. Kilograms roll up to the metric tonne at 1 000 kg; pounds
+// have no equivalent unit — 1 000 lb is not one, and the short ton abbreviates
+// one letter away from the tonne — so they keep "lb" and take a magnitude prefix
+// on the *number* instead ("27,6k lb"). See docs/weight-unit-preference.md §10.
+"unit.volume.t" = "t";
+"unit.volume.thousand" = "k";
 
 // MARK: - Workout Set
 "set.number" = "Set %d";
 "set.reps" = "%d reps";
+"set.reps_range" = "%1$d–%2$d reps";
+// A weight range shares one unit word: "40–45 kg", not "40 kg–45 kg".
+"set.weight_range" = "%1$@–%2$@";
 "set.weight_compact" = "%1$@ %2$@";
 "set.reps_unit" = "reps";
 "set.reps_label" = "Reps";
@@ -414,12 +424,12 @@
 "rep_range.prompt.for_exercise" = "For %@";
 "rep_range.increase" = "Increase";
 "rep_range.increase_weight" = "Increase Weight";
-"rep_range.current_state" = "Current: %@kg × %d reps (%d sets)";
-"rep_range.new_state" = "New: %@kg × %d reps (all sets)";
+"rep_range.current_state" = "Current: %@ × %d reps (%d sets)";
+"rep_range.new_state" = "New: %@ × %d reps (all sets)";
 "rep_range.apply" = "Apply";
 "rep_range.goal_achieved" = "Rep Goal Achieved";
 "rep_range.goal_achieved_detail" = "All %d sets reached %d reps";
-"rep_range.routine_updated" = "Routine updated: %@kg × %d reps next time";
+"rep_range.routine_updated" = "Routine updated: %@ × %d reps next time";
 "rep_range.sets_with_range" = "%d sets | %d-%d reps";
 "rep_range.ready_for_more" = "Ready for More Weight";
 "rep_range.overload_card.description" = "All %d sets at **%d reps** — your target range %d–%d is maxed out.";
@@ -454,7 +464,7 @@
 "configure_exercise.info" = "Exercise Info";
 "configure_exercise.empty.title" = "No sets configured";
 "configure_exercise.empty.description" = "Tap 'Add Set' below to start";
-"configure_exercise.set_detail" = "%d reps • %.1f kg";
+"configure_exercise.set_detail" = "%d reps • %@";
 "configure_exercise.duplicate_set" = "Duplicate Last Set";
 "configure_exercise.rest_timer" = "Rest Timer";
 "configure_exercise.rest_time_between_sets" = "Rest Time Between Sets";
@@ -580,9 +590,9 @@
 "routine_exercise_detail.label.description" = "Description";
 "routine_exercise_detail.label.sets" = "Sets";
 "routine_exercise_detail.set_number" = "Set %d";
-"routine_exercise_detail.set_detail" = "%d reps • %.1f kg";
+"routine_exercise_detail.set_detail" = "%d reps • %@";
 "routine_exercise_detail.reps_label" = "Reps:";
-"routine_exercise_detail.weight_label" = "Weight (kg):";
+"routine_exercise_detail.weight_label" = "Weight (%@):";
 "routine_exercise_detail.add_set" = "Add Set";
 "routine_exercise_detail.delete" = "Delete";
 "routine_exercise_detail.delete_alert.title" = "Delete Exercise";
@@ -815,7 +825,13 @@
 "history.detail.exercises" = "Exercises";
 "history.detail.more" = "More";
 "history.detail.set_n" = "SET %d";
+// Marks a set that carried no external weight. Read alongside a unit word on
+// every neighbouring cell, so it must not itself look like one — the German
+// value was "KG" (Körpergewicht), indistinguishable from kilograms and actively
+// wrong-looking beside "49,6 lb". The spoken form exists so VoiceOver says the
+// word instead of spelling the abbreviation.
 "history.detail.bw" = "BW";
+"history.detail.bw.spoken" = "bodyweight";
 "history.detail.reps" = "reps";
 "history.detail.pr" = "PR";
 "history.detail.pr_record" = "New record: %@ × %d";
@@ -831,10 +847,17 @@
 "history.detail.first_session" = "First session";
 "history.detail.set_new" = "New";
 "history.detail.a11y.set_value_with_delta" = "%@, %d reps, %@";
-"history.detail.a11y.delta_up_weight" = "up %@ kilograms from last time";
-"history.detail.a11y.delta_down_weight" = "down %@ kilograms from last time";
+// The weight deltas take a preformatted spoken weight via %@ — the unit word
+// stays in unit.weight.*.spoken so a pounds user is not told "kilograms".
+"history.detail.a11y.delta_up_weight" = "up %@ from last time";
+"history.detail.a11y.delta_down_weight" = "down %@ from last time";
 "history.detail.a11y.delta_up_reps" = "up %d reps from last time";
 "history.detail.a11y.delta_down_reps" = "down %d reps from last time";
+// The volume delta is a percentage. It had no phrase of its own and fell
+// through the old substring check into the rep-count branch, so VoiceOver read
+// a volume change as "up 0 reps".
+"history.detail.a11y.delta_up_percent" = "up %d percent from last time";
+"history.detail.a11y.delta_down_percent" = "down %d percent from last time";
 "history.detail.a11y.delta_equal" = "same as last time";
 "history.detail.a11y.delta_new" = "new set, no previous data";
 "history.detail.a11y.pr_set" = "new personal record";
@@ -990,6 +1013,8 @@
 "ai_coach.deep_dive.insufficient_data" = "At least 4 sets needed for an analysis.";
 "ai_coach.deep_dive.error" = "Analysis could not be loaded.";
 "ai_coach.deep_dive.error_retry" = "Try again";
+"ai_coach.deep_dive.scope.all_time" = "all time";
+"ai_coach.deep_dive.scope.all_time_only" = "All time";
 
 // Workout analysis (workout detail)
 "ai_coach.workout_analysis.button_title" = "Ask the Coach";
@@ -1187,7 +1212,7 @@
 // configured in the dashboard). It never unlocks the gated capability.
 "paywall.unavailable.body" = "The offer couldn't be loaded. Check your connection and try again.";
 // Placement B's endowed-progress line. The numbers are the user's own real totals.
-"paywall.value_moment.figures" = "You've logged %@ workouts, %@ sets and %@ kg of volume.";
+"paywall.value_moment.figures" = "You've logged %@ workouts, %@ sets and %@ of volume.";
 
 // MARK: - Pro lock UI kit (docs/monetization-strategy.md §8 placement C and D)
 "pro.lock.subtitle" = "Included in Gym Streak Pro";

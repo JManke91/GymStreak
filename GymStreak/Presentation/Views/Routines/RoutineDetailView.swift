@@ -10,6 +10,9 @@ struct RoutineDetailView: View {
     @ObservedObject var exercisesViewModel: ExercisesViewModel
     @ObservedObject var workoutViewModel: WorkoutViewModel
     @Environment(\.dismiss) private var dismiss
+    /// Not private — RoutineDetailView+Sorting builds card displays too, and
+    /// extensions can't see private members.
+    @Environment(\.weightUnit) var weightUnit
 
     // Sheets & alerts
     @State private var showingAddExercise = false
@@ -457,7 +460,7 @@ struct RoutineDetailView: View {
         ForEach(Array(group.members.enumerated()), id: \.element.id) { index, routineExercise in
             exerciseRow(
                 routineExercise: routineExercise,
-                display: RoutineExerciseCardDisplay(routineExercise),
+                display: RoutineExerciseCardDisplay(routineExercise, in: weightUnit),
                 styling: styling[routineExercise.id] ?? .none
             )
             // Scroll anchor for the alternatives jump (scrollTo(exerciseId)).

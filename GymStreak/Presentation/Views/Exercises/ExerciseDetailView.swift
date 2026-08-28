@@ -4,6 +4,7 @@ struct ExerciseDetailView: View {
     let exercise: Exercise
     @ObservedObject var viewModel: ExercisesViewModel
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.weightUnit) private var weightUnit
     @State private var showingEdit = false
 
     private var muscleColor: Color { MuscleGroups.color(for: exercise.muscleGroups) }
@@ -254,9 +255,10 @@ struct ExerciseDetailView: View {
             reps: sets.map(\.reps),
             weights: sets.map(\.weight)
         ) {
-            return String(
-                format: "exercise.detail.set_scheme".localized,
-                sets.count, scheme.reps, scheme.weight
+            return "exercise.detail.set_scheme".localized(
+                sets.count,
+                scheme.reps,
+                WeightFormatting.label(scheme.weight, in: weightUnit)
             )
         }
         return "routine.sets_count".localized(sets.count)

@@ -3,16 +3,18 @@
 //  GymStreak
 //
 //  Horizontal shimmer bar used in the "generating" skeleton state.
-//  Gradient travels left-to-right using a phase-animated linear gradient.
+//  A fixed-stop highlight band travels left-to-right via `.offset` — the
+//  stop locations themselves never move.
 //
 
 import SwiftUI
 
 /// A shimmering horizontal bar that signals AI content is being generated.
 ///
-/// Uses a moving `[white04, accent10, white04]` gradient matching the CSS
-/// `skeletonShimmer` animation in the design spec. When `accessibilityReduceMotion`
-/// is active it renders as a static muted bar instead.
+/// A `white04` base with a fixed `[clear, accent10, clear]` highlight band
+/// swept across it, matching the CSS `skeletonShimmer` animation in the design
+/// spec. When `accessibilityReduceMotion` is active it renders as a static
+/// muted bar instead.
 struct AISkeletonBar: View {
 
     // MARK: - Props
@@ -24,6 +26,24 @@ struct AISkeletonBar: View {
     // MARK: - Environment
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    // MARK: - Constants
+
+    private static let baseColor = Color.white.opacity(0.04)
+    private static let highlightColor = AICoachTheme.accent.opacity(0.10)
+
+    /// Fixed, monotonically ascending stops — never mutated.
+    ///
+    /// `Gradient.Stop.location` must be ordered and `LinearGradient` has no
+    /// wrap-around mode, so the sweep is produced by translating this whole
+    /// layer with `.offset` (a documented `Animatable` geometry effect) rather
+    /// than by shifting the locations, which warned at runtime and made the
+    /// highlight jump instead of travel.
+    private static let highlightStops: [Gradient.Stop] = [
+        .init(color: .clear, location: 0.0),
+        .init(color: highlightColor, location: 0.5),
+        .init(color: .clear, location: 1.0),
+    ]
 
     // MARK: - State
 
@@ -42,45 +62,47 @@ struct AISkeletonBar: View {
         .frame(maxWidth: width ?? .infinity)
         .frame(height: height)
         .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
-        .onAppear(perform: startAnimation)
     }
 
-    // MARK: - Sub-views
+    // MARK: - Sub-views 
 
     @ViewBuilder
     private var staticBar: some View {
         Rectangle()
-            .fill(Color.white.opacity(0.04))
+            .fill(Self.baseColor)
     }
 
     @ViewBuilder
     private var animatedBar: some View {
-        // Phase drives the shimmer; we shift stop locations by `phase`
-        // so the highlight sweeps from left to right repeatedly.
-        LinearGradient(
-            stops: [
-                .init(color: Color.white.opacity(0.04),              location: clamp(0.0 + phase)),
-                .init(color: AICoachTheme.accent.opacity(0.10),      location: clamp(0.5 + phase)),
-                .init(color: Color.white.opacity(0.04),              location: clamp(1.0 + phase)),
-            ],
-            startPoint: .leading,
-            endPoint: .trailing
-        )
+        Rectangle()
+            .fill(Self.baseColor)
+            .overlay {
+                GeometryReader { proxy in
+                    LinearGradient(
+                        stops: Self.highlightStops,
+                        startPoint: .leading,
+                        endPoint: .trailing
+                    )
+                    // Travels exactly one bar width off each edge, so at both
+                    // ends of the cycle the band is fully clear of the bar and
+                    // the `repeatForever` wrap is invisible.
+                    .offset(x: (phase * 2 - 1) * proxy.size.width)
+                }
+            }
+            .onAppear(perform: startAnimation)
+            // Lands in its own update, so the offset is genuinely back at
+            // -width before the next appearance. The reset inside
+            // `startAnimation` is coalesced with the `withAnimation` write and
+            // cannot re-arm the loop on its own.
+            .onDisappear { phase = 0 }
     }
 
     // MARK: - Helpers
 
-    private func clamp(_ value: CGFloat) -> CGFloat {
-        // Keep locations in [0,1] for LinearGradient — the wrap-around effect
-        // creates the illusion of a continuous sweep without needing a tiling gradient.
-        (value.truncatingRemainder(dividingBy: 1.0) + 1.0).truncatingRemainder(dividingBy: 1.0)
-    }
-
     private func startAnimation() {
-        guard !reduceMotion else { return }
-        // Animate phase from 0→1 on a 1.8s linear loop
+        phase = 0
         withAnimation(.linear(duration: 1.8).repeatForever(autoreverses: false)) {
-            phase = 1.0
+            phase = 1
         }
     }
 }

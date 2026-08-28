@@ -14,6 +14,11 @@ import SwiftUI
 /// `Equatable` over plain values also lets SwiftUI skip unchanged rows outright.
 struct WorkoutCardView: View, Equatable {
     let card: WorkoutCardModel
+    /// Passed in rather than read from the environment: this view is `Equatable`
+    /// so SwiftUI can skip unchanged rows, and an `@Environment` property both
+    /// breaks the synthesized `==` and would leave it blind to a unit change —
+    /// the row would keep its old number under a new unit word.
+    let weightUnit: WeightUnit
 
     var body: some View {
         HStack(alignment: .center, spacing: 14) {
@@ -95,7 +100,7 @@ struct WorkoutCardView: View, Equatable {
         HStack(spacing: 12) {
             metricLabel(icon: "clock", text: "\(card.durationMinutes)m")
             metricLabel(icon: "dumbbell", text: "history.card.sets".localized(card.completedSets))
-            metricLabel(icon: "bolt", text: formatVolume(card.totalVolume))
+            metricLabel(icon: "bolt", text: WeightFormatting.volume(card.totalVolume, in: weightUnit))
         }
         .foregroundStyle(Color.white.opacity(0.6))
         .font(.system(size: 12))
@@ -107,14 +112,6 @@ struct WorkoutCardView: View, Equatable {
                 .font(.system(size: 11))
             Text(text)
                 .monospacedDigit()
-        }
-    }
-
-    private func formatVolume(_ kg: Double) -> String {
-        if kg >= 1000 {
-            return String(format: "%.1ft", kg / 1000)
-        } else {
-            return "\(Int(kg))kg"
         }
     }
 

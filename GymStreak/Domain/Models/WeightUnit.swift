@@ -95,10 +95,23 @@ enum WeightUnit: String, CaseIterable, Sendable {
     /// than per display unit so there is one number to keep true.
     static let maximumKilograms: Double = 999
 
-    /// The same ceiling expressed in this unit, derived from the canonical one.
+    /// The same ceiling expressed in this unit, derived from the canonical one
+    /// — and derived *once*.
+    ///
+    /// A set row reads this on every render to bound its stepper, and
+    /// `docs/weight-unit-preference.md` §5 records the warning this obeys: a
+    /// `Measurement` conversion is O(1) in a sheet but per-row work in a list.
+    /// It stays derived rather than hand-copied so it cannot drift from
+    /// `maximumKilograms`; `static let` is lazy, so the conversion runs once.
     var maximumDisplay: Double {
-        converting(fromKilograms: Self.maximumKilograms)
+        switch self {
+        case .kilograms: Self.maximumKilograms
+        case .pounds: Self.maximumPoundsDisplay
+        }
     }
+
+    private static let maximumPoundsDisplay = WeightUnit.pounds
+        .converting(fromKilograms: maximumKilograms)
 
     /// A typed display value → the canonical kilograms to store, clamped to
     /// `0...maximumKilograms`.

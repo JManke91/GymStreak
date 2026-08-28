@@ -51,9 +51,22 @@ struct ExerciseProgressChartView: View {
             legacyAttribution: dependencies.legacyHistoryAttribution,
             proEntitlements: dependencies.proEntitlements,
             paywalls: dependencies.paywalls,
+            weightUnitPreference: dependencies.weightUnitPreference,
             deepDiveAllowanceGate: dependencies.makeAICoachAllowanceGate(for: .exerciseDeepDive)
         )
     }
+}
+
+/// What the deep-dive narrative describes: one exercise, one usage. Both have to be part
+/// of the `.task(id:)` key, because the cached narrative is keyed by both.
+///
+/// `usage` is `ExerciseProgressViewModel.resolvedUsage`, so it is `nil` until a load has
+/// answered which usage the screen is showing. Keying on `selectedUsage` instead would
+/// run the cache probe — a full history fetch on the main actor — once against the
+/// `.combined` placeholder and again against the answer, on every screen open.
+private struct DeepDiveContext: Equatable {
+    let exerciseId: UUID?
+    let usage: ExerciseUsageSelection?
 }
 
 private struct ExerciseProgressChartViewInternal: View {
@@ -63,6 +76,10 @@ private struct ExerciseProgressChartViewInternal: View {
     let availableExercises: [ExerciseWithHistory]
 
     @StateObject private var viewModel: ExerciseProgressViewModel
+    /// Read only to notice a change: the plotted series is converted in the
+    /// ViewModel, which holds the same preference this environment value is
+    /// published from.
+    @Environment(\.weightUnit) private var weightUnit
     /// Kept only to pass through to the (out-of-scope) AI Coach deep-dive ViewModel API.
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
@@ -86,6 +103,7 @@ private struct ExerciseProgressChartViewInternal: View {
         legacyAttribution: any LegacyHistoryAttributing,
         proEntitlements: any ProEntitlementProviding,
         paywalls: any PaywallPresenting,
+        weightUnitPreference: any WeightUnitPreferenceProviding,
         deepDiveAllowanceGate: AICoachAllowanceGate
     ) {
         self._currentExerciseName = State(initialValue: exerciseName)
@@ -102,7 +120,8 @@ private struct ExerciseProgressChartViewInternal: View {
             provider: snapshotProvider,
             legacyAttribution: legacyAttribution,
             proEntitlements: proEntitlements,
-            paywalls: paywalls
+            paywalls: paywalls,
+            weightUnitPreference: weightUnitPreference
         ))
     }
 
@@ -140,9 +159,22 @@ private struct ExerciseProgressChartViewInternal: View {
         .onChange(of: currentExerciseName) { _, newName in
             CoachScreenContext.shared.anchor = .exercise(name: newName)
         }
+        // The unit is not part of `loadKey`, so a trip to Settings and back would
+        // otherwise leave the plotted series in the old unit under a relabelled
+        // axis. Nothing is refetched — only the conversion is redone.
+        .onChange(of: weightUnit) { _, _ in
+            viewModel.refreshChartSeries()
+        }
         .onDisappear {
             deepDiveVM.cancel()
             CoachScreenContext.shared.anchor = nil
+        }
+        // A narrative describes one usage, so the one on screen is retired the moment the
+        // user picks another. `requestedUsage`, not `selectedUsage`: the request changes
+        // on the tap, while the selection only catches up when the reload lands — and the
+        // stale sentences must not outlive the tap that invalidated them.
+        .onChange(of: viewModel.requestedUsage) { _, _ in
+            resetDeepDive()
         }
         // One load for the whole screen. `.task(id:)` cancels the superseded fetch when
         // the exercise or the timeframe changes; the view model's generation counter
@@ -151,10 +183,19 @@ private struct ExerciseProgressChartViewInternal: View {
         .task(id: viewModel.loadKey) {
             await viewModel.load()
         }
-        .task(id: currentExerciseId) {
-            // Auto-load cached deep-dive on appear or when exercise switches
-            if let exercise = resolvedExercise {
-                await deepDiveVM.checkCache(exercise: exercise, locale: .current, modelContext: modelContext)
+        // Keyed on the usage as well as the exercise: the cached narrative belongs to the
+        // (exercise, usage) pair, so switching usage has its own cache to check. It waits
+        // for `resolvedUsage` so the probe runs once, against the usage actually charted.
+        .task(id: DeepDiveContext(exerciseId: currentExerciseId, usage: viewModel.resolvedUsage)) {
+            // Auto-load cached deep-dive once the load has said which usage is charted,
+            // and again when the exercise or that usage changes.
+            if let usage = deepDiveUsage, let exercise = resolvedExercise {
+                await deepDiveVM.checkCache(
+                    exercise: exercise,
+                    usage: usage,
+                    locale: .current,
+                    modelContext: modelContext
+                )
                 // No cached narrative → the "Ask the Coach" button is showing.
                 // Warm the model now so a tap streams tokens with minimal delay.
                 if case .idle = deepDiveVM.state,
@@ -413,12 +454,12 @@ private struct ExerciseProgressChartViewInternal: View {
                 .tracking(0.6)
                 .foregroundStyle(Color.white.opacity(0.4))
             HStack(alignment: .firstTextBaseline, spacing: 8) {
-                Text(latestHeadline)
+                Text(viewModel.headlineValue)
                     .font(.system(size: 30, weight: .bold, design: .rounded))
                     .kerning(-0.8)
                     .monospacedDigit()
                     .foregroundStyle(Color.white)
-                Text(viewModel.selectedMetric.unit)
+                Text(viewModel.headlineUnitWord)
                     .font(.system(size: 13))
                     .foregroundStyle(Color.white.opacity(0.5))
                 if let trend = viewModel.trendPercentageString {
@@ -438,24 +479,16 @@ private struct ExerciseProgressChartViewInternal: View {
         .padding(.horizontal, 6)
     }
 
-    private var latestHeadline: String {
-        guard let last = viewModel.progressData?.dataPoints.last else { return "-" }
-        let value = last.value(for: viewModel.selectedMetric)
-        if viewModel.selectedMetric == .volume {
-            return "\(Int(value))"
-        }
-        return String(format: "%.1f", value)
-    }
-
     @ViewBuilder
     private var chartContent: some View {
         if viewModel.isLoading {
             ProgressView()
                 .frame(maxWidth: .infinity)
                 .frame(height: 180)
-        } else if let data = viewModel.progressData, data.hasEnoughData {
+        } else if let data = viewModel.progressData, data.hasEnoughData,
+                  let series = viewModel.chartSeries {
             ProgressChartContent(
-                data: data,
+                series: series,
                 metric: viewModel.selectedMetric,
                 // The window the data actually covers — a Pro-only selection
                 // blurs the last unlocked window rather than fetching a wider one.
@@ -572,7 +605,10 @@ private struct ExerciseProgressChartViewInternal: View {
     private var coachSection: some View {
         let prefs = AICoachPreferences.shared
         let avail = AICoachAvailability.shared
-        if prefs.isExerciseDeepDiveEffectivelyEnabled, avail.isAvailable, let exercise = resolvedExercise {
+        if prefs.isExerciseDeepDiveEffectivelyEnabled, avail.isAvailable,
+           let exercise = resolvedExercise,
+           // Nothing to describe until the load has said which usage is charted.
+           let usage = deepDiveUsage {
             Group {
                 if case .idle = deepDiveVM.state, !hasTappedAskCoach {
                     VStack(spacing: 10) {
@@ -587,6 +623,7 @@ private struct ExerciseProgressChartViewInternal: View {
                             // leaves the button where it was.
                             if deepDiveVM.generate(
                                 exercise: exercise,
+                                usage: usage,
                                 locale: .current,
                                 modelContext: modelContext
                             ) {
@@ -599,9 +636,14 @@ private struct ExerciseProgressChartViewInternal: View {
                     CoachDeepDiveSurface(
                         state: deepDiveVM.state,
                         exerciseName: currentExerciseName,
+                        // Only where a variant menu actually exists: on a single-usage
+                        // exercise `selectedUsageLabel` is "Alle Varianten", which would
+                        // name a choice this screen never offers.
+                        usageLabel: viewModel.showsUsagePicker ? viewModel.selectedUsageLabel : nil,
                         onRegenerate: {
                             deepDiveVM.regenerate(
                                 exercise: exercise,
+                                usage: usage,
                                 locale: .current,
                                 modelContext: modelContext
                             )
@@ -638,6 +680,27 @@ private struct ExerciseProgressChartViewInternal: View {
             initialUsage: exercise.initialUsage
         )
         // Reset deep-dive state when the user switches exercises
+        resetDeepDive()
+    }
+
+    /// The usage the coach should describe, paired with the label the picker is showing
+    /// for it — so the narrative names the variant exactly as the menu the user picked it
+    /// in does. Two reads of already-loaded view-model state, so `body` may read it.
+    ///
+    /// Built from `resolvedUsage`, never from `selectedUsage`: between a usage tap and the
+    /// reload landing, `selectedUsage` still names the *previous* variant, and generating
+    /// then would spend a monthly allowance unit on a narrative for the usage the user
+    /// just left. `nil` in that window, and `coachSection` renders nothing.
+    private var deepDiveUsage: DeepDiveUsage? {
+        viewModel.resolvedUsage.map {
+            DeepDiveUsage(selection: $0, label: viewModel.selectedUsageLabel)
+        }
+    }
+
+    /// Retires the narrative on screen. Called whenever the body of work it describes
+    /// changes underneath it — a different exercise, or a different usage of this one.
+    private func resetDeepDive() {
+        deepDiveVM.cancel()
         deepDiveVM = ExerciseDeepDiveViewModel(allowanceGate: deepDiveAllowanceGate)
         hasTappedAskCoach = false
     }
@@ -646,34 +709,24 @@ private struct ExerciseProgressChartViewInternal: View {
 // MARK: - Progress Chart Content (kept from original for Swift Charts rendering)
 
 struct ProgressChartContent: View {
-    let data: ExerciseProgressData
+    /// Already in the user's unit, with its y-domain derived from the same
+    /// converted numbers — see `ChartSeries` for why neither is computed here.
+    let series: ChartSeries
+    /// Only the metric's *name*, which labels the marks. The plotted numbers come
+    /// from `series`.
     let metric: ProgressMetric
     let timeframe: ChartTimeframe
     let selectedDataPoint: SelectedDataPoint?
     let onSelectPoint: (ExerciseProgressDataPoint) -> Void
     let onClearSelection: () -> Void
 
-    private var yDomain: ClosedRange<Double> {
-        let values = data.dataPoints.map { $0.value(for: metric) }
-        let minValue = values.min() ?? 0
-        let maxValue = values.max() ?? 0
-        let padding = max((maxValue - minValue) * 0.1, maxValue * 0.05)
-        let lower = max(0, minValue - padding)
-        let upper = maxValue + padding
-        guard lower < upper else {
-            let fallback = max(maxValue * 0.1, 1)
-            return max(0, maxValue - fallback)...(maxValue + fallback)
-        }
-        return lower...upper
-    }
-
     var body: some View {
         Chart {
-            ForEach(data.dataPoints) { point in
+            ForEach(series.points) { point in
                 AreaMark(
                     x: .value("Date", point.date),
-                    yStart: .value("Min", yDomain.lowerBound),
-                    yEnd: .value(metric.localizedTitle, point.value(for: metric))
+                    yStart: .value("Min", series.yDomain.lowerBound),
+                    yEnd: .value(metric.localizedTitle, point.value)
                 )
                 .foregroundStyle(
                     LinearGradient(
@@ -686,7 +739,7 @@ struct ProgressChartContent: View {
 
                 LineMark(
                     x: .value("Date", point.date),
-                    y: .value(metric.localizedTitle, point.value(for: metric))
+                    y: .value(metric.localizedTitle, point.value)
                 )
                 .foregroundStyle(DesignSystem.Colors.tint)
                 .interpolationMethod(.catmullRom)
@@ -694,7 +747,7 @@ struct ProgressChartContent: View {
 
                 PointMark(
                     x: .value("Date", point.date),
-                    y: .value(metric.localizedTitle, point.value(for: metric))
+                    y: .value(metric.localizedTitle, point.value)
                 )
                 .foregroundStyle(DesignSystem.Colors.tint)
                 .symbolSize(20)
@@ -709,7 +762,7 @@ struct ProgressChartContent: View {
                     }
             }
         }
-        .chartYScale(domain: yDomain)
+        .chartYScale(domain: series.yDomain)
         .chartXAxis {
             AxisMarks(values: .stride(by: timeframe.axisStrideComponent, count: timeframe.axisStrideValue)) { _ in
                 AxisValueLabel(format: axisDateFormat)
@@ -722,7 +775,7 @@ struct ProgressChartContent: View {
                     .foregroundStyle(Color.white.opacity(0.06))
                 AxisValueLabel {
                     if let doubleValue = value.as(Double.self) {
-                        Text(formatCompactValue(doubleValue, unit: nil))
+                        Text(series.axisLabel(for: doubleValue))
                             .foregroundStyle(Color.white.opacity(0.45))
                     }
                 }
@@ -760,11 +813,13 @@ struct ProgressChartContent: View {
             onClearSelection()
             return
         }
-        let nearest = data.dataPoints.min(by: {
+        let nearest = series.points.min(by: {
             abs($0.date.timeIntervalSince(tappedDate)) < abs($1.date.timeIntervalSince(tappedDate))
         })
         if let nearest {
-            onSelectPoint(nearest)
+            // The canonical point, not the converted one: the annotation's figure
+            // is formatted from kilograms like every other weight in the app.
+            onSelectPoint(nearest.source)
         } else {
             onClearSelection()
         }

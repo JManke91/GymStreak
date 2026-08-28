@@ -19,6 +19,8 @@ struct RoutineAlternativesSection: View {
     var valueFocus: FocusState<Bool>.Binding
     let onAddAlternative: () -> Void
 
+    @Environment(\.weightUnit) private var weightUnit
+
     /// Which parameter editor of the expanded alternative is open.
     @State private var openParameter: ExerciseCardParameter?
     @State private var alternativePendingRemoval: RoutineExerciseAlternative?
@@ -103,7 +105,8 @@ struct RoutineAlternativesSection: View {
 
                             Text(SetSummaryFormatting.text(
                                 reps: alternative.setsList.map(\.reps),
-                                weights: alternative.setsList.map(\.weight)
+                                weights: alternative.setsList.map(\.weight),
+                                in: weightUnit
                             ))
                             .font(.system(size: 11))
                             .monospacedDigit()

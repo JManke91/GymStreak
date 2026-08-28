@@ -28,6 +28,8 @@ struct CoachEntryCard: View {
     /// Navigation destination pushed on tap.
     let destination: PeriodRecapDestination
 
+    @Environment(\.weightUnit) private var weightUnit
+
     // MARK: - Body
 
     var body: some View {
@@ -109,12 +111,8 @@ struct CoachEntryCard: View {
     // MARK: - Helpers
 
     private var sublineText: String {
-        let volumeText: String
-        if totalVolumeTons >= 1 {
-            volumeText = String(format: "%.1ft", totalVolumeTons)
-        } else {
-            volumeText = String(format: "%.0fkg", totalVolumeTons * 1000)
-        }
+        // `totalVolumeTons` is metric tonnes, but the seam takes canonical kilograms.
+        let volumeText = WeightFormatting.volume(totalVolumeTons * 1000, in: weightUnit)
         return String(format: "ai_coach.period_recap.entry_card.subline".localized, sessionCount, volumeText, newPRCount)
     }
 

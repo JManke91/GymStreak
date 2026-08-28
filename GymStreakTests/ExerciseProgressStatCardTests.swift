@@ -135,7 +135,11 @@ struct ExerciseProgressStatCardTests {
         #expect(harness.viewModel.trendValueString == "chart.trend.mixed".localized)
         #expect(harness.viewModel.trendValueString != "chart.trend.mixed")
         // The other two cards still describe the plotted series.
-        #expect(harness.viewModel.personalRecordString == "90.0 kg")
+        // Through the unit seam now, which drops a trailing zero and takes its
+        // unit word from `unit.weight.*` — no test instance injects a
+        // preference, so the canonical kilograms are what is rendered.
+        #expect(harness.viewModel.personalRecordString
+                == WeightFormatting.label(90, in: .kilograms))
         #expect(harness.viewModel.sessionCountString == "2")
     }
 
@@ -174,7 +178,11 @@ struct ExerciseProgressStatCardTests {
         // The gate falls the stat cards back to the free metric; the blend rule still
         // withholds that metric's trend rather than printing a blended free number.
         #expect(harness.viewModel.isMetricLocked(.estimated1RM))
-        #expect(harness.viewModel.personalRecordString == "90.0 kg")
+        // Through the unit seam now, which drops a trailing zero and takes its
+        // unit word from `unit.weight.*` — no test instance injects a
+        // preference, so the canonical kilograms are what is rendered.
+        #expect(harness.viewModel.personalRecordString
+                == WeightFormatting.label(90, in: .kilograms))
         #expect(harness.viewModel.trendValueString == "chart.trend.mixed".localized)
     }
 

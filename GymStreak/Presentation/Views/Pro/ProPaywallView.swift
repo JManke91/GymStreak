@@ -50,6 +50,7 @@ struct ProPaywallView: View {
     var onPaywallShown: () -> Void = {}
 
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.weightUnit) private var weightUnit
 
     @State private var phase: Phase = .loading
 
@@ -263,13 +264,20 @@ struct ProPaywallView: View {
     ///
     /// `nil` unless this really is the value moment, so no other placement can
     /// acquire an endowed-progress line by being handed totals.
+    ///
+    /// Deliberately not `WeightFormatting.volume`: this is §8 B endowed progress,
+    /// where "24,300 kg" is the point — a rolled-up "24.3 t" would shrink the
+    /// number this line exists to show. So it keeps its grouped, full-precision
+    /// `counted` formatting and only attaches the unit word via `labelled`.
     private var valueMomentFigures: String? {
         guard placement == .valueMoment, let totals = lifetimeTotals else { return nil }
+        let displayVolume = weightUnit.converting(fromKilograms: totals.volumeKilograms)
+        let volumeText = WeightFormatting.labelled(Self.counted(Int(displayVolume.rounded())), in: weightUnit)
         return String(
             format: "paywall.value_moment.figures".localized,
             Self.counted(totals.workoutCount),
             Self.counted(totals.completedSetCount),
-            Self.counted(Int(totals.volumeKilograms.rounded()))
+            volumeText
         )
     }
 

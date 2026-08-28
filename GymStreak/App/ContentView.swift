@@ -73,7 +73,8 @@ private struct ContentViewInternal: View {
             routineTemplateSync: dependencies.routineTemplateSync,
             recovery: dependencies.workoutRecovery,
             activeWorkout: dependencies.activeWorkout,
-            proactivePaywalls: dependencies.proactivePaywalls
+            proactivePaywalls: dependencies.proactivePaywalls,
+            weightUnitPreference: dependencies.weightUnitPreference
         ))
     }
 

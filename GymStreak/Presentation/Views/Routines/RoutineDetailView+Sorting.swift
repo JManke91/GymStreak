@@ -64,14 +64,14 @@ extension RoutineDetailView {
                 members: unit.exercises.map { routineExercise in
                     RoutineSortingMemberDisplay(
                         id: routineExercise.id,
-                        display: RoutineExerciseCardDisplay(routineExercise),
+                        display: RoutineExerciseCardDisplay(routineExercise, in: weightUnit),
                         onRemove: { removeExercise(routineExercise) }
                     )
                 }
             )
         } else if let routineExercise = unit.exercises.first {
             RoutineSortingRow(
-                display: RoutineExerciseCardDisplay(routineExercise),
+                display: RoutineExerciseCardDisplay(routineExercise, in: weightUnit),
                 onRemove: { removeExercise(routineExercise) }
             )
         }

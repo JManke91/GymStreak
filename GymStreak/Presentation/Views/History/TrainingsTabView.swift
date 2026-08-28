@@ -33,6 +33,8 @@ struct TrainingsTabView: View {
 
     @State private var mode: DisplayMode = .list
 
+    @Environment(\.weightUnit) private var weightUnit
+
     // MARK: - AI Coach entry card state
 
     /// Whether conditions are met to show any AI Coach card.
@@ -202,18 +204,13 @@ struct TrainingsTabView: View {
     }
 
     private func monthSummary(for month: MonthSectionModel) -> String {
-        let volumeTxt: String
-        if month.totalVolume >= 1000 {
-            volumeTxt = String(format: "%.0ft", month.totalVolume / 1000)
-        } else {
-            volumeTxt = "\(Int(month.totalVolume))kg"
-        }
+        let volumeTxt = WeightFormatting.volume(month.totalVolume, in: weightUnit)
         return String(format: "history.month.summary".localized, month.sessionCount, volumeTxt)
     }
 
     private func cardRow(_ card: WorkoutCardModel) -> some View {
         NavigationLink(value: card.id) {
-            WorkoutCardView(card: card)
+            WorkoutCardView(card: card, weightUnit: weightUnit)
         }
         .buttonStyle(.plain)
         .simultaneousGesture(TapGesture().onEnded { HapticManager.shared.light() })

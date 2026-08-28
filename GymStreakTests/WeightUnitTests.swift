@@ -171,6 +171,127 @@ struct WeightUnitTests {
         #expect(abs(atCeiling - 999) < 1e-9)
     }
 
+    // MARK: - Volume and the tonnage rollup
+
+    @Test("A tonnage below the rollup carries the plain unit word and no decimals")
+    func volumeBelowRollup() {
+        let parts = WeightFormatting.volumeParts(847.4, in: .kilograms)
+        #expect(parts.unitWord == WeightFormatting.unitWord(.kilograms))
+        // Weekly volume is not more informative to a tenth of a kilogram.
+        if let separator = Locale.current.decimalSeparator {
+            #expect(!parts.number.contains(separator))
+        }
+    }
+
+    /// Kilograms signal the rollup by swapping the unit word for the tonne;
+    /// pounds keep "lb" and carry a magnitude prefix on the number instead, so
+    /// "did this roll up?" is a different question per unit (§10).
+    private func isRolledUp(_ kilograms: Double, in unit: WeightUnit) -> Bool {
+        let parts = WeightFormatting.volumeParts(kilograms, in: unit)
+        switch unit {
+        case .kilograms: return parts.unitWord != WeightFormatting.unitWord(.kilograms)
+        case .pounds: return parts.number.hasSuffix("unit.volume.thousand".localized)
+        }
+    }
+
+    @Test("Kilograms roll up to the metric tonne, and exactly at 1000")
+    func kilogramRollup() {
+        #expect(isRolledUp(1500, in: .kilograms))
+        #expect(isRolledUp(1000, in: .kilograms))
+        #expect(!isRolledUp(999, in: .kilograms))
+        #expect(WeightFormatting.volumeParts(12_500, in: .kilograms).number
+                == 12.5.formatted(.number.precision(.fractionLength(1)).grouping(.never)))
+    }
+
+    @Test("Pounds keep their own unit word when rolled, never the tonne")
+    func poundRollupIsNotTonnes() {
+        let pounds = WeightFormatting.volumeParts(12_500, in: .pounds)
+        let tonneWord = WeightFormatting.volumeParts(12_500, in: .kilograms).unitWord
+        // "0,5 t" for a pounds user would mix measurement systems on their own
+        // numbers — the product call this asserts.
+        #expect(pounds.unitWord != tonneWord)
+        #expect(pounds.unitWord == WeightFormatting.unitWord(.pounds))
+        // The rollup shows on the number ("27,6k"), so the shared "%@ %@" join
+        // cannot orphan the prefix.
+        #expect(isRolledUp(12_500, in: .pounds))
+    }
+
+    @Test("The rollup threshold is applied after conversion, so each unit rolls at 1000 of its own numbers")
+    func rollupHappensInDisplaySpace() {
+        // 500 kg is 1102 lb: below the threshold as kilograms, above it as pounds.
+        // Deciding before conversion would have rolled both or neither.
+        #expect(!isRolledUp(500, in: .kilograms))
+        #expect(isRolledUp(500, in: .pounds))
+    }
+
+    @Test("A tonnage is converted from the canonical kilograms")
+    func volumeConverts() {
+        #expect(WeightFormatting.volume(400, in: .kilograms)
+                != WeightFormatting.volume(400, in: .pounds))
+        // 400 kg is 882 lb — still below the rollup in both units, so the two
+        // strings differ by their *numbers*, not only by their unit words.
+        let kilograms = WeightFormatting.volumeParts(400, in: .kilograms)
+        let pounds = WeightFormatting.volumeParts(400, in: .pounds)
+        #expect(kilograms.number != pounds.number)
+    }
+
+    @Test("The joined string is exactly the parts, so number and word cannot disagree")
+    func volumeJoinsItsOwnParts() {
+        for kilograms in [0.0, 12.0, 847.4, 999.0, 1000.0, 12_500.0] {
+            for unit in WeightUnit.allCases {
+                let parts = WeightFormatting.volumeParts(kilograms, in: unit)
+                let joined = WeightFormatting.volume(kilograms, in: unit)
+                #expect(joined.contains(parts.number))
+                #expect(joined.contains(parts.unitWord))
+            }
+        }
+    }
+
+    @Test("Related volumes share one rollup decision, so they never land in different units")
+    func relatedVolumesShareTheRollup() {
+        // Inclined Flying on device: a 1080 kg window record beside a 960 kg
+        // latest value. Deciding per figure printed "1,1 t" directly above
+        // "960 kg" — both correct alone, and not comparable, which is the only
+        // reason the two sit next to each other.
+        let record = 1080.0, latest = 960.0
+        for unit in WeightUnit.allCases {
+            let rolled = WeightFormatting.volumeRollsUp(record, in: unit)
+            let recordWord = WeightFormatting.volumeParts(record, in: unit, rolledUp: rolled).unitWord
+            let latestWord = WeightFormatting.volumeParts(latest, in: unit, rolledUp: rolled).unitWord
+            #expect(recordWord == latestWord)
+        }
+        // Deciding independently is what produced the mismatch — pinned so the
+        // shared-decision overload cannot quietly become redundant.
+        #expect(WeightFormatting.volumeParts(record, in: .kilograms).unitWord
+                != WeightFormatting.volumeParts(latest, in: .kilograms).unitWord)
+    }
+
+    @Test("The rollup decision is taken in display space")
+    func rollsUpMatchesTheParts() {
+        for kilograms in [0.0, 400.0, 500.0, 999.0, 1000.0, 12_500.0] {
+            for unit in WeightUnit.allCases {
+                let rolled = WeightFormatting.volumeRollsUp(kilograms, in: unit)
+                #expect(WeightFormatting.volumeParts(kilograms, in: unit).unitWord
+                        == WeightFormatting.volumeParts(kilograms, in: unit, rolledUp: rolled).unitWord)
+            }
+        }
+    }
+
+    @Test("A derived weight rounds to whole display units, an entered one does not")
+    func estimateLabelRoundsWhereLabelDoesNot() {
+        // An Epley estimate has arbitrary decimals; printing them is false
+        // confidence, which is why `estimateLabel` exists next to `label`.
+        if let separator = Locale.current.decimalSeparator {
+            #expect(!WeightFormatting.estimateLabel(137.35, in: .kilograms).contains(separator))
+            #expect(WeightFormatting.label(137.35, in: .kilograms).contains(separator))
+            #expect(!WeightFormatting.estimateLabel(137.35, in: .pounds).contains(separator))
+        }
+        // Rounding happens after converting, so the pound figure is derived from
+        // the stored kilograms rather than from a rounded kilogram value.
+        #expect(WeightFormatting.estimateLabel(137.35, in: .pounds)
+                != WeightFormatting.estimateLabel(137.0, in: .pounds))
+    }
+
     // MARK: - Unit words
 
     @Test("The unit word and its spoken form come from the two dedicated keys")

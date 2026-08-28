@@ -47,6 +47,7 @@ private struct PeriodRecapViewInternal: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
     @Environment(\.locale) private var locale
+    @Environment(\.weightUnit) private var weightUnit
 
     init(initialRange: PeriodRange, allowanceGate: AICoachAllowanceGate) {
         self.initialRange = initialRange
@@ -444,7 +445,7 @@ private struct PeriodRecapViewInternal: View {
             )
             Divider().background(Color.white.opacity(0.06)).frame(height: 36)
             statCell(
-                value: volumeKg.map { formatVolume($0) },
+                value: volumeKg.map { WeightFormatting.volume($0, in: weightUnit) },
                 label: "ai_coach.period_recap.stat.volume".localized,
                 tinted: true,
                 isStreaming: isStreaming && volumeKg == nil
@@ -654,14 +655,6 @@ private struct PeriodRecapViewInternal: View {
     private var isStreaming: Bool {
         if case .streaming = viewModel.state { return true }
         return false
-    }
-
-    private func formatVolume(_ kg: Double) -> String {
-        if kg >= 1000 {
-            return String(format: "%.1ft", kg / 1000)
-        } else {
-            return String(format: "%.0fkg", kg)
-        }
     }
 
     private func relativeDate(_ date: Date) -> String {

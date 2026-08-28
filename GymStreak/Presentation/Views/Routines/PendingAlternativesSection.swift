@@ -13,6 +13,8 @@ struct PendingAlternativesSection: View {
     /// Shared "a set value is being typed" flag driving the screen's Done bar.
     var valueFocus: FocusState<Bool>.Binding
 
+    @Environment(\.weightUnit) private var weightUnit
+
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text("configure_exercise.alternatives.explanation".localized)
@@ -77,7 +79,8 @@ struct PendingAlternativesSection: View {
 
                             Text(SetSummaryFormatting.text(
                                 reps: alternative.sets.map(\.reps),
-                                weights: alternative.sets.map(\.weight)
+                                weights: alternative.sets.map(\.weight),
+                                in: weightUnit
                             ))
                             .font(.system(size: 11))
                             .monospacedDigit()

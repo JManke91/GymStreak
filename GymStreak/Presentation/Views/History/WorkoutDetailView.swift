@@ -21,6 +21,7 @@ struct WorkoutDetailView: View {
     /// Kept only to pass through to the (out-of-scope) AI Coach analysis ViewModel API.
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.weightUnit) private var weightUnit
 
     @State private var prDetails: [UUID: PersonalRecordService.PRDetail] = [:]
     @State private var healthKitKcal: Double?
@@ -191,7 +192,7 @@ struct WorkoutDetailView: View {
             statCard(
                 icon: "bolt.fill",
                 color: Color(red: 200/255, green: 140/255, blue: 255/255),
-                value: formatVolume(workout.totalVolume),
+                value: WeightFormatting.volume(workout.totalVolume, in: weightUnit),
                 label: "history.detail.volume".localized
             )
             statCard(
@@ -232,13 +233,6 @@ struct WorkoutDetailView: View {
                 .stroke(Color.white.opacity(0.06), lineWidth: 1)
         )
         .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-    }
-
-    private func formatVolume(_ kg: Double) -> String {
-        if kg >= 1000 {
-            return String(format: "%.1ft", kg / 1000)
-        }
-        return "\(Int(kg))kg"
     }
 
     // MARK: - Progressive overload (after-the-fact)

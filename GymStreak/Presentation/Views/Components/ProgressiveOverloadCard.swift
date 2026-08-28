@@ -42,6 +42,7 @@ struct ProgressiveOverloadCard: View {
     let onUndo: () -> Void
 
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.weightUnit) private var weightUnit
 
     private var isApplied: Bool { exercise.progressiveOverloadApplied || appliedOverride }
     private var isAssistance: Bool { exercise.loadBehavior.isCounterweightAssistance }
@@ -186,7 +187,7 @@ struct ProgressiveOverloadCard: View {
                     .font(.system(size: 14, weight: .bold))
                 Text((isAssistance ? "exercise.reduce_assistance" : "rep_range.increase_weight").localized)
                     .font(.system(size: 15.5, weight: .bold))
-                Text(formattedWeight(actionableCurrentWeight))
+                Text(WeightFormatting.label(actionableCurrentWeight, in: weightUnit))
                     .font(.system(size: 15.5, weight: .semibold))
                     .strikethrough()
                     .opacity(0.55)
@@ -240,7 +241,7 @@ struct ProgressiveOverloadCard: View {
                 } else {
                     Text(accentedText(
                         (isAssistance ? "rep_range.overload_card.reduced_to" : "rep_range.overload_card.increased_to")
-                            .localized(formattedWeight(confirmedWeight ?? 0)),
+                            .localized(WeightFormatting.label(confirmedWeight ?? 0, in: weightUnit)),
                         accent: DesignSystem.Colors.tint
                     ))
                     .font(.system(size: 14.5, weight: .bold))
@@ -249,7 +250,7 @@ struct ProgressiveOverloadCard: View {
                     Text("rep_range.overload_card.next_workout".localized(
                         sortedSets.count,
                         exercise.targetRepMin ?? 0,
-                        formattedWeight(confirmedWeight ?? 0)
+                        WeightFormatting.label(confirmedWeight ?? 0, in: weightUnit)
                     ))
                     .font(.system(size: 12, weight: .medium))
                     .foregroundStyle(DesignSystem.Colors.textSecondary)
@@ -295,10 +296,6 @@ struct ProgressiveOverloadCard: View {
                 )
             }
         }
-    }
-
-    private func formattedWeight(_ weight: Double) -> String {
-        String(format: "%g kg", weight)
     }
 
     /// Parses the localized string's **bold** markers and colors those runs

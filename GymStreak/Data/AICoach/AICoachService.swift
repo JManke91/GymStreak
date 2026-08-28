@@ -130,11 +130,24 @@ final class AICoachService: AICoachServicing {
     ) async throws -> LanguageModelSession.ResponseStream<ExerciseDeepDiveOutput>? {
         guard preferences.exerciseDeepDiveEnabled, preferences.isEffectivelyEnabled, availability.isAvailable else { return nil }
         return await stream(
-            instructions: ExerciseDeepDiveInstructions.systemPrompt,
+            // Two prompts: a blended view carries no progression figures, and the
+            // single-variant prompt's four-paragraph progression structure is exactly what
+            // the model fills in with invented numbers when they are absent.
+            instructions: ExerciseDeepDiveInstructions.systemPrompt(
+                forBlendedView: input.blendedUsageCount > 1,
+                // English instructions plus Apple's documented output-language directive
+                // — see `AICoachLocaleDirective`.
+                localeIdentifier: input.locale
+            ),
             promptText: input.toPromptText(),
             outputType: ExerciseDeepDiveOutput.self,
             useCase: "exercise_deep_dive",
-            maximumResponseTokens: 400
+            maximumResponseTokens: 400,
+            // Deterministic decoding for a surface whose whole job is to restate figures
+            // it was given. `.greedy` always takes the most likely token; Apple uses it
+            // for its own must-not-hallucinate classification sample. Only this surface
+            // opts in — the others are unchanged and unverified.
+            sampling: .greedy
         )
     }
 
@@ -192,12 +205,15 @@ final class AICoachService: AICoachServicing {
         promptText: String,
         outputType: Output.Type,
         useCase: String,
-        maximumResponseTokens: Int? = nil
+        maximumResponseTokens: Int? = nil,
+        sampling: GenerationOptions.SamplingMode? = nil
     ) async -> LanguageModelSession.ResponseStream<Output> {
         let session = LanguageModelSession(instructions: Instructions(instructions))
         let start = ContinuousClock.now
 
-        let options = maximumResponseTokens.map { GenerationOptions(maximumResponseTokens: $0) }
+        let options: GenerationOptions? = (maximumResponseTokens == nil && sampling == nil)
+            ? nil
+            : GenerationOptions(sampling: sampling, maximumResponseTokens: maximumResponseTokens)
         let responseStream: LanguageModelSession.ResponseStream<Output>
         if let options {
             responseStream = session.streamResponse(to: promptText, generating: outputType, options: options)

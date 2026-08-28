@@ -14,6 +14,7 @@ struct WorkoutDetailExerciseBlock: View {
     let exercise: WorkoutExercise
     let prDetail: PersonalRecordService.PRDetail?
     let comparison: ExerciseComparisonResult?
+    @Environment(\.weightUnit) private var weightUnit
 
     private var sortedSets: [WorkoutSet] {
         exercise.setsList.sorted(by: { $0.order < $1.order })
@@ -94,8 +95,13 @@ struct WorkoutDetailExerciseBlock: View {
         let weight = usePlanned ? set.plannedWeight : set.actualWeight
         let reps = usePlanned ? set.plannedReps : set.actualReps
         let weightText = weight > 0
-            ? String(format: "%gkg", weight)
+            ? WeightFormatting.label(weight, in: weightUnit)
             : "history.detail.bw".localized
+        // The written forms are abbreviations — "49,6 lb", "Körper". A screen
+        // reader has to say the words: "49,6 pounds", "Körpergewicht".
+        let spokenWeightText = weight > 0
+            ? WeightFormatting.spokenLabel(weight, in: weightUnit)
+            : "history.detail.bw.spoken".localized
         let isCompleted = set.isCompleted
         let isPRSet = set.id == prDetail?.setId
         let setComparison = setComparisons.indices.contains(index) ? setComparisons[index] : nil
@@ -103,7 +109,8 @@ struct WorkoutDetailExerciseBlock: View {
             comparison: setComparison,
             isCompleted: isCompleted,
             hasPreviousSession: comparison?.previousPerformance != nil,
-            loadBehavior: exercise.loadBehavior
+            loadBehavior: exercise.loadBehavior,
+            unit: weightUnit
         )
 
         return VStack(spacing: 4) {
@@ -122,6 +129,13 @@ struct WorkoutDetailExerciseBlock: View {
                 .font(.system(size: 14, weight: .bold, design: .rounded))
                 .kerning(-0.3)
                 .monospacedDigit()
+                // At six sets each cell is ~47pt wide inside its padding, and
+                // "21,5 kg" measures more than that. Scaling down beats wrapping,
+                // which would silently make one grid row taller than its
+                // neighbours. Tight before the seam added a space; not a regression,
+                // but this is the ticket that made the string longer.
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
                 .foregroundStyle(isCompleted ? Color.white : Color.white.opacity(0.4))
             Text("\(reps) \("history.detail.reps".localized)")
                 .font(.system(size: 10))
@@ -143,14 +157,13 @@ struct WorkoutDetailExerciseBlock: View {
         .opacity(isCompleted ? 1 : 0.5)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(Text(String(format: "history.detail.set_n".localized, index + 1)))
-        .accessibilityValue(accessibilityValue(weight: weight, weightText: weightText, reps: reps, delta: delta, isPRSet: isPRSet))
+        .accessibilityValue(accessibilityValue(spokenWeight: spokenWeightText, reps: reps, delta: delta, isPRSet: isPRSet))
     }
 
-    private func accessibilityValue(weight: Double, weightText: String, reps: Int, delta: SetDeltaChip.Delta?, isPRSet: Bool) -> Text {
+    private func accessibilityValue(spokenWeight: String, reps: Int, delta: SetDeltaChip.Delta?, isPRSet: Bool) -> Text {
         let deltaPhrase = delta?.accessibilityPhrase ?? ""
-        let valueString = weight > 0 ? weightText : "history.detail.bw".localized
         var formatted = String(format: "history.detail.a11y.set_value_with_delta".localized,
-                               valueString, reps, deltaPhrase)
+                               spokenWeight, reps, deltaPhrase)
         if isPRSet {
             formatted += ", " + "history.detail.a11y.pr_set".localized
         }
@@ -163,6 +176,7 @@ struct WorkoutDetailExerciseBlock: View {
 struct ExerciseComparisonStrip: View {
     let comparison: ExerciseComparisonResult
     let previous: PreviousExercisePerformance
+    @Environment(\.weightUnit) private var weightUnit
 
     private var topWeightDelta: SetDeltaChip.Delta {
         let currentTop = comparison.currentPerformance.sets
@@ -173,7 +187,8 @@ struct ExerciseComparisonStrip: View {
         return SetDeltaChip.Delta.fromWeight(
             current: currentTop,
             previous: previousTop,
-            loadBehavior: comparison.loadBehavior
+            loadBehavior: comparison.loadBehavior,
+            unit: weightUnit
         )
     }
 
@@ -184,11 +199,20 @@ struct ExerciseComparisonStrip: View {
         )
     }
 
-    private var dateString: String {
+    // Hoisted out of `body`'s read path: this allocated a DateFormatter per strip
+    // per render (CLAUDE.md rendering rule 2), and every history detail screen
+    // renders one strip per exercise. `Locale.current` is already the default.
+    // `@MainActor` because a shared mutable formatter is only safe while every
+    // access comes from a view body.
+    @MainActor
+    private static let dateFormatter: DateFormatter = {
         let fmt = DateFormatter()
-        fmt.locale = Locale.current
         fmt.setLocalizedDateFormatFromTemplate("d. MMM")
-        return fmt.string(from: previous.date)
+        return fmt
+    }()
+
+    private var dateString: String {
+        Self.dateFormatter.string(from: previous.date)
     }
 
     var body: some View {
@@ -237,15 +261,39 @@ struct FirstSessionBadge: View {
 
 struct SetDeltaChip: View {
     enum Delta: Equatable {
-        case gain(String)
-        case loss(String)
+        /// What the change is actually measured in, carried alongside the label.
+        ///
+        /// It used to be *recovered* from the label instead: `s.contains("kg")`
+        /// chose between the weight and the rep-count phrasing and
+        /// `numericPart(of:)` stripped `"kg"` to get the number back. That is
+        /// build-green, test-green and wrong the moment the label reads
+        /// "+5 lb" — VoiceOver then describes a weight change as a rep change.
+        /// A volume delta, whose label is a percentage, already fell through to
+        /// the rep branch and was read out as "up 0 reps". Adding `"lb"` to the
+        /// substring check would have moved the same defect one unit further
+        /// out, so the kind is passed explicitly and the parsing helpers are
+        /// gone.
+        enum Quantity: Equatable {
+            /// A weight change, carrying the spoken form of the same figure —
+            /// "2,5 kilograms" — so the phrase never has to parse the label.
+            case weight(spoken: String)
+            case reps(Int)
+            case percentage(Int)
+        }
+
+        case gain(String, Quantity)
+        case loss(String, Quantity)
         case neutral
         case new
 
+        /// `current`/`previous` are canonical kilograms; the *difference* is what
+        /// gets converted, which is exact for a linear unit and keeps the rule
+        /// that nothing is ever derived from an already-converted number.
         static func fromWeight(
             current: Double,
             previous: Double,
-            loadBehavior: ExerciseLoadBehavior = .resistance
+            loadBehavior: ExerciseLoadBehavior = .resistance,
+            unit: WeightUnit
         ) -> Delta {
             let diff = ExerciseLoadMetrics.signedEnteredWeightDelta(
                 current: current,
@@ -253,32 +301,41 @@ struct SetDeltaChip: View {
                 behavior: loadBehavior
             )
             if abs(diff) < 0.01 { return .neutral }
-            let formatted = String(format: "%@%g kg", diff > 0 ? "+" : "−", abs(diff))
-            return diff > 0 ? .gain(formatted) : .loss(formatted)
+            let sign = diff > 0 ? "+" : "−"
+            let formatted = sign + WeightFormatting.label(abs(diff), in: unit)
+            let quantity = Quantity.weight(
+                spoken: WeightFormatting.spokenLabel(abs(diff), in: unit)
+            )
+            return diff > 0 ? .gain(formatted, quantity) : .loss(formatted, quantity)
         }
 
         static func fromVolume(current: Double, previous: Double) -> Delta {
             guard previous > 0 else {
-                return current > 0 ? .gain("+100%") : .neutral
+                return current > 0 ? .gain("+100%", .percentage(100)) : .neutral
             }
             let pct = ((current - previous) / previous) * 100
             if abs(pct) < 0.5 { return .neutral }
+            let magnitude = Int(abs(pct).rounded())
             let formatted = String(format: "%@%.0f%%", pct > 0 ? "+" : "−", abs(pct))
-            return pct > 0 ? .gain(formatted) : .loss(formatted)
+            return pct > 0
+                ? .gain(formatted, .percentage(magnitude))
+                : .loss(formatted, .percentage(magnitude))
         }
 
         static func fromReps(current: Int, previous: Int) -> Delta {
             let diff = current - previous
             if diff == 0 { return .neutral }
             let formatted = "\(diff > 0 ? "+" : "−")\(abs(diff)) \("history.detail.reps".localized)"
-            return diff > 0 ? .gain(formatted) : .loss(formatted)
+            let quantity = Quantity.reps(abs(diff))
+            return diff > 0 ? .gain(formatted, quantity) : .loss(formatted, quantity)
         }
 
         init?(
             comparison: ExerciseComparisonResult.CurrentExercisePerformance.SetComparison?,
             isCompleted: Bool,
             hasPreviousSession: Bool,
-            loadBehavior: ExerciseLoadBehavior = .resistance
+            loadBehavior: ExerciseLoadBehavior = .resistance,
+            unit: WeightUnit
         ) {
             guard isCompleted, hasPreviousSession else { return nil }
             guard let c = comparison else { return nil }
@@ -292,7 +349,8 @@ struct SetDeltaChip: View {
                     self = Delta.fromWeight(
                         current: c.currentWeight,
                         previous: prevWeight,
-                        loadBehavior: loadBehavior
+                        loadBehavior: loadBehavior,
+                        unit: unit
                     )
                     return
                 }
@@ -318,7 +376,7 @@ struct SetDeltaChip: View {
 
         var label: String {
             switch self {
-            case .gain(let s), .loss(let s): return s
+            case .gain(let s, _), .loss(let s, _): return s
             case .neutral: return ""
             case .new: return "history.detail.set_new".localized
             }
@@ -335,28 +393,31 @@ struct SetDeltaChip: View {
 
         var accessibilityPhrase: String {
             switch self {
-            case .gain(let s):
-                return s.contains("kg")
-                    ? String(format: "history.detail.a11y.delta_up_weight".localized, numericPart(of: s))
-                    : String(format: "history.detail.a11y.delta_up_reps".localized, numericInt(of: s))
-            case .loss(let s):
-                return s.contains("kg")
-                    ? String(format: "history.detail.a11y.delta_down_weight".localized, numericPart(of: s))
-                    : String(format: "history.detail.a11y.delta_down_reps".localized, numericInt(of: s))
+            case .gain(_, let quantity): return Self.phrase(for: quantity, rising: true)
+            case .loss(_, let quantity): return Self.phrase(for: quantity, rising: false)
             case .neutral: return "history.detail.a11y.delta_equal".localized
             case .new: return "history.detail.a11y.delta_new".localized
             }
         }
 
-        private func numericPart(of s: String) -> String {
-            s.replacingOccurrences(of: "+", with: "")
-             .replacingOccurrences(of: "−", with: "")
-             .replacingOccurrences(of: "kg", with: "")
-             .trimmingCharacters(in: .whitespaces)
-        }
-
-        private func numericInt(of s: String) -> Int {
-            Int(numericPart(of: s).components(separatedBy: " ").first ?? "0") ?? 0
+        private static func phrase(for quantity: Quantity, rising: Bool) -> String {
+            switch quantity {
+            case .weight(let spoken):
+                let key = rising
+                    ? "history.detail.a11y.delta_up_weight"
+                    : "history.detail.a11y.delta_down_weight"
+                return String(format: key.localized, spoken)
+            case .reps(let count):
+                let key = rising
+                    ? "history.detail.a11y.delta_up_reps"
+                    : "history.detail.a11y.delta_down_reps"
+                return String(format: key.localized, count)
+            case .percentage(let percent):
+                let key = rising
+                    ? "history.detail.a11y.delta_up_percent"
+                    : "history.detail.a11y.delta_down_percent"
+                return String(format: key.localized, percent)
+            }
         }
     }
 

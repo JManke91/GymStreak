@@ -6,19 +6,23 @@
 import SwiftUI
 
 struct WeightIncreaseSheet: View {
+    /// Canonical kilograms.
     let currentWeight: Double
     let currentReps: Int
     let setCount: Int
     let targetMin: Int
     let isAssistance: Bool
+    /// Called with the increment in **canonical kilograms** — this sheet is the
+    /// one place the user's pick is converted, and it happens once.
     let onApply: (Double) -> Void
     let onCancel: () -> Void
 
-    @State private var selectedIncrement: Double = ProgressiveOverloadIncrement.default
+    @Environment(\.weightUnit) private var weightUnit
 
-    /// One shared list with the watch picker (`Domain/Services/ProgressiveOverloadService`),
-    /// so the two platforms cannot offer different steps again.
-    private let increments: [Double] = ProgressiveOverloadIncrement.options
+    /// The chosen step, in the unit the user reads. `nil` until the sheet has
+    /// seen its unit — the grid is per-unit, so the default cannot be resolved
+    /// at initialization, before the environment exists.
+    @State private var selectedIncrement: Double?
 
     /// Routine-editor surface: current values come from the template sets.
     init(routineExercise: RoutineExercise, onApply: @escaping (Double) -> Void, onCancel: @escaping () -> Void) {
@@ -55,8 +59,27 @@ struct WeightIncreaseSheet: View {
         self.onCancel = onCancel
     }
 
-    private var resultingWeight: Double {
-        isAssistance ? max(0, currentWeight - selectedIncrement) : currentWeight + selectedIncrement
+    /// The current unit's steps. Pounds get their own plate steps rather than
+    /// converted kilograms — see `ProgressiveOverloadIncrement`.
+    private var grid: ProgressiveOverloadIncrement.Grid {
+        ProgressiveOverloadIncrement.grid(for: weightUnit)
+    }
+
+    private var increment: Double {
+        selectedIncrement ?? grid.defaultOption
+    }
+
+    /// `currentWeight` in the displayed unit. Every number this sheet shows is
+    /// computed in display space, so the arithmetic the user reads adds up
+    /// exactly ("198.4 + 5 = 203.4") instead of drifting through a conversion.
+    private var currentDisplayWeight: Double {
+        weightUnit.converting(fromKilograms: currentWeight)
+    }
+
+    private func resultingDisplayWeight(after increment: Double) -> Double {
+        isAssistance
+            ? max(0, currentDisplayWeight - increment)
+            : currentDisplayWeight + increment
     }
 
     var body: some View {
@@ -64,7 +87,7 @@ struct WeightIncreaseSheet: View {
             VStack(spacing: 16) {
                 // Current state
                 Text("rep_range.current_state".localized(
-                    String(format: "%.1f", currentWeight),
+                    WeightFormatting.displayLabel(currentDisplayWeight, in: weightUnit),
                     currentReps,
                     setCount
                 ))
@@ -75,24 +98,25 @@ struct WeightIncreaseSheet: View {
 
                 // Increment options
                 VStack(spacing: 8) {
-                    ForEach(increments, id: \.self) { increment in
+                    ForEach(grid.options, id: \.self) { option in
+                        let isSelected = option == increment
                         Button {
-                            selectedIncrement = increment
+                            selectedIncrement = option
                             UIImpactFeedbackGenerator(style: .light).impactOccurred()
                         } label: {
                             HStack {
-                                Image(systemName: selectedIncrement == increment ? "circle.inset.filled" : "circle")
-                                    .foregroundStyle(selectedIncrement == increment ? .orange : .secondary)
+                                Image(systemName: isSelected ? "circle.inset.filled" : "circle")
+                                    .foregroundStyle(isSelected ? .orange : .secondary)
 
-                                // Two fraction digits, not `%.2g`: at two
-                                // SIGNIFICANT digits a 1.25 kg step rendered as
+                                // The seam's two fraction digits, not `%.2g`: at
+                                // two SIGNIFICANT digits a 1.25 step renders as
                                 // a misleading "1.2".
-                                Text("\(isAssistance ? "−" : "+")\(increment.formatted(.number.precision(.fractionLength(0...2)))) kg")
+                                Text("\(isAssistance ? "−" : "+")\(WeightFormatting.incrementLabel(option, in: weightUnit))")
                                     .font(.body.weight(.medium))
 
                                 Spacer()
 
-                                Text("\(String(format: "%.1f", isAssistance ? max(0, currentWeight - increment) : currentWeight + increment)) kg")
+                                Text(WeightFormatting.displayLabel(resultingDisplayWeight(after: option), in: weightUnit))
                                     .font(.subheadline)
                                     .foregroundStyle(.secondary)
                             }
@@ -100,13 +124,13 @@ struct WeightIncreaseSheet: View {
                             .padding(.vertical, 12)
                             .background(
                                 RoundedRectangle(cornerRadius: 10)
-                                    .fill(selectedIncrement == increment
+                                    .fill(isSelected
                                         ? Color.orange.opacity(0.1)
                                         : DesignSystem.Colors.card)
                             )
                             .overlay(
                                 RoundedRectangle(cornerRadius: 10)
-                                    .strokeBorder(selectedIncrement == increment
+                                    .strokeBorder(isSelected
                                         ? Color.orange.opacity(0.4)
                                         : Color.clear, lineWidth: 1)
                             )
@@ -121,11 +145,13 @@ struct WeightIncreaseSheet: View {
                         .foregroundStyle(.orange)
                     Text(
                         isAssistance
-                            // Pinned to kilograms with the rest of this sheet.
                             ? "exercise.assistance.value".localized(
-                                WeightFormatting.label(resultingWeight, in: .kilograms)
+                                WeightFormatting.displayLabel(resultingDisplayWeight(after: increment), in: weightUnit)
                             )
-                            : "rep_range.new_state".localized(String(format: "%.1f", resultingWeight), targetMin)
+                            : "rep_range.new_state".localized(
+                                WeightFormatting.displayLabel(resultingDisplayWeight(after: increment), in: weightUnit),
+                                targetMin
+                            )
                     )
                     .font(.subheadline.weight(.medium))
                 }
@@ -142,7 +168,9 @@ struct WeightIncreaseSheet: View {
                 // Action buttons
                 VStack(spacing: 12) {
                     Button {
-                        onApply(selectedIncrement)
+                        // The one conversion: the grid lives in display space,
+                        // everything below this line is canonical kilograms.
+                        onApply(weightUnit.kilograms(fromDisplay: increment))
                     } label: {
                         Text("rep_range.apply".localized)
                             .font(.body.weight(.semibold))

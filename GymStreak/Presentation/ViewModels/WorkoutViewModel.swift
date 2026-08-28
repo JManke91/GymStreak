@@ -134,6 +134,12 @@ class WorkoutViewModel: ObservableObject {
     /// `activeWorkout` is: unit-test instances have no app to report to.
     private let proactivePaywalls: ProactivePaywallCoordinator?
 
+    /// The unit weights are shown in. Injected rather than reached for
+    /// (`.shared` is barred inside ViewModels); nil in unit-test instances,
+    /// which then read the canonical kilograms.
+    private let weightUnitPreference: WeightUnitPreferenceProviding?
+    private var weightUnit: WeightUnit { weightUnitPreference?.weightUnit ?? .kilograms }
+
     /// Pre-apply values captured when progressive overload is applied, keyed by
     /// WorkoutExercise.id, so the completion screen can offer Undo. In-memory
     /// only — undo is available while the session is still open.
@@ -177,6 +183,7 @@ class WorkoutViewModel: ObservableObject {
         recovery: WorkoutRecoveryCoordinating? = nil,
         activeWorkout: (any ActiveWorkoutReporting)? = nil,
         proactivePaywalls: ProactivePaywallCoordinator? = nil,
+        weightUnitPreference: WeightUnitPreferenceProviding? = nil,
         aiCoachCache: AICoachCaching? = nil,
         now: @escaping () -> Date = Date.init
     ) {
@@ -191,6 +198,7 @@ class WorkoutViewModel: ObservableObject {
         self.recovery = recovery
         self.activeWorkout = activeWorkout
         self.proactivePaywalls = proactivePaywalls
+        self.weightUnitPreference = weightUnitPreference
         self.aiCoachCache = aiCoachCache ?? AICoachCache.shared
         self.now = now
         restTimerLiveActivity.dismissExpiredActivities()
@@ -1272,11 +1280,17 @@ class WorkoutViewModel: ObservableObject {
         let setScheme: String?  // compact scheme summary, e.g. "3×10 · 20kg"
     }
 
-    /// Compact scheme summary for swap-picker rows, e.g. "3×10", "4×8–12 · 20kg".
+    /// Compact scheme summary for swap-picker rows, e.g. "3×10", "4×8–12 · 20 kg".
     /// Delegates to the shared `RoutineMetricsService.setSchemeSummary` so the
-    /// in-workout Swap picker and the routine browse sheet stay identical.
+    /// in-workout Swap picker and the routine browse sheet stay identical. The
+    /// service hands back the structure and this side supplies the formatted
+    /// weight — the Domain layer neither knows the unit nor the unit word.
     private func setScheme(from sets: [(reps: Int, weight: Double)]) -> String? {
-        RoutineMetricsService.setSchemeSummary(reps: sets.map(\.reps), weights: sets.map(\.weight))
+        RoutineMetricsService.setSchemeSummary(
+            reps: sets.map(\.reps),
+            weights: sets.map(\.weight),
+            formattingWeight: { [weightUnit] in WeightFormatting.label($0, in: weightUnit) }
+        )
     }
 
     /// Finds the routine exercise a workout exercise originated from, using the

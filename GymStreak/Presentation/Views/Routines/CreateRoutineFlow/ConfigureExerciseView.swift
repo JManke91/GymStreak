@@ -9,6 +9,7 @@ import SwiftUI
 
 struct ConfigureExerciseView: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.weightUnit) private var weightUnit
 
     let exercise: Exercise
     let existingSets: [ExerciseSet]?
@@ -97,7 +98,10 @@ struct ConfigureExerciseView: View {
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 16)
                 } else {
-                    ForEach(Array(sets.enumerated()), id: \.offset) { index, set in
+                    // Identified by the set, not its index: `WeightValueField`
+                    // hangs its display-mirror state off this identity, and an
+                    // index identifier reassigns it on every insert or delete.
+                    ForEach(Array(sets.enumerated()), id: \.element.id) { index, set in
                         VStack(alignment: .leading, spacing: 0) {
                             // Display set with tap to edit
                             Button(action: {
@@ -115,7 +119,10 @@ struct ConfigureExerciseView: View {
                                         .font(.headline)
                                         .foregroundColor(.primary)
                                     Spacer()
-                                    Text("configure_exercise.set_detail".localized(sets[index].reps, sets[index].weight))
+                                    Text("configure_exercise.set_detail".localized(
+                                        sets[index].reps,
+                                        WeightFormatting.label(sets[index].weight, in: weightUnit)
+                                    ))
                                         .foregroundColor(.secondary)
                                     Image(systemName: "chevron.right")
                                         .font(.caption)
@@ -136,19 +143,12 @@ struct ConfigureExerciseView: View {
                                         Stepper("\(sets[index].reps)", value: repsBinding(at: index), in: 1...100)
                                     }
 
-                                    HStack {
-                                        // Pinned to kilograms: ticket 02 converts
-                                        // this flow's fields.
-                                        Text("set.weight_label".localized(
-                                            WeightFormatting.unitWord(.kilograms)
-                                        ) + ":")
-                                        Spacer()
-                                        TextField("0.0", value: weightBinding(at: index), format: .number)
-                                            .keyboardType(.decimalPad)
-                                            .multilineTextAlignment(.trailing)
-                                            .frame(width: 80)
-                                            .selectAllOnFocus()
-                                    }
+                                    WeightValueField(
+                                        label: "set.weight_label".localized(
+                                            WeightFormatting.unitWord(weightUnit)
+                                        ) + ":",
+                                        kilograms: weightBinding(at: index)
+                                    )
                                 }
                                 .padding(.top, 8)
                                 .transition(.asymmetric(

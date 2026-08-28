@@ -27,6 +27,7 @@ struct ExerciseDeepDiveAllowanceTests {
         let exercise = harness.seedExercise(completedSets: 6)
         guard let key = harness.viewModel.cacheKey(
             exerciseId: exercise.id,
+            usageSelection: .combined,
             modelContext: harness.context
         ) else {
             Issue.record("a seeded exercise must produce a cache key")
@@ -37,6 +38,7 @@ struct ExerciseDeepDiveAllowanceTests {
 
         await harness.viewModel.checkCache(
             exercise: exercise,
+            usage: .combined,
             locale: .current,
             modelContext: harness.context
         )
@@ -54,6 +56,7 @@ struct ExerciseDeepDiveAllowanceTests {
 
         let didStart = harness.viewModel.generate(
             exercise: exercise,
+            usage: .combined,
             locale: .current,
             modelContext: harness.context
         )
@@ -71,6 +74,7 @@ struct ExerciseDeepDiveAllowanceTests {
 
         #expect(harness.viewModel.generate(
             exercise: exercise,
+            usage: .combined,
             locale: .current,
             modelContext: harness.context
         ))
@@ -89,6 +93,7 @@ struct ExerciseDeepDiveAllowanceTests {
 
         #expect(harness.viewModel.generate(
             exercise: exercise,
+            usage: .combined,
             locale: .current,
             modelContext: harness.context
         ))
@@ -104,6 +109,7 @@ struct ExerciseDeepDiveAllowanceTests {
         let exercise = harness.seedExercise(completedSets: 6)
         guard let key = harness.viewModel.cacheKey(
             exerciseId: exercise.id,
+            usageSelection: .combined,
             modelContext: harness.context
         ) else {
             Issue.record("a seeded exercise must produce a cache key")
@@ -114,6 +120,7 @@ struct ExerciseDeepDiveAllowanceTests {
 
         let didStart = harness.viewModel.regenerate(
             exercise: exercise,
+            usage: .combined,
             locale: .current,
             modelContext: harness.context
         )
@@ -134,6 +141,7 @@ struct ExerciseDeepDiveAllowanceTests {
         for _ in 0..<3 {
             #expect(harness.viewModel.generate(
                 exercise: exercise,
+                usage: .combined,
                 locale: .current,
                 modelContext: harness.context
             ))

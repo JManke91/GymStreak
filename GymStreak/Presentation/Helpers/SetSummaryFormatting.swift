@@ -5,13 +5,11 @@ import Foundation
 /// the same reps and weight, otherwise "3 Sätze · max 90 kg".
 enum SetSummaryFormatting {
 
-    /// The unit these summaries render in. Routine cards are ticket 02's
-    /// surface: until they read the user's unit from the environment, the
-    /// summary stays in the canonical kilograms rather than showing a converted
-    /// figure next to the kilogram values their set editors still display.
-    private static let unit = WeightUnit.kilograms
-
-    static func text(reps: [Int], weights: [Double]) -> String {
+    /// - Parameters:
+    ///   - weights: canonical kilograms, as they are stored.
+    ///   - unit: the unit the caller's screen renders in — read from
+    ///     `\.weightUnit` by the view that builds the summary.
+    static func text(reps: [Int], weights: [Double], in unit: WeightUnit) -> String {
         guard !reps.isEmpty else { return "routine.sets_count".localized(0) }
 
         if let uniform = RoutineMetricsService.uniformSetScheme(reps: reps, weights: weights), uniform.weight > 0 {

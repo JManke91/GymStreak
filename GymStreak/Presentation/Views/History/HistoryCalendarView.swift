@@ -19,6 +19,8 @@ struct HistoryCalendarView: View {
     @State private var viewMonth: Date = HistoryCalendarView.initialMonth()
     @State private var selectedDate: Date?
 
+    @Environment(\.weightUnit) private var weightUnit
+
     private static func initialMonth() -> Date {
         let cal = HistoryStatsService.isoGermanCalendar()
         let comps = cal.dateComponents([.year, .month], from: Date())
@@ -103,12 +105,7 @@ struct HistoryCalendarView: View {
     }
 
     private func monthStatsLabel(stats: (sessions: Int, volume: Double)) -> String {
-        let volumeTxt: String
-        if stats.volume >= 1000 {
-            volumeTxt = String(format: "%.1ft", stats.volume / 1000)
-        } else {
-            volumeTxt = "\(Int(stats.volume))kg"
-        }
+        let volumeTxt = WeightFormatting.volume(stats.volume, in: weightUnit)
         return String(format: "history.calendar.month_stats".localized, stats.sessions, volumeTxt)
     }
 
@@ -300,7 +297,7 @@ struct HistoryCalendarView: View {
                     .padding(.horizontal, 20)
                 if let card {
                     NavigationLink(value: card.id) {
-                        WorkoutCardView(card: card)
+                        WorkoutCardView(card: card, weightUnit: weightUnit)
                     }
                     .buttonStyle(.plain)
                     .simultaneousGesture(TapGesture().onEnded { HapticManager.shared.light() })

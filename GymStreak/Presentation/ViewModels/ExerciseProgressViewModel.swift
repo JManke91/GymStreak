@@ -35,13 +35,36 @@ class ExerciseProgressViewModel: ObservableObject {
     /// user's choice, and a direct write from a view would bypass that and let the opening
     /// default overrule a tap.
     @Published private(set) var selectedTimeframe: ChartTimeframe = .month
-    @Published var selectedMetric: ProgressMetric = .maxWeight
+    /// `chartSeries` is derived from this, so the rebuild hangs off `didSet`
+    /// rather than off `updateMetric(_:)`. Making the setter `private(set)` was
+    /// the other option and is worse here: the title tests deliberately force
+    /// selections the picker would refuse in order to pin a past bug, and
+    /// `didSet` keeps the cache correct for *any* writer, including a future
+    /// `$selectedMetric` picker binding.
+    @Published var selectedMetric: ProgressMetric = .maxWeight {
+        didSet { refreshChartSeries() }
+    }
     @Published private(set) var progressData: ExerciseProgressData?
     /// One card per usage per session — a workout that trained the exercise twice
     /// contributes two entries. Capped by sessions, see `recentSessionLimit`.
     @Published private(set) var recentUsages: [ExerciseRecentUsage] = []
     @Published var selectedDataPoint: SelectedDataPoint?
     @Published private(set) var isLoading = true
+    /// The plotted series in **display** space, with the y-domain derived from
+    /// the same converted numbers.
+    ///
+    /// Built here rather than in the chart's `body` for two reasons. The series
+    /// and the `chartYScale(domain:)` have to convert *together* or the marks and
+    /// the scale describe different units; and the domain used to be a computed
+    /// property that mapped over every point *inside* the `ForEach` that drew
+    /// them (`AreaMark`'s `yStart` read it), which is O(n²) per render — adding a
+    /// `Measurement` conversion there would have multiplied it.
+    @Published private(set) var chartSeries: ChartSeries?
+    /// The largest per-session volume in the loaded window, in canonical
+    /// kilograms. Computed in `load()` rather than by a `map`/`max` inside a
+    /// `body`-read property, and it does double duty: it is the volume PR *and*
+    /// the value the whole screen's rollup decision is taken from.
+    @Published private(set) var maxVolumeKilograms: Double?
 
     /// The usages the picker offers, labelled. Empty until the first load returns; a
     /// single entry means there is nothing to choose between and the picker stays hidden.
@@ -50,6 +73,17 @@ class ExerciseProgressViewModel: ObservableObject {
     /// only fills in the default when nothing has been requested yet. A chosen usage is
     /// never swapped out: outside the window it draws the empty-chart state instead.
     @Published private(set) var selectedUsage: ExerciseUsageSelection = .combined
+    /// `selectedUsage`, but `nil` until a load has actually resolved it.
+    ///
+    /// `selectedUsage` starts (and is reset on an exercise switch) at `.combined`, which
+    /// is a placeholder rather than an answer — the aggregator usually resolves the
+    /// default to the most recently trained usage. Surfaces whose work is expensive
+    /// enough that doing it once against the placeholder and again against the answer
+    /// matters key off this instead: the AI Coach deep-dive's cache probe is a full
+    /// history fetch on the main actor, and it must run once per resolved usage, not
+    /// twice per screen open. It stays put across a timeframe change (the same value is
+    /// republished), so it does not make the probe repeat on every range tap.
+    @Published private(set) var resolvedUsage: ExerciseUsageSelection?
     /// What the user picked, or `nil` while they have not picked anything for this
     /// exercise — which is what lets the aggregator open the screen on the most recently
     /// trained usage instead of on the combined sawtooth.
@@ -130,6 +164,12 @@ class ExerciseProgressViewModel: ObservableObject {
     private let proEntitlements: any ProEntitlementProviding
     private let paywalls: any PaywallPresenting
     private let isGatingEnabled: Bool
+    /// The user's display unit. This ViewModel formats weights, so per CLAUDE.md
+    /// Hard rule 2 it takes the protocol by init injection rather than reaching
+    /// for `WeightUnitPreference.shared`. Nil-defaulted like `recovery` and
+    /// `activeWorkout` on `WorkoutViewModel`, so a unit-test instance reads the
+    /// canonical kilograms.
+    private let weightUnitPreference: (any WeightUnitPreferenceProviding)?
 
     /// Separate from task cancellation on purpose, mirroring `HistoryViewModel`: the
     /// fetches inside the model actor are synchronous, so a superseded load can still
@@ -162,6 +202,7 @@ class ExerciseProgressViewModel: ObservableObject {
         legacyAttribution: any LegacyHistoryAttributing,
         proEntitlements: any ProEntitlementProviding,
         paywalls: any PaywallPresenting,
+        weightUnitPreference: (any WeightUnitPreferenceProviding)? = nil,
         isGatingEnabled: Bool = ProGating.isEnabled
     ) {
         self.exerciseName = exerciseName
@@ -171,6 +212,7 @@ class ExerciseProgressViewModel: ObservableObject {
         self.legacyAttribution = legacyAttribution
         self.proEntitlements = proEntitlements
         self.paywalls = paywalls
+        self.weightUnitPreference = weightUnitPreference
         self.isGatingEnabled = isGatingEnabled
         entitlementObserver = EntitlementChangeObserver(
             entitlements: proEntitlements
@@ -229,6 +271,7 @@ class ExerciseProgressViewModel: ObservableObject {
         requestedUsage = initialUsage.map(ExerciseUsageSelection.usage)
         usageOptions = []
         selectedUsage = .combined
+        resolvedUsage = nil
         datedWindowEmptyMessage = nil
         // The finding belongs to the exercise it was computed for. Keeping it across a
         // switch would offer to attribute another exercise's legacy rows to this one.
@@ -253,6 +296,12 @@ class ExerciseProgressViewModel: ObservableObject {
         guard selection != requestedUsage else { return }
         requestedUsage = selection
         selectedDataPoint = nil
+        // The loaded answer describes the usage the user just navigated away from, so it
+        // is no longer an answer to the question on screen. Clearing it keeps surfaces
+        // gated on `resolvedUsage` — the AI Coach deep-dive — from acting on the previous
+        // variant during the reload: a tap in that window would have spent a monthly
+        // allowance unit generating and caching a narrative for the wrong one.
+        resolvedUsage = nil
     }
 
     /// Whether there is anything to choose between. One usage and the picker is noise:
@@ -499,12 +548,21 @@ class ExerciseProgressViewModel: ObservableObject {
                 orAtLeast: lastPerformed
             ) { return }
             progressData = snapshot.data
+            maxVolumeKilograms = snapshot.data.dataPoints.map(\.totalVolume).max()
+            // The selection belonged to the *previous* snapshot's points. Keeping
+            // it would draw the `RuleMark` at a date the new series may not
+            // contain, and `refreshChartSeries()` would faithfully re-format an
+            // annotation for a retired point. The three `loadKey`-moving mutators
+            // already clear it; this covers the reloads that do not move the key
+            // (a legacy-attribution write, a `.task(id:)` restart on reappear).
+            selectedDataPoint = nil
             statRange = loadedRange
             recentUsages = snapshot.recentUsages
             // Labelled once, here — the picker must not build localized strings or scan
             // for duplicate labels while a view body is being evaluated.
             usageOptions = ExerciseUsageLabeling.pickerItems(for: snapshot.availableUsages)
             selectedUsage = snapshot.selectedUsage
+            resolvedUsage = snapshot.selectedUsage
             // Formatted here for the same reason the labels are: the empty chart's copy
             // must not build a date string while `body` is being evaluated.
             datedWindowEmptyMessage = lastPerformed.map(Self.datedWindowEmptyMessage(lastPerformed:))
@@ -515,16 +573,23 @@ class ExerciseProgressViewModel: ObservableObject {
             if !availableMetrics.contains(selectedMetric) {
                 selectedMetric = .maxWeight
             }
+            // A new snapshot with an unchanged selection does not run
+            // `selectedMetric`'s `didSet`, so the series is rebuilt here too.
+            refreshChartSeries()
             isLoading = false
         } catch is CancellationError {
             return
         } catch {
             guard generation == self.generation else { return }
             progressData = nil
+            maxVolumeKilograms = nil
+            selectedDataPoint = nil
+            refreshChartSeries()
             statRange = loadedRange
             recentUsages = []
             usageOptions = []
             selectedUsage = .combined
+            resolvedUsage = nil
             datedWindowEmptyMessage = nil
             unattributedLegacy = nil
             unattributedLegacyMessage = nil
@@ -584,8 +649,10 @@ class ExerciseProgressViewModel: ObservableObject {
     /// carries all three values from the one fetch.
     func updateMetric(_ metric: ProgressMetric) {
         guard availableMetrics.contains(metric) else { return }
-        selectedMetric = metric
+        // Cleared first: `selectedMetric`'s `didSet` rebuilds the series, and
+        // re-deriving an annotation that is about to be discarded is waste.
         selectedDataPoint = nil
+        selectedMetric = metric
         if isMetricLocked(metric) {
             paywalls.present(.chartMetric)
         }
@@ -670,11 +737,57 @@ class ExerciseProgressViewModel: ObservableObject {
         isMetricLocked(selectedMetric) ? ProFeatureCaps.freeChartMetric : selectedMetric
     }
 
+    // MARK: - Display unit
+
+    /// The unit every number this ViewModel formats is rendered in.
+    /// `.kilograms` when no preference was injected — the canonical unit, which
+    /// is what a unit test asserts against.
+    private var displayUnit: WeightUnit {
+        weightUnitPreference?.weightUnit ?? .kilograms
+    }
+
+    /// Whether *every* volume figure on this screen rolls up — taken once, from
+    /// the window's largest value, and never per figure.
+    ///
+    /// The record is by definition the largest, so deciding from it covers the
+    /// headline and the tap annotation too. Letting each decide for itself is
+    /// what put "REKORD 1,1 t" directly above "GESAMTVOLUMEN 960 kg": both
+    /// correct in isolation, and not comparable, which is the only reason the
+    /// two sit next to each other.
+    private var volumeRollsUp: Bool {
+        WeightFormatting.volumeRollsUp(maxVolumeKilograms ?? 0, in: displayUnit)
+    }
+
+    /// Rebuilds `chartSeries` from the loaded snapshot and the current selection.
+    ///
+    /// Called after a load, from `selectedMetric`'s `didSet`, and by the view when
+    /// the user's weight unit changes while this screen is pushed — the unit is
+    /// not part of `loadKey`, so nothing else would notice a trip to Settings.
+    func refreshChartSeries() {
+        chartSeries = progressData.map {
+            ChartSeries(data: $0, metric: selectedMetric, unit: displayUnit)
+        }
+        // The tap annotation's figure is a *string*, formatted once at selection
+        // time, so it has to be re-derived too. Without this a tapped point keeps
+        // reading "100 kg" over a converted line and a converted y-domain —
+        // exactly the mismatch this method exists to prevent, one property
+        // further out. Re-derived from the canonical point, never from the
+        // rendered string.
+        if let selected = selectedDataPoint {
+            selectDataPoint(selected.dataPoint, for: selectedMetric)
+        }
+    }
+
     // MARK: - Data Point Selection
 
     func selectDataPoint(_ dataPoint: ExerciseProgressDataPoint, for metric: ProgressMetric) {
         let value = dataPoint.value(for: metric)
-        let displayValue = formatCompactValue(value, unit: metric.unit)
+        let displayValue = Self.annotationValue(
+            value,
+            for: metric,
+            in: displayUnit,
+            rolledUp: volumeRollsUp
+        )
         let displayDate = dataPoint.date.formatted(date: .abbreviated, time: .omitted)
         selectedDataPoint = SelectedDataPoint(
             dataPoint: dataPoint,
@@ -746,21 +859,81 @@ class ExerciseProgressViewModel: ObservableObject {
         )
     }
 
+    /// The tap annotation's figure.
+    ///
+    /// Volume goes through the tonnage formatter, so the annotation, the headline
+    /// and the history cards all roll up at the same threshold. A single load goes
+    /// through the plain label and is **not** compacted: it used to run through
+    /// `formatCompactValue`, whose ≥1000 branch was unreachable behind the 999 kg
+    /// ceiling but becomes reachable above ~454 kg once converted — a 500 kg sled
+    /// set would have annotated "1.1k lb" while the headline read "1102.3 lb" for
+    /// the same point.
+    private static func annotationValue(
+        _ kilograms: Double,
+        for metric: ProgressMetric,
+        in unit: WeightUnit,
+        rolledUp: Bool
+    ) -> String {
+        switch metric.quantity {
+        case .volume:
+            return WeightFormatting.volume(kilograms, in: unit, rolledUp: rolledUp)
+        case .weight:
+            return WeightFormatting.label(kilograms, in: unit)
+        }
+    }
+
+    /// The chart headline's number, without its unit word — the view renders the
+    /// two in different type styles, so they arrive separately but are always
+    /// produced from the same value and the same rollup decision.
+    var headlineValue: String {
+        guard let last = progressData?.dataPoints.last else { return "-" }
+        let kilograms = last.value(for: selectedMetric)
+        switch selectedMetric.quantity {
+        case .volume:
+            return WeightFormatting
+                .volumeParts(kilograms, in: displayUnit, rolledUp: volumeRollsUp)
+                .number
+        case .weight:
+            return WeightFormatting.number(kilograms, in: displayUnit)
+        }
+    }
+
+    /// The unit word beside `headlineValue` — "kg", "lb", or the rolled-up "t" /
+    /// "k lb" when the headline is a rolled-up tonnage.
+    var headlineUnitWord: String {
+        switch selectedMetric.quantity {
+        case .volume:
+            let kilograms = progressData?.dataPoints.last?.value(for: selectedMetric) ?? 0
+            return WeightFormatting
+                .volumeParts(kilograms, in: displayUnit, rolledUp: volumeRollsUp)
+                .unitWord
+        case .weight:
+            return WeightFormatting.unitWord(displayUnit)
+        }
+    }
+
     var personalRecordString: String? {
         guard let data = progressData else { return nil }
 
         switch statMetric {
         case .maxWeight:
+            // An entered weight, so it keeps the unit's own precision.
             if let pr = data.personalRecord {
-                return String(format: "%.1f kg", pr)
+                return WeightFormatting.label(pr, in: displayUnit)
             }
         case .estimated1RM:
+            // Not `estimateLabel`, even though this *is* an estimate: this card
+            // sits directly under `headlineValue`, which renders at the unit's
+            // own precision. Rounding only one of the two made the pair read as a
+            // contradiction on device — "REKORD 53 lb" over "GESCH. 1RM 52,9 lb".
+            // Whole-unit rounding belongs to the history PR banner, which has no
+            // neighbour to agree with.
             if let pr = data.personalRecord1RM {
-                return String(format: "%.1f kg", pr)
+                return WeightFormatting.label(pr, in: displayUnit)
             }
         case .volume:
-            if let maxVolume = data.dataPoints.map(\.totalVolume).max() {
-                return String(format: "%.0f kg", maxVolume)
+            if let maxVolume = maxVolumeKilograms {
+                return WeightFormatting.volume(maxVolume, in: displayUnit, rolledUp: volumeRollsUp)
             }
         }
         return nil

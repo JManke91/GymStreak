@@ -243,6 +243,31 @@ enum ExerciseUsageSelection: Hashable, Sendable {
     /// Every usage folded together — the behaviour that predates the picker.
     case combined
     case usage(ExerciseUsage.Key)
+
+    /// A stable, filename-safe identifier for this selection, for use inside cache keys.
+    ///
+    /// The AI Coach's exercise deep-dive narrates the *selected* usage, so its cached
+    /// narrative belongs to a `(exercise, usage, last-set timestamp)` triple rather than
+    /// to the exercise alone — without the usage in the key, switching usage serves the
+    /// previous usage's sentences, and switching back either re-serves them or spends a
+    /// second monthly allowance unit (`docs/pro-subscription.md` §5e).
+    ///
+    /// Lives on the value, not in the cache, so there is one spelling of it: changing
+    /// this string silently orphans every cached narrative, which is a decision and not
+    /// an implementation detail.
+    var cacheToken: String {
+        switch self {
+        case .combined:
+            return "all"
+        case .usage(let key):
+            switch key.slot {
+            case .routineSlot(let id):
+                return "\(id.uuidString)#\(key.occurrence)"
+            case .unattributed:
+                return "unattributed#\(key.occurrence)"
+            }
+        }
+    }
 }
 
 /// One entry of the detail screen's usage picker: a usage found anywhere in history,

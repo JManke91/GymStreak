@@ -27,6 +27,8 @@ struct ProactivePeriodPromptCard: View {
     /// Called by both the primary CTA and the dismiss button — coordinator stamps the period id.
     let onDismiss: () -> Void
 
+    @Environment(\.weightUnit) private var weightUnit
+
     // MARK: - State
 
     @State private var navigateTapped: Bool = false
@@ -176,11 +178,8 @@ struct ProactivePeriodPromptCard: View {
     // MARK: - Helpers
 
     private var volumeString: String {
-        if totalVolumeTons >= 1 {
-            return String(format: "%.1ft", totalVolumeTons)
-        } else {
-            return String(format: "%.0fkg", totalVolumeTons * 1000)
-        }
+        // `totalVolumeTons` is metric tonnes, but the seam takes canonical kilograms.
+        WeightFormatting.volume(totalVolumeTons * 1000, in: weightUnit)
     }
 
     private var proactiveBorderGradient: LinearGradient {

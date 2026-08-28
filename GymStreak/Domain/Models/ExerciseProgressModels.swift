@@ -90,10 +90,18 @@ enum ProgressMetric: String, CaseIterable, Identifiable {
         }
     }
 
-    var unit: String {
+    /// What kind of quantity the metric measures.
+    ///
+    /// This used to return the literal `"kg"`, which made `Domain/` the layer
+    /// that decided the user's unit. It names the *quantity* now and the
+    /// Presentation layer resolves the word — the same discipline
+    /// `RoutineMetricsService` was put under. Both cases are masses read in the
+    /// user's weight unit; they differ in magnitude, which is what decides
+    /// whether the display rolls up to tonnes.
+    var quantity: ProgressQuantity {
         switch self {
-        case .maxWeight, .estimated1RM: return "kg"
-        case .volume: return "kg"
+        case .maxWeight, .estimated1RM: return .weight
+        case .volume: return .volume
         }
     }
 
@@ -106,10 +114,28 @@ enum ProgressMetric: String, CaseIterable, Identifiable {
     }
 }
 
+/// The kind of number a `ProgressMetric` plots.
+enum ProgressQuantity: Sendable {
+    /// A single load — a top set, an estimated 1RM. Rendered at the unit's own
+    /// display precision.
+    case weight
+    /// Summed weight × reps. Large enough to roll up, so it goes through
+    /// `WeightFormatting.volume(_:in:)`.
+    case volume
+}
+
 // MARK: - Compact Number Formatting
 
-/// Formats a number using compact notation (e.g., 1.2k, 3.5M) with optional unit suffix
-func formatCompactValue(_ value: Double, unit: String? = nil) -> String {
+/// Formats a number using compact notation (e.g., 1.2k, 3.5M).
+///
+/// The k/M thresholds are magnitude-based, not kilogram-based, so they hold for a
+/// converted pound figure too — 27 563 lb compacts to "27.6k" exactly as 12 500 kg
+/// compacts to "12.5k".
+///
+/// Its one caller is the chart's **unit-less** y-axis. The optional `unit:` suffix
+/// it used to take is gone: appending a unit word here would put back in `Domain/`
+/// the decision that removing `ProgressMetric.unit` took out of it.
+func formatCompactValue(_ value: Double) -> String {
     let formatted: String
     switch abs(value) {
     case 0..<1:
@@ -126,9 +152,6 @@ func formatCompactValue(_ value: Double, unit: String? = nil) -> String {
         formatted = m.truncatingRemainder(dividingBy: 1) == 0
             ? String(format: "%.0fM", m)
             : String(format: "%.1fM", m)
-    }
-    if let unit {
-        return "\(formatted) \(unit)"
     }
     return formatted
 }

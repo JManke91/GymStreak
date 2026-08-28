@@ -15,7 +15,9 @@ struct RoutineExerciseCardDisplay {
     let setSummary: String
     let alternativeAvatars: [AvatarValues]
 
-    init(_ routineExercise: RoutineExercise) {
+    /// - Parameter unit: the unit the card renders weights in, read from
+    ///   `\.weightUnit` by the view that builds this display.
+    init(_ routineExercise: RoutineExercise, in unit: WeightUnit) {
         name = routineExercise.exercise?.name ?? "Unknown"
         avatar = routineExercise.exercise.map {
             AvatarValues(muscleGroups: $0.muscleGroups, equipmentType: $0.equipmentType)
@@ -24,7 +26,8 @@ struct RoutineExerciseCardDisplay {
         let sets = routineExercise.setsList
         setSummary = SetSummaryFormatting.text(
             reps: sets.map(\.reps),
-            weights: sets.map(\.weight)
+            weights: sets.map(\.weight),
+            in: unit
         )
 
         alternativeAvatars = routineExercise.alternativesList.compactMap { alternative in

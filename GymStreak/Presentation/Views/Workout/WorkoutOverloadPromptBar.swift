@@ -22,6 +22,7 @@ struct WorkoutOverloadPromptBar: View {
     /// Dynamic Type and gets a second line at accessibility sizes instead of
     /// truncating — matching how the banner below it restacks.
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.weightUnit) private var weightUnit
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -61,7 +62,10 @@ struct WorkoutOverloadPromptBar: View {
                 .foregroundStyle(DesignSystem.Colors.success)
 
             Text(applied.weight.map {
-                "rep_range.routine_updated".localized(String(format: "%.1f", $0), applied.reps)
+                "rep_range.routine_updated".localized(
+                    WeightFormatting.label($0, in: weightUnit),
+                    applied.reps
+                )
             } ?? "rep_range.overload_card.next_workout_no_weight".localized(applied.setCount, applied.reps))
                 .font(.caption.weight(.medium))
                 .foregroundStyle(.primary)

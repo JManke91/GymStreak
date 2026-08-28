@@ -153,7 +153,7 @@
 "exercise.detail.not_used" = "Diese Übung ist noch in keiner Routine.";
 "exercise.detail.alternative" = "Alternative";
 "exercise.detail.as_alternative" = "Als Alternative";
-"exercise.detail.set_scheme" = "%d × %d Wdh · %.1f kg";
+"exercise.detail.set_scheme" = "%d × %d Wdh · %@";
 
 // MARK: - Exercise Deletion Confirmation
 "exercises.delete.confirmation.title" = "Übung löschen?";
@@ -200,10 +200,20 @@
 // Spoken forms, for VoiceOver — a screen reader saying "kay gee" is why.
 "unit.weight.kg.spoken" = "Kilogramm";
 "unit.weight.lb.spoken" = "Pfund";
+// Tonnage rollup, for the volume figures on the history cards, the week hero and
+// the month summaries. Kilograms roll up to the metric tonne at 1 000 kg; pounds
+// have no equivalent unit — 1 000 lb is not one, and the short ton abbreviates
+// one letter away from the tonne — so they keep "lb" and take a magnitude prefix
+// on the *number* instead ("27,6k lb"). See docs/weight-unit-preference.md §10.
+"unit.volume.t" = "t";
+"unit.volume.thousand" = "k";
 
 // MARK: - Workout Set
 "set.number" = "Satz %d";
 "set.reps" = "%d Wdh.";
+"set.reps_range" = "%1$d–%2$d Wdh.";
+// Ein Gewichtsbereich teilt sich ein Einheitenwort: "40–45 kg", nicht "40 kg–45 kg".
+"set.weight_range" = "%1$@–%2$@";
 "set.weight_compact" = "%1$@ %2$@";
 "set.reps_unit" = "Wdh.";
 "set.reps_label" = "Wiederholungen";
@@ -414,12 +424,12 @@
 "rep_range.prompt.for_exercise" = "Für %@";
 "rep_range.increase" = "Erhöhen";
 "rep_range.increase_weight" = "Gewicht erhöhen";
-"rep_range.current_state" = "Aktuell: %@kg × %d Wdh. (%d Sätze)";
-"rep_range.new_state" = "Neu: %@kg × %d Wdh. (alle Sätze)";
+"rep_range.current_state" = "Aktuell: %@ × %d Wdh. (%d Sätze)";
+"rep_range.new_state" = "Neu: %@ × %d Wdh. (alle Sätze)";
 "rep_range.apply" = "Anwenden";
 "rep_range.goal_achieved" = "Wdh.-Ziel erreicht";
 "rep_range.goal_achieved_detail" = "Alle %d Sätze haben %d Wdh. erreicht";
-"rep_range.routine_updated" = "Routine aktualisiert: %@kg × %d Wdh. beim nächsten Mal";
+"rep_range.routine_updated" = "Routine aktualisiert: %@ × %d Wdh. beim nächsten Mal";
 "rep_range.sets_with_range" = "%d Sätze | %d-%d Wdh.";
 "rep_range.ready_for_more" = "Bereit für mehr Gewicht";
 "rep_range.overload_card.description" = "Alle %d Sätze bei **%d Wdh.** — dein Zielbereich %d–%d ist ausgereizt.";
@@ -454,7 +464,7 @@
 "configure_exercise.info" = "Übungsinformationen";
 "configure_exercise.empty.title" = "Keine Sätze konfiguriert";
 "configure_exercise.empty.description" = "Tippe unten auf 'Satz hinzufügen' um zu beginnen";
-"configure_exercise.set_detail" = "%d Wdh. • %.1f kg";
+"configure_exercise.set_detail" = "%d Wdh. • %@";
 "configure_exercise.duplicate_set" = "Letzten Satz duplizieren";
 "configure_exercise.rest_timer" = "Pausentimer";
 "configure_exercise.rest_time_between_sets" = "Pausenzeit zwischen Sätzen";
@@ -580,9 +590,9 @@
 "routine_exercise_detail.label.description" = "Beschreibung";
 "routine_exercise_detail.label.sets" = "Sätze";
 "routine_exercise_detail.set_number" = "Satz %d";
-"routine_exercise_detail.set_detail" = "%d Wdh. • %.1f kg";
+"routine_exercise_detail.set_detail" = "%d Wdh. • %@";
 "routine_exercise_detail.reps_label" = "Wiederholungen:";
-"routine_exercise_detail.weight_label" = "Gewicht (kg):";
+"routine_exercise_detail.weight_label" = "Gewicht (%@):";
 "routine_exercise_detail.add_set" = "Satz hinzufügen";
 "routine_exercise_detail.delete" = "Löschen";
 "routine_exercise_detail.delete_alert.title" = "Übung löschen";
@@ -814,7 +824,13 @@
 "history.detail.exercises" = "Übungen";
 "history.detail.more" = "Mehr";
 "history.detail.set_n" = "SATZ %d";
-"history.detail.bw" = "KG";
+// Marks a set that carried no external weight. Read alongside a unit word on
+// every neighbouring cell, so it must not itself look like one — this value was
+// "KG" (Körpergewicht), indistinguishable from kilograms and actively
+// wrong-looking beside "49,6 lb". The spoken form exists so VoiceOver says the
+// word instead of spelling the abbreviation.
+"history.detail.bw" = "Körper";
+"history.detail.bw.spoken" = "Körpergewicht";
 "history.detail.reps" = "Wdh.";
 "history.detail.pr" = "PR";
 "history.detail.pr_record" = "Neuer Rekord: %@ × %d";
@@ -830,10 +846,17 @@
 "history.detail.first_session" = "Erste Session";
 "history.detail.set_new" = "Neu";
 "history.detail.a11y.set_value_with_delta" = "%@, %d Wiederholungen, %@";
-"history.detail.a11y.delta_up_weight" = "plus %@ Kilogramm im Vergleich zur letzten Sitzung";
-"history.detail.a11y.delta_down_weight" = "minus %@ Kilogramm im Vergleich zur letzten Sitzung";
+// The weight deltas take a preformatted spoken weight via %@ — the unit word
+// stays in unit.weight.*.spoken so a pounds user is not told "Kilogramm".
+"history.detail.a11y.delta_up_weight" = "plus %@ im Vergleich zur letzten Sitzung";
+"history.detail.a11y.delta_down_weight" = "minus %@ im Vergleich zur letzten Sitzung";
 "history.detail.a11y.delta_up_reps" = "plus %d Wiederholungen im Vergleich zur letzten Sitzung";
 "history.detail.a11y.delta_down_reps" = "minus %d Wiederholungen im Vergleich zur letzten Sitzung";
+// The volume delta is a percentage. It had no phrase of its own and fell
+// through the old substring check into the rep-count branch, so VoiceOver read
+// a volume change as "plus 0 Wiederholungen".
+"history.detail.a11y.delta_up_percent" = "plus %d Prozent im Vergleich zur letzten Sitzung";
+"history.detail.a11y.delta_down_percent" = "minus %d Prozent im Vergleich zur letzten Sitzung";
 "history.detail.a11y.delta_equal" = "gleich wie letztes Mal";
 "history.detail.a11y.delta_new" = "neuer Satz, keine Vergleichsdaten";
 "history.detail.a11y.pr_set" = "neuer persönlicher Rekord";
@@ -990,6 +1013,8 @@
 "ai_coach.deep_dive.insufficient_data" = "Mindestens 4 Sätze nötig für eine Analyse.";
 "ai_coach.deep_dive.error" = "Analyse konnte nicht geladen werden.";
 "ai_coach.deep_dive.error_retry" = "Erneut versuchen";
+"ai_coach.deep_dive.scope.all_time" = "gesamte Historie";
+"ai_coach.deep_dive.scope.all_time_only" = "Gesamte Historie";
 
 // Workout analysis (workout detail)
 "ai_coach.workout_analysis.button_title" = "Coach fragen";
@@ -1187,7 +1212,7 @@
 // configured in the dashboard). It never unlocks the gated capability.
 "paywall.unavailable.body" = "Das Angebot konnte nicht geladen werden. Prüfe deine Verbindung und versuche es erneut.";
 // Placement B's endowed-progress line. The numbers are the user's own real totals.
-"paywall.value_moment.figures" = "Du hast %@ Trainings, %@ Sätze und %@ kg Volumen protokolliert.";
+"paywall.value_moment.figures" = "Du hast %@ Trainings, %@ Sätze und %@ Volumen protokolliert.";
 
 // MARK: - Pro lock UI kit (docs/monetization-strategy.md §8 placement C and D)
 "pro.lock.subtitle" = "In Gym Streak Pro enthalten";

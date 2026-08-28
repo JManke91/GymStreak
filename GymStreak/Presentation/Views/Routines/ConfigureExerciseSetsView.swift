@@ -29,6 +29,8 @@ struct ConfigureExerciseSetsView: View {
     /// Set schemes offered on the empty state — the fastest way out of "no sets".
     private static let quickSchemes: [(sets: Int, reps: Int)] = [(3, 8), (3, 10), (4, 12)]
 
+    @Environment(\.weightUnit) private var weightUnit
+
     @State private var sets: [ExerciseSet] = []
     @State private var globalRestTime: TimeInterval = 0
     @State private var targetRepMin: Int?
@@ -112,6 +114,9 @@ struct ConfigureExerciseSetsView: View {
     /// Sets · volume · rest at a glance, so the configuration reads back without
     /// re-scanning the rows. The reduce runs over the local set array only — a
     /// handful of value reads, no relationship traversal.
+    ///
+    /// The volume is summed in canonical kilograms and converted once for
+    /// display, like every other weight on the screen.
     private var summaryStrip: some View {
         let volume = sets.reduce(0.0) { $0 + Double($1.reps) * $1.weight }
         return HStack(spacing: 0) {
@@ -121,8 +126,7 @@ struct ConfigureExerciseSetsView: View {
             )
             summaryDivider
             summaryColumn(
-                // Pinned to kilograms: ticket 03 owns volume formatting.
-                value: volume > 0 ? WeightFormatting.label(volume, in: .kilograms) : "—",
+                value: volume > 0 ? WeightFormatting.label(volume, in: weightUnit) : "—",
                 label: "configure_exercise.summary.volume".localized
             )
             summaryDivider

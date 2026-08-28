@@ -11,6 +11,7 @@ import SwiftUI
 
 struct PRRecordStrip: View {
     let detail: PersonalRecordService.PRDetail
+    @Environment(\.weightUnit) private var weightUnit
 
     var body: some View {
         HStack(alignment: .top, spacing: 8) {
@@ -19,7 +20,8 @@ struct PRRecordStrip: View {
                 .padding(.top, 1)
             VStack(alignment: .leading, spacing: 2) {
                 Text(String(format: "history.detail.pr_record".localized,
-                            formatKg(detail.weight), detail.reps))
+                            WeightFormatting.label(detail.weight, in: weightUnit),
+                            detail.reps))
                     .font(.system(size: 12, weight: .bold, design: .rounded))
                 Text(estimateLine)
                     .font(.system(size: 10, weight: .medium, design: .rounded))
@@ -36,16 +38,17 @@ struct PRRecordStrip: View {
         .accessibilityElement(children: .combine)
     }
 
+    /// The Epley figure is computed and compared in kilograms — only the two
+    /// numbers printed here are converted. Both are estimates, so they take the
+    /// seam's whole-unit `estimateLabel` rather than an entered weight's
+    /// precision.
     private var estimateLine: String {
-        let current = String(format: "%.0f kg", detail.estimatedOneRepMax)
+        let current = WeightFormatting.estimateLabel(detail.estimatedOneRepMax, in: weightUnit)
         if let previous = detail.previousBest {
             return String(format: "history.detail.pr_e1rm_vs".localized,
-                          current, String(format: "%.0f kg", previous))
+                          current,
+                          WeightFormatting.estimateLabel(previous, in: weightUnit))
         }
         return String(format: "history.detail.pr_e1rm".localized, current)
-    }
-
-    private func formatKg(_ weight: Double) -> String {
-        String(format: "%g kg", weight)
     }
 }

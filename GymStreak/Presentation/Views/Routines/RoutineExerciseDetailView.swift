@@ -3,12 +3,15 @@ import SwiftUI
 struct RoutineExerciseDetailView: View {
     @Bindable var routineExercise: RoutineExercise
     @ObservedObject var viewModel: RoutinesViewModel
+    @Environment(\.weightUnit) private var weightUnit
     @State private var showingEditExercise = false
     @State private var showingDeleteAlert = false
     @State private var showingDeleteSetAlert = false
     @State private var setPendingDeletion: ExerciseSet?
     @State private var editingSetId: UUID?
     @State private var editingReps: Int = 10
+    /// Canonical kilograms of the expanded set. `WeightValueField` edits it
+    /// through a display-space mirror.
     @State private var editingWeight: Double = 0.0
     @State private var restTimerExpanded = false
 
@@ -72,7 +75,10 @@ struct RoutineExerciseDetailView: View {
                                     .font(.headline)
                                     .foregroundColor(.primary)
                                 Spacer()
-                                Text("routine_exercise_detail.set_detail".localized(set.reps, set.weight))
+                                Text("routine_exercise_detail.set_detail".localized(
+                                    set.reps,
+                                    WeightFormatting.label(set.weight, in: weightUnit)
+                                ))
                                     .foregroundColor(.secondary)
                                 Image(systemName: "chevron.right")
                                     .font(.caption)
@@ -97,18 +103,20 @@ struct RoutineExerciseDetailView: View {
                                         }
                                 }
 
-                                HStack {
-                                    Text("routine_exercise_detail.weight_label".localized)
-                                    Spacer()
-                                    TextField("0.0", value: $editingWeight, format: .number)
-                                        .keyboardType(.decimalPad)
-                                        .multilineTextAlignment(.trailing)
-                                        .frame(width: 80)
-                                        .onChange(of: editingWeight) { _, newValue in
-                                            guard editingSetId == set.id else { return }
-                                            updateSet(set, weight: newValue)
-                                        }
-                                }
+                                WeightValueField(
+                                    label: "routine_exercise_detail.weight_label".localized(
+                                        WeightFormatting.unitWord(weightUnit)
+                                    ),
+                                    kilograms: $editingWeight
+                                )
+                            }
+                            .onChange(of: editingWeight) { _, newValue in
+                                // Guards the documented animation race: the
+                                // collapsing row's handlers are still live while
+                                // the shared editing state already holds the
+                                // newly expanded set's values.
+                                guard editingSetId == set.id else { return }
+                                updateSet(set, weight: newValue)
                             }
                             .padding(.top, 8)
                             .transition(.asymmetric(
@@ -238,6 +246,8 @@ struct SetRowView: View {
     let set: ExerciseSet
     var showChevron: Bool = false
 
+    @Environment(\.weightUnit) private var weightUnit
+
     var body: some View {
         HStack {
             VStack(alignment: .leading, spacing: 4) {
@@ -248,7 +258,7 @@ struct SetRowView: View {
                 HStack {
                     Text("\(set.reps) reps")
                     Text("•")
-                    Text("\(set.weight, specifier: "%.1f") kg")
+                    Text(WeightFormatting.label(set.weight, in: weightUnit))
                     Text("•")
                     Text("\(TimeFormatting.formatRestTime(set.restTime)) rest")
                 }

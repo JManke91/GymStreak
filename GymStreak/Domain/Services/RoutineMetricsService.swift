@@ -121,18 +121,28 @@ enum RoutineMetricsService {
         return (firstReps, firstWeight)
     }
 
-    /// Compact scheme summary for picker rows, e.g. "3×10", "4×8–12 · 20kg".
+    /// Compact scheme summary for picker rows, e.g. "3×10", "4×8–12 · 20 kg".
     /// Weight is appended only when uniform across all sets and non-zero
     /// (alternatives commonly seed at weight 0). Shared by the in-workout Swap
     /// picker and the routine alternatives browse sheet so both read identically.
-    static func setSchemeSummary(reps: [Int], weights: [Double]) -> String? {
+    ///
+    /// `formattingWeight` is supplied by the caller for the same reason
+    /// `uniformSetScheme` hands back raw values: the weight arrives in canonical
+    /// kilograms and only the caller knows the unit the user reads. This method
+    /// used to interpolate `"%gkg"` itself — a localized unit word emitted from
+    /// the Domain layer, and a kilogram one at that.
+    static func setSchemeSummary(
+        reps: [Int],
+        weights: [Double],
+        formattingWeight: (Double) -> String
+    ) -> String? {
         guard !reps.isEmpty else { return nil }
         let repsPart = reps.min() == reps.max()
             ? "\(reps[0])"
             : "\(reps.min() ?? 0)–\(reps.max() ?? 0)"
         var summary = "\(reps.count)×\(repsPart)"
         if let weight = weights.first, weight > 0, weights.allSatisfy({ $0 == weight }) {
-            summary += " · \(String(format: "%gkg", weight))"
+            summary += " · \(formattingWeight(weight))"
         }
         return summary
     }

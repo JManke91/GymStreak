@@ -16,6 +16,7 @@ import SwiftUI
 /// a contradiction rather than as two different pieces of work.
 struct RecentUsageCardView: View {
     let entry: ExerciseRecentUsage
+    @Environment(\.weightUnit) private var weightUnit
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -43,7 +44,11 @@ struct RecentUsageCardView: View {
                         Text(
                             String(
                                 format: "history.exercise.best_set".localized,
-                                String(format: "%gkg × %d", best.weight, best.reps)
+                                String(
+                                    format: "%@ × %d",
+                                    WeightFormatting.label(best.weight, in: weightUnit),
+                                    best.reps
+                                )
                             )
                         )
                         .font(.system(size: 11))
@@ -129,11 +134,13 @@ struct RecentUsageCardView: View {
             ForEach(entry.sets) { set in
                 VStack(spacing: 2) {
                     HStack(alignment: .firstTextBaseline, spacing: 1) {
-                        Text(String(format: "%g", set.weight))
+                        Text(WeightFormatting.number(set.weight, in: weightUnit))
                             .font(.system(size: 13, weight: .bold, design: .rounded))
                             .monospacedDigit()
                             .foregroundStyle(Color.white)
-                        Text("kg")
+                        // The number and the word are styled differently, so the
+                        // pairing cannot come from the seam's `label` here.
+                        Text(WeightFormatting.unitWord(weightUnit))
                             .font(.system(size: 9, weight: .medium))
                             .foregroundStyle(Color.white.opacity(0.5))
                     }

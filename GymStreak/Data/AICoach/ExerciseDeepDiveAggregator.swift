@@ -7,8 +7,17 @@ import Foundation
 import SwiftData
 import os
 
-/// Builds an `ExerciseDeepDiveInput` from all historical data for a single exercise.
-/// Returns `nil` when there is insufficient history (fewer than 4 completed sets total).
+/// Builds an `ExerciseDeepDiveInput` from the historical data the exercise detail screen
+/// is showing: one exercise, one selected usage, one load behaviour.
+///
+/// The narrative sits directly under the chart and speaks in full sentences, so it is
+/// *more* likely to be believed than the numbers above it — which is why it resolves rows
+/// with the chart's three rules rather than any of its own. See `RowFilter` for identity
+/// and load-behaviour homogeneity, and `buildInput` for what a blended `.combined` view
+/// deliberately withholds.
+///
+/// Returns `nil` when the selected usage has insufficient history (fewer than 4 completed
+/// sets, or fewer than two sessions).
 struct ExerciseDeepDiveAggregator {
 
     private static let logger = Logger(subsystem: "com.gymstreak", category: "ExerciseDeepDiveAggregator")
@@ -21,30 +30,45 @@ struct ExerciseDeepDiveAggregator {
 
     // MARK: - Public API
 
-    /// Builds the AI Coach deep-dive input for a single exercise.
+    /// Builds the AI Coach deep-dive input for a single exercise, describing **the body
+    /// of work the screen is showing**.
+    ///
     /// - Parameters:
     ///   - exercise: The live `Exercise` to analyze.
     ///   - locale: User's locale (for month label formatting).
     ///   - modelContext: SwiftData context for history queries.
+    ///   - usage: the usage the exercise detail screen is showing — the selection **and**
+    ///     the label the picker used for it — handed down rather than re-derived.
+    ///     `ExerciseProgressViewModel` already resolved both, and a second resolution
+    ///     could disagree with the menu the user picked from. `.combined` folds every
+    ///     usage together, which is what an exercise trained exactly one way always is.
     ///   - now: Injection point for current date (injectable for tests).
-    /// - Returns: `nil` if the exercise has fewer than 4 completed sets across all history.
+    /// - Returns: `nil` if the selected usage has fewer than 4 completed sets, or fewer
+    ///   than two sessions, across all history.
     func buildInput(
         exercise: Exercise,
         locale: Locale,
         modelContext: ModelContext,
+        usage: DeepDiveUsage = .combined,
         now: Date = Date()
     ) -> ExerciseDeepDiveInput? {
-        let sessions = fetchSessions(exercise: exercise, modelContext: modelContext)
-        // Whether the legacy name fallback may be used at all — see the matching note below.
-        // Resolved from the live library, once, exactly as the chart resolves it.
-        let nameIsUnique = ExerciseProgressAggregator.isNameUnique(
-            exercise.name,
-            in: (try? modelContext.fetch(FetchDescriptor<Exercise>())) ?? []
-        )
+        let usageSelection = usage.selection
+        let sessions = fetchSessionsForFullAggregation(modelContext: modelContext)
+        let library = (try? modelContext.fetch(FetchDescriptor<Exercise>())) ?? []
+        let filter = RowFilter(exerciseId: exercise.id, exerciseName: exercise.name, library: library)
+
+        // Only for `.combined`, and only because that is the branch whose answer depends
+        // on it: whether combined is a genuine blend or simply the one way this exercise
+        // has ever been trained. A selected usage is one usage by definition, so the
+        // second all-time pass over history is not run for it.
+        let blendedUsageCount = usageSelection == .combined
+            ? ExerciseUsageResolver.options(in: sessions, matching: filter.matches).count
+            : 1
+
         let dataPoints = buildDataPoints(
-            exercise: exercise,
             sessions: sessions,
-            nameIsUnique: nameIsUnique
+            filter: filter,
+            usageSelection: usageSelection
         )
 
         // Insufficient data guard: require at least 4 completed sets
@@ -54,21 +78,44 @@ struct ExerciseDeepDiveAggregator {
         let sortedPoints = dataPoints.sorted { $0.date < $1.date }
         guard let first = sortedPoints.first, let last = sortedPoints.last else { return nil }
 
+        let peak = findPeak(points: sortedPoints, locale: locale)
+        let historyRange = buildHistoryRange(first: first.date, last: last.date, locale: locale)
+
+        // A blend states no trend. The first-to-last delta across several usages is
+        // decided by which usage happens to sit at each end of the range, which is the
+        // very number this screen's Trend card withholds by printing *Gemischt*
+        // (`docs/progress-charts.md`). Segments are first-to-last deltas too, so they go
+        // with it — a coach that cannot state the trend but announces "improving,
+        // +5.0 kg est. 1RM" has withheld nothing.
+        guard blendedUsageCount <= 1 else {
+            return ExerciseDeepDiveInput(
+                locale: locale.identifier,
+                exerciseName: exercise.name,
+                usageLabel: nil,
+                blendedUsageCount: blendedUsageCount,
+                totalSessions: sortedPoints.count,
+                historyRange: historyRange,
+                overallProgression: nil,
+                peak: peak,
+                strongestSegment: nil,
+                currentSegment: nil
+            )
+        }
+
         let firstEst = first.bestEst1RM
         let lastEst = last.bestEst1RM
         let deltaKg = lastEst - firstEst
         let percentChange = firstEst > 0 ? Int((deltaKg / firstEst * 100).rounded()) : 0
 
-        let peak = findPeak(points: sortedPoints, locale: locale)
         let weeklyBuckets = buildWeeklyBuckets(points: sortedPoints)
         let strongestSegment = findStrongestSegment(buckets: weeklyBuckets, locale: locale, now: now)
         let currentSegment = buildCurrentSegment(buckets: weeklyBuckets, locale: locale, now: now)
 
-        let historyRange = buildHistoryRange(first: first.date, last: last.date)
-
         return ExerciseDeepDiveInput(
             locale: locale.identifier,
             exerciseName: exercise.name,
+            usageLabel: usage.label,
+            blendedUsageCount: blendedUsageCount,
             totalSessions: sortedPoints.count,
             historyRange: historyRange,
             overallProgression: ProgressionSummary(
@@ -83,62 +130,135 @@ struct ExerciseDeepDiveAggregator {
 
     // MARK: - Data Fetch
 
-    private func fetchSessions(exercise: Exercise, modelContext: ModelContext) -> [WorkoutSession] {
-        let descriptor = FetchDescriptor<WorkoutSession>(
-            predicate: #Predicate { session in
-                session.endTime != nil
-            },
-            sortBy: [SortDescriptor(\.startTime, order: .forward)]
-        )
-        return (try? modelContext.fetch(descriptor)) ?? []
+    /// Every completed session with `workoutExercises` and their `sets` already
+    /// registered. **For `buildInput` only** — see `lastCompletedSetTimestamp` for why it
+    /// must not share this.
+    ///
+    /// `CompletedSessionFetch.withFullGraph` warns that it is model-actor-only because it
+    /// materializes the entire workout graph. `buildInput` walks that whole graph anyway —
+    /// every session, every matching row, every completed set, and a second all-time pass
+    /// for `.combined` — so the prefetch makes its cost smaller, not larger; without it
+    /// the same traversal faults once per row and once per set. It is still a main-actor
+    /// call to a model-actor helper, and it is on the tap path behind the `.preparing`
+    /// skeleton rather than on appear. **Ticket 02 moves `buildInput` off the main actor;
+    /// until it lands, do not add a second caller here.**
+    ///
+    /// Order is irrelevant to this caller: `buildDataPoints` sorts its points itself, and
+    /// `ExerciseUsageResolver` ranks descriptors by an explicit comparison.
+    private func fetchSessionsForFullAggregation(modelContext: ModelContext) -> [WorkoutSession] {
+        (try? CompletedSessionFetch.withFullGraph(in: modelContext)) ?? []
     }
 
     // MARK: - Cache Key Query
 
-    /// Returns the most recent session date containing a completed set of this exercise,
-    /// used by `ExerciseDeepDiveViewModel` to build its cache key. Returns `nil` when no
-    /// matching completed set is found.
+    /// Returns the most recent session date containing a completed set of **the selected
+    /// usage** of this exercise, used by `ExerciseDeepDiveViewModel` to build its cache
+    /// key. Returns `nil` when no matching completed set is found.
     ///
-    /// **Matches with the same identity rule as `buildDataPoints`.** It used to accept
-    /// `we.exerciseId == exerciseId || we.exerciseId == nil` — no name check at all — so
-    /// *any* legacy row with a completed set in the newest session advanced this
-    /// exercise's cache key, however unrelated. The cost lands on the user: a moved key is
-    /// a cache miss, and for a free user a miss spends a monthly allowance unit
+    /// **Filtered exactly as `buildDataPoints` filters.** Identity is the shared
+    /// `ExerciseProgressAggregator.matches(_:exerciseId:exerciseName:nameIsUnique:)`; a
+    /// row whose `loadBehavior` differs from the live library's is not part of this
+    /// series; and a row belonging to another usage is not part of this narrative. Every
+    /// row this admits that the narrative does not describe is a needless cache miss —
+    /// and for a free user a miss spends a monthly allowance unit
     /// (`docs/pro-subscription.md` §5e) to regenerate a narrative that had not changed.
-    func lastCompletedSetTimestamp(exerciseId: UUID, modelContext: ModelContext) -> Date? {
+    /// It used to accept `we.exerciseId == exerciseId || we.exerciseId == nil` — no name
+    /// check at all — so *any* legacy row in the newest session moved this key.
+    func lastCompletedSetTimestamp(
+        exerciseId: UUID,
+        modelContext: ModelContext,
+        usageSelection: ExerciseUsageSelection = .combined
+    ) -> Date? {
         let library = (try? modelContext.fetch(FetchDescriptor<Exercise>())) ?? []
         // Without the live entry there is no name to match on, so only the id can be
         // matched — which is the conservative half of the rule, never the guessing half.
-        let exercise = library.first { $0.id == exerciseId }
-        let exerciseName = exercise?.name ?? ""
-        let nameIsUnique = exercise.map {
-            ExerciseProgressAggregator.isNameUnique($0.name, in: library)
-        } ?? false
+        // `RowFilter` then falls back to `.resistance`, the same fallback the chart's
+        // `buildSnapshot` takes for an exercise the library no longer holds.
+        let exerciseName = library.first { $0.id == exerciseId }?.name ?? ""
+        let filter = RowFilter(exerciseId: exerciseId, exerciseName: exerciseName, library: library)
 
-        let descriptor = FetchDescriptor<WorkoutSession>(
+        // Its own fetch, deliberately **not** `fetchSessionsForFullAggregation`. This runs
+        // from `checkCache` on the screen's `.task` — appear-time work on the main actor —
+        // and it returns at the first matching session, which is normally the newest one.
+        // Materializing every `WorkoutExercise` and every `WorkoutSet` in the database to
+        // read one session is the `docs/history-performance.md` hang, bought for nothing.
+        // One direct key path is the documented use of `relationshipKeyPathsForPrefetching`
+        // (as in `CompletedSessionFetch.withRoutine`): it saves the per-row fault on the
+        // sessions actually visited, and the set fault stays per visited row.
+        //
+        // The sort is written here because the loop depends on it: newest first, so the
+        // first match is the answer.
+        var descriptor = FetchDescriptor<WorkoutSession>(
             predicate: #Predicate { $0.endTime != nil },
             sortBy: [SortDescriptor(\.startTime, order: .reverse)]
         )
+        descriptor.relationshipKeyPathsForPrefetching = [\.workoutExercises]
         guard let sessions = try? modelContext.fetch(descriptor) else { return nil }
 
-        var latestTimestamp: Date?
         for session in sessions {
-            for we in session.workoutExercisesList {
-                guard ExerciseProgressAggregator.matches(
-                    we,
-                    exerciseId: exerciseId,
-                    exerciseName: exerciseName,
-                    nameIsUnique: nameIsUnique
-                ) else { continue }
-                let completedSets = we.setsList.filter(\.isCompleted)
-                if !completedSets.isEmpty {
-                    latestTimestamp = session.startTime
-                    break
+            let hasCompletedSet = ExerciseUsageResolver
+                .keyedRows(in: session, matching: filter.matches)
+                .contains {
+                    ExerciseUsageResolver.belongs($0.key, to: usageSelection)
+                        && $0.exercise.setsList.contains(where: \.isCompleted)
                 }
-            }
-            if latestTimestamp != nil { break }
+            if hasCompletedSet { return session.startTime }
         }
-        return latestTimestamp
+        return nil
+    }
+
+    // MARK: - Row filter
+
+    /// The two rules that decide which history rows make up one series: **identity** — the
+    /// shared `ExerciseProgressAggregator.matches(_:exerciseId:exerciseName:nameIsUnique:)`,
+    /// deliberately not a local copy — and **`loadBehavior` homogeneity**. Resolved once
+    /// from the live library, exactly as `ExerciseProgressAggregator.buildSnapshot`
+    /// resolves them for the chart on the same screen.
+    ///
+    /// This type used to carry its own identity rule that applied the legacy name fallback
+    /// **without** the uniqueness gate: `we.exerciseId == nil && name matches`. Where two
+    /// live exercises share a name, that claimed every ambiguous pre-`exerciseId` row for
+    /// *both* of them — so the coach narrated a trend over a series blended across two
+    /// different exercises, and did it on a screen whose chart deliberately drops those
+    /// rows. Reported from a device check: the coach read "in den letzten 19 Sitzungen …
+    /// -43%" beside a chart and a row that both said 15 workouts. Attribution does not save
+    /// this path either — double-counting survives what dropping does not.
+    ///
+    /// The `loadBehavior` half keeps the entered number meaning one thing throughout a
+    /// series. A uniquely-named exercise whose library load behaviour changed after some
+    /// workouts were logged otherwise has a narrative mixing counterweight *assistance*
+    /// values with physical loads (`docs/assisted-exercise-progress.md`).
+    ///
+    /// `ExerciseProgressAggregator`, `FortschrittAggregator` and `PeriodRecapAggregator`
+    /// all gate the fallback. Four copies of one rule is how three of them stayed right
+    /// while this one drifted, so this one is a call, not a copy — in every place this
+    /// type resolves a row: `buildInput`, `buildDataPoints` and `lastCompletedSetTimestamp`
+    /// all go through this one value.
+    private struct RowFilter {
+        let exerciseId: UUID?
+        let exerciseName: String
+        let nameIsUnique: Bool
+        let loadBehavior: ExerciseLoadBehavior
+
+        init(exerciseId: UUID?, exerciseName: String, library: [Exercise]) {
+            self.exerciseId = exerciseId
+            self.exerciseName = exerciseName
+            self.nameIsUnique = ExerciseProgressAggregator.isNameUnique(exerciseName, in: library)
+            self.loadBehavior = ExerciseProgressAggregator.loadBehavior(
+                exerciseId: exerciseId,
+                exerciseName: exerciseName,
+                in: library
+            )
+        }
+
+        func matches(_ row: WorkoutExercise) -> Bool {
+            ExerciseProgressAggregator.matches(
+                row,
+                exerciseId: exerciseId,
+                exerciseName: exerciseName,
+                nameIsUnique: nameIsUnique
+            ) && row.loadBehavior == loadBehavior
+        }
     }
 
     // MARK: - Per-Session Data Points
@@ -151,16 +271,17 @@ struct ExerciseDeepDiveAggregator {
         let setCount: Int
     }
 
+    /// One point per session that holds a completed set of the selected usage.
+    ///
+    /// Rows are keyed by `ExerciseUsageResolver.keyedRows(in:matching:)` and filtered by
+    /// `belongs(_:to:)` — the same two calls `ExerciseProgressAggregator.buildProgress`
+    /// makes — so the coach's session count is the chart's session count and its
+    /// progression is computed over the chart's points.
     private func buildDataPoints(
-        exercise: Exercise,
         sessions: [WorkoutSession],
-        nameIsUnique: Bool
+        filter: RowFilter,
+        usageSelection: ExerciseUsageSelection
     ) -> [SessionDataPoint] {
-        // Resolve by exerciseId (primary) or unique-name fallback — the same rule the
-        // chart on the same screen applies. See the matching note below.
-        let exerciseId = exercise.id
-        let exerciseName = exercise.name
-
         var points: [SessionDataPoint] = []
 
         for session in sessions {
@@ -169,13 +290,12 @@ struct ExerciseDeepDiveAggregator {
             var bestR: Int = 0
             var setCount = 0
 
-            for we in session.workoutExercisesList {
-                guard ExerciseProgressAggregator.matches(
-                    we,
-                    exerciseId: exerciseId,
-                    exerciseName: exerciseName,
-                    nameIsUnique: nameIsUnique
-                ) else { continue }
+            let rows = ExerciseUsageResolver
+                .keyedRows(in: session, matching: filter.matches)
+                .filter { ExerciseUsageResolver.belongs($0.key, to: usageSelection) }
+                .map(\.exercise)
+
+            for we in rows {
                 let usePlanned = we.progressiveOverloadApplied
                 let completed = we.setsList.filter(\.isCompleted)
                 setCount += completed.count
@@ -205,27 +325,6 @@ struct ExerciseDeepDiveAggregator {
 
         return points
     }
-
-    // Matching is `ExerciseProgressAggregator.matches(_:exerciseId:exerciseName:nameIsUnique:)`,
-    // deliberately not a local copy.
-    //
-    // This type used to carry its own version that applied the legacy name fallback
-    // **without** the uniqueness gate: `we.exerciseId == nil && name matches`. Where two
-    // live exercises share a name, that claimed every ambiguous pre-`exerciseId` row for
-    // *both* of them — so the coach narrated a trend over a series blended across two
-    // different exercises, and did it on a screen whose chart deliberately drops those
-    // rows. Reported from a device check: the coach read "in den letzten 19 Sitzungen …
-    // -43%" beside a chart and a row that both said 15 workouts. Attribution does not save
-    // this path either — double-counting survives what dropping does not.
-    //
-    // `ExerciseProgressAggregator`, `FortschrittAggregator` and `PeriodRecapAggregator`
-    // all gate the fallback. Four copies of one rule is how three of them stayed right
-    // while this one drifted, so this one is now a call, not a copy — in both places this
-    // type resolves identity: here and in `lastCompletedSetTimestamp`.
-    //
-    // Identity only. `buildProgress` additionally filters by `loadBehavior` and by the
-    // selected usage; this aggregator does neither, so a coach session count may still
-    // exceed the chart's for reasons that have nothing to do with the name.
 
     // MARK: - Peak
 
@@ -379,9 +478,17 @@ struct ExerciseDeepDiveAggregator {
         return fmt.string(from: date)
     }
 
-    private func buildHistoryRange(first: Date, last: Date) -> String {
-        let fmt = DateFormatter()
-        fmt.dateFormat = "yyyy-MM"
-        return "\(fmt.string(from: first)) to \(fmt.string(from: last))"
+    /// The period the analysis covers, in the reader's own language — "Juli 2026 –
+    /// August 2026", collapsing to a single label when both ends fall in one month.
+    ///
+    /// It used to be `"2026-07 to 2026-08"`, a machine format handed straight to a
+    /// language model, and the model echoed it: the narrative opened "in den letzten
+    /// 2026-07 und 2026-08". Exactly the failure the workout-analysis surface already
+    /// hit with raw ISO dates (`docs/ai-coach.md` §4) — so this uses the same localized
+    /// `MMMM yyyy` that `monthLabel` builds for the peak.
+    private func buildHistoryRange(first: Date, last: Date, locale: Locale) -> String {
+        let start = Self.monthLabel(for: first, locale: locale)
+        let end = Self.monthLabel(for: last, locale: locale)
+        return start == end ? start : "\(start) – \(end)"
     }
 }

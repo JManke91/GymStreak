@@ -37,55 +37,48 @@ struct PendingRoutineExercise: Identifiable {
         self.targetRepMax = targetRepMax
     }
 
-    /// Summary of sets for display (e.g., "3 sets • 8-12 reps • 45kg")
-    var setSummary: String {
-        guard !sets.isEmpty else { return "No sets configured" }
+    /// Summary of sets for display, e.g. "3 sets • 8-12 reps • 45 kg".
+    ///
+    /// - Parameter unit: the unit the calling screen renders in, read from
+    ///   `\.weightUnit`.
+    func setSummary(in unit: WeightUnit) -> String {
+        guard !sets.isEmpty else { return "configure_exercise.empty.title".localized }
 
-        let setCount = sets.count
-        let repsRange = getRepsRange()
-        let weightRange = getWeightRange()
-
-        var summary = "\(setCount) set\(setCount == 1 ? "" : "s")"
-
-        if !repsRange.isEmpty {
-            summary += " • \(repsRange)"
-        }
-
-        if !weightRange.isEmpty {
-            summary += " • \(weightRange)"
-        }
-
-        return summary
+        let parts = [
+            "routine.sets_count".localized(sets.count),
+            repsRange,
+            weightRange(in: unit)
+        ]
+        return parts.filter { !$0.isEmpty }.joined(separator: " • ")
     }
 
-    private func getRepsRange() -> String {
+    private var repsRange: String {
         let reps = sets.map { $0.reps }
         guard let minReps = reps.min(), let maxReps = reps.max() else { return "" }
 
-        if minReps == maxReps {
-            return "\(minReps) reps"
-        } else {
-            return "\(minReps)-\(maxReps) reps"
-        }
+        return minReps == maxReps
+            ? "set.reps".localized(minReps)
+            : "set.reps_range".localized(minReps, maxReps)
     }
 
-    private func getWeightRange() -> String {
+    /// Empty for a bodyweight scheme (every set at 0), which is how the summary
+    /// stays "3 sets • 10 reps" instead of claiming a weight.
+    private func weightRange(in unit: WeightUnit) -> String {
         let weights = sets.map { $0.weight }
-        guard let minWeight = weights.min(), let maxWeight = weights.max() else { return "" }
-
-        // Don't show weight if all are 0 (bodyweight exercise)
-        if maxWeight == 0 {
+        guard let minWeight = weights.min(), let maxWeight = weights.max(), maxWeight > 0 else {
             return ""
         }
 
-        let formatter = NumberFormatter()
-        formatter.maximumFractionDigits = 1
-        formatter.minimumFractionDigits = 0
-
         if minWeight == maxWeight {
-            return "\(formatter.string(from: NSNumber(value: minWeight)) ?? "0")kg"
-        } else {
-            return "\(formatter.string(from: NSNumber(value: minWeight)) ?? "0")-\(formatter.string(from: NSNumber(value: maxWeight)) ?? "0")kg"
+            return WeightFormatting.label(maxWeight, in: unit)
         }
+        // One unit word for the pair — "40–45 kg", not "40 kg–45 kg".
+        return WeightFormatting.labelled(
+            "set.weight_range".localized(
+                WeightFormatting.number(minWeight, in: unit),
+                WeightFormatting.number(maxWeight, in: unit)
+            ),
+            in: unit
+        )
     }
 }

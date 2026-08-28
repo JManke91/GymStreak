@@ -9,6 +9,7 @@ import SwiftUI
 
 struct CreateRoutineView: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.weightUnit) private var weightUnit
 
     @State private var routineName: String = ""
     @State private var pendingExercises: [PendingRoutineExercise] = []
@@ -62,7 +63,7 @@ struct CreateRoutineView: View {
                                 Text(pending.exercise.name)
                                     .font(.headline)
 
-                                Text(pending.setSummary)
+                                Text(pending.setSummary(in: weightUnit))
                                     .font(.caption)
                                     .foregroundColor(.secondary)
                             }
