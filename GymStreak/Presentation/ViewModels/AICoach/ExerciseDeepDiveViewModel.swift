@@ -12,19 +12,23 @@
 //
 
 import Foundation
-import SwiftData
 import FoundationModels
 import os
 
 /// Orchestrates exercise deep-dive generation for `ExerciseProgressChartView`.
 ///
 /// Lifecycle:
-/// 1. `checkCache(exercise:usage:locale:modelContext:)` runs from the screen's
-///    `.task(id:)`. If a cached result exists for the current exercise + usage +
-///    last-set timestamp, the state transitions straight to `.success(text:isCached:true)`.
+/// 1. `checkCache(exerciseId:usage:)` runs from the screen's `.task(id:)`. If a cached
+///    result exists for the current exercise + usage + last-set timestamp, the state
+///    transitions straight to `.success(text:isCached:true)`.
 /// 2. If no cache hit, the view renders `CoachDeepDiveButton`. Tapping it calls
-///    `generate(exercise:usage:locale:modelContext:)`.
+///    `generate(exerciseId:exerciseName:usage:locale:)`.
 /// 3. `regenerate(...)` bypasses the cache and forces a fresh generation.
+///
+/// **No `ModelContext` reaches this type.** Every history read goes through
+/// `ExerciseDeepDiveFactProviding`, whose conformer answers on a model actor — this is a
+/// `@MainActor` class, and both reads walk all of completed history (ticket 02, and Hard
+/// rule 1 of the architecture: no `FetchDescriptor` in `Presentation/`).
 ///
 /// **Every entry point takes the usage the screen is showing.** The narrative describes
 /// one usage, so it is cached per usage and generated per usage; there is deliberately no
@@ -62,9 +66,9 @@ final class ExerciseDeepDiveViewModel {
     // MARK: - Private
 
     private let logger = Logger(subsystem: "app.gymstreak.aicoach", category: "ExerciseDeepDiveVM")
-    private let aggregator = ExerciseDeepDiveAggregator()
     private var streamTask: Task<Void, Never>?
 
+    private let facts: any ExerciseDeepDiveFactProviding
     private let service: AICoachServicing
     private let cache: AICoachCaching
     private let preferences: AICoachPreferencesProviding
@@ -77,17 +81,20 @@ final class ExerciseDeepDiveViewModel {
     // `= Foo.shared` default argument would be evaluated in a nonisolated
     // context (error under Swift 6 language mode).
     //
-    // `allowanceGate` has no such default: it carries the entitlement and the
-    // paywall seam, which per Hard rule 2 come from `AppDependencies` and never
-    // from a singleton.
+    // `allowanceGate` and `facts` have no such default: the gate carries the
+    // entitlement and the paywall seam, and `facts` is the model-actor-backed
+    // history boundary. Per Hard rule 2 both come from `AppDependencies` and
+    // never from a singleton.
     init(
         allowanceGate: AICoachAllowanceGate,
+        facts: any ExerciseDeepDiveFactProviding,
         service: AICoachServicing? = nil,
         cache: AICoachCaching? = nil,
         preferences: AICoachPreferencesProviding? = nil,
         availability: AICoachAvailabilityProviding? = nil
     ) {
         self.allowanceGate = allowanceGate
+        self.facts = facts
         self.service = service ?? AICoachService.shared
         self.cache = cache ?? AICoachCache.shared
         self.preferences = preferences ?? AICoachPreferences.shared
@@ -113,30 +120,35 @@ final class ExerciseDeepDiveViewModel {
 
     /// Checks the disk cache silently. If a cached narrative exists, transitions
     /// directly to `.success` without user interaction.
-    func checkCache(
-        exercise: Exercise,
-        usage: DeepDiveUsage,
-        locale: Locale,
-        modelContext: ModelContext
-    ) async {
+    ///
+    /// Never spends an allowance unit and never aggregates: it asks the read boundary for
+    /// the cache timestamp alone, which is a bounded probe rather than a walk of history.
+    func checkCache(exerciseId: UUID, usage: DeepDiveUsage) async {
         guard preferences.isExerciseDeepDiveEffectivelyEnabled,
               availability.isAvailable else { return }
 
-        guard let key = cacheKey(
-            exerciseId: exercise.id,
-            usageSelection: usage.selection,
-            modelContext: modelContext
+        guard let timestamp = await facts.fetchDeepDiveCacheTimestamp(
+            exerciseId: exerciseId,
+            usageSelection: usage.selection
         ) else { return }
 
+        let key = Self.cacheKey(
+            exerciseId: exerciseId,
+            usageSelection: usage.selection,
+            timestamp: timestamp
+        )
         if let cached = cache.loadExerciseDeepDive(key: key) {
-            logger.debug("Cache hit for exercise deep-dive \(exercise.id, privacy: .private)")
+            logger.debug("Cache hit for exercise deep-dive \(exerciseId, privacy: .private)")
             state = .success(text: cached.narrative, isCached: true)
         }
     }
 
-    /// Generates a deep-dive narrative for `exercise`, using cache if available.
+    /// Generates a deep-dive narrative for the exercise, using cache if available.
     /// Fire-and-forget: cancels any in-flight stream before starting a new one.
     /// Transitions to `.preparing` synchronously so the UI responds to the tap immediately.
+    ///
+    /// Takes the exercise as `id` + `name` rather than the `@Model`: the aggregation runs
+    /// on a model actor, which a `PersistentModel` may not cross onto.
     ///
     /// Returns `false` when the free monthly allowance is spent — the gate has
     /// raised `.exerciseDeepDive` and the state is left untouched, so the "Ask
@@ -144,17 +156,17 @@ final class ExerciseDeepDiveViewModel {
     /// empty surface behind the paywall.
     @discardableResult
     func generate(
-        exercise: Exercise,
+        exerciseId: UUID,
+        exerciseName: String,
         usage: DeepDiveUsage,
-        locale: Locale,
-        modelContext: ModelContext
+        locale: Locale
     ) -> Bool {
         guard let ticket = allowanceGate.requestGeneration() else { return false }
         start(
-            exercise: exercise,
+            exerciseId: exerciseId,
+            exerciseName: exerciseName,
             usage: usage,
             locale: locale,
-            modelContext: modelContext,
             bypassCache: false,
             ticket: ticket
         )
@@ -166,27 +178,22 @@ final class ExerciseDeepDiveViewModel {
     ///
     /// The gate is asked **before** the cache is invalidated: a refused
     /// regeneration must leave the narrative the user already paid an allowance
-    /// for both on screen and on disk (§7 Rule 4).
+    /// for both on screen and on disk (§7 Rule 4). The invalidation itself happens
+    /// inside `run`, off the back of the one aggregate this generation fetches —
+    /// computing the key here would mean a second walk of history for the same answer.
     @discardableResult
     func regenerate(
-        exercise: Exercise,
+        exerciseId: UUID,
+        exerciseName: String,
         usage: DeepDiveUsage,
-        locale: Locale,
-        modelContext: ModelContext
+        locale: Locale
     ) -> Bool {
         guard let ticket = allowanceGate.requestGeneration() else { return false }
-        if let key = cacheKey(
-            exerciseId: exercise.id,
-            usageSelection: usage.selection,
-            modelContext: modelContext
-        ) {
-            cache.invalidateExerciseDeepDive(key: key)
-        }
         start(
-            exercise: exercise,
+            exerciseId: exerciseId,
+            exerciseName: exerciseName,
             usage: usage,
             locale: locale,
-            modelContext: modelContext,
             bypassCache: true,
             ticket: ticket
         )
@@ -201,10 +208,10 @@ final class ExerciseDeepDiveViewModel {
     /// back to the user. The gate holds only app-lifetime collaborators, so a
     /// strong capture neither leaks nor cycles.
     private func start(
-        exercise: Exercise,
+        exerciseId: UUID,
+        exerciseName: String,
         usage: DeepDiveUsage,
         locale: Locale,
-        modelContext: ModelContext,
         bypassCache: Bool,
         ticket: AICoachAllowanceGate.Ticket
     ) {
@@ -216,10 +223,10 @@ final class ExerciseDeepDiveViewModel {
                 return
             }
             await self.run(
-                exercise: exercise,
+                exerciseId: exerciseId,
+                exerciseName: exerciseName,
                 usage: usage,
                 locale: locale,
-                modelContext: modelContext,
                 bypassCache: bypassCache,
                 ticket: ticket
             )
@@ -251,10 +258,10 @@ final class ExerciseDeepDiveViewModel {
     ///   exercise with too little data, a failed or cancelled stream. Only a
     ///   completed narrative keeps it.
     private func run(
-        exercise: Exercise,
+        exerciseId: UUID,
+        exerciseName: String,
         usage: DeepDiveUsage,
         locale: Locale,
-        modelContext: ModelContext,
         bypassCache: Bool,
         ticket: AICoachAllowanceGate.Ticket
     ) async {
@@ -273,39 +280,45 @@ final class ExerciseDeepDiveViewModel {
             return
         }
 
-        // 3. Cache hit (skipped when bypassing)
-        if !bypassCache {
-            if let key = cacheKey(
-                exerciseId: exercise.id,
-                usageSelection: usage.selection,
-                modelContext: modelContext
-               ),
-               let cached = cache.loadExerciseDeepDive(key: key) {
-                logger.debug("Cache hit for exercise deep-dive \(exercise.id, privacy: .private)")
-                state = .success(text: cached.narrative, isCached: true)
-                return
-            }
+        // 3. One walk of history, on the model actor, answering both questions this
+        //    generation asks of it: which key describes the body of work, and what it
+        //    says. The key is then carried through the cache check, the invalidation and
+        //    the post-stream save — three uses, one fetch. Before ticket 02 each of those
+        //    re-fetched all of history, on the main actor.
+        let aggregate = await facts.fetchDeepDiveAggregate(
+            exerciseId: exerciseId,
+            exerciseName: exerciseName,
+            usage: usage,
+            locale: locale
+        )
+        // A superseded generation must write no state: `start` cancels the previous
+        // stream task and then sets `.preparing` for the new one, so a late
+        // `.insufficientData` from the old task would land on top of it. The `defer`
+        // above still returns the allowance unit.
+        guard !Task.isCancelled else { return }
+
+        let key = aggregate.lastCompletedSetTimestamp.map {
+            Self.cacheKey(exerciseId: exerciseId, usageSelection: usage.selection, timestamp: $0)
         }
 
-        // 4. Aggregate input — returns nil when insufficient data
-        guard let input = aggregator.buildInput(
-            exercise: exercise,
-            locale: locale,
-            modelContext: modelContext,
-            usage: usage
-        ) else {
-            logger.debug("Insufficient data for exercise deep-dive \(exercise.name, privacy: .private)")
+        // 4. Cache — bypassed by `regenerate`, which retires the stored narrative instead.
+        if bypassCache {
+            if let key { cache.invalidateExerciseDeepDive(key: key) }
+        } else if let key, let cached = cache.loadExerciseDeepDive(key: key) {
+            logger.debug("Cache hit for exercise deep-dive \(exerciseId, privacy: .private)")
+            state = .success(text: cached.narrative, isCached: true)
+            return
+        }
+
+        // 5. Insufficient data — the aggregate carries no input
+        guard let input = aggregate.input else {
+            logger.debug("Insufficient data for exercise deep-dive \(exerciseName, privacy: .private)")
             state = .insufficientData
             return
         }
 
-        // 5. Stream
-        if await stream(
-            input: input,
-            exerciseId: exercise.id,
-            usageSelection: usage.selection,
-            modelContext: modelContext
-        ) {
+        // 6. Stream
+        if await stream(input: input, cacheKey: key) {
             pending = nil
         }
     }
@@ -330,12 +343,14 @@ final class ExerciseDeepDiveViewModel {
     /// - Returns: `true` only when a complete narrative reached the screen. The
     ///   caller keeps the allowance unit on `true` and refunds it otherwise —
     ///   a cancelled stream surfaces no text, so it costs nothing either.
+    /// - Parameter cacheKey: the key this narrative is stored under, already resolved
+    ///   from the same aggregate that produced `input` — so the sentences and the
+    ///   timestamp they are keyed by describe one and the same body of work. `nil` when
+    ///   history held no completed set to stamp it with, in which case nothing is stored.
     @discardableResult
     private func stream(
         input: ExerciseDeepDiveInput,
-        exerciseId: UUID,
-        usageSelection: ExerciseUsageSelection,
-        modelContext: ModelContext
+        cacheKey: String?
     ) async -> Bool {
         let start = ContinuousClock.now
 
@@ -360,13 +375,9 @@ final class ExerciseDeepDiveViewModel {
             state = .success(text: finalText, isCached: false)
 
             // Persist to cache keyed by (exerciseId, usage, last-set timestamp)
-            if let key = cacheKey(
-                exerciseId: exerciseId,
-                usageSelection: usageSelection,
-                modelContext: modelContext
-            ) {
+            if let cacheKey {
                 cache.saveExerciseDeepDive(
-                    key: key,
+                    key: cacheKey,
                     output: ExerciseDeepDiveOutput(narrative: finalText)
                 )
             }
@@ -430,7 +441,6 @@ final class ExerciseDeepDiveViewModel {
     // MARK: - Cache key
 
     /// Builds the cache key `"\(exerciseId)|\(usageToken)|\(lastSetTimestampISO)"`.
-    /// Returns `nil` when no completed sets are found (key would be meaningless).
     ///
     /// **The usage is part of the key because it is part of the narrative.** The
     /// deep-dive describes the usage the screen is showing, so two usages of one exercise
@@ -441,19 +451,15 @@ final class ExerciseDeepDiveViewModel {
     ///
     /// The timestamp is resolved for that same usage, so logging a set of one usage does
     /// not invalidate another usage's narrative — its history did not change.
-    func cacheKey(
+    ///
+    /// Pure string assembly: the timestamp is fetched once per interaction by the caller
+    /// (`ExerciseDeepDiveFactProviding`) and handed in, never re-read here.
+    static func cacheKey(
         exerciseId: UUID,
         usageSelection: ExerciseUsageSelection,
-        modelContext: ModelContext
-    ) -> String? {
-        guard let timestamp = aggregator.lastCompletedSetTimestamp(
-            exerciseId: exerciseId,
-            modelContext: modelContext,
-            usageSelection: usageSelection
-        ) else {
-            return nil
-        }
-        return "\(exerciseId.uuidString)|\(usageSelection.cacheToken)|\(Self.iso8601.string(from: timestamp))"
+        timestamp: Date
+    ) -> String {
+        "\(exerciseId.uuidString)|\(usageSelection.cacheToken)|\(iso8601.string(from: timestamp))"
     }
 
     /// Hoisted: `ISO8601DateFormatter` is expensive to allocate and this runs on every

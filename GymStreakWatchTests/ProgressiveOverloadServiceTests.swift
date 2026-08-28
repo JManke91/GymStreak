@@ -133,33 +133,65 @@ struct ProgressiveOverloadServiceTests {
         #expect(ExerciseLoadBehavior.from(raw: "somethingIOSAddedLater") == .resistance)
     }
 
-    // MARK: - Increment scale (watch Digital Crown picker)
+    // MARK: - Increment grids (per display unit)
+    //
+    // Kept identical to the iOS twin: the two `ProgressiveOverloadIncrement`
+    // copies are per-target duplicates, and a drift means the watch proposes a
+    // different increase than the phone for the same set.
 
     @Test
-    func normalizedClampsToTheSelectableRange() {
-        #expect(ProgressiveOverloadIncrement.normalized(0) == ProgressiveOverloadIncrement.minimum)
-        #expect(ProgressiveOverloadIncrement.normalized(-5) == ProgressiveOverloadIncrement.minimum)
-        #expect(ProgressiveOverloadIncrement.normalized(999) == ProgressiveOverloadIncrement.maximum)
+    func normalizedClampsToEachUnitsSelectableRange() {
+        for unit in WeightUnit.allCases {
+            let grid = ProgressiveOverloadIncrement.grid(for: unit)
+            #expect(ProgressiveOverloadIncrement.normalized(0, in: unit) == grid.minimum)
+            #expect(ProgressiveOverloadIncrement.normalized(-5, in: unit) == grid.minimum)
+            #expect(ProgressiveOverloadIncrement.normalized(999, in: unit) == grid.maximum)
+        }
     }
 
     @Test
     func normalizedSnapsToTheNearestStride() {
-        #expect(ProgressiveOverloadIncrement.normalized(2.6) == 2.5)
-        #expect(ProgressiveOverloadIncrement.normalized(2.63) == 2.75)
+        #expect(ProgressiveOverloadIncrement.normalized(2.6, in: .kilograms) == 2.5)
+        #expect(ProgressiveOverloadIncrement.normalized(2.63, in: .kilograms) == 2.75)
         // Float drift from repeated crown writes must not survive.
-        #expect(ProgressiveOverloadIncrement.normalized(1.2500000001) == 1.25)
+        #expect(ProgressiveOverloadIncrement.normalized(1.2500000001, in: .kilograms) == 1.25)
+
+        // Pounds share the 0.25 stride, which is what keeps 1.25 lb reachable.
+        #expect(ProgressiveOverloadIncrement.normalized(5.1, in: .pounds) == 5)
+        #expect(ProgressiveOverloadIncrement.normalized(1.3, in: .pounds) == 1.25)
+        #expect(ProgressiveOverloadIncrement.normalized(1.2500000001, in: .pounds) == 1.25)
     }
 
     @Test
-    func everyPresetLandsExactlyOnTheStrideGrid() {
+    func everyPresetLandsExactlyOnItsUnitsStrideGrid() {
         // The presets are reachable by crown only if they sit on the grid —
         // otherwise the picker could never highlight them.
-        for preset in ProgressiveOverloadIncrement.options {
-            #expect(ProgressiveOverloadIncrement.normalized(preset) == preset,
-                    "preset \(preset) is off the \(ProgressiveOverloadIncrement.step) grid")
-            #expect(preset >= ProgressiveOverloadIncrement.minimum)
-            #expect(preset <= ProgressiveOverloadIncrement.maximum)
+        for unit in WeightUnit.allCases {
+            let grid = ProgressiveOverloadIncrement.grid(for: unit)
+            for preset in grid.options {
+                #expect(ProgressiveOverloadIncrement.normalized(preset, in: unit) == preset,
+                        "preset \(preset) is off the \(grid.step) grid of \(unit)")
+                #expect(preset >= grid.minimum)
+                #expect(preset <= grid.maximum)
+            }
+            #expect(grid.options.contains(grid.defaultOption))
         }
-        #expect(ProgressiveOverloadIncrement.options.contains(ProgressiveOverloadIncrement.default))
+    }
+
+    @Test
+    func poundIncrementsAreRealPlateStepsRatherThanConvertedKilograms() {
+        let kilograms = ProgressiveOverloadIncrement.grid(for: .kilograms)
+        let pounds = ProgressiveOverloadIncrement.grid(for: .pounds)
+
+        #expect(pounds.options == [1.25, 2.5, 5, 10])
+        #expect(pounds.defaultOption == 5)
+
+        // Converting the kilogram list would give 1.1 / 2.76 / 5.51 / 11.02 lb.
+        // Nobody racks a 2.76 lb plate, so the two grids must not match.
+        let converted = kilograms.options.map { WeightUnit.pounds.converting(fromKilograms: $0) }
+        for option in pounds.options {
+            #expect(!converted.contains(option),
+                    "\(option) lb looks like a converted kilogram step, not a plate step")
+        }
     }
 }

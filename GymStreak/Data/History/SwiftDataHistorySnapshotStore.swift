@@ -15,7 +15,9 @@ import SwiftData
 /// contract. It is deliberately limited to constructing the stable actor: it does not receive or
 /// process models, and actual fetch tasks retain normal caller cancellation through the actor
 /// methods and their explicit cancellation checks.
-struct SwiftDataHistorySnapshotProvider: HistorySnapshotProviding, LifetimeTrainingTotalsProviding {
+struct SwiftDataHistorySnapshotProvider: HistorySnapshotProviding,
+                                        LifetimeTrainingTotalsProviding,
+                                        ExerciseDeepDiveFactProviding {
     private let storeTask: Task<SwiftDataHistorySnapshotStore, Never>
 
     init(modelContainer: ModelContainer) {
@@ -26,8 +28,9 @@ struct SwiftDataHistorySnapshotProvider: HistorySnapshotProviding, LifetimeTrain
 
     // MARK: - Off-main guarantee
     //
-    // `@concurrent` (SE-0461) on all five methods is LOAD-BEARING — it is the
-    // whole reason this type exists. `SWIFT_APPROACHABLE_CONCURRENCY` enables
+    // `@concurrent` (SE-0461) on **every method of this provider** is LOAD-BEARING — it
+    // is the whole reason this type exists, and it applies to each one added since,
+    // whichever protocol the method belongs to. `SWIFT_APPROACHABLE_CONCURRENCY` enables
     // `nonisolated(nonsending)` by default, which makes a plain `nonisolated async`
     // method run on the *caller's* actor. Called from a `@MainActor` ViewModel that
     // ran the entire unbounded fetch + aggregation ON the main actor, reproducing
@@ -109,6 +112,44 @@ struct SwiftDataHistorySnapshotProvider: HistorySnapshotProviding, LifetimeTrain
         let store = await storeTask.value
         return try await store.fetchLifetimeTotals()
     }
+
+    /// `ExerciseDeepDiveFactProviding`. The cheap half — a bounded prefetch that stops at
+    /// the newest matching session — but still `@concurrent`, because "cheap" is a claim
+    /// about the common case and this one runs from a `.task` on every screen open.
+    @concurrent func fetchDeepDiveCacheTimestamp(
+        exerciseId: UUID,
+        usageSelection: ExerciseUsageSelection
+    ) async -> Date? {
+        let store = await storeTask.value
+        return await store.fetchDeepDiveCacheTimestamp(
+            exerciseId: exerciseId,
+            usageSelection: usageSelection
+        )
+    }
+
+    /// `ExerciseDeepDiveFactProviding`. `@concurrent` for the same load-bearing reason as
+    /// every method above: this walks all of completed history, faulting each matching
+    /// row's sets, and until ticket 02 it did exactly that on the main actor — reached
+    /// from a `Task { }` created on a `@MainActor` ViewModel, where SE-0461 leaves a plain
+    /// `nonisolated` call.
+    ///
+    /// Measured 2026-08-28: dropping only this annotation stalled the main actor
+    /// **311 ms** in `exerciseDeepDiveAggregationKeepsMainActorResponsive` (240 sessions ×
+    /// 5 exercises × 4 sets, plus the live library entry). Build green either way.
+    @concurrent func fetchDeepDiveAggregate(
+        exerciseId: UUID,
+        exerciseName: String,
+        usage: DeepDiveUsage,
+        locale: Locale
+    ) async -> ExerciseDeepDiveAggregate {
+        let store = await storeTask.value
+        return await store.fetchDeepDiveAggregate(
+            exerciseId: exerciseId,
+            exerciseName: exerciseName,
+            usage: usage,
+            locale: locale
+        )
+    }
 }
 
 /// Actor-confined read model for the History feature.
@@ -144,6 +185,9 @@ actor SwiftDataHistorySnapshotStore {
         subsystem: "com.shotat24fps.GymStreak",
         category: "History"
     )
+
+    /// Stateless value type; it holds no context of its own and reads this actor's.
+    private let deepDive = ExerciseDeepDiveAggregator()
 
     func fetchTrainingSnapshot(referenceDate: Date) async throws -> HistorySnapshot {
         try Task.checkCancellation()
@@ -316,6 +360,62 @@ actor SwiftDataHistorySnapshotStore {
         }
         try Task.checkCancellation()
         return totals
+    }
+
+    // MARK: - AI Coach exercise deep-dive
+
+    /// The cache probe behind the exercise detail screen's narrative.
+    ///
+    /// Lives on this actor rather than the chat's (`ChatFactStore`) because the screen
+    /// asking the question is the one this actor already serves: `fetchExerciseProgress`
+    /// draws the chart the narrative sits under, from the same sessions. A second context
+    /// would fault the same graph twice for one screen — and the chat actor is built
+    /// lazily on first chat open, which the exercise detail screen never triggers.
+    func fetchDeepDiveCacheTimestamp(
+        exerciseId: UUID,
+        usageSelection: ExerciseUsageSelection
+    ) async -> Date? {
+        // Cancellation degrades to "nothing found" rather than throwing, because this
+        // boundary does not throw (see `ExerciseDeepDiveFactProviding`). It is worth
+        // checking: `checkCache` runs from a `.task(id:)` cancelled on every exercise or
+        // usage switch, and this actor is shared with the chart load that same switch
+        // just started — so a superseded probe would queue ahead of it.
+        guard !Task.isCancelled else { return nil }
+        return measured("DeepDiveCacheTimestamp") {
+            deepDive.lastCompletedSetTimestamp(
+                exerciseId: exerciseId,
+                modelContext: modelContext,
+                usageSelection: usageSelection
+            )
+        }
+    }
+
+    /// The narrative's input and its cache timestamp, from one walk of history.
+    ///
+    /// The widest read on this actor after `fetchLifetimeTotals`: every completed session,
+    /// every row matching the exercise, every completed set — plus a second all-time pass
+    /// over the usages when the view is `.combined`.
+    func fetchDeepDiveAggregate(
+        exerciseId: UUID,
+        exerciseName: String,
+        usage: DeepDiveUsage,
+        locale: Locale
+    ) async -> ExerciseDeepDiveAggregate {
+        // Same degradation as above. The caller (`ExerciseDeepDiveViewModel.run`) checks
+        // cancellation itself before acting on this, so an empty aggregate never reaches
+        // the screen as `.insufficientData`.
+        guard !Task.isCancelled else {
+            return ExerciseDeepDiveAggregate(lastCompletedSetTimestamp: nil, input: nil)
+        }
+        return measured("DeepDiveBuildAggregate") {
+            deepDive.buildAggregate(
+                exerciseId: exerciseId,
+                exerciseName: exerciseName,
+                locale: locale,
+                modelContext: modelContext,
+                usage: usage
+            )
+        }
     }
 
     /// The prefetch-correct completed-session fetch, shared with the AI-coach fact actor.

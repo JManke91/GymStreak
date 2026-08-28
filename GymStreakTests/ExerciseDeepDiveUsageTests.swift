@@ -52,12 +52,13 @@ struct ExerciseDeepDiveUsageTests {
         let aggregator = ExerciseDeepDiveAggregator()
 
         let heavy = try #require(
-            aggregator.buildInput(
-                exercise: curls,
+            aggregator.buildAggregate(
+                exerciseId: curls.id,
+                exerciseName: curls.name,
                 locale: .init(identifier: "en_US"),
                 modelContext: context,
                 usage: DeepDiveUsage(selection: .usage(.routineSlot(heavySlot)), label: "4–6 · Pull")
-            )
+            ).input
         )
         #expect(heavy.totalSessions == 4)
         #expect(heavy.blendedUsageCount == 1)
@@ -68,12 +69,13 @@ struct ExerciseDeepDiveUsageTests {
         #expect(heavyProgression.estimatedOneRMDeltaKg > 0)
 
         let light = try #require(
-            aggregator.buildInput(
-                exercise: curls,
+            aggregator.buildAggregate(
+                exerciseId: curls.id,
+                exerciseName: curls.name,
                 locale: .init(identifier: "en_US"),
                 modelContext: context,
                 usage: DeepDiveUsage(selection: .usage(.routineSlot(lightSlot)), label: "8–12 · Pull")
-            )
+            ).input
         )
         #expect(light.totalSessions == 4)
         #expect(light.peak.weightKg == 10)
@@ -105,12 +107,13 @@ struct ExerciseDeepDiveUsageTests {
 
         let pickerLabel = "4–6 Wdh. · Pull"
         let input = try #require(
-            ExerciseDeepDiveAggregator().buildInput(
-                exercise: curls,
+            ExerciseDeepDiveAggregator().buildAggregate(
+                exerciseId: curls.id,
+                exerciseName: curls.name,
                 locale: .init(identifier: "en_US"),
                 modelContext: context,
                 usage: DeepDiveUsage(selection: .usage(.routineSlot(heavySlot)), label: pickerLabel)
-            )
+            ).input
         )
 
         // The input records which variant it describes...
@@ -138,12 +141,13 @@ struct ExerciseDeepDiveUsageTests {
         try context.save()
 
         let input = try #require(
-            ExerciseDeepDiveAggregator().buildInput(
-                exercise: curls,
+            ExerciseDeepDiveAggregator().buildAggregate(
+                exerciseId: curls.id,
+                exerciseName: curls.name,
                 locale: .init(identifier: "en_US"),
                 modelContext: context,
                 usage: .combined
-            )
+            ).input
         )
         #expect(input.usageLabel == nil)
         #expect(!input.toPromptText().contains("Variant:"))
@@ -167,12 +171,13 @@ struct ExerciseDeepDiveUsageTests {
         try context.save()
 
         let input = try #require(
-            ExerciseDeepDiveAggregator().buildInput(
-                exercise: curls,
+            ExerciseDeepDiveAggregator().buildAggregate(
+                exerciseId: curls.id,
+                exerciseName: curls.name,
                 locale: .init(identifier: "en_US"),
                 modelContext: context,
                 usage: .combined
-            )
+            ).input
         )
 
         #expect(input.historyRange.contains("January 1970"))
@@ -213,12 +218,13 @@ struct ExerciseDeepDiveUsageTests {
         try context.save()
 
         let combined = try #require(
-            ExerciseDeepDiveAggregator().buildInput(
-                exercise: curls,
+            ExerciseDeepDiveAggregator().buildAggregate(
+                exerciseId: curls.id,
+                exerciseName: curls.name,
                 locale: .init(identifier: "en_US"),
                 modelContext: context,
                 usage: .combined
-            )
+            ).input
         )
 
         #expect(combined.blendedUsageCount == 2)
@@ -255,12 +261,13 @@ struct ExerciseDeepDiveUsageTests {
         try context.save()
 
         let input = try #require(
-            ExerciseDeepDiveAggregator().buildInput(
-                exercise: curls,
+            ExerciseDeepDiveAggregator().buildAggregate(
+                exerciseId: curls.id,
+                exerciseName: curls.name,
                 locale: .init(identifier: "en_US"),
                 modelContext: context,
                 usage: .combined
-            )
+            ).input
         )
 
         #expect(input.blendedUsageCount == 1)
@@ -344,12 +351,24 @@ struct ExerciseDeepDiveUsageTests {
 
         let aggregator = ExerciseDeepDiveAggregator()
         let german = try #require(
-            aggregator.buildInput(exercise: curls, locale: .init(identifier: "de_DE"), modelContext: context, usage: .combined)
+            aggregator.buildAggregate(
+                exerciseId: curls.id,
+                exerciseName: curls.name,
+                locale: .init(identifier: "de_DE"),
+                modelContext: context,
+                usage: .combined
+            ).input
         )
         #expect(german.toPromptText().contains("26,5 kg"))
 
         let english = try #require(
-            aggregator.buildInput(exercise: curls, locale: .init(identifier: "en_US"), modelContext: context, usage: .combined)
+            aggregator.buildAggregate(
+                exerciseId: curls.id,
+                exerciseName: curls.name,
+                locale: .init(identifier: "en_US"),
+                modelContext: context,
+                usage: .combined
+            ).input
         )
         #expect(english.toPromptText().contains("26.5 kg"))
     }
@@ -386,12 +405,13 @@ struct ExerciseDeepDiveUsageTests {
         try context.save()
 
         let input = try #require(
-            ExerciseDeepDiveAggregator().buildInput(
-                exercise: pullUps,
+            ExerciseDeepDiveAggregator().buildAggregate(
+                exerciseId: pullUps.id,
+                exerciseName: pullUps.name,
                 locale: .init(identifier: "en_US"),
                 modelContext: context,
                 usage: .combined
-            )
+            ).input
         )
 
         // Four, not eight: the physical-load rows describe a different exercise than the
@@ -422,15 +442,14 @@ struct ExerciseDeepDiveUsageTests {
         }
         try context.save()
 
-        let viewModel = makeViewModel()
         let heavyKey = try #require(
-            viewModel.cacheKey(exerciseId: curls.id, usageSelection: .usage(.routineSlot(heavySlot)), modelContext: context)
+            cacheKey(exerciseId: curls.id, usageSelection: .usage(.routineSlot(heavySlot)), context: context)
         )
         let lightKey = try #require(
-            viewModel.cacheKey(exerciseId: curls.id, usageSelection: .usage(.routineSlot(lightSlot)), modelContext: context)
+            cacheKey(exerciseId: curls.id, usageSelection: .usage(.routineSlot(lightSlot)), context: context)
         )
         let combinedKey = try #require(
-            viewModel.cacheKey(exerciseId: curls.id, usageSelection: .combined, modelContext: context)
+            cacheKey(exerciseId: curls.id, usageSelection: .combined, context: context)
         )
 
         #expect(heavyKey != lightKey)
@@ -439,7 +458,7 @@ struct ExerciseDeepDiveUsageTests {
         // Switching back lands on the same key, so the cached narrative is re-read
         // rather than regenerated.
         #expect(
-            viewModel.cacheKey(exerciseId: curls.id, usageSelection: .usage(.routineSlot(heavySlot)), modelContext: context)
+            cacheKey(exerciseId: curls.id, usageSelection: .usage(.routineSlot(heavySlot)), context: context)
                 == heavyKey
         )
     }
@@ -461,12 +480,11 @@ struct ExerciseDeepDiveUsageTests {
         }
         try context.save()
 
-        let viewModel = makeViewModel()
         let heavyBefore = try #require(
-            viewModel.cacheKey(exerciseId: curls.id, usageSelection: .usage(.routineSlot(heavySlot)), modelContext: context)
+            cacheKey(exerciseId: curls.id, usageSelection: .usage(.routineSlot(heavySlot)), context: context)
         )
         let combinedBefore = try #require(
-            viewModel.cacheKey(exerciseId: curls.id, usageSelection: .combined, modelContext: context)
+            cacheKey(exerciseId: curls.id, usageSelection: .combined, context: context)
         )
 
         // A later workout that trained only the light slot.
@@ -475,7 +493,7 @@ struct ExerciseDeepDiveUsageTests {
         try context.save()
 
         let heavyAfter = try #require(
-            viewModel.cacheKey(exerciseId: curls.id, usageSelection: .usage(.routineSlot(heavySlot)), modelContext: context)
+            cacheKey(exerciseId: curls.id, usageSelection: .usage(.routineSlot(heavySlot)), context: context)
         )
         #expect(heavyAfter == heavyBefore)
 
@@ -484,28 +502,92 @@ struct ExerciseDeepDiveUsageTests {
         // order: reverse it and the key would freeze at the *oldest* session, so every
         // deep-dive narrative would silently stop invalidating.
         let combinedAfter = try #require(
-            viewModel.cacheKey(exerciseId: curls.id, usageSelection: .combined, modelContext: context)
+            cacheKey(exerciseId: curls.id, usageSelection: .combined, context: context)
         )
         #expect(combinedAfter != combinedBefore)
     }
 
+    /// One generation walks history **once** (ticket 02), so the timestamp it keys the
+    /// narrative by no longer comes from the same fetch the appear-time probe uses. The
+    /// two must still answer identically — otherwise a narrative would be written under
+    /// one key and looked up under another, and every screen open would regenerate it at
+    /// the cost of a monthly allowance unit.
+    ///
+    /// They are also derived differently on purpose: the probe returns the first match of
+    /// a newest-first fetch, the aggregate takes a `max` over an unordered graph.
+    @Test("The aggregate's cache timestamp agrees with the appear-time probe")
+    func aggregateTimestampAgreesWithTheProbe() throws {
+        let context = ModelContext(InMemoryModelContainer.make())
+        let curls = Exercise(name: "Biceps Curls", equipmentType: .dumbbell)
+        context.insert(curls)
+
+        let heavySlot = UUID()
+        let lightSlot = UUID()
+        for index in 0..<4 {
+            let session = makeSession(at: Double(10_000 * (index + 1)), in: context)
+            addRow(exercise: curls, slot: heavySlot, order: 0, weight: 20, reps: 5, to: session, context: context)
+        }
+        // A later workout of the *other* usage, so a path that ignored the selection would
+        // answer with this session's date instead.
+        let lightDay = makeSession(at: 900_000, in: context)
+        addRow(exercise: curls, slot: lightSlot, order: 0, weight: 10, reps: 12, to: lightDay, context: context)
+        try context.save()
+
+        let aggregator = ExerciseDeepDiveAggregator()
+        for selection: ExerciseUsageSelection in [
+            .combined,
+            .usage(.routineSlot(heavySlot)),
+            .usage(.routineSlot(lightSlot))
+        ] {
+            let probed = aggregator.lastCompletedSetTimestamp(
+                exerciseId: curls.id,
+                modelContext: context,
+                usageSelection: selection
+            )
+            let aggregated = aggregator.buildAggregate(
+                exerciseId: curls.id,
+                exerciseName: curls.name,
+                locale: .init(identifier: "en_US"),
+                modelContext: context,
+                usage: DeepDiveUsage(selection: selection, label: nil)
+            ).lastCompletedSetTimestamp
+            #expect(probed == aggregated)
+        }
+
+        // And it is the selected usage's own newest session, not history's.
+        #expect(
+            aggregator.lastCompletedSetTimestamp(
+                exerciseId: curls.id,
+                modelContext: context,
+                usageSelection: .usage(.routineSlot(heavySlot))
+            ) == Date(timeIntervalSince1970: 40_000)
+        )
+    }
+
     // MARK: - Fixtures
 
-    private func makeViewModel() -> ExerciseDeepDiveViewModel {
-        ExerciseDeepDiveViewModel(
-            allowanceGate: AICoachAllowanceGate(
-                surface: .exerciseDeepDive,
-                entitlements: StubProEntitlements(state: .free),
-                paywalls: RecordingPaywallPresenter(),
-                allowance: SpyAllowanceStore(),
-                availability: StubAICoachAvailability(),
-                isGatingEnabled: true
-            ),
-            service: FakeAICoachService(),
-            cache: FakeAICoachCache(),
-            preferences: FakeAICoachPreferences(),
-            availability: StubAICoachAvailability()
-        )
+    /// The key a deep-dive would cache under, assembled exactly as production assembles
+    /// it — and, since ticket 02, from both sides of the model-actor boundary: the
+    /// aggregator resolves the timestamp for that usage, the ViewModel stamps it into a
+    /// key. Spanning both is the point: the two halves are what must agree.
+    private func cacheKey(
+        exerciseId: UUID,
+        usageSelection: ExerciseUsageSelection,
+        context: ModelContext
+    ) -> String? {
+        ExerciseDeepDiveAggregator()
+            .lastCompletedSetTimestamp(
+                exerciseId: exerciseId,
+                modelContext: context,
+                usageSelection: usageSelection
+            )
+            .map {
+                ExerciseDeepDiveViewModel.cacheKey(
+                    exerciseId: exerciseId,
+                    usageSelection: usageSelection,
+                    timestamp: $0
+                )
+            }
     }
 
     private func makeSession(at timestamp: TimeInterval, in context: ModelContext) -> WorkoutSession {

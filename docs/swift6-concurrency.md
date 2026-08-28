@@ -69,7 +69,15 @@ audit P1.3's `ChatFactProvider` → `ChatFactStore`
 (`chatFactLookupKeepsMainActorResponsive`, same 240-session fixture): **319 ms** without
 `@concurrent` on `exercisePRFacts`, within budget with it.
 
-Three independent boundaries, two different actors, same failure, same fix — treat
+Measured a fourth time on 2026-08-28 when the AI-coach exercise deep-dive joined the
+History provider (ticket 02, `exerciseDeepDiveAggregationKeepsMainActorResponsive`, same
+240-session fixture plus a live library entry): **311 ms** without `@concurrent` on
+`fetchDeepDiveAggregate`, within budget with it. Build green either way, again — and
+this one had been running on the main actor in shipped code, reached from a `Task { }`
+created on a `@MainActor` ViewModel, which is exactly the call shape SE-0461 leaves on
+the caller's actor.
+
+Four independent boundaries, two different actors, same failure, same fix — treat
 `@concurrent` on a new method at any such boundary as mandatory, not advisory, and prove
 it by deleting the annotation once and watching the test go red before you ship.
 
@@ -112,10 +120,13 @@ regression test types the provider as `any HistorySnapshotProviding`, matching h
 Any new type conforming to `HistorySnapshotProviding` that does real work must carry
 `@concurrent` on its own methods. The actor deliberately no longer conforms, so it
 cannot be injected as an unannotated conformer. The same rule and the same warning
-comment are carried by `LifetimeTrainingTotalsProviding` (ticket 11) — a second, narrow
-read boundary conformed to by the *same* provider struct, so there is still one
-`@ModelActor` and one `ModelContext`, and `lifetimeTotalsKeepMainActorResponsive` types
-it as the existential exactly like the four cases above it.
+comment are carried by `LifetimeTrainingTotalsProviding` (ticket 11) and
+`ExerciseDeepDiveFactProviding` (ticket 02) — narrow read boundaries conformed to by the
+*same* provider struct, so there is still one `@ModelActor` and one `ModelContext`, and
+`lifetimeTotalsKeepMainActorResponsive` / `exerciseDeepDiveAggregationKeepsMainActorResponsive`
+type it as the existential exactly like the cases above them. Three protocols on one
+provider is the pattern, not an accident: a new question about history gets its own
+narrow boundary and the existing actor, never a new actor.
 `largeSnapshotBuildKeepsMainActorResponsive` is the acceptance criterion — a green
 build cannot catch this.
 

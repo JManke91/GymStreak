@@ -37,6 +37,13 @@ enum WatchRoutineSync {
     static let contextTargetWatchInstanceIDKey = "routineTargetWatchInstanceID"
     static let contextFromEpochKey = "routineFromEpoch"
     static let contextHandoverNonceKey = "routineHandoverNonce"
+    /// The user's displayed weight unit (`WeightUnit.rawValue`), merged into
+    /// the SAME dictionary as the routine payload rather than sent as a second
+    /// `updateApplicationContext` call — that call replaces the whole
+    /// per-direction dictionary, so a competing one would clobber the routines.
+    /// Absent from a context sent by an older iOS build; the watch then keeps
+    /// its last persisted unit and falls back to kilograms, never to `Locale`.
+    static let contextWeightUnitKey = "weightUnit"
 
     // Watch → iOS challenge keys. Must be MERGED with the catalogue challenge
     // keys into the watch's one complete context dictionary.

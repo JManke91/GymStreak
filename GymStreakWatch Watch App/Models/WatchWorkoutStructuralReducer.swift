@@ -38,10 +38,16 @@ struct WatchExerciseConfigurationDraft: Equatable {
     var weight: Double
     var restSeconds: Int
 
+    /// `weight` is canonical kilograms and is deliberately **not** rounded.
+    /// Quantization belongs in display space — the crown editor steps whole
+    /// kilograms or whole pounds and converts — because rounding the stored
+    /// kilograms destroys a pounds value on every edit (135 lb = 61.235 kg →
+    /// 61 kg → 134.5 lb). The ceiling is still canonical, so there is one
+    /// number to keep true whatever unit is on screen.
     init(setCount: Int = 1, reps: Int = 10, weight: Double = 0, restSeconds: Int = 60) {
         self.setCount = min(max(setCount, 1), 20)
         self.reps = min(max(reps, 1), 100)
-        self.weight = min(max(weight.rounded(), 0), 999)
+        self.weight = min(max(weight, 0), WeightUnit.maximumKilograms)
         self.restSeconds = min(max((restSeconds / 30) * 30, 0), 300)
     }
 }

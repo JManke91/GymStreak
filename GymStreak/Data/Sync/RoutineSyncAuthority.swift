@@ -97,6 +97,16 @@ final class RoutineSyncAuthority {
     /// from CloudKit remote-change storms).
     private var lastSentRoutinesPayload: Data?
 
+    /// The user's displayed weight unit (`WeightUnit.rawValue`), merged into
+    /// every context this authority builds.
+    ///
+    /// It rides along here rather than in a context of its own because
+    /// `updateApplicationContext` replaces the whole per-direction dictionary:
+    /// a second, competing call would silently drop the routine payload and the
+    /// authority header with it. In-memory only — the composition root supplies
+    /// it at launch from the persisted preference.
+    private var weightUnitRawValue: String?
+
     init(transport: RoutineContextTransporting, directory: URL? = nil) {
         self.transport = transport
         let base = directory ?? FileManager.default
@@ -204,7 +214,7 @@ final class RoutineSyncAuthority {
             // Mixed-version compatibility: an old watch never publishes the
             // ticket-05 challenge, but still understands the routines payload.
             do {
-                try transport.sendRoutineContext([WatchRoutineSync.contextRoutinesKey: payload])
+                try transport.sendRoutineContext(context(for: payload))
                 lastSentRoutinesPayload = payload
             } catch {
                 WatchSyncDiagnostics.error("authority: failed to send legacy routine context — \(error.localizedDescription)")
@@ -234,8 +244,56 @@ final class RoutineSyncAuthority {
         lastSentRoutinesPayload = nil
     }
 
+    /// Records the user's weight unit and, when it actually changed, pushes it
+    /// to the watch immediately.
+    ///
+    /// The value is recorded whatever `push` says, so a change made while the
+    /// session cannot send still rides along with the next routine sync. `push`
+    /// is the caller's session/watch-state gate — the same one `sendOrdinary`
+    /// is behind — so a unit change cannot consume an authority generation on a
+    /// send that was never going to leave the phone. It is evaluated only when
+    /// the unit actually changed (see below).
+    ///
+    /// The push deliberately bypasses the identical-content suppression: the
+    /// routines are unchanged by definition here, so `sendOrdinary` would drop
+    /// the context and the watch would keep displaying the old unit until the
+    /// next routine edit.
+    func updateWeightUnit(_ rawValue: String, push: @autoclosure () -> Bool) {
+        guard weightUnitRawValue != rawValue else { return }
+        weightUnitRawValue = rawValue
+        // `@autoclosure` so the caller's session gate — which logs when it
+        // refuses — is only evaluated once the unit has actually changed.
+        // Otherwise every launch printed "cannot sync routines — session not
+        // activated" from the composition root's seeding call, before
+        // `WCSession.activate()` could possibly have completed.
+        guard push() else { return }
+        // Nothing has been sent in this process yet — the unit will ride along
+        // with the first routine sync, which has not happened.
+        guard let payload = lastSentRoutinesPayload else { return }
+        guard resolvedChallenge() != nil else {
+            do {
+                try transport.sendRoutineContext(context(for: payload))
+            } catch {
+                WatchSyncDiagnostics.error("authority: failed to send legacy weight-unit context — \(error.localizedDescription)")
+            }
+            return
+        }
+        send(payload: payload)
+    }
+
     // MARK: - Sending
 
+    /// The routine payload plus everything that always rides with it. Every
+    /// send path builds its context from here so no path can omit the unit.
+    private func context(for payload: Data) -> [String: Any] {
+        var context: [String: Any] = [WatchRoutineSync.contextRoutinesKey: payload]
+        if let weightUnitRawValue {
+            context[WatchRoutineSync.contextWeightUnitKey] = weightUnitRawValue
+        }
+        return context
+    }
+
+    @discardableResult
     private func send(payload: Data) -> (epoch: UUID, generation: UInt64)? {
         // No challenge means no authority can be established yet: the watch
         // has never told us who it is, so a proposal could not be bound to it.
@@ -244,7 +302,7 @@ final class RoutineSyncAuthority {
             return nil
         }
 
-        var context: [String: Any] = [WatchRoutineSync.contextRoutinesKey: payload]
+        var context = context(for: payload)
         let epoch: UUID
         let generation: UInt64
 

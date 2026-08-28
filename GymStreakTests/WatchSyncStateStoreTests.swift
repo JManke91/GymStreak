@@ -228,6 +228,60 @@ struct WatchSyncStateStoreTests {
         #expect(queue.all.count == 1)
     }
 
+    // MARK: - Weight unit (docs/weight-unit-preference.md)
+
+    @Test
+    func weightUnitFallsBackToKilogramsAndNeverToTheLocale() throws {
+        let dir = try Fixtures.makeTempDirectory()
+        let queue = WatchSyncStateStore(directory: dir, legacyDefaults: nil)
+
+        // Nothing has arrived from iPhone yet — fresh install, or a watch
+        // launched first. Deriving the unit from `Locale` here is exactly the
+        // bug this replaced: it would let the two devices disagree about what
+        // a stored number means.
+        #expect(queue.weightUnit == .kilograms)
+    }
+
+    @Test
+    func weightUnitPersistsAcrossRelaunch() throws {
+        let dir = try Fixtures.makeTempDirectory()
+        let queue = WatchSyncStateStore(directory: dir, legacyDefaults: nil)
+
+        #expect(queue.applyWeightUnit(.pounds))
+        // Idempotent: an unchanged unit is not a change to republish.
+        #expect(!queue.applyWeightUnit(.pounds))
+
+        let reloaded = WatchSyncStateStore(directory: dir, legacyDefaults: nil)
+        #expect(reloaded.weightUnit == .pounds)
+    }
+
+    /// The wire schema evolution rule: the new key is Optional, so a state file
+    /// written by a build that predates it must still decode. A non-optional
+    /// field here would throw `keyNotFound` and quarantine the watch's entire
+    /// sync state — the outgoing workout queue included.
+    @Test
+    func stateWrittenBeforeTheWeightUnitExistedStillDecodes() throws {
+        let dir = try Fixtures.makeTempDirectory()
+        let queue = WatchSyncStateStore(directory: dir, legacyDefaults: nil)
+        let workout = Fixtures.makeWorkout()
+        try queue.enqueue(workout, phase: .transportEligible)
+
+        // Strip the key the way an older build's file would not have had it.
+        let stateURL = dir.appendingPathComponent("outgoing-queue.json")
+        var raw = try #require(
+            try JSONSerialization.jsonObject(with: Data(contentsOf: stateURL)) as? [String: Any]
+        )
+        raw.removeValue(forKey: "weightUnitRaw")
+        try JSONSerialization.data(withJSONObject: raw).write(to: stateURL, options: .atomic)
+
+        let reloaded = WatchSyncStateStore(directory: dir, legacyDefaults: nil)
+        #expect(reloaded.all.compactMap(\.completedWorkout).map(\.id) == [workout.id])
+        #expect(reloaded.weightUnit == .kilograms)
+        #expect(!FileManager.default.fileExists(
+            atPath: stateURL.appendingPathExtension("corrupt").path
+        ))
+    }
+
     /// Recorded performance budget: 150 enqueues + phase advances against a
     /// growing state file (every mutation rewrites it atomically) must stay
     /// comfortably interactive. Budget is deliberately generous to avoid CI

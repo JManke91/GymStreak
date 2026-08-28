@@ -348,6 +348,16 @@ extension WatchConnectivityManager: WCSessionDelegate {
     /// template values survive either way — the sync-state owner folds
     /// unresolved transactions over whatever base is newest.
     private func processApplicationContext(_ context: [String: Any]) {
+        // Ahead of the routines guard and outside the authority decision on
+        // purpose: the unit is an unversioned display preference merged into
+        // the same dictionary, so it must still apply when the routine half is
+        // absent (older iOS), a duplicate, or rejected as a stale generation.
+        if let rawUnit = context[WatchRoutineSync.contextWeightUnitKey] as? String,
+           let unit = WeightUnit(rawValue: rawUnit),
+           syncState.applyWeightUnit(unit) {
+            WatchSyncDiagnostics.info("watch: applied weight unit \(rawUnit) from iPhone")
+        }
+
         guard let routineData = context[WatchRoutineSync.contextRoutinesKey] as? Data else {
             return
         }

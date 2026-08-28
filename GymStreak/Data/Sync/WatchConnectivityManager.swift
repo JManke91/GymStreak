@@ -168,6 +168,18 @@ final class WatchConnectivityManager: NSObject, ObservableObject, WatchSyncServi
         return routineAuthority.sendAuthoritative(routines)
     }
 
+    /// Publishes the user's weight unit to the watch. Merged into the routine
+    /// `applicationContext` by the authority — see
+    /// `RoutineSyncAuthority.updateWeightUnit(_:push:)` for why it cannot be a
+    /// context of its own. Idempotent: an unchanged unit sends nothing.
+    ///
+    /// The authority records the value even when `canSyncRoutines` is false —
+    /// this is called at launch, before activation completes — so the first
+    /// routine sync of the session carries it either way.
+    func syncWeightUnit(_ unit: WeightUnit) {
+        routineAuthority.updateWeightUnit(unit.rawValue, push: canSyncRoutines)
+    }
+
     private var canSyncRoutines: Bool {
         guard let session = session, session.activationState == .activated else {
             WatchSyncDiagnostics.notice("phone: cannot sync routines — session not activated")

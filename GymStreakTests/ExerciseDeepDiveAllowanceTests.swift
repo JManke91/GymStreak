@@ -25,23 +25,14 @@ struct ExerciseDeepDiveAllowanceTests {
     func cachedNarrativeIsFreeAndNeverBlocked() async {
         let harness = makeHarness()
         let exercise = harness.seedExercise(completedSets: 6)
-        guard let key = harness.viewModel.cacheKey(
-            exerciseId: exercise.id,
-            usageSelection: .combined,
-            modelContext: harness.context
-        ) else {
+        guard let key = await harness.cacheKey(for: exercise) else {
             Issue.record("a seeded exercise must produce a cache key")
             return
         }
         harness.cache.deepDives[key] = ExerciseDeepDiveOutput(narrative: "Already yours.")
         harness.spend()
 
-        await harness.viewModel.checkCache(
-            exercise: exercise,
-            usage: .combined,
-            locale: .current,
-            modelContext: harness.context
-        )
+        await harness.viewModel.checkCache(exerciseId: exercise.id, usage: .combined)
 
         #expect(harness.viewModel.state == .success(text: "Already yours.", isCached: true))
         #expect(harness.allowance.consumeCount == 0)
@@ -49,16 +40,16 @@ struct ExerciseDeepDiveAllowanceTests {
     }
 
     @Test("Asking with nothing left raises the paywall and leaves the button where it was")
-    func exhaustedGenerationRaisesThePaywall() {
+    func exhaustedGenerationRaisesThePaywall() async {
         let harness = makeHarness()
         let exercise = harness.seedExercise(completedSets: 6)
         harness.spend()
 
         let didStart = harness.viewModel.generate(
-            exercise: exercise,
+            exerciseId: exercise.id,
+            exerciseName: exercise.name,
             usage: .combined,
-            locale: .current,
-            modelContext: harness.context
+            locale: .current
         )
 
         #expect(didStart == false)
@@ -73,10 +64,10 @@ struct ExerciseDeepDiveAllowanceTests {
         harness.service.isUnavailable = true
 
         #expect(harness.viewModel.generate(
-            exercise: exercise,
+            exerciseId: exercise.id,
+            exerciseName: exercise.name,
             usage: .combined,
-            locale: .current,
-            modelContext: harness.context
+            locale: .current
         ))
         await harness.viewModel.waitForCurrentGeneration()
 
@@ -92,10 +83,10 @@ struct ExerciseDeepDiveAllowanceTests {
         let exercise = harness.seedExercise(completedSets: 2)
 
         #expect(harness.viewModel.generate(
-            exercise: exercise,
+            exerciseId: exercise.id,
+            exerciseName: exercise.name,
             usage: .combined,
-            locale: .current,
-            modelContext: harness.context
+            locale: .current
         ))
         await harness.viewModel.waitForCurrentGeneration()
 
@@ -104,14 +95,10 @@ struct ExerciseDeepDiveAllowanceTests {
     }
 
     @Test("A refused regeneration keeps the narrative the user already paid for")
-    func refusedRegenerationKeepsTheCache() {
+    func refusedRegenerationKeepsTheCache() async {
         let harness = makeHarness()
         let exercise = harness.seedExercise(completedSets: 6)
-        guard let key = harness.viewModel.cacheKey(
-            exerciseId: exercise.id,
-            usageSelection: .combined,
-            modelContext: harness.context
-        ) else {
+        guard let key = await harness.cacheKey(for: exercise) else {
             Issue.record("a seeded exercise must produce a cache key")
             return
         }
@@ -119,10 +106,10 @@ struct ExerciseDeepDiveAllowanceTests {
         harness.spend()
 
         let didStart = harness.viewModel.regenerate(
-            exercise: exercise,
+            exerciseId: exercise.id,
+            exerciseName: exercise.name,
             usage: .combined,
-            locale: .current,
-            modelContext: harness.context
+            locale: .current
         )
 
         #expect(didStart == false)
@@ -140,10 +127,10 @@ struct ExerciseDeepDiveAllowanceTests {
 
         for _ in 0..<3 {
             #expect(harness.viewModel.generate(
-                exercise: exercise,
+                exerciseId: exercise.id,
+                exerciseName: exercise.name,
                 usage: .combined,
-                locale: .current,
-                modelContext: harness.context
+                locale: .current
             ))
             await harness.viewModel.waitForCurrentGeneration()
         }
@@ -162,6 +149,10 @@ struct ExerciseDeepDiveAllowanceTests {
         let service: FakeAICoachService
         let allowance: SpyAllowanceStore
         let paywalls: RecordingPaywallPresenter
+        /// The real model-actor-backed boundary over the same in-memory container the
+        /// fixture seeds, not a stub: since ticket 02 every history read the ViewModel
+        /// makes crosses it, and a stub would leave that crossing untested.
+        let facts: any ExerciseDeepDiveFactProviding
         private let container: ModelContainer
 
         init(isGatingEnabled: Bool) {
@@ -176,6 +167,8 @@ struct ExerciseDeepDiveAllowanceTests {
             self.service = service
             self.allowance = allowance
             self.paywalls = paywalls
+            let facts = SwiftDataHistorySnapshotProvider(modelContainer: container)
+            self.facts = facts
             self.viewModel = ExerciseDeepDiveViewModel(
                 allowanceGate: AICoachAllowanceGate(
                     surface: .exerciseDeepDive,
@@ -185,6 +178,7 @@ struct ExerciseDeepDiveAllowanceTests {
                     availability: StubAICoachAvailability(),
                     isGatingEnabled: isGatingEnabled
                 ),
+                facts: facts,
                 service: service,
                 cache: cache,
                 preferences: FakeAICoachPreferences(),
@@ -199,6 +193,21 @@ struct ExerciseDeepDiveAllowanceTests {
                 allowance.consume(.exerciseDeepDive)
             }
             allowance.resetCallCounts()
+        }
+
+        /// The key the ViewModel would cache this exercise's combined narrative under,
+        /// assembled from both sides of the boundary exactly as `run` assembles it.
+        func cacheKey(for exercise: Exercise) async -> String? {
+            await facts.fetchDeepDiveCacheTimestamp(
+                exerciseId: exercise.id,
+                usageSelection: .combined
+            ).map {
+                ExerciseDeepDiveViewModel.cacheKey(
+                    exerciseId: exercise.id,
+                    usageSelection: .combined,
+                    timestamp: $0
+                )
+            }
         }
 
         @discardableResult

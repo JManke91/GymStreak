@@ -50,13 +50,15 @@ GymStreakWatchTests/
 ├── WatchWorkoutInteractionPolicyTests.swift     twin of GymStreakTests/WatchWorkoutInteractionPolicyTests
 ├── WatchWorkoutStructuralReducerTests.swift     twin of GymStreakTests/WatchWorkoutStructuralReducerTests
 ├── WatchModelsWireCompatibilityTests.swift      twin of GymStreakTests/WatchModelsWireCompatibilityTests
+├── WeightUnitTests.swift                        twin of GymStreakTests/WeightUnitTests
 └── Support/
     └── WatchWorkoutStructuralTestFixtures.swift twin of GymStreakTests/Support/…
 ```
 
 `WatchModelsWireCompatibilityTests` arrived later, with audit item P1.4 (see
-§ "Deliberately deferred, and since landed"). The seed coverage described next
-is the other three files.
+§ "Deliberately deferred, and since landed"), and `WeightUnitTests` later still,
+with ticket 04 of the weight-unit work (see below). The seed coverage described
+next is the other three files.
 
 Seed coverage is 28 tests across **2** suites from **3** files: as in the iOS
 twin, `WatchWorkoutInteractionPolicyTests.swift` declares no type of its own but
@@ -70,6 +72,16 @@ Coverage is over the watch copies of
 `WatchWorkoutStructuralReducer` (+ `WatchWorkoutStructuralBaseline`,
 `WatchExerciseConfigurationDraft`, `WatchExerciseSelection`) and
 `WatchWorkoutInteractionPolicy`.
+
+`WeightUnitTests` (2026-08-28, weight-unit ticket 04) covers the watch copies of
+`WeightUnit` and `WatchWeightFormatting` plus `WatchExercise.setsSummary(in:)`.
+Its conversion, precision, grid, ceiling and unit-word assertions are kept
+identical to the iOS twin, because a divergence between the two `WeightUnit`
+copies makes the same stored kilograms read as two different weights on the two
+devices. Three assertions have no iOS twin, covering watch-only defects that
+ticket removed: the routine summary rendering the unit it is *given* rather than
+the locale's, and display-space stepping surviving a round trip that rounding
+stored kilograms does not. See `docs/weight-unit-preference.md` §9a.
 
 Two assertions exist here that have no iOS twin, because they cover the
 watch-only half of a copied file:
@@ -282,8 +294,12 @@ convenience a unified plan was supposed to buy is provided instead by the
 if either does.
 
 Verified 2026-08-13: the seed coverage above is 28 tests in 2 suites, all passing,
-build warning-free. The target now stands at **34 tests in 3 suites** — P1.4 added
-`WatchModelsWireCompatibilityTests` the same day (see below).
+build warning-free. P1.4 added `WatchModelsWireCompatibilityTests` the same day
+(see below), taking it to 34 tests in 3 suites.
+
+Verified 2026-08-28: the target stands at **52 tests in 4 suites**, all passing.
+Weight-unit ticket 04 added `WeightUnitTests` and extended
+`ProgressiveOverloadServiceTests` to the per-unit increment grids.
 
 ---
 

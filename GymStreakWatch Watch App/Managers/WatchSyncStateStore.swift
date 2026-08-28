@@ -59,6 +59,12 @@ private struct WatchSyncStateFile: Codable {
     /// Terminally failed template updates the user has not dismissed yet.
     /// Optional so state written before this field remains decodable.
     var templateFailureNotices: [WatchTemplateFailureNotice]?
+    /// The weight unit iOS last published (`WeightUnit.rawValue`). Optional per
+    /// the wire schema evolution rule — a stored property's default value is
+    /// NOT a decode-time fallback, so a non-optional field here would make
+    /// every state file written before this ticket undecodable and quarantine
+    /// the watch's whole sync state.
+    var weightUnitRaw: String?
 }
 
 @MainActor
@@ -78,6 +84,16 @@ final class WatchSyncStateStore {
     private(set) var lastRoutineSyncDate: Date?
     private var hasCompletedLegacyDefaultsMigration = false
     private var failureNotices: [WatchTemplateFailureNotice] = []
+    /// The unit weights are shown and entered in on this watch.
+    ///
+    /// Persisted here so the value survives a relaunch and is available BEFORE
+    /// the first `applicationContext` of the session arrives — a fresh install,
+    /// a watch launched before the phone, or a user who never opened the
+    /// setting. The fallback is kilograms, the canonical stored unit, and
+    /// deliberately **not** `Locale`: deriving it independently on the watch is
+    /// the bug this replaced, and it would let the two devices disagree about
+    /// what a stored number means.
+    private(set) var weightUnit: WeightUnit = .kilograms
     private var isStateDurable = false
 
     private let fileURL: URL?
@@ -96,6 +112,9 @@ final class WatchSyncStateStore {
     /// dismissed). `RoutineStore` republishes on it so the watch UI can tell
     /// the user their accepted change was not applied.
     var onTemplateFailureNoticesChanged: (() -> Void)?
+    /// Invoked when iOS published a different weight unit.
+    /// `WatchWeightUnitStore` republishes on it.
+    var onWeightUnitChanged: (() -> Void)?
 
     /// - Parameters:
     ///   - directory: override for tests; defaults to the App Group's
@@ -125,6 +144,9 @@ final class WatchSyncStateStore {
                 hasCompletedLegacyDefaultsMigration =
                     decoded.hasCompletedLegacyDefaultsMigration ?? false
                 failureNotices = decoded.templateFailureNotices ?? []
+                if let raw = decoded.weightUnitRaw, let unit = WeightUnit(rawValue: raw) {
+                    weightUnit = unit
+                }
                 hadState = true
                 isStateDurable = true
             } else {
@@ -339,6 +361,35 @@ final class WatchSyncStateStore {
             }
         }
         return routines
+    }
+
+    /// Records the weight unit iOS published in the routine context.
+    ///
+    /// Deliberately NOT gated on the routine authority's epoch/generation
+    /// decision: the unit is a display preference with no version of its own,
+    /// so a context whose routines are a duplicate or a stale generation still
+    /// carries the newest unit iOS knows about.
+    ///
+    /// A failed atomic write rolls the in-memory value back, like every other
+    /// mutation here: the state file is the persistence boundary, so a value
+    /// that did not commit must not be published either. iOS's context is
+    /// retained by WatchConnectivity and redelivered, so the unit is not lost.
+    ///
+    /// Returns true when the unit actually changed.
+    @discardableResult
+    func applyWeightUnit(_ unit: WeightUnit) -> Bool {
+        guard unit != weightUnit else { return false }
+        let previous = weightUnit
+        weightUnit = unit
+        do {
+            try persist()
+        } catch {
+            weightUnit = previous
+            WatchSyncDiagnostics.error("queue: weight-unit write failed — \(error.localizedDescription)")
+            return false
+        }
+        onWeightUnitChanged?()
+        return true
     }
 
     /// Applies an incoming iOS → watch routine snapshot.
@@ -841,7 +892,8 @@ final class WatchSyncStateStore {
             routineAnchors: routineAnchors,
             lastRoutineSyncDate: lastRoutineSyncDate,
             hasCompletedLegacyDefaultsMigration: hasCompletedLegacyDefaultsMigration,
-            templateFailureNotices: failureNotices
+            templateFailureNotices: failureNotices,
+            weightUnitRaw: weightUnit.rawValue
         )
         let data = try JSONEncoder().encode(file)
         try data.write(to: fileURL, options: .atomic)

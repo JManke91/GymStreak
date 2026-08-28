@@ -408,6 +408,43 @@ On the watch, `WatchSyncStateStore.effectiveRoutines()` = newest accepted base w
 
 The Watch UI treats routine identity and routine values differently. `RoutineListView` stores only a typed routine ID in `NavigationStack` and resolves the current value from `RoutineStore` while a detail is visible. Starting a workout resolves that ID once more inside `WatchWorkoutViewModel`; only then is the routine copied into active-workout state. This is the intentional snapshot boundary: later routine contexts update future workouts, never a session already in progress. Storing a full `WatchRoutine` in the path is forbidden because SwiftUI path values are snapshots and have no live relationship to a later published replacement. This follows Apple's [navigation-stack guidance](https://developer.apple.com/documentation/swiftui/understanding-the-navigation-stack) to use lightweight identifiers. `updateApplicationContext(_:)` remains the correct authoritative transport: Apple documents it as opportunistic, coalescing latest-state delivery, not an event stream or an immediate-delivery API ([API reference](https://developer.apple.com/documentation/watchconnectivity/wcsession/updateapplicationcontext(_:))). Relaunch-time `receivedApplicationContext` replay is recovery, not a requirement for live delivery.
 
+### The weight-unit preference rides in the routine context (weight-unit ticket 04)
+
+**App Group `UserDefaults` is shared within a device's app family, not between iPhone and
+Watch.** Both sides open `group.com.gymstreak.shared`, but they are different containers on
+different devices, so the user's displayed weight unit (`WeightUnit.rawValue`) has to cross
+over WatchConnectivity like everything else.
+
+It is **merged into the same `applicationContext` dictionary as the routine payload**, under
+`WatchRoutineSync.contextWeightUnitKey` (`"weightUnit"`) — never sent as a context of its
+own. `updateApplicationContext(_:)` replaces the whole per-direction dictionary, so a second
+competing call would silently drop the routines and the authority header with them. That
+dictionary is wholly owned by `RoutineSyncAuthority`, which holds the unit and builds every
+context — ordinary, authoritative, handover, and the legacy no-challenge path — through one
+`context(for:)` helper, so no send path can omit it.
+
+Three properties worth knowing:
+
+- **A unit change resends the last routine payload, bypassing duplicate suppression.**
+  `sendOrdinary` drops a context whose routine bytes are unchanged, which they are by
+  definition when only the unit moved. The push stays behind `canSyncRoutines` like every
+  other send path, so it cannot consume a generation on a send that could not leave the
+  phone; the value is recorded regardless and rides along with the next routine sync.
+- **The watch applies the unit ahead of the routines guard and outside the authority
+  decision** (`processApplicationContext`). The unit is unversioned, so a context whose
+  routine half is absent (older iOS), a duplicate generation, or rejected as stale still
+  carries the newest unit iOS knows about.
+- **The watch persists it** in `WatchSyncStateStore`'s state file (`weightUnitRaw`,
+  `Optional` per the wire schema evolution rule below) and falls back to **kilograms** — the
+  canonical stored unit — when nothing has arrived. Never to `Locale`: deriving the unit
+  independently on the watch is the defect this replaced, and it let a US-locale watch
+  render "80 lb" in the routine overview beside a set editor that said "kg".
+
+Weights themselves stay bare kilogram `Double`s on the wire. No unit field was added to
+`WatchSet`, `ActiveWorkoutSet`, `CompletedWatchSet` or `WatchTemplateSetChange` — the unit is
+a display setting, not a property of a set, and tagging every set would allow a payload
+whose sets disagree with each other. See `docs/weight-unit-preference.md` §9a.
+
 ### Mixed-version payloads
 
 A requested-template payload without ordering identity (old watch build) may run the idempotent set-only reconciliation only while **no** sequenced outcome exists for its routine. Once one does, it can no longer prove it is newer: history is preserved and deduplicated, `didUpdateTemplate` is corrected to false, current routine state is staged, and the intent is answered with the plain acknowledgment its sender understands. Successful no-receipt legacy reconciliation similarly corrects the flag to true.
@@ -609,6 +646,7 @@ AppDependencies.init → WatchWorkoutIngestionCoordinator.routineAuthorityDidCha
 | `GymStreakWatch/Managers/WatchWorkoutTransportCoordinator.swift` | Workout transport policy (identical semantic copy of the iOS testable file): fast message, durable transfer, outstanding-transfer suppression, and successor reconciliation after FIFO-head retirement |
 | `GymStreakWatch/Managers/WatchHealthKitManager.swift` | `WorkoutFinalizationHealthKit`: `endCollectionAndAddMetadata(externalId:)` (required metadata, throws on failure) + `finishWorkout()` |
 | `GymStreakWatch/Managers/RoutineStore.swift` | Published projection of `WatchSyncStateStore.effectiveRoutines()` (base + optimistic fold) and of its outstanding template-failure notices. Owns no persistence since ticket 05 |
+| `GymStreakWatch/Managers/WatchWeightUnitStore.swift` | Published projection of `WatchSyncStateStore.weightUnit` — the unit iOS last sent in the routine context. `RootView` republishes it into `\.weightUnit` |
 | `GymStreakWatch/Views/TemplateFailureNoticeRow.swift` | The dismissible routine-list card telling the user a change they accepted was not applied, and why |
 | `GymStreakWatch/Managers/ExerciseCatalogStore.swift` | Catalogue cache: state file, receive inbox, serialized drain, challenge state |
 | `GymStreakWatch/ViewModels/WatchWorkoutViewModel.swift` | Workout lifecycle and terminal finalization. A requested template update is no longer applied to a separate local copy — enqueueing the transaction folds it over the base |

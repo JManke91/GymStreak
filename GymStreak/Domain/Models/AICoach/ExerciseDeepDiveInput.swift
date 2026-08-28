@@ -35,7 +35,10 @@ struct DeepDiveUsage: Equatable, Sendable {
 }
 
 @Generable
-struct ExerciseDeepDiveInput {
+// `Sendable` is explicit rather than inferred: this value crosses off the History model
+// actor as half of `ExerciseDeepDiveAggregate` (ticket 02), so a future non-`Sendable`
+// stored property must fail the build here rather than silently withdraw the guarantee.
+struct ExerciseDeepDiveInput: Sendable {
     @Guide(description: "User's locale identifier, e.g. 'de_DE' or 'en_US'")
     let locale: String
 

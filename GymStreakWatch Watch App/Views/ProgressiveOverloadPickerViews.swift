@@ -36,28 +36,61 @@ import WatchKit
 /// so it does not violate the in-workout-editing rule about competing stacks.
 struct ProgressiveOverloadIncrementPicker: View {
     let exerciseName: String
+    /// Canonical kilograms.
     let currentWeight: Double
     let isAssistance: Bool
     /// False for a pyramid/drop scheme. The step applies to every set either
     /// way, but only a uniform scheme has ONE resulting weight worth previewing
     /// — naming the first set's result for the others would be wrong.
     let hasUniformWeights: Bool
+    /// Called with the step in **canonical kilograms** — this picker is the one
+    /// place the user's display-space pick is converted, and it happens once.
     let onApply: (Double) -> Void
     /// Returns to the suggestion step. Not a sheet dismissal: the user asked to
     /// change the value, so backing out should land where they came from.
     let onCancel: () -> Void
 
+    @Environment(\.weightUnit) private var weightUnit
+
     /// The crown drives the WEIGHT STEP directly, not an index into a preset
     /// list: boxing the user into four values was the whole complaint. The
     /// bounded/strided overload keeps haptic detents, which the unbounded one
     /// cannot — see `ProgressiveOverloadIncrement` for why a finite maximum.
-    @State private var increment: Double = ProgressiveOverloadIncrement.default
+    ///
+    /// In **display units**, like the grid it moves along. `nil` until the view
+    /// has seen its unit: the grid is per-unit, so the default cannot be
+    /// resolved at initialization, before the environment exists.
+    @State private var selectedIncrement: Double?
     @FocusState private var isCrownFocused: Bool
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
-    private var resultingWeight: Double {
+    /// The current unit's steps. Pounds get their own plate steps rather than
+    /// converted kilograms — see `ProgressiveOverloadIncrement`.
+    private var grid: ProgressiveOverloadIncrement.Grid {
+        ProgressiveOverloadIncrement.grid(for: weightUnit)
+    }
+
+    private var increment: Double {
+        selectedIncrement ?? grid.defaultOption
+    }
+
+    /// `currentWeight` in the displayed unit. Every number this screen shows is
+    /// computed in display space, so the arithmetic the user reads adds up
+    /// exactly ("198,4 + 5 = 203,4") instead of drifting through a conversion.
+    private var currentDisplayWeight: Double {
+        weightUnit.converting(fromKilograms: currentWeight)
+    }
+
+    /// The result the user is about to apply, computed in display space.
+    ///
+    /// Goes through the SAME service the apply path uses rather than
+    /// reimplementing its assistance clamp here — otherwise a future change to
+    /// that rule would silently desync this preview from what actually gets
+    /// applied. The service is unit-agnostic pure math, and the kg↔display
+    /// conversion is linear, so feeding it display units is exact.
+    private var resultingDisplayWeight: Double {
         ProgressiveOverloadService.increasedWeight(
-            currentWeight,
+            currentDisplayWeight,
             increment: increment,
             loadBehavior: isAssistance ? .counterweightAssistance : .resistance
         )
@@ -66,7 +99,7 @@ struct ProgressiveOverloadIncrementPicker: View {
     private var resultingWeightPreview: Text {
         hasUniformWeights
             ? Text(
-                "→ \(ProgressiveOverloadFormat.weight(resultingWeight))",
+                "→ \(WatchWeightFormatting.displayLabel(resultingDisplayWeight, in: weightUnit))",
                 comment: "Resulting weight preview in the increment picker"
             )
             : Text("all sets", comment: "Increment picker preview when the target's sets do not share one weight")
@@ -88,7 +121,9 @@ struct ProgressiveOverloadIncrementPicker: View {
                     }
                     ToolbarItem(placement: .confirmationAction) {
                         Button {
-                            onApply(increment)
+                            // The one conversion: the grid lives in display
+                            // space, everything past this line is kilograms.
+                            onApply(weightUnit.kilograms(fromDisplay: increment))
                         } label: {
                             Image(systemName: "checkmark")
                         }
@@ -109,7 +144,9 @@ struct ProgressiveOverloadIncrementPicker: View {
                 stepButton(systemName: "chevron.left", delta: -1)
 
                 VStack(spacing: 3) {
-                    Text(ProgressiveOverloadFormat.increment(increment, isAssistance: isAssistance))
+                    Text(ProgressiveOverloadFormat.increment(
+                        increment, isAssistance: isAssistance, in: weightUnit
+                    ))
                         .font(.system(size: 24, weight: .heavy))
                         .lineLimit(1)
                         .minimumScaleFactor(0.6)
@@ -139,24 +176,25 @@ struct ProgressiveOverloadIncrementPicker: View {
             .focusable(true)
             .focused($isCrownFocused)
             .digitalCrownRotation(
-                $increment,
-                from: ProgressiveOverloadIncrement.minimum,
-                through: ProgressiveOverloadIncrement.maximum,
-                by: ProgressiveOverloadIncrement.step,
+                crownValue,
+                from: grid.minimum,
+                through: grid.maximum,
+                by: grid.step,
                 sensitivity: .medium,
                 isContinuous: false,
                 isHapticFeedbackEnabled: true
             )
-            // The crown writes the binding directly, so accumulated float drift
-            // could leave the value marginally off-grid and silently break the
-            // `preset == increment` chip highlight. Snap it back.
-            .onChange(of: increment) { _, value in
-                let snapped = ProgressiveOverloadIncrement.normalized(value)
-                if snapped != value { increment = snapped }
+            // Switching units mid-picker cannot carry the number across: 2.5 kg
+            // is not 2.5 lb. Drop back to the new unit's default rather than
+            // reinterpreting the old figure on the new grid.
+            .onChange(of: weightUnit) { _, _ in
+                selectedIncrement = nil
             }
             .accessibilityElement()
             .accessibilityLabel(Text("Weight increase", comment: "VoiceOver label for the increment picker"))
-            .accessibilityValue(Text(ProgressiveOverloadFormat.increment(increment, isAssistance: isAssistance)))
+            .accessibilityValue(Text(ProgressiveOverloadFormat.increment(
+                increment, isAssistance: isAssistance, in: weightUnit
+            )))
             .accessibilityAdjustableAction { direction in
                 switch direction {
                 case .increment: step(by: 1)
@@ -181,14 +219,14 @@ struct ProgressiveOverloadIncrementPicker: View {
 
     private var presetChips: some View {
         HStack(spacing: 5) {
-            ForEach(ProgressiveOverloadIncrement.options, id: \.self) { preset in
+            ForEach(grid.options, id: \.self) { preset in
                 Button {
                     setIncrement(preset)
                 } label: {
-                        // Locale-converted like every other weight on screen —
-                        // a bare number here read "2.5" next to a "+5.51 lb"
-                        // preview in a pounds locale.
-                        Text(ProgressiveOverloadFormat.weight(preset))
+                        // In the same unit as everything else on screen — a
+                        // bare number here read "2.5" next to a "+5.51 lb"
+                        // preview back when the unit came from the locale.
+                        Text(WatchWeightFormatting.incrementLabel(preset, in: weightUnit))
                             .font(.system(size: 11, weight: .semibold))
                             .lineLimit(1)
                             .minimumScaleFactor(0.7)
@@ -207,7 +245,9 @@ struct ProgressiveOverloadIncrementPicker: View {
                     }
                 .buttonStyle(.plain)
                 .accessibilityLabel(Text(
-                    ProgressiveOverloadFormat.increment(preset, isAssistance: isAssistance)
+                    ProgressiveOverloadFormat.increment(
+                        preset, isAssistance: isAssistance, in: weightUnit
+                    )
                 ))
             }
         }
@@ -227,15 +267,26 @@ struct ProgressiveOverloadIncrementPicker: View {
         .accessibilityHidden(true)
     }
 
+    /// The crown's binding. It normalizes on write because the crown writes
+    /// directly: accumulated float drift would otherwise leave the value
+    /// marginally off-grid and silently break the `preset == increment` chip
+    /// highlight.
+    private var crownValue: Binding<Double> {
+        Binding(
+            get: { increment },
+            set: { selectedIncrement = ProgressiveOverloadIncrement.normalized($0, in: weightUnit) }
+        )
+    }
+
     /// Fine adjustment by one stride — the touch equivalent of one crown detent.
     private func step(by delta: Int) {
-        setIncrement(increment + Double(delta) * ProgressiveOverloadIncrement.step)
+        setIncrement(increment + Double(delta) * grid.step)
     }
 
     private func setIncrement(_ value: Double) {
-        let next = ProgressiveOverloadIncrement.normalized(value)
+        let next = ProgressiveOverloadIncrement.normalized(value, in: weightUnit)
         guard next != increment else { return }
-        increment = next
+        selectedIncrement = next
         WKInterfaceDevice.current().play(.click)
     }
 }
@@ -246,6 +297,7 @@ struct ProgressiveOverloadIncrementPicker: View {
 /// workout" — deliberately NOT "already saved on iPhone", which may still be
 /// pending while the phone is unreachable.
 struct ProgressiveOverloadConfirmationView: View {
+    /// Canonical kilograms.
     let newWeight: Double
     let targetRepMin: Int
     /// Progressing a counterweight stack REMOVES assistance, so the headline
@@ -257,6 +309,8 @@ struct ProgressiveOverloadConfirmationView: View {
     /// naming a weight the other sets do not have.
     let hasUniformWeights: Bool
     let onDismiss: () -> Void
+
+    @Environment(\.weightUnit) private var weightUnit
 
     var body: some View {
         VStack(spacing: 14) {
@@ -291,7 +345,7 @@ struct ProgressiveOverloadConfirmationView: View {
                         Text("Increased to", comment: "Progressive-overload confirmation headline")
                             .font(.system(size: 20, weight: .heavy))
                     }
-                    Text(ProgressiveOverloadFormat.weight(newWeight))
+                    Text(ProgressiveOverloadFormat.weight(newWeight, in: weightUnit))
                         .font(.system(size: 22, weight: .heavy))
                         .foregroundStyle(OnyxWatch.Colors.accentGreen)
                 }
@@ -324,29 +378,30 @@ struct ProgressiveOverloadConfirmationView: View {
 
 // MARK: - Formatting
 
-/// Shared, allocation-light formatting for the three surfaces. `FormatStyle`
-/// rather than a `MeasurementFormatter` instance, per the repository's
-/// main-thread rules.
+/// Shared formatting for the three overload surfaces, over the watch's one
+/// weight-formatting seam.
+///
+/// It used to format with `.formatted(.measurement(width: .abbreviated,
+/// usage: .general))`, whose `usage: .general` re-derives the unit **from the
+/// locale**. That is what made a US-locale watch show "80 lb" in the routine
+/// overview beside a set editor that said "kg", and the older bug the comment
+/// on `increment` records — "+2.5 kg" next to "→ 137.8 lb" — was the same
+/// defect one layer down. Both are gone: the unit is the one synced preference,
+/// for the value and for the word.
 enum ProgressiveOverloadFormat {
-    /// Up to two fraction digits so a 1.25 kg step reads "1.25 kg" rather than
-    /// being rounded to "1.2 kg" by the default precision.
-    static func weight(_ kilograms: Double) -> String {
-        Measurement(value: kilograms, unit: UnitMass.kilograms)
-            .formatted(.measurement(
-                width: .abbreviated,
-                usage: .general,
-                numberFormatStyle: .number.precision(.fractionLength(0...2))
-            ))
+    /// A **canonical kilogram** weight, converted and labelled in `unit`.
+    static func weight(_ kilograms: Double, in unit: WeightUnit) -> String {
+        WatchWeightFormatting.label(kilograms, in: unit)
     }
 
     /// The signed step as shown on the button: a counterweight stack progresses
     /// by REMOVING assistance, so the user sees a minus there.
     ///
-    /// Formatted through the SAME locale-aware `Measurement` path as `weight`.
-    /// Hardcoding " kg" here made the step and the resulting-weight preview
-    /// disagree in both unit and magnitude in a locale that displays pounds
-    /// (e.g. "+2.5 kg" next to "→ 137.8 lb").
-    static func increment(_ value: Double, isAssistance: Bool) -> String {
-        "\(isAssistance ? "−" : "+")\(weight(value))"
+    /// `value` is in **display units**, like the grid it comes from — the step
+    /// and the resulting-weight preview are both computed in display space, so
+    /// the arithmetic the user reads adds up exactly. Two fraction digits, so a
+    /// 1.25 step reads "1,25" rather than being rounded to a misleading "1,3".
+    static func increment(_ value: Double, isAssistance: Bool, in unit: WeightUnit) -> String {
+        "\(isAssistance ? "−" : "+")\(WatchWeightFormatting.incrementLabel(value, in: unit))"
     }
 }

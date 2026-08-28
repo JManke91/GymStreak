@@ -39,12 +39,21 @@ struct WatchExercise: Codable, Identifiable, Hashable {
     // Optional (nil default) keeps old cached payloads decodable.
     var alternatives: [WatchExerciseAlternative]? = nil
 
-    /// Compact, consistent summary of planned sets.
+    /// Compact, consistent summary of planned sets, in the unit the user reads.
     ///
     /// Always uses the format `<sets> × <reps> @ <weight>` with ascending ranges,
-    /// e.g. "3 × 10 @ 80 kg", "3 × 8–12 @ 80 kg", "3 × 10 @ 60–80 kg".
+    /// e.g. "3 × 10 @ 80 kg", "3 × 8–12 @ 80 kg", "3 × 10 @ 60–80 lb".
     /// Bodyweight sets omit the weight part ("3 × 10"). Empty when no sets.
-    var setsSummary: String {
+    ///
+    /// `unit` is a parameter rather than something read here because this is a
+    /// wire model with no access to the environment. It used to format with
+    /// `.formatted(.measurement(width: .abbreviated, usage: .general))`, which
+    /// re-derives the unit from `Locale` — so a US-locale watch showed "80 lb"
+    /// here and "kg" in the set editor of the same workout, and `en_GB` could
+    /// even render mass as stone. The unit now comes from the one synced
+    /// preference, and the range's two ends are converted from the canonical
+    /// kilograms independently so neither is derived from the other.
+    func setsSummary(in unit: WeightUnit) -> String {
         guard !sets.isEmpty else { return "" }
 
         let reps = sets.map(\.reps)
@@ -55,11 +64,6 @@ struct WatchExercise: Codable, Identifiable, Hashable {
         let maxWeight = weights.max() ?? 0
         let isBodyweight = maxWeight == 0
 
-        func formatted(_ kg: Double) -> String {
-            Measurement(value: kg, unit: UnitMass.kilograms)
-                .formatted(.measurement(width: .abbreviated, usage: .general))
-        }
-
         // Reps: single value when uniform, otherwise an ascending min–max range.
         let repsPart = minReps == maxReps ? "\(minReps)" : "\(minReps)–\(maxReps)"
         let setsAndReps = "\(sets.count) × \(repsPart)"
@@ -67,10 +71,16 @@ struct WatchExercise: Codable, Identifiable, Hashable {
         // Bodyweight exercises omit the weight portion entirely.
         guard !isBodyweight else { return setsAndReps }
 
-        // Weight: single value when uniform, otherwise an ascending min–max range.
-        let weightPart = minWeight == maxWeight
-            ? formatted(minWeight)
-            : "\(formatted(minWeight))–\(formatted(maxWeight))"
+        // Weight: single value when uniform, otherwise an ascending min–max
+        // range. The unit word is appended once, to the pair.
+        let weightPart: String
+        if minWeight == maxWeight {
+            weightPart = WatchWeightFormatting.label(minWeight, in: unit)
+        } else {
+            let range = "\(WatchWeightFormatting.number(minWeight, in: unit))"
+                + "–\(WatchWeightFormatting.number(maxWeight, in: unit))"
+            weightPart = WatchWeightFormatting.labelled(range, in: unit)
+        }
 
         return "\(setsAndReps) @ \(weightPart)"
     }

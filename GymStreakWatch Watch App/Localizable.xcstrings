@@ -7,9 +7,6 @@
     "·" : {
 
     },
-    "%@" : {
-
-    },
     "%@ · all sets" : {
       "comment" : "Mid-workout progressive-overload primary action; parameter is the signed weight step",
       "localizations" : {
@@ -17,6 +14,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%@ · alle Sätze"
+          }
+        }
+      }
+    },
+    "%@ %@" : {
+      "comment" : "A weight and its unit, e.g. \"90 kg\"",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@ %2$@"
           }
         }
       }
@@ -164,26 +172,6 @@
                 }
               }
             }
-          }
-        }
-      }
-    },
-    "%lld kg" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%lld kg"
-          }
-        }
-      }
-    },
-    "%lld kilograms" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%lld Kilogramm"
           }
         }
       }
@@ -337,9 +325,6 @@
           }
         }
       }
-    },
-    "Adjustable. Swipe up or down to change value." : {
-
     },
     "All Routines" : {
       "localizations" : {
@@ -751,9 +736,6 @@
         }
       }
     },
-    "Double tap to adjust." : {
-
-    },
     "Double tap to complete set and start rest timer" : {
       "localizations" : {
         "de" : {
@@ -783,9 +765,6 @@
           }
         }
       }
-    },
-    "Double tap to mark this set as complete and start rest timer" : {
-
     },
     "Double tap to pause workout" : {
       "localizations" : {
@@ -1105,6 +1084,28 @@
     "kCal" : {
 
     },
+    "kg" : {
+      "comment" : "Abbreviated kilograms unit shown next to a weight",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "kg"
+          }
+        }
+      }
+    },
+    "kilograms" : {
+      "comment" : "Spoken kilograms unit, for VoiceOver",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kilogramm"
+          }
+        }
+      }
+    },
     "Later" : {
       "comment" : "Dismisses the mid-workout progressive-overload suggestion",
       "localizations" : {
@@ -1122,6 +1123,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Latissimus"
+          }
+        }
+      }
+    },
+    "lb" : {
+      "comment" : "Abbreviated pounds unit shown next to a weight",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "lb"
           }
         }
       }
@@ -1320,6 +1332,17 @@
     },
     "Pause" : {
 
+    },
+    "pounds" : {
+      "comment" : "Spoken pounds unit, for VoiceOver",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pfund"
+          }
+        }
+      }
     },
     "Previous set" : {
       "localizations" : {
@@ -1613,9 +1636,6 @@
           }
         }
       }
-    },
-    "scroll crown" : {
-
     },
     "Search exercises" : {
       "localizations" : {

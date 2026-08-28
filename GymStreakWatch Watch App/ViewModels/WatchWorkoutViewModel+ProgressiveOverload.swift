@@ -111,8 +111,13 @@ extension WatchWorkoutViewModel {
               let routineID = currentRoutine?.id,
               let target = resolveOverloadTemplateTarget(for: exercise, routineID: routineID)
         else { return false }
-        // The smallest offered step still leaves every set unchanged.
-        let smallest = ProgressiveOverloadIncrement.options.min() ?? ProgressiveOverloadIncrement.default
+        // The smallest offered step still leaves every set unchanged. Read off
+        // the KILOGRAM grid because this view model works in canonical
+        // kilograms and has no display unit; the question it answers — "is this
+        // stack already at zero assistance?" — has the same answer for any
+        // positive step, so the unit the user happens to read is irrelevant.
+        let kilogramGrid = ProgressiveOverloadIncrement.grid(for: .kilograms)
+        let smallest = kilogramGrid.options.min() ?? kilogramGrid.defaultOption
         return target.sets.allSatisfy { set in
             ProgressiveOverloadService.increasedWeight(
                 set.weight, increment: smallest, loadBehavior: behavior

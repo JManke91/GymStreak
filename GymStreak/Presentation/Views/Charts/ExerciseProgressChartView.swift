@@ -52,7 +52,8 @@ struct ExerciseProgressChartView: View {
             proEntitlements: dependencies.proEntitlements,
             paywalls: dependencies.paywalls,
             weightUnitPreference: dependencies.weightUnitPreference,
-            deepDiveAllowanceGate: dependencies.makeAICoachAllowanceGate(for: .exerciseDeepDive)
+            deepDiveAllowanceGate: dependencies.makeAICoachAllowanceGate(for: .exerciseDeepDive),
+            deepDiveFacts: dependencies.exerciseDeepDiveFacts
         )
     }
 }
@@ -62,8 +63,9 @@ struct ExerciseProgressChartView: View {
 ///
 /// `usage` is `ExerciseProgressViewModel.resolvedUsage`, so it is `nil` until a load has
 /// answered which usage the screen is showing. Keying on `selectedUsage` instead would
-/// run the cache probe — a full history fetch on the main actor — once against the
-/// `.combined` placeholder and again against the answer, on every screen open.
+/// run the cache probe — a history fetch on the shared History model actor, queued ahead
+/// of this screen's own chart load — once against the `.combined` placeholder and again
+/// against the answer, on every screen open.
 private struct DeepDiveContext: Equatable {
     let exerciseId: UUID?
     let usage: ExerciseUsageSelection?
@@ -80,8 +82,6 @@ private struct ExerciseProgressChartViewInternal: View {
     /// ViewModel, which holds the same preference this environment value is
     /// published from.
     @Environment(\.weightUnit) private var weightUnit
-    /// Kept only to pass through to the (out-of-scope) AI Coach deep-dive ViewModel API.
-    @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
 
     // MARK: - AI Coach Deep-Dive
@@ -93,6 +93,9 @@ private struct ExerciseProgressChartViewInternal: View {
     /// view may not construct the entitlement or the paywall seam itself, and
     /// the gate is a cheap, stateless composition of app-lifetime collaborators.
     private let deepDiveAllowanceGate: AICoachAllowanceGate
+    /// Retained for the same reason: the deep-dive's model-actor-backed history
+    /// boundary, which only the composition root may hand out.
+    private let deepDiveFacts: any ExerciseDeepDiveFactProviding
 
     init(
         exerciseName: String,
@@ -104,14 +107,19 @@ private struct ExerciseProgressChartViewInternal: View {
         proEntitlements: any ProEntitlementProviding,
         paywalls: any PaywallPresenting,
         weightUnitPreference: any WeightUnitPreferenceProviding,
-        deepDiveAllowanceGate: AICoachAllowanceGate
+        deepDiveAllowanceGate: AICoachAllowanceGate,
+        deepDiveFacts: any ExerciseDeepDiveFactProviding
     ) {
         self._currentExerciseName = State(initialValue: exerciseName)
         self._currentExerciseId = State(initialValue: exerciseId)
         self.availableExercises = availableExercises
         self.deepDiveAllowanceGate = deepDiveAllowanceGate
+        self.deepDiveFacts = deepDiveFacts
         self._deepDiveVM = State(
-            initialValue: ExerciseDeepDiveViewModel(allowanceGate: deepDiveAllowanceGate)
+            initialValue: ExerciseDeepDiveViewModel(
+                allowanceGate: deepDiveAllowanceGate,
+                facts: deepDiveFacts
+            )
         )
         self._viewModel = StateObject(wrappedValue: ExerciseProgressViewModel(
             exerciseName: exerciseName,
@@ -190,12 +198,7 @@ private struct ExerciseProgressChartViewInternal: View {
             // Auto-load cached deep-dive once the load has said which usage is charted,
             // and again when the exercise or that usage changes.
             if let usage = deepDiveUsage, let exercise = resolvedExercise {
-                await deepDiveVM.checkCache(
-                    exercise: exercise,
-                    usage: usage,
-                    locale: .current,
-                    modelContext: modelContext
-                )
+                await deepDiveVM.checkCache(exerciseId: exercise.id, usage: usage)
                 // No cached narrative → the "Ask the Coach" button is showing.
                 // Warm the model now so a tap streams tokens with minimal delay.
                 if case .idle = deepDiveVM.state,
@@ -622,10 +625,10 @@ private struct ExerciseProgressChartViewInternal: View {
                             // admitted: a refused tap raises the paywall and
                             // leaves the button where it was.
                             if deepDiveVM.generate(
-                                exercise: exercise,
+                                exerciseId: exercise.id,
+                                exerciseName: exercise.name,
                                 usage: usage,
-                                locale: .current,
-                                modelContext: modelContext
+                                locale: .current
                             ) {
                                 hasTappedAskCoach = true
                             }
@@ -642,10 +645,10 @@ private struct ExerciseProgressChartViewInternal: View {
                         usageLabel: viewModel.showsUsagePicker ? viewModel.selectedUsageLabel : nil,
                         onRegenerate: {
                             deepDiveVM.regenerate(
-                                exercise: exercise,
+                                exerciseId: exercise.id,
+                                exerciseName: exercise.name,
                                 usage: usage,
-                                locale: .current,
-                                modelContext: modelContext
+                                locale: .current
                             )
                         }
                     )
@@ -701,7 +704,10 @@ private struct ExerciseProgressChartViewInternal: View {
     /// changes underneath it — a different exercise, or a different usage of this one.
     private func resetDeepDive() {
         deepDiveVM.cancel()
-        deepDiveVM = ExerciseDeepDiveViewModel(allowanceGate: deepDiveAllowanceGate)
+        deepDiveVM = ExerciseDeepDiveViewModel(
+            allowanceGate: deepDiveAllowanceGate,
+            facts: deepDiveFacts
+        )
         hasTappedAskCoach = false
     }
 }

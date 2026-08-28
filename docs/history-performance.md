@@ -55,9 +55,19 @@ ViewModel executed the aggregation inline on the main actor.
 `SwiftDataHistorySnapshotProvider` methods** — SE-0461's explicit "always leave the
 caller's actor" opt-out. The off-main guarantee is now a property of the code rather
 than of a build setting, and approachable concurrency is enabled project-wide.
-(Three at the time of this fix; the provider carries seven such methods today —
+(Three at the time of this fix; the provider carries nine such methods today —
 see `docs/swift6-concurrency.md` §1 for the current list and the rule that every new
 one must be annotated.)
+
+**The same class of regression shipped once more, in code this document did not cover.**
+The AI coach's exercise deep-dive (`docs/ai-coach.md` §3) called a plain synchronous
+aggregator straight from a `@MainActor` ViewModel — an unbounded
+`FetchDescriptor<WorkoutSession>` and a full relationship walk, twice per generation and
+once again on every screen open. Fixed 2026-08-28 (ticket 02) by moving it behind the
+same provider: **311 ms** of main-actor stall without `@concurrent` on
+`fetchDeepDiveAggregate`, within budget with it, build green either way. The lesson is
+the one below — a new caller of history is a new instance of this bug until a heartbeat
+test says otherwise.
 
 Measured with `GymStreakTests/SwiftDataHistorySnapshotStoreTests`:
 

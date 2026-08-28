@@ -1,10 +1,10 @@
 # Weight unit preference (kg / lb)
 
-**Status:** tickets 01 and 02 of 05 shipped — the unit type, the preference store, the
-Settings picker, the formatting seam, the active-workout surfaces (01), and the whole of
-routine building/editing plus the progressive-overload increment grid (02). Tickets 03–05
-route the remaining surfaces (history/charts/PRs/volume, watch parity, AI coach) through
-the seam built here.
+**Status:** tickets 01–04 of 05 shipped — the unit type, the preference store, the Settings
+picker, the formatting seam, the active-workout surfaces (01), the whole of routine
+building/editing plus the progressive-overload increment grid (02), history/charts/PRs and
+the tonnage rollup (03), and **watch parity plus the preference channel that carries the
+unit across the pairing (04)**. Ticket 05 routes the AI coach through the seam built here.
 
 **Source:** Things to-do "Weight Conversion" (`4HHdQyQQe88T9iMReWTmdc`), reported as a
 customer complaint that the app is unusable in pounds.
@@ -25,9 +25,17 @@ alternative-exercise editors, the routine cards and sorting rows, and the
 progressive-overload sheet all read and accept pounds, and the sheet offers real pound
 plate steps rather than converted kilogram ones.
 
-**Monetization: Free.** §3 Rule 1 (aha path), Rule 3 (in-workout), Rule 4 (the user's own
-logged data). No cap, no placement, no nudge — the whole feature is the free residue.
-Re-checked at completion: what shipped is entirely free, matching the planning verdict.
+The Apple Watch reads the same unit. It is not chosen there — the watch has no settings
+surface — but sent from the iPhone and remembered, so the routine overview, the set editor,
+an exercise added mid-workout, the swap picker and the weight-increase screens all agree
+with the phone, and the Digital Crown and ±buttons step in the user's unit (§9a).
+
+**Monetization: Free.** §3 Rule 1 (aha path), Rule 3 (in-workout **and anything on the
+watch app**), Rule 4 (the user's own logged data). No cap, no placement, no nudge — the
+whole feature is the free residue. Re-checked at completion of each ticket, ticket 04
+included: what shipped is entirely free, matching the planning verdict. Rule 3 makes the
+watch half auto-free with no discussion — every surface it touches is either on the watch
+or inside an active workout.
 
 ---
 
@@ -106,6 +114,18 @@ Presentation/Helpers/WeightFormatting.swift       the one formatting seam
 Presentation/Helpers/WeightDisplayMirror.swift    the kg ↔ display field invariant
 Presentation/Views/Workout/SetValueKeypad.swift   the digit pad, split off the sheet
 Presentation/Views/Settings/Components/UnitsSettingsSectionView.swift
+```
+
+Ticket 04 added the watch half. The watch may not import iOS `Domain/` (SwiftData), so it
+follows the repository's per-target file-copy pattern:
+
+```
+GymStreakWatch Watch App/Models/WeightUnit.swift            verbatim copy of the Domain type
+GymStreakWatch Watch App/Models/WatchWeightFormatting.swift the watch's formatting seam
+GymStreakWatch Watch App/Views/WeightUnitEnvironment.swift  the @Entry environment value
+GymStreakWatch Watch App/Managers/WatchWeightUnitStore.swift published projection
+GymStreakWatch Watch App/Managers/WatchSyncStateStore.swift persists the last-known unit
+GymStreakWatch Watch App/GymStreakWatchApp.swift            RootView publishes it into the env
 ```
 
 `WeightUnit` lives in `Domain/` and imports only Foundation — no SwiftUI, no localization.
@@ -582,16 +602,19 @@ through a conversion.
 `selectedIncrement` became `Double?`: the default is per-unit, so it cannot be resolved at
 initialization, before the environment exists. Nil means "the current unit's default".
 
-**Watch drift, deliberate and time-boxed — with a user-visible consequence.** The watch
-keeps its own copy of `ProgressiveOverloadService.swift`, still carrying the kilogram-only
-`ProgressiveOverloadIncrement` (flat `options`/`default`/`minimum`/`maximum`/`step` and
-`normalized(_:)`). Until ticket 04 ships, **a pounds user gets kilogram plate steps on the
-watch** — the picker offers 0.5/1.25/2.5/5, and they are kilograms whatever the phone says.
-The two test suites therefore assert *different contracts for the same type name*
-(`GymStreakTests/ProgressiveOverloadServiceTests.swift` vs
-`GymStreakWatchTests/ProgressiveOverloadServiceTests.swift:140-163`), which is precisely the
-copy-drift trap CLAUDE.md warns about — recorded here so ticket 04 closes it deliberately
-rather than discovering it. Both copies' doc comments say so too.
+**The watch carries a second copy of both grids, and keeping them identical is manual.**
+Ticket 04 closed the drift this section used to record: between tickets 02 and 04 the watch
+still had the kilogram-only `ProgressiveOverloadIncrement` (flat
+`options`/`default`/`minimum`/`maximum`/`step` and `normalized(_:)`), so a pounds user got
+kilogram plate steps on the watch whatever the phone said. Both copies now carry the same
+`Grid`/`grid(for:)`/`normalized(_:in:)` shape and the same two grids.
+
+They are **per-target duplicated copies, not shared code**: nothing in the build makes them
+agree, and a drift means the watch proposes a different increase than the phone for the
+same set. `GymStreakWatchTests/ProgressiveOverloadServiceTests.swift` therefore mirrors the
+iOS suite's assertions character for character — including
+`poundIncrementsAreRealPlateStepsRatherThanConvertedKilograms` — so a divergence fails the
+watch suite rather than shipping. Both copies' doc comments say so too.
 
 ### The Domain-layer leak
 
@@ -607,6 +630,236 @@ unit.
 
 Rejected: passing a `WeightUnit` into the service and formatting there. That relocates the
 violation instead of fixing it — Domain would still be reaching for `Localizable.strings`.
+
+---
+
+## 9a. Ticket 04 — the watch
+
+### The bug that already shipped: two units on one watch
+
+Two watch surfaces were **already locale-aware** and had been since long before this
+feature existed:
+
+- `WatchExercise.setsSummary` formatted with
+  `.formatted(.measurement(width: .abbreviated, usage: .general))`
+- `ProgressiveOverloadFormat.weight` did the same, with an explicit `numberFormatStyle`
+
+`usage: .general` re-derives the unit **from the locale** (§3). So a US-locale user saw
+"80 lb" in the routine overview and "kg" in the set editor of the same workout, on the same
+watch, with nothing to explain the difference — and `en_GB` could render mass as stone. The
+comment at `ProgressiveOverloadPickerViews.swift` records an earlier round of the same
+defect one layer down: a hardcoded " kg" step shown next to a locale-formatted result
+("+2.5 kg" beside "→ 137.8 lb"). Both are gone; the unit for the value and the unit for the
+word now come from the same place, and that place is never `Locale`.
+
+### Delivering the preference: merged into the routine `applicationContext`
+
+**App Group `UserDefaults` is shared within a device's app family, not between iPhone and
+Watch.** `WatchSyncStateStore` opens `group.com.gymstreak.shared` on both sides, but they
+are different containers on different devices. The unit therefore crosses over
+WatchConnectivity.
+
+It rides in the **existing routine `applicationContext`**, under
+`WatchRoutineSync.contextWeightUnitKey` (`"weightUnit"`), because
+`updateApplicationContext` **replaces the whole per-direction dictionary**: a second,
+competing call would silently drop the routine payload and the authority header with it.
+That dictionary is wholly owned by `RoutineSyncAuthority`, so the unit is held there and
+`RoutineSyncAuthority.context(for:)` is the single place every send path — ordinary,
+authoritative, handover and the legacy no-challenge path — builds its dictionary.
+
+```
+WeightUnitPreference.didSet
+  → AppDependencies' onChange hook
+  → WatchConnectivityManager.syncWeightUnit(_:)
+  → RoutineSyncAuthority.updateWeightUnit(_:)      merges the key, resends
+  → updateApplicationContext                        one dictionary, one call
+  → watch WatchConnectivityManager.processApplicationContext
+  → WatchSyncStateStore.applyWeightUnit(_:)         persists + notifies
+  → WatchWeightUnitStore.unit                       @Published
+  → RootView → \.weightUnit environment            every weight re-renders
+```
+
+Three decisions inside that chain are load-bearing:
+
+- **A unit change resends the last routine payload, bypassing duplicate suppression.**
+  `sendOrdinary` drops a context whose routine bytes are unchanged — which they are, by
+  definition, when only the unit moved. Without the explicit resend the watch would keep
+  the old unit until the user's next routine edit. The push is still behind
+  `canSyncRoutines`, the same session/watch-state gate every other send path uses, so a
+  unit change cannot consume an authority generation on a send that was never going to
+  leave the phone — but the *value* is recorded either way, so it rides along with the next
+  routine sync regardless.
+- **The watch applies the unit ahead of the routines guard and outside the authority
+  decision.** The unit has no version of its own, so a context whose routine half is
+  absent (older iOS), a duplicate generation, or rejected as stale still carries the newest
+  unit iOS knows about.
+- **`onChange` on the preference, not an `@Observable` read.** The write is the event; no
+  view is involved, so nothing would otherwise observe it. The first-launch locale seed
+  happens inside `init` and runs no `didSet` — correct, because the composition root reads
+  the seeded value directly and calls `syncWeightUnit` with it.
+
+### The watch has a value before the first context arrives
+
+`WatchSyncStateStore` persists the unit in its one atomically replaced App Group state file,
+alongside the routine base. Fresh install, watch launched before the phone, or a user who
+never opened the setting: the fallback is **kilograms**, the canonical stored unit — never
+`Locale`. Deriving it independently on the watch is precisely the bug above, and it would
+let the two devices disagree about what a stored number means.
+
+`weightUnitRaw` is `Optional` per the **wire schema evolution rule** (`docs/watch-sync.md`):
+a synthesized `Decodable` throws `keyNotFound` rather than using a stored property's
+default, and an undecodable state file quarantines the watch's *entire* sync state — the
+outgoing workout queue included. An older watch build ignores the new context key the same
+way, since it simply never reads it.
+
+**No unit is added to any per-set wire DTO.** `WatchSet`, `ActiveWorkoutSet`,
+`CompletedWatchSet` and `WatchTemplateSetChange` stay bare kilogram `Double`s. The unit is a
+display setting, not a property of a set; tagging every set would create the possibility of
+a payload whose sets disagree with each other. `ActiveWorkoutExercise` gained no stored
+property either, so `checkpointExerciseRoundTripPreservesEveryField` — which pins that
+struct's encoded key set and stored-property count — needed no change and still passes.
+
+### The integer-kilogram grid, and why it was a data bug
+
+This is the part of ticket 04 most likely to have shipped a silent corruption, so it is
+written down. Three watch paths quantized weight to **whole kilograms**:
+
+| path | was |
+| --- | --- |
+| `WatchExerciseConfigurationDraft.init` | `weight.rounded()`, clamped `0...999` |
+| `FullScreenSetEditorView.adjustWeight` | `±1` on the stored kilograms, clamped `0...999` |
+| `WatchWeightConfigurationEditor` | crown `from: 0, through: 999, by: 1` on the stored kilograms |
+
+±1 kg is a reasonable watch step. ±1 lb is too. Rounding the *stored kilograms* is not:
+135 lb is 61.235 kg, rounds to 61 kg, and redisplays as **134.5 lb** — and drifts again on
+the next edit. The user's number decays every time they touch it.
+
+The fix moves quantization into **display space**: the number the user manipulates is
+stepped in their unit, converted to kilograms, and stored unrounded. The ceiling stays
+canonical (`WeightUnit.maximumKilograms`, 999 kg) so there is one number to keep true; the
+crown's `through:` is `weightUnit.maximumDisplay.rounded(.down)`, derived from it rather
+than hand-copied. `WatchExerciseConfigurationDraft` no longer rounds at all.
+
+`WatchWeightConfigurationEditor` holds the crown's value as `@State` in display space and
+writes the canonical binding in one direction only (display → kg, never
+display ← kg ← display), so a crown detent is never fought by a re-conversion. A unit change
+mid-edit re-derives the crown value from the canonical kilograms, which never moved — rather
+than reinterpreting the old number on the new grid, which would turn 135 lb into 135 kg.
+
+*One accepted consequence.* That re-derivation rounds to a whole unit of the **new** unit, so
+a 135 lb value (61.235 kg) becomes 61 kg if the phone switches to kilograms while this one
+editor is open. The crown's grid is whole display units by design and it is the only way this
+value is ever entered, so the alternative — showing a fractional number the crown cannot
+reach — is worse. It is visible on screen, it needs the unit to change during this specific
+edit, and it cannot touch a weight that was already logged.
+
+`WeightUnitTests.displaySpaceSteppingPreservesAPoundsValue` pins all of it, including four
+consecutive ±1 lb steps landing back exactly where they started.
+
+**Two steppers, two grid rules, on purpose.** `WatchWeightConfigurationEditor`'s crown snaps
+to whole display units; `FullScreenSetEditorView.adjustWeight` does not. The crown dials a
+*new* value up from zero, so whole units are all it can ever hold. The set editor edits a
+weight that already exists — usually straight off the routine — and snapping would discard
+whatever part of it does not sit on the current unit's grid the first time the user taps +.
+A 60 kg planned set read in pounds steps 132.3 → 133.3 and back to 132.3.
+
+### Surfaces converted
+
+| surface | what changed |
+| --- | --- |
+| `WatchExercise.setsSummary` | now `setsSummary(in:)`; no `usage: .general`, and a mixed range converts both ends independently from the canonical kilograms and takes one unit word |
+| `FullScreenSetEditorView` | the hardcoded `unit: "kg"`, and display-space stepping |
+| `CompactValueEditor` | takes a preformatted value plus a written *and* a spoken unit; it no longer converts or formats, so it cannot disagree with the stepper |
+| `WatchExerciseConfigurationView` + `WatchWeightConfigurationEditor` | the row label, the crown editor, the ± buttons and the VoiceOver value |
+| `ExerciseListView.setScheme` | `String(format: "%gkg", …)` — the watch twin of the Domain leak ticket 02 fixed on iOS |
+| `ProgressiveOverloadIncrementPicker` | per-unit grid, display-space preview arithmetic, one conversion at apply |
+| `ProgressiveOverloadSheet` / `SuggestionView` | the one-tap default is the current unit's `defaultOption`, converted at apply |
+| `ProgressiveOverloadConfirmationView`, `SummaryOverloadPromptView` | the announced new weight |
+| `OnyxWatchDesignSystem` | preview literal, cosmetic |
+
+**Deleted rather than converted:** `InlineSetEditorView` and `ValueStepperView`. Both were
+unreachable — `ValueStepperView`'s only caller was `InlineSetEditorView`, whose only caller
+was its own commented-out preview — and they carried a **third** weight convention into the
+tree (`unit: "lbs"`, `step: 5`, contradicting every live surface).
+`docs/watch-localization.md` already recorded them as known non-targets. Leaving them would
+have meant a third convention in a feature whose whole point is that there is one. Their
+`Comparable.clamped(to:)` extension has four live callers and moved to
+`Extensions/Comparable+Clamped.swift`.
+
+### Verification
+
+**On device, 2026-08-28 (real paired hardware, German locale).** All five checks passed. The
+load-bearing one is the overload write-back, because it is the only path in this ticket that
+permanently mutates a routine template:
+
+| | lb | kg (stored) |
+| --- | --- | --- |
+| before | 49,6 | 22,5 |
+| step applied on the watch | **+5 lb** | +2,26796 |
+| after | 54,6 | 24,77 |
+
+22,5 kg renders as 49,60 lb; +5 lb gives 54,60 lb; converting back gives 24,768 kg → "24,77
+kg" at the seam's two-digit kilogram precision. So the step was a **real pound plate step**
+rather than a converted kilogram one, it was converted to kilograms exactly once, and the
+stored value is the exact sum. Reps reset to the range minimum (8) on both sets.
+
+*A kilograms user doing the same thing would have landed on 25 kg* (22,5 + 2,5), not 24,77.
+That is the parallel-grid decision working as intended, not a rounding artefact: the pounds
+user gets the plates their gym stocks, and the canonical kilograms end up wherever that step
+lands. Switching back to kg shows that honestly instead of rewriting the stored value.
+
+Also confirmed on device: a ±1 lb round trip in the set editor returns the original weight
+(the integer-kilogram bug); the unit crosses the pairing on change; the US-locale kg/lb split
+between the routine overview and the set editor is gone; and the mid-workout add-exercise
+crown editor reads and accepts pounds.
+
+**Automated.** `fastlane test_unit` — iOS 957 tests in 108 suites, watch 52 tests in 4
+suites, all passing; the watch scheme builds with no first-party warnings.
+
+### Architecture review
+
+**PASS WITH WARNINGS**, no CRITICAL findings. The reviewer verified the lockstep of all four
+duplicated file pairs by content diff rather than by trust, traced the sync path end to end
+(including that the resend's fresh generation cannot block a pending template-transaction
+retirement, because the watch's ack gate is `hasApplied(epoch:generation:)` with `>=`), and
+confirmed the display-space arithmetic is exact because the `Measurement<UnitMass>`
+conversion is linear.
+
+Fixed in response:
+
+- `ProgressiveOverloadIncrementPicker.resultingDisplayWeight` had reimplemented
+  `ProgressiveOverloadService.increasedWeight`'s assistance clamp inline. Equivalent today,
+  but a future change to the service would have silently desynced the preview from what the
+  apply actually does. It calls the service now — which is legitimate because that service
+  is unit-agnostic pure math, so display-space values are as valid as kilograms.
+- `WeightUnitPreference.onChange` is `@ObservationIgnored` — it is wiring, not UI state.
+- The crown editor's VoiceOver value built `number + " " + spokenUnitWord` by hand instead of
+  going through `WatchWeightFormatting.labelled`, bypassing the localized `"%@ %@"` order.
+  `labelled` now takes an optional explicit unit word so a spoken site gets the same pairing.
+- `updateWeightUnit`'s `push` gate is an `@autoclosure`, so `canSyncRoutines` — which logs
+  when it refuses — is only evaluated once the unit has actually changed. It was printing
+  "cannot sync routines — session not activated" on every launch from the seeding call,
+  before `WCSession.activate()` could possibly have completed.
+- `docs/watch-unit-tests.md` file inventory and test counts updated (52 tests / 4 suites).
+
+Acknowledged and deliberately not fixed here:
+
+- `ProgressiveOverloadPickerViews.swift` is ~400 lines, over the 300-line convention, and
+  grew in this ticket. The natural seam is `ProgressiveOverloadFormat` plus
+  `ProgressiveOverloadConfirmationView`; splitting it is unrelated churn on top of a
+  behavioural change, so it is left for the next substantive pass on that file.
+- `RoutineDetailView`'s `ScrollView { VStack { ForEach … } }` is a non-lazy stack over
+  user-scaled data, and `exerciseGroups` sorts/filters in a computed property `body` reads.
+  Both are **pre-existing**, and this ticket strictly *reduces* per-row cost — it replaced a
+  per-row `Measurement.formatted(.measurement(...))` with a hoisted `static let` format
+  style. The eager stack should become a `LazyVStack` and `exerciseGroups` should be
+  precomputed next time that file is touched substantively.
+
+### String catalog
+
+The watch uses source-string keys, so the unit words are `kg` / `lb` / `kilograms` /
+`pounds` (`Kilogramm` / `Pfund` in German), joined by `%@ %@`. `%lld kg` and
+`%lld kilograms` were removed: nothing renders them any more.
 
 ---
 
@@ -792,6 +1045,29 @@ literal `"90.0 kg"` to `WeightFormatting.label(90, in: .kilograms)`: the seam dr
 trailing zero and takes its unit word from `unit.weight.*`. Asserting through the seam
 rather than re-hardcoding the new literal keeps the test about the *stat card* instead of
 about the formatter, which has tests of its own.
+
+`GymStreakWatchTests/WeightUnitTests.swift` (ticket 04) is the watch twin of the iOS suite
+— the conversion, precision, grid, ceiling and unit-word assertions are kept identical so a
+divergence between the two `WeightUnit` copies fails the watch suite. It carries three
+assertions the iOS suite has no reason to:
+
+- `displaySpaceSteppingPreservesAPoundsValue` — the integer-kilogram bug (§9a). It shows
+  that rounding stored kilograms loses a 135 lb entry, that the display-space path does not,
+  and that four consecutive ±1 lb steps land back exactly where they started
+- `setsSummaryFollowsTheGivenUnit` — the routine overview renders the unit it is *given*,
+  and not merely a different word: 80 kg and 176.4 lb are different numbers. Plus the
+  bodyweight and mixed-range cases, the latter asserting the unit word appears **once**, on
+  the pair
+- the watch `ProgressiveOverloadIncrement` grids, asserted with the iOS suite's own
+  assertions including `poundIncrementsAreRealPlateStepsRatherThanConvertedKilograms`
+
+`GymStreakTests/WatchSyncStateStoreTests.swift` (ticket 04) covers the preference's
+persistence, against the iOS copy of the store as the rest of that file does:
+
+- the fallback is kilograms and never the locale, before any context has arrived
+- the unit survives a relaunch, and an unchanged unit is not a change to republish
+- **a state file written before `weightUnitRaw` existed still decodes** — the wire schema
+  evolution rule, whose blast radius here is the whole outgoing workout queue, not one field
 
 **Not unit-tested:** the mirror in §6 is view state, so "toggle units and nothing changed"
 rests on `commit`'s opening guard plus the on-device check, not on a test. That covers the

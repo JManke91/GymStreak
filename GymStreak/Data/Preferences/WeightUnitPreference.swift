@@ -59,6 +59,23 @@ final class WeightUnitPreference: WeightUnitPreferenceProviding {
     /// The unit weights are shown and entered in.
     /// Key: `units.weight`. Default: seeded from the locale on first launch.
     var weightUnit: WeightUnit {
-        didSet { defaults.set(weightUnit.rawValue, forKey: Keys.weightUnit) }
+        didSet {
+            defaults.set(weightUnit.rawValue, forKey: Keys.weightUnit)
+            onChange?(weightUnit)
+        }
     }
+
+    /// Called after a change has been written through. The composition root
+    /// uses it to push the new unit to the watch, which has no other way to
+    /// learn of it — the App Group suite is shared within a device's app
+    /// family, not between iPhone and Watch (see docs/watch-sync.md).
+    ///
+    /// A plain callback rather than an `@Observable` read: this fires on the
+    /// write, so nothing has to poll or diff. Not invoked for the first-launch
+    /// locale seed, which happens in `init` and therefore runs no `didSet` —
+    /// correct, since the composition root reads the seeded value directly.
+    ///
+    /// `@ObservationIgnored` because this is wiring, not UI state: nothing
+    /// renders it, so it needs no observation accessors.
+    @ObservationIgnored var onChange: ((WeightUnit) -> Void)?
 }

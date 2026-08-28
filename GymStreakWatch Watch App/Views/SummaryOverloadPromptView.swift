@@ -16,6 +16,8 @@ struct SummaryOverloadPromptView: View {
     let state: WatchSummaryOverloadRow.State
     let onTap: () -> Void
 
+    @Environment(\.weightUnit) private var weightUnit
+
     var body: some View {
         switch state {
         case .actionable:
@@ -79,7 +81,7 @@ struct SummaryOverloadPromptView: View {
                 comment: "Recap confirmation when a target's sets do not share one weight"
             )
         }
-        let weight = ProgressiveOverloadFormat.weight(newWeight)
+        let weight = ProgressiveOverloadFormat.weight(newWeight, in: weightUnit)
         return isAssistance
             ? Text(
                 "Assistance now \(weight) next workout",

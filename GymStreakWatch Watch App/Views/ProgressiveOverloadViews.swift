@@ -39,6 +39,13 @@ import WatchKit
 /// therefore unaffected by any presentation style.
 struct ProgressiveOverloadSheet: View {
     @EnvironmentObject private var viewModel: WatchWorkoutViewModel
+    @Environment(\.weightUnit) private var weightUnit
+
+    /// The current unit's steps. Pounds get their own plate steps rather than
+    /// converted kilograms — see `ProgressiveOverloadIncrement`.
+    private var grid: ProgressiveOverloadIncrement.Grid {
+        ProgressiveOverloadIncrement.grid(for: weightUnit)
+    }
 
     var body: some View {
         step
@@ -70,11 +77,14 @@ struct ProgressiveOverloadSheet: View {
                 ProgressiveOverloadSuggestionView(
                     exerciseName: display.exerciseName,
                     targetRepMax: targetRepMax,
-                    defaultIncrement: ProgressiveOverloadIncrement.default,
+                    defaultIncrement: grid.defaultOption,
                     isAssistance: display.isAssistance,
                     onApply: {
+                        // The one-tap path's single conversion: the grid is in
+                        // display space, the view model works in kilograms.
                         viewModel.applyProgressiveOverload(
-                            slotID: slotID, increment: ProgressiveOverloadIncrement.default
+                            slotID: slotID,
+                            increment: weightUnit.kilograms(fromDisplay: grid.defaultOption)
                         )
                     },
                     onChange: { viewModel.showOverloadIncrementPicker(slotID: slotID) },
@@ -156,11 +166,15 @@ struct ProgressiveOverloadSheet: View {
 struct ProgressiveOverloadSuggestionView: View {
     let exerciseName: String
     let targetRepMax: Int
+    /// The recommended step in **display units** — what the button announces.
+    /// The sheet converts it to kilograms when the user taps.
     let defaultIncrement: Double
     let isAssistance: Bool
     let onApply: () -> Void
     let onChange: () -> Void
     let onLater: () -> Void
+
+    @Environment(\.weightUnit) private var weightUnit
 
     var body: some View {
         // Scrolls so the largest Dynamic Type sizes cannot clip the actions.
@@ -199,7 +213,7 @@ struct ProgressiveOverloadSuggestionView: View {
                         Image(systemName: "arrow.up")
                             .font(.system(size: 14, weight: .bold))
                         Text(
-                            "\(ProgressiveOverloadFormat.increment(defaultIncrement, isAssistance: isAssistance)) · all sets",
+                            "\(ProgressiveOverloadFormat.increment(defaultIncrement, isAssistance: isAssistance, in: weightUnit)) · all sets",
                             comment: "Mid-workout progressive-overload primary action; parameter is the signed weight step"
                         )
                         .font(.system(size: 16, weight: .bold))

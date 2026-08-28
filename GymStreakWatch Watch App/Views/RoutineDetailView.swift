@@ -201,6 +201,8 @@ struct ExercisePreviewRow: View {
     var supersetPosition: Int = 0
     var supersetTotal: Int = 0
 
+    @Environment(\.weightUnit) private var weightUnit
+
     var body: some View {
         HStack {
             VStack(alignment: .leading, spacing: 2) {
@@ -233,7 +235,7 @@ struct ExercisePreviewRow: View {
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
 
-                let summary = exercise.setsSummary
+                let summary = exercise.setsSummary(in: weightUnit)
                 if !summary.isEmpty {
                     Text(summary)
                         .font(.caption2)

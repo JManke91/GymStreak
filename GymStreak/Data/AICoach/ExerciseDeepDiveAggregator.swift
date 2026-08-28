@@ -16,8 +16,14 @@ import os
 /// and load-behaviour homogeneity, and `buildInput` for what a blended `.combined` view
 /// deliberately withholds.
 ///
-/// Returns `nil` when the selected usage has insufficient history (fewer than 4 completed
-/// sets, or fewer than two sessions).
+/// The produced input is `nil` when the selected usage has insufficient history (fewer
+/// than 4 completed sets, or fewer than two sessions).
+///
+/// **Every entry point here fetches and faults SwiftData relationships across all of
+/// history, so all of them belong on a model actor.** `SwiftDataHistorySnapshotStore` is
+/// the only production caller; `ExerciseDeepDiveFactProviding` is the boundary that gets
+/// it there, and `SwiftDataHistorySnapshotProvider`'s `@concurrent` is what keeps it off
+/// the main one.
 struct ExerciseDeepDiveAggregator {
 
     private static let logger = Logger(subsystem: "com.gymstreak", category: "ExerciseDeepDiveAggregator")
@@ -30,32 +36,79 @@ struct ExerciseDeepDiveAggregator {
 
     // MARK: - Public API
 
-    /// Builds the AI Coach deep-dive input for a single exercise, describing **the body
-    /// of work the screen is showing**.
+    /// Everything one deep-dive generation needs from history, answered from **one** walk
+    /// of the session graph: the narrative's input, and the timestamp its cache key is
+    /// stamped with.
+    ///
+    /// The two used to be separate entry points, each issuing its own unbounded
+    /// `FetchDescriptor<WorkoutSession>`, so a single tap fetched all of history twice —
+    /// three times counting the cache write after the stream — and did all of it on the
+    /// main actor (ticket 02). They are answered together because they are answered from
+    /// the same rows: the key must move exactly when the described body of work moves,
+    /// and deriving it from a second fetch is the only way the two could ever disagree.
+    ///
+    /// Called **only** from `SwiftDataHistorySnapshotStore`, on its model actor. It walks
+    /// every session's exercise → set graph, which is not main-actor work
+    /// (`docs/history-performance.md`).
     ///
     /// - Parameters:
-    ///   - exercise: The live `Exercise` to analyze.
+    ///   - exerciseId: id of the live `Exercise` the screen is showing. A value rather
+    ///     than the `@Model` itself, because a `PersistentModel` may not cross onto a
+    ///     model actor.
+    ///   - exerciseName: that same live entry's name, handed down rather than re-derived
+    ///     here — so the identity rule below sees exactly the exercise the user is
+    ///     looking at, even where two library entries share a name.
     ///   - locale: User's locale (for month label formatting).
-    ///   - modelContext: SwiftData context for history queries.
+    ///   - modelContext: the **model actor's** context for history queries.
     ///   - usage: the usage the exercise detail screen is showing — the selection **and**
     ///     the label the picker used for it — handed down rather than re-derived.
     ///     `ExerciseProgressViewModel` already resolved both, and a second resolution
     ///     could disagree with the menu the user picked from. `.combined` folds every
     ///     usage together, which is what an exercise trained exactly one way always is.
     ///   - now: Injection point for current date (injectable for tests).
-    /// - Returns: `nil` if the selected usage has fewer than 4 completed sets, or fewer
-    ///   than two sessions, across all history.
-    func buildInput(
-        exercise: Exercise,
+    func buildAggregate(
+        exerciseId: UUID,
+        exerciseName: String,
         locale: Locale,
         modelContext: ModelContext,
         usage: DeepDiveUsage = .combined,
         now: Date = Date()
-    ) -> ExerciseDeepDiveInput? {
-        let usageSelection = usage.selection
+    ) -> ExerciseDeepDiveAggregate {
         let sessions = fetchSessionsForFullAggregation(modelContext: modelContext)
         let library = (try? modelContext.fetch(FetchDescriptor<Exercise>())) ?? []
-        let filter = RowFilter(exerciseId: exercise.id, exerciseName: exercise.name, library: library)
+        let filter = RowFilter(exerciseId: exerciseId, exerciseName: exerciseName, library: library)
+
+        return ExerciseDeepDiveAggregate(
+            lastCompletedSetTimestamp: Self.lastCompletedSetTimestamp(
+                in: sessions,
+                filter: filter,
+                usageSelection: usage.selection
+            ),
+            input: buildInput(
+                sessions: sessions,
+                filter: filter,
+                exerciseName: exerciseName,
+                locale: locale,
+                usage: usage,
+                now: now
+            )
+        )
+    }
+
+    /// Builds the AI Coach deep-dive input for a single exercise, describing **the body
+    /// of work the screen is showing**.
+    ///
+    /// - Returns: `nil` if the selected usage has fewer than 4 completed sets, or fewer
+    ///   than two sessions, across all history.
+    private func buildInput(
+        sessions: [WorkoutSession],
+        filter: RowFilter,
+        exerciseName: String,
+        locale: Locale,
+        usage: DeepDiveUsage,
+        now: Date
+    ) -> ExerciseDeepDiveInput? {
+        let usageSelection = usage.selection
 
         // Only for `.combined`, and only because that is the branch whose answer depends
         // on it: whether combined is a genuine blend or simply the one way this exercise
@@ -90,7 +143,7 @@ struct ExerciseDeepDiveAggregator {
         guard blendedUsageCount <= 1 else {
             return ExerciseDeepDiveInput(
                 locale: locale.identifier,
-                exerciseName: exercise.name,
+                exerciseName: exerciseName,
                 usageLabel: nil,
                 blendedUsageCount: blendedUsageCount,
                 totalSessions: sortedPoints.count,
@@ -113,7 +166,7 @@ struct ExerciseDeepDiveAggregator {
 
         return ExerciseDeepDiveInput(
             locale: locale.identifier,
-            exerciseName: exercise.name,
+            exerciseName: exerciseName,
             usageLabel: usage.label,
             blendedUsageCount: blendedUsageCount,
             totalSessions: sortedPoints.count,
@@ -131,20 +184,20 @@ struct ExerciseDeepDiveAggregator {
     // MARK: - Data Fetch
 
     /// Every completed session with `workoutExercises` and their `sets` already
-    /// registered. **For `buildInput` only** — see `lastCompletedSetTimestamp` for why it
-    /// must not share this.
+    /// registered. **For `buildAggregate` only** — see `lastCompletedSetTimestamp` for why
+    /// the appear-time probe must not share it.
     ///
     /// `CompletedSessionFetch.withFullGraph` warns that it is model-actor-only because it
-    /// materializes the entire workout graph. `buildInput` walks that whole graph anyway —
+    /// materializes the entire workout graph. That warning is satisfied rather than
+    /// tolerated here: since ticket 02 the only caller is `SwiftDataHistorySnapshotStore`,
+    /// so this runs on that actor's executor. `buildInput` walks the whole graph anyway —
     /// every session, every matching row, every completed set, and a second all-time pass
     /// for `.combined` — so the prefetch makes its cost smaller, not larger; without it
-    /// the same traversal faults once per row and once per set. It is still a main-actor
-    /// call to a model-actor helper, and it is on the tap path behind the `.preparing`
-    /// skeleton rather than on appear. **Ticket 02 moves `buildInput` off the main actor;
-    /// until it lands, do not add a second caller here.**
+    /// the same traversal faults once per row and once per set.
     ///
-    /// Order is irrelevant to this caller: `buildDataPoints` sorts its points itself, and
-    /// `ExerciseUsageResolver` ranks descriptors by an explicit comparison.
+    /// Order is irrelevant to this caller: `buildDataPoints` sorts its points itself,
+    /// `ExerciseUsageResolver` ranks descriptors by an explicit comparison, and the cache
+    /// timestamp is a `max`.
     private func fetchSessionsForFullAggregation(modelContext: ModelContext) -> [WorkoutSession] {
         (try? CompletedSessionFetch.withFullGraph(in: modelContext)) ?? []
     }
@@ -164,6 +217,10 @@ struct ExerciseDeepDiveAggregator {
     /// (`docs/pro-subscription.md` §5e) to regenerate a narrative that had not changed.
     /// It used to accept `we.exerciseId == exerciseId || we.exerciseId == nil` — no name
     /// check at all — so *any* legacy row in the newest session moved this key.
+    ///
+    /// This is the **appear-time** probe (`checkCache`). `buildAggregate` answers the same
+    /// question from the graph it already holds, via the shared helper below, so a
+    /// generation never runs both.
     func lastCompletedSetTimestamp(
         exerciseId: UUID,
         modelContext: ModelContext,
@@ -178,10 +235,14 @@ struct ExerciseDeepDiveAggregator {
         let filter = RowFilter(exerciseId: exerciseId, exerciseName: exerciseName, library: library)
 
         // Its own fetch, deliberately **not** `fetchSessionsForFullAggregation`. This runs
-        // from `checkCache` on the screen's `.task` — appear-time work on the main actor —
-        // and it returns at the first matching session, which is normally the newest one.
-        // Materializing every `WorkoutExercise` and every `WorkoutSet` in the database to
-        // read one session is the `docs/history-performance.md` hang, bought for nothing.
+        // from `checkCache` on the screen's `.task` — on appear and on every exercise or
+        // usage switch — and it returns at the first matching session, which is normally
+        // the newest one. Materializing every `WorkoutExercise` and every `WorkoutSet` in
+        // the database to read one session is the `docs/history-performance.md` walk,
+        // bought for nothing. That the walk is off the main actor since ticket 02 does not
+        // make it free: this probe shares the History model actor with the chart load
+        // happening on the same screen at the same moment.
+        //
         // One direct key path is the documented use of `relationshipKeyPathsForPrefetching`
         // (as in `CompletedSessionFetch.withRoutine`): it saves the per-row fault on the
         // sessions actually visited, and the set fault stays per visited row.
@@ -195,16 +256,47 @@ struct ExerciseDeepDiveAggregator {
         descriptor.relationshipKeyPathsForPrefetching = [\.workoutExercises]
         guard let sessions = try? modelContext.fetch(descriptor) else { return nil }
 
-        for session in sessions {
-            let hasCompletedSet = ExerciseUsageResolver
-                .keyedRows(in: session, matching: filter.matches)
-                .contains {
-                    ExerciseUsageResolver.belongs($0.key, to: usageSelection)
-                        && $0.exercise.setsList.contains(where: \.isCompleted)
-                }
-            if hasCompletedSet { return session.startTime }
+        for session in sessions where Self.hasCompletedSet(
+            in: session,
+            filter: filter,
+            usageSelection: usageSelection
+        ) {
+            return session.startTime
         }
         return nil
+    }
+
+    /// The same answer as `lastCompletedSetTimestamp(exerciseId:modelContext:usageSelection:)`,
+    /// read off a graph the caller has already fetched — which is what lets one generation
+    /// walk history once instead of twice.
+    ///
+    /// A `max` rather than a first-match, because `fetchSessionsForFullAggregation`
+    /// deliberately imposes no order.
+    private static func lastCompletedSetTimestamp(
+        in sessions: [WorkoutSession],
+        filter: RowFilter,
+        usageSelection: ExerciseUsageSelection
+    ) -> Date? {
+        sessions
+            .filter { hasCompletedSet(in: $0, filter: filter, usageSelection: usageSelection) }
+            .map(\.startTime)
+            .max()
+    }
+
+    /// Whether this session holds a completed set that the narrative describes. One
+    /// definition, shared by both timestamp paths, so the appear-time probe and the
+    /// generation can never key on different rows.
+    private static func hasCompletedSet(
+        in session: WorkoutSession,
+        filter: RowFilter,
+        usageSelection: ExerciseUsageSelection
+    ) -> Bool {
+        ExerciseUsageResolver
+            .keyedRows(in: session, matching: filter.matches)
+            .contains {
+                ExerciseUsageResolver.belongs($0.key, to: usageSelection)
+                    && $0.exercise.setsList.contains(where: \.isCompleted)
+            }
     }
 
     // MARK: - Row filter

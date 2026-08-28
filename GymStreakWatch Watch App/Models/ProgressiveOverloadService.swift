@@ -123,36 +123,67 @@ enum ProgressiveOverloadService {
     }
 }
 
-/// The weight steps overload surfaces offer, shared by BOTH platforms so they
-/// cannot drift apart again.
+/// The weight steps overload surfaces offer, expressed in the unit the user
+/// reads — one grid per unit.
 ///
-/// `options` are the PRESETS: 0.5 is the micro-loading step (fractional plates,
-/// and the smallest meaningful move on many machine stacks); 1.25 / 2.5 / 5 are
-/// the standard plate steps. The iOS `WeightIncreaseSheet` shows exactly these
-/// as a radio list, and 2.5 is the one-tap default on both platforms.
+/// **VERBATIM COPY of the iOS `ProgressiveOverloadIncrement`**
+/// (`GymStreak/Domain/Services/ProgressiveOverloadService.swift`). These are
+/// per-target duplicated copies, not shared code, so keeping the two grids
+/// identical is manual: a drift here means the watch proposes a different
+/// increase than the phone for the same set. `GymStreakWatchTests` asserts the
+/// watch copy with the same assertions as the iOS twin for exactly that reason.
+///
+/// **The pound grid is a parallel set of real plate steps, not converted
+/// kilograms.** Converting the kilogram list gives 1.1 / 2.76 / 5.51 / 11.02 lb,
+/// which is nonsense on a plate rack: nobody owns a 2.76 lb plate. A pounds user
+/// gets 1.25 / 2.5 / 5 / 10 lb, the steps their gym actually stocks. Whatever
+/// they pick is converted to kilograms exactly once, in the picker that applies
+/// it — the grids themselves never leave display space.
+///
+/// `options` are the PRESETS. In kilograms 0.5 is the micro-loading step
+/// (fractional plates, and the smallest meaningful move on many machine stacks)
+/// and 1.25 / 2.5 / 5 are the standard plate steps; in pounds 1.25 is the
+/// micro-plate. `defaultOption` is the one-tap default.
 ///
 /// `minimum`/`maximum`/`step` additionally describe FREE selection, which the
 /// watch's Digital Crown picker uses so a user who wants an unusual jump is not
-/// boxed into the presets. The stride is 0.25 so every preset — 1.25 included —
-/// lands exactly on the grid. The upper bound is deliberately generous rather
-/// than realistic: a single-session jump that large is absurd, but a finite
-/// bound is required (the unbounded `digitalCrownRotation` overload carries no
-/// stride and no haptic detents, so it is the wrong tool for a stepped value).
+/// boxed into the presets. The stride is 0.25 in both units so every preset —
+/// 1.25 included — lands exactly on the grid. The upper bound is deliberately
+/// generous rather than realistic: a single-session jump that large is absurd,
+/// but a finite bound is required (the unbounded `digitalCrownRotation` overload
+/// carries no stride and no haptic detents, so it is the wrong tool for a
+/// stepped value).
 ///
-/// Display all of these with two fraction digits — `%.2g` and the default
-/// `Measurement` precision both round 1.25 to a misleading "1.2".
+/// Display all of these through `WatchWeightFormatting.incrementLabel`, whose
+/// `.fractionLength(0...2)` renders 1.25 as "1.25" — `%.2g` and the default
+/// `Measurement` precision both round it to a misleading "1.2".
 enum ProgressiveOverloadIncrement {
-    static let options: [Double] = [0.5, 1.25, 2.5, 5.0]
-    static let `default`: Double = 2.5
 
-    static let minimum: Double = 0.25
-    static let maximum: Double = 50.0
-    static let step: Double = 0.25
+    /// One unit's grid. Every value is in that unit's own display space.
+    struct Grid {
+        let options: [Double]
+        let defaultOption: Double
+        let minimum: Double
+        let maximum: Double
+        let step: Double
+    }
 
-    /// Clamps to the selectable range and snaps to the nearest stride, so a
-    /// value from any source stays on the same grid the crown moves along.
-    static func normalized(_ value: Double) -> Double {
-        let clamped = min(max(value, minimum), maximum)
-        return (clamped / step).rounded() * step
+    /// The two grids, side by side so a change to one is read against the other.
+    static func grid(for unit: WeightUnit) -> Grid {
+        switch unit {
+        case .kilograms:
+            Grid(options: [0.5, 1.25, 2.5, 5], defaultOption: 2.5, minimum: 0.25, maximum: 50, step: 0.25)
+        case .pounds:
+            Grid(options: [1.25, 2.5, 5, 10], defaultOption: 5, minimum: 0.25, maximum: 100, step: 0.25)
+        }
+    }
+
+    /// Clamps a display-space value to `unit`'s selectable range and snaps it to
+    /// that unit's stride, so a value from any source stays on the same grid the
+    /// crown moves along.
+    static func normalized(_ value: Double, in unit: WeightUnit) -> Double {
+        let grid = grid(for: unit)
+        let clamped = min(max(value, grid.minimum), grid.maximum)
+        return (clamped / grid.step).rounded() * grid.step
     }
 }

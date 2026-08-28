@@ -7,9 +7,11 @@ import Foundation
 /// Pure value math over plain types — no SwiftData/SwiftUI — so every surface
 /// (routine editor, active workout, completion screen, history, watch) applies
 /// identical rules. The watch keeps its own copy of this file
-/// (`GymStreakWatch Watch App/Models/ProgressiveOverloadService.swift`); it still
-/// carries the kilogram-only `ProgressiveOverloadIncrement` this file replaced,
-/// and ticket 04 of the weight-unit work brings it back in line.
+/// (`GymStreakWatch Watch App/Models/ProgressiveOverloadService.swift`),
+/// including the per-unit `ProgressiveOverloadIncrement` grids below — these are
+/// per-target duplicated copies, not shared code, so keeping the two identical
+/// is manual and a drift means the watch proposes a different increase than the
+/// phone for the same set.
 ///
 /// Every `increment` and `weight` here is in **canonical kilograms**. Only
 /// `ProgressiveOverloadIncrement` speaks display units, and the conversion

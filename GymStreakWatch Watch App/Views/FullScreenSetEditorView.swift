@@ -21,6 +21,7 @@ struct FullScreenSetEditorView: View {
     @State private var showDoneFlash = false
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.weightUnit) private var weightUnit
 
     private let metrics = WorkoutScreenMetrics.current
 
@@ -151,8 +152,11 @@ struct FullScreenSetEditorView: View {
                     HStack(spacing: metrics.valueCardGap) {
                         CompactValueEditor(
                             label: String(localized: "WEIGHT"),
-                            value: currentSet.actualWeight,
-                            unit: "kg",
+                            value: WatchWeightFormatting.number(
+                                currentSet.actualWeight.wrappedValue, in: weightUnit
+                            ),
+                            unit: WatchWeightFormatting.unitWord(weightUnit),
+                            spokenUnit: WatchWeightFormatting.spokenUnitWord(weightUnit),
                             icon: "scalemass.fill",
                             isFocused: focusedField == .weight,
                             onTap: {
@@ -163,11 +167,9 @@ struct FullScreenSetEditorView: View {
 
                         CompactValueEditor(
                             label: String(localized: "REPS"),
-                            value: Binding(
-                                get: { Double(currentSet.actualReps.wrappedValue) },
-                                set: { currentSet.actualReps.wrappedValue = Int($0) }
-                            ),
+                            value: String(currentSet.actualReps.wrappedValue),
                             unit: String(localized: "reps"),
+                            spokenUnit: String(localized: "reps"),
                             icon: "repeat",
                             isFocused: focusedField == .reps,
                             onTap: {
@@ -297,10 +299,28 @@ struct FullScreenSetEditorView: View {
         }
     }
 
+    /// Steps the weight by one unit **of what the user is reading**, never by
+    /// one kilogram of what is stored.
+    ///
+    /// The stored value stays an unrounded `Double`. Rounding the kilograms to
+    /// a whole number — which this used to do implicitly by stepping them —
+    /// destroys any pounds figure the user entered: 135 lb is 61.235 kg, rounds
+    /// to 61, and comes back as 134.5 lb, drifting again on the next edit. So
+    /// the ±1 happens after converting to display space, and the result is
+    /// converted back and clamped against the canonical ceiling.
+    ///
+    /// It deliberately does NOT snap to the display grid, unlike
+    /// `WatchWeightConfigurationEditor`'s crown. That editor dials a *new*
+    /// value up from zero, so whole display units are all it can ever hold. This
+    /// one edits a weight that already exists — usually straight off the
+    /// routine — and snapping would discard the part of it that does not sit on
+    /// the current unit's grid the first time the user taps +. A 60 kg planned
+    /// set read in pounds steps 132,3 → 133,3 and back to 132,3, which is the
+    /// property `displaySpaceSteppingPreservesAPoundsValue` pins.
     private func adjustWeight(by amount: Double) {
-        let current = currentSet.actualWeight.wrappedValue
-        let new = max(0, min(999, current + amount))
-        currentSet.actualWeight.wrappedValue = new
+        let display = weightUnit.converting(fromKilograms: currentSet.actualWeight.wrappedValue)
+        currentSet.actualWeight.wrappedValue =
+            weightUnit.clampedKilograms(fromDisplay: display + amount)
     }
 
     private func adjustReps(by amount: Int) {

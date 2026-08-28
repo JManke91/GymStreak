@@ -265,6 +265,107 @@ struct SwiftDataHistorySnapshotStoreTests {
         )
     }
 
+    /// The AI-coach exercise deep-dive's read boundary joins the same tripwire suite.
+    ///
+    /// Ticket 02: `ExerciseDeepDiveAggregator` was called straight from the `@MainActor`
+    /// `ExerciseDeepDiveViewModel`. It is a plain `nonisolated` synchronous type, so under
+    /// SE-0461 it ran on the caller's actor — an unbounded `FetchDescriptor<WorkoutSession>`
+    /// with no prefetching, then a walk of every matching row's sets, on the main one.
+    /// Worse, it did that walk **twice** per generation: once for the narrative and once
+    /// for the cache key. Both now come off one fetch on this actor.
+    ///
+    /// The seed makes every session a hit for "Exercise 0", so this is the shape that
+    /// costs most: no row can be skipped, and `.combined` adds the second all-time pass
+    /// over the usages on top.
+    @Test
+    func exerciseDeepDiveAggregationKeepsMainActorResponsive() async throws {
+        let container = InMemoryModelContainer.make()
+        let context = ModelContext(container)
+        try seedHistory(sessionCount: 240, context: context)
+        // The live library entry is what the identity rule resolves against; without it
+        // the aggregate falls back to id-only matching and describes nothing.
+        let exercise = Exercise(name: "Exercise 0")
+        context.insert(exercise)
+        try context.save()
+
+        // Existential on purpose — see the note in the training-snapshot test above.
+        // `ExerciseDeepDiveViewModel` holds `any ExerciseDeepDiveFactProviding`, so the
+        // `@concurrent` guarantee has to survive this witness too.
+        let provider: any ExerciseDeepDiveFactProviding =
+            SwiftDataHistorySnapshotProvider(modelContainer: container)
+        let heartbeat = MainActorHeartbeat(interval: .milliseconds(10))
+        let heartbeatTask = Task { await heartbeat.run() }
+        await Task.yield()
+
+        let aggregate = await provider.fetchDeepDiveAggregate(
+            exerciseId: exercise.id,
+            exerciseName: exercise.name,
+            usage: .combined,
+            locale: Locale(identifier: "en_US")
+        )
+
+        heartbeatTask.cancel()
+        await heartbeatTask.value
+
+        // A real narrative over the whole seed, not an early return: 240 sessions, and a
+        // peak at the seeded 40 kg × 10 reps.
+        let input = try #require(aggregate.input)
+        #expect(input.totalSessions == 240)
+        #expect(input.peak.weightKg == 40)
+        // The cache stamp comes off the same walk rather than a second fetch.
+        #expect(aggregate.lastCompletedSetTimestamp != nil)
+        #expect(
+            heartbeat.sampleCount >= 1,
+            "the main actor should run while the model actor is aggregating the deep-dive"
+        )
+        #expect(
+            heartbeat.maximumDelay < .milliseconds(100),
+            "Deep-dive aggregation delayed MainActor by \(heartbeat.maximumDelay)"
+        )
+    }
+
+    /// The appear-time half of the deep-dive boundary — the one with no `.preparing`
+    /// skeleton in front of it.
+    ///
+    /// `checkCache` runs from the exercise detail screen's `.task(id:)`, so it fires on
+    /// every screen open and every exercise or usage switch, for every user who has the
+    /// coach on. Before ticket 02 that was a main-actor fetch plus a relationship walk,
+    /// and it allocated an `ISO8601DateFormatter` per call on top.
+    @Test
+    func deepDiveCacheProbeKeepsMainActorResponsive() async throws {
+        let container = InMemoryModelContainer.make()
+        let context = ModelContext(container)
+        try seedHistory(sessionCount: 240, context: context)
+        let exercise = Exercise(name: "Exercise 0")
+        context.insert(exercise)
+        try context.save()
+
+        let provider: any ExerciseDeepDiveFactProviding =
+            SwiftDataHistorySnapshotProvider(modelContainer: container)
+        let heartbeat = MainActorHeartbeat(interval: .milliseconds(10))
+        let heartbeatTask = Task { await heartbeat.run() }
+        await Task.yield()
+
+        let timestamp = await provider.fetchDeepDiveCacheTimestamp(
+            exerciseId: exercise.id,
+            usageSelection: .combined
+        )
+
+        heartbeatTask.cancel()
+        await heartbeatTask.value
+
+        // The newest seeded session, which is `referenceDate` minus nothing.
+        #expect(timestamp != nil)
+        #expect(
+            heartbeat.sampleCount >= 1,
+            "the main actor should run while the model actor is probing the cache key"
+        )
+        #expect(
+            heartbeat.maximumDelay < .milliseconds(100),
+            "Deep-dive cache probe delayed MainActor by \(heartbeat.maximumDelay)"
+        )
+    }
+
     /// The trigger question §8 B asks after every workout must agree with the
     /// aggregation without paying for it.
     ///

@@ -137,7 +137,7 @@ extension Font {
                     .frame(width: 20, height: 20)
             }
 
-            Text("135 kg × 10")
+            Text(WatchWeightFormatting.label(61.235, in: .pounds) + " × 10")
                 .font(.watchNumberLarge)
                 .foregroundStyle(OnyxWatch.Colors.textPrimary)
         }

@@ -47,7 +47,12 @@ struct ExerciseDeepDiveIdentityTests {
 
         let aggregator = ExerciseDeepDiveAggregator()
         let input = try #require(
-            aggregator.buildInput(exercise: dumbbell, locale: .init(identifier: "en_US"), modelContext: context)
+            aggregator.buildAggregate(
+                exerciseId: dumbbell.id,
+                exerciseName: dumbbell.name,
+                locale: .init(identifier: "en_US"),
+                modelContext: context
+            ).input
         )
 
         // Four, not eight: the legacy rows are dropped, exactly as the chart drops them.
@@ -59,11 +64,12 @@ struct ExerciseDeepDiveIdentityTests {
         // so it falls under the insufficient-data guard rather than inheriting the legacy
         // rows the dumbbell just refused.
         #expect(
-            aggregator.buildInput(
-                exercise: barbell,
+            aggregator.buildAggregate(
+                exerciseId: barbell.id,
+                exerciseName: barbell.name,
                 locale: .init(identifier: "en_US"),
                 modelContext: context
-            ) == nil
+            ).input == nil
         )
     }
 
@@ -107,7 +113,12 @@ struct ExerciseDeepDiveIdentityTests {
 
         let aggregator = ExerciseDeepDiveAggregator()
         let input = try #require(
-            aggregator.buildInput(exercise: curls, locale: .init(identifier: "en_US"), modelContext: context)
+            aggregator.buildAggregate(
+                exerciseId: curls.id,
+                exerciseName: curls.name,
+                locale: .init(identifier: "en_US"),
+                modelContext: context
+            ).input
         )
 
         #expect(input.totalSessions == 4)

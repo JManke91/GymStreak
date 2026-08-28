@@ -11,8 +11,14 @@ import SwiftUI
 
 struct CompactValueEditor: View {
     let label: String
-    @Binding var value: Double
+    /// Already formatted for display. The caller owns the unit — the card never
+    /// converts, so it cannot disagree with the value the stepper is editing.
+    let value: String
+    /// The written unit shown under the number ("kg", "lb", "reps").
     let unit: String
+    /// The spoken form for VoiceOver ("kilograms"). A screen reader saying
+    /// "kay gee" is the reason this is separate from `unit`.
+    let spokenUnit: String
     let icon: String
     let isFocused: Bool
     let onTap: () -> Void
@@ -24,7 +30,7 @@ struct CompactValueEditor: View {
             onTap()
         } label: {
             VStack(spacing: 1.5) {
-                Text(formatValue(value))
+                Text(value)
                     .font(.system(size: metrics.valueFontSize, weight: .bold, design: .rounded))
                     .monospacedDigit()
                     .foregroundStyle(OnyxWatch.Colors.textPrimary)
@@ -58,17 +64,9 @@ struct CompactValueEditor: View {
         }
         .buttonStyle(.plain)
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("\(label). \(formatValue(value)) \(unit)")
-        .accessibilityValue("\(formatValue(value))")
+        .accessibilityLabel("\(label). \(value) \(spokenUnit)")
+        .accessibilityValue(value)
         .accessibilityAddTraits(isFocused ? .isSelected : [])
-    }
-
-    private func formatValue(_ value: Double) -> String {
-        if value.truncatingRemainder(dividingBy: 1) == 0 {
-            return String(Int(value))
-        } else {
-            return String(format: "%.1f", value)
-        }
     }
 }
 
@@ -76,8 +74,6 @@ struct CompactValueEditor: View {
 
 #Preview {
     struct PreviewWrapper: View {
-        @State private var weight: Double = 135
-        @State private var reps: Double = 10
         @State private var focused = 0
 
         var body: some View {
@@ -87,8 +83,9 @@ struct CompactValueEditor: View {
                 HStack(spacing: 6.5) {
                     CompactValueEditor(
                         label: "WEIGHT",
-                        value: $weight,
-                        unit: "kg",
+                        value: WatchWeightFormatting.number(61.235, in: .pounds),
+                        unit: WatchWeightFormatting.unitWord(.pounds),
+                        spokenUnit: WatchWeightFormatting.spokenUnitWord(.pounds),
                         icon: "scalemass.fill",
                         isFocused: focused == 0,
                         onTap: { focused = 0 }
@@ -96,8 +93,9 @@ struct CompactValueEditor: View {
 
                     CompactValueEditor(
                         label: "REPS",
-                        value: $reps,
+                        value: "10",
                         unit: "reps",
+                        spokenUnit: "reps",
                         icon: "repeat",
                         isFocused: focused == 1,
                         onTap: { focused = 1 }

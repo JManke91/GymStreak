@@ -18,6 +18,11 @@ final class AppDependencies: ObservableObject {
     let exerciseRepository: ExerciseRepository
     let workoutSessionRepository: WorkoutSessionRepository
     let historySnapshotProvider: HistorySnapshotProviding
+    /// The exercise deep-dive's history boundary. The **same instance** as
+    /// `historySnapshotProvider`: the narrative is read from the very sessions
+    /// the chart above it is drawn from, so a second `@ModelActor` would fault
+    /// the same graph twice for one screen.
+    let exerciseDeepDiveFacts: ExerciseDeepDiveFactProviding
     /// The one write path into workout history outside of recording a workout: linking
     /// pre-`exerciseId` rows to the library exercise the user says they meant.
     let legacyHistoryAttribution: LegacyHistoryAttributing
@@ -189,6 +194,7 @@ final class AppDependencies: ObservableObject {
             modelContainer: modelContext.container
         )
         self.historySnapshotProvider = historySnapshotProvider
+        self.exerciseDeepDiveFacts = historySnapshotProvider
         self.legacyHistoryAttribution = SwiftDataLegacyHistoryAttributionProvider(
             modelContainer: modelContext.container
         )
@@ -203,7 +209,8 @@ final class AppDependencies: ObservableObject {
             containerIdentifier: GymStreakSchema.cloudKitContainerIdentifier
         )
         self.deviceDiagnostics = SystemDeviceDiagnosticsProvider()
-        self.weightUnitPreference = WeightUnitPreference.shared
+        let weightUnitPreference = WeightUnitPreference.shared
+        self.weightUnitPreference = weightUnitPreference
         // Constructing the gateway configures the RevenueCat SDK — this runs in
         // `GymStreakApp.init()`, so it happens once, before any UI exists and
         // before anything can read an entitlement.
@@ -254,6 +261,14 @@ final class AppDependencies: ObservableObject {
         )
         let watchConnectivity = WatchConnectivityManager.shared
         self.watchSync = watchConnectivity
+        // The watch cannot read the iPhone's UserDefaults — the App Group suite
+        // is shared within a device's app family, not across the pairing — so
+        // the unit is published over WatchConnectivity, merged into the routine
+        // applicationContext. Seed it now and republish on every change.
+        watchConnectivity.syncWeightUnit(weightUnitPreference.weightUnit)
+        weightUnitPreference.onChange = { [weak watchConnectivity] unit in
+            watchConnectivity?.syncWeightUnit(unit)
+        }
         self.exerciseProgressService = ExerciseProgressService(
             historyProvider: historySnapshotProvider
         )
