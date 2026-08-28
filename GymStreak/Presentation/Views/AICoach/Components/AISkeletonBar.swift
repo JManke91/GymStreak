@@ -64,7 +64,7 @@ struct AISkeletonBar: View {
         .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
     }
 
-    // MARK: - Sub-views 
+    // MARK: - Sub-views
 
     @ViewBuilder
     private var staticBar: some View {

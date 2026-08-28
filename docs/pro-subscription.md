@@ -2688,7 +2688,8 @@ Nothing else in the app names a product, a price or an entitlement.
 |---|---|---|
 | Entitlement identifier | `Gym Streak Pro` (spaces and capitals included) | RevenueCat dashboard → Product catalog → Entitlements (REST id `entl4a899fb281`) |
 | Test Store product ids | `lifetime`, `yearly`, `monthly` | Simulated Store products, attached to that entitlement |
-| Test Store package ids | `$rc_lifetime`, `$rc_annual`, `$rc_monthly` | The current Offering's packages |
+| **Offering** | `gymstreak_sale` ("Set of all packages", REST id `ofrng880c8209b0`) — **the only one, and the current one**, since `default` was deleted on 2026-08-28 (§9.4d) | RevenueCat dashboard → Product catalog → Offerings. No app code names it: every paywall resolves through the *current* offering or a placement (§5j) |
+| Package ids | `$rc_annual`, `$rc_monthly` | `gymstreak_sale`'s packages, each carrying its Test Store **and** App Store product. There is no `$rc_lifetime` package any more — it existed only in the deleted `default`, and the Test Store `lifetime` product is now in no offering (it stays fetchable by identifier, which is all the debug store section needs) |
 | Test Store SDK key | `test_IjLklyuZDXOVrXMjaURxfwJnWxk` | `RevenueCatConfiguration.testStoreAPIKey` |
 | App Store SDK key | `appl_NjUvNeWpHECDnqaxDNJcFnbAhoW` (filled in by ticket 14a; the only key a Release build can select) | `RevenueCatConfiguration.appStoreAPIKey` |
 | Placement identifiers | `PaywallPlacement.rawValue`: `first-routine-created`, `value-moment`, `routine-cap`, `chart-metric`, `chart-window`, `coach-chat`, `period-recap`, `exercise-deep-dive`, `weekday-schedule` | RevenueCat dashboard → Placements (ticket 14). **Each must exist *and* point at an offering that has a paywall** — both halves fail silently in a Release build (§5j) |
@@ -2703,10 +2704,13 @@ purchase flipping the entitlement.
 does not fail either — the SDK serves the current offering for an identifier it does not know, so
 the app still shows *a* paywall, just not the one that placement was meant to have (§5j).
 
-**As of 2026-08-16 none of the nine Placements exists in the dashboard, and no offering has a
-paywall designed.** Every placement therefore renders the `default` offering with RevenueCat's own
-"No Paywall configured" template. Creating the Placements and designing their paywalls is dashboard
-work and is a prerequisite for ticket 15's launch.
+**None of the Placements exists in the dashboard** — re-verified 2026-08-28, Targeting reads *"No
+rules yet"* (§9.4d's audit). Every placement therefore resolves to the current offering, which is
+the documented SDK behaviour for an identifier it does not know, not a failure. What has changed
+since this was first written is the other half: `gymstreak_sale` **does** carry a components-based
+paywall, so a placement no longer lands on RevenueCat's "No Paywall configured" template — it lands
+on the real paywall, just without per-placement copy. Creating the Placements is still open dashboard
+work, and it is now an improvement rather than a prerequisite.
 
 ### 9.2 The SPM integration, and the import boundary
 
@@ -2929,6 +2933,7 @@ shows §5j's `unavailable` state.
 | The `appl_` key is not in use | The launch argument is not ticked; the SDK also logs its Test Store warning at launch when the test key is active |
 | Product identifiers not configured in RevenueCat | RevenueCat → Product catalog. The dashboard's App Store Connect API key can import them, but that is a *dashboard* convenience — it changes nothing on the device, which asks Apple directly for the identifiers the offering names |
 | No offering configured | §9.1: no Placement and no paywall exists in the dashboard yet |
+| **An offering whose packages carry no product for the *active store*** | The SDK logs `No packages could be found for offering with identifier <id>` and **drops that offering** from `Offerings`. See §9.4d — this is the one cause that is neither Apple's fault nor the app's |
 
 #### What is still not proven by any of this
 
@@ -3111,6 +3116,118 @@ debug override when one is set, which is a fact about the picker rather than abo
 
 `FounderStatusTests` pins the two simulated cases against `cutoffBuild` itself, so re-pinning the
 cutoff cannot quietly turn the negative case into a grant.
+
+### 9.4d The `default` offering warning, and why it is a per-store fault
+
+Diagnosed 2026-08-28. Every run from Xcode logs this, twice, at `.warn`:
+
+> ⚠️ There's a problem with your configuration. No packages could be found for offering with
+> identifier `default`. This could be due to Products not being configured correctly in the
+> RevenueCat dashboard, App Store Connect (or the StoreKit Configuration file if one is being used).
+
+**It is not an App Store Connect problem and not an app bug.** Offerings and packages are
+*project-level* objects in RevenueCat; **products are per-store**. The backend serves each package
+only the product belonging to the app the API key identifies, so the same offering can be fully
+populated for one store and completely empty for another. The Gym Streak project has two:
+
+| Offering | Packages | App Store products | Test Store products | Paywall | Current |
+|---|---|---|---|---|---|
+| `default` (created 2026-08-13) | `$rc_monthly`, `$rc_annual`, `$rc_lifetime` | **none** | `monthly`, `yearly`, `lifetime` | none | no |
+| `gymstreak_sale` (created 2026-08-15) | `$rc_annual`, `$rc_monthly` | `gymstreak.iap.pro.yearly.sub`, `gymstreak.iap.pro.monthly.sub` | `yearly`, `monthly` | components-based | **yes** |
+
+`default` is the Test-Store-only offering from before the App Store products were imported. Run with
+the `appl_` key — which a Release build always is, and which a Debug build is whenever
+`-REVENUECAT_APP_STORE` is ticked (it is, in the shared scheme) — and the backend returns its three
+packages with no Apple product in any of them. `OfferingsFactory` `compactMap`s every unresolvable
+package away, finds the offering empty, logs the line above and **returns `nil` for it**, so the
+offering does not appear in `Offerings` at all.
+
+**Two independent facts pin the diagnosis**, and both are worth knowing because each is a
+diagnostic in its own right:
+
+1. **The wording names the store.** `Strings.offering.offering_empty` has three variants selected
+   from the API key's prefix (`Configuration.swift`): a `test_` key produces "*Test Store products
+   not being configured correctly*", an `appl_` key the "*App Store Connect (or the StoreKit
+   Configuration file…)*" text above. Reading the App Store variant is therefore **proof the
+   `appl_` key was active**, whatever the build config nominally selects — the first thing to check
+   when the two disagree.
+2. **The absent companion line.** When packages *do* name products for the active store and
+   StoreKit cannot resolve them, `OfferingsManager` additionally logs
+   `Could not find products with identifiers: …` naming them. That line is **not** present here,
+   which separates "no product configured for this store" (this case) from "product configured but
+   unfetchable" (§9.4a's table — agreement, product status, bundle-ID mismatch).
+
+**Why it printed twice**: `performInitialForegroundSetup()` runs the SDK's own offerings fetch at
+`configure()`, and anything that calls `Purchases.shared.offerings()` afterwards — `ProPaywallView`
+resolving a placement, or the debug store section's `availableProducts()` — fetches again. Both
+traverse the same factory and log identically; there is nothing in the string to tell them apart.
+
+**Consequence, and why it was still worth fixing.** Nothing was broken at the time: `gymstreak_sale`
+is the current offering, it carries both stores' products, and every placement resolves to it (an
+unknown or unconfigured Placement is served the *current* offering — §5j). What the warning
+announced was a **live trap**: making `default` current again, or pointing one Targeting rule at it,
+would leave a Release build with no purchasable package at all — the §5j `unavailable` screen, and
+no way to buy, which is precisely the 2.1(b) rejection this project has already had twice
+(`appstore-rejection-1.1.9.md`).
+
+**Resolved 2026-08-28: `default` was deleted, and the warnings are gone** — verified on the next
+launch from Xcode with the `appl_` key active. `gymstreak_sale` is now the project's only offering.
+
+The fix was dashboard-only; no app code was touched, because no app code names an offering identifier
+and none should. The alternative, had `default` turned out to be referenced, was to attach
+`gymstreak.iap.pro.yearly.sub` and `gymstreak.iap.pro.monthly.sub` to its `$rc_annual` and
+`$rc_monthly` packages alongside the Test Store products already there, so the offering would resolve
+against either key. Its `$rc_lifetime` package was never part of the problem: the empty-offering guard
+is per *offering*, not per package, and §6's non-consumable does not exist in App Store Connect yet.
+
+**Still unverified:** whether *archiving* an offering (the Active/Inactive state) also stops the SDK
+receiving it, and therefore silences this warning. Deleting was chosen instead, so the question was
+never answered — see the note below before assuming archive is a lighter-touch equivalent.
+
+**The reference audit, and why deleting an offering is safe to reason about at all.** An offering is
+never named by this app — every paywall resolves through `currentOffering(forPlacement:)` with a
+fallback to `offerings.current` (§5j) — so the question is entirely a dashboard one. These are all
+the places that can bind to one, and the state each was in on 2026-08-28:
+
+| Reference path | Where to look | State |
+|---|---|---|
+| Current offering | Product catalog → Offerings, the ✓ badge | `gymstreak_sale` |
+| Attached paywall | the offering's detail page, Paywall row | none — `default` offered "Add Paywall" |
+| Targeting rules / Placements | Targeting | "No rules yet" |
+| Experiments (running or finished) | Experiments | "No experiments yet" |
+| Funnels | Funnels | "No funnels yet" |
+| Web Purchase Links | Funnels → Purchase Links | cannot exist — no Stripe/Paddle/RC Billing configured |
+| App code | `grep` for an offering identifier | nothing, by design |
+| Past App Store transactions | the product's Recent Transactions | impossible — `default` never carried an Apple product |
+
+**What deleting an offering actually does** (RevenueCat API v2 reference, `docs/api-v2/offering`,
+checked 2026-08-28):
+
+- **Delete is permanent and cascades** — "delete an offering *and its attached packages*". There is
+  no undo.
+- **Archive is the reversible form, and it is what the list's Active/Inactive filter means** —
+  "archives an offering (makes it inactive)"; archived objects "stay in your account and can be
+  restored at any time". Whether an archived offering is still sent to the SDK — and therefore
+  whether archiving silences `offering_empty` — is **documented nowhere and was not verified here**;
+  do not assume it.
+- **The identifier `default` is not special.** Only the `is_current` flag is, and it is a flag on any
+  offering. RevenueCat's onboarding merely happens to name the first one `default`; an offering
+  called `default` that is not current is ordinary configuration, not a misconfiguration.
+- **No subscriber is at risk either way.** Entitlements attach to *products*; an offering is a
+  pre-purchase display construct that appears nowhere in the grant chain. Only removing a product in
+  **App Store Connect** cancels live subscriptions — a RevenueCat catalog edit cannot.
+
+**With no Targeting rule, every placement is served the *current* offering** — which is why an empty
+Targeting page is what makes an unreferenced offering genuinely dead rather than merely unused, and
+it is the same SDK behaviour §5j records from the other direction (an unknown placement identifier
+resolves to the current offering rather than to `nil`). Entitlements and subscriptions bind to
+**products** and to `Gym Streak Pro`, never to an offering, so no purchase history rides on this.
+The only history `default` ever carried was the 2026-08-16 Test Store purchases made while it was
+still current, i.e. simulated-store data.
+
+**The rule this leaves behind:** *every offering the dashboard serves must carry a product for every
+store the app ships against.* An offering that is right for one key and empty for the other is a
+warning today and a dead paywall the moment it becomes current.
 
 ### 9.5 App Store Connect: the two product constraints that cannot be fixed in code
 

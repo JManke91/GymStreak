@@ -180,9 +180,13 @@ dormant configuration that the app never surfaces. Removing it is a product deci
 The annual is attached to the **Gym Streak Pro** entitlement (created 2026-08-13), which is the
 identifier the app compiles against. That link is correct.
 
-> **Worth revisiting later, unrelated to the rejection:** the default offering is named for a *sale*.
-> `pro-subscription.md` §5j already flags that a contextual gate pointed at a sale offering shows
-> different prices than the same user sees elsewhere. Confirm that is intended.
+> **Worth revisiting later, unrelated to the rejection:** the current offering is named for a
+> *sale*, and since the stale `default` offering was deleted on 2026-08-28
+> (`pro-subscription.md` §9.4d) `gymstreak_sale` is the **only** offering — so every gate in the app
+> resolves to something called a sale, and there is no neutrally-named offering left to move to.
+> Renaming it, or creating a plainly-named permanent offering and reserving `gymstreak_sale` for an
+> actual promotion, is the open decision. Note the identifier is a wire string in the dashboard only,
+> never in app code.
 
 ### 3.4 The 2026-08-18 reviewer session — the purchase never reached RevenueCat
 
