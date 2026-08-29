@@ -94,7 +94,8 @@ struct ExampleRoutineSeederTests {
             seeder: ExampleRoutineSeeder(
                 modelContext: context,
                 defaults: defaults,
-                cloudVersionStore: versionStore
+                cloudVersionStore: versionStore,
+                historyStoreGate: .unshared()
             ),
             versionStore: versionStore,
             defaults: defaults
@@ -108,10 +109,10 @@ struct ExampleRoutineSeederTests {
     // MARK: - Seeding
 
     @Test
-    func seedsTheExampleRoutineIntoAStoreWithNoRoutines() throws {
+    func seedsTheExampleRoutineIntoAStoreWithNoRoutines() async throws {
         let fixture = makeFixture()
 
-        fixture.seeder.run()
+        await fixture.seeder.run()
 
         let seeded = try #require(try routines(fixture.context).first)
         #expect(try routines(fixture.context).count == 1)
@@ -138,10 +139,10 @@ struct ExampleRoutineSeederTests {
     }
 
     @Test
-    func seedsTheCurlPushdownPairAsOneSuperset() throws {
+    func seedsTheCurlPushdownPairAsOneSuperset() async throws {
         let fixture = makeFixture()
 
-        fixture.seeder.run()
+        await fixture.seeder.run()
 
         let seeded = try #require(try routines(fixture.context).first)
         let supersetMembers = seeded.routineExercisesList
@@ -160,10 +161,10 @@ struct ExampleRoutineSeederTests {
     /// The name must come out of the strings table, not a literal — the seeded
     /// routine is a German user's routine too.
     @Test
-    func namesTheRoutineFromTheStringsTable() throws {
+    func namesTheRoutineFromTheStringsTable() async throws {
         let fixture = makeFixture()
 
-        fixture.seeder.run()
+        await fixture.seeder.run()
 
         let seeded = try #require(try routines(fixture.context).first)
         #expect(seeded.name == Self.row.seedKey.localized)
@@ -175,7 +176,7 @@ struct ExampleRoutineSeederTests {
     /// this notification the user meets the empty state and only finds the
     /// routine after relaunching.
     @Test
-    func announcesTheSeededRoutineSoTheAlreadyLoadedListRefetches() throws {
+    func announcesTheSeededRoutineSoTheAlreadyLoadedListRefetches() async throws {
         let fixture = makeFixture()
         let posts = PostCounter()
         let observer = NotificationCenter.default.addObserver(
@@ -185,22 +186,22 @@ struct ExampleRoutineSeederTests {
         ) { _ in posts.record() }
         defer { NotificationCenter.default.removeObserver(observer) }
 
-        fixture.seeder.run()
+        await fixture.seeder.run()
         #expect(posts.value == 1)
 
         // A launch that seeds nothing must stay silent — every listener refetches
         // and re-syncs the watch on this.
-        fixture.seeder.run()
+        await fixture.seeder.run()
         #expect(posts.value == 1)
     }
 
     @Test
-    func doesNotSeedIntoAStoreThatAlreadyHasRoutines() throws {
+    func doesNotSeedIntoAStoreThatAlreadyHasRoutines() async throws {
         let fixture = makeFixture()
         fixture.context.insert(Routine(name: "My Own Routine"))
         try fixture.context.save()
 
-        fixture.seeder.run()
+        await fixture.seeder.run()
 
         let all = try routines(fixture.context)
         #expect(all.count == 1)
@@ -210,14 +211,14 @@ struct ExampleRoutineSeederTests {
     // MARK: - Never resurrect
 
     @Test
-    func doesNotBringTheRoutineBackAfterTheUserDeletesIt() throws {
+    func doesNotBringTheRoutineBackAfterTheUserDeletesIt() async throws {
         let fixture = makeFixture()
-        fixture.seeder.run()
+        await fixture.seeder.run()
         let seeded = try #require(try routines(fixture.context).first)
         fixture.context.delete(seeded)
         try fixture.context.save()
 
-        fixture.seeder.run()
+        await fixture.seeder.run()
 
         #expect(try routines(fixture.context).isEmpty)
     }
@@ -225,10 +226,10 @@ struct ExampleRoutineSeederTests {
     /// The version flag travels in iCloud KV, so the user's *second* device
     /// must not re-seed either — even though its own routine list is empty.
     @Test
-    func doesNotSeedOnASecondDeviceThatInheritedTheVersionFlag() throws {
+    func doesNotSeedOnASecondDeviceThatInheritedTheVersionFlag() async throws {
         let fixture = makeFixture(storedVersion: SeedRoutineCatalog.currentVersion)
 
-        fixture.seeder.run()
+        await fixture.seeder.run()
 
         #expect(try routines(fixture.context).isEmpty)
     }
@@ -236,7 +237,7 @@ struct ExampleRoutineSeederTests {
     // MARK: - Deduplication
 
     @Test
-    func collapsesTwoSeededCopiesIntoTheOlderOne() throws {
+    func collapsesTwoSeededCopiesIntoTheOlderOne() async throws {
         let fixture = makeFixture()
         let older = Routine(name: "Full Body Starter")
         older.seedKey = Self.row.seedKey
@@ -259,7 +260,7 @@ struct ExampleRoutineSeederTests {
         ) { _ in posts.record() }
         defer { NotificationCenter.default.removeObserver(observer) }
 
-        fixture.seeder.run()
+        await fixture.seeder.run()
 
         let all = try routines(fixture.context)
         #expect(all.count == 1)
@@ -274,7 +275,7 @@ struct ExampleRoutineSeederTests {
     /// Both devices run the same sort, so they keep the same record. A dedup
     /// that picked locally would let two devices delete each other's copy.
     @Test
-    func picksTheSameSurvivorRegardlessOfFetchOrder() throws {
+    func picksTheSameSurvivorRegardlessOfFetchOrder() async throws {
         let sameInstant = Date(timeIntervalSince1970: 3_000)
 
         for reversed in [false, true] {
@@ -291,7 +292,7 @@ struct ExampleRoutineSeederTests {
             }
             try fixture.context.save()
 
-            fixture.seeder.run()
+            await fixture.seeder.run()
 
             // Same `createdAt`, so the tie-break decides: the smallest id wins,
             // whichever order the fetch happened to hand them over in.
@@ -301,7 +302,7 @@ struct ExampleRoutineSeederTests {
     }
 
     @Test
-    func keepsHistoryAndPlanWhenCollapsingDuplicates() throws {
+    func keepsHistoryAndPlanWhenCollapsingDuplicates() async throws {
         let fixture = makeFixture()
         let older = Routine(name: "Full Body Starter")
         older.seedKey = Self.row.seedKey
@@ -319,7 +320,7 @@ struct ExampleRoutineSeederTests {
         fixture.context.insert(schedule)
         try fixture.context.save()
 
-        fixture.seeder.run()
+        await fixture.seeder.run()
 
         #expect(session.routine?.id == older.id)
         #expect(older.schedule?.id == schedule.id)
@@ -333,9 +334,9 @@ struct ExampleRoutineSeederTests {
     /// cannot fix it — the user's real routines carry no `seedKey` — so the next
     /// launch removes it instead.
     @Test
-    func removesAnExampleRoutineThatCloudKitLaterProvedWasNotWanted() throws {
+    func removesAnExampleRoutineThatCloudKitLaterProvedWasNotWanted() async throws {
         let fixture = makeFixture()
-        fixture.seeder.run()
+        await fixture.seeder.run()
         let seeded = try #require(try routines(fixture.context).first)
 
         // CloudKit lands the user's real routines, created long before.
@@ -345,7 +346,7 @@ struct ExampleRoutineSeederTests {
         fixture.context.insert(imported)
         try fixture.context.save()
 
-        fixture.seeder.run()
+        await fixture.seeder.run()
 
         let all = try routines(fixture.context)
         #expect(all.count == 1)
@@ -356,9 +357,9 @@ struct ExampleRoutineSeederTests {
     /// otherwise the already-loaded list keeps showing a routine that no longer
     /// exists, and the watch keeps its copy.
     @Test
-    func announcesTheRemovalOfASupersededExampleRoutine() throws {
+    func announcesTheRemovalOfASupersededExampleRoutine() async throws {
         let fixture = makeFixture()
-        fixture.seeder.run()
+        await fixture.seeder.run()
         let seeded = try #require(try routines(fixture.context).first)
 
         let imported = Routine(name: "Push Day")
@@ -375,20 +376,20 @@ struct ExampleRoutineSeederTests {
         ) { _ in posts.record() }
         defer { NotificationCenter.default.removeObserver(observer) }
 
-        fixture.seeder.run()
+        await fixture.seeder.run()
         #expect(posts.value == 1)
 
         // Nothing left to remove — and nothing to say.
-        fixture.seeder.run()
+        await fixture.seeder.run()
         #expect(posts.value == 1)
     }
 
     /// Routines the user creates *after* meeting the example routine are the
     /// normal case, and must never trigger the cleanup.
     @Test
-    func keepsTheExampleRoutineWhenTheUsersOwnRoutinesCameLater() throws {
+    func keepsTheExampleRoutineWhenTheUsersOwnRoutinesCameLater() async throws {
         let fixture = makeFixture()
-        fixture.seeder.run()
+        await fixture.seeder.run()
         let seeded = try #require(try routines(fixture.context).first)
 
         let own = Routine(name: "Leg Day")
@@ -396,7 +397,7 @@ struct ExampleRoutineSeederTests {
         fixture.context.insert(own)
         try fixture.context.save()
 
-        fixture.seeder.run()
+        await fixture.seeder.run()
 
         #expect(try routines(fixture.context).count == 2)
     }
@@ -404,7 +405,7 @@ struct ExampleRoutineSeederTests {
     /// An example routine the user has trained or edited is theirs now, whatever
     /// arrived afterwards.
     @Test
-    func keepsASupersededExampleRoutineTheUserHasAlreadyUsed() throws {
+    func keepsASupersededExampleRoutineTheUserHasAlreadyUsed() async throws {
         for makeItTouched in [
             { (routine: Routine, context: ModelContext) in
                 routine.updatedAt = routine.createdAt.addingTimeInterval(60)
@@ -414,7 +415,7 @@ struct ExampleRoutineSeederTests {
             }
         ] {
             let fixture = makeFixture()
-            fixture.seeder.run()
+            await fixture.seeder.run()
             let seeded = try #require(try routines(fixture.context).first)
             makeItTouched(seeded, fixture.context)
 
@@ -424,7 +425,7 @@ struct ExampleRoutineSeederTests {
             fixture.context.insert(imported)
             try fixture.context.save()
 
-            fixture.seeder.run()
+            await fixture.seeder.run()
 
             #expect(try routines(fixture.context).count == 2)
         }
@@ -436,7 +437,7 @@ struct ExampleRoutineSeederTests {
     /// reassignment, it would read an untouched routine and delete a trained one,
     /// orphaning the history dedup had just rescued.
     @Test
-    func keepsATrainedExampleRoutineWhenTheTrainingLandedOnTheOtherCopy() throws {
+    func keepsATrainedExampleRoutineWhenTheTrainingLandedOnTheOtherCopy() async throws {
         let fixture = makeFixture()
         let older = Routine(name: "Full Body Starter")
         older.seedKey = Self.row.seedKey
@@ -460,7 +461,7 @@ struct ExampleRoutineSeederTests {
         fixture.context.insert(imported)
         try fixture.context.save()
 
-        fixture.seeder.run()
+        await fixture.seeder.run()
 
         let all = try routines(fixture.context)
         #expect(all.count == 2)
@@ -472,7 +473,7 @@ struct ExampleRoutineSeederTests {
     // MARK: - Missing exercises
 
     @Test
-    func dropsSlotsWhoseExerciseTheUserDeleted() throws {
+    func dropsSlotsWhoseExerciseTheUserDeleted() async throws {
         // Five of six present: the plank is gone.
         let fixture = makeFixture(
             exerciseSeedKeys: Self.row.exercises
@@ -480,7 +481,7 @@ struct ExampleRoutineSeederTests {
                 .filter { $0 != "seed.exercise.plank" }
         )
 
-        fixture.seeder.run()
+        await fixture.seeder.run()
 
         let seeded = try #require(try routines(fixture.context).first)
         #expect(seeded.routineExercisesList.count == 5)
@@ -494,14 +495,14 @@ struct ExampleRoutineSeederTests {
     /// A superset needs two partners. With one gone the survivor is a plain
     /// exercise, not a one-member superset.
     @Test
-    func collapsesASupersetThatLostAPartner() throws {
+    func collapsesASupersetThatLostAPartner() async throws {
         let fixture = makeFixture(
             exerciseSeedKeys: Self.row.exercises
                 .map(\.exerciseSeedKey)
                 .filter { $0 != "seed.exercise.tricep_pushdown" }
         )
 
-        fixture.seeder.run()
+        await fixture.seeder.run()
 
         let seeded = try #require(try routines(fixture.context).first)
         #expect(seeded.routineExercisesList.allSatisfy { $0.supersetId == nil })
@@ -511,10 +512,10 @@ struct ExampleRoutineSeederTests {
     /// and — crucially — the version stays unstamped so a library that arrives
     /// later still gets the routine.
     @Test
-    func defersRatherThanSeedingAStumpAndRetriesOnceTheLibraryIsThere() throws {
+    func defersRatherThanSeedingAStumpAndRetriesOnceTheLibraryIsThere() async throws {
         let fixture = makeFixture(exerciseSeedKeys: ["seed.exercise.barbell_back_squat"])
 
-        fixture.seeder.run()
+        await fixture.seeder.run()
 
         #expect(try routines(fixture.context).isEmpty)
         #expect(fixture.versionStore.version(forKey: "seedRoutineVersion") == 0)
@@ -532,7 +533,7 @@ struct ExampleRoutineSeederTests {
             versionStore: fixture.versionStore,
             defaults: fixture.defaults
         )
-        second.seeder.run()
+        await second.seeder.run()
 
         let seeded = try #require(try routines(fixture.context).first)
         #expect(seeded.routineExercisesList.count == Self.row.exercises.count)

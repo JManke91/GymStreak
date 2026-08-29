@@ -207,11 +207,19 @@ struct HistoryView: View {
                 hasHealthKitWorkout: workoutToDelete?.healthKitWorkoutId != nil,
                 onDelete: { alsoFromHealthKit in
                     if let workout = workoutToDelete {
-                        // Deleting re-fetches, which bumps `historyVersion` and re-fires the
-                        // rebuild tasks; rebuilding here as well would do the work twice.
-                        viewModel.deleteWorkout(workout, alsoFromHealthKit: alsoFromHealthKit)
+                        // Cleared before the `await`: this list re-renders while the delete
+                        // waits on the History gate, and `hasHealthKitWorkout` above reads
+                        // this same `@Model`.
                         workoutToDelete = nil
                         HapticManager.shared.success()
+                        // Deleting re-fetches, which bumps `historyVersion` and re-fires the
+                        // rebuild tasks; rebuilding here as well would do the work twice.
+                        Task {
+                            await viewModel.deleteWorkout(
+                                workout,
+                                alsoFromHealthKit: alsoFromHealthKit
+                            )
+                        }
                     }
                 },
                 onCancel: { workoutToDelete = nil }

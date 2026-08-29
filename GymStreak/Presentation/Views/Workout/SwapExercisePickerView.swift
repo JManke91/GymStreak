@@ -26,7 +26,7 @@ struct SwapExercisePickerView: View {
                 Section {
                     ForEach(viewModel.swapTargets(for: workoutExercise)) { target in
                         Button {
-                            viewModel.swapExercise(workoutExercise, to: target)
+                            Task { await viewModel.swapExercise(workoutExercise, to: target) }
                             UINotificationFeedbackGenerator().notificationOccurred(.success)
                             dismiss()
                         } label: {

@@ -87,12 +87,12 @@ struct RoutinesViewModelTests {
     }
 
     @Test
-    func deleteRoutineRemovesItFromStoreAndPublishedList() throws {
+    func deleteRoutineRemovesItFromStoreAndPublishedList() async throws {
         let (viewModel, _, context) = makeViewModel()
         viewModel.addRoutine(name: "Leg Day")
         let routine = try #require(viewModel.routines.first)
 
-        viewModel.deleteRoutine(routine)
+        await viewModel.deleteRoutine(routine)
 
         #expect(viewModel.routines.isEmpty)
         let persisted = try context.fetch(FetchDescriptor<Routine>())

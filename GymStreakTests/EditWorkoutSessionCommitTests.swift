@@ -180,12 +180,12 @@ struct EditWorkoutSessionCommitTests {
     // MARK: - Draft reconciliation
 
     @Test
-    func editingAKeptSetWritesTheActualFields() throws {
+    func editingAKeptSetWritesTheActualFields() async throws {
         let fixture = makeFixture()
         let recorded = makeRecordedWorkout(fixture, setCount: 1)
         let original = try #require(recorded.workoutExercise.setsList.first)
 
-        fixture.viewModel.saveEditedWorkout(
+        await fixture.viewModel.saveEditedWorkout(
             recorded.session,
             exerciseDrafts: [draft(for: recorded.workoutExercise, sets: [keptSet(original, reps: 12, weight: 65)])],
             updateTemplate: false
@@ -201,12 +201,12 @@ struct EditWorkoutSessionCommitTests {
     /// An overload-applied exercise displays (and therefore edits) the planned
     /// fields, mirroring `WorkoutDetailExerciseBlock`.
     @Test
-    func editingWithUsePlannedWritesThePlannedFieldsInstead() throws {
+    func editingWithUsePlannedWritesThePlannedFieldsInstead() async throws {
         let fixture = makeFixture()
         let recorded = makeRecordedWorkout(fixture, setCount: 1, overloadApplied: true)
         let original = try #require(recorded.workoutExercise.setsList.first)
 
-        fixture.viewModel.saveEditedWorkout(
+        await fixture.viewModel.saveEditedWorkout(
             recorded.session,
             exerciseDrafts: [
                 draft(
@@ -225,13 +225,13 @@ struct EditWorkoutSessionCommitTests {
     }
 
     @Test
-    func aSetDroppedFromTheDraftIsDeleted() throws {
+    func aSetDroppedFromTheDraftIsDeleted() async throws {
         let fixture = makeFixture()
         let recorded = makeRecordedWorkout(fixture, setCount: 2)
         let sets = recorded.workoutExercise.setsList.sorted { $0.order < $1.order }
         let kept = try #require(sets.first)
 
-        fixture.viewModel.saveEditedWorkout(
+        await fixture.viewModel.saveEditedWorkout(
             recorded.session,
             exerciseDrafts: [draft(for: recorded.workoutExercise, sets: [keptSet(kept, reps: 10, weight: 60)])],
             updateTemplate: false
@@ -243,12 +243,12 @@ struct EditWorkoutSessionCommitTests {
     }
 
     @Test
-    func aSetAddedInTheEditorIsInsertedInDraftOrder() throws {
+    func aSetAddedInTheEditorIsInsertedInDraftOrder() async throws {
         let fixture = makeFixture()
         let recorded = makeRecordedWorkout(fixture, setCount: 1)
         let original = try #require(recorded.workoutExercise.setsList.first)
 
-        fixture.viewModel.saveEditedWorkout(
+        await fixture.viewModel.saveEditedWorkout(
             recorded.session,
             exerciseDrafts: [
                 draft(
@@ -277,13 +277,13 @@ struct EditWorkoutSessionCommitTests {
     }
 
     @Test
-    func unmarkingASetAsCompletedClearsItsTimestamp() throws {
+    func unmarkingASetAsCompletedClearsItsTimestamp() async throws {
         let fixture = makeFixture()
         let recorded = makeRecordedWorkout(fixture, setCount: 1)
         let original = try #require(recorded.workoutExercise.setsList.first)
         #expect(original.completedAt != nil)
 
-        fixture.viewModel.saveEditedWorkout(
+        await fixture.viewModel.saveEditedWorkout(
             recorded.session,
             exerciseDrafts: [
                 draft(
@@ -301,7 +301,7 @@ struct EditWorkoutSessionCommitTests {
     /// The draft carries a `WorkoutExercise.id`; one that matches nothing in the
     /// session must be skipped rather than throwing off the other drafts.
     @Test
-    func aDraftForAnUnknownExerciseIsIgnored() throws {
+    func aDraftForAnUnknownExerciseIsIgnored() async throws {
         let fixture = makeFixture()
         let recorded = makeRecordedWorkout(fixture, setCount: 1)
         let original = try #require(recorded.workoutExercise.setsList.first)
@@ -313,7 +313,7 @@ struct EditWorkoutSessionCommitTests {
             sets: [addedSet(reps: 1, weight: 1)]
         )
 
-        fixture.viewModel.saveEditedWorkout(
+        await fixture.viewModel.saveEditedWorkout(
             recorded.session,
             exerciseDrafts: [orphanDraft, draft(for: recorded.workoutExercise, sets: [keptSet(original, reps: 11, weight: 61)])],
             updateTemplate: false
@@ -359,7 +359,7 @@ struct EditWorkoutSessionCommitTests {
             let observer = observeTemplateChange { notified() }
             defer { NotificationCenter.default.removeObserver(observer) }
 
-            fixture.viewModel.saveEditedWorkout(
+            await fixture.viewModel.saveEditedWorkout(
                 recorded.session,
                 exerciseDrafts: [draft(for: recorded.workoutExercise, sets: [keptSet(original, reps: 12, weight: 65)])],
                 updateTemplate: true
@@ -383,7 +383,7 @@ struct EditWorkoutSessionCommitTests {
             let observer = observeTemplateChange { notified() }
             defer { NotificationCenter.default.removeObserver(observer) }
 
-            fixture.viewModel.saveEditedWorkout(
+            await fixture.viewModel.saveEditedWorkout(
                 recorded.session,
                 exerciseDrafts: [draft(for: recorded.workoutExercise, sets: [keptSet(original, reps: 12, weight: 65)])],
                 updateTemplate: false
@@ -402,13 +402,13 @@ struct EditWorkoutSessionCommitTests {
     /// "update routine" on a routine-less workout silently dropped the user's set
     /// edits. The save is now unconditional.
     @Test
-    func editsToARoutinelessWorkoutSurviveEvenWhenTemplateUpdateIsRequested() throws {
+    func editsToARoutinelessWorkoutSurviveEvenWhenTemplateUpdateIsRequested() async throws {
         let fixture = makeFixture()
         let recorded = makeRecordedWorkout(fixture, setCount: 1, withRoutine: false)
         let original = try #require(recorded.workoutExercise.setsList.first)
         #expect(recorded.session.routine == nil)
 
-        fixture.viewModel.saveEditedWorkout(
+        await fixture.viewModel.saveEditedWorkout(
             recorded.session,
             exerciseDrafts: [draft(for: recorded.workoutExercise, sets: [keptSet(original, reps: 15, weight: 80)])],
             updateTemplate: true
@@ -426,13 +426,13 @@ struct EditWorkoutSessionCommitTests {
     }
 
     @Test
-    func committingAnEditAdvancesTheHistoryInvalidationToken() throws {
+    func committingAnEditAdvancesTheHistoryInvalidationToken() async throws {
         let fixture = makeFixture()
         let recorded = makeRecordedWorkout(fixture, setCount: 1)
         let original = try #require(recorded.workoutExercise.setsList.first)
         let before = fixture.viewModel.historyVersion
 
-        fixture.viewModel.saveEditedWorkout(
+        await fixture.viewModel.saveEditedWorkout(
             recorded.session,
             exerciseDrafts: [draft(for: recorded.workoutExercise, sets: [keptSet(original, reps: 9, weight: 55)])],
             updateTemplate: false

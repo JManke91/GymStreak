@@ -153,6 +153,26 @@ A corroborating symptom of the same root cause, deliberately left alone: after a
 those synced workouts show no Apple Health calories until authorization is granted. It repairs
 itself once the user grants access anywhere.
 
+### The delete is `async` and serialized against History reads (2026-08-29)
+
+`WorkoutViewModel.deleteWorkout` is `async` and takes `HistoryStoreGate` around its
+`delete` + `save()`. It has to: the History `@ModelActor` fetches the whole completed-session
+graph into its own `ModelContext` and walks it synchronously, and a delete committed underneath
+that walk left it holding rows that no longer exist — an uncatchable SwiftData `fatalError`. This
+shipped and was reproduced from the device's persistent history: two History deletions four
+seconds apart, the second landing inside the rebuild the first had triggered.
+
+Consequences for this feature:
+
+- Both call sites (`HistoryView`'s alert, `WorkoutDetailView`'s menu) now dismiss/clear their
+  `@Model` state **before** awaiting the delete, because both re-render while it waits and both
+  read the session in their alert arguments.
+- `WorkoutDetailView` blanks its content behind `isBeingDeleted` — `dismiss()` does not unmount
+  synchronously, and that body walks `workout.workoutExercisesList` twice.
+- `refreshHistory()` stays outside the gate so the rebuild it starts can take the gate itself.
+
+Full root cause, evidence and the residual watch-ingestion exposure: `docs/history-delete-race.md`.
+
 ### Cascade deletion of children (local)
 No child objects are hand-deleted. `WorkoutSession.workoutExercises` and `WorkoutExercise.sets` both declare `.cascade` delete rules, so exercises and sets are removed with the session. Deleting them manually would be redundant and risks double-delete.
 

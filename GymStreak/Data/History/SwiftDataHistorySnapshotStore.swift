@@ -20,7 +20,16 @@ struct SwiftDataHistorySnapshotProvider: HistorySnapshotProviding,
                                         ExerciseDeepDiveFactProviding {
     private let storeTask: Task<SwiftDataHistorySnapshotStore, Never>
 
-    init(modelContainer: ModelContainer) {
+    /// Excludes completed-session deletions for the duration of each graph walk below.
+    /// Without it a delete landing mid-walk makes the actor's next property read trap —
+    /// see `HistoryStoreGate` and `docs/history-delete-race.md`.
+    private let gate: HistoryStoreGate
+
+    /// - Parameter gate: **`AppDependencies`' shared gate.** Deliberately not defaulted — a
+    ///   provider handed its own gate compiles, looks wired and excludes nothing. Tests say
+    ///   so explicitly with `HistoryStoreGate.unshared()`.
+    init(modelContainer: ModelContainer, gate: HistoryStoreGate) {
+        self.gate = gate
         self.storeTask = Task.detached(priority: .userInitiated) {
             SwiftDataHistorySnapshotStore(modelContainer: modelContainer)
         }
@@ -59,19 +68,25 @@ struct SwiftDataHistorySnapshotProvider: HistorySnapshotProviding,
     // lookup). Green build either way, again.
     @concurrent func fetchTrainingSnapshot(referenceDate: Date) async throws -> HistorySnapshot {
         let store = await storeTask.value
-        return try await store.fetchTrainingSnapshot(referenceDate: referenceDate)
+        return try await gate.withAccess {
+            try await store.fetchTrainingSnapshot(referenceDate: referenceDate)
+        }
     }
 
     @concurrent func fetchFortschrittSnapshot() async throws -> [FortschrittExerciseModel] {
         let store = await storeTask.value
-        return try await store.fetchFortschrittSnapshot()
+        return try await gate.withAccess {
+            try await store.fetchFortschrittSnapshot()
+        }
     }
 
     @concurrent func fetchPRDetails(
         sessionID: UUID
     ) async throws -> [UUID: PersonalRecordService.PRDetail] {
         let store = await storeTask.value
-        return try await store.fetchPRDetails(sessionID: sessionID)
+        return try await gate.withAccess {
+            try await store.fetchPRDetails(sessionID: sessionID)
+        }
     }
 
     @concurrent func fetchExerciseProgress(
@@ -82,27 +97,33 @@ struct SwiftDataHistorySnapshotProvider: HistorySnapshotProviding,
         usageSelection: ExerciseUsageSelection?
     ) async throws -> ExerciseProgressSnapshot {
         let store = await storeTask.value
-        return try await store.fetchExerciseProgress(
-            exerciseName: exerciseName,
-            exerciseId: exerciseId,
-            startDate: startDate,
-            recentSessionLimit: recentSessionLimit,
-            usageSelection: usageSelection
-        )
+        return try await gate.withAccess {
+            try await store.fetchExerciseProgress(
+                exerciseName: exerciseName,
+                exerciseId: exerciseId,
+                startDate: startDate,
+                recentSessionLimit: recentSessionLimit,
+                usageSelection: usageSelection
+            )
+        }
     }
 
     @concurrent func fetchPreviousPerformances(
         _ lookup: PreviousPerformanceLookup
     ) async throws -> [UUID: PreviousExercisePerformance] {
         let store = await storeTask.value
-        return try await store.fetchPreviousPerformances(lookup)
+        return try await gate.withAccess {
+            try await store.fetchPreviousPerformances(lookup)
+        }
     }
 
     /// `LifetimeTrainingTotalsProviding`. A counting query, not an aggregation —
     /// still `@concurrent`, because it still enters the model actor.
     @concurrent func fetchCompletedWorkoutCount() async throws -> Int {
         let store = await storeTask.value
-        return try await store.fetchCompletedWorkoutCount()
+        return try await gate.withAccess {
+            try await store.fetchCompletedWorkoutCount()
+        }
     }
 
     /// `LifetimeTrainingTotalsProviding`. `@concurrent` for the same
@@ -110,7 +131,9 @@ struct SwiftDataHistorySnapshotProvider: HistorySnapshotProviding,
     /// session's set graph, so it is the largest of them.
     @concurrent func fetchLifetimeTotals() async throws -> LifetimeTrainingTotals {
         let store = await storeTask.value
-        return try await store.fetchLifetimeTotals()
+        return try await gate.withAccess {
+            try await store.fetchLifetimeTotals()
+        }
     }
 
     /// `ExerciseDeepDiveFactProviding`. The cheap half — a bounded prefetch that stops at
@@ -121,10 +144,12 @@ struct SwiftDataHistorySnapshotProvider: HistorySnapshotProviding,
         usageSelection: ExerciseUsageSelection
     ) async -> Date? {
         let store = await storeTask.value
-        return await store.fetchDeepDiveCacheTimestamp(
-            exerciseId: exerciseId,
-            usageSelection: usageSelection
-        )
+        return await gate.withAccess {
+            await store.fetchDeepDiveCacheTimestamp(
+                exerciseId: exerciseId,
+                usageSelection: usageSelection
+            )
+        }
     }
 
     /// `ExerciseDeepDiveFactProviding`. `@concurrent` for the same load-bearing reason as
@@ -143,12 +168,14 @@ struct SwiftDataHistorySnapshotProvider: HistorySnapshotProviding,
         locale: Locale
     ) async -> ExerciseDeepDiveAggregate {
         let store = await storeTask.value
-        return await store.fetchDeepDiveAggregate(
-            exerciseId: exerciseId,
-            exerciseName: exerciseName,
-            usage: usage,
-            locale: locale
-        )
+        return await gate.withAccess {
+            await store.fetchDeepDiveAggregate(
+                exerciseId: exerciseId,
+                exerciseName: exerciseName,
+                usage: usage,
+                locale: locale
+            )
+        }
     }
 }
 

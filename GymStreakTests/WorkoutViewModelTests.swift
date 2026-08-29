@@ -42,7 +42,7 @@ struct WorkoutViewModelTests {
     /// refresh must still advance the generation.
     @MainActor
     @Test
-    func historyVersionChangesOnEveryRefreshAndSingleSessionLookupStillWorks() throws {
+    func historyVersionChangesOnEveryRefreshAndSingleSessionLookupStillWorks() async throws {
         let context = ModelContext(InMemoryModelContainer.make())
         let sessionRepository = SwiftDataWorkoutSessionRepository(modelContext: context)
         let viewModel = makeViewModel(
@@ -115,7 +115,7 @@ struct WorkoutViewModelTests {
     }
 
     @Test
-    func restoringRestTimerDerivesRemainingTimeFromPersistedDeadline() {
+    func restoringRestTimerDerivesRemainingTimeFromPersistedDeadline() async {
         let context = ModelContext(InMemoryModelContainer.make())
         var currentDate = Date(timeIntervalSinceReferenceDate: 1_000)
         let viewModel = makeViewModel(
@@ -194,7 +194,7 @@ struct WorkoutViewModelTests {
     /// rather than a new one, so the presenter can recognise the countdown it is
     /// already showing instead of requesting a duplicate Live Activity.
     @Test
-    func restoringARestTimerRepresentsTheSameLiveActivityIdentity() throws {
+    func restoringARestTimerRepresentsTheSameLiveActivityIdentity() async throws {
         let context = ModelContext(InMemoryModelContainer.make())
         let liveActivity = RecordingRestTimerLiveActivity()
         var currentDate = Date(timeIntervalSinceReferenceDate: 1_000)
@@ -222,7 +222,7 @@ struct WorkoutViewModelTests {
     }
 
     @Test
-    func routineWorkoutSnapshotsSlotWhileAdHocExerciseDoesNot() {
+    func routineWorkoutSnapshotsSlotWhileAdHocExerciseDoesNot() async {
         let exercise = Exercise(name: "Biceps Curls")
         let routineExercise = RoutineExercise(exercise: exercise, order: 0)
 
@@ -239,7 +239,7 @@ struct WorkoutViewModelTests {
     }
 
     @Test
-    func swapAndRevertPreserveSlotAndSnapshotPerformedLoadBehavior() throws {
+    func swapAndRevertPreserveSlotAndSnapshotPerformedLoadBehavior() async throws {
         let context = ModelContext(InMemoryModelContainer.make())
         let sessionRepository = SwiftDataWorkoutSessionRepository(modelContext: context)
         let routineRepository = SwiftDataRoutineRepository(modelContext: context)
@@ -290,7 +290,7 @@ struct WorkoutViewModelTests {
         let alternativeTarget = try #require(
             viewModel.swapTargets(for: workoutExercise).first { $0.exercise.id == alternative.id }
         )
-        viewModel.swapExercise(workoutExercise, to: alternativeTarget)
+        await viewModel.swapExercise(workoutExercise, to: alternativeTarget)
 
         #expect(workoutExercise.routineExerciseId == slot.id)
         #expect(workoutExercise.exerciseId == alternative.id)
@@ -299,7 +299,7 @@ struct WorkoutViewModelTests {
         let revertTarget = try #require(
             viewModel.swapTargets(for: workoutExercise).first { $0.isOriginal }
         )
-        viewModel.swapExercise(workoutExercise, to: revertTarget)
+        await viewModel.swapExercise(workoutExercise, to: revertTarget)
 
         #expect(workoutExercise.routineExerciseId == slot.id)
         #expect(workoutExercise.exerciseId == primary.id)
@@ -307,7 +307,7 @@ struct WorkoutViewModelTests {
     }
 
     @Test
-    func completingWorkoutWithTemplateUpdateReplacesRemovedSlotWhenSameExerciseIsReadded() throws {
+    func completingWorkoutWithTemplateUpdateReplacesRemovedSlotWhenSameExerciseIsReadded() async throws {
         let context = ModelContext(InMemoryModelContainer.make())
         let sessionRepository = SwiftDataWorkoutSessionRepository(modelContext: context)
         let routineRepository = SwiftDataRoutineRepository(modelContext: context)
@@ -352,7 +352,7 @@ struct WorkoutViewModelTests {
         )
         viewModel.currentSession = session
 
-        viewModel.completeWorkout(updateTemplate: true, notes: "")
+        await viewModel.completeWorkout(updateTemplate: true, notes: "")
 
         let updatedRoutine = try #require(routineRepository.fetch(id: routine.id))
         let addedSlot = try #require(
@@ -369,7 +369,7 @@ struct WorkoutViewModelTests {
     }
 
     @Test
-    func completingWorkoutWithTemplateUpdateRemovesMissingRoutineExercise() throws {
+    func completingWorkoutWithTemplateUpdateRemovesMissingRoutineExercise() async throws {
         let context = ModelContext(InMemoryModelContainer.make())
         let sessionRepository = SwiftDataWorkoutSessionRepository(modelContext: context)
         let routineRepository = SwiftDataRoutineRepository(modelContext: context)
@@ -413,7 +413,7 @@ struct WorkoutViewModelTests {
         )
         viewModel.currentSession = session
 
-        viewModel.completeWorkout(updateTemplate: true, notes: "")
+        await viewModel.completeWorkout(updateTemplate: true, notes: "")
 
         let remainingSlots = try #require(routineRepository.fetch(id: routine.id))
             .routineExercisesList
@@ -423,7 +423,7 @@ struct WorkoutViewModelTests {
     }
 
     @Test
-    func completingWorkoutWithoutTemplateUpdateLeavesRoutineMembershipUnchanged() throws {
+    func completingWorkoutWithoutTemplateUpdateLeavesRoutineMembershipUnchanged() async throws {
         let context = ModelContext(InMemoryModelContainer.make())
         let sessionRepository = SwiftDataWorkoutSessionRepository(modelContext: context)
         let routineRepository = SwiftDataRoutineRepository(modelContext: context)
@@ -459,7 +459,7 @@ struct WorkoutViewModelTests {
         )
         viewModel.currentSession = session
 
-        viewModel.completeWorkout(updateTemplate: false, notes: "")
+        await viewModel.completeWorkout(updateTemplate: false, notes: "")
 
         let unchangedRoutine = try #require(routineRepository.fetch(id: routine.id))
         #expect(unchangedRoutine.routineExercisesList.map(\.id) == [slot.id])
@@ -576,7 +576,7 @@ struct WorkoutViewModelTests {
             healthKitManager: healthKit
         )
 
-        viewModel.deleteWorkout(session, alsoFromHealthKit: true)
+        await viewModel.deleteWorkout(session, alsoFromHealthKit: true)
         await Task.yield()
 
         #expect(sessionRepository.fetchAll().isEmpty)
@@ -600,7 +600,7 @@ struct WorkoutViewModelTests {
             healthKitManager: healthKit
         )
 
-        viewModel.deleteWorkout(session, alsoFromHealthKit: false)
+        await viewModel.deleteWorkout(session, alsoFromHealthKit: false)
         await Task.yield()
 
         #expect(sessionRepository.fetchAll().isEmpty)
@@ -624,7 +624,7 @@ struct WorkoutViewModelTests {
         )
 
         // Even when Apple Health is requested there is nothing to remove.
-        viewModel.deleteWorkout(session, alsoFromHealthKit: true)
+        await viewModel.deleteWorkout(session, alsoFromHealthKit: true)
         await Task.yield()
 
         #expect(sessionRepository.fetchAll().isEmpty)
@@ -649,7 +649,7 @@ struct WorkoutViewModelTests {
             healthKitManager: healthKit
         )
 
-        viewModel.deleteWorkout(session, alsoFromHealthKit: true)
+        await viewModel.deleteWorkout(session, alsoFromHealthKit: true)
         await Task.yield()
 
         // The local delete stands; the failure only raises the non-blocking flag.
@@ -679,7 +679,7 @@ struct WorkoutViewModelTests {
             healthKitManager: healthKit
         )
 
-        viewModel.deleteWorkout(session, alsoFromHealthKit: true)
+        await viewModel.deleteWorkout(session, alsoFromHealthKit: true)
         await Task.yield()
 
         #expect(sessionRepository.fetchAll().isEmpty)
@@ -704,7 +704,7 @@ struct WorkoutViewModelTests {
             healthKitManager: healthKit
         )
 
-        viewModel.deleteWorkout(session, alsoFromHealthKit: true)
+        await viewModel.deleteWorkout(session, alsoFromHealthKit: true)
         await Task.yield()
 
         #expect(sessionRepository.fetchAll().isEmpty)
@@ -739,7 +739,7 @@ struct WorkoutViewModelTests {
         viewModel.startWorkout(routine: routine)
         let session = try #require(viewModel.currentSession)
         viewModel.pauseForCompletion()
-        viewModel.completeWorkout(updateTemplate: false, notes: "")
+        await viewModel.completeWorkout(updateTemplate: false, notes: "")
         // The Health write is a detached Task with several suspension points.
         for _ in 0..<20 where healthKit.savedWorkouts.isEmpty {
             await Task.yield()
@@ -779,7 +779,7 @@ struct WorkoutViewModelTests {
         viewModel.startWorkout(routine: routine)
         let session = try #require(viewModel.currentSession)
         viewModel.pauseForCompletion()
-        viewModel.completeWorkout(updateTemplate: false, notes: "")
+        await viewModel.completeWorkout(updateTemplate: false, notes: "")
         for _ in 0..<20 where viewModel.healthKitSyncStatus == .syncing {
             await Task.yield()
         }
@@ -794,7 +794,7 @@ struct WorkoutViewModelTests {
     /// the proposal into the live sets would rewrite work already done and show
     /// the user numbers they never lifted.
     @Test
-    func applyingOverloadMidWorkoutRaisesTheTemplateWithoutRewritingThePerformance() throws {
+    func applyingOverloadMidWorkoutRaisesTheTemplateWithoutRewritingThePerformance() async throws {
         let context = ModelContext(InMemoryModelContainer.make())
         let sessionRepository = SwiftDataWorkoutSessionRepository(modelContext: context)
         let routineRepository = SwiftDataRoutineRepository(modelContext: context)
@@ -832,7 +832,7 @@ struct WorkoutViewModelTests {
     /// overloaded exercise, the weights from BEFORE the increase — writing them
     /// back would silently undo it (and re-qualify the exercise at once).
     @Test
-    func savingWithTemplateUpdateDoesNotWriteThePerformanceOverAnAppliedIncrease() throws {
+    func savingWithTemplateUpdateDoesNotWriteThePerformanceOverAnAppliedIncrease() async throws {
         let context = ModelContext(InMemoryModelContainer.make())
         let sessionRepository = SwiftDataWorkoutSessionRepository(modelContext: context)
         let routineRepository = SwiftDataRoutineRepository(modelContext: context)
@@ -846,7 +846,7 @@ struct WorkoutViewModelTests {
         viewModel.currentSession = scenario.session
         viewModel.applyProgressiveOverload(for: scenario.workoutExercise, weightIncrement: 2.5)
 
-        viewModel.completeWorkout(updateTemplate: true, notes: "")
+        await viewModel.completeWorkout(updateTemplate: true, notes: "")
 
         let templateSet = try #require(scenario.slot.setsList.first)
         #expect(templateSet.weight == 52.5)
@@ -856,7 +856,7 @@ struct WorkoutViewModelTests {
     /// The same writeback must still work for an ordinary exercise — the
     /// exclusion above is scoped to overload-applied ones only.
     @Test
-    func savingWithTemplateUpdateStillWritesThePerformanceForAnOrdinaryExercise() throws {
+    func savingWithTemplateUpdateStillWritesThePerformanceForAnOrdinaryExercise() async throws {
         let context = ModelContext(InMemoryModelContainer.make())
         let sessionRepository = SwiftDataWorkoutSessionRepository(modelContext: context)
         let routineRepository = SwiftDataRoutineRepository(modelContext: context)
@@ -871,7 +871,7 @@ struct WorkoutViewModelTests {
         let performedSet = try #require(scenario.workoutExercise.setsList.first)
         performedSet.actualWeight = 55
 
-        viewModel.completeWorkout(updateTemplate: true, notes: "")
+        await viewModel.completeWorkout(updateTemplate: true, notes: "")
 
         let templateSet = try #require(scenario.slot.setsList.first)
         #expect(templateSet.weight == 55)
@@ -882,7 +882,7 @@ struct WorkoutViewModelTests {
     /// could have raised, so it must join the RAISED scheme — otherwise Save
     /// leaves the template mixing raised and unraised sets.
     @Test
-    func aSetAddedDuringAnOverloadedWorkoutJoinsTheRaisedTemplateScheme() throws {
+    func aSetAddedDuringAnOverloadedWorkoutJoinsTheRaisedTemplateScheme() async throws {
         let context = ModelContext(InMemoryModelContainer.make())
         let sessionRepository = SwiftDataWorkoutSessionRepository(modelContext: context)
         let routineRepository = SwiftDataRoutineRepository(modelContext: context)
@@ -906,7 +906,7 @@ struct WorkoutViewModelTests {
         scenario.workoutExercise.sets?.append(extra)
         context.insert(extra)
 
-        viewModel.completeWorkout(updateTemplate: true, notes: "")
+        await viewModel.completeWorkout(updateTemplate: true, notes: "")
 
         let templateSets = scenario.slot.setsList.sorted { $0.order < $1.order }
         #expect(templateSets.count == 2)
@@ -917,7 +917,7 @@ struct WorkoutViewModelTests {
     /// A nonuniform (pyramid) target has no single weight that is true of the
     /// exercise, so the card must be told to say "all sets adjusted" instead.
     @Test
-    func anOverloadOnANonuniformSchemeReportsNoSingleAppliedWeight() throws {
+    func anOverloadOnANonuniformSchemeReportsNoSingleAppliedWeight() async throws {
         let context = ModelContext(InMemoryModelContainer.make())
         let sessionRepository = SwiftDataWorkoutSessionRepository(modelContext: context)
         let routineRepository = SwiftDataRoutineRepository(modelContext: context)
@@ -943,7 +943,7 @@ struct WorkoutViewModelTests {
     }
 
     @Test
-    func undoingAMidWorkoutOverloadRestoresTheTemplateAndClearsTheAppliedWeight() throws {
+    func undoingAMidWorkoutOverloadRestoresTheTemplateAndClearsTheAppliedWeight() async throws {
         let context = ModelContext(InMemoryModelContainer.make())
         let sessionRepository = SwiftDataWorkoutSessionRepository(modelContext: context)
         let routineRepository = SwiftDataRoutineRepository(modelContext: context)
@@ -968,7 +968,7 @@ struct WorkoutViewModelTests {
     }
 
     @Test
-    func applyingOverloadFromHistoryBumpsLiveTemplateAndLeavesHistoryUnchanged() throws {
+    func applyingOverloadFromHistoryBumpsLiveTemplateAndLeavesHistoryUnchanged() async throws {
         let context = ModelContext(InMemoryModelContainer.make())
         let sessionRepository = SwiftDataWorkoutSessionRepository(modelContext: context)
         let routineRepository = SwiftDataRoutineRepository(modelContext: context)
@@ -1004,7 +1004,7 @@ struct WorkoutViewModelTests {
     }
 
     @Test
-    func applyingOverloadFromHistoryResolvesRenamedExerciseViaIdentityFallback() throws {
+    func applyingOverloadFromHistoryResolvesRenamedExerciseViaIdentityFallback() async throws {
         let context = ModelContext(InMemoryModelContainer.make())
         let sessionRepository = SwiftDataWorkoutSessionRepository(modelContext: context)
         let routineRepository = SwiftDataRoutineRepository(modelContext: context)
@@ -1030,7 +1030,7 @@ struct WorkoutViewModelTests {
     }
 
     @Test
-    func applyingOverloadFromHistoryIsNoOpWhenRoutineDeleted() throws {
+    func applyingOverloadFromHistoryIsNoOpWhenRoutineDeleted() async throws {
         let context = ModelContext(InMemoryModelContainer.make())
         let sessionRepository = SwiftDataWorkoutSessionRepository(modelContext: context)
         let routineRepository = SwiftDataRoutineRepository(modelContext: context)

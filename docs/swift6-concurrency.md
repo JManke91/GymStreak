@@ -379,6 +379,28 @@ actor are **enqueued in creation order**, so callback order is preserved — whi
 watch sync protocol depends on. `MainActor.assumeIsolated` would *trap* here, because
 these callbacks genuinely are not on the main thread.
 
+**The `@MainActor in` is load-bearing, not decoration — a bare `Task { … }` does not get
+that guarantee.** SE-0431 scopes creation-order enqueue to closures with an *explicit*
+isolation marker (a global-actor attribute or an explicit `isolated` capture) and
+deliberately **excludes** closures that are merely *implicitly* isolated by their context,
+so that bare `Task {}` does not become a scheduling bottleneck. Inside an already-`@MainActor`
+type, `Task { await self.foo() }` therefore still runs on the main actor but with
+**unspecified enqueue order**. It compiles, it looks identical, and it silently loses
+ordering. It was written that way for one review cycle in
+`AppDependencies.onWorkoutInboxUpdated` while making the watch drain gate-aware.
+
+Be precise about what that would actually have cost, though — the first write-up of this
+overstated it. Payload-vs-payload ingestion order was never at risk: the drain iterates
+`WatchWorkoutInboxStore.entries()`, which sorts by arrival-timestamp filename, so whichever
+task wins the gate drains everything oldest-first and the loser finds an empty inbox. Inbox
+order is a property of the **store**, not of task scheduling. What genuinely depends on task
+order is one drain kind preceding another — `routineAuthorityDidChange` (receipt recovery)
+before a plain `drainInbox` — and even that converges, since it re-drains after
+`recoverReadyReceipts()`. So: spell the isolation explicitly on any `Task` whose ordering
+matters, because it is free and strictly stronger — but do not audit the codebase for bare
+`Task {}` on the premise that each one is a live ordering bug.
+([SE-0431](https://github.com/swiftlang/swift-evolution/blob/main/proposals/0431-isolated-any-functions.md))
+
 `assumeIsolated` is not banned, though — it is correct when the callback is *documented
 or configured* to arrive on the main thread. `CloudKitSyncStatusMonitor` uses it
 legitimately for a `NotificationCenter` observer registered with `queue: .main`.
@@ -821,6 +843,26 @@ per-expression deprecation suppression, and the wrap-in-a-deprecated-helper tric
 moves the warning to the helper's call site.
 
 Revisit when RevenueCat promotes `hasPrunedPaywallComponents` out of `@_spi`.
+
+## 9d. Actor isolation does not isolate a SwiftData *store*
+
+`@ModelActor` gives a context its own executor. It does **not** give it its own view of the store.
+Another context can delete a row this one has already fetched, and the next property read on that
+object is an uncatchable `fatalError` from `SwiftData/BackingData.swift` — not a thrown error, not a
+notification. SwiftData has no equivalent of Core Data's
+`setQueryGenerationFrom(NSQueryGenerationToken.current)` and no
+`automaticallyMergesChangesFromParent`; `isDeleted` reports only deletes staged in the object's own
+context, and `relationshipKeyPathsForPrefetching` removes queries, not the invalidation window.
+Apple DTS confirms there is no API-level fix ([forums/thread/800316](https://developer.apple.com/forums/thread/800316)).
+
+This shipped as a crash: see `docs/history-delete-race.md`. The remedy is app-level mutual
+exclusion — `HistoryStoreGate` (`Domain/Services/`). Rule for new code: **a background walk of a
+SwiftData graph must be serialized against every context that can delete rows in it.**
+
+One subtlety worth preserving — the gate's `withAccess` is `nonisolated` on purpose. An isolated
+method that `await`s the body would let a second caller in through actor reentrancy, defeating the
+exclusion; being `nonisolated` (SE-0461 `nonisolated(nonsending)`) also means it runs on the
+caller's executor, so it does not disturb the `@concurrent` off-main guarantee of §1.
 
 ## 10. Rules for new code
 

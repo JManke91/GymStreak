@@ -44,6 +44,11 @@ struct EditWorkoutSessionView: View {
 
     @State private var exerciseDrafts: [WorkoutExerciseDraft] = []
     @State private var showingTemplatePrompt = false
+    /// True while `commit` is awaiting the History gate. The sheet stays up during that wait
+    /// (see `commit`), so without this a second Save would run the commit twice — and drafts
+    /// added in the editor carry no `existingSetId`, so they would be inserted twice — and a
+    /// swipe-dismiss would re-open the `onDismiss`-before-commit race that awaiting closes.
+    @State private var isCommitting = false
 
     var body: some View {
         NavigationStack {
@@ -57,9 +62,11 @@ struct EditWorkoutSessionView: View {
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("action.cancel".localized) { dismiss() }
+                        .disabled(isCommitting)
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("action.save".localized) { onSaveTapped() }
+                        .disabled(isCommitting)
                 }
             }
             .confirmationDialog(
@@ -74,6 +81,7 @@ struct EditWorkoutSessionView: View {
                 Text("edit_workout.template_prompt.message".localized)
             }
             .onAppear(perform: buildDrafts)
+            .interactiveDismissDisabled(isCommitting)
         }
     }
 
@@ -116,13 +124,23 @@ struct EditWorkoutSessionView: View {
     }
 
     private func commit(updateTemplate: Bool) {
-        viewModel.saveEditedWorkout(
-            workout,
-            exerciseDrafts: exerciseDrafts,
-            updateTemplate: updateTemplate
-        )
+        guard !isCommitting else { return }
+        isCommitting = true
         HapticManager.shared.success()
-        dismiss()
+        let drafts = exerciseDrafts
+        // Dismiss only after the commit lands. `WorkoutDetailView` reloads its derived state
+        // from this sheet's `onDismiss`, so dismissing first would race that reload against
+        // a commit still waiting on the History gate and leave the detail screen showing
+        // pre-edit values with nothing to re-trigger it. Safe to stay presented meanwhile:
+        // this body renders only the value-type drafts and never reads `workout`.
+        Task {
+            await viewModel.saveEditedWorkout(
+                workout,
+                exerciseDrafts: drafts,
+                updateTemplate: updateTemplate
+            )
+            dismiss()
+        }
     }
 
     private func addSet(toExerciseAt index: Int) {

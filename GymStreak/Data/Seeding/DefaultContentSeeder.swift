@@ -40,6 +40,11 @@ final class DefaultContentSeeder {
     private let cloudVersionStore: SeedCatalogVersionStore
     private let settleWindow: Duration
     private let importBurstGrace: Duration
+    /// `deduplicate` deletes duplicate `Exercise` rows, and the History model actor
+    /// fetches the **whole** `Exercise` table. This runs at launch, when a rebuild can
+    /// already be in flight. See `HistoryStoreGate` and `docs/history-delete-race.md`.
+    /// (`recoverStrandedLibraryIfNeeded` needs no gate — it only inserts.)
+    private let historyStoreGate: HistoryStoreGate
 
     /// - Parameters:
     ///   - settleWindow: how long the stranded-library recovery gives CloudKit
@@ -57,7 +62,8 @@ final class DefaultContentSeeder {
         defaults: UserDefaults = .standard,
         cloudVersionStore: SeedCatalogVersionStore = UbiquitousSeedCatalogVersionStore(),
         settleWindow: Duration = .seconds(45),
-        importBurstGrace: Duration = .seconds(3)
+        importBurstGrace: Duration = .seconds(3),
+        historyStoreGate: HistoryStoreGate
     ) {
         self.modelContext = modelContext
         self.cloudSyncStatus = cloudSyncStatus
@@ -65,9 +71,17 @@ final class DefaultContentSeeder {
         self.cloudVersionStore = cloudVersionStore
         self.settleWindow = settleWindow
         self.importBurstGrace = importBurstGrace
+        self.historyStoreGate = historyStoreGate
     }
 
-    func run() {
+    /// `async` because `deduplicate` deletes `Exercise` rows the History model actor
+    /// may be holding — see `historyStoreGate`. The whole pass is bracketed so its
+    /// fetch, dedup and save see a consistent store.
+    func run() async {
+        await historyStoreGate.withAccess { runLocked() }
+    }
+
+    private func runLocked() {
         do {
             let exercises = try modelContext.fetch(FetchDescriptor<Exercise>())
             let survivors = deduplicate(exercises)

@@ -18,6 +18,14 @@ import SwiftData
 /// **Call this only from inside a model actor.** It is synchronous and unbounded: it
 /// fetches every completed session and faults in every exercise and set. On the main
 /// actor that is the ~600 ms hang in `docs/history-performance.md`.
+///
+/// **And only while holding `HistoryStoreGate`.** The graph this registers stays live
+/// across the caller's whole walk; a completed-session delete committed from any other
+/// context in the meantime leaves the caller holding rows that no longer exist, and its
+/// next property read is an uncatchable SwiftData `fatalError`. That shipped — see
+/// `docs/history-delete-race.md`. Both current callers (`SwiftDataHistorySnapshotStore`,
+/// `ChatFactStore`) are reached only through providers that take the *same* gate instance;
+/// a new one must be too.
 enum CompletedSessionFetch {
 
     /// Every completed session, newest first, with `workoutExercises`, their `sets` and

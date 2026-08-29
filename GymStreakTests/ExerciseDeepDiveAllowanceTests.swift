@@ -167,7 +167,7 @@ struct ExerciseDeepDiveAllowanceTests {
             self.service = service
             self.allowance = allowance
             self.paywalls = paywalls
-            let facts = SwiftDataHistorySnapshotProvider(modelContainer: container)
+            let facts = SwiftDataHistorySnapshotProvider(modelContainer: container, gate: .unshared())
             self.facts = facts
             self.viewModel = ExerciseDeepDiveViewModel(
                 allowanceGate: AICoachAllowanceGate(

@@ -65,6 +65,13 @@ class RoutinesViewModel: ObservableObject {
     ///   inside the cap checks, for the same reason `PaywallPresenter` injects
     ///   it: the shipped switch is off, so tests baking it in would prove the
     ///   gate is inert rather than that it is correct.
+    /// The History model actor holds `Routine` and `RoutineExercise` rows too — its session
+    /// fetch prefetches `\.routine`, the snapshot builder faults `session.routine?.id` during
+    /// the walk, and the live-slot lookup walks `routine.routineExercisesList`. Deleting a
+    /// routine underneath that walk is the same uncatchable trap as deleting a workout.
+    /// See `HistoryStoreGate`.
+    private let historyStoreGate: HistoryStoreGate
+
     init(
         routineRepository: RoutineRepository,
         workoutSessionRepository: WorkoutSessionRepository,
@@ -72,6 +79,7 @@ class RoutinesViewModel: ObservableObject {
         proEntitlements: any ProEntitlementProviding,
         paywalls: any PaywallPresenting,
         proactivePaywalls: ProactivePaywallCoordinator? = nil,
+        historyStoreGate: HistoryStoreGate = .unshared(),
         isGatingEnabled: Bool = ProGating.isEnabled
     ) {
         self.routineRepository = routineRepository
@@ -80,6 +88,7 @@ class RoutinesViewModel: ObservableObject {
         self.proEntitlements = proEntitlements
         self.paywalls = paywalls
         self.proactivePaywalls = proactivePaywalls
+        self.historyStoreGate = historyStoreGate
         self.isGatingEnabled = isGatingEnabled
         fetchRoutines()
         observeCloudKitChanges()
@@ -487,9 +496,15 @@ class RoutinesViewModel: ObservableObject {
         return copy
     }
 
-    func deleteRoutine(_ routine: Routine) {
-        routineRepository.delete(routine)
-        save()
+    /// `async` because the cascade removes `RoutineExercise` rows the History model actor may
+    /// be holding — see `historyStoreGate`. (Workout history itself is untouched:
+    /// `Routine.workoutSessions` carries no delete rule, so SwiftData nullifies rather than
+    /// cascades. See `docs/history-delete-race.md`.)
+    func deleteRoutine(_ routine: Routine) async {
+        await historyStoreGate.withAccess {
+            routineRepository.delete(routine)
+            save()
+        }
         fetchRoutines()
     }
 

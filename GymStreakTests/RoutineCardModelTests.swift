@@ -201,7 +201,7 @@ struct RoutineCardModelTests {
         // Deletes the RoutineExercise rows too — the routine template really changed,
         // on a screen that never touches a routine directly.
         exercisesViewModel.requestDeleteExercise(exercise)
-        exercisesViewModel.confirmDeleteExercise()
+        await exercisesViewModel.confirmDeleteExercise()
 
         // The refresh arrives through `.routineTemplateDidChange`, so it is a main-queue
         // hop rather than a direct call.

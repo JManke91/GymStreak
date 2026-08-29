@@ -15,6 +15,10 @@ struct SaveWorkoutView: View {
     @State private var isLoadingComparisons = true
     @State private var recapVM = PostWorkoutRecapViewModel()
     @State private var overloadSheetExercise: WorkoutExercise?
+    /// True while `completeWorkout` is awaiting the History gate. The sheet stays up for
+    /// that wait (see the Save button), so without this a second tap would complete the
+    /// workout twice — and the template reconciliation it runs is not idempotent.
+    @State private var isSaving = false
 
     let onSave: () -> Void
 
@@ -33,6 +37,9 @@ struct SaveWorkoutView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
+                    // Disabled while the commit is in flight, like `EditWorkoutSessionView`:
+                    // cancelling mid-wait would discard the recap cache for a session whose
+                    // completion is still queued, and the queued task dismisses anyway.
                     Button("action.cancel".localized) {
                         // Clean up any orphaned cache entry produced during generation
                         // before the session was persisted via completeWorkout().
@@ -41,16 +48,31 @@ struct SaveWorkoutView: View {
                         }
                         dismiss()
                     }
+                    .disabled(isSaving)
                 }
 
                 ToolbarItem(placement: .confirmationAction) {
                     Button("action.save".localized) {
-                        viewModel.completeWorkout(updateTemplate: updateTemplate, notes: notes)
-                        dismiss()
-                        onSave()
+                        guard !isSaving else { return }
+                        isSaving = true
+                        // Dismiss only after the commit lands, mirroring
+                        // `EditWorkoutSessionView`: `completeWorkout` is `async` now
+                        // (it takes the History gate) and it is what clears
+                        // `currentSession`, so `onSave()` must not run against a
+                        // half-finished completion.
+                        Task {
+                            await viewModel.completeWorkout(
+                                updateTemplate: updateTemplate,
+                                notes: notes
+                            )
+                            dismiss()
+                            onSave()
+                        }
                     }
+                    .disabled(isSaving)
                 }
             }
+            .interactiveDismissDisabled(isSaving)
             .onAppear {
                 syncToHealthKit = viewModel.healthKitSyncEnabled
             }

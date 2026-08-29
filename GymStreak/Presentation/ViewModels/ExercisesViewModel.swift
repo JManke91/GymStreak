@@ -74,16 +74,25 @@ class ExercisesViewModel: ObservableObject {
     private let exerciseRepository: ExerciseRepository
     private let routineRepository: RoutineRepository
     private let catalogSync: ExerciseCatalogSyncRequesting
+    /// The History model actor fetches the **whole** `Exercise` table
+    /// (`SwiftDataHistorySnapshotStore.fetchFortschrittSnapshot`,
+    /// `fetchExerciseProgress`, `fetchPreviousPerformances`), so deleting an exercise
+    /// removes rows it may be holding — and the cascade through `RoutineExercise`
+    /// reaches its routine graph too. Same uncatchable trap as a History deletion;
+    /// see `HistoryStoreGate` and `docs/history-delete-race.md`.
+    private let historyStoreGate: HistoryStoreGate
     private var cloudSyncObserver: NSObjectProtocol?
 
     init(
         exerciseRepository: ExerciseRepository,
         routineRepository: RoutineRepository,
-        catalogSync: ExerciseCatalogSyncRequesting
+        catalogSync: ExerciseCatalogSyncRequesting,
+        historyStoreGate: HistoryStoreGate = .unshared()
     ) {
         self.exerciseRepository = exerciseRepository
         self.routineRepository = routineRepository
         self.catalogSync = catalogSync
+        self.historyStoreGate = historyStoreGate
         fetchExercises()
         observeCloudKitChanges()
     }
@@ -160,25 +169,32 @@ class ExercisesViewModel: ObservableObject {
         showingDeleteConfirmation = true
     }
 
-    /// Actually deletes the exercise and removes it from all routines
-    func confirmDeleteExercise() {
+    /// Actually deletes the exercise and removes it from all routines.
+    ///
+    /// `async` because the deletion has to exclude the History model actor — see
+    /// `historyStoreGate`.
+    func confirmDeleteExercise() async {
         guard let exercise = exerciseToDelete else { return }
-        performDeleteExercise(exercise)
+        // Cleared before the `await`: the confirmation alert's own body reads
+        // `exerciseToDelete`, and this now suspends while the gate is held.
         resetDeleteState()
+        await performDeleteExercise(exercise)
     }
 
     /// Performs the actual deletion of an exercise and its associated RoutineExercises
-    private func performDeleteExercise(_ exercise: Exercise) {
-        // First, delete all RoutineExercise records that reference this exercise
-        // This also cascades to delete their ExerciseSets
-        let routineExercises = exercise.routineExercises ?? []
-        for routineExercise in routineExercises {
-            routineRepository.delete(routineExercise)
-        }
+    private func performDeleteExercise(_ exercise: Exercise) async {
+        let saved = await historyStoreGate.withAccess {
+            // First, delete all RoutineExercise records that reference this exercise
+            // This also cascades to delete their ExerciseSets
+            let routineExercises = exercise.routineExercises ?? []
+            for routineExercise in routineExercises {
+                routineRepository.delete(routineExercise)
+            }
 
-        // Now delete the exercise itself
-        exerciseRepository.delete(exercise)
-        let saved = save()
+            // Now delete the exercise itself
+            exerciseRepository.delete(exercise)
+            return save()
+        }
         fetchExercises()
         if saved {
             catalogSync.requestCatalogSync()
@@ -212,24 +228,31 @@ class ExercisesViewModel: ObservableObject {
         showingDeleteAllConfirmation = true
     }
 
-    /// Confirms and performs deletion of all exercises
-    func confirmDeleteAllExercises() {
-        for exercise in exercises {
-            // Delete all RoutineExercise records first
-            let routineExercises = exercise.routineExercises ?? []
-            for routineExercise in routineExercises {
-                routineRepository.delete(routineExercise)
+    /// Confirms and performs deletion of all exercises.
+    ///
+    /// `async` for the same reason as `confirmDeleteExercise` — and this is the larger
+    /// of the two, since it removes every `Exercise` the History actor holds.
+    func confirmDeleteAllExercises() async {
+        // Dismissed before the `await`, for the same reason `confirmDeleteExercise`
+        // clears its confirmation state first.
+        showingDeleteAllConfirmation = false
+        let saved = await historyStoreGate.withAccess {
+            for exercise in exercises {
+                // Delete all RoutineExercise records first
+                let routineExercises = exercise.routineExercises ?? []
+                for routineExercise in routineExercises {
+                    routineRepository.delete(routineExercise)
+                }
+                // Then delete the exercise
+                exerciseRepository.delete(exercise)
             }
-            // Then delete the exercise
-            exerciseRepository.delete(exercise)
+            return save()
         }
-        let saved = save()
         fetchExercises()
         if saved {
             catalogSync.requestCatalogSync()
             notifyRoutineTemplatesChanged()
         }
-        showingDeleteAllConfirmation = false
     }
 
     /// Cancels the delete all operation

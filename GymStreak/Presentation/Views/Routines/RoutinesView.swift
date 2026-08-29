@@ -30,12 +30,14 @@ private struct RoutinesViewInternal: View {
             watchSync: dependencies.watchSync,
             proEntitlements: dependencies.proEntitlements,
             paywalls: dependencies.paywalls,
-            proactivePaywalls: dependencies.proactivePaywalls
+            proactivePaywalls: dependencies.proactivePaywalls,
+            historyStoreGate: dependencies.historyStoreGate
         ))
         self._exercisesViewModel = StateObject(wrappedValue: ExercisesViewModel(
             exerciseRepository: dependencies.exerciseRepository,
             routineRepository: dependencies.routineRepository,
-            catalogSync: dependencies.exerciseCatalogSync
+            catalogSync: dependencies.exerciseCatalogSync,
+            historyStoreGate: dependencies.historyStoreGate
         ))
         self._workoutViewModel = StateObject(wrappedValue: WorkoutViewModel(
             workoutSessionRepository: dependencies.workoutSessionRepository,
@@ -49,7 +51,8 @@ private struct RoutinesViewInternal: View {
             recovery: dependencies.workoutRecovery,
             activeWorkout: dependencies.activeWorkout,
             proactivePaywalls: dependencies.proactivePaywalls,
-            weightUnitPreference: dependencies.weightUnitPreference
+            weightUnitPreference: dependencies.weightUnitPreference,
+            historyStoreGate: dependencies.historyStoreGate
         ))
     }
 
@@ -90,7 +93,7 @@ private struct RoutinesViewInternal: View {
                 Button("action.delete".localized, role: .destructive) {
                     if let id = routinePendingDeletion,
                        let routine = viewModel.routine(withId: id) {
-                        viewModel.deleteRoutine(routine)
+                        Task { await viewModel.deleteRoutine(routine) }
                     }
                     routinePendingDeletion = nil
                 }

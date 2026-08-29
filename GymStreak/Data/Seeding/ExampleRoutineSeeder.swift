@@ -51,18 +51,39 @@ final class ExampleRoutineSeeder {
     private let modelContext: ModelContext
     private let defaults: UserDefaults
     private let cloudVersionStore: SeedCatalogVersionStore
+    /// Both `removeSupersededExampleRoutines` and `deduplicate` delete whole `Routine`
+    /// rows, whose cascade takes their `RoutineExercise` children with them — and the
+    /// History model actor holds both (it fetches every `Routine`, and
+    /// `fetchLiveRoutineSlotIds` walks `routineExercisesList`). This runs at launch,
+    /// when a History rebuild can already be in flight, so it takes the gate like any
+    /// other deleter. See `HistoryStoreGate` and `docs/history-delete-race.md`.
+    private let historyStoreGate: HistoryStoreGate
 
+    /// - Parameter historyStoreGate: **`AppDependencies`' shared gate.** Deliberately not
+    ///   defaulted, like the three Data-layer providers: a writer handed its own gate
+    ///   compiles, looks wired and excludes nothing. Tests opt out visibly with
+    ///   `HistoryStoreGate.unshared()`.
     init(
         modelContext: ModelContext,
         defaults: UserDefaults = .standard,
-        cloudVersionStore: SeedCatalogVersionStore = UbiquitousSeedCatalogVersionStore()
+        cloudVersionStore: SeedCatalogVersionStore = UbiquitousSeedCatalogVersionStore(),
+        historyStoreGate: HistoryStoreGate
     ) {
         self.modelContext = modelContext
         self.defaults = defaults
         self.cloudVersionStore = cloudVersionStore
+        self.historyStoreGate = historyStoreGate
     }
 
-    func run() {
+    /// `async` because the dedup and cleanup passes below delete `Routine` rows the
+    /// History model actor may be walking — see `historyStoreGate`. The whole body is
+    /// bracketed rather than just the deletions: it is one launch-time pass whose
+    /// fetches, deletes and single save have to see a consistent store.
+    func run() async {
+        await historyStoreGate.withAccess { runLocked() }
+    }
+
+    private func runLocked() {
         do {
             let seededRoutines = try modelContext.fetch(
                 FetchDescriptor<Routine>(predicate: #Predicate { $0.seedKey != "" })

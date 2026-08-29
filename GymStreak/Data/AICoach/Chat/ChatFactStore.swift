@@ -27,7 +27,18 @@ import SwiftData
 struct ChatFactProvider: ChatFactProviding {
     private let storeTask: Task<ChatFactStore, Never>
 
-    init(modelContainer: ModelContainer) {
+    /// This actor walks the very same completed-session graph as the History one — two of
+    /// its three reads go through `CompletedSessionFetch.withFullGraph` — so it is exposed
+    /// to the same cross-context delete race and shares the same gate. See
+    /// `HistoryStoreGate` and `docs/history-delete-race.md`.
+    private let gate: HistoryStoreGate
+
+    /// - Parameter gate: **`AppDependencies`' shared gate** — and it must be the *same*
+    ///   instance the History provider gets; two gates over one store serialize nothing
+    ///   against each other. Deliberately not defaulted; tests opt out explicitly with
+    ///   `HistoryStoreGate.unshared()`.
+    init(modelContainer: ModelContainer, gate: HistoryStoreGate) {
+        self.gate = gate
         self.storeTask = Task.detached(priority: .userInitiated) {
             ChatFactStore(modelContainer: modelContainer)
         }
@@ -58,17 +69,17 @@ struct ChatFactProvider: ChatFactProviding {
 
     @concurrent func nextWorkoutFacts() async -> String {
         let store = await storeTask.value
-        return await store.nextWorkoutFacts()
+        return await gate.withAccess { await store.nextWorkoutFacts() }
     }
 
     @concurrent func exercisePRFacts(exerciseName: String) async -> String {
         let store = await storeTask.value
-        return await store.exercisePRFacts(exerciseName: exerciseName)
+        return await gate.withAccess { await store.exercisePRFacts(exerciseName: exerciseName) }
     }
 
     @concurrent func workoutHistoryFacts(timeframe: ChatHistoryTimeframe) async -> String {
         let store = await storeTask.value
-        return await store.workoutHistoryFacts(timeframe: timeframe)
+        return await gate.withAccess { await store.workoutHistoryFacts(timeframe: timeframe) }
     }
 }
 

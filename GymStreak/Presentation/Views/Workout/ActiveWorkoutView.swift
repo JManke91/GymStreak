@@ -133,9 +133,9 @@ struct ActiveWorkoutView: View {
             DeleteExerciseConfirmationView(
                 exercise: exercise,
                 onConfirm: {
-                    withAnimation(DesignSystem.Animation.spring) {
-                        viewModel.removeExerciseFromWorkout(exercise)
-                    }
+                    // The animation moved into the ViewModel: a `Task` body lands in a later
+                    // transaction, so wrapping it here would animate nothing.
+                    Task { await viewModel.removeExerciseFromWorkout(exercise) }
                     exerciseToDelete = nil
                 },
                 onCancel: { exerciseToDelete = nil }
@@ -745,7 +745,7 @@ private struct ActiveWorkoutAlerts: ViewModifier {
         content
             .alert("workout.cancel.title".localized, isPresented: $showingCancelAlert) {
                 Button("workout.cancel.discard".localized, role: .destructive) {
-                    viewModel.cancelWorkout()
+                    Task { await viewModel.cancelWorkout() }
                     onDismissWorkout()
                 }
                 Button("workout.cancel.keep".localized, role: .cancel) {}
@@ -790,9 +790,8 @@ private struct ActiveWorkoutAlerts: ViewModifier {
                 presenting: pendingSetDeletion
             ) { deletion in
                 Button("set.delete.confirm".localized, role: .destructive) {
-                    withAnimation(DesignSystem.Animation.spring) {
-                        viewModel.removeSetFromExercise(deletion.set, from: deletion.exercise)
-                    }
+                    // Animation is applied inside the ViewModel — see `removeExerciseFromWorkout`.
+                    Task { await viewModel.removeSetFromExercise(deletion.set, from: deletion.exercise) }
                     pendingSetDeletion = nil
                 }
                 Button("action.cancel".localized, role: .cancel) {

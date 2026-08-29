@@ -33,7 +33,7 @@ struct ChatFactProviderTests {
     /// `any ChatFactProviding` (the tools hold `let facts: any ChatFactProviding`),
     /// and the `@concurrent` guarantee has to survive the witness.
     private func makeProvider(_ container: ModelContainer) -> any ChatFactProviding {
-        ChatFactProvider(modelContainer: container)
+        ChatFactProvider(modelContainer: container, gate: .unshared())
     }
 
     @discardableResult

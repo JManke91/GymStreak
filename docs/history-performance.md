@@ -90,6 +90,23 @@ regression. Run it before believing any isolation or build-setting change is saf
 
 ---
 
+## 0b. The model actor's isolation is not free — it races deletes (2026-08-29)
+
+Moving the graph walk onto a `@ModelActor` fixed the hang and introduced a crash. That actor holds
+the whole completed-session graph in its *own* `ModelContext` while it walks; if the main context
+deletes a completed `WorkoutSession` and saves during the walk, the actor's next property read
+cannot resolve its backing row and SwiftData traps — uncatchably. SwiftData has no query
+generations and no cross-context merge, so the only remedy is to serialize the two.
+
+`HistoryStoreGate` does that: every read in `SwiftDataHistorySnapshotProvider`, `ChatFactProvider`
+and `SwiftDataLegacyHistoryAttributionProvider` takes it, as does every `WorkoutViewModel` deletion
+of a row the actor can be holding. Membership is the fetches' own `endTime != nil` predicate —
+which, note, an *in-progress* workout can already satisfy, because `pauseForCompletion()` persists
+`endTime` before the session is ever saved.
+
+**Anything new that walks this graph off the main actor must take the gate too.** See
+`docs/history-delete-race.md`.
+
 ## 1. Symptom
 
 The Verlauf tab's **Trainings** sub-section ignores all touch input for roughly 1–2

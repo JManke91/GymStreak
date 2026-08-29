@@ -33,6 +33,13 @@ struct WorkoutDetailView: View {
     @State private var muscleMap: MuscleMapCardModel = .empty
     @State private var showingEdit = false
     @State private var showingDeleteConfirmation = false
+    /// Set the moment deletion is confirmed, so `body` stops walking
+    /// `workout.workoutExercisesList` while the pop animation runs and the delete awaits
+    /// the History gate. `dismiss()` does not unmount this view synchronously, and every
+    /// `@Published` change on `viewModel` — including the `historyVersion` bump the delete
+    /// itself causes — re-evaluates this body. Reading a cascade-deleted `WorkoutExercise`
+    /// there is an uncatchable SwiftData trap; see `HistoryStoreGate`.
+    @State private var isBeingDeleted = false
     /// Which exercise's weight-increase sheet is open (after-the-fact overload).
     @State private var overloadSheetExercise: WorkoutExercise?
     /// New live-template weight per exercise applied from this history view. The
@@ -50,30 +57,37 @@ struct WorkoutDetailView: View {
         WorkoutType.classify(routineName: workout.routineName)
     }
 
+    @ViewBuilder
+    private var content: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                header
+                MuscleMapCardView(model: muscleMap)
+                statsGrid
+                progressiveOverloadSection
+                if workout.healthKitWorkoutId != nil {
+                    healthKitBanner
+                }
+                if !workout.notes.isEmpty {
+                    notesSection
+                }
+                coachSection
+                exercisesSection
+                Color.clear.frame(height: 40)
+            }
+        }
+        // The muscle map card is inserted above the fold once its aggregation lands, and
+        // without this the scroll view compensates by keeping the content below anchored —
+        // the screen would open already scrolled past the workout title.
+        .defaultScrollAnchor(.top)
+    }
+
     var body: some View {
         ZStack {
             DesignSystem.Colors.background.ignoresSafeArea()
-            ScrollView {
-                VStack(alignment: .leading, spacing: 16) {
-                    header
-                    MuscleMapCardView(model: muscleMap)
-                    statsGrid
-                    progressiveOverloadSection
-                    if workout.healthKitWorkoutId != nil {
-                        healthKitBanner
-                    }
-                    if !workout.notes.isEmpty {
-                        notesSection
-                    }
-                    coachSection
-                    exercisesSection
-                    Color.clear.frame(height: 40)
-                }
+            if !isBeingDeleted {
+                content
             }
-            // The muscle map card is inserted above the fold once its aggregation lands, and
-            // without this the scroll view compensates by keeping the content below anchored —
-            // the screen would open already scrolled past the workout title.
-            .defaultScrollAnchor(.top)
         }
         .navigationTitle("")
         .navigationBarTitleDisplayMode(.inline)
@@ -115,18 +129,29 @@ struct WorkoutDetailView: View {
         }
         .deleteWorkoutConfirmation(
             isPresented: $showingDeleteConfirmation,
-            hasHealthKitWorkout: workout.healthKitWorkoutId != nil,
+            // Short-circuited: this modifier sits outside the `isBeingDeleted` guard, so
+            // without it the alert would still read the tombstoned session.
+            hasHealthKitWorkout: !isBeingDeleted && workout.healthKitWorkoutId != nil,
             onDelete: deleteWorkout
         )
     }
 
-    /// Pops the detail screen before the session is removed, so no view body ever
-    /// re-reads a deleted `@Model`. Deletion bumps the History invalidation version, which causes
-    /// the actor-owned snapshot to reload.
+    /// Blanks the content and pops the screen before the session is removed, so no view
+    /// body ever re-reads a deleted `@Model`. `dismiss()` alone is not enough: it does not
+    /// unmount synchronously, and the delete now awaits the History gate — `isBeingDeleted`
+    /// is what actually stops `body` from walking the session graph in between. Deletion
+    /// bumps the History invalidation version, which causes the actor-owned snapshot to
+    /// reload.
     private func deleteWorkout(alsoFromHealthKit: Bool) {
+        isBeingDeleted = true
+        // Its stream task captures this `WorkoutSession` and reads its exercise/set graph
+        // across several suspensions, so it would outlive the delete otherwise.
+        analysisVM.cancel()
         dismiss()
-        viewModel.deleteWorkout(workout, alsoFromHealthKit: alsoFromHealthKit)
         HapticManager.shared.success()
+        Task {
+            await viewModel.deleteWorkout(workout, alsoFromHealthKit: alsoFromHealthKit)
+        }
     }
 
     /// Re-derives PR badges, vs-previous comparisons and coach state after the user
@@ -437,6 +462,9 @@ struct WorkoutDetailView: View {
 
     @MainActor
     private func loadCoachState() {
+        // Runs last in the `.task` chain, after three awaits, and `prepareCoachState` reads the
+        // session — so it needs the same tombstone check as the two loaders above.
+        guard !isBeingDeleted else { return }
         // Aggregation, cache lookup and model prewarming all live on the ViewModel —
         // the view only reads back whether a previous session exists.
         hasPreviousSession = analysisVM.prepareCoachState(session: workout, modelContext: modelContext)
@@ -489,6 +517,11 @@ struct WorkoutDetailView: View {
         let applied = await dependencies.appliedOverloadCorrelation.appliedOverloads(
             forWorkout: workout.id
         )
+        // The gate only excludes the model actor's walks; a main-actor continuation like
+        // this one resumes *after* the delete has committed. `isBeingDeleted` is set on
+        // this actor before the delete task is created, so seeing it false here means the
+        // session is still alive. Without the guard the loop below faults deleted rows.
+        guard !isBeingDeleted else { return }
         guard !applied.isEmpty else { return }
         // Correlated by routine slot — the only id both the Watch's template
         // target and this recorded exercise agree on.
@@ -520,6 +553,9 @@ struct WorkoutDetailView: View {
         // arrays positionally — a `zip` that silently truncates or mispairs the moment
         // the orderings diverge.
         let results = await dependencies.exerciseProgressService.compareWithPrevious(workout: workout)
+        // Same reason as `loadAppliedOverloads`: `compareWithPrevious` walks this session's
+        // exercises and sets after its own suspension.
+        guard !isBeingDeleted else { return }
         comparisons = Dictionary(
             results.map { ($0.workoutExerciseId, $0) },
             uniquingKeysWith: { first, _ in first }

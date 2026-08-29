@@ -38,8 +38,12 @@ struct ExerciseDetailView: View {
                 viewModel.cancelDeleteExercise()
             }
             Button("exercises.delete.confirm".localized, role: .destructive) {
-                viewModel.confirmDeleteExercise()
+                // Dismiss first, then delete: this screen renders `exercise`, and the
+                // delete now suspends on the History gate — it must not still be on
+                // screen reading a row that is about to become a tombstone. Same
+                // ordering as `RoutineDetailView`.
                 dismiss()
+                Task { await viewModel.confirmDeleteExercise() }
             }
         } message: {
             let exerciseName = viewModel.exerciseToDelete?.name ?? ""

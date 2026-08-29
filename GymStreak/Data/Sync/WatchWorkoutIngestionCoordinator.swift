@@ -35,6 +35,21 @@ final class WatchWorkoutIngestionCoordinator {
     private let historyTransactions: WorkoutHistoryTransacting
     private let watchSync: WatchSyncServicing
     private let templateTransactions: WatchTemplateTransactionCoordinator
+    /// Taken around a **whole** drain pass, never inside it.
+    ///
+    /// The drain deletes rows the History model actor holds — `WatchWorkoutIngestionService`
+    /// removes the HealthKit-recovered placeholder session it supersedes, and
+    /// `WatchTemplateTransactionService.liveRoutine` removes a legacy placeholder `Routine`
+    /// — so it is a writer like any other. See `HistoryStoreGate` and
+    /// `docs/history-delete-race.md`.
+    ///
+    /// Gating the pass as a whole is deliberate, and is what makes this safe to do at all.
+    /// Everything below stays **synchronous**: the reentrancy coalescing, the oldest-first
+    /// ordering and the one-save-per-entry commits gain no suspension point, so none of
+    /// their invariants change. Only the entry points are `async`. The internal follow-up
+    /// pass therefore calls `drainInboxLocked()`, never `drainInbox()` — the gate is not
+    /// reentrant, and re-entering it here would deadlock the pipeline.
+    private let historyStoreGate: HistoryStoreGate
 
     private var isDraining = false
     private var needsAnotherDrain = false
@@ -46,12 +61,14 @@ final class WatchWorkoutIngestionCoordinator {
         routineSnapshots: AuthoritativeRoutineSnapshotProviding,
         routineSnapshotTransport: WatchRoutineSnapshotTransporting,
         mainContextCache: MainContextRoutineCacheRefreshing,
-        watchSync: WatchSyncServicing
+        watchSync: WatchSyncServicing,
+        historyStoreGate: HistoryStoreGate
     ) {
         self.inbox = inbox
         self.receipts = receipts
         self.historyTransactions = historyTransactions
         self.watchSync = watchSync
+        self.historyStoreGate = historyStoreGate
         self.templateTransactions = WatchTemplateTransactionCoordinator(
             inbox: inbox,
             receipts: receipts,
@@ -63,10 +80,18 @@ final class WatchWorkoutIngestionCoordinator {
         )
     }
 
-    /// Serially processes every inbox entry, oldest first. Reentrant calls
-    /// coalesce into one follow-up pass, so mutation order is always the
-    /// inbox's arrival order — never task-scheduling order.
-    func drainInbox() {
+    /// Serially processes every inbox entry, oldest first, holding the History gate for
+    /// the whole pass — see `historyStoreGate` for why the gate is taken here rather than
+    /// around the individual deletions inside.
+    func drainInbox() async {
+        await historyStoreGate.withAccess { drainInboxLocked() }
+    }
+
+    /// The pass itself. Reentrant calls coalesce into one follow-up pass, so mutation
+    /// order is always the inbox's arrival order — never task-scheduling order.
+    ///
+    /// Synchronous on purpose, and the caller must already hold `historyStoreGate`.
+    private func drainInboxLocked() {
         guard !isDraining else {
             needsAnotherDrain = true
             return
@@ -76,7 +101,8 @@ final class WatchWorkoutIngestionCoordinator {
             isDraining = false
             if needsAnotherDrain {
                 needsAnotherDrain = false
-                drainInbox()
+                // Not `drainInbox()`: the gate is already held and is not reentrant.
+                drainInboxLocked()
             }
         }
 
@@ -88,9 +114,14 @@ final class WatchWorkoutIngestionCoordinator {
     /// Called only when the watch's routine challenge changes. Ready receipts
     /// are otherwise intentionally quiet; ordinary inbox drains must not
     /// resend every historical terminal acknowledgment.
-    func routineAuthorityDidChange() {
-        templateTransactions.recoverReadyReceipts()
-        drainInbox()
+    ///
+    /// One gate acquisition covers the receipt recovery and the drain it triggers, so the
+    /// two stay one atomic pass exactly as they were before.
+    func routineAuthorityDidChange() async {
+        await historyStoreGate.withAccess {
+            templateTransactions.recoverReadyReceipts()
+            drainInboxLocked()
+        }
     }
 
     private func process(_ entry: WatchWorkoutInboxStore.Entry) {

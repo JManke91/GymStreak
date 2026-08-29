@@ -30,7 +30,7 @@ struct WatchHistoryTemplateSplitWireTests {
     private typealias Fixtures = WatchWorkoutSyncFixtures
 
     @Test
-    func splitEnvelopeCarriesTheWorkoutWithoutClaimingItsHistory() throws {
+    func splitEnvelopeCarriesTheWorkoutWithoutClaimingItsHistory() async throws {
         let workout = makeTemplateWorkout()
         let envelope = TemplateTransactionEnvelope(templateIntentFor: workout)
 
@@ -50,7 +50,7 @@ struct WatchHistoryTemplateSplitWireTests {
     }
 
     @Test
-    func splitEnvelopeWithAWorkoutCorrelationIsInconsistent() {
+    func splitEnvelopeWithAWorkoutCorrelationIsInconsistent() async {
         let workout = makeTemplateWorkout()
         let envelope = TemplateTransactionEnvelope(
             transactionID: workout.templateTransactionID!,
@@ -64,7 +64,7 @@ struct WatchHistoryTemplateSplitWireTests {
     }
 
     @Test
-    func splitEnvelopeWithAForeignOrderingIdentityIsInconsistent() {
+    func splitEnvelopeWithAForeignOrderingIdentityIsInconsistent() async {
         let workout = makeTemplateWorkout()
         let envelope = TemplateTransactionEnvelope(
             transactionID: UUID(),
@@ -78,7 +78,7 @@ struct WatchHistoryTemplateSplitWireTests {
     }
 
     @Test
-    func legacyFusedEnvelopeRulesAreUnchanged() {
+    func legacyFusedEnvelopeRulesAreUnchanged() async {
         let workout = makeTemplateWorkout()
         #expect(TemplateTransactionEnvelope(completedWorkout: workout).isInternallyConsistent)
 
@@ -96,7 +96,7 @@ struct WatchHistoryTemplateSplitWireTests {
     }
 
     @Test
-    func inboxStoresTheNewKindAndRejectsAnInconsistentOne() throws {
+    func inboxStoresTheNewKindAndRejectsAnInconsistentOne() async throws {
         let inbox = WatchWorkoutInboxStore(
             directory: try Fixtures.makeTempDirectory(), legacyDefaults: nil
         )
@@ -141,7 +141,7 @@ struct WatchHistoryTemplateSplitEntryTests {
     private typealias Fixtures = WatchWorkoutSyncFixtures
 
     @Test
-    func historyAndTemplateEntriesForOneWorkoutStayDistinct() throws {
+    func historyAndTemplateEntriesForOneWorkoutStayDistinct() async throws {
         let directory = try Fixtures.makeTempDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
         let workout = WatchHistoryTemplateSplitFixtures.makeTemplateWorkout()
@@ -168,7 +168,7 @@ struct WatchHistoryTemplateSplitEntryTests {
     }
 
     @Test
-    func pendingSplitTemplateIntentStillShowsAsOptimisticOverlay() throws {
+    func pendingSplitTemplateIntentStillShowsAsOptimisticOverlay() async throws {
         let directory = try Fixtures.makeTempDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
         let slotID = UUID(), setID = UUID()
@@ -251,7 +251,7 @@ struct WatchHistoryTemplateSplitEnqueueTests {
     }
 
     @Test
-    func templateCarryingWorkoutEnqueuesHistoryAndTemplateInOneCommit() throws {
+    func templateCarryingWorkoutEnqueuesHistoryAndTemplateInOneCommit() async throws {
         let directory = try Fixtures.makeTempDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
         let store = WatchSyncStateStore(directory: directory, legacyDefaults: nil)
@@ -304,7 +304,7 @@ struct WatchHistoryTemplateSplitEnqueueTests {
     }
 
     @Test
-    func aFailedCommitEnqueuesNeitherHalfAndConsumesNoSequence() throws {
+    func aFailedCommitEnqueuesNeitherHalfAndConsumesNoSequence() async throws {
         let directory = try Fixtures.makeTempDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
         let store = WatchSyncStateStore(directory: directory, legacyDefaults: nil)
@@ -326,7 +326,7 @@ struct WatchHistoryTemplateSplitEnqueueTests {
     }
 
     @Test
-    func aWorkoutWithoutTemplateIntentStillEnqueuesExactlyOneEntry() throws {
+    func aWorkoutWithoutTemplateIntentStillEnqueuesExactlyOneEntry() async throws {
         let directory = try Fixtures.makeTempDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
         let store = WatchSyncStateStore(directory: directory, legacyDefaults: nil)
@@ -373,7 +373,7 @@ struct WatchHistoryTemplateSplitEnqueueTests {
     /// nothing will ever acknowledge pins its routine's queue head, and a later
     /// workout for that same routine must still reach the iPhone.
     @Test
-    func aStalledTemplateHeadNoLongerWithholdsALaterWorkoutsHistory() throws {
+    func aStalledTemplateHeadNoLongerWithholdsALaterWorkoutsHistory() async throws {
         let directory = try Fixtures.makeTempDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
         let store = WatchSyncStateStore(directory: directory, legacyDefaults: nil)
@@ -398,7 +398,7 @@ struct WatchHistoryTemplateSplitEnqueueTests {
     }
 
     @Test
-    func theAcceptedChangeShowsImmediatelyAndRevertsWhenTheTemplateIntentDies() throws {
+    func theAcceptedChangeShowsImmediatelyAndRevertsWhenTheTemplateIntentDies() async throws {
         let directory = try Fixtures.makeTempDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
         let store = WatchSyncStateStore(directory: directory, legacyDefaults: nil)
@@ -478,6 +478,8 @@ struct WatchHistoryTemplateSplitIngestionTests {
             routineSnapshotTransport: watchSync,
             mainContextCache: SwiftDataMainContextRoutineCacheRefresher(modelContext: context),
             watchSync: watchSync
+        ,
+            historyStoreGate: .unshared()
         )
         return Harness(
             container: container, context: context, inbox: inbox, receipts: receipts,
@@ -512,18 +514,18 @@ struct WatchHistoryTemplateSplitIngestionTests {
     }
 
     @Test
-    func templateAfterHistoryAppliesTheRoutineUpdateAndDuplicatesNoHistory() throws {
+    func templateAfterHistoryAppliesTheRoutineUpdateAndDuplicatesNoHistory() async throws {
         let harness = try makeHarness()
         let (routine, workout) = try seed(harness)
         let split = WatchHistoryTemplateSplitFixtures.split(workout)
 
         try harness.deliver(history: split.history)
-        harness.coordinator.drainInbox()
+        await harness.coordinator.drainInbox()
         #expect(harness.sessions().count == 1)
         #expect(try harness.committedSet(routineId: routine.id).weight == 60)
 
         try harness.deliver(transaction: split.envelope)
-        harness.coordinator.drainInbox()
+        await harness.coordinator.drainInbox()
 
         // Template applied, and exactly one history row for the workout.
         let committed = try harness.committedSet(routineId: routine.id)
@@ -549,13 +551,13 @@ struct WatchHistoryTemplateSplitIngestionTests {
     }
 
     @Test
-    func templateBeforeHistoryCommitsTheWrappedWorkoutAndTheHistoryEntryStillRetires() throws {
+    func templateBeforeHistoryCommitsTheWrappedWorkoutAndTheHistoryEntryStillRetires() async throws {
         let harness = try makeHarness()
         let (routine, workout) = try seed(harness)
         let split = WatchHistoryTemplateSplitFixtures.split(workout)
 
         try harness.deliver(transaction: split.envelope)
-        harness.coordinator.drainInbox()
+        await harness.coordinator.drainInbox()
 
         // The wrapped copy commits the history the separate entry has not
         // delivered yet, so nothing waits on arrival order.
@@ -566,7 +568,7 @@ struct WatchHistoryTemplateSplitIngestionTests {
         #expect(harness.watchSync.acknowledgeWorkoutSavedCalls.isEmpty)
 
         try harness.deliver(history: split.history)
-        harness.coordinator.drainInbox()
+        await harness.coordinator.drainInbox()
 
         // No second row, and the history entry gets the plain acknowledgment
         // it needs to retire on the watch.
@@ -577,13 +579,13 @@ struct WatchHistoryTemplateSplitIngestionTests {
     }
 
     @Test
-    func redeliveredTemplateIsAnsweredFromItsReceiptWithoutReapplying() throws {
+    func redeliveredTemplateIsAnsweredFromItsReceiptWithoutReapplying() async throws {
         let harness = try makeHarness()
         let (routine, workout) = try seed(harness)
         let split = WatchHistoryTemplateSplitFixtures.split(workout)
 
         try harness.deliver(transaction: split.envelope)
-        harness.coordinator.drainInbox()
+        await harness.coordinator.drainInbox()
 
         // The user then edits the same set on iPhone. A redelivery must not
         // replay the watch's values over it.
@@ -592,7 +594,7 @@ struct WatchHistoryTemplateSplitIngestionTests {
         try harness.routineRepository.save()
 
         try harness.deliver(transaction: split.envelope)
-        harness.coordinator.drainInbox()
+        await harness.coordinator.drainInbox()
 
         #expect(try harness.committedSet(routineId: routine.id).weight == 80)
         #expect(harness.sessions().count == 1)
@@ -601,12 +603,12 @@ struct WatchHistoryTemplateSplitIngestionTests {
     }
 
     @Test
-    func legacyFusedTransactionIngestsExactlyAsBefore() throws {
+    func legacyFusedTransactionIngestsExactlyAsBefore() async throws {
         let harness = try makeHarness()
         let (routine, workout) = try seed(harness)
 
         try harness.deliver(transaction: TemplateTransactionEnvelope(completedWorkout: workout))
-        harness.coordinator.drainInbox()
+        await harness.coordinator.drainInbox()
 
         #expect(harness.sessions().count == 1)
         #expect(harness.sessions().first?.didUpdateTemplate == true)
@@ -620,7 +622,7 @@ struct WatchHistoryTemplateSplitIngestionTests {
     }
 
     @Test
-    func aSplitTemplateBuffersUntilItsPredecessorArrives() throws {
+    func aSplitTemplateBuffersUntilItsPredecessorArrives() async throws {
         let harness = try makeHarness()
         let senderEpoch = UUID()
         let (routine, first) = try seed(harness, sequence: 0, senderEpoch: senderEpoch)
@@ -639,21 +641,21 @@ struct WatchHistoryTemplateSplitIngestionTests {
 
         // Establish the per-routine ledger with the head transaction.
         try harness.deliver(transaction: WatchHistoryTemplateSplitFixtures.split(first).envelope)
-        harness.coordinator.drainInbox()
+        await harness.coordinator.drainInbox()
         #expect(try harness.committedSet(routineId: routine.id).weight == 65)
 
         // A later transaction overtakes its predecessor (cross-channel
         // delivery is not causally ordered): it stays durably inboxed and
         // mutates nothing.
         try harness.deliver(transaction: successor(actualWeight: 75, sequence: 2))
-        harness.coordinator.drainInbox()
+        await harness.coordinator.drainInbox()
         #expect(try harness.committedSet(routineId: routine.id).weight == 65)
         #expect(harness.inbox.entries().count == 1)
         #expect(harness.watchSync.templateAcks.count == 1)
 
         // The predecessor's arrival releases it within the same drain.
         try harness.deliver(transaction: successor(actualWeight: 70, sequence: 1))
-        harness.coordinator.drainInbox()
+        await harness.coordinator.drainInbox()
 
         #expect(try harness.committedSet(routineId: routine.id).weight == 75)
         #expect(harness.inbox.entries().isEmpty)

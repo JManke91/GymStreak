@@ -17,6 +17,10 @@ final class AppDependencies: ObservableObject {
     let routineRepository: RoutineRepository
     let exerciseRepository: ExerciseRepository
     let workoutSessionRepository: WorkoutSessionRepository
+    /// The one gate that makes History's model-actor reads and the main context's
+    /// completed-session deletes mutually exclusive. Both sides must be handed *this*
+    /// instance — a second gate excludes nothing. See `HistoryStoreGate`.
+    let historyStoreGate = HistoryStoreGate()
     let historySnapshotProvider: HistorySnapshotProviding
     /// The exercise deep-dive's history boundary. The **same instance** as
     /// `historySnapshotProvider`: the narrative is read from the very sessions
@@ -191,12 +195,14 @@ final class AppDependencies: ObservableObject {
             exerciseRepository: exerciseRepository
         )
         let historySnapshotProvider = SwiftDataHistorySnapshotProvider(
-            modelContainer: modelContext.container
+            modelContainer: modelContext.container,
+            gate: historyStoreGate
         )
         self.historySnapshotProvider = historySnapshotProvider
         self.exerciseDeepDiveFacts = historySnapshotProvider
         self.legacyHistoryAttribution = SwiftDataLegacyHistoryAttributionProvider(
-            modelContainer: modelContext.container
+            modelContainer: modelContext.container,
+            gate: historyStoreGate
         )
         self.workoutHistoryCorrelation = SwiftDataWorkoutHistoryCorrelationProvider(
             container: modelContext.container
@@ -274,9 +280,13 @@ final class AppDependencies: ObservableObject {
         )
         self.defaultContentSeeder = DefaultContentSeeder(
             modelContext: modelContext,
-            cloudSyncStatus: cloudSyncStatus
+            cloudSyncStatus: cloudSyncStatus,
+            historyStoreGate: historyStoreGate
         )
-        self.exampleRoutineSeeder = ExampleRoutineSeeder(modelContext: modelContext)
+        self.exampleRoutineSeeder = ExampleRoutineSeeder(
+            modelContext: modelContext,
+            historyStoreGate: historyStoreGate
+        )
         self.routinePlanLinkRepair = RoutinePlanLinkRepair(
             modelContext: modelContext,
             cloudSyncStatus: cloudSyncStatus
@@ -302,7 +312,8 @@ final class AppDependencies: ObservableObject {
             ),
             routineSnapshotTransport: watchConnectivity,
             mainContextCache: SwiftDataMainContextRoutineCacheRefresher(modelContext: modelContext),
-            watchSync: watchConnectivity
+            watchSync: watchConnectivity,
+            historyStoreGate: historyStoreGate
         )
         let recovery = WorkoutRecoveryCoordinator(
             anchorStore: HealthKitWorkoutAnchorStore(),
@@ -317,20 +328,55 @@ final class AppDependencies: ObservableObject {
         // Receipt-of-payload and activation drains route through the manager;
         // weak because the manager is an app-lifetime singleton and must not
         // retain the composition root's coordinators.
+        // The two drains are `async` now (they hold the History gate for the whole pass —
+        // see `WatchWorkoutIngestionCoordinator.historyStoreGate`), so each hops through a
+        // `Task`.
+        //
+        // **`Task { @MainActor in … }`, never a bare `Task { … }`.** SE-0431 guarantees tasks
+        // start on an actor *in creation order* only for closures carrying an explicit
+        // isolation marker, and deliberately excludes merely *implicitly* isolated ones (so
+        // bare `Task {}` does not become a scheduling bottleneck). The explicit form is the
+        // same guarantee `docs/swift6-concurrency.md` §4 already relies on for the delegate
+        // hops, and it costs nothing to keep here.
+        //
+        // Scope note, so nobody over-reads this: payload-vs-payload order does **not** depend
+        // on it. `drainInboxLocked()` iterates `inbox.entries()`, which sorts by arrival
+        // timestamp, so whichever task wins the gate drains everything oldest-first and the
+        // loser finds an empty inbox — inbox order is a property of the store. What does
+        // depend on task order is `routineAuthorityDidChange` (receipt recovery) landing
+        // before a plain drain, and even that converges, because it re-drains after
+        // `recoverReadyReceipts()`.
         watchConnectivity.onWorkoutInboxUpdated = {
             [weak ingestion = watchWorkoutIngestion, weak recovery] in
-            ingestion?.drainInbox()
-            // A new/settled payload changes the buffered set and may resolve a
-            // recovery candidate — re-reconcile without a fresh HealthKit drain.
-            recovery?.reconcile()
+            // `reconcile()` runs INSIDE the task, after the drain — it reads
+            // `historyCorrelation.healthKitWorkoutIDs()` and `watchSync.pendingWorkouts()`,
+            // both of which the drain mutates, and its comment below describes a *post*-drain
+            // reconcile. Making the drain `async` briefly inverted this: left outside the
+            // task it ran first, and on the drain branches that acknowledge without ingesting
+            // (no `.workoutHistoryDidChange` post) the entry stayed buffered until some
+            // unrelated trigger.
+            Task { @MainActor in
+                await ingestion?.drainInbox()
+                // A new/settled payload changes the buffered set and may resolve a
+                // recovery candidate — re-reconcile without a fresh HealthKit drain.
+                recovery?.reconcile()
+            }
         }
         watchConnectivity.onRoutineChallengeUpdated = { [weak coordinator = watchWorkoutIngestion] in
-            coordinator?.routineAuthorityDidChange()
+            Task { @MainActor in await coordinator?.routineAuthorityDidChange() }
         }
-        // Launch drain: entries that arrived before this init or were left by
-        // a prior crash (processed before any RoutinesViewModel can trigger a
-        // routine sync with stale data).
-        watchWorkoutIngestion.routineAuthorityDidChange()
+        // Launch drain: entries that arrived before this init or were left by a prior crash.
+        //
+        // This no longer completes before `RoutinesViewModel` first fetches — the drain is
+        // `async`, so the enqueued task cannot start until this main-actor turn ends, and the
+        // first `body` evaluation (which builds `RoutinesViewModel` and calls `fetchRoutines()`
+        // → `syncRoutinesToWatch()`) is in that same turn. What actually prevents a stale
+        // routine sync is `canSyncRoutines` refusing to send before WCSession activation
+        // (docs/watch-sync.md) — that gate is now the only thing holding the invariant.
+        // The `Task` captures the coordinator rather than `self`, which is still initializing.
+        Task { @MainActor [watchWorkoutIngestion] in
+            await watchWorkoutIngestion.routineAuthorityDidChange()
+        }
         // Register the HealthKit observer + run the first incremental drain.
         recovery.start()
     }
@@ -392,6 +438,6 @@ final class AppDependencies: ObservableObject {
     /// opt-in and hardware-gated, so nobody should pay for that at launch.
     /// `CoachChatService.isConfigured` is what keeps this to one call per process.
     func makeChatFactProvider() -> ChatFactProviding {
-        ChatFactProvider(modelContainer: modelContainer)
+        ChatFactProvider(modelContainer: modelContainer, gate: historyStoreGate)
     }
 }

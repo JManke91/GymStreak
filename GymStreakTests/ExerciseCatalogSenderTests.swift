@@ -426,7 +426,7 @@ struct ExerciseCatalogSyncTriggerTests {
     }
 
     @Test
-    func eachSuccessfulMutationRequestsExactlyOneSync() {
+    func eachSuccessfulMutationRequestsExactlyOneSync() async {
         let (viewModel, catalogSync) = makeViewModel()
 
         let exercise = viewModel.addExercise(name: "Bench Press", muscleGroups: ["Chest"])
@@ -436,11 +436,11 @@ struct ExerciseCatalogSyncTriggerTests {
         #expect(catalogSync.requestCount == 2)
 
         viewModel.requestDeleteExercise(exercise!)
-        viewModel.confirmDeleteExercise()
+        await viewModel.confirmDeleteExercise()
         #expect(catalogSync.requestCount == 3)
 
         _ = viewModel.addExercise(name: "Squat", muscleGroups: ["Legs"])
-        viewModel.confirmDeleteAllExercises()
+        await viewModel.confirmDeleteAllExercises()
         #expect(catalogSync.requestCount == 5)
 
         // Ordinary fetches never request a sync.

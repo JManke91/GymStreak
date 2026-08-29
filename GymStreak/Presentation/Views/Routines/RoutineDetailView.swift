@@ -203,8 +203,11 @@ struct RoutineDetailView: View {
         }
         .alert("routine.delete".localized, isPresented: $showingDeleteAlert) {
             Button("action.delete".localized, role: .destructive) {
-                viewModel.deleteRoutine(routine)
+                // Dismiss first, then delete: this view holds `routine` as a `@Bindable` and
+                // its body reads `routine.routineExercisesList`, so it must not still be
+                // walking the template while the delete waits on the History gate.
                 dismiss()
+                Task { await viewModel.deleteRoutine(routine) }
             }
             Button("action.cancel".localized, role: .cancel) {}
         } message: {

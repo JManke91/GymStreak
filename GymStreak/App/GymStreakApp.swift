@@ -127,18 +127,28 @@ struct GymStreakApp: App {
                     if isUITesting {
                         seedTestData()
                     } else {
-                        dependencies.defaultContentSeeder.run()
-                        // After the catalog: the example routine resolves its
-                        // exercises out of the library the seeder just
-                        // committed. `RoutinesView` is the first tab and has
-                        // already read an empty list by now, so the seeder
-                        // announces what it changed rather than relying on
-                        // ordering — that post is also what reaches the watch.
-                        dependencies.exampleRoutineSeeder.run()
-                        // Stage the first catalogue snapshot only after
-                        // seeding/dedup committed, so it can't race ahead of
-                        // the built-in library.
-                        dependencies.exerciseCatalogSync.requestCatalogSync()
+                        // One `Task`, awaited in order: both seeders now take the
+                        // History gate (they delete `Exercise` and `Routine` rows the
+                        // History model actor holds — see `HistoryStoreGate`), so they
+                        // are `async`. The sequencing below is unchanged and still
+                        // load-bearing; only the hop off this synchronous callback is
+                        // new. Nothing here depended on running before the first frame:
+                        // the seeders announce what they changed by notification rather
+                        // than relying on view ordering, as the comments below say.
+                        Task {
+                            await dependencies.defaultContentSeeder.run()
+                            // After the catalog: the example routine resolves its
+                            // exercises out of the library the seeder just
+                            // committed. `RoutinesView` is the first tab and has
+                            // already read an empty list by now, so the seeder
+                            // announces what it changed rather than relying on
+                            // ordering — that post is also what reaches the watch.
+                            await dependencies.exampleRoutineSeeder.run()
+                            // Stage the first catalogue snapshot only after
+                            // seeding/dedup committed, so it can't race ahead of
+                            // the built-in library.
+                            dependencies.exerciseCatalogSync.requestCatalogSync()
+                        }
                     }
                 }
                 .task {

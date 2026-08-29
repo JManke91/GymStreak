@@ -156,6 +156,8 @@ struct WatchWorkoutIngestionCoordinatorTests {
             routineSnapshotTransport: watchSync,
             mainContextCache: SwiftDataMainContextRoutineCacheRefresher(modelContext: context),
             watchSync: watchSync
+        ,
+            historyStoreGate: .unshared()
         )
         return Harness(
             container: container, context: context, inbox: inbox, receipts: receipts,
@@ -172,12 +174,12 @@ struct WatchWorkoutIngestionCoordinatorTests {
     }
 
     @Test
-    func noTemplateIngestPersistsSessionThenReceiptThenRemovesInboxThenAcks() throws {
+    func noTemplateIngestPersistsSessionThenReceiptThenRemovesInboxThenAcks() async throws {
         let harness = try makeHarness()
         let workout = makeWorkoutWithSets()
         try harness.deliver(workout)
 
-        harness.coordinator.drainInbox()
+        await harness.coordinator.drainInbox()
 
         let session = try #require(harness.sessions().first)
         #expect(session.id == workout.id)
@@ -189,15 +191,15 @@ struct WatchWorkoutIngestionCoordinatorTests {
     }
 
     @Test
-    func duplicatesAndLostAcksAreAnsweredFromReceiptWithoutReingestion() throws {
+    func duplicatesAndLostAcksAreAnsweredFromReceiptWithoutReingestion() async throws {
         let harness = try makeHarness()
         let workout = makeWorkoutWithSets()
         try harness.deliver(workout)
-        harness.coordinator.drainInbox()
+        await harness.coordinator.drainInbox()
 
         // Lost-ack redelivery: answered from the receipt, no second session.
         try harness.deliver(workout)
-        harness.coordinator.drainInbox()
+        await harness.coordinator.drainInbox()
         #expect(harness.sessions().count == 1)
         #expect(harness.watchSync.acknowledgeWorkoutSavedCalls == [workout.id, workout.id])
 
@@ -206,14 +208,14 @@ struct WatchWorkoutIngestionCoordinatorTests {
         harness.sessionRepository.delete(harness.sessions()[0])
         try harness.sessionRepository.save()
         try harness.deliver(workout)
-        harness.coordinator.drainInbox()
+        await harness.coordinator.drainInbox()
         #expect(harness.sessions().isEmpty)
         #expect(harness.inbox.entries().isEmpty)
         #expect(harness.watchSync.acknowledgeWorkoutSavedCalls.count == 3)
     }
 
     @Test
-    func saveFailureRollsBackKeepsInboxAcksNothingAndRetryConverges() throws {
+    func saveFailureRollsBackKeepsInboxAcksNothingAndRetryConverges() async throws {
         var failingFactory: FailingSaveTransactionFactory?
         let harness = try makeHarness(transactionFactory: { container in
             let factory = FailingSaveTransactionFactory(container: container)
@@ -223,7 +225,7 @@ struct WatchWorkoutIngestionCoordinatorTests {
         let workout = makeWorkoutWithSets()
         try harness.deliver(workout)
 
-        harness.coordinator.drainInbox()
+        await harness.coordinator.drainInbox()
 
         #expect(harness.sessions().isEmpty)
         #expect(failingFactory?.rollbackCount == 1)
@@ -241,8 +243,10 @@ struct WatchWorkoutIngestionCoordinatorTests {
             routineSnapshotTransport: harness.watchSync,
             mainContextCache: SwiftDataMainContextRoutineCacheRefresher(modelContext: harness.context),
             watchSync: harness.watchSync
+        ,
+            historyStoreGate: .unshared()
         )
-        retry.drainInbox()
+        await retry.drainInbox()
 
         #expect(harness.sessions().count == 1)
         #expect(harness.receipts.receipt(for: workout.id) != nil)
@@ -251,7 +255,7 @@ struct WatchWorkoutIngestionCoordinatorTests {
     }
 
     @Test
-    func receiptWriteFailureKeepsInboxEntryAcksNothingThenConverges() throws {
+    func receiptWriteFailureKeepsInboxEntryAcksNothingThenConverges() async throws {
         let receiptsDir = try Fixtures.makeTempDirectory()
         let container = InMemoryModelContainer.make()
         let context = container.mainContext
@@ -267,12 +271,14 @@ struct WatchWorkoutIngestionCoordinatorTests {
             routineSnapshotTransport: watchSync,
             mainContextCache: SwiftDataMainContextRoutineCacheRefresher(modelContext: context),
             watchSync: watchSync
+        ,
+            historyStoreGate: .unshared()
         )
         let workout = makeWorkoutWithSets()
         try inbox.store(payloadData: try JSONEncoder().encode(workout), workoutId: workout.id)
 
         let restore = try Fixtures.makeReadOnly(receiptsDir)
-        coordinator.drainInbox()
+        await coordinator.drainInbox()
 
         // History committed, but the receipt could not be persisted: the
         // entry stays replayable and nothing is acknowledged.
@@ -284,7 +290,7 @@ struct WatchWorkoutIngestionCoordinatorTests {
         // session, persists the receipt first, then removes/acks — the
         // "history exists but receipt absent" migration case.
         restore()
-        coordinator.drainInbox()
+        await coordinator.drainInbox()
         #expect(sessionRepository.fetchAll().count == 1)
         #expect(receipts.receipt(for: workout.id) != nil)
         #expect(inbox.entries().isEmpty)
@@ -292,12 +298,12 @@ struct WatchWorkoutIngestionCoordinatorTests {
     }
 
     @Test
-    func missingRoutineProducesDenormalizedHistoryWithoutPlaceholderRoutine() throws {
+    func missingRoutineProducesDenormalizedHistoryWithoutPlaceholderRoutine() async throws {
         let harness = try makeHarness()
         let workout = makeWorkoutWithSets() // routineId matches nothing
         try harness.deliver(workout)
 
-        harness.coordinator.drainInbox()
+        await harness.coordinator.drainInbox()
 
         let session = try #require(harness.sessions().first)
         #expect(session.routine == nil)
@@ -308,7 +314,7 @@ struct WatchWorkoutIngestionCoordinatorTests {
     }
 
     @Test
-    func healthKitPlaceholderReplacementRemainsIdempotent() throws {
+    func healthKitPlaceholderReplacementRemainsIdempotent() async throws {
         let harness = try makeHarness()
         let workout = makeWorkoutWithSets()
 
@@ -321,7 +327,7 @@ struct WatchWorkoutIngestionCoordinatorTests {
         try harness.sessionRepository.save()
 
         try harness.deliver(workout)
-        harness.coordinator.drainInbox()
+        await harness.coordinator.drainInbox()
 
         let sessions = harness.sessions()
         #expect(sessions.count == 1)
@@ -329,7 +335,7 @@ struct WatchWorkoutIngestionCoordinatorTests {
 
         // A redelivered duplicate stays acknowledgment-only.
         try harness.deliver(workout)
-        harness.coordinator.drainInbox()
+        await harness.coordinator.drainInbox()
         #expect(harness.sessions().count == 1)
         #expect(harness.watchSync.acknowledgeWorkoutSavedCalls == [workout.id, workout.id])
     }
@@ -387,7 +393,7 @@ struct WatchWorkoutIngestionCoordinatorTests {
         let workout = makeTransaction(seed: seed, senderEpoch: UUID(), sequence: 0)
         try harness.deliver(workout)
 
-        harness.coordinator.drainInbox()
+        await harness.coordinator.drainInbox()
 
         #expect(harness.sessions().count == 1)
         #expect(harness.sessions().first?.didUpdateTemplate == true)
@@ -429,7 +435,7 @@ struct WatchWorkoutIngestionCoordinatorTests {
         let workout = makeTransaction(seed: seed, senderEpoch: UUID(), sequence: 0)
         try harness.deliver(workout)
 
-        harness.coordinator.drainInbox()
+        await harness.coordinator.drainInbox()
 
         #expect(harness.sessions().count == 1)
         #expect(try harness.committedSet(routineId: seed.routine.id).weight == 65)
@@ -448,7 +454,7 @@ struct WatchWorkoutIngestionCoordinatorTests {
 
         let workout = makeTransaction(seed: seed, senderEpoch: UUID(), sequence: 0)
         try harness.deliver(workout)
-        harness.coordinator.drainInbox()
+        await harness.coordinator.drainInbox()
 
         #expect(harness.context.hasChanges)
         #expect(seed.routine.name == "Unsaved iPhone Edit")
@@ -474,7 +480,7 @@ struct WatchWorkoutIngestionCoordinatorTests {
         let sequenceDirectory = receiptsDirectory.appendingPathComponent("Sequences", isDirectory: true)
         let restore = try Fixtures.makeReadOnly(sequenceDirectory)
 
-        harness.coordinator.drainInbox()
+        await harness.coordinator.drainInbox()
 
         #expect(harness.sessions().count == 1)
         #expect(try harness.committedSet(routineId: seed.routine.id).weight == 65)
@@ -482,7 +488,7 @@ struct WatchWorkoutIngestionCoordinatorTests {
         #expect(harness.watchSync.templateAcks.isEmpty)
 
         restore()
-        harness.coordinator.drainInbox()
+        await harness.coordinator.drainInbox()
 
         #expect(harness.receipts.nextExpectedSequence(
             for: workout.templateSenderEpoch!, routineID: workout.routineId
@@ -492,7 +498,7 @@ struct WatchWorkoutIngestionCoordinatorTests {
     }
 
     @Test
-    func sameSequenceReceiptWithDifferentTransactionIDIsRetainedAsInconsistent() throws {
+    func sameSequenceReceiptWithDifferentTransactionIDIsRetainedAsInconsistent() async throws {
         let harness = try makeHarness()
         let seed = try seedRoutine(in: harness)
         let workout = makeTransaction(seed: seed, senderEpoch: UUID(), sequence: 0)
@@ -510,7 +516,7 @@ struct WatchWorkoutIngestionCoordinatorTests {
         ))
         try harness.deliver(workout)
 
-        harness.coordinator.drainInbox()
+        await harness.coordinator.drainInbox()
 
         #expect(harness.sessions().isEmpty)
         #expect(harness.inbox.entries().count == 1)
@@ -526,7 +532,7 @@ struct WatchWorkoutIngestionCoordinatorTests {
         try harness.deliver(workout)
         let restore = try Fixtures.makeReadOnly(receiptsDirectory)
 
-        harness.coordinator.drainInbox()
+        await harness.coordinator.drainInbox()
 
         #expect(harness.sessions().count == 1)
         #expect(try harness.committedSet(routineId: seed.routine.id).weight == 65)
@@ -539,7 +545,7 @@ struct WatchWorkoutIngestionCoordinatorTests {
         set.weight = 90
         try harness.routineRepository.save()
 
-        harness.coordinator.drainInbox()
+        await harness.coordinator.drainInbox()
 
         #expect(try harness.committedSet(routineId: seed.routine.id).weight == 90)
         #expect(harness.inbox.entries().isEmpty)
@@ -562,7 +568,7 @@ struct WatchWorkoutIngestionCoordinatorTests {
         try harness.sessionRepository.save()
         try harness.deliver(workout)
 
-        harness.coordinator.drainInbox()
+        await harness.coordinator.drainInbox()
 
         #expect(try harness.committedSet(routineId: seed.routine.id).weight == 65)
         let reconciled = try #require(harness.sessionRepository.findSession(
@@ -582,11 +588,11 @@ struct WatchWorkoutIngestionCoordinatorTests {
         let second = makeTransaction(seed: seed, senderEpoch: epoch, sequence: 1, actualWeight: 75)
 
         try harness.deliver(first)       // A fast path
-        harness.coordinator.drainInbox()
+        await harness.coordinator.drainInbox()
         try harness.deliver(second)      // B fast path
-        harness.coordinator.drainInbox()
+        await harness.coordinator.drainInbox()
         try harness.deliver(first)       // delayed A background transfer
-        harness.coordinator.drainInbox()
+        await harness.coordinator.drainInbox()
 
         #expect(harness.sessions().count == 2)
         #expect(try harness.committedSet(routineId: seed.routine.id).weight == 75)
@@ -605,13 +611,13 @@ struct WatchWorkoutIngestionCoordinatorTests {
 
         // A establishes the ledger for this (epoch, routine).
         try harness.deliver(a)
-        harness.coordinator.drainInbox()
+        await harness.coordinator.drainInbox()
         #expect(try harness.committedSet(routineId: seed.routine.id).weight == 65)
 
         // C overtakes B: above the expected sequence, so it stays durably
         // inboxed and mutates nothing.
         try harness.deliver(c)
-        harness.coordinator.drainInbox()
+        await harness.coordinator.drainInbox()
         #expect(harness.sessions().count == 1)
         #expect(try harness.committedSet(routineId: seed.routine.id).weight == 65)
         #expect(harness.inbox.entries().count == 1)
@@ -619,7 +625,7 @@ struct WatchWorkoutIngestionCoordinatorTests {
 
         // B arrives: B then the buffered C apply, in sequence order.
         try harness.deliver(b)
-        harness.coordinator.drainInbox()
+        await harness.coordinator.drainInbox()
         #expect(harness.sessions().count == 3)
         #expect(try harness.committedSet(routineId: seed.routine.id).weight == 75)
         #expect(harness.inbox.entries().isEmpty)
@@ -636,7 +642,7 @@ struct WatchWorkoutIngestionCoordinatorTests {
         let workout = makeTransaction(seed: seed, senderEpoch: UUID(), sequence: 7)
         try harness.deliver(workout)
 
-        harness.coordinator.drainInbox()
+        await harness.coordinator.drainInbox()
 
         #expect(try harness.committedSet(routineId: seed.routine.id).weight == 65)
         #expect(harness.watchSync.templateAcks.count == 1)
@@ -644,7 +650,7 @@ struct WatchWorkoutIngestionCoordinatorTests {
     }
 
     @Test
-    func lowerThanExpectedWithoutReceiptIsSurfacedAndRetained() throws {
+    func lowerThanExpectedWithoutReceiptIsSurfacedAndRetained() async throws {
         let harness = try makeHarness()
         let seed = try seedRoutine(in: harness)
         let epoch = UUID()
@@ -654,7 +660,7 @@ struct WatchWorkoutIngestionCoordinatorTests {
         ))
         try harness.deliver(stale)
 
-        harness.coordinator.drainInbox()
+        await harness.coordinator.drainInbox()
 
         #expect(harness.sessions().isEmpty)
         #expect(harness.inbox.entries().count == 1)
@@ -667,7 +673,7 @@ struct WatchWorkoutIngestionCoordinatorTests {
         let seed = try seedRoutine(in: harness)
         let workout = makeTransaction(seed: seed, senderEpoch: UUID(), sequence: 0)
         try harness.deliver(workout)
-        harness.coordinator.drainInbox()
+        await harness.coordinator.drainInbox()
 
         let stagedCalls = harness.watchSync.stageAuthoritativeRoutineSnapshotCalls.count
 
@@ -676,7 +682,7 @@ struct WatchWorkoutIngestionCoordinatorTests {
         seed.set.weight = 80
         try harness.context.save()
         try harness.deliver(workout)
-        harness.coordinator.drainInbox()
+        await harness.coordinator.drainInbox()
 
         #expect(harness.sessions().count == 1)
         #expect(seed.set.weight == 80)
@@ -696,7 +702,7 @@ struct WatchWorkoutIngestionCoordinatorTests {
         )
         try harness.deliver(workout)
 
-        harness.coordinator.drainInbox()
+        await harness.coordinator.drainInbox()
 
         #expect(harness.sessions().count == 1)
         #expect(harness.sessions().first?.didUpdateTemplate == false)
@@ -712,7 +718,7 @@ struct WatchWorkoutIngestionCoordinatorTests {
     }
 
     @Test
-    func templateSaveFailureRollsBackAndAcknowledgesNothing() throws {
+    func templateSaveFailureRollsBackAndAcknowledgesNothing() async throws {
         var failingFactory: FailingSaveTransactionFactory?
         let harness = try makeHarness(transactionFactory: { container in
             let factory = FailingSaveTransactionFactory(container: container)
@@ -723,7 +729,7 @@ struct WatchWorkoutIngestionCoordinatorTests {
         let workout = makeTransaction(seed: seed, senderEpoch: UUID(), sequence: 0)
         try harness.deliver(workout)
 
-        harness.coordinator.drainInbox()
+        await harness.coordinator.drainInbox()
 
         #expect(harness.sessions().isEmpty)
         #expect(failingFactory?.rollbackCount == 1)
@@ -741,7 +747,7 @@ struct WatchWorkoutIngestionCoordinatorTests {
         let workout = makeTransaction(seed: seed, senderEpoch: UUID(), sequence: 0)
         try harness.deliver(workout)
 
-        harness.coordinator.drainInbox()
+        await harness.coordinator.drainInbox()
 
         // The local commit is final, but no acknowledgment may be sent before
         // the authoritative routine state is staged.
@@ -754,7 +760,7 @@ struct WatchWorkoutIngestionCoordinatorTests {
         // The challenge arrives: the receipt resumes ONLY context staging and
         // acknowledgment — never a second mutation.
         harness.watchSync.stagedRoutineVersion = (UUID(), 4)
-        harness.coordinator.drainInbox()
+        await harness.coordinator.drainInbox()
 
         #expect(harness.sessions().count == 1)
         #expect(harness.receipts.receipt(for: workout.id)?.phase == .readyToAcknowledge)
@@ -771,7 +777,7 @@ struct WatchWorkoutIngestionCoordinatorTests {
         let seed = try seedRoutine(in: harness)
         let workout = makeTransaction(seed: seed, senderEpoch: UUID(), sequence: 0)
         try harness.deliver(workout)
-        harness.coordinator.drainInbox()
+        await harness.coordinator.drainInbox()
 
         #expect(harness.sessions().count == 1)
         #expect(harness.watchSync.templateAcks.count == 1)
@@ -782,7 +788,7 @@ struct WatchWorkoutIngestionCoordinatorTests {
         harness.watchSync.watchRoutineChallenge = (UUID(), 0)
         let replacement = (epoch: UUID(), generation: UInt64(8))
         harness.watchSync.stagedRoutineVersion = replacement
-        harness.coordinator.routineAuthorityDidChange()
+        await harness.coordinator.routineAuthorityDidChange()
 
         let key = TemplateTransactionKey(
             senderEpoch: workout.templateSenderEpoch!,
@@ -806,17 +812,17 @@ struct WatchWorkoutIngestionCoordinatorTests {
         let seed = try seedRoutine(in: harness)
         let workout = makeTransaction(seed: seed, senderEpoch: UUID(), sequence: 0)
         try harness.deliver(workout)
-        harness.coordinator.drainInbox()
+        await harness.coordinator.drainInbox()
 
         #expect(harness.watchSync.stageAuthoritativeRoutineSnapshotCalls.count == 1)
         harness.watchSync.watchRoutineChallenge = accepted
-        harness.coordinator.routineAuthorityDidChange()
+        await harness.coordinator.routineAuthorityDidChange()
 
         // Once the watch proves this generation applied, later challenges
         // must not rescan/restage an indefinitely retained dedupe receipt.
         harness.watchSync.watchRoutineChallenge = (UUID(), 0)
         harness.watchSync.stagedRoutineVersion = (UUID(), 8)
-        harness.coordinator.routineAuthorityDidChange()
+        await harness.coordinator.routineAuthorityDidChange()
 
         #expect(harness.watchSync.stageAuthoritativeRoutineSnapshotCalls.count == 1)
         #expect(harness.sessions().count == 1)
@@ -868,7 +874,7 @@ struct WatchWorkoutIngestionCoordinatorTests {
             )]
         )
         try harness.deliver(legacy)
-        harness.coordinator.drainInbox()
+        await harness.coordinator.drainInbox()
 
         // No sequenced authority exists yet → idempotent reconciliation runs,
         // answered with the plain ack an old watch understands.
@@ -882,7 +888,7 @@ struct WatchWorkoutIngestionCoordinatorTests {
         // Establish sequenced authority for this routine.
         let sequenced = makeTransaction(seed: seed, senderEpoch: UUID(), sequence: 0, actualWeight: 70)
         try harness.deliver(sequenced)
-        harness.coordinator.drainInbox()
+        await harness.coordinator.drainInbox()
         let afterSequenced = try harness.committedSet(routineId: seed.routine.id)
         #expect(harness.watchSync.templateAcks.last?.outcome == .applied)
         #expect(afterSequenced.weight == 70)
@@ -901,7 +907,7 @@ struct WatchWorkoutIngestionCoordinatorTests {
             )]
         )
         try harness.deliver(stale)
-        harness.coordinator.drainInbox()
+        await harness.coordinator.drainInbox()
 
         #expect(try harness.committedSet(routineId: seed.routine.id).weight == 70)
         #expect(harness.sessions().count == 3)

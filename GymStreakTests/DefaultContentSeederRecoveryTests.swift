@@ -85,7 +85,8 @@ struct DefaultContentSeederRecoveryTests {
             defaults: defaults,
             cloudVersionStore: versionStore,
             settleWindow: settleWindow,
-            importBurstGrace: importBurstGrace
+            importBurstGrace: importBurstGrace,
+            historyStoreGate: .unshared()
         )
         return (context, seeder, versionStore)
     }
@@ -327,7 +328,7 @@ struct DefaultContentSeederRecoveryTests {
         #expect(!didSeed)
         #expect(try exerciseCount(context) == 0)
 
-        seeder.run()
+        await seeder.run()
         #expect(try exerciseCount(context) == SeedExerciseCatalog.entries.count)
     }
 }

@@ -20,7 +20,16 @@ import SwiftData
 struct SwiftDataLegacyHistoryAttributionProvider: LegacyHistoryAttributing {
     private let storeTask: Task<SwiftDataLegacyHistoryAttributionStore, Never>
 
-    init(modelContainer: ModelContainer) {
+    /// This is the third `@ModelActor` over the same store, and it is exposed to the same
+    /// cross-context delete race as the other two: it fetches `WorkoutExercise` rows, then
+    /// traverses `workoutSession?.endTime` on each and writes to them. A completed-session
+    /// delete landing in between would trap. See `HistoryStoreGate`.
+    private let gate: HistoryStoreGate
+
+    /// - Parameter gate: **`AppDependencies`' shared gate** — the same instance the History
+    ///   and chat providers get. Not defaulted, for the reason given on those two.
+    init(modelContainer: ModelContainer, gate: HistoryStoreGate) {
+        self.gate = gate
         self.storeTask = Task.detached(priority: .userInitiated) {
             SwiftDataLegacyHistoryAttributionStore(modelContainer: modelContainer)
         }
@@ -34,7 +43,10 @@ struct SwiftDataLegacyHistoryAttributionProvider: LegacyHistoryAttributing {
         named exerciseName: String,
         to exerciseId: UUID
     ) async throws -> Int {
-        try await storeTask.value.attributeLegacyRows(named: exerciseName, to: exerciseId)
+        let store = await storeTask.value
+        return try await gate.withAccess {
+            try await store.attributeLegacyRows(named: exerciseName, to: exerciseId)
+        }
     }
 }
 

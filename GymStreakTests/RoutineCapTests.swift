@@ -63,12 +63,12 @@ struct RoutineCapTests {
     }
 
     @Test("Deleting back under the cap restores the ability to create")
-    func deletingRestoresCreation() throws {
+    func deletingRestoresCreation() async throws {
         let harness = makeHarness()
         harness.fill(count: limit)
         let routine = try #require(harness.viewModel.routines.first)
 
-        harness.viewModel.deleteRoutine(routine)
+        await harness.viewModel.deleteRoutine(routine)
         harness.viewModel.requestAddRoutine()
 
         #expect(harness.viewModel.isRoutineCapReached == false)
@@ -306,12 +306,12 @@ struct RoutineCapTests {
     }
 
     @Test("Deleting the example routine leaves the allowance exactly as it was")
-    func deletingTheExampleRoutineChangesNothing() {
+    func deletingTheExampleRoutineChangesNothing() async {
         let harness = makeHarness()
         let seeded = harness.seedExampleRoutine()
         harness.fill(count: limit - 1)
 
-        harness.viewModel.deleteRoutine(seeded)
+        await harness.viewModel.deleteRoutine(seeded)
 
         #expect(harness.viewModel.countableRoutineCount == limit - 1)
         #expect(harness.viewModel.isRoutineCapReached == false)

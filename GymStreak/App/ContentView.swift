@@ -74,7 +74,8 @@ private struct ContentViewInternal: View {
             recovery: dependencies.workoutRecovery,
             activeWorkout: dependencies.activeWorkout,
             proactivePaywalls: dependencies.proactivePaywalls,
-            weightUnitPreference: dependencies.weightUnitPreference
+            weightUnitPreference: dependencies.weightUnitPreference,
+            historyStoreGate: dependencies.historyStoreGate
         ))
     }
 

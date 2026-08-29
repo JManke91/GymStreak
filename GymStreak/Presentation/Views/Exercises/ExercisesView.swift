@@ -20,7 +20,8 @@ private struct ExercisesViewInternal: View {
         self._viewModel = StateObject(wrappedValue: ExercisesViewModel(
             exerciseRepository: dependencies.exerciseRepository,
             routineRepository: dependencies.routineRepository,
-            catalogSync: dependencies.exerciseCatalogSync
+            catalogSync: dependencies.exerciseCatalogSync,
+            historyStoreGate: dependencies.historyStoreGate
         ))
     }
 
@@ -58,7 +59,7 @@ private struct ExercisesViewInternal: View {
                     viewModel.cancelDeleteExercise()
                 }
                 Button("exercises.delete.confirm".localized, role: .destructive) {
-                    viewModel.confirmDeleteExercise()
+                    Task { await viewModel.confirmDeleteExercise() }
                 }
             } message: {
                 let exerciseName = viewModel.exerciseToDelete?.name ?? ""
@@ -74,7 +75,7 @@ private struct ExercisesViewInternal: View {
                     viewModel.cancelDeleteAllExercises()
                 }
                 Button("exercises.deleteAll.confirm".localized, role: .destructive) {
-                    viewModel.confirmDeleteAllExercises()
+                    Task { await viewModel.confirmDeleteAllExercises() }
                 }
             } message: {
                 Text("exercises.deleteAll.confirmation.message".localized)

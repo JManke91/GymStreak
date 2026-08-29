@@ -168,6 +168,21 @@ class WorkoutViewModel: ObservableObject {
         ProcessInfo.processInfo.arguments.contains("-UI_TESTING")
     }
 
+    /// Excludes the History model actor's graph walks while this view model deletes rows
+    /// the actor may be holding. See `HistoryStoreGate`.
+    ///
+    /// **The test is `endTime != nil`, not "is this a past workout".** Both History fetches
+    /// select on `endTime != nil`, and `pauseForCompletion()` persists `endTime` while the
+    /// session is still `currentSession` — "Continue workout" never clears it — so an
+    /// *in-progress* workout can already be inside the actor's graph. Deletions that can
+    /// see such a session therefore route through `withHistoryGateIfVisible`.
+    ///
+    /// Kept defaulted (unlike the two Data-layer providers, where the default was removed)
+    /// only because of the call-site count in tests; the default is spelled `.unshared()` so
+    /// it reads as an opt-out rather than as a wired dependency. Production passes
+    /// `AppDependencies.historyStoreGate` from `ContentView` and `RoutinesView`.
+    private let historyStoreGate: HistoryStoreGate
+
     // `aiCoachCache`'s default is resolved inside this @MainActor-isolated init body —
     // a `= AICoachCache.shared` default argument would be evaluated in a nonisolated
     // context (error under Swift 6 language mode).
@@ -185,6 +200,7 @@ class WorkoutViewModel: ObservableObject {
         proactivePaywalls: ProactivePaywallCoordinator? = nil,
         weightUnitPreference: WeightUnitPreferenceProviding? = nil,
         aiCoachCache: AICoachCaching? = nil,
+        historyStoreGate: HistoryStoreGate = .unshared(),
         now: @escaping () -> Date = Date.init
     ) {
         self.workoutSessionRepository = workoutSessionRepository
@@ -200,6 +216,7 @@ class WorkoutViewModel: ObservableObject {
         self.proactivePaywalls = proactivePaywalls
         self.weightUnitPreference = weightUnitPreference
         self.aiCoachCache = aiCoachCache ?? AICoachCache.shared
+        self.historyStoreGate = historyStoreGate
         self.now = now
         restTimerLiveActivity.dismissExpiredActivities()
         loadHealthKitPreferences()
@@ -561,15 +578,20 @@ class WorkoutViewModel: ObservableObject {
         }
     }
 
-    func cancelWorkout() {
+    /// `async` because a session that reached the Finish prompt already carries an
+    /// `endTime`, which puts it inside the History model actor's graph — see
+    /// `withHistoryGateIfVisible`.
+    func cancelWorkout() async {
         stopTimer()
         stopRestTimer()
 
-        if let session = currentSession {
-            workoutSessionRepository.delete(session)
-            save()
-        }
-
+        // Unpublish BEFORE deleting, not after. `withHistoryGateIfVisible` suspends (on
+        // `acquire`, and again on `release` after the body), and `ActiveWorkoutView` is still
+        // mounted through the dismissal — its body does `if let session = viewModel.currentSession`
+        // and immediately walks that session's exercises. Leaving a tombstoned session
+        // published across those hops is the same uncatchable trap this gate exists to
+        // prevent, and it only became reachable when this method turned `async`.
+        let doomed = currentSession
         currentSession = nil
         elapsedTime = 0
         currentExerciseIndex = 0
@@ -577,6 +599,13 @@ class WorkoutViewModel: ObservableObject {
         healthKitSyncStatus = .idle
         overloadSnapshots.removeAll()
         appliedOverloadWeights.removeAll()
+
+        if let doomed {
+            await withHistoryGateIfVisible(doomed) {
+                workoutSessionRepository.delete(doomed)
+                save()
+            }
+        }
         // A discarded session is still a session that ended, so a §8 A/B
         // trigger Rule 3 suppressed during it gets its safe moment here. It
         // earns nothing new — a workout that was thrown away is not a value
@@ -594,21 +623,30 @@ class WorkoutViewModel: ObservableObject {
         save()
     }
 
-    func completeWorkout(updateTemplate: Bool, notes: String) {
+    /// `async` because the `updateTemplate` branch reconciles routine membership, which
+    /// **deletes** `RoutineExercise` and `ExerciseSet` rows — and the History model actor
+    /// holds the routine graph (it fetches every `Routine`; `fetchLiveRoutineSlotIds` walks
+    /// `routineExercisesList`). By this point `pauseForCompletion()` has already persisted
+    /// `endTime`, so the session is inside the actor's fetch too. See `HistoryStoreGate`.
+    func completeWorkout(updateTemplate: Bool, notes: String) async {
         guard let session = currentSession else { return }
 
-        // Update workout details
-        session.notes = notes
-        session.didUpdateTemplate = updateTemplate
+        await historyStoreGate.withAccess {
+            // Update workout details
+            session.notes = notes
+            session.didUpdateTemplate = updateTemplate
 
-        if updateTemplate {
-            routineTemplateSync.applyPerformedValues(
-                from: session,
-                reconcileExerciseMembership: true
-            )
+            if updateTemplate {
+                routineTemplateSync.applyPerformedValues(
+                    from: session,
+                    reconcileExerciseMembership: true
+                )
+            }
+
+            save()
         }
-
-        save()
+        // Outside the gate, like `deleteWorkout`: it only bumps a counter, and the
+        // rebuild it starts must be free to take the gate itself.
         refreshHistory()
 
         // Save to HealthKit
@@ -1192,15 +1230,21 @@ class WorkoutViewModel: ObservableObject {
         save()
     }
 
-    func removeSetFromExercise(_ set: WorkoutSet, from workoutExercise: WorkoutExercise) {
-        guard currentSession != nil else { return }
+    func removeSetFromExercise(_ set: WorkoutSet, from workoutExercise: WorkoutExercise) async {
+        guard let session = currentSession else { return }
 
         objectWillChange.send()
 
-        if let index = workoutExercise.setsList.firstIndex(where: { $0.id == set.id }) {
-            workoutExercise.sets?.remove(at: index)
-            workoutSessionRepository.delete(set)
-            save()
+        // Identity, not a positional index: the gate can suspend, and another queued edit
+        // (a second deletion, an add, a duplicate) would leave a stale index pointing at the
+        // wrong set — or out of bounds.
+        await withHistoryGateIfVisible(session) {
+            guard workoutExercise.setsList.contains(where: { $0.id == set.id }) else { return }
+            withAnimation(DesignSystem.Animation.spring) {
+                workoutExercise.sets?.removeAll { $0.id == set.id }
+                workoutSessionRepository.delete(set)
+                save()
+            }
         }
     }
 
@@ -1337,87 +1381,100 @@ class WorkoutViewModel: ObservableObject {
 
     /// Swaps a workout exercise for one of its alternatives (or back to the original).
     /// Only allowed before any set is completed; rebuilds the sets from the target's own scheme.
-    func swapExercise(_ workoutExercise: WorkoutExercise, to target: SwapTarget) {
+    func swapExercise(_ workoutExercise: WorkoutExercise, to target: SwapTarget) async {
         guard workoutExercise.completedSetsCount == 0 else { return }
         guard let origin = originRoutineExercise(for: workoutExercise) else { return }
-
-        objectWillChange.send()
-
-        // Record the originally-planned exercise on the first swap only.
-        if workoutExercise.plannedExerciseId == nil {
-            workoutExercise.plannedExerciseId = workoutExercise.exerciseId
-            workoutExercise.plannedExerciseName = workoutExercise.exerciseName
-        }
-
-        // Update identity to the actually-performed exercise.
-        workoutExercise.exerciseId = target.exercise.id
-        workoutExercise.exerciseName = target.exercise.name
-        workoutExercise.muscleGroups = target.exercise.muscleGroups
-        workoutExercise.loadBehavior = target.exercise.loadBehavior
-
-        // Reverting to the originally-planned exercise clears the swap metadata.
-        if target.isOriginal {
-            workoutExercise.plannedExerciseId = nil
-            workoutExercise.plannedExerciseName = nil
-        }
-
-        // Rebuild the sets from the chosen target's own set scheme, and adopt the
-        // target's own rep-range goal (the original's on revert, else the
-        // alternative's own — each alternative can define its own range).
-        let templateSets: [(reps: Int, weight: Double, rest: TimeInterval)]
-        if target.isOriginal {
-            templateSets = origin.setsList.sorted(by: { $0.order < $1.order })
-                .map { ($0.reps, $0.weight, $0.restTime) }
-            workoutExercise.targetRepMin = origin.targetRepMin
-            workoutExercise.targetRepMax = origin.targetRepMax
-        } else if let alternative = origin.alternativesList.first(where: { $0.exercise?.id == target.exercise.id }) {
-            templateSets = alternative.setsList.map { ($0.reps, $0.weight, $0.restTime) }
-            workoutExercise.targetRepMin = alternative.targetRepMin
-            workoutExercise.targetRepMax = alternative.targetRepMax
-        } else {
-            templateSets = []
-            workoutExercise.targetRepMin = nil
-            workoutExercise.targetRepMax = nil
-        }
-
-        // Replace existing sets (none completed, safe to discard).
-        for set in workoutExercise.setsList {
-            workoutSessionRepository.delete(set)
-        }
-        let newSets: [WorkoutSet] = templateSets.enumerated().map { index, template in
-            let set = WorkoutSet(
-                plannedReps: template.reps,
-                actualReps: template.reps,
-                plannedWeight: template.weight,
-                actualWeight: template.weight,
-                restTime: template.rest,
-                order: index
-            )
-            set.workoutExercise = workoutExercise
-            return set
-        }
-        workoutExercise.sets = newSets
-
-        save()
-    }
-
-    func removeExerciseFromWorkout(_ workoutExercise: WorkoutExercise) {
         guard let session = currentSession else { return }
 
         objectWillChange.send()
 
-        // Remove all sets associated with this exercise
-        for set in workoutExercise.setsList {
-            workoutSessionRepository.delete(set)
-        }
+        // The **whole** mutation runs under the gate, not just the set replacement below.
+        // Splitting it left the exercise showing the new identity against the old, still
+        // unsaved set list for the length of a History rebuild whenever the gate was
+        // contended — a visible half-applied swap.
+        await withHistoryGateIfVisible(session) {
+            // Record the originally-planned exercise on the first swap only.
+            if workoutExercise.plannedExerciseId == nil {
+                workoutExercise.plannedExerciseId = workoutExercise.exerciseId
+                workoutExercise.plannedExerciseName = workoutExercise.exerciseName
+            }
 
-        // Remove the exercise from the session
-        if let index = session.workoutExercisesList.firstIndex(where: { $0.id == workoutExercise.id }) {
-            session.workoutExercises?.remove(at: index)
-        }
+            // Update identity to the actually-performed exercise.
+            workoutExercise.exerciseId = target.exercise.id
+            workoutExercise.exerciseName = target.exercise.name
+            workoutExercise.muscleGroups = target.exercise.muscleGroups
+            workoutExercise.loadBehavior = target.exercise.loadBehavior
 
-        workoutSessionRepository.delete(workoutExercise)
-        save()
+            // Reverting to the originally-planned exercise clears the swap metadata.
+            if target.isOriginal {
+                workoutExercise.plannedExerciseId = nil
+                workoutExercise.plannedExerciseName = nil
+            }
+
+            // Rebuild the sets from the chosen target's own set scheme, and adopt the
+            // target's own rep-range goal (the original's on revert, else the
+            // alternative's own — each alternative can define its own range).
+            let templateSets: [(reps: Int, weight: Double, rest: TimeInterval)]
+            if target.isOriginal {
+                templateSets = origin.setsList.sorted(by: { $0.order < $1.order })
+                    .map { ($0.reps, $0.weight, $0.restTime) }
+                workoutExercise.targetRepMin = origin.targetRepMin
+                workoutExercise.targetRepMax = origin.targetRepMax
+            } else if let alternative = origin.alternativesList.first(where: { $0.exercise?.id == target.exercise.id }) {
+                templateSets = alternative.setsList.map { ($0.reps, $0.weight, $0.restTime) }
+                workoutExercise.targetRepMin = alternative.targetRepMin
+                workoutExercise.targetRepMax = alternative.targetRepMax
+            } else {
+                templateSets = []
+                workoutExercise.targetRepMin = nil
+                workoutExercise.targetRepMax = nil
+            }
+
+            // Replace existing sets (none completed, safe to discard).
+            for set in workoutExercise.setsList {
+                workoutSessionRepository.delete(set)
+            }
+            let newSets: [WorkoutSet] = templateSets.enumerated().map { index, template in
+                let set = WorkoutSet(
+                    plannedReps: template.reps,
+                    actualReps: template.reps,
+                    plannedWeight: template.weight,
+                    actualWeight: template.weight,
+                    restTime: template.rest,
+                    order: index
+                )
+                set.workoutExercise = workoutExercise
+                return set
+            }
+            workoutExercise.sets = newSets
+
+            save()
+        }
+    }
+
+    func removeExerciseFromWorkout(_ workoutExercise: WorkoutExercise) async {
+        guard let session = currentSession else { return }
+
+        objectWillChange.send()
+
+        // The animation lives here rather than at the call site: the caller can only wrap an
+        // `await` in a `Task`, whose body lands in a later transaction and so animates nothing.
+        await withHistoryGateIfVisible(session) {
+            withAnimation(DesignSystem.Animation.spring) {
+                // Remove all sets associated with this exercise
+                for set in workoutExercise.setsList {
+                    workoutSessionRepository.delete(set)
+                }
+
+                // Remove the exercise from the session
+                if let index = session.workoutExercisesList.firstIndex(where: { $0.id == workoutExercise.id }) {
+                    session.workoutExercises?.remove(at: index)
+                }
+
+                workoutSessionRepository.delete(workoutExercise)
+                save()
+            }
+        }
     }
 
     func skipSet(workoutExercise: WorkoutExercise, set: WorkoutSet) {
@@ -1790,13 +1847,39 @@ class WorkoutViewModel: ObservableObject {
     /// drafts so that cancelling never mutates the `@Model` objects. Mirrors the active-workout
     /// completion flow: optionally pushes the corrected values back to the routine template and
     /// triggers a watch routine sync so the next workout (iOS + watch) starts from them.
+    /// `async` for the same reason as `deleteWorkout`: step 1 below deletes `WorkoutSet`
+    /// rows of a **completed** session, which the History model actor prefetches and
+    /// walks. See `HistoryStoreGate`.
     func saveEditedWorkout(
         _ session: WorkoutSession,
         exerciseDrafts: [WorkoutExerciseDraft],
         updateTemplate: Bool
-    ) {
+    ) async {
         objectWillChange.send()
 
+        await historyStoreGate.withAccess {
+            commitEditedWorkout(session, exerciseDrafts: exerciseDrafts, updateTemplate: updateTemplate)
+        }
+
+        refreshHistory()
+
+        // The cached AI recap/analysis for this session reflect the old values — drop them.
+        aiCoachCache.invalidatePostWorkout(workoutId: session.id)
+        aiCoachCache.invalidateWorkoutAnalysis(workoutId: session.id)
+
+        // Propagate template changes to the watch (RoutinesViewModel re-fetches and syncs).
+        if updateTemplate {
+            NotificationCenter.default.post(name: .routineTemplateDidChange, object: nil)
+        }
+    }
+
+    /// The persisted half of `saveEditedWorkout`, kept as one synchronous unit so the
+    /// gate above brackets every row mutation and the save together.
+    private func commitEditedWorkout(
+        _ session: WorkoutSession,
+        exerciseDrafts: [WorkoutExerciseDraft],
+        updateTemplate: Bool
+    ) {
         for draft in exerciseDrafts {
             guard let workoutExercise = session.workoutExercisesList.first(where: { $0.id == draft.id }) else {
                 continue
@@ -1857,16 +1940,6 @@ class WorkoutViewModel: ObservableObject {
         }
 
         save()
-        refreshHistory()
-
-        // The cached AI recap/analysis for this session reflect the old values — drop them.
-        aiCoachCache.invalidatePostWorkout(workoutId: session.id)
-        aiCoachCache.invalidateWorkoutAnalysis(workoutId: session.id)
-
-        // Propagate template changes to the watch (RoutinesViewModel re-fetches and syncs).
-        if updateTemplate {
-            NotificationCenter.default.post(name: .routineTemplateDidChange, object: nil)
-        }
     }
 
     // MARK: - History
@@ -1879,9 +1952,46 @@ class WorkoutViewModel: ObservableObject {
         workoutSessionRepository.findSession(id: id, healthKitWorkoutId: nil)
     }
 
-    func deleteWorkout(_ session: WorkoutSession) {
-        workoutSessionRepository.delete(session)
-        save()
+    /// Runs `mutation` under the History gate, but only when `session` is actually visible
+    /// to the History model actor.
+    ///
+    /// Visibility is `endTime != nil` — the predicate both `CompletedSessionFetch` fetches
+    /// use. That is **not** the same as "the workout is over": `pauseForCompletion()` sets
+    /// and saves `endTime` when the user taps Finish (and automatically once the last set is
+    /// completed), while the session stays `currentSession` and fully editable, and
+    /// `resumeAfterCompletionPrompt()` does not undo it. In that window an ordinary
+    /// in-workout deletion can remove rows the actor is walking — the same uncatchable trap
+    /// `deleteWorkout` exists to prevent.
+    ///
+    /// Gating conditionally rather than always keeps the common case free: during a normal
+    /// workout `endTime` is nil, so set and exercise edits never wait on a History rebuild.
+    private func withHistoryGateIfVisible(
+        _ session: WorkoutSession,
+        _ mutation: () -> Void
+    ) async {
+        guard session.endTime != nil else {
+            mutation()
+            return
+        }
+        await historyStoreGate.withAccess { mutation() }
+    }
+
+    /// Deletes a completed session and its cascaded exercises and sets.
+    ///
+    /// `async` because the delete has to exclude the History model actor for its whole
+    /// duration. That actor fetches the entire completed-session graph into its own
+    /// `ModelContext` and then walks it synchronously; a delete committed underneath the
+    /// walk leaves it holding rows that no longer exist, and its next property read is an
+    /// uncatchable SwiftData `fatalError`. Two History deletions four seconds apart
+    /// reproduced exactly that on device — the second landed inside the rebuild the first
+    /// one had triggered. See `HistoryStoreGate` and `docs/history-delete-race.md`.
+    func deleteWorkout(_ session: WorkoutSession) async {
+        await historyStoreGate.withAccess {
+            workoutSessionRepository.delete(session)
+            save()
+        }
+        // Outside the gate on purpose: this only bumps a counter, and the rebuild it
+        // starts must be free to take the gate itself.
         refreshHistory()
     }
 
@@ -1891,9 +2001,11 @@ class WorkoutViewModel: ObservableObject {
     /// never gated on, blocked by, or rolled back for HealthKit. A HealthKit
     /// failure only raises `healthKitDeleteFailure`, which the History screen
     /// surfaces non-blockingly — the user may still see the workout in Health.
-    func deleteWorkout(_ session: WorkoutSession, alsoFromHealthKit: Bool) {
+    func deleteWorkout(_ session: WorkoutSession, alsoFromHealthKit: Bool) async {
+        // Read before the delete: afterwards `session` is a tombstone and this property
+        // can no longer be resolved.
         let healthKitWorkoutId = session.healthKitWorkoutId
-        deleteWorkout(session)
+        await deleteWorkout(session)
 
         guard alsoFromHealthKit, let healthKitWorkoutId else { return }
         Task {

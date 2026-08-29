@@ -29,7 +29,7 @@ struct SwiftDataHistorySnapshotStoreTests {
         // `@concurrent` guarantee has to survive the witness, not just a direct
         // concrete call. Testing the concrete type would leave the real path unguarded.
         let provider: any HistorySnapshotProviding =
-            SwiftDataHistorySnapshotProvider(modelContainer: container)
+            SwiftDataHistorySnapshotProvider(modelContainer: container, gate: .unshared())
         let heartbeat = MainActorHeartbeat(interval: .milliseconds(10))
         let heartbeatTask = Task { await heartbeat.run() }
         await Task.yield()
@@ -66,7 +66,7 @@ struct SwiftDataHistorySnapshotStoreTests {
 
         // Existential on purpose — see the note in the training-snapshot test above.
         let provider: any HistorySnapshotProviding =
-            SwiftDataHistorySnapshotProvider(modelContainer: container)
+            SwiftDataHistorySnapshotProvider(modelContainer: container, gate: .unshared())
         let heartbeat = MainActorHeartbeat(interval: .milliseconds(10))
         let heartbeatTask = Task { await heartbeat.run() }
         await Task.yield()
@@ -118,7 +118,7 @@ struct SwiftDataHistorySnapshotStoreTests {
 
         // Existential on purpose — see the note in the training-snapshot test above.
         // The chat tools likewise hold `any ChatFactProviding`.
-        let provider: any ChatFactProviding = ChatFactProvider(modelContainer: container)
+        let provider: any ChatFactProviding = ChatFactProvider(modelContainer: container, gate: .unshared())
         let heartbeat = MainActorHeartbeat(interval: .milliseconds(10))
         let heartbeatTask = Task { await heartbeat.run() }
         await Task.yield()
@@ -160,7 +160,7 @@ struct SwiftDataHistorySnapshotStoreTests {
 
         // Existential on purpose — see the note in the training-snapshot test above.
         let provider: any HistorySnapshotProviding =
-            SwiftDataHistorySnapshotProvider(modelContainer: container)
+            SwiftDataHistorySnapshotProvider(modelContainer: container, gate: .unshared())
         // An eight-exercise workout: five the user has trained before, three added to the
         // routine since. The three without history are not padding — they are the shape
         // that costs most, because an exercise with no predecessor is only proven absent
@@ -241,7 +241,7 @@ struct SwiftDataHistorySnapshotStoreTests {
         // `any LifetimeTrainingTotalsProviding`, so the `@concurrent` guarantee
         // has to survive this witness too.
         let provider: any LifetimeTrainingTotalsProviding =
-            SwiftDataHistorySnapshotProvider(modelContainer: container)
+            SwiftDataHistorySnapshotProvider(modelContainer: container, gate: .unshared())
         let heartbeat = MainActorHeartbeat(interval: .milliseconds(10))
         let heartbeatTask = Task { await heartbeat.run() }
         await Task.yield()
@@ -292,7 +292,7 @@ struct SwiftDataHistorySnapshotStoreTests {
         // `ExerciseDeepDiveViewModel` holds `any ExerciseDeepDiveFactProviding`, so the
         // `@concurrent` guarantee has to survive this witness too.
         let provider: any ExerciseDeepDiveFactProviding =
-            SwiftDataHistorySnapshotProvider(modelContainer: container)
+            SwiftDataHistorySnapshotProvider(modelContainer: container, gate: .unshared())
         let heartbeat = MainActorHeartbeat(interval: .milliseconds(10))
         let heartbeatTask = Task { await heartbeat.run() }
         await Task.yield()
@@ -341,7 +341,7 @@ struct SwiftDataHistorySnapshotStoreTests {
         try context.save()
 
         let provider: any ExerciseDeepDiveFactProviding =
-            SwiftDataHistorySnapshotProvider(modelContainer: container)
+            SwiftDataHistorySnapshotProvider(modelContainer: container, gate: .unshared())
         let heartbeat = MainActorHeartbeat(interval: .milliseconds(10))
         let heartbeatTask = Task { await heartbeat.run() }
         await Task.yield()
@@ -387,7 +387,7 @@ struct SwiftDataHistorySnapshotStoreTests {
         try context.save()
 
         let provider: any LifetimeTrainingTotalsProviding =
-            SwiftDataHistorySnapshotProvider(modelContainer: container)
+            SwiftDataHistorySnapshotProvider(modelContainer: container, gate: .unshared())
 
         let count = try await provider.fetchCompletedWorkoutCount()
         let totals = try await provider.fetchLifetimeTotals()
@@ -416,7 +416,7 @@ struct SwiftDataHistorySnapshotStoreTests {
         // `@concurrent` guarantee has to survive the witness, not just a direct
         // concrete call. Testing the concrete type would leave the real path unguarded.
         let provider: any HistorySnapshotProviding =
-            SwiftDataHistorySnapshotProvider(modelContainer: container)
+            SwiftDataHistorySnapshotProvider(modelContainer: container, gate: .unshared())
         let fetch = Task {
             try await provider.fetchTrainingSnapshot(referenceDate: Date())
         }
@@ -509,7 +509,7 @@ struct SwiftDataHistorySnapshotStoreTests {
 
         // Existential on purpose — see the note in the training-snapshot test above.
         let provider: any HistorySnapshotProviding =
-            SwiftDataHistorySnapshotProvider(modelContainer: container)
+            SwiftDataHistorySnapshotProvider(modelContainer: container, gate: .unshared())
         let snapshot = try await provider.fetchExerciseProgress(
             exerciseName: exercise.name,
             exerciseId: exercise.id,

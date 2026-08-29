@@ -164,7 +164,7 @@ struct ExerciseProgressServiceTests {
     /// suite from another file.
     func makeService(context: ModelContext) -> ExerciseProgressService {
         ExerciseProgressService(
-            historyProvider: SwiftDataHistorySnapshotProvider(modelContainer: context.container)
+            historyProvider: SwiftDataHistorySnapshotProvider(modelContainer: context.container, gate: .unshared())
         )
     }
 

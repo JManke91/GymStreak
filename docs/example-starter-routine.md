@@ -105,15 +105,19 @@ pins them equal at seed time to make the test meaningful.
 | Catalog (`SeedRoutine`, `SeedRoutineExercise`, `currentVersion`) | `GymStreak/Data/Seeding/SeedRoutineCatalog.swift` |
 | Seeder (cleanup + dedup + version-gated seed + exercise resolution) | `GymStreak/Data/Seeding/ExampleRoutineSeeder.swift` |
 | Version-flag seam (shared with the exercise catalog) | `GymStreak/Data/Seeding/SeedCatalogVersionStore.swift` |
-| Wiring | `App/AppDependencies.swift` (constructs it), `App/GymStreakApp.swift` (`.onAppear`, right after `defaultContentSeeder.run()`) |
+| Wiring | `App/AppDependencies.swift` (constructs it), `App/GymStreakApp.swift` (`.onAppear`, awaited in one `Task` right after `defaultContentSeeder.run()`) |
 | Tests | `GymStreakTests/ExampleRoutineSeederTests.swift` |
 | Localized name | `Resources/en.lproj/Localizable.strings` + `de.lproj` (`seed.routine.full_body_starter`) |
 
 ### How seeding works
 
-`ExampleRoutineSeeder.run()` executes at every launch (except UI-testing runs, which use
-`TestDataSeeder`), immediately after `DefaultContentSeeder.run()` has committed the exercise
-library it resolves against:
+`ExampleRoutineSeeder.run()` is `async` and executes at every launch (except UI-testing runs,
+which use `TestDataSeeder`), immediately after `DefaultContentSeeder.run()` has committed the
+exercise library it resolves against. `GymStreakApp` awaits the two in order inside one `Task`
+from `.onAppear`; the ordering between them is unchanged and still load-bearing. `run()` takes
+the History gate around the whole pass, because its cleanup and dedup passes delete `Routine`
+rows (cascading to `RoutineExercise`) that the History model actor may be walking — see
+`docs/history-delete-race.md`:
 
 1. **Dedup pass (every launch).** Routines are grouped by non-empty `seedKey`; duplicates collapse
    into a deterministic survivor (sorted by `createdAt`, then `id.uuidString` — the same convention

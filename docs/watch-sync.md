@@ -140,7 +140,23 @@ Unlike `WorkoutRecoveryDiagnostics`' one-typed-method-per-event shape, this is a
 
 ### Isolated no-template ingestion + durable receipts (iOS)
 
-`WatchWorkoutIngestionCoordinator` (composition root) drains the inbox oldest-first. Per entry:
+`WatchWorkoutIngestionCoordinator` (composition root) drains the inbox oldest-first.
+
+**The drain entry points are `async` and hold the History gate for the whole pass**
+(`drainInbox()`, `routineAuthorityDidChange()`) — it deletes rows the History `@ModelActor`s
+may be walking (the HealthKit placeholder session in `WatchWorkoutIngestionService.stageHistory`,
+the legacy placeholder `Routine` in `WatchTemplateTransactionService.liveRoutine`), which is the
+uncatchable SwiftData trap documented in `docs/history-delete-race.md`. The pass **itself**
+(`drainInboxLocked()`) is unchanged and still fully synchronous, so the reentrancy coalescing,
+the oldest-first ordering and the one-save-per-entry commits gain no suspension point; only the
+entry points suspend. Two consequences for anyone editing this: the internal follow-up pass must
+call `drainInboxLocked()`, never `drainInbox()` (the gate is not reentrant — re-entering it
+deadlocks ingestion permanently), and the composition root's call sites must stay
+`Task { @MainActor in … }` rather than a bare `Task { … }`, because SE-0431 only guarantees
+creation-order start for closures with an **explicit** isolation marker. A bare `Task {}` would
+compile, still run on the main actor, and silently lose inbox ordering.
+
+Per entry:
 
 - **A durable receipt already exists** → acknowledgment-only, no re-ingestion. Receipts survive history deletion, so a session the user deleted is never resurrected by a stale redelivery.
 - **No-template workout** → a fresh `ModelContext` (`SwiftDataWorkoutHistoryTransaction`, `autosaveEnabled = false`) materializes the complete denormalized history graph (stable workout/HK/exercise/set ids) and `save()`s **exactly once**. Unrelated dirty main-context work is *deferred*, never saved or rolled back by ingestion. On save failure the isolated context is rolled back, both durable queues stay intact, and nothing is acked. On success a terminal `WorkoutIngestReceipt` (phase `readyToAcknowledgeNotRequested`) is persisted **before** the inbox entry is removed or the workout acked. If the receipt write fails the entry stays replayable and nothing is acked; the next drain dedupes against the committed session, persists the receipt, then acks (this also covers migrated "history exists but receipt absent" cases).
@@ -255,7 +271,7 @@ adapter was **not** restructured in response, and what would reopen that:
 
 `GymStreakWatchApp` registers `.backgroundTask(.watchConnectivity)` → `WatchConnectivityManager.handleWatchConnectivityBackgroundWake()`. Every WatchConnectivity delegate callback synchronously registers its app-owned work with `WatchConnectivityDelegateWorkTracker` before hopping to the main actor, and unregisters it only when that work is complete. The background handler waits for activation, `hasContentPending == false`, and the tracker to become idle, then rechecks both signals before performing the catalogue inbox drain, challenge republication, and workout reconciliation. This is an explicit completion barrier: `hasContentPending` covers undelivered *system* content only, and a single `Task.yield()` cannot prove that already-dispatched delegate work has finished. There is no arbitrary local timeout: the system cancels the task at expiration, at which point every durable input remains replayable for the next wake. SwiftUI completes the background task when the async closure returns — there is no explicit completion call. Watch scene activation also reconciles directly, so reopening a suspended app remains a recovery trigger rather than relying on WCSession's one-time process activation callback.
 
-On the iOS side the ingestion coordinator is created and given a **launch drain** in `AppDependencies.init` — before any `RoutinesViewModel` exists — so a payload left by a prior crash is ingested before the app can push stale routine data to the watch. `WatchConnectivityManager.onWorkoutInboxUpdated` (set by the composition root) re-drains on every receipt and on WCSession activation. Activation and each foreground transition also send the bounded queue-drain request to Watch; this closes the opposite case where no payload reached the iOS inbox while the phone was powered off.
+On the iOS side the ingestion coordinator is created and given a **launch drain** in `AppDependencies.init`. Note that this drain no longer *completes* before the first `RoutinesViewModel` fetch: it is `async` now, so the enqueued task cannot start until that main-actor turn ends, and the first `body` evaluation — which builds `RoutinesViewModel` and calls `fetchRoutines()` → `syncRoutinesToWatch()` — happens in the same turn. What actually prevents a stale routine sync is `canSyncRoutines` refusing to send before WCSession activation (above); that gate, not the launch drain's ordering, is what holds the invariant. `WatchConnectivityManager.onWorkoutInboxUpdated` (set by the composition root) re-drains on every receipt and on WCSession activation. Activation and each foreground transition also send the bounded queue-drain request to Watch; this closes the opposite case where no payload reached the iOS inbox while the phone was powered off.
 
 ### Verification status (ticket 04)
 
