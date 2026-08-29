@@ -289,7 +289,8 @@ final class AppDependencies: ObservableObject {
         )
         self.routinePlanLinkRepair = RoutinePlanLinkRepair(
             modelContext: modelContext,
-            cloudSyncStatus: cloudSyncStatus
+            cloudSyncStatus: cloudSyncStatus,
+            historyStoreGate: historyStoreGate
         )
         self.exerciseCatalogSync = ExerciseCatalogSyncCoordinator(
             exerciseRepository: exerciseRepository,

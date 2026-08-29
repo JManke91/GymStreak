@@ -23,11 +23,11 @@ struct ScheduleGatingTests {
     // MARK: - Free: the cadence is free, the weekly split is not
 
     @Test("A free user plans the rolling cadence with no gate at all")
-    func freeUserPlansCadence() throws {
+    func freeUserPlansCadence() async throws {
         let harness = makeHarness()
         let routine = harness.makeRoutine()
 
-        let saved = harness.viewModel.setSchedule(
+        let saved = await harness.viewModel.setSchedule(
             for: routine, type: .everyNDays, intervalDays: 3, weekdays: [], referenceDate: .now
         )
 
@@ -50,11 +50,11 @@ struct ScheduleGatingTests {
     }
 
     @Test("Saving a weekday plan is refused and writes nothing")
-    func weekdaySaveIsRefused() {
+    func weekdaySaveIsRefused() async {
         let harness = makeHarness()
         let routine = harness.makeRoutine()
 
-        let saved = harness.viewModel.setSchedule(
+        let saved = await harness.viewModel.setSchedule(
             for: routine, type: .weekdays, intervalDays: 3, weekdays: [1, 3, 5], referenceDate: .now
         )
 
@@ -66,15 +66,15 @@ struct ScheduleGatingTests {
     }
 
     @Test("Switching an existing cadence plan into weekday shape is refused, cadence intact")
-    func switchingIntoWeekdayShapeIsRefused() throws {
+    func switchingIntoWeekdayShapeIsRefused() async throws {
         let harness = makeHarness()
         let routine = harness.makeRoutine()
-        harness.viewModel.setSchedule(
+        await harness.viewModel.setSchedule(
             for: routine, type: .everyNDays, intervalDays: 4, weekdays: [], referenceDate: .now
         )
         harness.paywalls.reset()
 
-        let saved = harness.viewModel.setSchedule(
+        let saved = await harness.viewModel.setSchedule(
             for: routine, type: .weekdays, intervalDays: 4, weekdays: [2, 4], referenceDate: .now
         )
 
@@ -89,12 +89,12 @@ struct ScheduleGatingTests {
     // MARK: - Lapse (§7, Rule 4) — the schedule the user already built
 
     @Test("A weekday plan built while subscribed keeps driving the planned week after a lapse")
-    func lapsedWeekdayPlanStillPlansTheWeek() throws {
+    func lapsedWeekdayPlanStillPlansTheWeek() async throws {
         let harness = makeHarness(state: .subscription)
         let routine = harness.makeRoutine()
         // Every weekday, so the assertion holds whichever day the suite runs on.
         let everyDay = Set(1...7)
-        #expect(harness.viewModel.setSchedule(
+        #expect(await harness.viewModel.setSchedule(
             for: routine, type: .weekdays, intervalDays: 3, weekdays: everyDay, referenceDate: .now
         ))
 
@@ -115,17 +115,17 @@ struct ScheduleGatingTests {
     }
 
     @Test("A refused edit of an existing weekday plan leaves it intact")
-    func refusedEditLeavesExistingPlanIntact() throws {
+    func refusedEditLeavesExistingPlanIntact() async throws {
         let harness = makeHarness(state: .subscription)
         let routine = harness.makeRoutine()
-        harness.viewModel.setSchedule(
+        await harness.viewModel.setSchedule(
             for: routine, type: .weekdays, intervalDays: 3, weekdays: [1, 3, 5], referenceDate: .now
         )
         harness.entitlements.state = .free
         harness.paywalls.reset()
 
         // The user re-opens the sheet and tries to add Sunday.
-        let saved = harness.viewModel.setSchedule(
+        let saved = await harness.viewModel.setSchedule(
             for: routine, type: .weekdays, intervalDays: 3, weekdays: [1, 3, 5, 7], referenceDate: .now
         )
 
@@ -137,15 +137,15 @@ struct ScheduleGatingTests {
     }
 
     @Test("A lapsed user may move an existing weekday plan back to the free cadence")
-    func lapsedUserMayLeaveWeekdayShape() throws {
+    func lapsedUserMayLeaveWeekdayShape() async throws {
         let harness = makeHarness(state: .subscription)
         let routine = harness.makeRoutine()
-        harness.viewModel.setSchedule(
+        await harness.viewModel.setSchedule(
             for: routine, type: .weekdays, intervalDays: 3, weekdays: [1, 3, 5], referenceDate: .now
         )
         harness.entitlements.state = .free
 
-        let saved = harness.viewModel.setSchedule(
+        let saved = await harness.viewModel.setSchedule(
             for: routine, type: .everyNDays, intervalDays: 5, weekdays: [1, 3, 5], referenceDate: .now
         )
 
@@ -159,17 +159,17 @@ struct ScheduleGatingTests {
     @Test("Removing a plan works in every entitlement state", arguments: [
         ProEntitlementState.free, .subscription, .lifetime, .founder
     ])
-    func removingIsNeverGated(state: ProEntitlementState) {
+    func removingIsNeverGated(state: ProEntitlementState) async {
         // Built while Pro so the weekday shape exists even for the free case.
         let harness = makeHarness(state: .subscription)
         let routine = harness.makeRoutine()
-        harness.viewModel.setSchedule(
+        await harness.viewModel.setSchedule(
             for: routine, type: .weekdays, intervalDays: 3, weekdays: [1, 3, 5], referenceDate: .now
         )
         harness.entitlements.state = state
         harness.paywalls.reset()
 
-        harness.viewModel.removeSchedule(from: routine)
+        await harness.viewModel.removeSchedule(from: routine)
 
         #expect(routine.schedule == nil)
         #expect(harness.paywalls.presentedPlacements.isEmpty)
@@ -180,13 +180,13 @@ struct ScheduleGatingTests {
     @Test("A Pro subscriber and a Founder see no gate", arguments: [
         ProEntitlementState.subscription, .lifetime, .founder
     ])
-    func proAndFounderSeeNoGate(state: ProEntitlementState) throws {
+    func proAndFounderSeeNoGate(state: ProEntitlementState) async throws {
         let harness = makeHarness(state: state)
         let routine = harness.makeRoutine()
 
         #expect(harness.viewModel.isWeekdayScheduleLocked == false)
         #expect(harness.viewModel.requestWeekdaySchedule())
-        #expect(harness.viewModel.setSchedule(
+        #expect(await harness.viewModel.setSchedule(
             for: routine, type: .weekdays, intervalDays: 3, weekdays: [2, 5], referenceDate: .now
         ))
         #expect(try #require(routine.schedule).weekdays == [2, 5])
@@ -194,13 +194,13 @@ struct ScheduleGatingTests {
     }
 
     @Test("With the kill switch off, scheduling behaves identically to today")
-    func killSwitchOffBehavesAsBefore() throws {
+    func killSwitchOffBehavesAsBefore() async throws {
         let harness = makeHarness(isGatingEnabled: false)
         let routine = harness.makeRoutine()
 
         #expect(harness.viewModel.isWeekdayScheduleLocked == false)
         #expect(harness.viewModel.requestWeekdaySchedule())
-        #expect(harness.viewModel.setSchedule(
+        #expect(await harness.viewModel.setSchedule(
             for: routine, type: .weekdays, intervalDays: 3, weekdays: [1, 4], referenceDate: .now
         ))
         #expect(try #require(routine.schedule).weekdays == [1, 4])

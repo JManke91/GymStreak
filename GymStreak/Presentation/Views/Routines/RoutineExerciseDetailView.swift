@@ -167,7 +167,9 @@ struct RoutineExerciseDetailView: View {
         .alert("routine_exercise_detail.delete_alert.title".localized, isPresented: $showingDeleteAlert) {
             Button("routine_exercise_detail.delete".localized, role: .destructive) {
                 if let routine = routineExercise.routine {
-                    viewModel.removeRoutineExercise(routineExercise, from: routine)
+                    // The snapshot is the undo payload for `RoutineDetailView`'s toast;
+                    // this screen has no undo, so it is dropped here.
+                    Task { _ = await viewModel.removeRoutineExercise(routineExercise, from: routine) }
                 }
             }
             Button("action.cancel".localized, role: .cancel) {}

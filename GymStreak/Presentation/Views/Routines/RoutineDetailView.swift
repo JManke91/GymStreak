@@ -85,19 +85,24 @@ struct RoutineDetailView: View {
     /// confirmation alert with this).
     func removeExercise(_ routineExercise: RoutineExercise) {
         if expandedExerciseId == routineExercise.id { collapseCardState() }
-        let snapshot = withAnimation(DesignSystem.Animation.spring) {
-            viewModel.removeRoutineExercise(routineExercise, from: routine)
+        // Hops off this callback because the removal waits on the History gate, which
+        // makes it `async` — so a `withAnimation` here can no longer wrap the mutation.
+        // The card's disappearance is animated by `browsingModeContent`'s
+        // `.animation(_:value:)` on the exercise count instead.
+        Task { @MainActor in
+            guard let snapshot = await viewModel.removeRoutineExercise(routineExercise, from: routine) else {
+                return
+            }
+            HapticManager.shared.medium()
+            withAnimation(DesignSystem.Animation.spring) {
+                removedExercise = snapshot
+                // Sorting mode has no empty state and its Fertig button is hidden
+                // for an empty routine — removing the last exercise while sorting
+                // would otherwise leave no way out but the back button.
+                if routine.routineExercisesList.isEmpty { isSorting = false }
+            }
+            scheduleUndoDismissal()
         }
-        guard let snapshot else { return }
-        HapticManager.shared.medium()
-        withAnimation(DesignSystem.Animation.spring) {
-            removedExercise = snapshot
-            // Sorting mode has no empty state and its Fertig button is hidden
-            // for an empty routine — removing the last exercise while sorting
-            // would otherwise leave no way out but the back button.
-            if routine.routineExercisesList.isEmpty { isSorting = false }
-        }
-        scheduleUndoDismissal()
     }
 
     private func scheduleUndoDismissal() {
@@ -267,6 +272,12 @@ struct RoutineDetailView: View {
                         .frame(height: 40)
                 }
                 .padding(.horizontal, 16)
+                // Removing an exercise is gated (`async`), so the call site cannot wrap the
+                // mutation in a transaction any more. Animating on the count covers it — and
+                // the add path, which was never animated — without moving `withAnimation`
+                // into the ViewModel. `routineExercisesList` is already read three times in
+                // this body, so this adds no new relationship walk.
+                .animation(DesignSystem.Animation.spring, value: routine.routineExercisesList.count)
             }
             .onChange(of: scrollToExerciseId) { _, newValue in
                 guard let id = newValue else { return }

@@ -23,7 +23,8 @@ rebuild that crashed — *and* the actor's graph contains `Routine` and `Routine
 own (the session fetch prefetches `\.routine`, `HistorySnapshotBuilder` faults `session.routine?.id`
 mid-walk, and `fetchLiveRoutineSlotIds` walks `routine.routineExercisesList`). So a routine delete
 landing inside a rebuild is the identical trap on a different entity. `RoutinesViewModel.deleteRoutine`
-is gated for that reason; see "Known residual exposure" for the routine writers that are not.
+is gated for that reason, and so are the three template writers that were left ungated by the first
+pass; see "Known residual exposure" for what is still open.
 
 ## How it was diagnosed
 
@@ -168,9 +169,21 @@ changes — a walk that traverses relationships it did not just fetch, or object
 calls — this conclusion has to be re-tested, because it is a property of the fetch, not a guarantee
 from Apple.
 
-The probe was deliberately not kept: case 3 kills the test runner rather than failing an assertion
-(the trap is an uncatchable `fatalError`), so it cannot live in the suite. `HistoryStoreGateTests`
-asserts the gate's properties instead.
+**The two passing cases are now pinned permanently** by
+`GymStreakTests/HistoryContextRefetchAssumptionTests.swift` — a whole session deleted between two
+walks of one long-lived reader context, and a single `WorkoutSet` deleted under a surviving parent
+exercise and session (the sharper case, where the re-fetch hands back an object the context already
+holds and whose `sets` collection the first walk materialized). Both run against an on-disk store;
+in-memory does not fault the same way. Because the assumption comes from observed behaviour rather
+than an Apple guarantee, an OS update could revoke it while every other test in the suite still
+passes, so it needs its own canary. If either test goes red — or traps — serialization alone is no
+longer sufficient and every History reader has to take a fresh `ModelContext(container)` per pass
+instead of reusing the model actor's.
+
+Case 3 was deliberately **not** kept: it kills the test runner rather than failing an assertion (the
+trap is an uncatchable `fatalError`), so it cannot live in the suite. `HistoryStoreGateTests` asserts
+the gate's properties, and `HistoryDeleteRaceRegressionTests` drives the real reader against the real
+writer.
 
 ## The fix
 
@@ -192,7 +205,8 @@ cancellation-aware — see the comment there for the latency trade that buys.
   precisely the exclusion the type exists to provide.
 - **Writers:** the two `WorkoutViewModel` methods that delete rows of a **completed** session take it
   — `deleteWorkout(_:)` and `saveEditedWorkout(_:exerciseDrafts:updateTemplate:)` (its step 1 deletes
-  `WorkoutSet` rows). Both became `async` as a result.
+  `WorkoutSet` rows). Both became `async` as a result. Writers enter through
+  `withExclusiveAccess { … }`, **not** `withAccess` — see "Two entry points" below.
 - **Conditionally gated:** `cancelWorkout`, `removeSetFromExercise`, `removeExerciseFromWorkout`
   and `swapExercise` route their deletes through `withHistoryGateIfVisible`, which takes the gate
   only when `session.endTime != nil`.
@@ -287,10 +301,12 @@ which a detail screen can re-read a tombstoned model got *longer*. Three call si
   value-type drafts and never reads `workout`.
 
 The gate does **not** cover main-actor continuations, so `WorkoutDetailView`'s loaders needed the
-same flag: `loadAppliedOverloads` and `loadComparisons` both walk the session's exercises *after*
+same flag: `loadAppliedOverloads` and `loadComparisons` both walked the session's exercises *after*
 their own `await`, by which point a delete may have committed. Each now re-checks `isBeingDeleted`
 on resume — sound because the flag is set on the main actor before the delete task is even created,
-so seeing it `false` after a resume means the session is still alive. `deleteWorkout` also calls
+so seeing it `false` after a resume means the session is still alive. (`loadComparisons`'s own read
+has since moved before the suspension — see "The adjacent bug" below — but the flag stays, because
+publishing rows re-renders a screen that is on its way out.) `deleteWorkout` also calls
 `analysisVM.cancel()`: the coach analysis stream task captures the `WorkoutSession` and reads its
 graph across several suspensions, and nothing used to stop it when the screen went away.
 
@@ -346,6 +362,38 @@ caught in review rather than by a test:
   `healthKitWorkoutIDs()` and `pendingWorkouts()`, both of which the drain mutates. It now sits
   inside the task, after the `await`.
 
+### Two entry points, and why they are not overloads
+
+`HistoryStoreGate` exposes the acquire/release bracket twice:
+
+| entry point | closure | who uses it |
+|---|---|---|
+| `withAccess` | `() async throws -> T` | the three `@ModelActor` reader providers, whose bodies must `await` their actor |
+| `withExclusiveAccess` | `() throws -> T` | every writer — ViewModels, seeders, the watch ingestion coordinator |
+
+The gate is not reentrant, so a writer that suspends inside the gated body while a History rebuild
+queues behind it deadlocks the app permanently: no crash, no crash report, no log, and no test that
+can catch it. Every writer body is a fetch/delete/save burst that has no reason to suspend, so the
+writers' entry point takes a **synchronous** closure and the mistake becomes a compile error.
+
+The two must carry **different names**. As overloads the guard would be worthless: a synchronous
+closure converts freely to `() async throws -> T`, so both candidates stay viable — the synchronous
+one wins while the body is await-free, and the moment someone adds an `await` it drops out of
+overload resolution and the `async` one is silently selected instead. The deadlock would compile
+exactly as it did before the guard existed.
+
+Both brackets release on the success and the throwing path, asserted for each in
+`HistoryStoreGateTests.aThrowingBodyStillReleasesTheGate`;
+`aWriterWaitsBehindAReaderHoldingTheSameGate` asserts the two names really are one gate.
+
+**On the name, since it will come up again.** The architecture reviewer argued that
+`withExclusiveAccess` names the wrong axis — both entry points are equally exclusive, and the real
+difference is a synchronous body versus an `async` one — and suggested `withSynchronousAccess`.
+The argument is correct; the name was kept anyway, decided 2026-08-29. It is the name the ticket
+specified, it is live at all 11 writer call sites and referenced from `docs/swift6-concurrency.md`
+§9 and `docs/workout-planning.md`, and behaviour is identical either way. Renaming is a mechanical
+change if the confusion ever costs someone real time — but re-open it as a rename, not as a bug.
+
 ### Where the gate has to be taken
 
 Anything that walks the completed-session graph off the main actor, and anything that deletes a row
@@ -377,20 +425,109 @@ suspends.
 
 The store is `NSPersistentCloudKitContainer`-backed, and mirroring applies remote deletes on
 `NSCloudKitMirroringDelegate`'s **own** context. Nothing the app locks can serialize against it, so
-a workout deleted on another device — or on the watch — can in principle land mid-walk exactly like
-a local delete. This is a real, permanent limit on the gate, not an oversight: SwiftData exposes no
-way to pause, defer or veto an import. Apple DTS's guidance for the CloudKit case is reactive only —
-observe `.NSPersistentStoreRemoteChange`
-([forums/thread/762022](https://developer.apple.com/forums/thread/762022)).
+a workout deleted on another device can land mid-walk exactly like a local delete. This is a real,
+permanent limit on the gate, not an oversight: SwiftData exposes no way to pause, defer or veto an
+import. Apple DTS's guidance for the CloudKit case is reactive only — observe
+`.NSPersistentStoreRemoteChange` ([forums/thread/762022](https://developer.apple.com/forums/thread/762022)).
 
 It was **not** the cause of the shipped crash: the persistent-history author column proved both
-deletes were local app writes (a mirroring import would have read
-`NSCloudKitMirroringDelegate.import`). Nothing has been built against it, because doing so means
-either aborting a walk on a remote-change notification or refetching around it, and the frequency
-does not yet justify either. If this trap recurs on a store with no local delete to blame, this is
-the first place to look.
+deletes were local app writes (a mirroring import reads `NSCloudKitMirroringDelegate.import`).
 
-### Routine-template writers other than `deleteRoutine`
+**Not the watch, though.** The watch app has no SwiftData store and no CloudKit container at all —
+`RoutineStore` over App Group `UserDefaults` is its whole persistence layer — so it cannot originate
+a mirroring import. Watch-completed workouts arrive over WatchConnectivity into
+`WatchWorkoutIngestionCoordinator`, which takes the gate like any other writer. An earlier draft of
+this section named the watch as a second import source; that was wrong.
+
+#### What the store actually shows (measured 2026-08-29)
+
+The device store was pulled again and its persistent history read the same way as the original
+diagnosis — three days of it, 26.08.2026 15:15 (store creation) to 29.08.2026 11:54, with no
+pruning, since transaction ids start at 1. Local writes on this store carry a **null** `ZAUTHORTS`;
+only mirroring interns an author string, which makes the two sources trivially separable:
+
+```sql
+SELECT CASE WHEN s.ZNAME IS NULL THEN 'local' ELSE 'IMPORT' END src, p.Z_NAME entity, COUNT(*)
+FROM ACHANGE c JOIN ATRANSACTION t ON c.ZTRANSACTIONID = t.Z_PK
+LEFT JOIN ATRANSACTIONSTRING s ON t.ZAUTHORTS = s.Z_PK
+LEFT JOIN Z_PRIMARYKEY p ON p.Z_ENT = c.ZENTITY
+WHERE c.ZCHANGETYPE = 2 GROUP BY 1, 2;   -- 2 = delete
+```
+
+Every row deletion in those three days, by source:
+
+| source | rows deleted | entities |
+|---|---|---|
+| local | **825** | `WorkoutSet` 573, `WorkoutExercise` 192, `WorkoutSession` 31, `ExerciseSet` 13, `RoutineSchedule` 6, `AlternativeExerciseSet` 4, `RoutineExercise` 3, `Routine` 2, `RoutineExerciseAlternative` 1 |
+| **import** | **7** | `RoutineSchedule` 5, `Exercise` 2 |
+
+So the gate covers **99.2%** of the delete pressure on this store, and the CloudKit residue is 0.8%.
+
+Three things that residue does tell us, and they are not all reassuring:
+
+1. **Imported deletes of in-scope entities do happen — this is no longer hypothetical.** Both
+   entities that were hit are ones the reader actors hold and traverse: `Exercise` is fetched
+   wholesale by `fetchFortschrittSnapshot`, `fetchExerciseProgress`, `fetchPreviousPerformances` and
+   `ChatFactStore.exercisePRFacts`, and every one of those hands the rows to an aggregator that
+   reads their properties; `RoutineSchedule` is prefetched by both reader actors and actually walked
+   by `ChatFactBuilder.nextWorkoutFacts` (`routine.schedule` → `schedule.isActive`). A delete
+   landing inside either walk is the same trap.
+2. **No imported delete touched a completed-session row.** Zero `WorkoutSession`, `WorkoutExercise`
+   or `WorkoutSet` deletions arrived from the cloud, while all 796 local ones did. That matters
+   because the session graph is the *unbounded* walk — the ~600 ms one that crashed. The two
+   entities that were hit are small bounded fetches whose walk is milliseconds, so the same event
+   has far less window to land in.
+3. **All seven arrived in a single 75 ms burst**, transactions 37–39 at 27.08. 16:48:40.815–.890.
+   Their content is a signature, not noise: `RoutineSchedule` rows 6–10 deleted and 11–15 inserted
+   in the same breath — `RoutinePlanLinkRepair`'s delete-then-reinsert, run on another device and
+   mirrored in **ungated**. The pass that is carefully bracketed locally arrives from the cloud with
+   no bracket at all. (`Exercise` 111/113 were likewise replaced by 118/119.)
+
+#### The timing, which is the part worth knowing
+
+Imports do not arrive uniformly — they cluster at launch, which is exactly when the readers do their
+coldest, heaviest work. `ANSCKEVENT` records the container's own lifecycle (`ZCLOUDKITEVENTTYPE`
+0 = setup, 1 = import, 2 = export):
+
+- The delete burst above landed **5.1 s after container setup** — setup at 16:48:35.732, import
+  event 16:48:35.764 → 16:48:40.896, deletes committed at 16:48:40.815. The previous local write was
+  five hours earlier and the next one 54 s later, so this was a cold launch with the user in the app.
+- The **initial** import after install (transactions 1–26) was **3,836 changes over 6.19 s**, a
+  sustained ~620 changes/second beginning 0.5 s after the store was created. It contained no
+  deletes — an import into an empty store structurally cannot — but it shows the shape: mirroring
+  can hold the store in continuous mutation for six seconds straight at first launch, and a device
+  that has been offline while another one deleted workouts replays that backlog into the same window.
+
+Over the three days: 44 container setups, 236 import events, but only **29 import transactions that
+changed anything**, in two bursts, one of which carried deletes. Most imports are no-ops.
+
+#### Recommendation: leave it as a documented ceiling
+
+No mitigation is being built, and the reason is stronger than "the frequency is low":
+
+- **The only available signal fires too late.** `.NSPersistentStoreRemoteChange` — Apple's sole
+  handle, already wired up in `CloudSyncObserver` — is posted *after* the import context commits. A
+  reader walking the graph traps during the walk, before any notification can be processed. A
+  reactive abort cannot prevent the trap; it can only notice it afterwards, which is what the
+  crash report already does.
+- **Deferring the rebuild until the import quiesces is not reliable either.** The app already tries
+  this shape twice (`RoutinePlanLinkRepair.runIfNeeded`, `DefaultContentSeeder.recoverStrandedLibraryIfNeeded`),
+  and the comment on the first one records why it is only *optimistic*: `CloudKitSyncStatusMonitor`
+  restores its status from `UserDefaults` in `init`, so the first `.upToDate` of a cold launch can
+  arrive before this session has imported anything. There is no signal in this app's sync model that
+  proves an import finished.
+- **The remaining option is structural** — stop holding `@Model` rows across the walk at all, i.e.
+  project to value types inside the fetch. That is a rewrite of the reader layer, and it is the only
+  thing that would actually close this. It is not worth doing for 0.8% of delete pressure that has
+  never yet touched the unbounded walk.
+
+**Revisit if** the trap recurs on a store whose history shows no local delete to blame (check the
+author column first — that is a five-minute query), or if imported `WorkoutSession` /
+`WorkoutExercise` deletions start appearing at all, which would mean cross-device workout deletion
+has become a real usage pattern rather than a theoretical one. Either finding moves this from a
+documented ceiling to the value-projection rewrite above.
+
+### Routine-template writers other than `deleteRoutine` — now gated
 
 **Three** writers, not the six an earlier draft of this section listed. The correction matters,
 because the difference is exactly the entity-scope question this document exists to pin down. The
@@ -405,34 +542,235 @@ reader actors touch only three template entities:
 They never traverse `routineExercise.setsList` or `.alternativesList`. So `ExerciseSet`,
 `RoutineExerciseAlternative` and `AlternativeExerciseSet` deletions are **out of scope** — deleting
 a child does not invalidate the parent row the actor holds — which rules out
-`RoutinesViewModel:601`, `:996` and `:1031`.
+`RoutinesViewModel`'s set, alternative and alternative-set removals. That scope was re-verified
+against the reader code when these three were closed, and still holds.
 
-That leaves the genuinely exposed, still-ungated writers:
+The three that were genuinely exposed took the gate on 2026-08-29 (they had been left out of the
+original fix on frequency grounds, not because they were safe):
 
-- `RoutinesViewModel.removeRoutineExercise` (`:524`) — deletes `RoutineExercise`. The reachable one.
-- `RoutinesViewModel` schedule removal (`:783`) — deletes `RoutineSchedule`.
-- `RoutinePlanLinkRepair` (`Data/Sync/RoutinePlanLinkRepair.swift:197`) — deletes `RoutineSchedule`.
+- `RoutinesViewModel.removeRoutineExercise` — deletes `RoutineExercise`; the reachable one. Now
+  `async`, with the snapshot capture, the delete, `SupersetOrderingService.normalizeOrdering` and
+  the save all inside one `withExclusiveAccess` block; only the refetch sits outside, as in
+  `deleteRoutine`.
+- `RoutinesViewModel.removeSchedule` — deletes every `RoutineSchedule` row of a routine. Now
+  `async`; the emptiness check moved *inside* the gate so the pass reads and writes one consistent
+  store, and it reports back whether anything was removed so the refetch stays conditional.
+- `RoutinePlanLinkRepair.repair()` — deletes `RoutineSchedule` rows to re-insert them. The whole
+  pass is bracketed from `runIfNeeded()`, not just its deletes: its `hasChanges` guard, fetch,
+  deletes, inserts, single save and `rollback()` recovery all depend on nothing else committing in
+  between. It stays one-shot per device (the `UserDefaults` version flag is untouched) and still
+  runs from its own `.task` in `GymStreakApp`, so its ordering relative to launch seeding is
+  unchanged — the gate only serializes it against the seeders that already take it.
 
-Left out on frequency grounds, not because they are safe. Tracked in
-`.scratch/history-delete-race-followups/`.
+Two consequences worth knowing, both visible in the diff:
 
-### Adjacent, deliberately not fixed here
+- **A gated mutation cannot be wrapped in a caller's `withAnimation`.** `RoutineDetailView` used to
+  wrap `removeRoutineExercise` in one; an `async` call escapes that transaction entirely. The fix is
+  a view-side `.animation(DesignSystem.Animation.spring, value: routine.routineExercisesList.count)`
+  on `browsingModeContent`'s `LazyVStack` — the animation stays a view concern, and it now covers the
+  add path too, which was never animated. Moving `withAnimation` into the ViewModel was tried first
+  and reverted: it works, but it puts a SwiftUI transaction inside a gated write where it has no
+  business being. Anything else that becomes gated has the same problem and the same answer.
+- `SchedulePlanningSheet` dismisses *before* awaiting the removal, for the same reason
+  `RoutineDetailView` dismisses before `deleteRoutine`: its body reads the plan it is deleting.
 
-The same "read a `@Model` after an `await`" shape exists around the **in-progress** session —
-`PostWorkoutRecapViewModel.run` and `SaveWorkoutView.loadComparisons` capture
-`WorkoutViewModel.currentSession` across suspensions while `cancelWorkout()` can delete it. That is
-a different bug — the reads there are main-actor continuations rather than the History actor's
-walk, so the gate does not address them — and it was left alone rather than folded into this
-change.
+### `setSchedule`'s duplicate collapse — found late, also gated
 
-### What the gate costs
+A fourth writer surfaced while closing the three above: `RoutinesViewModel.setSchedule` deletes the
+losing `RoutineSchedule` rows when a routine carries more than one plan (two devices planning
+offline, or two repair passes). Same trap as `removeSchedule`, lower frequency — it fires only when
+duplicates exist — and it was closed the same day rather than left open.
 
-`acquire()` is FIFO and deliberately not cancellation-aware, and the gate now serializes the read
-fan-out across three `@ModelActor`s plus the watch drain. A delete tapped while a rebuild is queued
-waits behind all of it, so a row can visibly linger in History. The trade is argued in
-`HistoryStoreGate.acquire`'s own comment and is the right one — correctness over latency — but it
-has **not** been measured on device at a realistic data volume (341 `WorkoutExercise` rows was the
-size of the store that crashed). If deletion ever feels sluggish, this is why.
+`setSchedule` is now `async`, with **the whole write inside the gate**: the survivor's field edits
+and the losers' removal are one plan, so splitting them would leave exactly the half-applied state
+this document warns about. The **paywall refusal stays outside** the gate — it writes nothing, and
+presenting UI while holding the gate would make a History rebuild wait on a human. `ScheduleGatingTests`
+and `RoutinePlanDuplicateTests` still pin both behaviours; their call sites simply became `await`.
+
+`SchedulePlanningSheet.save()` awaits *before* dismissing, unlike its remove button: the success
+haptic depends on the result, and this path deletes only duplicate rows the sheet never displays —
+the plan its body reads is the survivor the write keeps.
+
+With that, every routine-template writer that can delete a row a reader actor holds takes the gate.
+What remains open is the CloudKit ceiling above, not app code.
+
+### What the gate costs — measured
+
+`acquire()` is FIFO and deliberately not cancellation-aware, and the gate serializes the read
+fan-out across three `@ModelActor`s plus the watch drain, so a delete tapped while reads are queued
+waits behind them and a row can visibly linger in History. **Measured 2026-08-29** on an iPhone 16
+Pro Max (iOS 26.6, Debug build), five runs, at the crash store's volume. Verdict first: **accepted
+as it stands, no change** — the realistic wait is ~134 ms, and the specific case the trade was
+worried about costs 5 ms.
+
+The harness is `GymStreakTests/HistoryGateLatencyTests.swift` over
+`GymStreakTests/Support/HistoryGateLatencyHarness.swift`; re-run it with
+`-only-testing:GymStreakTests/HistoryGateLatencyTests` and grep the log for `GATE-COST`. Its
+fixture rebuilds the store that crashed — 49 completed sessions × 7 `WorkoutExercise` × 3
+`WorkoutSet` (343 exercise rows against the device's 341), **on disk**, plus the full 96-row starter
+catalog and four scheduled routines, because the readers fetch the entire `Exercise` table and every
+`Routine` on each pass too.
+
+Two things make the numbers mean what they claim. The waits are **staged, not raced**: a stand-in
+holder takes the gate, the fan-out and then the write queue behind it, and the clock starts at the
+release — so each number is that shape's **worst case**, the tap landing at the instant the reads
+begin (a tap landing halfway through a rebuild waits about half as much). And every reader is
+**warmed first**, because each provider awaits its `Task.detached` model-actor construction *before*
+`gate.withAccess`: an unwarmed reader can still be constructing while the write enqueues ahead of
+it, which silently drops it out of the measured wait. Each test asserts the intended FIFO order
+actually happened rather than assuming it.
+
+What a writer waits (median of 5 runs):
+
+| The writer's wait | Median | What it is |
+|---|---|---|
+| Delete behind a **cancelled** rebuild | **4.8 ms** | the case `acquire`'s comment accepts |
+| Delete behind **one** rebuild | **134 ms** | two History deletes in a row — the shipped scenario |
+| In-workout set delete on a finished session behind one rebuild | **131 ms** | the `withHistoryGateIfVisible` path |
+| Delete behind the **full eight-read fan-out** | **594 ms** (565–732) | the constructed ceiling |
+
+And what the reads themselves cost, which is what those waits are made of:
+
+| Gated read | Median |
+|---|---|
+| `fetchTrainingSnapshot` | 137 ms |
+| `fetchFortschrittSnapshot` | 140 ms |
+| `ChatFactStore.workoutHistoryFacts(.allTime)` | 128 ms |
+| `fetchLifetimeTotals` | 127 ms |
+| `fetchExerciseProgress` | 72 ms |
+| `ChatFactStore.exercisePRFacts` | 72 ms |
+| `ChatFactStore.nextWorkoutFacts` | 2 ms |
+| `fetchCompletedWorkoutCount` | 0.1 ms |
+| `attributeLegacyRows` (nothing to repair) | 0.2 ms |
+
+Those nine sum to 606 ms against a measured 594 ms fan-out, which is the cross-check: the wait is
+the reads, with nothing else hiding in it.
+
+Four things the numbers say:
+
+1. **The wait is the read, not the gate.** The delete behind a cancelled rebuild — which still pays
+   the queue turn, the hand-off and the delete's own cascade and `save()` — totals 4.8 ms. So of the
+   134 ms a real delete waits, essentially all of it is one `fetchTrainingSnapshot`, and the gate's
+   own machinery is free.
+2. **The cancelled-rebuild worry does not survive contact.** `acquire`'s comment concedes that a
+   superseded rebuild still takes its FIFO turn "ahead of a queued delete", and that is true — but
+   every `SwiftDataHistorySnapshotStore` method checks cancellation as its first statement (eight
+   of them `try Task.checkCancellation()`; the two non-throwing deep-dive methods
+   `guard !Task.isCancelled`), so the cancelled reader returns before it fetches anything and hands
+   the gate straight on. The wait it admits to is 5 ms, not a walk. This does **not** generalize:
+   `ChatFactStore` has no cancellation checks at all, so a cancelled coach fact lookup does pay in
+   full — which is why the number to watch is the fan-out, not cancellation.
+3. **The 594 ms ceiling is a construction, not a screen.** It stacks all eight gated reads — both
+   History loads, the proactive-paywall totals and count, three coach fact lookups and the
+   legacy-attribution repair — in front of one delete. No single interaction triggers all eight.
+4. **The spread is small once the actors are warm** — 565–732 ms across five runs, and ±5 ms on the
+   single-rebuild cases. An earlier unwarmed version of this harness produced outliers of 2.2 s and
+   3.2 s; those were model-actor construction and cold SQLite pages landing inside the measurement,
+   not the gate, and warming the readers removed them. Worth knowing if a future run looks wild:
+   suspect cold start before suspecting contention.
+
+All of this is a **Debug** build, so it is a pessimistic ceiling: the aggregation
+(`HistorySnapshotBuilder`, `PersonalRecordService`, `ChatFactBuilder`) is unoptimized first-party
+Swift, and a Release build walks the same graph faster.
+
+**Does deletion feel laggy?** No, at this volume. 134 ms between the tap and the row leaving the
+list is at the edge of perception and reads as an animation, not a stall — and it is the *same*
+134 ms whether or not the gate exists, because the delete has to wait for that read either way to
+avoid the crash at the top of this document.
+
+### The decision, and the levers if it ever changes
+
+**Accepted as it stands.** Neither candidate lever is worth pulling at these numbers:
+
+- **Make `acquire` cancellation-aware** — the lever the concern pointed at. Measured value: ≈ 5 ms.
+  It would buy back the hand-off, not a rebuild, and it costs the unconditional
+  "every acquire is followed by exactly one release" pairing that makes the gate reasonable to
+  reason about. Rejected on the measurement, not on taste.
+- **Narrow what the readers hold the gate for** — there is nothing to narrow. Each reader holds it
+  for exactly one whole-graph walk, and the walk *is* the dangerous part. The real lever the read
+  table exposes is a different one: `fetchTrainingSnapshot`, `fetchFortschrittSnapshot` and
+  `workoutHistoryFacts` each walk the same completed-session graph from scratch, at ~135 ms apiece.
+  Collapsing those repeated walks would cut the ceiling roughly in half — but that is a
+  History-performance change (`docs/history-performance.md`), not a gate change.
+
+**Re-measure when** the single-rebuild wait passes ~250 ms — run the harness; the cost scales with
+`WorkoutExercise` rows, so that is roughly a 700-row store, twice this one — or when a user reports
+a row lingering after a delete. The harness's `#expect` ceilings are loose on purpose: they are
+tripwires for someone putting a *new* unbounded read under the gate, not the measurement itself.
+
+## The adjacent bug: the in-progress session read across a suspension
+
+The same "read a `@Model` after an `await`" shape existed around the **in-progress** session, and
+the gate does not address it: the reads there are main-actor continuations that resume holding a
+tombstone, not a model actor mid-walk. It was deferred out of the gate change and fixed afterwards
+(follow-up ticket 04).
+
+Two screens capture `WorkoutViewModel.currentSession` and keep reading its exercise/set graph
+across suspensions, while `cancelWorkout()` deletes exactly that session:
+
+- **The post-workout recap.** `PostWorkoutRecapViewModel.run` checked availability first — a path
+  that *sleeps two seconds* when the model is not ready yet — and only then walked the session for
+  its set counts and its aggregated input, with the streaming call after that.
+- **The save screen's comparison load.** `SaveWorkoutView.loadComparisons` awaited
+  `ExerciseProgressService.compareWithPrevious`, and the danger was **inside** the service rather
+  than at the call site: `ExerciseComparisonBuilder.build(workout:)` walked the session's exercises
+  and sets *after* the off-main history scan returned. A guard at the call site could not have
+  covered it, and the same exposure was reached from `WorkoutDetailView` and
+  `WorkoutAnalysisViewModel`.
+
+### How it is fixed
+
+**Capture before the suspension, don't guard after it** — the second half of the pattern
+`WorkoutDetailView` established with `isBeingDeleted`, and the stronger half wherever it fits,
+because it removes the read rather than protecting it.
+
+- `ExerciseComparisonBuilder` gained `makeSnapshot(workout:)`, which reduces the workout to values
+  (per-set reps/weight/completion, the per-exercise aggregates, and the `PreviousPerformanceLookup`
+  it already produced) in one synchronous main-actor stretch. `build(snapshot:previousPerformances:)`
+  replaces `build(workout:)` and sees no `@Model` at all, so `compareWithPrevious` now touches the
+  session exactly once, before its await — which fixes all three of its callers at once.
+- `PostWorkoutRecapViewModel` split in two. `start(...)` is **synchronous** and does every session
+  read in the caller's own turn on the main actor: preferences, the two *synchronous* availability
+  verdicts (`deviceNotEligible` / `appleIntelligenceNotEnabled`), the set counts, the prior-session
+  count, the cache probe and `buildInput`. Only then does it spawn the task, which runs the
+  `.modelNotReady` retry that sleeps and then the stream, holding nothing but a
+  `PostWorkoutRecapInput` and a `UUID`.
+
+  Synchronous rather than "first in an async method" on purpose: a `Task` body is **not** ordered
+  against the task that discards the workout — SE-0431 gives an implicitly-isolated closure no
+  creation-order guarantee (`docs/swift6-concurrency.md` §4) — so reads placed before the first
+  `await` *inside* the task can still resume onto a tombstone. Moving them out of the task closes
+  that window rather than narrowing it.
+
+  Two accepted consequences: a device whose model is not ready yet pays the aggregation before
+  learning it cannot use it, and an insufficient-data session on such a device now reports
+  `.insufficientData` where it used to report `.unavailable`.
+
+**And cancel the work when the session goes away.** `generate`/`regenerate` are fire-and-forget
+(`runTask`) with a `cancel()`, exactly like `WorkoutAnalysisViewModel`, because the recap has to
+stop at the moment the *session* is discarded, which is not the moment the *view* disappears — the
+sheet's `.task` cancellation only covered the latter. `SaveWorkoutView` calls `cancel()` from
+`.onDisappear` and from `.onChange(of: viewModel.currentSession == nil)`, and the stream skips its
+final state write and cache save when cancelled.
+
+That `onChange` is qualified with `&& !isSaving`, because `currentSession` goes nil on **two**
+paths: discarding, and `completeWorkout` — and the sheet deliberately stays up through the latter's
+History-gate wait. Without the qualifier a recap still streaming when the user taps Save would be
+killed mid-sentence and never cached, where before it streamed on until the sheet dismissed.
+
+`WorkoutAnalysisViewModel.run` — the same shape on the History detail screen — gained the
+`Task.isCancelled` check that makes `WorkoutDetailView`'s existing `analysisVM.cancel()` actually
+protective rather than merely requested, and now takes `workout.id` once, on that check's line,
+instead of reading it again after the two-second availability retry.
+
+Where a read genuinely cannot move before the suspension, the guard is identity, not a new flag:
+`SaveWorkoutView.loadComparisons` re-checks `viewModel.currentSession === session` on resume.
+`cancelWorkout()` unpublishes `currentSession` **before** deleting the row and both happen on the
+main actor, so a resume that still sees the same object is a resume that came before the delete —
+the same proof `isBeingDeleted` provides in `WorkoutDetailView`.
+
+`ExerciseProgressServiceTests.comparisonRowsSurviveTheWorkoutBeingDeletedMidScan` pins it: snapshot,
+delete the session, build — and the rows still carry the workout's values.
 
 ## Related
 

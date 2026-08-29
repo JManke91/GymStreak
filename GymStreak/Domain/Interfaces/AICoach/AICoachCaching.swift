@@ -37,7 +37,7 @@ protocol AICoachCaching: AnyObject {
 
     // MARK: - Workout Analysis
 
-    func loadWorkoutAnalysis(workoutId: UUID) -> WorkoutAnalysisOutput?
-    func saveWorkoutAnalysis(workoutId: UUID, output: WorkoutAnalysisOutput)
+    func loadWorkoutAnalysis(workoutId: UUID) -> WorkoutAnalysisNarrative?
+    func saveWorkoutAnalysis(workoutId: UUID, narrative: WorkoutAnalysisNarrative)
     func invalidateWorkoutAnalysis(workoutId: UUID)
 }

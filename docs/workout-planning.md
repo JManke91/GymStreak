@@ -191,6 +191,22 @@ It also **defers entirely if anything else has unsaved work on the shared `mainC
 
 **No CloudKit schema deploy is needed.** A to-many stores nothing on the parent, so the change writes no new field: `CD_RoutineSchedule.CD_routine` already exists in Production and is simply populated now, while `CD_Routine.CD_schedule` stops being written and stays in the schema harmlessly (CloudKit schemas are additive and fields cannot be removed). Confirm with an export after the first real run.
 
+**Plan deletion takes the History gate (2026-08-29).** `removeSchedule` and `RoutinePlanLinkRepair`
+both delete `RoutineSchedule` rows, and both History reader actors hold those rows — their `Routine`
+fetches prefetch `\.schedules`. Deleting one mid-rebuild is the uncatchable SwiftData trap
+documented in `docs/history-delete-race.md`, so both now run inside `HistoryStoreGate`
+`withExclusiveAccess`: `removeSchedule` became `async` (its emptiness check moved inside the gate,
+and `SchedulePlanningSheet` dismisses *before* awaiting it, because that body reads the plan it is
+deleting), and the repair brackets its whole pass from `runIfNeeded()` — the `hasChanges` guard,
+fetch, deletes, inserts, save and `rollback()` all need to see one consistent store. The repair is
+still one-shot per device and still runs from its own `.task` in `GymStreakApp`, so its ordering
+relative to launch seeding is unchanged. `setSchedule` joined them the same day — its duplicate
+collapse deletes losing rows too, so the whole write (survivor edits + losers' removal, one plan)
+runs inside the gate while the paywall refusal stays outside it, and `SchedulePlanningSheet.save()`
+awaits before dismissing because the success haptic depends on the result. All three ViewModel
+entry points are `async` now, so their call sites and the `ScheduleGatingTests` /
+`RoutinePlanDuplicateTests` assertions `await` them.
+
 **Duplicate handling is load-bearing, not cosmetic.** Because a to-many makes a second row structurally reachable, every write path must treat the set rather than the winner. `removeSchedule` deletes **all** rows — deleting only the one `Routine.schedule` surfaces would promote the loser and the "removed" plan would reappear in the card, the weekly goal and the next-due ordering — and `setSchedule` collapses losers while editing so none survives. `RoutinePlanDuplicateTests` pins both behaviours.
 
 **Verification status.**

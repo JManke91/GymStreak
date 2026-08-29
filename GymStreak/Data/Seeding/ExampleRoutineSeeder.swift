@@ -80,7 +80,7 @@ final class ExampleRoutineSeeder {
     /// bracketed rather than just the deletions: it is one launch-time pass whose
     /// fetches, deletes and single save have to see a consistent store.
     func run() async {
-        await historyStoreGate.withAccess { runLocked() }
+        await historyStoreGate.withExclusiveAccess { runLocked() }
     }
 
     private func runLocked() {

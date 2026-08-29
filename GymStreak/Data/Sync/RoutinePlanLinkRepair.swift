@@ -57,15 +57,22 @@ final class RoutinePlanLinkRepair {
     private let modelContext: ModelContext
     private let cloudSyncStatus: CloudSyncStatusProviding
     private let defaults: UserDefaults
+    private let historyStoreGate: HistoryStoreGate
 
+    /// - Parameter historyStoreGate: **`AppDependencies`' shared gate.** Deliberately not
+    ///   defaulted, like the seeders and the Data-layer providers: a writer handed its own
+    ///   gate compiles, looks wired and excludes nothing. Tests opt out visibly with
+    ///   `HistoryStoreGate.unshared()`.
     init(
         modelContext: ModelContext,
         cloudSyncStatus: CloudSyncStatusProviding,
-        defaults: UserDefaults = .standard
+        defaults: UserDefaults = .standard,
+        historyStoreGate: HistoryStoreGate
     ) {
         self.modelContext = modelContext
         self.cloudSyncStatus = cloudSyncStatus
         self.defaults = defaults
+        self.historyStoreGate = historyStoreGate
     }
 
     /// Waits for sync to be quiescent, then repairs once.
@@ -99,7 +106,14 @@ final class RoutinePlanLinkRepair {
                 // appear would leave a task suspended for the whole session on
                 // every device that has no plans, and the flag stays clear
                 // whenever nothing was repaired, so the next launch retries.
-                repair()
+                //
+                // Gated because the pass deletes `RoutineSchedule` rows the History
+                // model actor may be holding — both reader actors prefetch
+                // `\.schedules` — see `HistoryStoreGate`. The whole pass is
+                // bracketed rather than only its deletes: its fetch, deletes, inserts
+                // and single save have to see one consistent store, and the rollback
+                // path depends on nothing else committing in between.
+                await historyStoreGate.withExclusiveAccess { repair() }
                 return
             case .syncing, .waiting:
                 // Keep waiting. Note `lastSuccessfulSync` is NOT usable as the

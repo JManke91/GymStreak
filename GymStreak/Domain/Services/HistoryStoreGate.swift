@@ -37,10 +37,28 @@ import Foundation
 ///
 /// ## Contract
 ///
-/// Exclusive (one holder at a time), FIFO, and **not reentrant** — a holder that calls
-/// `withAccess` again deadlocks. Readers are already serialized by the single history
+/// Exclusive (one holder at a time), FIFO, and **not reentrant** — a holder that takes the
+/// gate again deadlocks. Readers are already serialized by the single history
 /// model actor, so taking this exclusively costs them nothing beyond what that actor
 /// already imposes.
+///
+/// ## Two entry points, deliberately not overloads
+///
+/// `withAccess` is the **readers'** entry point — the three `@ModelActor` history providers
+/// (`SwiftDataHistorySnapshotStore`, `SwiftDataLegacyHistoryAttributionStore`,
+/// `ChatFactStore`), whose bodies genuinely have to `await` their actor.
+///
+/// `withExclusiveAccess` is the **writers'** entry point — every ViewModel, seeder and
+/// coordinator that deletes rows. Its closure is *not* `async`, so suspending inside a gated
+/// write is a compile error instead of a permanent silent hang: the gate is not reentrant, so
+/// a writer that suspends while a History rebuild queues behind it deadlocks the app with no
+/// crash, no crash report, no log, and no test that can catch it.
+///
+/// The two names differ on purpose. As overloads the guard would be worthless: a synchronous
+/// closure converts freely to `() async throws -> T`, so both candidates stay viable — the
+/// synchronous one wins while the body is await-free, and the moment someone adds an `await`
+/// it drops out and the `async` overload is silently selected instead. The deadlock would
+/// compile exactly as it does today.
 ///
 /// Every writer that can delete a row the History actor may be holding must take it. That
 /// graph is wider than "completed sessions": the actor also fetches the **entire** `Exercise`
@@ -49,10 +67,11 @@ import Foundation
 /// So `Exercise`, `Routine`, `RoutineExercise` and `RoutineSchedule` deletions are in scope too
 /// — not just `WorkoutSession`, `WorkoutExercise` and `WorkoutSet`.
 ///
-/// **That is the rule, not a description of the current code.** A handful of low-frequency
-/// `RoutineExercise`/`RoutineSchedule` writers still do not take the gate — they are listed,
-/// with the reasoning, under "Known residual exposure" in `docs/history-delete-race.md`. Do not
-/// read this type as proof that every such writer is covered.
+/// **That is the rule, not a description of the current code.** Every such writer in the app
+/// takes the gate today, but the rule is what a new one has to satisfy — and one exposure
+/// stays permanently out of reach: CloudKit mirroring applies remote deletes on its own
+/// context, which no app-level lock can serialize against. See "Known residual exposure" in
+/// `docs/history-delete-race.md`.
 ///
 /// For **`WorkoutSession`** rows specifically the membership test is the History fetches' own
 /// predicate — **`endTime != nil`** — and that is deliberately *not* the same question as
@@ -83,8 +102,10 @@ actor HistoryStoreGate {
     /// defaulting it.
     static func unshared() -> HistoryStoreGate { HistoryStoreGate() }
 
-    /// Runs `body` with exclusive access. Released on both the success and the throwing
-    /// path; `body` must not itself call back into the gate.
+    /// The **readers'** entry point: runs an `async` `body` with exclusive access. Released on
+    /// both the success and the throwing path; `body` must not itself call back into the gate.
+    ///
+    /// Writers use `withExclusiveAccess` instead — see "Two entry points" above.
     ///
     /// `nonisolated` so `body` runs on the caller's executor rather than this actor's:
     /// awaiting it *inside* the actor would let a second caller in through actor
@@ -101,12 +122,36 @@ actor HistoryStoreGate {
         }
     }
 
+    /// The **writers'** entry point: runs a *synchronous* `body` with exclusive access.
+    /// Released on both the success and the throwing path.
+    ///
+    /// The closure is non-`async` on purpose. Every gated write is a fetch/delete/save burst
+    /// that has no reason to suspend, and because the gate is not reentrant a suspension in
+    /// there is a silent deadlock rather than a diagnosable failure. Taking a synchronous
+    /// closure turns that mistake into a compile error. See "Two entry points" above for why
+    /// this is a separate name and not an overload of `withAccess`.
+    nonisolated func withExclusiveAccess<T>(_ body: () throws -> T) async rethrows -> T {
+        await acquire()
+        do {
+            let value = try body()
+            await release()
+            return value
+        } catch {
+            await release()
+            throw error
+        }
+    }
+
     /// Deliberately not cancellation-aware. A cancelled History rebuild still takes its FIFO
-    /// turn ahead of a queued delete, so a delete can wait behind a walk nobody wants any
-    /// more. That latency is accepted on purpose: the non-throwing `withCheckedContinuation`
-    /// is what makes "every acquire is followed by exactly one release" unconditional, and
-    /// correctness here outranks a rare wait. Every gated body is short or already checks
-    /// `Task.isCancelled` itself.
+    /// turn ahead of a queued delete — but it costs that delete **5 ms**, not a walk, because
+    /// every `SwiftDataHistorySnapshotStore` method checks cancellation as its first statement
+    /// (eight `try Task.checkCancellation()`, two non-throwing `guard !Task.isCancelled`) and
+    /// so hands the gate straight on. Measured on device at the crash store's volume
+    /// (`GymStreakTests/HistoryGateLatencyTests`, docs/history-delete-race.md "What the gate
+    /// costs"). That is why the non-throwing `withCheckedContinuation` stays: it is what makes
+    /// "every acquire is followed by exactly one release" unconditional, and it is being paid
+    /// for with 5 ms. Note that `ChatFactStore` checks no cancellation, so a cancelled coach
+    /// fact lookup does pay in full.
     private func acquire() async {
         guard isHeld else {
             isHeld = true

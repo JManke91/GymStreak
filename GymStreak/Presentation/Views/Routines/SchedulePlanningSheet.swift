@@ -371,8 +371,10 @@ struct SchedulePlanningSheet: View {
     private var removeButton: some View {
         Button {
             HapticManager.shared.light()
-            viewModel.removeSchedule(from: routine)
+            // Dismiss first, then remove: the removal waits on the History gate, and
+            // this sheet's body reads the plan it is about to delete.
             dismiss()
+            Task { await viewModel.removeSchedule(from: routine) }
         } label: {
             HStack(spacing: 6) {
                 Image(systemName: "trash").font(.system(size: 13, weight: .semibold))
@@ -412,14 +414,19 @@ struct SchedulePlanningSheet: View {
         // — reachable when a gated user opens an existing weekday plan and saves
         // it unchanged. A refusal writes nothing and raises the paywall, so the
         // sheet closes for the same reason `requestWeekdayShape()` does.
-        let saved = viewModel.setSchedule(
-            for: routine,
-            type: mode,
-            intervalDays: intervalDays,
-            weekdays: weekdays,
-            referenceDate: startDate
-        )
-        if saved { HapticManager.shared.success() }
-        dismiss()
+        // Awaited before dismissing, unlike the remove button: the haptic depends on
+        // the result, and this path deletes only duplicate rows the sheet never shows
+        // — the plan its body reads is the survivor the write keeps.
+        Task {
+            let saved = await viewModel.setSchedule(
+                for: routine,
+                type: mode,
+                intervalDays: intervalDays,
+                weekdays: weekdays,
+                referenceDate: startDate
+            )
+            if saved { HapticManager.shared.success() }
+            dismiss()
+        }
     }
 }

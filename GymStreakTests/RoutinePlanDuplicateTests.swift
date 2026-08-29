@@ -17,23 +17,23 @@ import Foundation
 struct RoutinePlanDuplicateTests {
 
     @Test("Removing a plan deletes every row, so no duplicate is promoted")
-    func removingAPlanDeletesDuplicates() throws {
+    func removingAPlanDeletesDuplicates() async throws {
         let harness = makeHarness()
         let routine = harness.makeRoutineWithDuplicatePlans()
         #expect(routine.schedules?.count == 2)
 
-        harness.viewModel.removeSchedule(from: routine)
+        await harness.viewModel.removeSchedule(from: routine)
 
         #expect(routine.schedule == nil)
         #expect(routine.schedules?.isEmpty ?? true)
     }
 
     @Test("Editing a plan collapses the duplicate instead of leaving it behind")
-    func editingAPlanCollapsesDuplicates() throws {
+    func editingAPlanCollapsesDuplicates() async throws {
         let harness = makeHarness()
         let routine = harness.makeRoutineWithDuplicatePlans()
 
-        let saved = harness.viewModel.setSchedule(
+        let saved = await harness.viewModel.setSchedule(
             for: routine, type: .everyNDays, intervalDays: 9, weekdays: [], referenceDate: .now
         )
 

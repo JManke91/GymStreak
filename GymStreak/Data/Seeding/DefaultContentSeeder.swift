@@ -78,7 +78,7 @@ final class DefaultContentSeeder {
     /// may be holding — see `historyStoreGate`. The whole pass is bracketed so its
     /// fetch, dedup and save see a consistent store.
     func run() async {
-        await historyStoreGate.withAccess { runLocked() }
+        await historyStoreGate.withExclusiveAccess { runLocked() }
     }
 
     private func runLocked() {

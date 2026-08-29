@@ -553,8 +553,9 @@ struct WorkoutDetailView: View {
         // arrays positionally — a `zip` that silently truncates or mispairs the moment
         // the orderings diverge.
         let results = await dependencies.exerciseProgressService.compareWithPrevious(workout: workout)
-        // Same reason as `loadAppliedOverloads`: `compareWithPrevious` walks this session's
-        // exercises and sets after its own suspension.
+        // `compareWithPrevious` no longer reads the session after its own suspension — it
+        // snapshots it first — but publishing rows for a workout that is being deleted still
+        // re-renders a screen that is on its way out, so the flag check stays.
         guard !isBeingDeleted else { return }
         comparisons = Dictionary(
             results.map { ($0.workoutExerciseId, $0) },

@@ -111,8 +111,8 @@ final class FakeAICoachCache: AICoachCaching {
         deepDives[key] = nil
     }
 
-    func loadWorkoutAnalysis(workoutId: UUID) -> WorkoutAnalysisOutput? { nil }
-    func saveWorkoutAnalysis(workoutId: UUID, output: WorkoutAnalysisOutput) {}
+    func loadWorkoutAnalysis(workoutId: UUID) -> WorkoutAnalysisNarrative? { nil }
+    func saveWorkoutAnalysis(workoutId: UUID, narrative: WorkoutAnalysisNarrative) {}
     func invalidateWorkoutAnalysis(workoutId: UUID) {}
 }
 

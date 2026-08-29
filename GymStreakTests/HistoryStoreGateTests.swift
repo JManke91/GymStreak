@@ -61,7 +61,9 @@ struct HistoryStoreGateTests {
     }
 
     /// A throwing body must still release, or the first failed snapshot build would wedge
-    /// every later read and every delete behind it.
+    /// every later read and every delete behind it. Asserted for *both* entry points —
+    /// `withAccess` (readers) and `withExclusiveAccess` (writers) — since each brackets
+    /// `acquire`/`release` itself.
     @Test
     func aThrowingBodyStillReleasesTheGate() async throws {
         struct Boom: Error {}
@@ -74,6 +76,48 @@ struct HistoryStoreGateTests {
         // Would hang here if the gate were still held.
         let reacquired = await gate.withAccess { true }
         #expect(reacquired)
+
+        await #expect(throws: Boom.self) {
+            try await gate.withExclusiveAccess { throw Boom() }
+        }
+
+        let reacquiredAfterWriter = await gate.withExclusiveAccess { true }
+        #expect(reacquiredAfterWriter)
+    }
+
+    /// The two entry points are one gate, not two. A writer entering through
+    /// `withExclusiveAccess` must wait behind a reader holding via `withAccess` — if they ever
+    /// came apart, every writer call site would silently stop excluding the History actor.
+    @Test
+    @MainActor
+    func aWriterWaitsBehindAReaderHoldingTheSameGate() async {
+        let gate = HistoryStoreGate()
+        let releaseReader = AsyncSignal()
+        let readerHasEntered = AsyncSignal()
+        let writerDidRun = RunFlag()
+
+        let reader = Task {
+            await gate.withAccess {
+                readerHasEntered.fire()
+                await releaseReader.wait()
+            }
+        }
+        await readerHasEntered.wait()
+
+        let writer = Task { @MainActor in
+            await gate.withExclusiveAccess { writerDidRun.didRun = true }
+        }
+
+        // Still blocked: the reader holds. The sleep also yields the main actor, so a writer
+        // that did *not* wait would have run by now.
+        try? await Task.sleep(for: .milliseconds(50))
+        #expect(writerDidRun.didRun == false, "a writer ran while a reader held the gate")
+
+        releaseReader.fire()
+        await reader.value
+        await writer.value
+
+        #expect(writerDidRun.didRun)
     }
 
     /// The wiring test: deleting a completed workout must wait for whoever holds the gate.
@@ -222,6 +266,13 @@ struct HistoryStoreGateTests {
     }
 
     // MARK: - Doubles
+
+    /// Records whether a synchronous gated body ran. `@MainActor` rather than an actor because
+    /// the writer entry point's closure is synchronous and so cannot `await`.
+    @MainActor
+    private final class RunFlag {
+        var didRun = false
+    }
 
     @MainActor
     private func makeViewModel(context: ModelContext, gate: HistoryStoreGate) -> WorkoutViewModel {

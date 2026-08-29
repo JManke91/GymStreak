@@ -86,14 +86,28 @@ struct SaveWorkoutView: View {
                 // runs before the first `await`, i.e. as the screen appears.
                 viewModel.completionOverloadSuggestionsDidAppear()
                 await loadComparisons()
+                // Re-read rather than reusing a capture from before the await:
+                // the workout may have been discarded while the comparison ran.
                 if let session = viewModel.currentSession {
-                    await recapVM.generate(
+                    recapVM.generate(
                         session: session,
                         locale: Locale.current,
                         modelContext: modelContext
                     )
                 }
             }
+            // The recap is fire-and-forget now, so it outlives this sheet unless it is
+            // stopped explicitly — and it must stop the moment the session it describes
+            // goes away, which is before `cancelWorkout()` deletes the row.
+            //
+            // `isSaving` is what separates the two ways `currentSession` goes nil: saving
+            // clears it too, and the sheet deliberately stays up for that wait, so a recap
+            // still streaming through a save is left alone and `.onDisappear` ends it at
+            // dismissal, exactly as the sheet's `.task` cancellation used to.
+            .onChange(of: viewModel.currentSession == nil) { _, isGone in
+                if isGone && !isSaving { recapVM.cancel() }
+            }
+            .onDisappear { recapVM.cancel() }
         }
     }
 
@@ -138,13 +152,11 @@ struct SaveWorkoutView: View {
             AIRecapInline(state: recapVM.state) {
                 HapticManager.shared.light()
                 if let session = viewModel.currentSession {
-                    Task {
-                        await recapVM.regenerate(
-                            session: session,
-                            locale: Locale.current,
-                            modelContext: modelContext
-                        )
-                    }
+                    recapVM.regenerate(
+                        session: session,
+                        locale: Locale.current,
+                        modelContext: modelContext
+                    )
                 }
             }
         } header: {
@@ -298,11 +310,21 @@ struct SaveWorkoutView: View {
     // MARK: - Data Loading
 
     private func loadComparisons() async {
-        if let session = viewModel.currentSession {
-            exerciseComparisons = await dependencies.exerciseProgressService
-                .compareWithPrevious(workout: session)
+        guard let session = viewModel.currentSession else {
+            isLoadingComparisons = false
+            return
         }
+        let results = await dependencies.exerciseProgressService
+            .compareWithPrevious(workout: session)
+        // `cancelWorkout()` can discard the workout while the history scan runs. It
+        // unpublishes `currentSession` before deleting the row, and both happen on this
+        // actor, so a resume that still sees the same object is a resume that came before
+        // the delete — the proof `WorkoutDetailView.isBeingDeleted` provides there. The
+        // results themselves are values; publishing them for a workout the user just threw
+        // away would render a section about a session that no longer exists.
         isLoadingComparisons = false
+        guard viewModel.currentSession === session else { return }
+        exerciseComparisons = results
     }
 }
 

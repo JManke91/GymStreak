@@ -84,7 +84,7 @@ final class WatchWorkoutIngestionCoordinator {
     /// the whole pass — see `historyStoreGate` for why the gate is taken here rather than
     /// around the individual deletions inside.
     func drainInbox() async {
-        await historyStoreGate.withAccess { drainInboxLocked() }
+        await historyStoreGate.withExclusiveAccess { drainInboxLocked() }
     }
 
     /// The pass itself. Reentrant calls coalesce into one follow-up pass, so mutation
@@ -118,7 +118,7 @@ final class WatchWorkoutIngestionCoordinator {
     /// One gate acquisition covers the receipt recovery and the drain it triggers, so the
     /// two stay one atomic pass exactly as they were before.
     func routineAuthorityDidChange() async {
-        await historyStoreGate.withAccess {
+        await historyStoreGate.withExclusiveAccess {
             templateTransactions.recoverReadyReceipts()
             drainInboxLocked()
         }

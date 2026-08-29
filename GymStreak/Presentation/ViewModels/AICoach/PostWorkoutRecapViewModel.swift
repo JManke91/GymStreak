@@ -18,6 +18,15 @@ import os
 /// 1. `generate(session:locale:modelContext:)` is called from `.task` in `SaveWorkoutView`.
 /// 2. The VM checks availability + preferences, gates on insufficient data, then streams.
 /// 3. `regenerate(...)` bypasses the cache and forces a fresh generation.
+/// 4. `cancel()` stops the in-flight generation — on view disappear, and when the session
+///    being recapped is discarded.
+///
+/// **The session is read only in the synchronous `start`, never in the task it spawns.**
+/// `WorkoutViewModel.cancelWorkout()` deletes the in-progress session, and generation outlives
+/// the screen that started it (the availability retry sleeps two seconds, streaming takes longer
+/// still). Reading a deleted `@Model` is an uncatchable SwiftData `fatalError`, so everything the
+/// generation needs is taken off `session` before the task exists, and only values cross into it.
+/// See `docs/history-delete-race.md`.
 @Observable
 @MainActor
 final class PostWorkoutRecapViewModel {
@@ -45,6 +54,7 @@ final class PostWorkoutRecapViewModel {
 
     private let logger = Logger(subsystem: "app.gymstreak.aicoach", category: "PostWorkoutRecapVM")
     private let aggregator = PostWorkoutRecapAggregator()
+    private var runTask: Task<Void, Never>?
 
     private let service: AICoachServicing
     private let cache: AICoachCaching
@@ -83,12 +93,26 @@ final class PostWorkoutRecapViewModel {
     }
 
     /// Generates a recap for `session`, using cache if available.
+    ///
+    /// **Synchronous, and that is the point.** Every read of `session` happens here, in the
+    /// caller's turn on the main actor. Discarding the workout deletes this very session, and
+    /// a `Task` body is not ordered against the task that does the deleting (SE-0431 gives an
+    /// implicitly-isolated closure no creation-order guarantee), so a session read inside the
+    /// task could resume onto a tombstone — an uncatchable SwiftData `fatalError`. Only values
+    /// go into the task. See `docs/history-delete-race.md`.
+    ///
+    /// The generation itself is fire-and-forget, like `WorkoutAnalysisViewModel`: the caller
+    /// keeps no handle, so `cancel()` can stop it from anywhere — including the moment the
+    /// session it describes is discarded, which is not the moment the view goes away.
     func generate(
         session: WorkoutSession,
         locale: Locale,
         modelContext: ModelContext
-    ) async {
-        await run(session: session, locale: locale, modelContext: modelContext, bypassCache: false)
+    ) {
+        // `cancel()` rather than `runTask?.cancel()`: `start` returns without spawning a task
+        // when it gates out, and a stale cancelled handle would then outlive it.
+        cancel()
+        start(session: session, locale: locale, modelContext: modelContext, bypassCache: false)
     }
 
     /// Forces a fresh generation, ignoring any cached result.
@@ -96,29 +120,54 @@ final class PostWorkoutRecapViewModel {
         session: WorkoutSession,
         locale: Locale,
         modelContext: ModelContext
-    ) async {
+    ) {
+        cancel()
         cache.invalidatePostWorkout(workoutId: session.id)
-        await run(session: session, locale: locale, modelContext: modelContext, bypassCache: true)
+        start(session: session, locale: locale, modelContext: modelContext, bypassCache: true)
+    }
+
+    /// Stops any in-flight generation. Called on view disappear, and when the session being
+    /// recapped is discarded — after which nothing may read it again.
+    func cancel() {
+        runTask?.cancel()
+        runTask = nil
     }
 
     // MARK: - Core pipeline
 
-    private func run(
+    /// The value-typed hand-off from the session-reading half to the streaming half.
+    private struct PendingGeneration {
+        let input: PostWorkoutRecapInput
+        let workoutId: UUID
+    }
+
+    /// Gates on preferences, availability and data, then hands the streaming half nothing but
+    /// values. Synchronous from start to finish — no `await` may be introduced between the
+    /// gates, because the session reads below are only safe while nothing can interleave.
+    private func start(
         session: WorkoutSession,
         locale: Locale,
         modelContext: ModelContext,
         bypassCache: Bool
-    ) async {
-        // 1. Availability check — with one retry for modelNotReady
-        guard await isAvailable() else {
+    ) {
+        // 1. Preferences check
+        guard preferences.isPostWorkoutEffectivelyEnabled else {
             state = .unavailable
             return
         }
 
-        // 2. Preferences check
-        guard preferences.isPostWorkoutEffectivelyEnabled else {
+        // 2. Availability, synchronous verdicts only. The `.modelNotReady` / `.unknown`
+        //    retry sleeps, so it moves into the streaming half — which means a not-yet-ready
+        //    device pays the aggregation before learning it cannot use it, and an
+        //    insufficient-data session on such a device now reports `.insufficientData`
+        //    rather than `.unavailable`. Both are cheap trades for keeping every model read
+        //    on this side of the first await.
+        switch availability.state {
+        case .deviceNotEligible, .appleIntelligenceNotEnabled:
             state = .unavailable
             return
+        case .available, .modelNotReady, .unknown:
+            break
         }
 
         // 3. Data threshold — current session sets
@@ -135,26 +184,46 @@ final class PostWorkoutRecapViewModel {
             return
         }
 
+        let workoutId = session.id
+
         // 5. Cache hit (skipped when bypassing)
         if !bypassCache {
-            if let cached = cache.loadPostWorkout(workoutId: session.id) {
-                logger.debug("Cache hit for post-workout recap \(session.id, privacy: .private)")
+            if let cached = cache.loadPostWorkout(workoutId: workoutId) {
+                logger.debug("Cache hit for post-workout recap \(workoutId, privacy: .private)")
                 state = .success(text: cached.narrative)
                 return
             }
         }
 
-        // 6. Build aggregated input
-        let input = aggregator.buildInput(session: session, locale: locale, modelContext: modelContext)
+        // 6. Build aggregated input — the last read of `session`.
+        let pending = PendingGeneration(
+            input: aggregator.buildInput(session: session, locale: locale, modelContext: modelContext),
+            workoutId: workoutId
+        )
 
-        // 7. Stream
-        await stream(input: input, workoutId: session.id)
+        runTask = Task { [weak self] in await self?.run(pending) }
+    }
+
+    /// The asynchronous half: the availability retry the ineligible verdicts did not settle,
+    /// then the stream. Touches no `@Model`.
+    private func run(_ pending: PendingGeneration) async {
+        let isReady = await isAvailable()
+        // Cancellation first: a run stopped mid-retry describes a workout that is gone or a
+        // screen that is, and neither wants a state write.
+        guard !Task.isCancelled else { return }
+        guard isReady else {
+            state = .unavailable
+            return
+        }
+
+        await stream(input: pending.input, workoutId: pending.workoutId)
     }
 
     // MARK: - Availability helper
 
     /// Returns `true` when the device is ready.
-    /// If state is `.modelNotReady`, retries once after 2 s.
+    /// If state is `.modelNotReady`, retries once after 2 s. The two verdicts that need no
+    /// retry are already handled synchronously in `start`.
     private func isAvailable() async -> Bool {
         switch availability.state {
         case .available:
@@ -187,6 +256,10 @@ final class PostWorkoutRecapViewModel {
                 finalText = partial
                 state = .streaming(text: partial)
             }
+
+            // Cancelled runs describe a workout that is gone (discarded) or a screen that
+            // is: neither should be cached or shown.
+            guard !Task.isCancelled else { return }
 
             // Stream complete
             state = .success(text: finalText)

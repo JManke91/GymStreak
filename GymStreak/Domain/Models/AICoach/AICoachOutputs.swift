@@ -83,21 +83,30 @@ struct ExerciseDeepDiveOutput {
 
 // MARK: - Workout Analysis
 
+/// What the model writes for a workout analysis — highlights and a closing sentence.
+///
+/// **There is no `headline` field**, and there deliberately is not one. It used to be
+/// generated, and a device check returned *"Neuer Bestwert bei Bankdrücken"* for a session
+/// without Bankdrücken in it: an exercise name lifted from a worked example in the
+/// instructions. `WorkoutAnalysisInput.headlineSentence` composes that sentence in Swift
+/// now and `WorkoutAnalysisNarrative` carries it, which is why this type is deliberately
+/// **not** `Codable` — what the cache and the screen hold is the narrative.
 @Generable
-struct WorkoutAnalysisOutput: Codable {
-    @Guide(description: "One short sentence (max 14 words) in the user's locale rephrasing the input's 'Headline fact' line. Never about total volume. No dates.")
-    let headline: String
-
+struct WorkoutAnalysisOutput {
     @Guide(description: "The 1 to 4 most notable exercises from the input, ordered: PRs first, then biggest improvements, then declines. Never include exercises done for the first time.", .minimumCount(1), .maximumCount(4))
     let exerciseHighlights: [WorkoutAnalysisHighlight]
 
-    @Guide(description: "One short closing sentence in the user's locale with an observation about the session as a whole. Observational, not prescriptive. No dates.")
+    @Guide(description: "One short closing sentence in the user's locale with an observation about the session as a whole. Observational, not prescriptive. No dates. NAME ONLY EXERCISES THAT APPEAR IN THE INPUT, SPELLED EXACTLY AS THE INPUT SPELLS THEM — never translate an exercise name and never invent one.")
     let closingObservation: String
 }
 
 @Generable
-struct WorkoutAnalysisHighlight: Codable {
-    @Guide(description: "Exercise name copied exactly as written in the input.")
+struct WorkoutAnalysisHighlight: Codable, Equatable, Sendable {
+    /// The copy order is all-caps and the no-translation half is spelled out because the
+    /// prompt's "translate every word into the target language" rule reads an English
+    /// exercise name in a German sentence as something to translate — which is how "Dip"
+    /// once became "Bankdrücken" in the generated headline.
+    @Guide(description: "COPY THE EXERCISE NAME FROM THE INPUT EXACTLY, LETTER FOR LETTER. Never translate, shorten or expand it, and never name an exercise the input does not list — an English name stays English in a German sentence.")
     let exerciseName: String
 
     @Guide(description: "Direction of change, derived from the verdict tag in the input: IMPROVED to improved, DECREASED to declined, UNCHANGED to unchanged, MIXED to mixed, NEW SETS to new.")
@@ -114,7 +123,7 @@ struct WorkoutAnalysisHighlight: Codable {
 /// `.anyOf` string guide, but type-safe with no string-to-enum mapping or
 /// invalid-value fallback. `String`-backed for clean JSON in the disk cache.
 @Generable
-enum WorkoutAnalysisTrend: String, Codable {
+enum WorkoutAnalysisTrend: String, Codable, Equatable, Sendable {
     case improved
     case declined
     case unchanged

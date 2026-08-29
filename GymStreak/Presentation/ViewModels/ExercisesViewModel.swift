@@ -183,7 +183,7 @@ class ExercisesViewModel: ObservableObject {
 
     /// Performs the actual deletion of an exercise and its associated RoutineExercises
     private func performDeleteExercise(_ exercise: Exercise) async {
-        let saved = await historyStoreGate.withAccess {
+        let saved = await historyStoreGate.withExclusiveAccess {
             // First, delete all RoutineExercise records that reference this exercise
             // This also cascades to delete their ExerciseSets
             let routineExercises = exercise.routineExercises ?? []
@@ -236,7 +236,7 @@ class ExercisesViewModel: ObservableObject {
         // Dismissed before the `await`, for the same reason `confirmDeleteExercise`
         // clears its confirmation state first.
         showingDeleteAllConfirmation = false
-        let saved = await historyStoreGate.withAccess {
+        let saved = await historyStoreGate.withExclusiveAccess {
             for exercise in exercises {
                 // Delete all RoutineExercise records first
                 let routineExercises = exercise.routineExercises ?? []

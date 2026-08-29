@@ -83,6 +83,47 @@ struct ExerciseProgressServiceTests {
         #expect(results.isEmpty)
     }
 
+    /// The comparison must survive the workout being **deleted** while the history scan runs.
+    ///
+    /// `SaveWorkoutView` compares `WorkoutViewModel.currentSession`, and `cancelWorkout()`
+    /// deletes exactly that session — so the graph can be gone by the time
+    /// `fetchPreviousPerformances` returns. `ExerciseComparisonBuilder` therefore reads the
+    /// models once, in `makeSnapshot`, and `build` sees only values; the version that took
+    /// the `WorkoutSession` itself read a tombstone here, which on a store-backed context is
+    /// an uncatchable `fatalError` (docs/history-delete-race.md).
+    @Test
+    func comparisonRowsSurviveTheWorkoutBeingDeletedMidScan() async throws {
+        let context = ModelContext(InMemoryModelContainer.make())
+        let exercise = Exercise(name: "Biceps Curls")
+        let routine = Routine(name: "Pull")
+        context.insert(exercise)
+        context.insert(routine)
+
+        let current = WorkoutSession(routine: routine)
+        current.startTime = Date(timeIntervalSince1970: 2_000)
+        current.endTime = Date(timeIntervalSince1970: 2_100)
+        context.insert(current)
+        addPerformance(exercise, weight: 21, reps: 5, order: 0, to: current, context: context)
+        try context.save()
+
+        // What `compareWithPrevious` does before it suspends.
+        let snapshot = ExerciseComparisonBuilder.makeSnapshot(workout: current)
+
+        // What `cancelWorkout()` can do while it is suspended.
+        context.delete(current)
+        try context.save()
+
+        // What it does on resume — with no access to the session at all.
+        let results = ExerciseComparisonBuilder.build(snapshot: snapshot, previousPerformances: [:])
+
+        #expect(results.count == 1)
+        #expect(results[0].exerciseName == "Biceps Curls")
+        #expect(results[0].currentPerformance.sets.first?.currentWeight == 21)
+        #expect(results[0].currentPerformance.sets.first?.currentReps == 5)
+        #expect(results[0].currentPerformance.totalVolume == 105)
+        #expect(results[0].previousPerformance == nil)
+    }
+
     @Test
     func routineSlotIdentitySurvivesExerciseReordering() async throws {
         let context = ModelContext(InMemoryModelContainer.make())

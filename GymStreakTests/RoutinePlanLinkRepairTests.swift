@@ -133,7 +133,8 @@ struct RoutinePlanLinkRepairTests {
             repair: RoutinePlanLinkRepair(
                 modelContext: context,
                 cloudSyncStatus: sync,
-                defaults: defaults
+                defaults: defaults,
+                historyStoreGate: .unshared()
             ),
             sync: sync
         )
@@ -306,7 +307,8 @@ struct RoutinePlanLinkRepairGatingTests {
             repair: RoutinePlanLinkRepair(
                 modelContext: context,
                 cloudSyncStatus: sync ?? .synced(),
-                defaults: defaults
+                defaults: defaults,
+                historyStoreGate: .unshared()
             ),
             defaults: defaults
         )

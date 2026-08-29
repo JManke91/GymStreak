@@ -85,10 +85,10 @@ along:
 ```
 SaveWorkoutView / WorkoutDetailView / WorkoutAnalysisViewModel
   → ExerciseProgressProviding (@MainActor)
-    → ExerciseComparisonBuilder.makeLookup(workout:)          ── main actor, bounded
+    → ExerciseComparisonBuilder.makeSnapshot(workout:)        ── main actor, bounded
     → HistorySnapshotProviding  ── @concurrent hop ──▶  SwiftDataHistorySnapshotStore
                                                           → PreviousPerformanceResolver
-    → ExerciseComparisonBuilder.build(workout:previousPerformances:)  ── main actor, bounded
+    → ExerciseComparisonBuilder.build(snapshot:previousPerformances:)  ── main actor, values only
 ```
 
 What it was: `compareWithPrevious(workout:)` called `previousPerformance` **once per
@@ -1383,7 +1383,7 @@ screen (this one fails against the `chartTimeframe` version); and a locked range
 | LegacyHistoryAttributing | `Domain/Interfaces/LegacyHistoryAttributing.swift` | The write seam, deliberately separate from the `HistorySnapshotProviding` read boundary. Sets `WorkoutExercise.exerciseId` on legacy rows and nothing else; idempotent, because a row that already has one is skipped |
 | SwiftDataLegacyHistoryAttributionStore | `Data/History/SwiftDataLegacyHistoryAttributionStore.swift` | `@ModelActor` owning its own `ModelContext` for that one write. `SwiftDataLegacyHistoryAttributionProvider.attributeLegacyRows` is the **`@concurrent`** entry point — without it the fetch and the `save()` would run on the calling ViewModel's main actor |
 | ExerciseProgressService | `Data/Progress/ExerciseProgressService.swift` | The vs-previous seam. Owns no `ModelContext`: `@MainActor` glue that runs `ExerciseComparisonBuilder` either side of one `@concurrent` boundary call. Does not feed the chart. |
-| ExerciseComparisonBuilder | `Domain/Services/ExerciseComparisonBuilder.swift` | **Pure, isolation-agnostic.** `makeLookup` reduces the current workout to `Sendable` values; `build` assembles the comparison rows from it plus the resolved predecessors. Runs on the main actor because the workout may be uncommitted. |
+| ExerciseComparisonBuilder | `Domain/Services/ExerciseComparisonBuilder.swift` | **Pure, isolation-agnostic.** `makeSnapshot` reduces the current workout to `Sendable` values — both the lookup the resolver needs and the per-set values the rows are built from; `build` assembles the comparison rows from that snapshot plus the resolved predecessors, and reads no `@Model` at all. Runs on the main actor because the workout may be uncommitted, and snapshots *before* the await because the session can be deleted during it (`docs/history-delete-race.md`). |
 | ExerciseUsageResolver | `Domain/Services/ExerciseUsageResolver.swift` | **Pure, isolation-agnostic.** The single definition of "the same piece of work": `slot(of:)`, `usage(of:in:)`, `belongs(_:to:)`, the picker's `options(in:liveSlotIds:matching:)` — which also flags a usage whose slot no live routine holds — the shared `sorted(_:)` order and `DescriptorRank`, and the default (plus the unknown-usage fallback) in `resolveSelection`. Shared by the chart aggregator, `FortschrittAggregator` and `PreviousPerformanceResolver`. |
 | PreviousPerformanceResolver | `Domain/Services/PreviousPerformanceResolver.swift` | **Pure, isolation-agnostic.** Resolves every exercise of one workout against the most recent comparable session, in a single pass. Its slot match calls `ExerciseUsageResolver.slot(of:)` — the same rule the chart segments usages by. Runs inside the model actor. |
 | PreviousPerformanceLookup | `Domain/Models/PreviousPerformanceLookup.swift` | The `Sendable` request: `before`, `routineId`, and one `Query` per exercise. Carries the workout's identity across the actor boundary without a `@Model` or a re-fetch. |

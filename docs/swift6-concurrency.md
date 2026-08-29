@@ -859,10 +859,20 @@ This shipped as a crash: see `docs/history-delete-race.md`. The remedy is app-le
 exclusion — `HistoryStoreGate` (`Domain/Services/`). Rule for new code: **a background walk of a
 SwiftData graph must be serialized against every context that can delete rows in it.**
 
-One subtlety worth preserving — the gate's `withAccess` is `nonisolated` on purpose. An isolated
-method that `await`s the body would let a second caller in through actor reentrancy, defeating the
-exclusion; being `nonisolated` (SE-0461 `nonisolated(nonsending)`) also means it runs on the
-caller's executor, so it does not disturb the `@concurrent` off-main guarantee of §1.
+One subtlety worth preserving — both of the gate's entry points are `nonisolated` on purpose. An
+isolated method that `await`s the body would let a second caller in through actor reentrancy,
+defeating the exclusion; being `nonisolated` (SE-0461 `nonisolated(nonsending)`) also means the body
+runs on the caller's executor, so it does not disturb the `@concurrent` off-main guarantee of §1.
+
+**Take the right entry point.** `withAccess` takes an `async` closure and is for the three
+`@ModelActor` reader providers, whose bodies must `await` their actor. Every **writer** —
+ViewModels, seeders, the watch ingestion coordinator — uses `withExclusiveAccess`, which takes a
+*synchronous* closure. The gate is not reentrant, so suspending inside a gated write deadlocks the
+app permanently with no crash, no log and no test able to catch it; the synchronous closure makes
+that a compile error. The two are separate names rather than overloads because a sync closure
+converts freely to `() async throws -> T`, so as overloads the `async` one would be silently
+selected the moment an `await` appeared and the deadlock would still compile. See
+`docs/history-delete-race.md`.
 
 ## 10. Rules for new code
 

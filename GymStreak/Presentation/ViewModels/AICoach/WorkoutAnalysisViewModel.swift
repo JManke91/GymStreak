@@ -18,6 +18,10 @@ import os
 /// UI-ready representation of a (partially) generated workout analysis.
 /// Mapped from `WorkoutAnalysisOutput` / its `PartiallyGenerated` snapshots
 /// so the view never touches FoundationModels types.
+///
+/// `headline` never comes from those snapshots — it is composed by
+/// `WorkoutAnalysisInput.headlineSentence` and handed in, so it is on screen from the
+/// first frame of the stream instead of arriving as the model's first tokens.
 struct WorkoutAnalysisContent: Equatable {
     struct Highlight: Equatable, Identifiable {
         let id: Int
@@ -40,9 +44,11 @@ struct WorkoutAnalysisContent: Equatable {
         self.closingObservation = closingObservation
     }
 
-    init(output: WorkoutAnalysisOutput) {
-        headline = output.headline
-        highlights = output.exerciseHighlights.enumerated().map { index, item in
+    /// A cached analysis, headline included — the cache is the only place the composed
+    /// headline survives between visits.
+    init(narrative: WorkoutAnalysisNarrative) {
+        headline = narrative.headline
+        highlights = narrative.exerciseHighlights.enumerated().map { index, item in
             Highlight(
                 id: index,
                 exerciseName: item.exerciseName,
@@ -50,11 +56,11 @@ struct WorkoutAnalysisContent: Equatable {
                 detail: item.detail
             )
         }
-        closingObservation = output.closingObservation
+        closingObservation = narrative.closingObservation
     }
 
-    init(partial: WorkoutAnalysisOutput.PartiallyGenerated) {
-        headline = partial.headline ?? ""
+    init(partial: WorkoutAnalysisOutput.PartiallyGenerated, headline: String) {
+        self.headline = headline
         highlights = (partial.exerciseHighlights ?? []).enumerated().map { index, item in
             Highlight(
                 id: index,
@@ -66,9 +72,9 @@ struct WorkoutAnalysisContent: Equatable {
         closingObservation = partial.closingObservation ?? ""
     }
 
-    /// Converts back to the cacheable output struct.
-    func toOutput() -> WorkoutAnalysisOutput {
-        WorkoutAnalysisOutput(
+    /// Converts to the cacheable narrative.
+    func toNarrative() -> WorkoutAnalysisNarrative {
+        WorkoutAnalysisNarrative(
             headline: headline,
             exerciseHighlights: highlights.map {
                 WorkoutAnalysisHighlight(
@@ -155,7 +161,7 @@ final class WorkoutAnalysisViewModel {
 
         if let cached = cache.loadWorkoutAnalysis(workoutId: workout.id) {
             logger.debug("Cache hit for workout analysis \(workout.id, privacy: .private)")
-            state = .success(content: WorkoutAnalysisContent(output: cached), isCached: true)
+            state = .success(content: WorkoutAnalysisContent(narrative: cached), isCached: true)
         }
     }
 
@@ -250,11 +256,18 @@ final class WorkoutAnalysisViewModel {
             return
         }
 
+        // `isAvailable()` sleeps two seconds on a model that is not ready yet, and
+        // `WorkoutDetailView.deleteWorkout` cancels this task and then deletes the session —
+        // so the resume must not read `workout` before checking. Everything below reads its
+        // id from this capture.
+        guard !Task.isCancelled else { return }
+        let workoutId = workout.id
+
         // 3. Cache hit (skipped when bypassing)
         if !bypassCache {
-            if let cached = cache.loadWorkoutAnalysis(workoutId: workout.id) {
-                logger.debug("Cache hit for workout analysis \(workout.id, privacy: .private)")
-                state = .success(content: WorkoutAnalysisContent(output: cached), isCached: true)
+            if let cached = cache.loadWorkoutAnalysis(workoutId: workoutId) {
+                logger.debug("Cache hit for workout analysis \(workoutId, privacy: .private)")
+                state = .success(content: WorkoutAnalysisContent(narrative: cached), isCached: true)
                 return
             }
         }
@@ -269,6 +282,9 @@ final class WorkoutAnalysisViewModel {
         // `prepareCoachState`, so the button the user just tapped would not be visible
         // without one, and the scan is off the main actor either way.
         let comparisons = await exerciseProgress.compareWithPrevious(workout: workout)
+        // `buildInput` walks the session, and `WorkoutDetailView.deleteWorkout` cancels this
+        // task before deleting it — which only helps if the cancellation is actually checked.
+        guard !Task.isCancelled else { return }
         guard let input = aggregator.buildInput(
             session: workout,
             locale: locale,
@@ -281,7 +297,7 @@ final class WorkoutAnalysisViewModel {
         }
 
         // 5. Stream
-        await stream(input: input, workoutId: workout.id)
+        await stream(input: input, workoutId: workoutId)
     }
 
     // MARK: - Availability helper
@@ -328,10 +344,18 @@ final class WorkoutAnalysisViewModel {
                 return
             }
 
-            var finalContent = WorkoutAnalysisContent()
+            // The composed headline is on screen before the first token arrives, and
+            // stays untouched by every snapshot after it. Resolved once — it walks the
+            // exercise list, which is not work to repeat per streaming snapshot.
+            let headline = input.headlineSentence
+            var finalContent = WorkoutAnalysisContent(headline: headline)
+            state = .streaming(content: finalContent)
             for try await snapshot in responseStream {
                 guard !Task.isCancelled else { break }
-                let content = WorkoutAnalysisContent(partial: snapshot.content)
+                let content = WorkoutAnalysisContent(
+                    partial: snapshot.content,
+                    headline: headline
+                )
                 finalContent = content
                 state = .streaming(content: content)
             }
@@ -344,7 +368,7 @@ final class WorkoutAnalysisViewModel {
 
             cache.saveWorkoutAnalysis(
                 workoutId: workoutId,
-                output: finalContent.toOutput()
+                narrative: finalContent.toNarrative()
             )
 
             let elapsed = ContinuousClock.now - start

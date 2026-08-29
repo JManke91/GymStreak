@@ -87,12 +87,12 @@ final class AICoachCache: AICoachCaching {
 
     // MARK: - Workout Analysis
 
-    func loadWorkoutAnalysis(workoutId: UUID) -> WorkoutAnalysisOutput? {
-        load(WorkoutAnalysisOutput.self, from: workoutAnalysisURL(workoutId))
+    func loadWorkoutAnalysis(workoutId: UUID) -> WorkoutAnalysisNarrative? {
+        load(WorkoutAnalysisNarrative.self, from: workoutAnalysisURL(workoutId))
     }
 
-    func saveWorkoutAnalysis(workoutId: UUID, output: WorkoutAnalysisOutput) {
-        save(output, to: workoutAnalysisURL(workoutId))
+    func saveWorkoutAnalysis(workoutId: UUID, narrative: WorkoutAnalysisNarrative) {
+        save(narrative, to: workoutAnalysisURL(workoutId))
     }
 
     func invalidateWorkoutAnalysis(workoutId: UUID) {
@@ -128,8 +128,12 @@ final class AICoachCache: AICoachCaching {
         // Version suffix: bumped whenever the content design changes so
         // pre-redesign cache entries are orphaned and regenerate.
         // v2: fact-based instead of volume-based. v3: first-time exercises
-        // excluded from PRs/highlights, German glossary.
-        root.appending(path: "workout_analysis_v3_\(id.uuidString).json", directoryHint: .notDirectory)
+        // excluded from PRs/highlights, German glossary. v4 (2026-08-29): the headline
+        // is composed in Swift rather than generated (`WorkoutAnalysisNarrative`) — the
+        // prefix is bumped rather than letting the old JSON decode, because a v3 file
+        // decodes cleanly into the new type and would keep serving the generated
+        // headline this fix exists to remove.
+        root.appending(path: "workout_analysis_v4_\(id.uuidString).json", directoryHint: .notDirectory)
     }
 
     // MARK: - Generic IO

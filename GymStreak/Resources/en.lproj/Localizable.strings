@@ -1028,6 +1028,20 @@
 "ai_coach.workout_analysis.header_label" = "COACH · ANALYSIS";
 "ai_coach.workout_analysis.error" = "Analysis could not be loaded.";
 "ai_coach.workout_analysis.error_retry" = "Try again";
+/* Workout analysis headline — composed in Swift, never generated (see WorkoutAnalysisInput.headlineSentence) */
+"ai_coach.workout_analysis.headline.pr" = "New best on %1$@: %2$@ kg × %3$d reps.";
+"ai_coach.workout_analysis.headline.pr_multiple" = "New best on %1$@: %2$@ kg × %3$d reps, plus %4$d more.";
+"ai_coach.workout_analysis.headline.all_improved" = "All %d exercises improved over the last session.";
+"ai_coach.workout_analysis.headline.one_improved" = "The one comparable exercise improved over the last session.";
+"ai_coach.workout_analysis.headline.some_improved" = "%1$d of %2$d exercises improved, the rest unchanged.";
+"ai_coach.workout_analysis.headline.all_declined" = "All %d exercises were below the last session.";
+"ai_coach.workout_analysis.headline.one_declined" = "The one comparable exercise was below the last session.";
+"ai_coach.workout_analysis.headline.some_declined" = "%1$d of %2$d exercises were below the last session, the rest unchanged.";
+"ai_coach.workout_analysis.headline.unchanged" = "Same weights and reps as the last session.";
+"ai_coach.workout_analysis.headline.mixed" = "Mixed session: %1$d improved, %2$d below the last session.";
+"ai_coach.workout_analysis.headline.mixed_with_swings" = "Mixed session: %1$d improved, %2$d below, %3$d up and down.";
+"ai_coach.workout_analysis.headline.no_comparison" = "First session with comparable data.";
+
 "ai_coach.settings.surface.workout_detail.title" = "Workout detail";
 "ai_coach.settings.surface.workout_detail.detail" = "Analysis when viewing past workouts";
 

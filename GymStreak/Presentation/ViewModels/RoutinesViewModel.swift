@@ -501,7 +501,7 @@ class RoutinesViewModel: ObservableObject {
     /// `Routine.workoutSessions` carries no delete rule, so SwiftData nullifies rather than
     /// cascades. See `docs/history-delete-race.md`.)
     func deleteRoutine(_ routine: Routine) async {
-        await historyStoreGate.withAccess {
+        await historyStoreGate.withExclusiveAccess {
             routineRepository.delete(routine)
             save()
         }
@@ -511,21 +511,35 @@ class RoutinesViewModel: ObservableObject {
     /// Removes an exercise from a routine and hands back everything needed to
     /// put it back — the sorting mode deletes immediately and offers an undo
     /// toast instead of a confirmation alert, and SwiftData deletion is final.
+    ///
+    /// `async` because it deletes a `RoutineExercise` row the History model actor may be
+    /// walking (`fetchLiveRoutineSlotIds` reads `routine.routineExercisesList`) — see
+    /// `historyStoreGate`. The whole pass is bracketed, not just the delete: reordering
+    /// outside the gate and saving inside it is the half-applied-state bug already fixed
+    /// once in `swapExercise`.
     @discardableResult
     func removeRoutineExercise(
         _ routineExercise: RoutineExercise,
         from routine: Routine
-    ) -> RemovedRoutineExerciseSnapshot? {
-        guard let index = routine.routineExercisesList.firstIndex(where: { $0.id == routineExercise.id }) else {
-            return nil
+    ) async -> RemovedRoutineExerciseSnapshot? {
+        let snapshot = await historyStoreGate.withExclusiveAccess { () -> RemovedRoutineExerciseSnapshot? in
+            guard let index = routine.routineExercisesList.firstIndex(where: { $0.id == routineExercise.id }) else {
+                return nil
+            }
+            let snapshot = RemovedRoutineExerciseSnapshot(routineExercise)
+            routine.routineExercises?.remove(at: index)
+            routineRepository.delete(routineExercise)
+            // Closes the gap the deletion left and keeps any superset it belonged to
+            // contiguous.
+            SupersetOrderingService.normalizeOrdering(in: routine)
+            routine.updatedAt = Date()
+            save()
+            return snapshot
         }
-        let snapshot = RemovedRoutineExerciseSnapshot(routineExercise)
-        routine.routineExercises?.remove(at: index)
-        routineRepository.delete(routineExercise)
-        // Closes the gap the deletion left and keeps any superset it belonged to
-        // contiguous.
-        SupersetOrderingService.normalizeOrdering(in: routine)
-        updateRoutine(routine)
+        guard let snapshot else { return nil }
+        // Outside the gate, like `deleteRoutine`: the refetch reads nothing the History
+        // actor can invalidate and holding the gate across it only widens the wait.
+        fetchRoutines()
         return snapshot
     }
 
@@ -721,7 +735,14 @@ class RoutinesViewModel: ObservableObject {
     /// Returns `false` when the requested shape is Pro-only for this user — the
     /// refusal happens *before* any mutation, so an existing schedule survives
     /// it intact rather than being cleared or downgraded. The check lives here
-    /// rather than only at the mode picker so no call site can bypass it.
+    /// rather than only at the mode picker so no call site can bypass it. The
+    /// paywall is raised outside the gate: it writes nothing, and presenting UI
+    /// while holding the gate would make a History rebuild wait on the user.
+    ///
+    /// `async` because the duplicate collapse below deletes `RoutineSchedule` rows the
+    /// History model actor may be holding — both reader actors prefetch `\.schedules` on
+    /// their `Routine` fetch — see `historyStoreGate`. The whole write runs inside the gate,
+    /// not just the deletes: the survivor's edits and the losers' removal are one plan.
     @discardableResult
     func setSchedule(
         for routine: Routine,
@@ -729,7 +750,7 @@ class RoutinesViewModel: ObservableObject {
         intervalDays: Int,
         weekdays: Set<Int>,
         referenceDate: Date
-    ) -> Bool {
+    ) async -> Bool {
         guard !ScheduleGatingPolicy.isScheduleTypeLocked(
             type,
             isPro: proEntitlements.isPro,
@@ -739,50 +760,64 @@ class RoutinesViewModel: ObservableObject {
             return false
         }
 
-        let schedule: RoutineSchedule
-        if let existing = routine.schedule {
-            schedule = existing
-            // `schedules` is a to-many holding at most one plan, but two devices
-            // planning offline — or two repair passes — can leave a second row.
-            // Collapse the losers while editing so none survives to be promoted
-            // by `Routine.schedule` later.
-            for duplicate in (routine.schedules ?? []) where duplicate !== existing {
-                duplicate.routine = nil
-                routineRepository.delete(duplicate)
+        await historyStoreGate.withExclusiveAccess {
+            let schedule: RoutineSchedule
+            if let existing = routine.schedule {
+                schedule = existing
+                // `schedules` is a to-many holding at most one plan, but two devices
+                // planning offline — or two repair passes — can leave a second row.
+                // Collapse the losers while editing so none survives to be promoted
+                // by `Routine.schedule` later.
+                for duplicate in (routine.schedules ?? []) where duplicate !== existing {
+                    duplicate.routine = nil
+                    routineRepository.delete(duplicate)
+                }
+            } else {
+                schedule = RoutineSchedule()
+                // Setting the child's to-one is what establishes the link — SwiftData
+                // maintains `routine.schedules` as its inverse, exactly as
+                // `addConfiguredExercise` does for a RoutineExercise. Assigning the
+                // parent side instead is what CloudKit failed to mirror.
+                schedule.routine = routine
+                routineRepository.insert(schedule)
             }
-        } else {
-            schedule = RoutineSchedule()
-            // Setting the child's to-one is what establishes the link — SwiftData
-            // maintains `routine.schedules` as its inverse, exactly as
-            // `addConfiguredExercise` does for a RoutineExercise. Assigning the
-            // parent side instead is what CloudKit failed to mirror.
-            schedule.routine = routine
-            routineRepository.insert(schedule)
+            schedule.type = type
+            schedule.intervalDays = max(1, intervalDays)
+            schedule.weekdays = weekdays
+            // Reference date is the "start fresh" anchor for the cadence; the last
+            // completed workout takes over once one lands on or after it.
+            schedule.startDate = referenceDate
+            schedule.isActive = true
+            routine.updatedAt = Date()
+            save()
         }
-        schedule.type = type
-        schedule.intervalDays = max(1, intervalDays)
-        schedule.weekdays = weekdays
-        // Reference date is the "start fresh" anchor for the cadence; the last
-        // completed workout takes over once one lands on or after it.
-        schedule.startDate = referenceDate
-        schedule.isActive = true
-        updateRoutine(routine)
+        fetchRoutines()
         return true
     }
 
     /// Clears a routine's plan entirely. Never gated: §7's Rule 4 constrains what
     /// a user may *build*, and removing a plan only ever gives capability back.
-    func removeSchedule(from routine: Routine) {
-        let schedules = routine.schedules ?? []
-        guard !schedules.isEmpty else { return }
-        // Every row, not just the one `Routine.schedule` surfaces: deleting only
-        // the winner would promote a duplicate and the removed plan would
-        // reappear — card, weekly goal and next-due ordering included.
-        for schedule in schedules {
-            schedule.routine = nil
-            routineRepository.delete(schedule)
+    ///
+    /// `async` because it deletes `RoutineSchedule` rows the History model actor may be
+    /// holding — both reader actors prefetch `\.schedules` on their `Routine` fetch — see
+    /// `historyStoreGate`. The fetch, the deletes and the save all run inside the gate.
+    func removeSchedule(from routine: Routine) async {
+        let didRemove = await historyStoreGate.withExclusiveAccess { () -> Bool in
+            let schedules = routine.schedules ?? []
+            guard !schedules.isEmpty else { return false }
+            // Every row, not just the one `Routine.schedule` surfaces: deleting only
+            // the winner would promote a duplicate and the removed plan would
+            // reappear — card, weekly goal and next-due ordering included.
+            for schedule in schedules {
+                schedule.routine = nil
+                routineRepository.delete(schedule)
+            }
+            routine.updatedAt = Date()
+            save()
+            return true
         }
-        updateRoutine(routine)
+        guard didRemove else { return }
+        fetchRoutines()
     }
 
     // MARK: - Rep Range Management

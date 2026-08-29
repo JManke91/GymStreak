@@ -631,7 +631,7 @@ class WorkoutViewModel: ObservableObject {
     func completeWorkout(updateTemplate: Bool, notes: String) async {
         guard let session = currentSession else { return }
 
-        await historyStoreGate.withAccess {
+        await historyStoreGate.withExclusiveAccess {
             // Update workout details
             session.notes = notes
             session.didUpdateTemplate = updateTemplate
@@ -1857,7 +1857,7 @@ class WorkoutViewModel: ObservableObject {
     ) async {
         objectWillChange.send()
 
-        await historyStoreGate.withAccess {
+        await historyStoreGate.withExclusiveAccess {
             commitEditedWorkout(session, exerciseDrafts: exerciseDrafts, updateTemplate: updateTemplate)
         }
 
@@ -1973,7 +1973,7 @@ class WorkoutViewModel: ObservableObject {
             mutation()
             return
         }
-        await historyStoreGate.withAccess { mutation() }
+        await historyStoreGate.withExclusiveAccess { mutation() }
     }
 
     /// Deletes a completed session and its cascaded exercises and sets.
@@ -1986,7 +1986,7 @@ class WorkoutViewModel: ObservableObject {
     /// reproduced exactly that on device — the second landed inside the rebuild the first
     /// one had triggered. See `HistoryStoreGate` and `docs/history-delete-race.md`.
     func deleteWorkout(_ session: WorkoutSession) async {
-        await historyStoreGate.withAccess {
+        await historyStoreGate.withExclusiveAccess {
             workoutSessionRepository.delete(session)
             save()
         }

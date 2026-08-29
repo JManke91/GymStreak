@@ -1028,6 +1028,20 @@
 "ai_coach.workout_analysis.header_label" = "COACH · ANALYSE";
 "ai_coach.workout_analysis.error" = "Analyse konnte nicht geladen werden.";
 "ai_coach.workout_analysis.error_retry" = "Erneut versuchen";
+/* Überschrift der Workout-Analyse — in Swift zusammengesetzt, nie generiert (siehe WorkoutAnalysisInput.headlineSentence) */
+"ai_coach.workout_analysis.headline.pr" = "Neuer Bestwert bei %1$@: %2$@ kg × %3$d Wdh.";
+"ai_coach.workout_analysis.headline.pr_multiple" = "Neuer Bestwert bei %1$@: %2$@ kg × %3$d Wdh., dazu %4$d weitere.";
+"ai_coach.workout_analysis.headline.all_improved" = "Alle %d Übungen besser als in der letzten Einheit.";
+"ai_coach.workout_analysis.headline.one_improved" = "Die eine vergleichbare Übung war besser als in der letzten Einheit.";
+"ai_coach.workout_analysis.headline.some_improved" = "%1$d von %2$d Übungen verbessert, der Rest unverändert.";
+"ai_coach.workout_analysis.headline.all_declined" = "Alle %d Übungen unter der letzten Einheit.";
+"ai_coach.workout_analysis.headline.one_declined" = "Die eine vergleichbare Übung lag unter der letzten Einheit.";
+"ai_coach.workout_analysis.headline.some_declined" = "%1$d von %2$d Übungen unter der letzten Einheit, der Rest unverändert.";
+"ai_coach.workout_analysis.headline.unchanged" = "Gleiche Gewichte und Wiederholungen wie in der letzten Einheit.";
+"ai_coach.workout_analysis.headline.mixed" = "Gemischte Einheit: %1$d besser, %2$d schwächer.";
+"ai_coach.workout_analysis.headline.mixed_with_swings" = "Gemischte Einheit: %1$d besser, %2$d schwächer, %3$d auf und ab.";
+"ai_coach.workout_analysis.headline.no_comparison" = "Erste Einheit mit vergleichbaren Daten.";
+
 "ai_coach.settings.surface.workout_detail.title" = "Workout-Detail";
 "ai_coach.settings.surface.workout_detail.detail" = "Analyse beim Ansehen vergangener Workouts";
 
