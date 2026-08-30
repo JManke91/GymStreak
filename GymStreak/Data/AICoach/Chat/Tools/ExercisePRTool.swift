@@ -24,8 +24,16 @@ struct ExercisePRTool: Tool {
 
     let facts: any ChatFactProviding
 
+    /// The unit the fact line's weights are written in. Captured when
+    /// `CoachChatService` builds its tools, and the tools are rebuilt when the reader
+    /// changes it — a `Tool` is `Sendable` and immutable, so there is nothing to mutate.
+    let weightUnit: WeightUnit
+
     func call(arguments: Arguments) async throws -> String {
-        let result = await facts.exercisePRFacts(exerciseName: arguments.exerciseName)
+        let result = await facts.exercisePRFacts(
+            exerciseName: arguments.exerciseName,
+            weightUnit: weightUnit
+        )
         #if DEBUG
         // Fact log for the Phase 0 device drill: lets an on-screen answer be
         // checked against what the tool actually returned.

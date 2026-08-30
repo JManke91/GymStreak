@@ -74,7 +74,7 @@ struct ExerciseDeepDiveGroundingTests {
     /// there is no month in the prompt for a model to make more precise.
     @Test("No peak figure and no peak month reach the prompt")
     func peakIsWithheldFromThePrompt() {
-        let prompt = makeInput().toPromptText()
+        let prompt = makeInput().toPromptText(in: .kilograms)
 
         // The peak's own block is gone entirely — label, figures and month.
         #expect(!prompt.contains("When:"))
@@ -91,7 +91,7 @@ struct ExerciseDeepDiveGroundingTests {
     /// A blended view holds nothing but the workload — so its prompt has no month at all.
     @Test("A blended prompt carries no month beyond the history range")
     func blendedPromptCarriesNoPeak() {
-        let prompt = makeInput(blendedUsageCount: 3).toPromptText()
+        let prompt = makeInput(blendedUsageCount: 3).toPromptText(in: .kilograms)
 
         #expect(prompt.contains("BLENDED VIEW"))
         #expect(!prompt.contains("20,0"))
@@ -105,7 +105,7 @@ struct ExerciseDeepDiveGroundingTests {
     @Test("The prompt contains no date more precise than a month")
     func promptCarriesNoDayLevelDate() throws {
         for locale in ["de_DE", "en_US"] {
-            let prompt = makeInput(locale: locale).toPromptText()
+            let prompt = makeInput(locale: locale).toPromptText(in: .kilograms)
             // `20.08.2026`, `2026-08-20`, `08/20/2026` — any day-level date form.
             let dayForms = try NSRegularExpression(
                 pattern: #"\d{1,4}[./-]\d{1,2}[./-]\d{2,4}"#
@@ -125,7 +125,7 @@ struct ExerciseDeepDiveGroundingTests {
     /// be worked out from a label.
     @Test("Training frequency is spelled out, not left as a bare ratio")
     func frequencyCarriesItsDirection() {
-        let prompt = makeInput().toPromptText()
+        let prompt = makeInput().toPromptText(in: .kilograms)
 
         #expect(prompt.contains("Training frequency: 2,0 sessions per week"))
         #expect(prompt.contains("Training frequency: 1,5 sessions per week"))
@@ -138,7 +138,7 @@ struct ExerciseDeepDiveGroundingTests {
     /// reader's training, so it no longer appears in the prompt at all.
     @Test("The recent segment's label carries no window for the model to quote")
     func recentSegmentLabelNamesNoWindow() {
-        let prompt = makeInput().toPromptText()
+        let prompt = makeInput().toPromptText(in: .kilograms)
 
         #expect(prompt.contains("Recent segment:"))
         #expect(!prompt.contains("4–8"))
@@ -153,7 +153,7 @@ struct ExerciseDeepDiveGroundingTests {
     /// one. Never describe a shape that presupposes data the prompt does not hold.
     @Test("The progression block offers a change, and never implies an endpoint value")
     func progressionOffersNoEndpointToName() {
-        let prompt = makeInput().toPromptText()
+        let prompt = makeInput().toPromptText(in: .kilograms)
 
         #expect(prompt.contains("no starting or ending 1RM value is available"))
         #expect(prompt.contains("Estimated 1RM change:"))
@@ -168,14 +168,14 @@ struct ExerciseDeepDiveGroundingTests {
 
     @Test("The peak sentence carries the peak's own figures, in the reader's convention")
     func peakSentenceIsComposedInSwift() {
-        let german = makeInput(locale: "de_DE").peakSentence
+        let german = makeInput(locale: "de_DE").peakSentence(in: .kilograms)
         #expect(german.contains("20,0"))
         #expect(german.contains("24,0"))
         #expect(german.contains("August 2026"))
         // The template resolved — an unresolved key would come back as the key itself.
         #expect(!german.contains("ai_coach.deep_dive.peak"))
 
-        let english = makeInput(locale: "en_US").peakSentence
+        let english = makeInput(locale: "en_US").peakSentence(in: .kilograms)
         #expect(english.contains("20.0"))
         #expect(english.contains("24.0"))
     }

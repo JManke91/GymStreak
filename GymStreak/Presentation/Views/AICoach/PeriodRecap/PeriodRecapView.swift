@@ -95,7 +95,7 @@ private struct PeriodRecapViewInternal: View {
         // made from this screen's own paywall would otherwise leave the lock up
         // with a dead Unlock button (docs/pro-subscription.md §3c).
         .task(id: viewModel.allowanceReloadKey) {
-            await viewModel.load(modelContext: modelContext)
+            await viewModel.load(modelContext: modelContext, weightUnit: weightUnit)
         }
     }
 
@@ -169,7 +169,7 @@ private struct PeriodRecapViewInternal: View {
                     .font(AICoachTheme.mono(size: 10, weight: .regular))
                     .foregroundStyle(Color.white.opacity(0.2))
                 Button {
-                    Task { await viewModel.regenerate(modelContext: modelContext) }
+                    Task { await viewModel.regenerate(modelContext: modelContext, weightUnit: weightUnit) }
                 } label: {
                     Text("ai_coach.period_recap.cache.regenerate".localized)
                         .font(AICoachTheme.mono(size: 10, weight: .regular))
@@ -198,7 +198,7 @@ private struct PeriodRecapViewInternal: View {
         return Button {
             if !isActive {
                 HapticManager.shared.selection()
-                Task { await viewModel.setRange(range, modelContext: modelContext) }
+                Task { await viewModel.setRange(range, modelContext: modelContext, weightUnit: weightUnit) }
             }
         } label: {
             Text(chipLabel(for: range))
@@ -268,7 +268,7 @@ private struct PeriodRecapViewInternal: View {
                 metrics: metrics,
                 mode: .offer(periodLabel: viewModel.range.label(locale: locale))
             ) {
-                Task { await viewModel.generateNow(modelContext: modelContext) }
+                Task { await viewModel.generateNow(modelContext: modelContext, weightUnit: weightUnit) }
             }
         case .gated(let metrics):
             allowanceView(metrics: metrics, mode: .gated) {
@@ -416,7 +416,7 @@ private struct PeriodRecapViewInternal: View {
         VStack(spacing: 16) {
             FallbackHintLine(text: "ai_coach.period_recap.error.banner".localized)
             Button {
-                Task { await viewModel.regenerate(modelContext: modelContext) }
+                Task { await viewModel.regenerate(modelContext: modelContext, weightUnit: weightUnit) }
             } label: {
                 Text("ai_coach.period_recap.error.retry".localized)
                     .font(.system(size: 14, weight: .medium, design: .rounded))

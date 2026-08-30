@@ -1017,7 +1017,7 @@
 "ai_coach.deep_dive.scope.all_time_only" = "Gesamte Historie";
 // In Swift zusammengesetzt, nie generiert — siehe ExerciseDeepDiveInput.peakSentence.
 // %1$@ Gewicht, %2$d Wiederholungen, %3$@ geschätztes 1RM, %4$@ Monat.
-"ai_coach.deep_dive.peak" = "Bestwert: %1$@ kg × %2$d Wdh. (geschätztes 1RM %3$@ kg), %4$@.";
+"ai_coach.deep_dive.peak" = "Bestwert: %1$@ × %2$d Wdh. (geschätztes 1RM %3$@), %4$@.";
 
 // Workout analysis (workout detail)
 "ai_coach.workout_analysis.button_title" = "Coach fragen";
@@ -1029,8 +1029,8 @@
 "ai_coach.workout_analysis.error" = "Analyse konnte nicht geladen werden.";
 "ai_coach.workout_analysis.error_retry" = "Erneut versuchen";
 /* Überschrift der Workout-Analyse — in Swift zusammengesetzt, nie generiert (siehe WorkoutAnalysisInput.headlineSentence) */
-"ai_coach.workout_analysis.headline.pr" = "Neuer Bestwert bei %1$@: %2$@ kg × %3$d Wdh.";
-"ai_coach.workout_analysis.headline.pr_multiple" = "Neuer Bestwert bei %1$@: %2$@ kg × %3$d Wdh., dazu %4$d weitere.";
+"ai_coach.workout_analysis.headline.pr" = "Neuer Bestwert bei %1$@: %2$@ × %3$d Wdh.";
+"ai_coach.workout_analysis.headline.pr_multiple" = "Neuer Bestwert bei %1$@: %2$@ × %3$d Wdh., dazu %4$d weitere.";
 "ai_coach.workout_analysis.headline.all_improved" = "Alle %d Übungen besser als in der letzten Einheit.";
 "ai_coach.workout_analysis.headline.one_improved" = "Die eine vergleichbare Übung war besser als in der letzten Einheit.";
 "ai_coach.workout_analysis.headline.some_improved" = "%1$d von %2$d Übungen verbessert, der Rest unverändert.";

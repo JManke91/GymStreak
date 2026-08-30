@@ -3,6 +3,7 @@
 //  GymStreak
 //
 
+import Foundation
 import FoundationModels
 
 @Generable
@@ -58,10 +59,23 @@ struct PRSummary {
 extension PostWorkoutRecapInput {
     /// Produces a plain-text serialisation suitable for use as the user-turn prompt
     /// in a `LanguageModelSession`. Keeps all values factual and readable.
-    func toPromptText() -> String {
+    ///
+    /// **This is the conversion boundary.** The stored properties above stay
+    /// canonical kilograms — which is what keeps their `…Kg` names and their
+    /// `@Guide` descriptions true — and every figure is converted here, once, on
+    /// its way into the string the model reads. See docs/weight-unit-preference.md §13.
+    ///
+    /// - Parameter unit: the unit the reader has chosen. `PostWorkoutRecapInstructions`
+    ///   must be built with the same one, or the prompt tells the model to echo a unit
+    ///   the figures are not in.
+    func toPromptText(in unit: WeightUnit) -> String {
+        let unitWord = AICoachUnitVocabulary.unitWord(unit)
+        func weight(_ kilograms: Double) -> String {
+            "\(AICoachUnitVocabulary.decimal(kilograms, in: unit, locale: .init(identifier: "en_US_POSIX"))) \(unitWord)"
+        }
         var lines: [String] = []
         lines.append("Locale: \(locale)")
-        lines.append("Workout volume: \(String(format: "%.1f", workoutVolumeKg)) kg")
+        lines.append("Workout volume: \(weight(workoutVolumeKg))")
         lines.append("Total sets: \(totalSets)")
         lines.append("Duration: \(durationMinutes) min")
         lines.append("Sessions this week (including today): \(sessionsThisWeek)")
@@ -70,14 +84,14 @@ extension PostWorkoutRecapInput {
             let delta = g.percentVsFourWeekAverage >= 0
                 ? "+\(g.percentVsFourWeekAverage)%"
                 : "\(g.percentVsFourWeekAverage)%"
-            lines.append("  - \(g.name): \(String(format: "%.1f", g.volumeKg)) kg (\(delta) vs 4-week average)")
+            lines.append("  - \(g.name): \(weight(g.volumeKg)) (\(delta) vs 4-week average)")
         }
         if newPRs.isEmpty {
             lines.append("New PRs: none")
         } else {
             lines.append("New PRs:")
             for pr in newPRs {
-                lines.append("  - \(pr.exerciseName): \(String(format: "%.1f", pr.weightKg)) kg × \(pr.reps)")
+                lines.append("  - \(pr.exerciseName): \(weight(pr.weightKg)) × \(pr.reps)")
             }
         }
         return lines.joined(separator: "\n")

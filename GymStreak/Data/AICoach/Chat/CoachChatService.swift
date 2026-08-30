@@ -49,6 +49,17 @@ final class CoachChatService: CoachChatServicing {
 
     private var factProvider: ChatFactProviding?
     private var tools: [any Tool] = []
+
+    /// The unit the tools' fact lines and the system prompt speak. Kilograms until
+    /// `setWeightUnit` says otherwise, which `CoachChatViewModel.onAppear` does before
+    /// `configure` on the very first open — so a pounds reader never sees a kilogram
+    /// turn. See docs/weight-unit-preference.md §13.
+    private var weightUnit: WeightUnit = .kilograms
+
+    /// Set when a unit change arrives mid-turn: the re-seed waits for `endTurn`.
+    /// Rebuilding the session while a turn is streaming would build its digest from
+    /// `messages` before that turn's answer lands, so the next turn would lose it.
+    private var needsUnitRebuild = false
     private var session: LanguageModelSession?
     /// Carries the turn's outcome as its value so the DEBUG drill — which runs
     /// turns without going through `send` — can await the same handle `cancel()`
@@ -74,11 +85,7 @@ final class CoachChatService: CoachChatServicing {
     func configure(factProvider: ChatFactProviding) {
         guard self.factProvider == nil else { return }
         self.factProvider = factProvider
-        self.tools = [
-            NextWorkoutTool(facts: factProvider),
-            ExercisePRTool(facts: factProvider),
-            WorkoutHistoryTool(facts: factProvider),
-        ]
+        rebuildTools()
 
         // Restore the persisted conversation. The transcript is NOT restored —
         // the fresh session instead carries a digest of the restored messages
@@ -90,6 +97,41 @@ final class CoachChatService: CoachChatServicing {
         } else {
             rebuildSession(withDigest: nil)
         }
+    }
+
+    /// Points the tools and the instructions at a different weight unit.
+    ///
+    /// Called on every chat appearance, so a Settings switch made between two visits is
+    /// picked up. A *change* rebuilds the tools (each captures the unit) and rebuilds the
+    /// session through the digest path — the instructions state the unit as a rule the
+    /// model answers by, and an already-created session carries the old rule for its whole
+    /// life. The visible `messages` are untouched; only the model's working set is
+    /// re-seeded, exactly as a context-overflow condensation re-seeds it.
+    ///
+    /// Turns already on screen keep the unit they were written in. Re-generating them is
+    /// not possible — they are a conversation, not a cached document — and re-asking is
+    /// the user's own, cheap remedy.
+    ///
+    /// A change that lands **mid-turn** is deferred to `endTurn` / `cancel`: re-seeding
+    /// while a turn streams would build the digest from `messages` before that turn's
+    /// answer arrives, silently dropping it from the model's working set.
+    func setWeightUnit(_ unit: WeightUnit) {
+        guard unit != weightUnit else { return }
+        weightUnit = unit
+        // Before `configure`, there is nothing to rebuild: it will build both with the
+        // unit just stored.
+        guard factProvider != nil else { return }
+        guard !isResponding else {
+            needsUnitRebuild = true
+            return
+        }
+        applyWeightUnitToSession()
+    }
+
+    private func applyWeightUnitToSession() {
+        needsUnitRebuild = false
+        rebuildTools()
+        condense()
     }
 
     func prewarm() {
@@ -135,6 +177,7 @@ final class CoachChatService: CoachChatServicing {
         }
         isResponding = false
         reportTurnOutcome(outcome)
+        if needsUnitRebuild { applyWeightUnitToSession() }
     }
 
     func reset() {
@@ -173,6 +216,9 @@ final class CoachChatService: CoachChatServicing {
         streamTask = nil
         store.save(messages: messages, turnTopics: turnTopics)
         reportTurnOutcome(outcome)
+        // A unit change that arrived mid-turn is applied now, so its digest carries the
+        // answer that just landed.
+        if needsUnitRebuild { applyWeightUnitToSession() }
     }
 
     /// Fires the in-flight turn's outcome handler once and drops it.
@@ -374,8 +420,17 @@ final class CoachChatService: CoachChatServicing {
 
     // MARK: - Helpers
 
+    private func rebuildTools() {
+        guard let factProvider else { return }
+        tools = [
+            NextWorkoutTool(facts: factProvider),
+            ExercisePRTool(facts: factProvider, weightUnit: weightUnit),
+            WorkoutHistoryTool(facts: factProvider, weightUnit: weightUnit),
+        ]
+    }
+
     private func rebuildSession(withDigest digest: String?) {
-        let instructions = CoachChatInstructions.build(digest: digest)
+        let instructions = CoachChatInstructions.build(digest: digest, unit: weightUnit)
         session = LanguageModelSession(tools: tools, instructions: Instructions(instructions))
     }
 

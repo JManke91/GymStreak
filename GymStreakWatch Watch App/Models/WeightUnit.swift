@@ -58,6 +58,19 @@ enum WeightUnit: String, CaseIterable, Sendable {
             .value
     }
 
+    /// Canonical kilograms → the value to display, rounded to this unit's
+    /// precision.
+    ///
+    /// `converting(fromKilograms:)` keeps the full conversion residue — 100 kg is
+    /// 220.46226… lb — which every `Presentation/` call site bounds with a format
+    /// style's `fractionLength`. The AI coach builds its prompt lines with
+    /// `String(format:)` and has no format style to lean on, so it rounds here
+    /// rather than printing six decimals at the model.
+    func roundedDisplay(fromKilograms kilograms: Double) -> Double {
+        let scale = pow(10.0, Double(fractionDigits))
+        return (converting(fromKilograms: kilograms) * scale).rounded() / scale
+    }
+
     // MARK: - Display precision
 
     /// Digits after the decimal separator. Kilograms keep two — 0.25 kg

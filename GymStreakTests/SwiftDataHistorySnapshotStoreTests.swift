@@ -123,7 +123,7 @@ struct SwiftDataHistorySnapshotStoreTests {
         let heartbeatTask = Task { await heartbeat.run() }
         await Task.yield()
 
-        let line = await provider.exercisePRFacts(exerciseName: "Exercise 0")
+        let line = await provider.exercisePRFacts(exerciseName: "Exercise 0", weightUnit: .kilograms)
 
         heartbeatTask.cancel()
         await heartbeatTask.value
@@ -301,7 +301,8 @@ struct SwiftDataHistorySnapshotStoreTests {
             exerciseId: exercise.id,
             exerciseName: exercise.name,
             usage: .combined,
-            locale: Locale(identifier: "en_US")
+            locale: Locale(identifier: "en_US"),
+            weightUnit: .kilograms
         )
 
         heartbeatTask.cancel()

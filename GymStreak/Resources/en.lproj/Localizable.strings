@@ -1017,7 +1017,7 @@
 "ai_coach.deep_dive.scope.all_time_only" = "All time";
 // Composed in Swift, never generated — see ExerciseDeepDiveInput.peakSentence.
 // %1$@ weight, %2$d reps, %3$@ estimated 1RM, %4$@ month.
-"ai_coach.deep_dive.peak" = "Best: %1$@ kg × %2$d reps (est. 1RM %3$@ kg), %4$@.";
+"ai_coach.deep_dive.peak" = "Best: %1$@ × %2$d reps (est. 1RM %3$@), %4$@.";
 
 // Workout analysis (workout detail)
 "ai_coach.workout_analysis.button_title" = "Ask the Coach";
@@ -1029,8 +1029,8 @@
 "ai_coach.workout_analysis.error" = "Analysis could not be loaded.";
 "ai_coach.workout_analysis.error_retry" = "Try again";
 /* Workout analysis headline — composed in Swift, never generated (see WorkoutAnalysisInput.headlineSentence) */
-"ai_coach.workout_analysis.headline.pr" = "New best on %1$@: %2$@ kg × %3$d reps.";
-"ai_coach.workout_analysis.headline.pr_multiple" = "New best on %1$@: %2$@ kg × %3$d reps, plus %4$d more.";
+"ai_coach.workout_analysis.headline.pr" = "New best on %1$@: %2$@ × %3$d reps.";
+"ai_coach.workout_analysis.headline.pr_multiple" = "New best on %1$@: %2$@ × %3$d reps, plus %4$d more.";
 "ai_coach.workout_analysis.headline.all_improved" = "All %d exercises improved over the last session.";
 "ai_coach.workout_analysis.headline.one_improved" = "The one comparable exercise improved over the last session.";
 "ai_coach.workout_analysis.headline.some_improved" = "%1$d of %2$d exercises improved, the rest unchanged.";

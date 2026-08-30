@@ -23,10 +23,17 @@ struct PeriodRecapAggregator {
 
     // MARK: - Public API
 
+    /// - Parameter weightUnit: the reader's unit. Only the trend magnitudes need it —
+    ///   they are the one place this aggregator renders a weight as text, and a rendered
+    ///   string is where the conversion has to happen. Everything numeric stays canonical
+    ///   kilograms, `HeadlineMetrics.totalVolumeKg` included, and every kilogram-magnitude
+    ///   threshold below is applied before anything converts. See
+    ///   docs/weight-unit-preference.md §13.
     func buildInput(
         range: PeriodRange,
         locale: Locale,
         modelContext: ModelContext,
+        weightUnit: WeightUnit,
         now: Date = Date()
     ) -> PeriodRecapInput {
         let interval = range.dateInterval(now: now)
@@ -46,7 +53,7 @@ struct PeriodRecapAggregator {
             recommendationFact = nil
         } else {
             let liveExercises = (try? modelContext.fetch(FetchDescriptor<Exercise>())) ?? []
-            trends = buildTrends(sessions: sessions, liveExercises: liveExercises, maxCount: 5)
+            trends = buildTrends(sessions: sessions, liveExercises: liveExercises, maxCount: 5, weightUnit: weightUnit)
             correlations = buildCorrelations(sessions: sessions, locale: locale, now: now)
             recommendationFact = buildRecommendation(
                 sessions: sessions,
@@ -74,9 +81,16 @@ struct PeriodRecapAggregator {
         range: PeriodRange,
         locale: Locale,
         modelContext: ModelContext,
+        weightUnit: WeightUnit,
         now: Date = Date()
     ) -> PeriodRecapInput {
-        let full = buildInput(range: range, locale: locale, modelContext: modelContext, now: now)
+        let full = buildInput(
+            range: range,
+            locale: locale,
+            modelContext: modelContext,
+            weightUnit: weightUnit,
+            now: now
+        )
         return PeriodRecapInput(
             locale: full.locale,
             periodLabel: full.periodLabel,
@@ -225,7 +239,8 @@ struct PeriodRecapAggregator {
     private func buildTrends(
         sessions: [WorkoutSession],
         liveExercises: [Exercise],
-        maxCount: Int
+        maxCount: Int,
+        weightUnit: WeightUnit
     ) -> [TrendFinding] {
         // Build lookup tables mirroring FortschrittAggregator's resolveLive pattern
         var liveById: [UUID: Exercise] = [:]
@@ -275,6 +290,11 @@ struct PeriodRecapAggregator {
             let absSlope: Double
         }
 
+        // A **kilogram** magnitude, and it stays one: this asks whether a trend is worth
+        // mentioning at all, which is a judgement about real progress and not about the
+        // number the reader happens to read. It is applied to the est-1RM slope below,
+        // which is in canonical kilograms — converting it into pounds and comparing
+        // against a pounds slope would silently double the bar for a pounds user.
         let slopeThreshold = 0.5 // kg/session threshold to be "improving" or "regressing"
 
         var candidates: [TrendCandidate] = []
@@ -290,9 +310,12 @@ struct PeriodRecapAggregator {
                 direction = "plateaued"
             }
 
+            // The one rendered weight on this surface, so the one conversion: canonical
+            // kilograms in, the reader's unit out, once. The prompt emits this string
+            // verbatim and `PeriodRecapInput` never touches it again.
             let deltaKg = (points.last?.est1RM ?? 0) - (points.first?.est1RM ?? 0)
             let sign = deltaKg >= 0 ? "+" : ""
-            let magnitude = "\(sign)\(String(format: "%.1f", deltaKg)) kg"
+            let magnitude = "\(sign)\(AICoachUnitVocabulary.decimal(deltaKg, in: weightUnit, locale: .init(identifier: "en_US_POSIX"))) \(AICoachUnitVocabulary.unitWord(weightUnit))"
 
             candidates.append(TrendCandidate(
                 name: data.name,

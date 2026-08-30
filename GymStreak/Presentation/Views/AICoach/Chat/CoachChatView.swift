@@ -30,6 +30,7 @@ private struct CoachChatViewInternal: View {
 
     @EnvironmentObject private var dependencies: AppDependencies
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.weightUnit) private var weightUnit
     @State private var viewModel: CoachChatViewModel
     @FocusState private var inputFocused: Bool
 
@@ -91,7 +92,12 @@ private struct CoachChatViewInternal: View {
                 .disabled(viewModel.isEmptyConversation && !viewModel.isResponding)
             }
         }
-        .onAppear { viewModel.onAppear(makeFactProvider: dependencies.makeChatFactProvider) }
+        .onAppear {
+            viewModel.onAppear(
+                weightUnit: weightUnit,
+                makeFactProvider: dependencies.makeChatFactProvider
+            )
+        }
         // In-flight streams are cancelled by the presenting fullScreenCover's
         // onDismiss (ContentView) — not here, so pushing settings on top of the
         // chat doesn't kill a streaming answer.

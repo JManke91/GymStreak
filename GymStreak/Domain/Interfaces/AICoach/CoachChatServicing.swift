@@ -34,6 +34,11 @@ protocol CoachChatServicing: AnyObject {
     /// a stable, app-lifetime read boundary).
     func configure(factProvider: ChatFactProviding)
 
+    /// Points the tools' fact lines and the system prompt at `unit`. Idempotent, and
+    /// safe before `configure`. A change rebuilds the model session so the new unit
+    /// reaches the instructions; the visible conversation survives.
+    func setWeightUnit(_ unit: WeightUnit)
+
     /// Warms the model weights so the first token arrives faster.
     func prewarm()
 

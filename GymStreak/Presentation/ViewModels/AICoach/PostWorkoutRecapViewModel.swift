@@ -104,26 +104,43 @@ final class PostWorkoutRecapViewModel {
     /// The generation itself is fire-and-forget, like `WorkoutAnalysisViewModel`: the caller
     /// keeps no handle, so `cancel()` can stop it from anywhere — including the moment the
     /// session it describes is discarded, which is not the moment the view goes away.
+    /// - Parameter weightUnit: the reader's unit, read from `\.weightUnit` by the view
+    ///   that calls this — the same way `locale` arrives. See
+    ///   docs/weight-unit-preference.md §13.
     func generate(
         session: WorkoutSession,
         locale: Locale,
+        weightUnit: WeightUnit,
         modelContext: ModelContext
     ) {
         // `cancel()` rather than `runTask?.cancel()`: `start` returns without spawning a task
         // when it gates out, and a stale cancelled handle would then outlive it.
         cancel()
-        start(session: session, locale: locale, modelContext: modelContext, bypassCache: false)
+        start(
+            session: session,
+            locale: locale,
+            weightUnit: weightUnit,
+            modelContext: modelContext,
+            bypassCache: false
+        )
     }
 
     /// Forces a fresh generation, ignoring any cached result.
     func regenerate(
         session: WorkoutSession,
         locale: Locale,
+        weightUnit: WeightUnit,
         modelContext: ModelContext
     ) {
         cancel()
         cache.invalidatePostWorkout(workoutId: session.id)
-        start(session: session, locale: locale, modelContext: modelContext, bypassCache: true)
+        start(
+            session: session,
+            locale: locale,
+            weightUnit: weightUnit,
+            modelContext: modelContext,
+            bypassCache: true
+        )
     }
 
     /// Stops any in-flight generation. Called on view disappear, and when the session being
@@ -138,6 +155,7 @@ final class PostWorkoutRecapViewModel {
     /// The value-typed hand-off from the session-reading half to the streaming half.
     private struct PendingGeneration {
         let input: PostWorkoutRecapInput
+        let weightUnit: WeightUnit
         let workoutId: UUID
     }
 
@@ -147,6 +165,7 @@ final class PostWorkoutRecapViewModel {
     private func start(
         session: WorkoutSession,
         locale: Locale,
+        weightUnit: WeightUnit,
         modelContext: ModelContext,
         bypassCache: Bool
     ) {
@@ -198,6 +217,7 @@ final class PostWorkoutRecapViewModel {
         // 6. Build aggregated input — the last read of `session`.
         let pending = PendingGeneration(
             input: aggregator.buildInput(session: session, locale: locale, modelContext: modelContext),
+            weightUnit: weightUnit,
             workoutId: workoutId
         )
 
@@ -216,7 +236,7 @@ final class PostWorkoutRecapViewModel {
             return
         }
 
-        await stream(input: pending.input, workoutId: pending.workoutId)
+        await stream(input: pending.input, weightUnit: pending.weightUnit, workoutId: pending.workoutId)
     }
 
     // MARK: - Availability helper
@@ -240,11 +260,14 @@ final class PostWorkoutRecapViewModel {
 
     // MARK: - Streaming
 
-    private func stream(input: PostWorkoutRecapInput, workoutId: UUID) async {
+    private func stream(input: PostWorkoutRecapInput, weightUnit: WeightUnit, workoutId: UUID) async {
         let start = ContinuousClock.now
 
         do {
-            guard let responseStream = try await service.streamPostWorkoutRecap(input: input) else {
+            guard let responseStream = try await service.streamPostWorkoutRecap(
+                input: input,
+                weightUnit: weightUnit
+            ) else {
                 // Service returned nil — disabled or unavailable
                 state = .unavailable
                 return

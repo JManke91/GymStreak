@@ -165,7 +165,8 @@ struct SwiftDataHistorySnapshotProvider: HistorySnapshotProviding,
         exerciseId: UUID,
         exerciseName: String,
         usage: DeepDiveUsage,
-        locale: Locale
+        locale: Locale,
+        weightUnit: WeightUnit
     ) async -> ExerciseDeepDiveAggregate {
         let store = await storeTask.value
         return await gate.withAccess {
@@ -173,7 +174,8 @@ struct SwiftDataHistorySnapshotProvider: HistorySnapshotProviding,
                 exerciseId: exerciseId,
                 exerciseName: exerciseName,
                 usage: usage,
-                locale: locale
+                locale: locale,
+                weightUnit: weightUnit
             )
         }
     }
@@ -426,7 +428,8 @@ actor SwiftDataHistorySnapshotStore {
         exerciseId: UUID,
         exerciseName: String,
         usage: DeepDiveUsage,
-        locale: Locale
+        locale: Locale,
+        weightUnit: WeightUnit
     ) async -> ExerciseDeepDiveAggregate {
         // Same degradation as above. The caller (`ExerciseDeepDiveViewModel.run`) checks
         // cancellation itself before acting on this, so an empty aggregate never reaches
@@ -440,6 +443,7 @@ actor SwiftDataHistorySnapshotStore {
                 exerciseName: exerciseName,
                 locale: locale,
                 modelContext: modelContext,
+                weightUnit: weightUnit,
                 usage: usage
             )
         }

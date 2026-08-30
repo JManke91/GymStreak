@@ -132,7 +132,10 @@ struct ProgressionSegment {
     @Guide(description: "Average number of sessions per week during this segment")
     let avgSessionsPerWeek: Double
 
-    @Guide(description: "Human-readable magnitude of change during this segment, e.g. '+5.0 kg est. 1RM' or 'stable'")
+    // Already rendered — by `ExerciseDeepDiveAggregator`, in the reader's unit and their
+    // decimal convention — so this example names no unit: the value is "+5.0 kg est. 1RM"
+    // for one reader and "+11.0 lb est. 1RM" for the next.
+    @Guide(description: "Human-readable magnitude of change during this segment, already carrying its weight unit, or 'stable'")
     let magnitude: String
 }
 
@@ -144,7 +147,15 @@ extension ExerciseDeepDiveInput {
     /// "20.0" for an English one — so the model only ever copies it. Asking it to convert
     /// separators would be one more transformation it can get wrong, and a coach writing
     /// "20.0 kg" beside a UI that says "44,1 lb" reads as foreign.
-    private func decimal(_ value: Double) -> String {
+    ///
+    /// Takes **canonical kilograms** and converts, like every other figure this type
+    /// writes — see `toPromptText(in:)`.
+    private func decimal(_ kilograms: Double, in unit: WeightUnit) -> String {
+        AICoachUnitVocabulary.decimal(kilograms, in: unit, locale: Locale(identifier: locale))
+    }
+
+    /// A frequency, not a weight — same reader convention, no conversion.
+    private func sessionsPerWeek(_ value: Double) -> String {
         String(format: "%.1f", locale: Locale(identifier: locale), value)
     }
 
@@ -163,16 +174,18 @@ extension ExerciseDeepDiveInput {
     /// which is what every other user-facing string on this screen does — the two agree
     /// because `locale` is the reader's current locale.
     ///
-    /// **Still kg, deliberately.** The whole AI Coach input layer is kg and the unit fix
-    /// is its own ticket, so this sentence keeps the divergence the model's prose already
-    /// had rather than closing it here in isolation. It is now the cheapest place to close
-    /// it, though: once `WeightUnit` reaches `ExerciseDeepDiveInput`, this is one
-    /// `String` and one strings key, not a prompt rule.
-    var peakSentence: String {
-        "ai_coach.deep_dive.peak".localized(
-            decimal(peak.weightKg),
+    /// **App-authored copy, so it reads in the reader's unit.** It is drawn directly
+    /// under a chart headline that already says `44,1 lb`; left in kilograms it read as
+    /// the app contradicting itself, which is why this — one `String` and one strings
+    /// key — was the cheapest site in the whole unit conversion. Both figures are handed
+    /// to the template preformatted, via `AICoachUnitVocabulary.labelled`, per the `%@`
+    /// pattern `docs/weight-unit-preference.md` §7 makes binding.
+    func peakSentence(in unit: WeightUnit) -> String {
+        let readerLocale = Locale(identifier: locale)
+        return "ai_coach.deep_dive.peak".localized(
+            AICoachUnitVocabulary.labelled(peak.weightKg, in: unit, locale: readerLocale),
             peak.reps,
-            decimal(peak.estimatedOneRMKg),
+            AICoachUnitVocabulary.labelled(peak.estimatedOneRMKg, in: unit, locale: readerLocale),
             peak.monthLabel
         )
     }
@@ -184,7 +197,15 @@ extension ExerciseDeepDiveInput {
     /// labelled one. The model is told the figure is unavailable and why, because the
     /// only reliable way to stop a language model stating a number is to not give it the
     /// number. **No peak reaches it either**, for the same reason — see `peakSentence`.
-    func toPromptText() -> String {
+    ///
+    /// **This is the conversion boundary for the one weight it does emit.**
+    /// `estimatedOneRMDeltaKg` stays canonical kilograms in the DTO — the aggregator's
+    /// kilogram-magnitude "is this worth mentioning" thresholds are applied to it before
+    /// anything converts — and it is converted here, once, as it becomes text. The
+    /// segment magnitudes arrive already rendered in this unit from
+    /// `ExerciseDeepDiveAggregator`, which is where those strings are made.
+    /// See docs/weight-unit-preference.md §13.
+    func toPromptText(in unit: WeightUnit) -> String {
         var lines: [String] = []
         lines.append("Locale: \(locale)")
         lines.append("Exercise: \(exerciseName)")
@@ -215,7 +236,7 @@ extension ExerciseDeepDiveInput {
                 // data the prompt does not hold.
                 lines.append("Overall progression across the whole history — a change only; no starting or ending 1RM value is available:")
                 let deltaSign = overallProgression.estimatedOneRMDeltaKg >= 0 ? "+" : ""
-                lines.append("  Estimated 1RM change: \(deltaSign)\(decimal(overallProgression.estimatedOneRMDeltaKg)) kg")
+                lines.append("  Estimated 1RM change: \(deltaSign)\(decimal(overallProgression.estimatedOneRMDeltaKg, in: unit)) \(AICoachUnitVocabulary.unitWord(unit))")
                 lines.append("  Percent change: \(overallProgression.percentChange >= 0 ? "+" : "")\(overallProgression.percentChange)%")
                 lines.append("")
             }
@@ -230,7 +251,7 @@ extension ExerciseDeepDiveInput {
             // handed `1.3` under that label the model wrote "1,3 Wochen pro Sitzung" —
             // the ratio inverted. It now has the phrase to copy rather than a direction
             // to work out.
-            lines.append("  Training frequency: \(decimal(strongestSegment.avgSessionsPerWeek)) sessions per week")
+            lines.append("  Training frequency: \(sessionsPerWeek(strongestSegment.avgSessionsPerWeek)) sessions per week")
         }
         if let currentSegment {
             lines.append("")
@@ -242,7 +263,7 @@ extension ExerciseDeepDiveInput {
             lines.append("  Period: \(currentSegment.range)")
             lines.append("  Classification: \(currentSegment.classification)")
             lines.append("  Change: \(currentSegment.magnitude)")
-            lines.append("  Training frequency: \(decimal(currentSegment.avgSessionsPerWeek)) sessions per week")
+            lines.append("  Training frequency: \(sessionsPerWeek(currentSegment.avgSessionsPerWeek)) sessions per week")
         }
         return lines.joined(separator: "\n")
     }

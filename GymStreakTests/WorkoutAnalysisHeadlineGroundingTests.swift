@@ -77,7 +77,7 @@ struct WorkoutAnalysisHeadlineGroundingTests {
 
     @Test("The PR headline names the exercise that set the PR, with its own figures")
     func headlineNamesThePRExercise() {
-        let headline = makeInput().headlineSentence
+        let headline = makeInput().headlineSentence(in: .kilograms)
 
         #expect(headline.contains("Dip"))
         #expect(headline.contains("16"))
@@ -93,7 +93,7 @@ struct WorkoutAnalysisHeadlineGroundingTests {
         let headline = makeInput(newPRs: [
             PRSummary(exerciseName: "Dip", weightKg: 16, reps: 7),
             PRSummary(exerciseName: "Overhead Triceps", weightKg: 21.5, reps: 12)
-        ]).headlineSentence
+        ]).headlineSentence(in: .kilograms)
 
         #expect(headline.contains("Dip"))
         #expect(headline.contains("1"))
@@ -108,7 +108,7 @@ struct WorkoutAnalysisHeadlineGroundingTests {
                 makeExercise(name: "Flying Chest", weight: 40, reps: 6, previousWeight: 40, previousReps: 6),
                 makeExercise(name: "Dip", weight: 16, reps: 7, previousWeight: 16, previousReps: 5)
             ]
-        ).headlineSentence
+        ).headlineSentence(in: .kilograms)
 
         // One of two improved, the other unchanged.
         #expect(headline.contains("1"))
@@ -118,17 +118,17 @@ struct WorkoutAnalysisHeadlineGroundingTests {
 
     @Test("Weights read in the locale's decimal notation, without a trailing zero")
     func headlineFormatsWeightForTheReader() {
-        let german = makeInput(newPRs: [PRSummary(exerciseName: "Dip", weightKg: 82.5, reps: 5)]).headlineSentence
+        let german = makeInput(newPRs: [PRSummary(exerciseName: "Dip", weightKg: 82.5, reps: 5)]).headlineSentence(in: .kilograms)
         #expect(german.contains("82,5"))
 
         let english = makeInput(
             locale: "en_US",
             newPRs: [PRSummary(exerciseName: "Dip", weightKg: 82.5, reps: 5)]
-        ).headlineSentence
+        ).headlineSentence(in: .kilograms)
         #expect(english.contains("82.5"))
 
         // A whole number stays whole — "16 kg", never "16,0 kg".
-        #expect(makeInput().headlineSentence.contains("16,0") == false)
+        #expect(makeInput().headlineSentence(in: .kilograms).contains("16,0") == false)
     }
 
     @Test("The model has no headline field to write")
@@ -149,7 +149,7 @@ struct WorkoutAnalysisHeadlineGroundingTests {
     /// paragraphs. Both symptoms shipped from one example line, so there is no example.
     @Test("No example exercise name remains in the instructions")
     func instructionsCarryNoExampleExerciseName() {
-        let prompt = WorkoutAnalysisInstructions.systemPrompt
+        let prompt = WorkoutAnalysisInstructions.systemPrompt(unit: .kilograms)
 
         #expect(!prompt.contains("Bankdrücken"))
         // The translate-everything rule now carves exercise names out explicitly.
@@ -166,7 +166,7 @@ struct WorkoutAnalysisHeadlineGroundingTests {
 
     @Test("The session summary reaches the prompt as context, not as a headline order")
     func promptStatesTheSummaryAsContext() {
-        let prompt = makeInput().toPromptText()
+        let prompt = makeInput().toPromptText(in: .kilograms)
 
         #expect(prompt.contains("Session summary:"))
         #expect(!prompt.contains("Headline fact:"))

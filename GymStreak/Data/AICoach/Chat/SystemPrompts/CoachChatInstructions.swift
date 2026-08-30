@@ -21,14 +21,17 @@ enum CoachChatInstructions {
     /// - Parameter digest: an optional Swift-side conversation digest appended
     ///   after a context-overflow condensation, so a fresh session keeps the gist
     ///   of earlier turns without carrying the full transcript.
-    static func build(digest: String?) -> String {
+    /// - Parameter unit: the unit the tools' fact lines are already written in.
+    ///   The ambient context line states it as a rule the model answers by, so it
+    ///   has to be the active one — see docs/weight-unit-preference.md §13.
+    static func build(digest: String?, unit: WeightUnit) -> String {
         var prompt = """
         You are the GymStreak coach, an on-device assistant that answers questions about the user's own workout data. Keep replies to 1–3 sentences.
 
         Context:
         - Today is \(todayLine()).
         - Week starts on Monday.
-        - All weights are in kilograms (kg).
+        - All weights are in \(AICoachUnitVocabulary.englishName(unit)) (\(AICoachUnitVocabulary.unitWord(unit))).
         - Reply in the SAME language as the user's latest message (a German question gets a German answer, an English question an English answer). The facts returned by tools are written in English; translate ALL of them — including weekday and month names — into that language.
 
         How to answer:

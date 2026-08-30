@@ -7,6 +7,7 @@ struct SaveWorkoutView: View {
     @EnvironmentObject private var dependencies: AppDependencies
     /// Kept only to pass through to the (out-of-scope) AI Coach recap ViewModel API.
     @Environment(\.modelContext) private var modelContext
+    @Environment(\.weightUnit) private var weightUnit
 
     @State private var updateTemplate = true
     @State private var notes = ""
@@ -92,6 +93,7 @@ struct SaveWorkoutView: View {
                     recapVM.generate(
                         session: session,
                         locale: Locale.current,
+                        weightUnit: weightUnit,
                         modelContext: modelContext
                     )
                 }
@@ -155,6 +157,7 @@ struct SaveWorkoutView: View {
                     recapVM.regenerate(
                         session: session,
                         locale: Locale.current,
+                        weightUnit: weightUnit,
                         modelContext: modelContext
                     )
                 }

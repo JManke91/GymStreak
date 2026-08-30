@@ -34,13 +34,13 @@ Voice and tone constraints (enforced via system prompt):
 ### Data flow (per surface)
 
 ```
-SwiftData (WorkoutSession / WorkoutExercise / ExerciseSet)
+SwiftData (WorkoutSession / WorkoutExercise / ExerciseSet)   — canonical kilograms
   ↓
-Aggregator.build*(…) → *Input struct
+Aggregator.build*(…) → *Input struct                         — still kilograms
   ↓
-*Input.toPromptText() → String with embedded locale identifier
+*Input.toPromptText(in: weightUnit) → String                 — CONVERTS, once
   ↓
-AICoachService.streamXxx(input:) → LanguageModelSession.ResponseStream<OutputType>
+AICoachService.streamXxx(input:weightUnit:) → LanguageModelSession.ResponseStream<OutputType>
   ↓
 for snapshot in stream → snapshot.content → *Output.PartiallyGenerated
   ↓
@@ -53,6 +53,31 @@ The exercise deep-dive inserts one boundary into that first step: its aggregator
 the History `@ModelActor` behind `ExerciseDeepDiveFactProviding`, and what reaches the
 ViewModel is a `Sendable` `ExerciseDeepDiveAggregate`, never a `ModelContext` or a
 `@Model` (§3, ticket 02). The other three surfaces still aggregate on the caller.
+
+### The weight unit (kg / lb)
+
+Weights are stored in kilograms everywhere and converted **at the point a string is made**
+— `toPromptText(in:)`, the two aggregator-rendered `magnitude` strings, `ChatFactBuilder`'s
+fact lines, and the two sentences Swift composes for the reader. The input DTOs stay
+kilograms, so their `…Kg` names and their `@Guide` descriptions stay true.
+
+The unit travels **beside** the input (`streamXxx(input:weightUnit:)`) rather than inside
+it: the inputs are `@Generable`, so a `WeightUnit` property would need `FoundationModels`
+in a Domain type the watch copies verbatim. Views read `@Environment(\.weightUnit)` and
+pass it in with `locale`.
+
+Three rules that are easy to get wrong:
+
+1. **Every prompt's worked examples carry the unit too.** These prompts teach exact
+   echoing, so a hardcoded `87.5 kg` example teaches a pounds reader's model to write "kg".
+2. **A `@Guide(description:)` cannot name the active unit** — it is a literal in a static
+   schema. Output guides say *copy the input's unit word*; the prompt names the unit.
+3. **kg-magnitude significance thresholds stay in kilograms** and are applied before
+   conversion, or a pounds user's bar rises by 2.2×.
+
+`Domain/Services/AICoach/AICoachUnitVocabulary.swift` does the rendering — `Presentation/`'s
+`WeightFormatting` is off-limits to Domain, but both read the same `unit.weight.*` keys.
+Full rationale in `docs/weight-unit-preference.md` §13.
 
 ### Four-layer pattern
 
@@ -332,6 +357,12 @@ GymStreak/
 - Period recap entries are invalidated when any workout in that period changes.
 - Deep-dive entries are keyed per **(exercise, usage, last-set timestamp)** and auto-invalidate via that timestamp, which is itself resolved for the selected usage. Filenames carry an `exercise_deep_dive_v2_` prefix and store `ExerciseDeepDiveNarrative` — the generated paragraphs plus the Swift-composed peak sentence, which has to be persisted because the appear-time cache probe fetches only a timestamp and never re-walks history.
 - Workout analysis entries are permanent (keyed by immutable `workoutId`).
+- **A unit switch does not invalidate anything.** Cached copy keeps the unit it was written
+  in, and so does a chat turn already on screen; every subsequent generation uses the new
+  unit. Regenerating instead would spend a free user's monthly allowance unit
+  (`docs/pro-subscription.md` §5e) to rewrite text they have already read, for a rare
+  one-time act whose own remedy is one tap on Regenerate. See
+  `docs/weight-unit-preference.md` §13.
 - **Format migration**: `AICoachCache.load` returns `nil` on a decode failure and the surface treats it as a miss, so a changed output shape needs no migration code. Bump the filename prefix anyway when the shape changes (`period_recap_v2_`, `exercise_deep_dive_v2_`, `workout_analysis_v4_`): a silent miss costs a free user a monthly allowance unit (`docs/pro-subscription.md` §5e), and a deliberate bump makes that a decision instead of an accident.
 
 ---
@@ -499,7 +530,8 @@ The Watch app is unaffected. FoundationModels is not available on watchOS. All A
 - All AI Coach keys are grouped under `// MARK: - AI Coach` at the bottom of both files.
 - Keys follow the pattern `ai_coach.<surface>.<element>`.
 - Interpolated strings use `String(format: "key".localized, arg1, arg2)` following the codebase's existing pattern.
-- The `locale` field is embedded in every aggregator's `toPromptText()` output as `Locale.current.identifier` (e.g. `de_DE`). The system prompt instructs the model: for `de_*` use German; for `en_*` use English; for any other locale, use English.
+- The `locale` field is embedded in every aggregator's `toPromptText(in:)` output as `Locale.current.identifier` (e.g. `de_DE`). The system prompt instructs the model: for `de_*` use German; for `en_*` use English; for any other locale, use English.
+- **No coach string bakes a unit word into its value.** `ai_coach.deep_dive.peak` and `ai_coach.workout_analysis.headline.pr{,_multiple}` — the only coach copy the app composes itself — take a preformatted weight via `%@`, per `docs/weight-unit-preference.md` §7.
 
 ---
 

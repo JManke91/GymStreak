@@ -72,14 +72,18 @@ struct ChatFactProvider: ChatFactProviding {
         return await gate.withAccess { await store.nextWorkoutFacts() }
     }
 
-    @concurrent func exercisePRFacts(exerciseName: String) async -> String {
+    @concurrent func exercisePRFacts(exerciseName: String, weightUnit: WeightUnit) async -> String {
         let store = await storeTask.value
-        return await gate.withAccess { await store.exercisePRFacts(exerciseName: exerciseName) }
+        return await gate.withAccess {
+            await store.exercisePRFacts(exerciseName: exerciseName, weightUnit: weightUnit)
+        }
     }
 
-    @concurrent func workoutHistoryFacts(timeframe: ChatHistoryTimeframe) async -> String {
+    @concurrent func workoutHistoryFacts(timeframe: ChatHistoryTimeframe, weightUnit: WeightUnit) async -> String {
         let store = await storeTask.value
-        return await gate.withAccess { await store.workoutHistoryFacts(timeframe: timeframe) }
+        return await gate.withAccess {
+            await store.workoutHistoryFacts(timeframe: timeframe, weightUnit: weightUnit)
+        }
     }
 }
 
@@ -144,20 +148,25 @@ actor ChatFactStore {
         return ChatFactBuilder.nextWorkoutFacts(routines: routines, completedSessions: sessions)
     }
 
-    func exercisePRFacts(exerciseName: String) async -> String {
+    func exercisePRFacts(exerciseName: String, weightUnit: WeightUnit) async -> String {
         let library = fetched("library") { try modelContext.fetch(FetchDescriptor<Exercise>()) }
         let sessions = fetched("sessions") { try CompletedSessionFetch.withFullGraph(in: modelContext) }
         return ChatFactBuilder.exercisePRFacts(
             exerciseName: exerciseName,
             library: library,
-            completedSessions: sessions
+            completedSessions: sessions,
+            weightUnit: weightUnit
         )
     }
 
-    func workoutHistoryFacts(timeframe: ChatHistoryTimeframe) async -> String {
+    func workoutHistoryFacts(timeframe: ChatHistoryTimeframe, weightUnit: WeightUnit) async -> String {
         // `WorkoutSession.totalVolume` walks exercises → sets, so this one needs the graph.
         let sessions = fetched("sessions") { try CompletedSessionFetch.withFullGraph(in: modelContext) }
-        return ChatFactBuilder.workoutHistoryFacts(timeframe: timeframe, completedSessions: sessions)
+        return ChatFactBuilder.workoutHistoryFacts(
+            timeframe: timeframe,
+            completedSessions: sessions,
+            weightUnit: weightUnit
+        )
     }
 
     /// Degrades a failed fetch to empty — but logs it, because the user-visible symptom

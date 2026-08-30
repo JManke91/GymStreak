@@ -23,8 +23,14 @@ struct WorkoutHistoryTool: Tool {
 
     let facts: any ChatFactProviding
 
+    /// The unit the fact line's total volume is written in — see `ExercisePRTool`.
+    let weightUnit: WeightUnit
+
     func call(arguments: Arguments) async throws -> String {
-        let result = await facts.workoutHistoryFacts(timeframe: arguments.timeframe)
+        let result = await facts.workoutHistoryFacts(
+            timeframe: arguments.timeframe,
+            weightUnit: weightUnit
+        )
         #if DEBUG
         // Fact log for the Phase 0 device drill: lets an on-screen answer be
         // checked against what the tool actually returned.

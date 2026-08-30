@@ -426,6 +426,7 @@ struct WorkoutDetailView: View {
                         analysisVM.generate(
                             workout: workout,
                             locale: Locale.current,
+                            weightUnit: weightUnit,
                             modelContext: modelContext,
                             exerciseProgress: dependencies.exerciseProgressService
                         )
@@ -440,6 +441,7 @@ struct WorkoutDetailView: View {
                             analysisVM.regenerate(
                                 workout: workout,
                                 locale: Locale.current,
+                                weightUnit: weightUnit,
                                 modelContext: modelContext,
                                 exerciseProgress: dependencies.exerciseProgressService
                             )

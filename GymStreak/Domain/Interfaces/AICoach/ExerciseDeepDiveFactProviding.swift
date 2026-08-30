@@ -60,10 +60,14 @@ protocol ExerciseDeepDiveFactProviding: Sendable {
     ///     library entries share a name.
     ///   - usage: the usage the screen is showing — selection and picker label together.
     ///   - locale: the reader's locale, which the input's month labels are written in.
+    ///   - weightUnit: the reader's weight unit. It reaches the aggregate because the
+    ///     segment magnitudes are *rendered* there, as text — everything that stays a
+    ///     number stays canonical kilograms. See docs/weight-unit-preference.md §13.
     func fetchDeepDiveAggregate(
         exerciseId: UUID,
         exerciseName: String,
         usage: DeepDiveUsage,
-        locale: Locale
+        locale: Locale,
+        weightUnit: WeightUnit
     ) async -> ExerciseDeepDiveAggregate
 }

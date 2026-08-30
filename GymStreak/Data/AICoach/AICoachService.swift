@@ -27,7 +27,10 @@ import os
 ///
 /// **Iterating a stream (Wave 3 pattern):**
 /// ```swift
-/// guard let stream = try await AICoachService.shared.streamPostWorkoutRecap(input: input) else {
+/// guard let stream = try await AICoachService.shared.streamPostWorkoutRecap(
+///     input: input,
+///     weightUnit: weightUnit
+/// ) else {
 ///     // surface disabled or unavailable — show nothing
 ///     return
 /// }
@@ -62,12 +65,16 @@ final class AICoachService: AICoachServicing {
     ///
     /// Returns `nil` when the post-workout surface is disabled or the model is unavailable.
     func streamPostWorkoutRecap(
-        input: PostWorkoutRecapInput
+        input: PostWorkoutRecapInput,
+        weightUnit: WeightUnit
     ) async throws -> LanguageModelSession.ResponseStream<PostWorkoutRecapOutput>? {
         guard preferences.isPostWorkoutEffectivelyEnabled, availability.isAvailable else { return nil }
         return await stream(
-            instructions: PostWorkoutRecapInstructions.systemPrompt,
-            promptText: input.toPromptText(),
+            // Instructions and prompt take the same unit, always: the instructions tell
+            // the model to echo the input's unit word, so a mismatch here teaches it to
+            // write the wrong one.
+            instructions: PostWorkoutRecapInstructions.systemPrompt(unit: weightUnit),
+            promptText: input.toPromptText(in: weightUnit),
             outputType: PostWorkoutRecapOutput.self,
             useCase: "post_workout",
             maximumResponseTokens: 200
@@ -84,11 +91,15 @@ final class AICoachService: AICoachServicing {
     /// Returns `nil` when the period recap surface is disabled or the model is unavailable.
     func streamPeriodRecap(
         buildInput: () -> PeriodRecapInput,
-        buildCompactInput: () -> PeriodRecapInput
+        buildCompactInput: () -> PeriodRecapInput,
+        weightUnit: WeightUnit
     ) async throws -> LanguageModelSession.ResponseStream<PeriodRecapOutput>? {
         guard preferences.periodRecapEnabled, preferences.isEffectivelyEnabled, availability.isAvailable else { return nil }
 
-        let instructions = PeriodRecapInstructions.systemPrompt
+        // The recap's figures are rendered into the trend magnitudes by
+        // `PeriodRecapAggregator`, which the caller already built with this unit; the
+        // instructions have to name the same one.
+        let instructions = PeriodRecapInstructions.systemPrompt(unit: weightUnit)
         let primary = buildInput()
         let promptText = primary.toPromptText()
 
@@ -126,7 +137,8 @@ final class AICoachService: AICoachServicing {
     ///
     /// Returns `nil` when the exercise deep-dive surface is disabled or the model is unavailable.
     func streamExerciseDeepDive(
-        input: ExerciseDeepDiveInput
+        input: ExerciseDeepDiveInput,
+        weightUnit: WeightUnit
     ) async throws -> LanguageModelSession.ResponseStream<ExerciseDeepDiveOutput>? {
         guard preferences.exerciseDeepDiveEnabled, preferences.isEffectivelyEnabled, availability.isAvailable else { return nil }
         return await stream(
@@ -139,7 +151,7 @@ final class AICoachService: AICoachServicing {
                 // — see `AICoachLocaleDirective`.
                 localeIdentifier: input.locale
             ),
-            promptText: input.toPromptText(),
+            promptText: input.toPromptText(in: weightUnit),
             outputType: ExerciseDeepDiveOutput.self,
             useCase: "exercise_deep_dive",
             maximumResponseTokens: 400
@@ -163,12 +175,15 @@ final class AICoachService: AICoachServicing {
     ///
     /// Returns `nil` when the workout detail surface is disabled or the model is unavailable.
     func streamWorkoutAnalysis(
-        input: WorkoutAnalysisInput
+        input: WorkoutAnalysisInput,
+        weightUnit: WeightUnit
     ) async throws -> LanguageModelSession.ResponseStream<WorkoutAnalysisOutput>? {
         guard preferences.isWorkoutDetailEffectivelyEnabled, availability.isAvailable else { return nil }
         return await stream(
-            instructions: WorkoutAnalysisInstructions.systemPrompt,
-            promptText: input.toPromptText(),
+            // Same unit for both halves — the instructions' German example patterns spell
+            // the unit word out, so they must agree with the figures.
+            instructions: WorkoutAnalysisInstructions.systemPrompt(unit: weightUnit),
+            promptText: input.toPromptText(in: weightUnit),
             outputType: WorkoutAnalysisOutput.self,
             useCase: "workout_analysis",
             maximumResponseTokens: 300

@@ -73,7 +73,10 @@ struct TrendFinding {
     @Guide(description: "Direction of the trend: 'improved', 'plateaued', 'regressed', or 'mixed'")
     let direction: String
 
-    @Guide(description: "Signed estimated-1RM change over the period, e.g. '+8.5 kg'")
+    // Already rendered — by `PeriodRecapAggregator`, in the reader's unit — so this
+    // example names no unit: the value is "+8.5 kg" for one reader and "+18.7 lb"
+    // for the next. The prompt emits it verbatim; nothing here converts.
+    @Guide(description: "Signed estimated-1RM change over the period, already carrying its weight unit")
     let magnitude: String
 }
 

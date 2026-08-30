@@ -65,22 +65,42 @@ final class FakeAICoachService: AICoachServicing {
     var isUnavailable = false
     private(set) var prewarmCount = 0
 
+    /// The unit each call was made with, so a test can assert the reader's choice
+    /// actually reached the generation boundary.
+    private(set) var requestedWeightUnits: [WeightUnit] = []
+
     func streamPostWorkoutRecap(
-        input: PostWorkoutRecapInput
-    ) async throws -> LanguageModelSession.ResponseStream<PostWorkoutRecapOutput>? { nil }
+        input: PostWorkoutRecapInput,
+        weightUnit: WeightUnit
+    ) async throws -> LanguageModelSession.ResponseStream<PostWorkoutRecapOutput>? {
+        requestedWeightUnits.append(weightUnit)
+        return nil
+    }
 
     func streamPeriodRecap(
         buildInput: () -> PeriodRecapInput,
-        buildCompactInput: () -> PeriodRecapInput
-    ) async throws -> LanguageModelSession.ResponseStream<PeriodRecapOutput>? { nil }
+        buildCompactInput: () -> PeriodRecapInput,
+        weightUnit: WeightUnit
+    ) async throws -> LanguageModelSession.ResponseStream<PeriodRecapOutput>? {
+        requestedWeightUnits.append(weightUnit)
+        return nil
+    }
 
     func streamExerciseDeepDive(
-        input: ExerciseDeepDiveInput
-    ) async throws -> LanguageModelSession.ResponseStream<ExerciseDeepDiveOutput>? { nil }
+        input: ExerciseDeepDiveInput,
+        weightUnit: WeightUnit
+    ) async throws -> LanguageModelSession.ResponseStream<ExerciseDeepDiveOutput>? {
+        requestedWeightUnits.append(weightUnit)
+        return nil
+    }
 
     func streamWorkoutAnalysis(
-        input: WorkoutAnalysisInput
-    ) async throws -> LanguageModelSession.ResponseStream<WorkoutAnalysisOutput>? { nil }
+        input: WorkoutAnalysisInput,
+        weightUnit: WeightUnit
+    ) async throws -> LanguageModelSession.ResponseStream<WorkoutAnalysisOutput>? {
+        requestedWeightUnits.append(weightUnit)
+        return nil
+    }
 
     func prewarm() { prewarmCount += 1 }
 }

@@ -1,14 +1,15 @@
 # Weight unit preference (kg / lb)
 
-**Status:** tickets 01–04 of 05 shipped — the unit type, the preference store, the Settings
+**Status:** all five tickets shipped — the unit type, the preference store, the Settings
 picker, the formatting seam, the active-workout surfaces (01), the whole of routine
 building/editing plus the progressive-overload increment grid (02), history/charts/PRs and
-the tonnage rollup (03), and **watch parity plus the preference channel that carries the
-unit across the pairing (04)**. Ticket 05 routes the AI coach through the seam built here.
+the tonnage rollup (03), **watch parity plus the preference channel that carries the unit
+across the pairing (04)**, and **the AI coach — prompts, fact lines and the two sentences
+Swift composes (05, §13)**.
 
 **Source:** Things to-do "Weight Conversion" (`4HHdQyQQe88T9iMReWTmdc`), reported as a
 customer complaint that the app is unusable in pounds.
-Slices: `.scratch/weight-unit-preference/issues/`.
+Slices: `.scratch/_done/weight-unit-preference/issues/` (archived 2026-08-30).
 
 ---
 
@@ -473,6 +474,12 @@ references it anywhere) and `SetRowView` inside it (no call sites at all). The t
 both as surfaces; nothing references them if a later pass wants them gone. `SetRowView`
 still carries unlocalized English (`"Set \(id.prefix(8))"`, `"reps"`, `"rest"`) — out of
 scope here, and moot while it is unreachable.
+
+### Ticket 05 — the AI coach
+
+Its own section: §13. The coach does **not** go through `WeightFormatting` — `Domain/` may
+not depend on `Presentation/` — so it renders through `AICoachUnitVocabulary`, which reads
+the same `unit.weight.*` keys.
 
 ### Ticket 03 — history, charts, PRs and volume
 
@@ -1172,3 +1179,274 @@ the overload sheet's pound presets, the planned volume (600 lb), and the swap pi
 `WeightUnitTests.poundsUseFoundationsCoefficient` was in fact red — the assertion compared a
 pound value against a kilogram-derived expectation and was wrong by the conversion factor
 itself. Grep the per-test `✔`/`✘` lines (or `Test run with N tests`) instead.
+
+---
+
+## 13. Ticket 05 — the AI coach speaks the unit
+
+The last surface in the app still writing kilograms at a pounds reader, and the one where
+it costs the most: the coach's sentences sit directly under a `44,1 lb` chart headline and
+above a converted set grid, so a kilogram figure inside them reads as a bug and undermines
+every number the coach states.
+
+### Where the conversion happens, and why not anywhere else
+
+**Convert where the string is made, from the canonical kilograms, exactly once.** In
+practice that is three kinds of site:
+
+| site | what converts there |
+| --- | --- |
+| `*Input.toPromptText(in:)` | every `Double` the DTO carries — the volumes, the PR sets, the per-set fact lines, the 1RM change |
+| the aggregators | the two figures that are *already strings* inside the DTO: `TrendFinding.magnitude` (`PeriodRecapAggregator`) and `ProgressionSegment.magnitude` (`ExerciseDeepDiveAggregator`) |
+| `ChatFactBuilder` | the chat tools' fact lines, which are strings by construction |
+
+Plus the two sentences Swift composes for the reader rather than for the model —
+`ExerciseDeepDiveInput.peakSentence(in:)` and `WorkoutAnalysisInput.headlineSentence(in:)`.
+
+**Converting the model's *output* was never an option.** It emits free prose, so there is
+no reliable number to intercept, and a post-hoc regex over generated text corrupts
+sentences. **Leaving the prompts in kilograms and converting only the chrome around them
+was not an option either** — the coach's own sentences contain the numbers.
+
+### The DTOs stay kilograms, and so do their names
+
+`workoutVolumeKg`, `currentWeightKg`, `weightKg`, `totalVolumeKg`, `estimatedOneRMDeltaKg`
+are untouched, and so are their `@Guide` descriptions ("…in kilograms"). Both remain
+**true**: nothing converted is ever written back into an input struct. Renaming the set
+would have been a large mechanical diff that changes no behaviour and makes the guides
+lie. The two guides that *were* edited are the two whose value is a rendered string and is
+therefore unit-dependent — `TrendFinding.magnitude` and `ProgressionSegment.magnitude` —
+and both now describe the value instead of pinning a unit into an example.
+
+### The unit travels beside the input, not inside it
+
+`AICoachServicing.streamXxx(input:weightUnit:)`. The inputs are `@Generable`, so every
+stored property must itself be `Generable`; making `WeightUnit` conform would drag
+`FoundationModels` into a `Domain/` type the watch target copies **verbatim**. Keeping the
+unit a parameter also forces the invariant that matters: the instructions and the figures
+are chosen in the same call, so they cannot disagree.
+
+Through the UI the unit travels the way `locale` already did — as a call argument, read
+from `@Environment(\.weightUnit)` by the view. It is a value the generation is performed
+*in*, not a collaborator a ViewModel holds, and reading it per call is what makes a
+Settings switch apply to the very next generation with no reactivity plumbing.
+
+### The `@Guide` limitation, and what replaced it
+
+**A `@Guide(description:)` cannot name the active unit.** It is a macro-expanded literal
+inside a *static* generation schema — one schema per type, not one per reader — so unlike a
+system prompt it has no per-reader value to carry. The two output guides that hardcoded
+kilograms (`PeriodRecapOutput.trendsNarrative`'s "exact kg gains",
+`WorkoutAnalysisHighlight.detail`'s "Weight changes always in kg") were the exact
+instruction that would tell a model holding pound figures to write "kg". They now say
+*copy the unit the input writes*, and the unit itself is named by the system prompt.
+
+### The prompts name the unit, examples included
+
+`PostWorkoutRecapInstructions`, `PeriodRecapInstructions`, `WorkoutAnalysisInstructions`
+and `CoachChatInstructions` became `systemPrompt(unit:)` / `build(digest:unit:)`. The
+non-obvious half is the **worked examples**: these prompts teach exact echoing — *"If the
+input says `87.5 kg`, output `87.5 kg`"* — and the German patterns spell the unit into a
+sentence the model copies almost verbatim (*"Topsatz 2,5 kg schwerer"*). A hardcoded `kg`
+there does not merely fail to help; it actively teaches the wrong word. Every one of them
+now interpolates the active unit.
+
+`ExerciseDeepDiveInstructions` is the exception and takes **no** unit parameter: it carries
+no data-shaped literal at all — deliberately, since a literal `87,5 kg` in it was once
+lifted into the reader's own narrative as if it were their data — so there was one phrase
+to neutralise ("a gain or loss in kg" → "in weight") and nothing to parameterize.
+
+### Significance thresholds stay kilogram magnitudes
+
+Two bare literals decide whether a change is worth mentioning:
+
+- `PeriodRecapAggregator`'s `slopeThreshold = 0.5` (kg per session), against a regression
+  slope over est-1RM values;
+- `ExerciseDeepDiveAggregator.buildSegmentFrom`'s `slopeThreshold = 0.5` and its
+  `abs(delta) < 0.5` "stable" cut-off.
+
+Both are judgements about **real progress**, so both are applied to the canonical
+kilograms *before* anything converts. Converting the delta first and comparing it against
+the same literal would have raised the bar for a pounds user by the conversion factor —
+2.2× — so the same training would read "improving" in kilograms and "plateau" in pounds.
+The audit found no other bare numeric threshold on a weight in these files;
+`WorkoutAnalysisInput`'s `0.01` epsilons are float-noise guards, not magnitudes, and hold
+in either unit.
+
+### Two app-authored sentences, one localization change
+
+`ai_coach.deep_dive.peak` and `ai_coach.workout_analysis.headline.pr{,_multiple}` are the
+only coach strings the app composes itself, and all three baked `kg` into their **value**
+in both languages. They now take a preformatted weight through `%@`, per §7's binding
+pattern:
+
+| key | before | after |
+| --- | --- | --- |
+| `ai_coach.deep_dive.peak` | `Best: %1$@ kg × %2$d reps (est. 1RM %3$@ kg), %4$@.` | `Best: %1$@ × %2$d reps (est. 1RM %3$@), %4$@.` |
+| `ai_coach.workout_analysis.headline.pr` | `New best on %1$@: %2$@ kg × %3$d reps.` | `New best on %1$@: %2$@ × %3$d reps.` |
+| `ai_coach.workout_analysis.headline.pr_multiple` | `…%2$@ kg × %3$d reps, plus %4$d more.` | `…%2$@ × %3$d reps, plus %4$d more.` |
+
+### `AICoachUnitVocabulary` — why a second unit-word lookup exists
+
+`WeightFormatting` is the app's one formatting seam and it lives in `Presentation/`.
+`Domain/` may not depend on it (`Presentation → Domain`), and the coach's input models,
+composed sentences and `ChatFactBuilder` are all Domain. So
+`Domain/Services/AICoach/AICoachUnitVocabulary.swift` renders weights for the coach layer —
+`unitWord`, `englishName`, `compact`, `decimal`, `labelled`.
+
+**The shared source of truth is the strings table, not the function.** `unitWord` reads the
+very same `unit.weight.kg` / `unit.weight.lb` keys `WeightFormatting.unitWord` reads, so a
+coach sentence and the chart headline above it cannot disagree about what a pound is
+called. `englishName` ("kilograms" / "pounds") exists only for the instruction sentences,
+which stay English whatever the reply language is (`AICoachLocaleDirective`).
+
+`compact` trims trailing zeros **by hand rather than with `%g`**: `%g`'s six significant
+digits turn a real all-time tonnage into `1.23457e+06`, and the chat's volume fact line
+would have handed that straight to the model.
+
+`ChatFactBuilder` keeps its **own** one-decimal rule rather than using
+`WeightUnit.fractionDigits`: two of the three figures it renders are derived (an Epley
+estimate, a whole-history tonnage) and a second decimal on those is false precision the
+model then repeats at the user ("estimated 1RM 116.67"). It is also exactly what shipped
+before, so a kilogram reader sees no change — `ChatFactProviderTests` pins it.
+
+### The chat is a session, so a unit switch rebuilds it
+
+`CoachChatService.setWeightUnit(_:)` is called from `CoachChatViewModel.onAppear` on every
+appearance, **before** `configure`, so the first session of a pounds reader is already
+built in pounds. A *change* rebuilds the tools (each captures the unit) and re-seeds the
+`LanguageModelSession` through the existing digest path — the instructions state the unit
+as a rule the model answers by, and a live session carries the old rule for its whole life.
+The visible `messages` are untouched; only the model's working set is re-seeded, exactly as
+a context-overflow condensation re-seeds it.
+
+### Cached copy keeps the unit it was written in — accepted, not invalidated
+
+A recap, analysis or deep-dive already on disk is **not** regenerated when the unit
+changes, and neither is a chat turn already on screen.
+
+The alternative was a unit component in the cache key, and it is the wrong trade: a
+regeneration spends a free user's monthly allowance unit
+(`docs/pro-subscription.md` §5e) to rewrite text they have already read. A unit switch is a
+rare, one-time act; every *subsequent* generation is in the new unit, and the user's own
+remedy — Regenerate, or asking the coach again — is one tap. The same argument the cache's
+version-prefix comments make for not letting a decode failure be silent applies here in
+reverse: a deliberate non-invalidation beats an accidental allowance charge.
+
+### Verification
+
+`GymStreakTests/AICoachWeightUnitTests.swift` is the new suite, and it pins the boundary
+rather than the model's obedience:
+
+- a weight is converted once and rounded to the unit's own precision, and a tonnage never
+  renders in scientific notation;
+- the post-workout prompt and its instructions name one and the same unit, in both
+  directions (a kilogram run contains no `lb`, a pound run no `kg`);
+- workout-analysis fact lines convert the *delta* too — 10 kg reads `+22 lb`, not `+10 lb`
+  beside a pound figure — and the composed headline follows;
+- the deep-dive prompt's 1RM change and the peak sentence both convert, in the reader's
+  decimal convention (`+8,8 lb`, `44,1 lb`);
+- the chat's ambient unit line names the active unit;
+- no output guide's generation schema still instructs "in kg" / "kg gains";
+- a segment's improving/stable verdict is unchanged by the unit — only the rendered
+  magnitude differs.
+
+`outputGuidesNameNoUnit` opens with a **positive control** — an assertion that the schema
+string still contains a phrase known to live in a guide. Every other assertion in it is a
+`!contains`, so if `GenerationSchema`'s `description` ever stopped surfacing `@Guide`
+descriptions they would all pass while pinning nothing, which is exactly the regression the
+test exists to catch.
+
+`roundedDisplay(fromKilograms:)` is asserted in **both** `WeightUnitTests` twins even though
+only the iOS coach calls it. Those two suites exist to catch a divergence between the
+byte-identical `WeightUnit` copies, so a member covered on one side only is a hole in that
+guarantee.
+
+**Not testable here:** whether the model then writes "lb". That is a device check, and the
+failure mode to look for is the one this ticket creates — the model being handed pounds and
+confidently writing "kg" anyway, or mixing units inside one paragraph. Check both languages;
+`WorkoutAnalysisInstructions`' German example patterns are the likeliest leak, which is why
+`AICoachWeightUnitTests` asserts they carry the active unit word.
+
+**On device (2026-08-30): confirmed working, reported by the user.** The generated coach copy
+comes back in pounds — no model output writing "kg" against pound figures, and no unit mixed
+inside one response. That closes the last acceptance criterion of the ticket and, with it,
+the whole weight-unit feature. The specifics of which surfaces and which language were
+exercised were not recorded beyond that verdict, so a future regression hunt should re-run
+the check rather than assume this pass covered every surface.
+
+**Test run (2026-08-30):** `bundle exec fastlane test_unit` — `GymStreakTests` **1027/1027**
+and `GymStreakWatchTests` **53/53**, both green, with the new suite and both `roundedDisplay`
+assertions confirmed present in the result bundles. The iOS app also builds clean.
+
+A full-scheme `xcodebuild test` additionally runs `GymStreakUITests`, where two tests fail —
+`SettingsTabUITests.testSupportSectionShowsRateAppRow` ("Rate app row is not tappable") and
+`WorkoutDeletionUITests.testCoachSettingsStillPushesOnThePathBoundStack` ("Settings button
+should exist"). **Both fail identically on an unmodified tree**, verified by stashing this
+ticket's changes and re-running exactly those two. They are pre-existing and unrelated;
+`test_unit` does not run them.
+
+### Architecture review
+
+`architecture-reviewer`: **PASS WITH WARNINGS**, no CRITICAL findings. All three warnings
+were fixed rather than acknowledged — the two suites were run (above), `roundedDisplay` gained
+its twin-suite coverage, and `outputGuidesNameNoUnit` gained its positive control. One
+advisory was also acted on: `CoachChatService.setWeightUnit` used to `condense()`
+unconditionally, so a unit switch arriving mid-turn re-seeded the session from `messages`
+before that turn's answer landed and silently dropped it from the next digest. It now defers
+the re-seed to `endTurn` / `cancel`. `AICoachUnitVocabulary` moved from
+`Domain/Models/AICoach/` to `Domain/Services/AICoach/`, beside `ChatFactBuilder`, which is
+the literal match for the placement rule.
+
+The reviewer also confirmed what this change does **not** touch: no `@Model` class, property
+or relationship changed, so no CloudKit Console schema deploy is needed; and no monetization
+surface changed.
+
+### Monetization gate
+
+```
+Monetization verdict — the AI coach speaks the user's weight unit
+  Tier          Free
+  Derivation    §3 Rule 4 (reads the user's own logged data back to them) and §3 Rule 1
+                (the aha path — "see the number go up" is the coach's entire subject)
+  Mechanism     none — this is a correctness fix to surfaces that already exist
+  Placement     none (no PaywallPlacement added or changed)
+  Nudge         none; the coach's existing monthly-taster nudges are untouched
+  Free residue  the whole change
+  Founder note  gating a unit correction converts nobody and reads as extortion; §10's
+                guardrails (free-user D30, App Store rating) point the same way
+```
+
+Re-checked at completion: what shipped is entirely free, matching the planning verdict for
+the whole weight-unit feature (§1).
+
+---
+
+## 14. Follow-up work found and deliberately not applied
+
+Harvested from the ticket bodies at close-out so it does not disappear with them. **None of
+it is a units defect** — these are pre-existing items the unit work walked past and chose not
+to widen its scope for. Listed in the order they were found.
+
+- **`PeriodRecapView.relativeDate(_:)` builds a `RelativeDateTimeFormatter` per call, from a
+  view body, and hardcodes German** (`"vor " + …replacingOccurrences(of: "vor ", with: "")`).
+  Both breach standing rules (no formatter in `body`; no hardcoded language). Hoisting is not
+  a one-liner: the formatter reads `@Environment(\.locale)`, so it cannot simply become a
+  `static let`.
+- **`ExerciseProgressViewModel.personalRecordString`'s `.volume` branch aggregates in a
+  `body`-read computed property** (`dataPoints.map(\.totalVolume).max()`). Bounded by the
+  selected timeframe's session count, so it has not been measured as a problem.
+- **`WorkoutDetailExerciseBlock` takes the `@Model` itself, and `sortedSets` walks the
+  relationship in a `body`-read property.** Rendering rule 4 debt, pre-existing.
+- **`ExerciseProgressViewModel.swift` is 923 lines**, past the 200–300 line convention.
+  Extracting the display members would mean widening `weightUnitPreference` and `displayUnit`
+  from `private` to internal purely to satisfy a line count — encapsulation traded for a
+  convention — so it was left. Any real split has to find a seam that does not do that.
+- **Neither `WorkoutCardView` call site applies `.equatable()`**, so the row-skip its
+  `Equatable` conformance exists for may not be active at all. Recorded in
+  `docs/history-performance.md`; worth measuring before adding more `Equatable` rows.
+
+One item from that list *was* fixed on request rather than deferred, and is recorded in §7:
+`history.detail.bw`'s German value was `"KG"` — *Körpergewicht* abbreviated into something
+indistinguishable from kilograms, beside a `49,6 lb` figure. It is `"Körper"` now, with a
+`history.detail.bw.spoken` form for VoiceOver.

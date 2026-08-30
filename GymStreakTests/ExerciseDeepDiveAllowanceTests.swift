@@ -49,7 +49,8 @@ struct ExerciseDeepDiveAllowanceTests {
             exerciseId: exercise.id,
             exerciseName: exercise.name,
             usage: .combined,
-            locale: .current
+            locale: .current,
+            weightUnit: .kilograms
         )
 
         #expect(didStart == false)
@@ -67,7 +68,8 @@ struct ExerciseDeepDiveAllowanceTests {
             exerciseId: exercise.id,
             exerciseName: exercise.name,
             usage: .combined,
-            locale: .current
+            locale: .current,
+            weightUnit: .kilograms
         ))
         await harness.viewModel.waitForCurrentGeneration()
 
@@ -86,7 +88,8 @@ struct ExerciseDeepDiveAllowanceTests {
             exerciseId: exercise.id,
             exerciseName: exercise.name,
             usage: .combined,
-            locale: .current
+            locale: .current,
+            weightUnit: .kilograms
         ))
         await harness.viewModel.waitForCurrentGeneration()
 
@@ -109,7 +112,8 @@ struct ExerciseDeepDiveAllowanceTests {
             exerciseId: exercise.id,
             exerciseName: exercise.name,
             usage: .combined,
-            locale: .current
+            locale: .current,
+            weightUnit: .kilograms
         )
 
         #expect(didStart == false)
@@ -130,7 +134,8 @@ struct ExerciseDeepDiveAllowanceTests {
                 exerciseId: exercise.id,
                 exerciseName: exercise.name,
                 usage: .combined,
-                locale: .current
+                locale: .current,
+                weightUnit: .kilograms
             ))
             await harness.viewModel.waitForCurrentGeneration()
         }

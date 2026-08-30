@@ -57,6 +57,7 @@ struct ExerciseDeepDiveUsageTests {
                 exerciseName: curls.name,
                 locale: .init(identifier: "en_US"),
                 modelContext: context,
+                weightUnit: .kilograms,
                 usage: DeepDiveUsage(selection: .usage(.routineSlot(heavySlot)), label: "4–6 · Pull")
             ).input
         )
@@ -74,6 +75,7 @@ struct ExerciseDeepDiveUsageTests {
                 exerciseName: curls.name,
                 locale: .init(identifier: "en_US"),
                 modelContext: context,
+                weightUnit: .kilograms,
                 usage: DeepDiveUsage(selection: .usage(.routineSlot(lightSlot)), label: "8–12 · Pull")
             ).input
         )
@@ -112,13 +114,14 @@ struct ExerciseDeepDiveUsageTests {
                 exerciseName: curls.name,
                 locale: .init(identifier: "en_US"),
                 modelContext: context,
+                weightUnit: .kilograms,
                 usage: DeepDiveUsage(selection: .usage(.routineSlot(heavySlot)), label: pickerLabel)
             ).input
         )
 
         // The input records which variant it describes...
         #expect(input.usageLabel == pickerLabel)
-        let prompt = input.toPromptText()
+        let prompt = input.toPromptText(in: .kilograms)
         // ...and the prompt says a variant is being described...
         #expect(prompt.contains("Variant: one specific variant"))
         // ...without ever handing the model the string.
@@ -146,11 +149,12 @@ struct ExerciseDeepDiveUsageTests {
                 exerciseName: curls.name,
                 locale: .init(identifier: "en_US"),
                 modelContext: context,
+                weightUnit: .kilograms,
                 usage: .combined
             ).input
         )
         #expect(input.usageLabel == nil)
-        #expect(!input.toPromptText().contains("Variant:"))
+        #expect(!input.toPromptText(in: .kilograms).contains("Variant:"))
     }
 
     /// The period is handed over in the reader's own language. It used to be
@@ -176,6 +180,7 @@ struct ExerciseDeepDiveUsageTests {
                 exerciseName: curls.name,
                 locale: .init(identifier: "en_US"),
                 modelContext: context,
+                weightUnit: .kilograms,
                 usage: .combined
             ).input
         )
@@ -184,7 +189,7 @@ struct ExerciseDeepDiveUsageTests {
         #expect(input.historyRange.contains("–"))
         // No machine format anywhere near the model.
         #expect(!input.historyRange.contains("1970-01"))
-        #expect(!input.toPromptText().contains("1970-01"))
+        #expect(!input.toPromptText(in: .kilograms).contains("1970-01"))
     }
 
     /// `DeepDiveUsage` drops a label handed to `.combined`: the view model's
@@ -223,6 +228,7 @@ struct ExerciseDeepDiveUsageTests {
                 exerciseName: curls.name,
                 locale: .init(identifier: "en_US"),
                 modelContext: context,
+                weightUnit: .kilograms,
                 usage: .combined
             ).input
         )
@@ -237,7 +243,7 @@ struct ExerciseDeepDiveUsageTests {
         #expect(combined.peak.weightKg == 26)
 
         // And nothing that looks like a trend reaches the model.
-        let prompt = combined.toPromptText()
+        let prompt = combined.toPromptText(in: .kilograms)
         #expect(prompt.contains("BLENDED VIEW"))
         #expect(!prompt.contains("Percent change"))
         #expect(!prompt.contains("Overall progression"))
@@ -266,6 +272,7 @@ struct ExerciseDeepDiveUsageTests {
                 exerciseName: curls.name,
                 locale: .init(identifier: "en_US"),
                 modelContext: context,
+                weightUnit: .kilograms,
                 usage: .combined
             ).input
         )
@@ -372,14 +379,15 @@ struct ExerciseDeepDiveUsageTests {
                 exerciseName: curls.name,
                 locale: .init(identifier: "de_DE"),
                 modelContext: context,
+                weightUnit: .kilograms,
                 usage: .combined
             ).input
         )
         // The est-1RM delta the model is handed: 26.5 × 5 minus 20.0 × 5 in Epley terms.
-        #expect(german.toPromptText().contains("7,6 kg"))
+        #expect(german.toPromptText(in: .kilograms).contains("7,6 kg"))
         // And the peak sentence the surface renders — composed in Swift, never prompted.
-        #expect(german.peakSentence.contains("26,5"))
-        #expect(!german.toPromptText().contains("26,5"))
+        #expect(german.peakSentence(in: .kilograms).contains("26,5"))
+        #expect(!german.toPromptText(in: .kilograms).contains("26,5"))
 
         let english = try #require(
             aggregator.buildAggregate(
@@ -387,12 +395,13 @@ struct ExerciseDeepDiveUsageTests {
                 exerciseName: curls.name,
                 locale: .init(identifier: "en_US"),
                 modelContext: context,
+                weightUnit: .kilograms,
                 usage: .combined
             ).input
         )
-        #expect(english.toPromptText().contains("7.6 kg"))
-        #expect(english.peakSentence.contains("26.5"))
-        #expect(!english.toPromptText().contains("26.5"))
+        #expect(english.toPromptText(in: .kilograms).contains("7.6 kg"))
+        #expect(english.peakSentence(in: .kilograms).contains("26.5"))
+        #expect(!english.toPromptText(in: .kilograms).contains("26.5"))
     }
 
     // MARK: - Load behaviour homogeneity
@@ -432,6 +441,7 @@ struct ExerciseDeepDiveUsageTests {
                 exerciseName: pullUps.name,
                 locale: .init(identifier: "en_US"),
                 modelContext: context,
+                weightUnit: .kilograms,
                 usage: .combined
             ).input
         )
@@ -571,6 +581,7 @@ struct ExerciseDeepDiveUsageTests {
                 exerciseName: curls.name,
                 locale: .init(identifier: "en_US"),
                 modelContext: context,
+                weightUnit: .kilograms,
                 usage: DeepDiveUsage(selection: selection, label: nil)
             ).lastCompletedSetTimestamp
             #expect(probed == aggregated)

@@ -84,10 +84,10 @@ struct HistoryGateLatencyTests {
             await chat.nextWorkoutFacts()
         }
         _ = await HistoryGateLatencyHarness.measure("ChatFactProvider.exercisePRFacts") {
-            await chat.exercisePRFacts(exerciseName: trainedName)
+            await chat.exercisePRFacts(exerciseName: trainedName, weightUnit: .kilograms)
         }
         _ = await HistoryGateLatencyHarness.measure("ChatFactProvider.workoutHistoryFacts(.allTime)") {
-            await chat.workoutHistoryFacts(timeframe: .allTime)
+            await chat.workoutHistoryFacts(timeframe: .allTime, weightUnit: .kilograms)
         }
         // Nothing to repair in this fixture — every row carries its `exerciseId`, as every
         // shipped write path has. This is the cost of the *fetch*, which is what a queued
@@ -306,8 +306,8 @@ struct HistoryGateLatencyTests {
             { _ = try? await history.fetchLifetimeTotals() },
             { _ = try? await history.fetchCompletedWorkoutCount() },
             { _ = await chat.nextWorkoutFacts() },
-            { _ = await chat.exercisePRFacts(exerciseName: name) },
-            { _ = await chat.workoutHistoryFacts(timeframe: .allTime) },
+            { _ = await chat.exercisePRFacts(exerciseName: name, weightUnit: .kilograms) },
+            { _ = await chat.workoutHistoryFacts(timeframe: .allTime, weightUnit: .kilograms) },
             { _ = try? await attribution.attributeLegacyRows(named: name, to: id) }
         ]
     }

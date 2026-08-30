@@ -90,7 +90,7 @@ struct ChatFactProviderTests {
         seedCompletedSession(context: context, routineName: "Push", exercise: exercise,
                              sets: [(80, 5), (100, 5), (90, 8)], start: Date().addingTimeInterval(-86_400))
 
-        let line = await makeProvider(container).exercisePRFacts(exerciseName: "Bench Press")
+        let line = await makeProvider(container).exercisePRFacts(exerciseName: "Bench Press", weightUnit: .kilograms)
         #expect(line.contains("100 kg x 5 reps"))
         #expect(line.contains("116.7 kg"))
         #expect(!line.contains("__NO_MATCH__"))
@@ -109,7 +109,7 @@ struct ChatFactProviderTests {
         seedCompletedSession(context: context, routineName: "Arms", exercise: dumbbell,
                              sets: [(20, 12)], start: Date().addingTimeInterval(-86_400))
 
-        let line = await makeProvider(container).exercisePRFacts(exerciseName: "Biceps Curls")
+        let line = await makeProvider(container).exercisePRFacts(exerciseName: "Biceps Curls", weightUnit: .kilograms)
         #expect(line.contains("30 kg x 10 reps"))
         #expect(!line.contains("__NO_MATCH__"))
     }
@@ -121,7 +121,7 @@ struct ChatFactProviderTests {
         context.insert(exercise)
         try? context.save()
 
-        let line = await makeProvider(container).exercisePRFacts(exerciseName: "Kreuzheben")
+        let line = await makeProvider(container).exercisePRFacts(exerciseName: "Kreuzheben", weightUnit: .kilograms)
         #expect(line.contains("__NO_MATCH__"))
         #expect(line.contains("Squat")) // real library handed to the model
     }
@@ -136,7 +136,7 @@ struct ChatFactProviderTests {
         seedCompletedSession(context: context, routineName: "Push", exercise: exercise,
                              sets: [(100, 5)], start: Date())
 
-        let line = await makeProvider(container).workoutHistoryFacts(timeframe: .thisWeek)
+        let line = await makeProvider(container).workoutHistoryFacts(timeframe: .thisWeek, weightUnit: .kilograms)
         #expect(line.contains("This week"))
         #expect(line.contains("1 workout"))
     }
@@ -149,7 +149,7 @@ struct ChatFactProviderTests {
         seedCompletedSession(context: context, routineName: "LegDay", exercise: exercise,
                              sets: [(100, 5)], start: Date().addingTimeInterval(-86_400 * 40))
 
-        let line = await makeProvider(container).workoutHistoryFacts(timeframe: .allTime)
+        let line = await makeProvider(container).workoutHistoryFacts(timeframe: .allTime, weightUnit: .kilograms)
         #expect(line.contains("All time"))
         #expect(line.contains("LegDay")) // resolves "my last workout" beyond week/month windows
     }

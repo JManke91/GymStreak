@@ -73,10 +73,15 @@ enum ChatFactBuilder {
     /// The all-time PR for a free-form exercise name: best set, estimated 1RM and
     /// date — or disambiguation candidates / a not-found payload with the closest
     /// known names. Name resolution happens here, not in the tool schema.
+    /// - Parameter weightUnit: the reader's unit. Every weight below is stored in
+    ///   canonical kilograms and converted here, once, as the fact line is written — the
+    ///   same boundary the recap surfaces convert at. `CoachChatInstructions` must be
+    ///   built with the same unit: it states the unit as a rule the model answers by.
     static func exercisePRFacts(
         exerciseName: String,
         library: [Exercise],
-        completedSessions: [WorkoutSession]
+        completedSessions: [WorkoutSession],
+        weightUnit: WeightUnit
     ) -> String {
         switch nameResolver.resolve(exerciseName, in: library) {
         case .noMatch:
@@ -86,7 +91,7 @@ enum ChatFactBuilder {
             return "\"\(exerciseName)\" is ambiguous. Candidates: \(names.joined(separator: ", ")). Ask the user which one they mean."
 
         case .resolved(let exercises):
-            return personalRecordLine(for: exercises, sessions: completedSessions)
+            return personalRecordLine(for: exercises, sessions: completedSessions, weightUnit: weightUnit)
         }
     }
 
@@ -111,7 +116,8 @@ enum ChatFactBuilder {
     /// all — they are one exercise to the user and can't be told apart by name.
     private static func personalRecordLine(
         for exercises: [Exercise],
-        sessions: [WorkoutSession]
+        sessions: [WorkoutSession],
+        weightUnit: WeightUnit
     ) -> String {
         let displayName = exercises.first?.name ?? ""
         var best: (weight: Double, reps: Int, est: Double, date: Date)?
@@ -141,7 +147,8 @@ enum ChatFactBuilder {
             return "\(displayName): no completed sets logged yet, so there is no personal record."
         }
 
-        return "\(displayName) personal record: best set \(fmt(best.weight)) kg x \(best.reps) reps, estimated 1RM \(fmt(best.est)) kg, achieved on \(mediumDate(best.date))."
+        let unitWord = AICoachUnitVocabulary.unitWord(weightUnit)
+        return "\(displayName) personal record: best set \(fmt(best.weight, in: weightUnit)) \(unitWord) x \(best.reps) reps, estimated 1RM \(fmt(best.est, in: weightUnit)) \(unitWord), achieved on \(mediumDate(best.date))."
     }
 
     // MARK: - Workout history
@@ -149,9 +156,11 @@ enum ChatFactBuilder {
     /// Workout count, volume, last workout and current streak for a timeframe.
     /// The streak is deliberately computed over *all* sessions, not the windowed
     /// ones — "current streak" is not a property of the requested period.
+    /// - Parameter weightUnit: see `exercisePRFacts`.
     static func workoutHistoryFacts(
         timeframe: ChatHistoryTimeframe,
-        completedSessions sessions: [WorkoutSession]
+        completedSessions sessions: [WorkoutSession],
+        weightUnit: WeightUnit
     ) -> String {
         let range = interval(for: timeframe)
         let inRange = sessions.filter { range.contains($0.startTime) }
@@ -161,7 +170,7 @@ enum ChatFactBuilder {
         let streak = HistoryStatsService.streakWeeks(sessions: sessions)
         let label = timeframeLabel(timeframe)
 
-        var parts = ["\(label): \(count) workout\(count == 1 ? "" : "s"), total volume \(fmt(volume)) kg."]
+        var parts = ["\(label): \(count) workout\(count == 1 ? "" : "s"), total volume \(fmt(volume, in: weightUnit)) \(AICoachUnitVocabulary.unitWord(weightUnit))."]
 
         if let last = inRange.max(by: { $0.startTime < $1.startTime }) {
             let minutes = Int(last.duration / 60)
@@ -249,8 +258,17 @@ enum ChatFactBuilder {
         return formatter.string(from: date)
     }
 
-    /// Trims a trailing `.0` so "37.5" and "40" both read cleanly.
-    private static func fmt(_ value: Double) -> String {
+    /// Canonical kilograms → the reader's unit, trailing `.0` trimmed so "37.5" and
+    /// "40" both read cleanly.
+    ///
+    /// One decimal in **both** units, which is this file's own rule rather than
+    /// `WeightUnit.fractionDigits`: two of the three figures it renders are derived — an
+    /// Epley estimate and a whole-history tonnage — and a second decimal on those is
+    /// false precision the model would then repeat at the user ("estimated 1RM 116.67").
+    /// It is also exactly what shipped before the unit conversion, so a kilogram reader
+    /// sees no change.
+    private static func fmt(_ kilograms: Double, in unit: WeightUnit) -> String {
+        let value = (unit.converting(fromKilograms: kilograms) * 10).rounded() / 10
         if value == value.rounded() { return String(Int(value.rounded())) }
         return String(format: "%.1f", value)
     }

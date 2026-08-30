@@ -20,12 +20,17 @@ struct PostWorkoutRecapOutput: Codable {
 
 // MARK: - Period Recap
 
+/// **No guide here names a unit.** `@Guide(description:)` is a macro-expanded literal
+/// in a *static* generation schema, so it cannot carry a per-reader value the way the
+/// system prompts can — and a guide hardcoding "kg" is exactly what taught the model to
+/// write kilograms at a reader being handed pounds. The unit is named by the prompt and
+/// carried by the figures; the guides say "copy it". See docs/weight-unit-preference.md §13.
 @Generable
 struct PeriodRecapOutput: Codable {
     @Guide(description: "One sentence in the user's locale rephrasing the input's 'Headline fact'. Never about total volume or session counts.")
     let headline: String
 
-    @Guide(description: "Two to three short sentences in the user's locale: improved exercises with exact kg gains, then declined ones, then unchanged ones by name. Mention the consistency fact when marked irregular.")
+    @Guide(description: "Two to three short sentences in the user's locale: improved exercises with their exact gains copied from the input — figure and unit word together, exactly as written there — then declined ones, then unchanged ones by name. Mention the consistency fact when marked irregular.")
     let trendsNarrative: String
 
     @Guide(description: "The 'Detected patterns' statement reproduced as one sentence in the user's locale. Return nil when the input has no detected patterns. Do NOT write explanatory or apologetic text. nil means the UI hides this section.")
@@ -112,7 +117,7 @@ struct WorkoutAnalysisHighlight: Codable, Equatable, Sendable {
     @Guide(description: "Direction of change, derived from the verdict tag in the input: IMPROVED to improved, DECREASED to declined, UNCHANGED to unchanged, MIXED to mixed, NEW SETS to new.")
     let trend: WorkoutAnalysisTrend
 
-    @Guide(description: "One short sentence (max 12 words) in the user's locale rephrasing this exercise's 'Fact' line with its exact numbers. Weight changes always in kg, rep changes always as reps — never mix the two units in one figure.")
+    @Guide(description: "One short sentence (max 12 words) in the user's locale rephrasing this exercise's 'Fact' line with its exact numbers. Copy each weight with the unit word the input writes it with; rep changes always as reps — never mix the two units in one figure.")
     let detail: String
 }
 

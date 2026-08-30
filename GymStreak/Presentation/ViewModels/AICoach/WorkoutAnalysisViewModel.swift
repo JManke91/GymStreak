@@ -188,9 +188,15 @@ final class WorkoutAnalysisViewModel {
     /// Generates a workout analysis, using cache if available.
     /// Fire-and-forget: cancels any in-flight stream before starting a new one.
     /// Transitions to `.preparing` synchronously so the UI responds to the tap immediately.
+    /// - Parameter weightUnit: the reader's unit, read from `\.weightUnit` by the view
+    ///   that calls this — the same way `locale` arrives, and for the same reason: the
+    ///   unit is a value the generation is performed *in*, not a collaborator this
+    ///   ViewModel holds. Reading it per call is also what makes a Settings switch
+    ///   apply to the very next generation. See docs/weight-unit-preference.md §13.
     func generate(
         workout: WorkoutSession,
         locale: Locale,
+        weightUnit: WeightUnit,
         modelContext: ModelContext,
         exerciseProgress: any ExerciseProgressProviding
     ) {
@@ -200,6 +206,7 @@ final class WorkoutAnalysisViewModel {
             await self?.run(
                 workout: workout,
                 locale: locale,
+                weightUnit: weightUnit,
                 modelContext: modelContext,
                 exerciseProgress: exerciseProgress,
                 bypassCache: false
@@ -212,6 +219,7 @@ final class WorkoutAnalysisViewModel {
     func regenerate(
         workout: WorkoutSession,
         locale: Locale,
+        weightUnit: WeightUnit,
         modelContext: ModelContext,
         exerciseProgress: any ExerciseProgressProviding
     ) {
@@ -222,6 +230,7 @@ final class WorkoutAnalysisViewModel {
             await self?.run(
                 workout: workout,
                 locale: locale,
+                weightUnit: weightUnit,
                 modelContext: modelContext,
                 exerciseProgress: exerciseProgress,
                 bypassCache: true
@@ -240,6 +249,7 @@ final class WorkoutAnalysisViewModel {
     private func run(
         workout: WorkoutSession,
         locale: Locale,
+        weightUnit: WeightUnit,
         modelContext: ModelContext,
         exerciseProgress: any ExerciseProgressProviding,
         bypassCache: Bool
@@ -297,7 +307,7 @@ final class WorkoutAnalysisViewModel {
         }
 
         // 5. Stream
-        await stream(input: input, workoutId: workoutId)
+        await stream(input: input, weightUnit: weightUnit, workoutId: workoutId)
     }
 
     // MARK: - Availability helper
@@ -335,11 +345,14 @@ final class WorkoutAnalysisViewModel {
 
     // MARK: - Streaming
 
-    private func stream(input: WorkoutAnalysisInput, workoutId: UUID) async {
+    private func stream(input: WorkoutAnalysisInput, weightUnit: WeightUnit, workoutId: UUID) async {
         let start = ContinuousClock.now
 
         do {
-            guard let responseStream = try await service.streamWorkoutAnalysis(input: input) else {
+            guard let responseStream = try await service.streamWorkoutAnalysis(
+                input: input,
+                weightUnit: weightUnit
+            ) else {
                 state = .unavailable
                 return
             }
@@ -347,7 +360,7 @@ final class WorkoutAnalysisViewModel {
             // The composed headline is on screen before the first token arrives, and
             // stays untouched by every snapshot after it. Resolved once — it walks the
             // exercise list, which is not work to repeat per streaming snapshot.
-            let headline = input.headlineSentence
+            let headline = input.headlineSentence(in: weightUnit)
             var finalContent = WorkoutAnalysisContent(headline: headline)
             state = .streaming(content: finalContent)
             for try await snapshot in responseStream {

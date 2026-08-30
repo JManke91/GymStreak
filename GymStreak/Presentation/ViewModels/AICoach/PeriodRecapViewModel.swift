@@ -152,11 +152,11 @@ final class PeriodRecapViewModel {
     ///
     /// Navigation, not intent: a metered user lands on `.offer` rather than on
     /// a generation they did not ask for.
-    func load(modelContext: ModelContext) async {
+    func load(modelContext: ModelContext, weightUnit: WeightUnit) async {
         streamTask?.cancel()
         state = .loading
         streamTask = Task { [weak self] in
-            await self?.run(modelContext: modelContext, bypassCache: false, ticket: nil)
+            await self?.run(modelContext: modelContext, weightUnit: weightUnit, bypassCache: false, ticket: nil)
         }
     }
 
@@ -165,7 +165,7 @@ final class PeriodRecapViewModel {
     /// The gate is asked **before** the cache is invalidated, and a refusal
     /// leaves the state untouched: the recap the user already spent an
     /// allowance on stays on screen and on disk behind the paywall (§7 Rule 4).
-    func regenerate(modelContext: ModelContext) async {
+    func regenerate(modelContext: ModelContext, weightUnit: WeightUnit) async {
         guard let ticket = allowanceGate.requestGeneration() else { return }
         streamTask?.cancel()
         let key = buildCacheKey(range: range, modelContext: modelContext)
@@ -176,13 +176,13 @@ final class PeriodRecapViewModel {
                 gate.refund(ticket)
                 return
             }
-            await self.run(modelContext: modelContext, bypassCache: true, ticket: ticket)
+            await self.run(modelContext: modelContext, weightUnit: weightUnit, bypassCache: true, ticket: ticket)
         }
     }
 
     /// The explicit "generate it" tap on the `.offer` state — the only path
     /// that spends a metered user's monthly recap.
-    func generateNow(modelContext: ModelContext) async {
+    func generateNow(modelContext: ModelContext, weightUnit: WeightUnit) async {
         guard let ticket = allowanceGate.requestGeneration() else {
             state = .gated(buildHeadlineMetrics(range: range, modelContext: modelContext))
             return
@@ -194,18 +194,18 @@ final class PeriodRecapViewModel {
                 gate.refund(ticket)
                 return
             }
-            await self.run(modelContext: modelContext, bypassCache: false, ticket: ticket)
+            await self.run(modelContext: modelContext, weightUnit: weightUnit, bypassCache: false, ticket: ticket)
         }
     }
 
     /// Switch to a different range and reload.
-    func setRange(_ newRange: PeriodRange, modelContext: ModelContext) async {
+    func setRange(_ newRange: PeriodRange, modelContext: ModelContext, weightUnit: WeightUnit) async {
         guard newRange != range else { return }
         streamTask?.cancel()
         range = newRange
         state = .loading
         streamTask = Task { [weak self] in
-            await self?.run(modelContext: modelContext, bypassCache: false, ticket: nil)
+            await self?.run(modelContext: modelContext, weightUnit: weightUnit, bypassCache: false, ticket: nil)
         }
     }
 
@@ -232,8 +232,12 @@ final class PeriodRecapViewModel {
     ///   (`generateNow`, `regenerate`), or `nil` on the navigation path, where
     ///   the allowance is resolved at step 5 instead. Every exit that does not
     ///   produce a recap gives the unit back.
+    /// - Parameter weightUnit: the reader's unit, read from `\.weightUnit` by
+    ///   `PeriodRecapView` and passed in with the `ModelContext` — the same shape every
+    ///   entry point here already has. See docs/weight-unit-preference.md §13.
     private func run(
         modelContext: ModelContext,
+        weightUnit: WeightUnit,
         bypassCache: Bool,
         ticket: AICoachAllowanceGate.Ticket?
     ) async {
@@ -270,7 +274,8 @@ final class PeriodRecapViewModel {
         let sampleInput = aggregator.buildInput(
             range: range,
             locale: Locale.current,
-            modelContext: modelContext
+            modelContext: modelContext,
+            weightUnit: weightUnit
         )
         if sampleInput.isInsufficient {
             state = .insufficient(sampleInput.headline)
@@ -306,6 +311,7 @@ final class PeriodRecapViewModel {
         if await stream(
             range: range,
             modelContext: modelContext,
+            weightUnit: weightUnit,
             headlineMetrics: sampleInput.headline
         ) {
             pending = nil
@@ -347,6 +353,7 @@ final class PeriodRecapViewModel {
     private func stream(
         range: PeriodRange,
         modelContext: ModelContext,
+        weightUnit: WeightUnit,
         headlineMetrics: HeadlineMetrics
     ) async -> Bool {
         let locale = Locale.current
@@ -365,16 +372,19 @@ final class PeriodRecapViewModel {
                     self.aggregator.buildInput(
                         range: capturedRange,
                         locale: locale,
-                        modelContext: modelContext
+                        modelContext: modelContext,
+                        weightUnit: weightUnit
                     )
                 },
                 buildCompactInput: {
                     self.aggregator.buildCompactInput(
                         range: capturedRange,
                         locale: locale,
-                        modelContext: modelContext
+                        modelContext: modelContext,
+                        weightUnit: weightUnit
                     )
-                }
+                },
+                weightUnit: weightUnit
             ) else {
                 let metrics = buildHeadlineMetrics(range: capturedRange, modelContext: modelContext)
                 state = .unavailable(metrics)

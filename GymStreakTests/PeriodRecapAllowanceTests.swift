@@ -26,7 +26,7 @@ struct PeriodRecapAllowanceTests {
         let harness = makeHarness()
         harness.seedSessions(count: 3)
 
-        await harness.viewModel.load(modelContext: harness.context)
+        await harness.viewModel.load(modelContext: harness.context, weightUnit: .kilograms)
         await harness.viewModel.waitForCurrentGeneration()
 
         guard case .offer = harness.viewModel.state else {
@@ -46,7 +46,7 @@ struct PeriodRecapAllowanceTests {
         harness.seedSessions(count: 3)
         harness.service.isUnavailable = true
 
-        await harness.viewModel.generateNow(modelContext: harness.context)
+        await harness.viewModel.generateNow(modelContext: harness.context, weightUnit: .kilograms)
         await harness.viewModel.waitForCurrentGeneration()
 
         guard case .unavailable = harness.viewModel.state else {
@@ -63,7 +63,7 @@ struct PeriodRecapAllowanceTests {
         harness.seedSessions(count: 3)
         harness.spend()
 
-        await harness.viewModel.load(modelContext: harness.context)
+        await harness.viewModel.load(modelContext: harness.context, weightUnit: .kilograms)
         await harness.viewModel.waitForCurrentGeneration()
 
         guard case .gated = harness.viewModel.state else {
@@ -86,7 +86,7 @@ struct PeriodRecapAllowanceTests {
         )
         harness.spend()
 
-        await harness.viewModel.load(modelContext: harness.context)
+        await harness.viewModel.load(modelContext: harness.context, weightUnit: .kilograms)
         await harness.viewModel.waitForCurrentGeneration()
 
         guard case .success(let output, let isCached, _, _) = harness.viewModel.state else {
@@ -105,7 +105,7 @@ struct PeriodRecapAllowanceTests {
         harness.seedSessions(count: 3)
         harness.service.isUnavailable = true
 
-        await harness.viewModel.load(modelContext: harness.context)
+        await harness.viewModel.load(modelContext: harness.context, weightUnit: .kilograms)
         await harness.viewModel.waitForCurrentGeneration()
 
         // Not `.offer`: an unmetered user never sees the confirmation step.
@@ -123,7 +123,7 @@ struct PeriodRecapAllowanceTests {
         harness.seedSessions(count: 3)
         harness.service.isUnavailable = true
 
-        await harness.viewModel.load(modelContext: harness.context)
+        await harness.viewModel.load(modelContext: harness.context, weightUnit: .kilograms)
         await harness.viewModel.waitForCurrentGeneration()
 
         guard case .unavailable = harness.viewModel.state else {

@@ -31,6 +31,14 @@ enum ExerciseDeepDiveInstructions {
     /// and no `@Guide` constraint enforces a paragraph count inside a single `String`.
     /// What these instructions still do is assign a *subject* to each field.
     ///
+    /// **These prompts name no unit, and deliberately need no unit parameter.** Every
+    /// other coach prompt carries a worked example with a unit word in it; these two
+    /// carry no data-shaped literal at all (see `singleVariantPrompt`), so there is
+    /// nothing here for a pounds reader to contradict. The figures themselves arrive
+    /// already converted and already carrying their unit, from
+    /// `ExerciseDeepDiveInput.toPromptText(in:)` and the segment magnitudes
+    /// `ExerciseDeepDiveAggregator` renders. See docs/weight-unit-preference.md §13.
+    ///
     /// - Parameter localeIdentifier: the reader's locale, from `ExerciseDeepDiveInput`.
     ///   The instructions stay English; `AICoachLocaleDirective` prepends the output-language
     ///   directive Apple documents. Writing the instructions themselves in German was tried
@@ -109,7 +117,7 @@ enum ExerciseDeepDiveInstructions {
 
     Strict rules:
     - Every number you write must appear verbatim in the input. IF A FIGURE IS NOT IN THE INPUT, IT DOES NOT EXIST: do not compute it, estimate it, infer it from other figures, or invent it.
-    - There is no progression data, and you must not produce any. Do not state or imply improvement, decline, a plateau, stability, a percentage, a gain or loss in kg, an estimated-1RM change, a training frequency, a "strongest period", or any comparison between two periods. NEVER STATE A NUMBER THAT IS NOT PRESENT IN THE PROMPT.
+    - There is no progression data, and you must not produce any. Do not state or imply improvement, decline, a plateau, stability, a percentage, a gain or loss in weight, an estimated-1RM change, a training frequency, a "strongest period", or any comparison between two periods. NEVER STATE A NUMBER THAT IS NOT PRESENT IN THE PROMPT.
     - NEVER NAME A TIMEFRAME THE INPUT DOES NOT STATE. The only period you may name is the `History range` value, copied exactly. Do not write "in the last six months", "this year" or "recently".
     - NEVER WRITE A DATE MORE PRECISE THAN THE INPUT. The input carries months and month ranges only. Never write a day.
     - Do not name any button, menu or other control on the screen. Say that a single variant has to be selected; do not say where.

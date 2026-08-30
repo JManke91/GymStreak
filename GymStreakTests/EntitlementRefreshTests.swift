@@ -167,7 +167,7 @@ struct EntitlementRefreshTests {
         harness.seedSessions(count: 5)
         harness.exhaustAllowance()
 
-        await harness.viewModel.load(modelContext: harness.context)
+        await harness.viewModel.load(modelContext: harness.context, weightUnit: .kilograms)
         await harness.viewModel.waitForCurrentGeneration()
         guard case .gated = harness.viewModel.state else {
             Issue.record("expected .gated, got \(harness.viewModel.state)")
@@ -181,7 +181,7 @@ struct EntitlementRefreshTests {
         #expect(harness.viewModel.allowanceReloadKey != keyWhileGated)
 
         // …and re-entering on that key leaves the dead end.
-        await harness.viewModel.load(modelContext: harness.context)
+        await harness.viewModel.load(modelContext: harness.context, weightUnit: .kilograms)
         await harness.viewModel.waitForCurrentGeneration()
         if case .gated = harness.viewModel.state {
             Issue.record("still gated after buying Pro")

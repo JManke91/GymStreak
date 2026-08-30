@@ -78,6 +78,21 @@ struct WeightUnitTests {
         #expect(WatchWeightFormatting.number(100, in: .pounds) == "220\(separator)5")
     }
 
+    /// The twin suites exist to catch a divergence between the two `WeightUnit` copies, so
+    /// every member of the type is asserted in both — including one only the iOS AI coach
+    /// calls today. `roundedDisplay` is where a prompt figure gets its precision: the
+    /// coach builds its lines with `String(format:)` and has no format style to bound the
+    /// conversion residue with.
+    @Test("A converted weight rounds to its unit's own precision")
+    func roundedDisplayFollowsThePerUnitPrecision() {
+        // 100 kg is 220.46226… lb; pounds keep one digit.
+        #expect(WeightUnit.pounds.roundedDisplay(fromKilograms: 100) == 220.5)
+        // Kilograms keep two, so a quarter-plate weight survives untouched.
+        #expect(WeightUnit.kilograms.roundedDisplay(fromKilograms: 37.25) == 37.25)
+        // And a kilogram value is never converted on the way through.
+        #expect(WeightUnit.kilograms.roundedDisplay(fromKilograms: 999) == 999)
+    }
+
     @Test("Thousands are never grouped")
     func noGrouping() {
         // 999 kg is 2202.6 lb: a grouping separator here would read as a decimal.

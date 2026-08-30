@@ -126,7 +126,12 @@ final class CoachChatViewModel {
     /// Restoring and reading the existing conversation happens here unconditionally:
     /// a user's own chat history is never gated and never costs an allowance
     /// (§7 Rule 4). Only the paywall for an *exhausted* allowance is raised.
-    func onAppear(makeFactProvider: () -> ChatFactProviding) {
+    /// - Parameter weightUnit: the reader's unit, read from `\.weightUnit` by
+    ///   `CoachChatView`. Applied **before** `configure` so the very first session is
+    ///   built with it, and re-applied on every appearance so a Settings switch made
+    ///   between two visits reaches the next turn. See docs/weight-unit-preference.md §13.
+    func onAppear(weightUnit: WeightUnit, makeFactProvider: () -> ChatFactProviding) {
+        service.setWeightUnit(weightUnit)
         if !service.isConfigured {
             service.configure(factProvider: makeFactProvider())
         }

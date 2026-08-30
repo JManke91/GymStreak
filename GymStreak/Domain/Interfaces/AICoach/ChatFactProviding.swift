@@ -40,8 +40,15 @@ protocol ChatFactProviding: Sendable {
     /// The all-time PR for a free-form exercise name: best set, estimated 1RM,
     /// and date — or disambiguation candidates / a not-found line with the
     /// closest known names. Name resolution happens here, not in the schema.
-    func exercisePRFacts(exerciseName: String) async -> String
+    ///
+    /// - Parameter weightUnit: the unit the fact line's weights are written in.
+    ///   Passed per call rather than held by the conformer because the reader can
+    ///   change it between two turns of one conversation; `CoachChatService` rebuilds
+    ///   its tools and its session when they do.
+    func exercisePRFacts(exerciseName: String, weightUnit: WeightUnit) async -> String
 
     /// Workout count, volume, last workout, and current streak for a timeframe.
-    func workoutHistoryFacts(timeframe: ChatHistoryTimeframe) async -> String
+    ///
+    /// - Parameter weightUnit: see `exercisePRFacts`.
+    func workoutHistoryFacts(timeframe: ChatHistoryTimeframe, weightUnit: WeightUnit) async -> String
 }

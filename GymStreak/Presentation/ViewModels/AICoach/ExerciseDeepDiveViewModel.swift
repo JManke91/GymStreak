@@ -154,12 +154,16 @@ final class ExerciseDeepDiveViewModel {
     /// raised `.exerciseDeepDive` and the state is left untouched, so the "Ask
     /// the Coach" button stays where it was rather than collapsing into an
     /// empty surface behind the paywall.
+    /// - Parameter weightUnit: the reader's unit, read from `\.weightUnit` by the view
+    ///   that calls this — the same way `locale` arrives. See
+    ///   docs/weight-unit-preference.md §13.
     @discardableResult
     func generate(
         exerciseId: UUID,
         exerciseName: String,
         usage: DeepDiveUsage,
-        locale: Locale
+        locale: Locale,
+        weightUnit: WeightUnit
     ) -> Bool {
         guard let ticket = allowanceGate.requestGeneration() else { return false }
         start(
@@ -167,6 +171,7 @@ final class ExerciseDeepDiveViewModel {
             exerciseName: exerciseName,
             usage: usage,
             locale: locale,
+            weightUnit: weightUnit,
             bypassCache: false,
             ticket: ticket
         )
@@ -186,7 +191,8 @@ final class ExerciseDeepDiveViewModel {
         exerciseId: UUID,
         exerciseName: String,
         usage: DeepDiveUsage,
-        locale: Locale
+        locale: Locale,
+        weightUnit: WeightUnit
     ) -> Bool {
         guard let ticket = allowanceGate.requestGeneration() else { return false }
         start(
@@ -194,6 +200,7 @@ final class ExerciseDeepDiveViewModel {
             exerciseName: exerciseName,
             usage: usage,
             locale: locale,
+            weightUnit: weightUnit,
             bypassCache: true,
             ticket: ticket
         )
@@ -212,6 +219,7 @@ final class ExerciseDeepDiveViewModel {
         exerciseName: String,
         usage: DeepDiveUsage,
         locale: Locale,
+        weightUnit: WeightUnit,
         bypassCache: Bool,
         ticket: AICoachAllowanceGate.Ticket
     ) {
@@ -227,6 +235,7 @@ final class ExerciseDeepDiveViewModel {
                 exerciseName: exerciseName,
                 usage: usage,
                 locale: locale,
+                weightUnit: weightUnit,
                 bypassCache: bypassCache,
                 ticket: ticket
             )
@@ -262,6 +271,7 @@ final class ExerciseDeepDiveViewModel {
         exerciseName: String,
         usage: DeepDiveUsage,
         locale: Locale,
+        weightUnit: WeightUnit,
         bypassCache: Bool,
         ticket: AICoachAllowanceGate.Ticket
     ) async {
@@ -289,7 +299,8 @@ final class ExerciseDeepDiveViewModel {
             exerciseId: exerciseId,
             exerciseName: exerciseName,
             usage: usage,
-            locale: locale
+            locale: locale,
+            weightUnit: weightUnit
         )
         // A superseded generation must write no state: `start` cancels the previous
         // stream task and then sets `.preparing` for the new one, so a late
@@ -318,7 +329,7 @@ final class ExerciseDeepDiveViewModel {
         }
 
         // 6. Stream
-        if await stream(input: input, cacheKey: key) {
+        if await stream(input: input, weightUnit: weightUnit, cacheKey: key) {
             pending = nil
         }
     }
@@ -350,12 +361,16 @@ final class ExerciseDeepDiveViewModel {
     @discardableResult
     private func stream(
         input: ExerciseDeepDiveInput,
+        weightUnit: WeightUnit,
         cacheKey: String?
     ) async -> Bool {
         let start = ContinuousClock.now
 
         do {
-            guard let responseStream = try await service.streamExerciseDeepDive(input: input) else {
+            guard let responseStream = try await service.streamExerciseDeepDive(
+                input: input,
+                weightUnit: weightUnit
+            ) else {
                 state = .unavailable
                 return false
             }
@@ -363,7 +378,7 @@ final class ExerciseDeepDiveViewModel {
             // Composed in Swift from the same aggregate, and available before the first
             // token — so the surface has one real line while the paragraphs are still
             // skeletons. The model never receives the facts behind it.
-            let peakSentence = input.peakSentence
+            let peakSentence = input.peakSentence(in: weightUnit)
             // A blended view has no progression, so it gets no progression paragraph —
             // whatever the model returns for that field. The prompt and the field's
             // `@Guide` both tell it to omit the field; this is the half of the guarantee

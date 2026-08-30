@@ -65,12 +65,19 @@ struct ExerciseDeepDiveAggregator {
     ///     `ExerciseProgressViewModel` already resolved both, and a second resolution
     ///     could disagree with the menu the user picked from. `.combined` folds every
     ///     usage together, which is what an exercise trained exactly one way always is.
+    ///   - weightUnit: the reader's unit. Only the segment magnitudes need it — they are
+    ///     the one place this aggregator renders a weight as text. Every figure that stays
+    ///     a `Double` stays canonical kilograms (`estimatedOneRMDeltaKg`, the whole of
+    ///     `PerformancePoint`) and is converted later, by
+    ///     `ExerciseDeepDiveInput.toPromptText(in:)` / `peakSentence(in:)`. See
+    ///     docs/weight-unit-preference.md §13.
     ///   - now: Injection point for current date (injectable for tests).
     func buildAggregate(
         exerciseId: UUID,
         exerciseName: String,
         locale: Locale,
         modelContext: ModelContext,
+        weightUnit: WeightUnit,
         usage: DeepDiveUsage = .combined,
         now: Date = Date()
     ) -> ExerciseDeepDiveAggregate {
@@ -89,6 +96,7 @@ struct ExerciseDeepDiveAggregator {
                 filter: filter,
                 exerciseName: exerciseName,
                 locale: locale,
+                weightUnit: weightUnit,
                 usage: usage,
                 now: now
             )
@@ -105,6 +113,7 @@ struct ExerciseDeepDiveAggregator {
         filter: RowFilter,
         exerciseName: String,
         locale: Locale,
+        weightUnit: WeightUnit,
         usage: DeepDiveUsage,
         now: Date
     ) -> ExerciseDeepDiveInput? {
@@ -161,8 +170,8 @@ struct ExerciseDeepDiveAggregator {
         let percentChange = firstEst > 0 ? Int((deltaKg / firstEst * 100).rounded()) : 0
 
         let weeklyBuckets = buildWeeklyBuckets(points: sortedPoints)
-        let strongestSegment = findStrongestSegment(buckets: weeklyBuckets, locale: locale, now: now)
-        let currentSegment = buildCurrentSegment(buckets: weeklyBuckets, locale: locale, now: now)
+        let strongestSegment = findStrongestSegment(buckets: weeklyBuckets, locale: locale, weightUnit: weightUnit, now: now)
+        let currentSegment = buildCurrentSegment(buckets: weeklyBuckets, locale: locale, weightUnit: weightUnit, now: now)
 
         return ExerciseDeepDiveInput(
             locale: locale.identifier,
@@ -465,10 +474,11 @@ struct ExerciseDeepDiveAggregator {
     private func findStrongestSegment(
         buckets: [WeeklyBucket],
         locale: Locale,
+        weightUnit: WeightUnit,
         now: Date
     ) -> ProgressionSegment {
         guard buckets.count >= 4 else {
-            return buildSegmentFrom(buckets: buckets, locale: locale)
+            return buildSegmentFrom(buckets: buckets, locale: locale, weightUnit: weightUnit)
         }
 
         var bestStart = 0
@@ -491,7 +501,7 @@ struct ExerciseDeepDiveAggregator {
         }
 
         let bestSlice = Array(buckets[bestStart...bestEnd])
-        return buildSegmentFrom(buckets: bestSlice, locale: locale)
+        return buildSegmentFrom(buckets: bestSlice, locale: locale, weightUnit: weightUnit)
     }
 
     // MARK: - Current Segment
@@ -500,16 +510,21 @@ struct ExerciseDeepDiveAggregator {
     private func buildCurrentSegment(
         buckets: [WeeklyBucket],
         locale: Locale,
+        weightUnit: WeightUnit,
         now: Date
     ) -> ProgressionSegment {
         let windowSize = min(8, max(4, buckets.count))
         let slice = Array(buckets.suffix(windowSize))
-        return buildSegmentFrom(buckets: slice, locale: locale)
+        return buildSegmentFrom(buckets: slice, locale: locale, weightUnit: weightUnit)
     }
 
     // MARK: - Segment Builder
 
-    private func buildSegmentFrom(buckets: [WeeklyBucket], locale: Locale) -> ProgressionSegment {
+    private func buildSegmentFrom(
+        buckets: [WeeklyBucket],
+        locale: Locale,
+        weightUnit: WeightUnit
+    ) -> ProgressionSegment {
         guard !buckets.isEmpty else {
             return ProgressionSegment(
                 classification: "plateau",
@@ -521,6 +536,10 @@ struct ExerciseDeepDiveAggregator {
 
         let firstEst = buckets.first?.avgEst1RM ?? 0
         let lastEst = buckets.last?.avgEst1RM ?? 0
+        // `delta`, `slopeThreshold` and the "stable" cut-off below are all **kilogram**
+        // magnitudes and stay so: they decide whether a change is worth calling a change
+        // at all, which must not depend on the unit the reader happens to read. The
+        // conversion happens once, further down, where the magnitude becomes text.
         let delta = lastEst - firstEst
         let slopeThreshold = 0.5
 
@@ -554,7 +573,7 @@ struct ExerciseDeepDiveAggregator {
             // The reader's own separator, like every other figure in the prompt — this
             // one bypassed it, so a German narrative had the model converting "0.7" to
             // "0,7" itself rather than copying it.
-            : "\(sign)\(String(format: "%.1f", locale: locale, delta)) kg est. 1RM"
+            : "\(sign)\(AICoachUnitVocabulary.decimal(delta, in: weightUnit, locale: locale)) \(AICoachUnitVocabulary.unitWord(weightUnit)) est. 1RM"
 
         return ProgressionSegment(
             classification: classification,

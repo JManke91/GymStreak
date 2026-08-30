@@ -628,7 +628,8 @@ private struct ExerciseProgressChartViewInternal: View {
                                 exerciseId: exercise.id,
                                 exerciseName: exercise.name,
                                 usage: usage,
-                                locale: .current
+                                locale: .current,
+                                weightUnit: weightUnit
                             ) {
                                 hasTappedAskCoach = true
                             }
@@ -648,7 +649,8 @@ private struct ExerciseProgressChartViewInternal: View {
                                 exerciseId: exercise.id,
                                 exerciseName: exercise.name,
                                 usage: usage,
-                                locale: .current
+                                locale: .current,
+                                weightUnit: weightUnit
                             )
                         }
                     )

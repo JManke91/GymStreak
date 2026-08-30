@@ -51,7 +51,8 @@ struct ExerciseDeepDiveIdentityTests {
                 exerciseId: dumbbell.id,
                 exerciseName: dumbbell.name,
                 locale: .init(identifier: "en_US"),
-                modelContext: context
+                modelContext: context,
+                weightUnit: .kilograms
             ).input
         )
 
@@ -68,7 +69,8 @@ struct ExerciseDeepDiveIdentityTests {
                 exerciseId: barbell.id,
                 exerciseName: barbell.name,
                 locale: .init(identifier: "en_US"),
-                modelContext: context
+                modelContext: context,
+                weightUnit: .kilograms
             ).input == nil
         )
     }
@@ -117,7 +119,8 @@ struct ExerciseDeepDiveIdentityTests {
                 exerciseId: curls.id,
                 exerciseName: curls.name,
                 locale: .init(identifier: "en_US"),
-                modelContext: context
+                modelContext: context,
+                weightUnit: .kilograms
             ).input
         )
 
