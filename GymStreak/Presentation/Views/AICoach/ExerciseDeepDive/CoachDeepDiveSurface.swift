@@ -140,7 +140,7 @@ struct CoachDeepDiveSurface: View {
     @ViewBuilder
     private func paragraphSlot(_ text: String, showsCursor: Bool, placeholderLines: Int) -> some View {
         if text.isEmpty {
-            if placeholderLines > 0 { skeletonLines(placeholderLines) }
+            if placeholderLines > 0 { AISkeletonLines(count: placeholderLines) }
         } else {
             StreamingTextView(
                 text: text,
@@ -149,14 +149,6 @@ struct CoachDeepDiveSurface: View {
                 color: .white.opacity(0.88),
                 lineSpacing: 4
             )
-        }
-    }
-
-    private func skeletonLines(_ count: Int) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            ForEach(0..<count, id: \.self) { index in
-                AISkeletonBar(width: index == count - 1 ? 200 : nil, height: 12)
-            }
         }
     }
 

@@ -984,16 +984,16 @@
 "ai_coach.period_recap.eyebrow.streaming" = "COACH WRITING";
 "ai_coach.period_recap.eyebrow.static" = "COACH · RECAP";
 "ai_coach.period_recap.cache.from_cache" = "Cached";
-"ai_coach.period_recap.cache.regenerate" = "Regenerate";
 "ai_coach.period_recap.chip.this_week" = "This Week";
 "ai_coach.period_recap.chip.last_week" = "Last Week";
 "ai_coach.period_recap.chip.this_month" = "This Month";
 "ai_coach.period_recap.chip.last_month" = "Last Month";
 "ai_coach.period_recap.chip.last_3_months" = "3 Months";
 "ai_coach.period_recap.chip.this_year" = "This Year";
-"ai_coach.period_recap.section.trends" = "01 · What changed";
-"ai_coach.period_recap.section.correlation" = "02 · Notable pattern";
-"ai_coach.period_recap.section.closing" = "03 · Looking ahead";
+"ai_coach.period_recap.section.format" = "%1$02d · %2$@";
+"ai_coach.period_recap.section.trends" = "What changed";
+"ai_coach.period_recap.section.correlation" = "Notable pattern";
+"ai_coach.period_recap.section.closing" = "Looking ahead";
 "ai_coach.period_recap.correlation.label" = "PATTERN";
 "ai_coach.period_recap.stat.sessions" = "Sessions";
 "ai_coach.period_recap.stat.volume" = "Volume";
@@ -1068,6 +1068,8 @@
 "ai_coach.chat.allowance.nudge.exhausted" = "No Coach messages left this month. Gym Streak Pro unlocks unlimited chat.";
 
 // P4 — AI Period Recap monthly taster
+"ai_coach.period_recap.regenerate.confirm.title" = "Regenerate this recap?";
+"ai_coach.period_recap.regenerate.confirm.message" = "This writes a new recap and uses one of your free AI recaps. %d left this month.";
 "ai_coach.period_recap.allowance.nudge" = "%1$d of %2$d free AI recaps left this month";
 "ai_coach.period_recap.allowance.nudge.exhausted" = "No free AI recaps left this month. Gym Streak Pro unlocks unlimited recaps.";
 "ai_coach.period_recap.offer.title" = "Generate your AI recap";

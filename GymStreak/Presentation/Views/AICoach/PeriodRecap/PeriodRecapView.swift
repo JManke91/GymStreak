@@ -44,6 +44,10 @@ private struct PeriodRecapViewInternal: View {
     // MARK: - State
 
     @State private var viewModel: PeriodRecapViewModel
+
+    /// Gates the regenerate tap for a metered reader — see
+    /// `PeriodRecapViewModel.regenerateConfirmationMessage`.
+    @State private var isConfirmingRegenerate = false
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
     @Environment(\.locale) private var locale
@@ -120,8 +124,49 @@ private struct PeriodRecapViewInternal: View {
             .accessibilityLabel("ai_coach.period_recap.nav.back".localized)
 
             Spacer()
+
+            // The regenerate affordance every other coach surface puts in its
+            // `AISurface` header. This screen is a tree of cards rather than one
+            // surface, so it belongs in the nav bar instead of on a single card —
+            // regenerating replaces the whole recap, not one section of it.
+            if case .success = viewModel.state {
+                Button {
+                    HapticManager.shared.light()
+                    if viewModel.regenerateConfirmationMessage != nil {
+                        isConfirmingRegenerate = true
+                    } else {
+                        Task { await viewModel.regenerate(modelContext: modelContext, weightUnit: weightUnit) }
+                    }
+                } label: {
+                    Image(systemName: "arrow.clockwise")
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(Color.white.opacity(0.75))
+                        .frame(width: 36, height: 36)
+                        .background(
+                            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                .fill(Color.white.opacity(0.06))
+                        )
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("ai_coach.regenerate_button".localized)
+            }
         }
         .padding(.horizontal, 20)
+        .confirmationDialog(
+            "ai_coach.period_recap.regenerate.confirm.title".localized,
+            isPresented: $isConfirmingRegenerate,
+            titleVisibility: .visible
+        ) {
+            Button("ai_coach.regenerate_button".localized) {
+                Task { await viewModel.regenerate(modelContext: modelContext, weightUnit: weightUnit) }
+            }
+            Button("common.cancel".localized, role: .cancel) {}
+        } message: {
+            // Read at presentation time, so the count is the one that is true now.
+            if let message = viewModel.regenerateConfirmationMessage {
+                Text(message)
+            }
+        }
     }
 
     // MARK: - Title Block
@@ -153,6 +198,13 @@ private struct PeriodRecapViewInternal: View {
         .padding(.horizontal, 20)
     }
 
+    /// Cache provenance only — "from cache · 2 hours ago".
+    ///
+    /// It used to end in a small "Regenerate" text link, which was the screen's only
+    /// regenerate affordance and appeared solely on a cached recap. That action now lives
+    /// in the nav bar as the same circular button every other coach surface has, so it is
+    /// reachable for a freshly generated recap too and goes through one confirmation path
+    /// instead of two — the link spent a metered reader's monthly recap with no prompt.
     private func cacheSubrow(isCached: Bool, generatedAt: Date) -> some View {
         HStack(spacing: 4) {
             if isCached {
@@ -165,17 +217,6 @@ private struct PeriodRecapViewInternal: View {
                 Text(relativeDate(generatedAt))
                     .font(AICoachTheme.mono(size: 10, weight: .regular))
                     .foregroundStyle(Color.white.opacity(0.35))
-                Text("·")
-                    .font(AICoachTheme.mono(size: 10, weight: .regular))
-                    .foregroundStyle(Color.white.opacity(0.2))
-                Button {
-                    Task { await viewModel.regenerate(modelContext: modelContext, weightUnit: weightUnit) }
-                } label: {
-                    Text("ai_coach.period_recap.cache.regenerate".localized)
-                        .font(AICoachTheme.mono(size: 10, weight: .regular))
-                        .foregroundStyle(AICoachTheme.accent)
-                }
-                .buttonStyle(.plain)
             }
         }
     }
@@ -240,7 +281,10 @@ private struct PeriodRecapViewInternal: View {
                 correlationContent: partial.correlationHighlight,
                 closingContent: partial.closingSentence,
                 metrics: partial.headlineMetrics,
-                showCorrelationWhenEmpty: true,
+                // Only reserve the correlation slot when the input actually carried a
+                // pattern. Reserving it unconditionally numbered the closing card `03`
+                // for the whole stream and then renumbered it to `02` on completion.
+                showCorrelationWhenEmpty: partial.hasDetectedPatterns,
                 isStreaming: true,
                 footerContent: { AnyView(streamingFooter) },
                 privacyFooter: false
@@ -347,6 +391,7 @@ private struct PeriodRecapViewInternal: View {
 
             // 3. Trends card
             sectionCardSlot(
+                number: 1,
                 label: "ai_coach.period_recap.section.trends".localized,
                 content: trendsContent,
                 minHeight: CardHeight.trends,
@@ -356,12 +401,18 @@ private struct PeriodRecapViewInternal: View {
             // 4. Correlation card
             // During streaming: render when the field is non-nil (may still be empty string mid-stream).
             // In success: omit entirely when nil (section hidden per schema Optional).
-            if showCorrelationWhenEmpty || correlationContent != nil {
-                correlationCardSlot(content: correlationContent ?? "", isStreaming: isStreaming)
+            //
+            // The ordinals below are computed rather than fixed: when this card is absent the
+            // closing card is section 02, not 03. Hardcoding them in the strings is what put
+            // `01 · …` directly above `03 · …` on screen.
+            let showsCorrelation = showCorrelationWhenEmpty || correlationContent != nil
+            if showsCorrelation {
+                correlationCardSlot(number: 2, content: correlationContent ?? "", isStreaming: isStreaming)
             }
 
             // 5. Closing card
             sectionCardSlot(
+                number: showsCorrelation ? 3 : 2,
                 label: "ai_coach.period_recap.section.closing".localized,
                 content: closingContent,
                 minHeight: CardHeight.closing,
@@ -510,13 +561,14 @@ private struct PeriodRecapViewInternal: View {
 
     /// Renders a labelled AISurface card with placeholder → streaming cross-dissolve.
     private func sectionCardSlot(
+        number: Int,
         label: String,
         content: String,
         minHeight: CGFloat,
         isStreaming: Bool
     ) -> some View {
         VStack(alignment: .leading, spacing: 10) {
-            sectionLabel(label)
+            sectionLabel(number: number, label)
             AISurface(isStreaming: isStreaming && !content.isEmpty, showFooter: false, compact: true) {
                 ZStack(alignment: .topLeading) {
                     placeholderBars
@@ -537,9 +589,9 @@ private struct PeriodRecapViewInternal: View {
 
     // MARK: - Correlation Card Slot
 
-    private func correlationCardSlot(content: String, isStreaming: Bool) -> some View {
+    private func correlationCardSlot(number: Int, content: String, isStreaming: Bool) -> some View {
         VStack(alignment: .leading, spacing: 10) {
-            sectionLabel("ai_coach.period_recap.section.correlation".localized)
+            sectionLabel(number: number, "ai_coach.period_recap.section.correlation".localized)
             VStack(alignment: .leading, spacing: 8) {
                 HStack(spacing: 6) {
                     Image(systemName: "chart.line.uptrend.xyaxis")
@@ -641,8 +693,14 @@ private struct PeriodRecapViewInternal: View {
 
     /// `.drawingGroup()` rasterises the kerned+uppercase text as a single CALayer,
     /// preventing the "garbled characters" glitch during ancestor layout animations.
-    private func sectionLabel(_ text: String) -> some View {
-        Text(text)
+    ///
+    /// **The ordinal is composed here, not baked into the localized string.** It used to be
+    /// (`"02 · Auffälligkeit"`), and the moment the correlation card was correctly hidden —
+    /// which is what the `nil`-placeholder fix made happen — the reader saw `01` followed by
+    /// `03` (device, German, 2026-08-30). The number describes a position among the sections
+    /// actually on screen, so only the view can know it.
+    private func sectionLabel(number: Int, _ text: String) -> some View {
+        Text(String(format: "ai_coach.period_recap.section.format".localized, number, text))
             .font(.system(size: 12, weight: .semibold, design: .monospaced))
             .foregroundStyle(Color.white.opacity(0.35))
             .kerning(0.8)

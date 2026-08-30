@@ -99,6 +99,32 @@ struct PeriodRecapAllowanceTests {
         #expect(harness.allowance.consumeCount == 0)
     }
 
+    // MARK: - The regenerate confirmation
+
+    /// Regenerating spends the month's recap, and this screen's whole allowance design is
+    /// that spending it is a deliberate choice — which is why `load` and `setRange` never
+    /// generate for a metered reader either. The nav-bar regenerate button asks first.
+    @Test("A metered reader with a recap left is asked before regenerating spends it")
+    func meteredReaderIsAskedBeforeRegenerating() {
+        let harness = makeHarness()
+        #expect(harness.viewModel.regenerateConfirmationMessage != nil)
+    }
+
+    /// No prompt once there is nothing to spend: `requestGeneration` raises the paywall
+    /// instead of running, so a confirmation would only be a second tap before a wall.
+    @Test("An exhausted reader is not asked — the paywall answers instead")
+    func exhaustedReaderIsNotAsked() {
+        let harness = makeHarness()
+        harness.spend()
+        #expect(harness.viewModel.regenerateConfirmationMessage == nil)
+    }
+
+    @Test("A Pro reader and an ungated build regenerate without a prompt")
+    func unmeteredReaderIsNotAsked() {
+        #expect(makeHarness(state: .subscription).viewModel.regenerateConfirmationMessage == nil)
+        #expect(makeHarness(isGatingEnabled: false).viewModel.regenerateConfirmationMessage == nil)
+    }
+
     @Test("With the kill switch off the recap generates on open, exactly as before")
     func killSwitchOffGeneratesOnOpen() async {
         let harness = makeHarness(isGatingEnabled: false)

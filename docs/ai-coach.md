@@ -212,6 +212,8 @@ GymStreak/
 - **System prompt file**: `PostWorkoutRecapInstructions.swift`.
 - **Output struct**: `PostWorkoutRecapOutput` — single `narrative: String` field.
 
+- **Skeleton while preparing (2026-08-30).** `RecapState` has a `.preparing` case, set synchronously at the end of `PostWorkoutRecapViewModel.start` once every gate has passed. `AIRecapInline` renders it — and any `.streaming` snapshot whose text is still empty — as three `AISkeletonBar` rows cross-dissolving into the text, inside a `ZStack` with a `minHeight` so the card reserves its height from the first frame and the save sheet does not grow under the reader's thumb. Before this the card was `.idle` (nothing at all) through the availability retry, the prewarm and the first token, so the reader watched blank space and the finished paragraph appeared out of nowhere. Every other coach surface already had this: `WorkoutAnalysisViewModel` and `ExerciseDeepDiveViewModel` both call it `.preparing`, and `PeriodRecapView` has a full `loadingView`.
+
 ### 2. Period Recap
 
 - **Entry points**:
@@ -226,7 +228,10 @@ GymStreak/
 - **Output struct**: `PeriodRecapOutput` — `headline`, `trendsNarrative`, `correlationHighlight: String?` (Optional), `closingSentence`.
 - **Fact-based content redesign (July 2026, same doctrine as Workout Analysis)**: the first version let the model narrate freely — the headline restated total volume/session counts (redundant with the stat strip directly above and a metric the user doesn't care about), the trends narrative rambled and produced contradictions ("Plateau erreicht, wobei die Gewichte zurückgegangen sind" — because plateaued trends still carried a kg delta in the prompt), and the closing was pure motivational filler. Now `PeriodRecapInput.toPromptText()` resolves everything in Swift: a **Headline fact** (strongest est-1RM gain > declines > steady plateau), trend groups where **plateaued exercises are serialized by name only** (no delta → no contradiction fodder), a **Consistency line** (weeks trained of weeks covered, avg sessions/week, longest gap, regular/irregular flag — running periods only count elapsed weeks), and a **Closing fact**. The system prompt reduces the model to rephrasing, bans total volume and hype words (bemerkenswert/beeindruckend/spannend/…), and requires contradiction-free trend sentences.
 - **Consistency + recommendation (July 2026)**: `ConsistencyMetrics` (totalWeeks/trainedWeeks/avgSessionsPerWeek/longestGapDays/isIrregular; irregular = skipped weeks or a gap ≥ 9 days) feeds the prompt. `buildRecommendation` resolves **at most one actionable suggestion**, only when stagnation demonstrably coincides with irregularity: (1) the adherence correlation fired (dips followed low-frequency weeks) → "keep frequency steady at ~X/week", or (2) training irregular AND no exercise improved → "more evenly spaced sessions". The closing fact is then marked as a recommendation and the system prompt allows a suggestion **only there** — the general no-prescriptive-advice rule stays for everything else. This is a deliberate product decision (user request): the Rückblick may give one concrete training-consistency recommendation; medical/nutrition advice remains banned.
-- **`correlationHighlight` is `String?`**: the field is schema-Optional so the model produces `null` (not an empty string) when no correlation data is present. The UI skips the card entirely when `nil`. A belt-and-suspenders heuristic (`isApologeticCorrelation`) in `PeriodRecapViewModel` additionally filters explicit "nothing found" phrasing ("keine Zusammenhänge", "no correlation", …). The earlier subject-matching heuristic (short text without a known exercise name → apologetic) was **removed**: the pre-written pattern statements are short and contain no exercise names, so it would have suppressed every real finding once the model started reproducing them verbatim.
+- **`correlationHighlight` is `String?`, and the model is not trusted to leave it out.** The field is schema-Optional, and `@Generable` defaults to `representNilExplicitlyInGeneratedContent: false`, so a nil property is omitted from the generated content entirely — the affordance is real. The model still does not always take it: asked to *"return nil for this field"*, it wrote the literal string `nil`, which the card rendered under the `MUSTER` label (German, on device, 2026-08-30). Three things changed, and all three are described in § "Prompt grounding rules" rules 3 and 4: the prompt and the `@Guide` no longer name a programming construct; `PeriodRecapViewModel` drops the field outright when the input carried no "Detected patterns" section (`hasDetectedPatterns`, resolved in Swift from `sampleInput.correlations`); and `CoachCorrelationSanitizer.sanitized(_:)` rejects a placeholder token or an apology in the streamed partial, the final output **and** inside `AICoachCache.loadPeriodRecap`. The earlier subject-matching heuristic (short text without a known exercise name → apologetic) stays **removed**: the pre-written pattern statements are short and contain no exercise names, so it would have suppressed every real finding once the model started reproducing them verbatim.
+- **Regenerate lives in the nav bar (2026-08-30).** Every other coach surface puts a circular `arrow.clockwise` in its `AISurface` header; this screen is a *tree* of cards rather than one surface, so the button sits at the trailing edge of `topNav` (36×36, matching the back button) and shows only in `.success` — regenerating replaces the whole recap, not one section of it, so a per-card button would have been wrong. It replaces a small "Regenerate" text link that used to end the cache sub-row, which appeared **only** on a cached recap (so a freshly generated one had no regenerate affordance at all) and which spent a metered reader's monthly recap with no prompt. **A metered reader is now asked first** — `PeriodRecapViewModel.regenerateConfirmationMessage`, `nil` for a Pro reader and while the kill switch is off: spending the month's single recap is meant to be a deliberate choice, the same reason `load` and `setRange` never generate for them. An *exhausted* reader gets no confirmation, because `AICoachAllowanceGate.requestGeneration` raises the paywall instead of running and a prompt there would be a second tap before a wall. Three tests in `PeriodRecapAllowanceTests` pin the three cases.
+- **The correlation slot is reserved only when the input has a pattern.** `PartialContent.hasDetectedPatterns` carries the flag into the streaming state, so `PeriodRecapView` passes it as `showCorrelationWhenEmpty`. Reserving the slot unconditionally — what it did before — numbered the closing card `03` for the whole stream and then renumbered it to `02` in front of the reader the moment the empty card was dropped at `.success`.
+- **Section ordinals are composed in the view, never baked into the localized string.** They used to be (`"02 · Auffälligkeit"`), and the moment the correlation card was correctly hidden — which is exactly what the `nil`-placeholder fix made happen — the reader saw `01 · Was sich verändert hat` directly above `03 · Ausblick` (device, German, 2026-08-30). `PeriodRecapView.sectionLabel(number:_:)` composes the label from an `ai_coach.period_recap.section.format` key (`"%1$02d · %2$@"`, so the ordinal's position and the `·` glue stay translatable), and `recapCardTree` passes `3` or `2` to the closing card depending on whether the correlation card is showing. The three `ai_coach.period_recap.section.*` title strings carry only the title in both languages.
 - **Stream cancellation**: `PeriodRecapViewModel` stores the active stream in a `streamTask: Task<Void, Never>?`. `setRange`, `load`, `generateNow` and `regenerate` all cancel the previous task before starting a new one. The for-await loop guards on `Task.isCancelled` and does not surface output after cancellation.
 - **Month label**: `PeriodRange.label(locale:)` formats `.thisMonth`/`.lastMonth` with `Date.FormatStyle` (`.locale(locale).month(.wide).year()`), not a `DateFormatter`. It is read from view bodies (title block, range chips, the free-tier offer card), where allocating a formatter is forbidden by the main-thread rules, and a cached `static let` formatter is not an option because `Domain/` stays isolation-agnostic and has no actor to hold a per-locale cache. `Date.FormatStyle` is a `Sendable` value usable from any isolation domain and honours the passed-in `locale` — which matters because `PeriodRecapAggregator` calls this with an explicit locale to build the model's prompt, not only for display. A hardcoded per-language month table was tried first and rejected for exactly that reason.
 - **Free-tier metering (P4)**: two states — `.offer(HeadlineMetrics?)` and `.gated(HeadlineMetrics?)`, both rendered by `PeriodRecapAllowanceCard` — exist only for a metered user. On the free tier the screen never generates on arrival: `load`/`setRange` land on `.offer` with a "Generate recap" button, because one recap a month is a single irreversible choice and opening the screen (or following the proactive month-boundary prompt) must not be what spends it. `generateNow` is the only path that consumes; `regenerate` asks the gate before invalidating the cache so a refusal leaves the cached recap on screen. A cached recap, an unavailable device and an insufficient period are all resolved *before* the meter is touched. See docs/pro-subscription.md §5e.
@@ -367,6 +372,157 @@ GymStreak/
 
 ---
 
+## Prompt grounding rules (binding, all surfaces)
+
+These are properties of **every** coach prompt and every `@Guide`, not of one surface. They are
+pinned by `GymStreakTests/CoachPromptGroundingTests.swift`, which scans all five coach surfaces
+(post-workout recap, workout analysis, period recap, coach chat, and the deep dive — six prompt
+strings, since the deep dive has two variants, and the three unit-parameterised ones are scanned in
+both `kg` and `lb`) plus all four generation schemas. A green test
+proves the *prompt* is clean; it can never prove the *output* is. That is always a device check.
+
+### 1. No prompt carries a data-shaped literal
+
+**No system prompt or `@Guide` may contain a number, date, frequency or exercise name that could
+be mistaken for the reader's own data.** Instructions are placed verbatim into the prompt, so an
+example number is indistinguishable from an input number, and a ~3B on-device model does not
+distinguish them.
+
+This is measured, not theoretical. `ExerciseDeepDiveInstructions` taught its copy-exactly rule
+with a worked example — *"If the input says `87.5 kg`, output `87.5 kg` — not 85, not 87"* — and
+on a device check (German, iPhone, 2026-08-29) the model lifted that literal out of the
+instructions and presented it as the reader's training data: *"Der geschätzte 1RM ist von 87,5 kg
+im ersten Training auf 88,2 kg im letzten Training gestiegen"*, for a reader whose actual best is
+20,0 kg. The `88,2` was the real `+0,7 kg` delta added to the invented base. The same class of
+failure produced a generated headline naming `Bankdrücken` for a session that did not contain it —
+an exercise name lifted from a worked example. The control case was `blendedViewPrompt`, which has
+never carried such a literal and has never invented a figure across five device rounds.
+
+**How the rule is satisfied** (2026-08-30, `.scratch/ai-coach-prompt-literals` ticket 01):
+
+- **State the rule abstractly.** The copy-exactly rule is now the same sentence on every surface:
+  *"Copy each figure digit for digit, including its decimal separator. Do not round it, shorten
+  it, or hedge it with 'about' or 'around'."* Same rule, nothing to copy.
+- **Where an example teaches phrasing, strip the value out of it.** The German sentence patterns
+  in `WorkoutAnalysisInstructions` and `PeriodRecapInstructions` exist to teach *phrasing*, not
+  numbers, so their figures became `<Gewicht>` / `<Wdh>` / `<Anzahl>` / `<Übung>` placeholders and
+  the pattern list is introduced as *"every angle-bracket placeholder is filled from the input and
+  never with a value of your own"*. The unit word beside the placeholder still carries the
+  reader's active unit (see § "The weight unit").
+- Apple's documented alternative — prefixing an example with *"Here is an example, but don't copy
+  it:"*, from the Landmarks sample — is the **second** choice, not the first. Apple's own few-shot
+  guidance warns that *"overly long or complex examples can lead to repetition or hallucination"*
+  ([Prompting an on-device foundation model](https://developer.apple.com/documentation/foundationmodels/prompting-an-on-device-foundation-model)),
+  and a pattern that still shows a plausible weight is still a literal the model can lift.
+
+**Corollary — a figure the model copies must already be the figure the reader should see.**
+Rule 1's abstract phrasing is *"copy each figure digit for digit, including its decimal
+separator"*, and the model obeys that literally. Prompt figures used to be rendered in the C
+locale (`en_US_POSIX`), so on device (German, 2026-08-30) the post-workout recap wrote *"ein
+Gesamtvolumen von 1830.0 kg"* and the Rückblick wrote *"+10.0 kg geschätztes 1RM"* and *"2.0
+Einheiten pro Woche"* — English decimal points inside German sentences. Every narrating surface
+now writes its figures in the reader's own convention, which is what `ExerciseDeepDiveInput` has
+always done:
+
+- `AICoachUnitVocabulary.compact(_:in:locale:)`, `.decimal(_:in:locale:)` and
+  `.plainDecimal(_:locale:)` all take the reader's locale.
+- They format in the C locale and substitute **only the decimal separator** (`fixed(_:places:locale:)`).
+  `String(format:locale:)` cannot be used directly: given a locale it also inserts grouping
+  separators, turning an all-time tonnage into `1,234,567.8`, and German groups with the period
+  while separating decimals with the comma — so `1.830,0` would put *two* locale-dependent
+  characters into a string the model is told to copy character for character.
+- Call sites: `PostWorkoutRecapInput.toPromptText`, `WorkoutAnalysisInput.toPromptText` (via its
+  private `fmt`, threaded through `exerciseVerdict` / `promptFact` / `signed`),
+  `PeriodRecapAggregator.buildTrends` and `buildRecommendation`, and
+  `PeriodRecapInput.toPromptText`'s consistency line.
+- Pinned by `germanPromptFiguresCarryTheGermanSeparator` (no `\d\.\d` anywhere in a German
+  prompt, in both units) and `englishPromptFiguresKeepThePeriod` (the rule is "the reader's
+  separator", not "always a comma", and never a grouping separator).
+
+**The chat is deliberately excluded.** `ChatFactBuilder`'s fact lines are uniformly English by
+design and the chat prompt tells the model to translate everything it is handed, including
+weekday and month names — a different contract from "copy verbatim". It has not been observed
+emitting an English separator into a German answer; if it ever does, the fix is the same one.
+
+**What the scan does not cover, and why that is currently safe.** It reads the four *output*
+generation schemas, not the `@Guide`s on the `@Generable` **input** structs — several of which do
+carry data-shaped literals (`ExerciseDeepDiveInput`'s `'May 2024 – April 2026'` and `'March 2026'`,
+`PostWorkoutRecapInput`'s `e.g. +12 or -8`). Those guides never reach a model: `AICoachService`
+sends an input only as `input.toPromptText(...)` text and never hands an input's generation schema
+to the session. **If that ever changes, those guides reintroduce exactly the bug this section
+exists to prevent** — extend the scan at the same time.
+
+**One deliberate exception, and one deliberate non-exception.** The chat prompt's ambient
+`Today is <weekday, d MMMM yyyy>.` line carries a real four-digit year — it is genuine input, the
+fact that makes "next workout" resolvable as "tomorrow", and the test strips exactly that line
+before scanning. `CoachChatInstructions` does still carry example *exercise names*
+("Bankdrücken", "Chest Press") in its translation and `__NO_MATCH__` rules; they are kept because
+every chat answer is grounded in a tool result that names the exercise, and the rules are about
+name handling and unteachable without one. If chat ever names an exercise the user does not have,
+this is the first place to look.
+
+### 2. No prompt asks the model to combine figures
+
+Apple documents the on-device models as *"not intended for tasks requiring basic math, code
+generation, or complex logical reasoning"*
+([Generating content and performing tasks with Foundation Models](https://developer.apple.com/documentation/foundationmodels/generating-content-and-performing-tasks-with-foundation-models)),
+and the fabricated `88,2 kg` was arithmetic. Every narrating surface hands the model **finished
+values to rephrase**, never a base and a delta, and says so in the prompt: *"Every fact is already
+resolved in the input. Never compute, combine, or re-interpret numbers yourself."* The chat prompt
+states the same rule as *"Never do arithmetic yourself and never invent numbers."* Where a surface
+needs a value picked out of several — the post-workout recap's muscle-group observation — the
+percentages are pre-resolved in `toPromptText` and the prompt asks only for a *selection* ("pick
+the one furthest from zero, in either direction"), never a computation.
+
+### 3. No prompt names a programming construct
+
+**Never write `nil`, `null`, `None` or "empty string" in a prompt or a `@Guide`.** Apple describes
+`@Guide(description:)` as "effectively another way of prompting", so `nil` inside one is a *word to
+write*, not an absence to produce.
+
+Measured on device (German, 2026-08-30): `PeriodRecapOutput.correlationHighlight` was described as
+*"Return nil when the input has no detected patterns … nil means the UI hides this section"*, and
+for a period with no detected patterns the model wrote the four-character string `nil` into the
+field. The Auffälligkeiten card rendered it verbatim, under the `MUSTER` label.
+
+An absent field is asked for in plain language instead — *"OMIT THIS FIELD ENTIRELY … do not
+return it empty, return nothing for it"* — matching the wording that already worked on
+`blendedViewPrompt`'s `progression`. The prompt deliberately does **not** enumerate the forbidden
+placeholder words ("do not write 'nil' or 'none'"), because naming a token in an instruction is
+the very mechanism rule 1 exists to prevent; it describes the class instead ("never fill it with a
+placeholder word, a dash, or a sentence explaining the absence").
+
+**The schema was never the problem.** `@Generable` defaults to
+`representNilExplicitlyInGeneratedContent: false`, which Apple documents as "nil properties are
+omitted entirely" — the model had a real, constrained-decoding-supported affordance to skip the
+key and chose not to use it. Wording, not schema, is the lever.
+
+### 4. Presence is decided in Swift wherever Swift knows
+
+A prompt rule is a request; a Swift-side drop is a guarantee. Where the app already knows whether
+a field can exist, it does not leave the decision to the model:
+
+- **`PeriodRecapViewModel`** passes `hasDetectedPatterns` (from `sampleInput.correlations`) into
+  `stream(...)` and drops `correlationHighlight` outright when the input carries no "Detected
+  patterns" section — the model's answer for that field is never rendered.
+- **`CoachCorrelationSanitizer.sanitized(_:)`** (`Domain/Services/AICoach/`) rejects an answer
+  that is *only* a placeholder token (`nil`, `null`, `none`, `keine`, `-`, …, matched against the
+  **whole trimmed string**, never as a substring, so a real sentence containing "none" survives)
+  and an answer that is an apology ("no correlation", "keine Auffälligkeiten", …). It is pure
+  `String? -> String?` with no state, which is why it lives in `Domain/` rather than on the
+  ViewModel. Applied at three sites: the streamed partial and the final output in
+  `PeriodRecapViewModel`, and **`AICoachCache.loadPeriodRecap`** — the persisted format is the
+  Data layer's concern, so every reader of `AICoachCaching.loadPeriodRecap` inherits the guard
+  instead of having to remember it. The cache path matters because recaps written before this
+  guard existed still hold a literal `nil`, and a cache entry is never regenerated just because
+  its prose is stale.
+- **`PeriodRecapAggregator.buildCompactInput`** keeps `correlations` at `prefix(1)`, never
+  `prefix(0)`. `hasDetectedPatterns` is derived from the *full* input, so a compact fallback that
+  emptied the array would leave the flag claiming a "Detected patterns:" block the prompt no
+  longer has. Non-empty must stay non-empty.
+- **`ExerciseDeepDiveNarrative`** drops the `progression` paragraph on a blended view whatever the
+  model returned — the original instance of this pattern.
+
 ## Guided Generation reference (WWDC25)
 
 The framework's structured-output mechanism is **Guided Generation** (`@Generable` + `@Guide`). Constraints below are enforced at the **decoding level** — the model literally cannot emit a value outside them, so they are far stronger than asking for a format in the prompt. Use these instead of free-text + prompt instructions wherever the shape is known.
@@ -395,6 +551,7 @@ Supported field types out of the box: `Bool`, `Int`, `Float`, `Double`, `Decimal
 - `StreamingTextView` renders `text` **directly** as a `Text` view — no internal word-by-word timer. A blinking 7×14 pt accent cursor appears inline at the tail while `isStreaming == true`. `.animation(nil, value: text)` suppresses height-interpolation animations between snapshots.
 - The old `wordDelay` parameter is now a no-op (source-compatible, no effect).
 - `AISurface` shows a shimmer border gradient and a pulsing dot + `"writing"` label while `isStreaming == true`.
+- **`AISkeletonLines(count:)`** (next to `AISkeletonBar`) is the paragraph-shaped placeholder every streaming coach surface draws while it waits: full-width bars with a short last line. `CoachDeepDiveSurface` and `AIRecapInline` both use it; it was extracted when the post-workout recap's `.preparing` state would have become the third hand-rolled copy of the same `VStack(spacing: 8)` of 12 pt bars.
 - **`AISkeletonBar` shimmer — never animate `Gradient.Stop.location`, and don't animate a gradient's `startPoint`/`endPoint` either (fixed 2026-08-28)**: the bar originally animated a `phase` value into each stop's `location` and wrapped it with a modulo `clamp()` helper. That made the locations non-monotonic as soon as `phase > 0` (at `phase = 0.6`: `0.6, 0.1, 0.6`), which triggered the Xcode runtime warning *"Gradient stop locations must be ordered"* and made the highlight jump instead of travel. `LinearGradient(stops:)` requires monotonically ascending locations and has **no wrap-around/repeating stop mode** — the modulo approach is unfixable, not mis-tuned. The bar is now a `white04` base with a fixed `[clear, accent10, clear]` highlight band in an overlay, swept by `.offset(x: (phase * 2 - 1) * proxy.size.width)` under the usual `withAnimation(.linear(duration: 1.8).repeatForever(autoreverses: false))` — the same pattern the watch's `ShimmerView` already uses (`GymStreakWatch Watch App/Views/RoutineDetailView.swift`). Travelling exactly one bar width off each edge means the band is fully clear of the bar at both ends of the cycle, so the wrap is invisible. **The loop is re-armed by `.onDisappear { phase = 0 }`, not by the reset inside `startAnimation`**: both writes in `startAnimation` happen in one synchronous scope, so SwiftUI coalesces them and never renders the intermediate `0` — on a reappearance where `@State phase` survived at `1` (Reduce Motion toggled off mid-skeleton, a pop-back onto a still-loading screen) the offset would be `+width` both before and after, giving a zero delta, no installed animation, and a flat bar. The `onDisappear` reset lands in its own update, so the rendered offset is genuinely back at `-width` before the next appearance. **Two discarded approaches, both of which compile clean and fail silently at runtime** (researched 2026-08-28, verified against Apple's documentation JSON and Developer Forums, *not* blog posts): (a) **animating the gradient's `startPoint`/`endPoint`** — the obvious-looking fix, and the one implemented first. `LinearGradient` conforms only to `Sendable, SendableMetatype, ShapeStyle, View`; it has **no `Animatable` conformance**, so SwiftUI diffs the two gradients as a discrete swap and never interpolates. `UnitPoint` *is* `Animatable`, but that conformance is inert unless a containing type exposes it through its own `animatableData`, which `LinearGradient` does not. An Apple DTS engineer reproduced exactly this non-animating gradient swap in [forums thread 775746](https://developer.apple.com/forums/thread/775746). This is the dangerous one: with the highlight living only in the interpolated mid-states, a snap leaves a permanently flat bar that looks like an intentional static design. (b) **`.phaseAnimator` with `nil` returned for the wrap-back transition** — per [forums thread 792541](https://developer.apple.com/forums/thread/792541), a phase transition with no effective animatable change **stalls the loop**; DTS called this expected behaviour and a gap in SwiftUI. Apple documents `nil` only as "the transition doesn't animate" and says nothing about the loop still advancing. Also checked and rejected: `TimelineView(.animation)` and `.keyframeAnimator` re-invoke their content closure every frame, wrong for a component instantiated many times per skeleton screen; and `.redacted(reason:)` offers only `.placeholder`/`.privacy`/`.invalidated` — **iOS 26 still ships no built-in animated shimmer/skeleton style**. Note that `AISurface`'s border shimmer uses the same phase-into-`location` trick but keeps its locations ordered (`0+phase … 1.0+phase`), so it never warned — though at `phase = 1.0` every location is ≥ 1.0 and the border collapses to a flat colour before snapping back. Same class of bug, visual only, deliberately left alone.
 
 ### Period Recap layout stability
@@ -540,6 +697,43 @@ The Watch app is unaffected. FoundationModels is not available on watchOS. All A
 All inference runs on-device via Foundation Models. No prompt text, no narrative text, and no workout data is transmitted to any server. Every AI surface shows an `AIPrivacyFooter` with a lock icon and the message "Generated on your iPhone · Data never leaves the device". The Settings screen footer reiterates this in full.
 
 ---
+
+## Known defects, found and not fixed
+
+Surfaced by the `ai-coach-prompt-literals` device rounds (German, iPhone, 2026-08-30) and by the
+architecture review of that work. None was in that ticket's scope — it was the literal-leak class
+only — so all are recorded here rather than buried with the archived ticket.
+
+1. **The post-workout recap states the planned set count, not the completed one.**
+   `PostWorkoutRecapAggregator` passes `session.totalSetsCount`, which is
+   `workoutExercisesList.flatMap(\.setsList).count` — every set, completed or not. A session whose
+   own summary read `8/20 (40%)` was narrated as *"mit einem Gesamtvolumen von 1980,0 kg und 20
+   Sätzen"*. The volume is right (it sums completed sets); the count is not. This is a **factual
+   error in generated copy**, so it is the most serious entry here. Fix is a completed-set count in
+   the aggregator, not a prompt change.
+2. **Workout analysis can emit several highlights for the same exercise.** A device check returned
+   four highlights, all `Arnold Press`, three of them restating the same top-set change. The prompt
+   asks for "the 1–4 most notable exercises" and `@Guide` bounds the array at 1…4, but nothing
+   dedupes by exercise name — neither the prompt nor `WorkoutAnalysisViewModel`. A Swift-side
+   uniquing pass on `exerciseHighlights` is the reliable fix; a prompt rule alone has failed on
+   this surface before.
+3. **Workout analysis wrote "Topset".** `WorkoutAnalysisInstructions` names this exact word as one
+   that does not exist and mandates "Topsatz"; the model used it anyway. A glossary line in the
+   instruction list is evidently not enough — the same lesson as the paragraph-count rule that
+   moved into `@Guide`s.
+4. **The period-recap headline leaks English.** `PeriodRecapInput.toPromptText` appends
+   `" (\(improved.count) exercises improved in total)"` to the headline fact, and the model
+   translated it only partway: *"(4 Übungen verbessert in total)"*. Either drop the parenthetical
+   or compose it in Swift like `WorkoutAnalysisInput.headlineSentence` already does.
+5. **`WorkoutAnalysisAggregator.findPreviousSession` matches on the denormalized `routineName`
+   string, not the routine id.** Renaming a routine orphans it from its own history, so the first
+   analysis after a rename reports "nothing to compare". This also means a report of "no Coach
+   analysis on a new workout" is only correct behaviour if the routine was *not* renamed.
+6. **`PeriodRecapInput.recommendationFact`'s `@Guide` still reads "nil when none was detected".**
+   Harmless today — `AICoachService` sends inputs only as `toPromptText(...)`, so an input's
+   generation schema never reaches a model — but it is the same wording that made the model write a
+   literal `nil` into `correlationHighlight`. If that type is ever used as a generation *output*,
+   this is the bug, pre-made. See § "Prompt grounding rules", rule 3.
 
 ## TODO (next phase)
 

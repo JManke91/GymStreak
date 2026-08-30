@@ -71,7 +71,7 @@ extension PostWorkoutRecapInput {
     func toPromptText(in unit: WeightUnit) -> String {
         let unitWord = AICoachUnitVocabulary.unitWord(unit)
         func weight(_ kilograms: Double) -> String {
-            "\(AICoachUnitVocabulary.decimal(kilograms, in: unit, locale: .init(identifier: "en_US_POSIX"))) \(unitWord)"
+            "\(AICoachUnitVocabulary.decimal(kilograms, in: unit, locale: Locale(identifier: locale))) \(unitWord)"
         }
         var lines: [String] = []
         lines.append("Locale: \(locale)")

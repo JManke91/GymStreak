@@ -28,6 +28,9 @@ struct AIRecapInline: View {
             // Blank placeholder — nothing visible before generation starts
             Color.clear.frame(height: 0)
 
+        case .preparing:
+            surfaceView(text: "", isStreaming: true)
+
         case .streaming(let text):
             surfaceView(text: text, isStreaming: true)
 
@@ -71,18 +74,37 @@ struct AIRecapInline: View {
 
     // MARK: - Surface helper
 
+    /// Cross-dissolves skeleton bars into the streamed text, the shape
+    /// `CoachDeepDiveSurface` and `CoachWorkoutAnalysisSurface` already use.
+    ///
+    /// Both are drawn in a `ZStack` with a `minHeight` rather than swapped, so the card
+    /// reserves its height from the first frame and the sheet does not grow under the
+    /// reader's thumb as tokens arrive — the same reservation `PeriodRecapView`'s
+    /// `sectionCardSlot` makes.
     @ViewBuilder
     private func surfaceView(text: String, isStreaming: Bool) -> some View {
         AISurface(
             isStreaming: isStreaming,
             onRegenerate: isStreaming ? nil : onRegenerate
         ) {
-            StreamingTextView(
-                text: text,
-                isStreaming: isStreaming
-            )
+            ZStack(alignment: .topLeading) {
+                AISkeletonLines(count: 3)
+                    .opacity(text.isEmpty ? 1 : 0)
+
+                StreamingTextView(
+                    text: text,
+                    isStreaming: isStreaming
+                )
+                .opacity(text.isEmpty ? 0 : 1)
+            }
+            .frame(minHeight: skeletonHeight, alignment: .topLeading)
+            .animation(.easeInOut(duration: 0.25), value: text.isEmpty)
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 4)
     }
+
+    /// Three lines for the two-to-three sentences the prompt asks for.
+    /// 3 × 12 pt bars + 2 × 8 pt spacing.
+    private var skeletonHeight: CGFloat { 52 }
 }

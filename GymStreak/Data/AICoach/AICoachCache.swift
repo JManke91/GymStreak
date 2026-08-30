@@ -59,8 +59,20 @@ final class AICoachCache: AICoachCaching {
 
     // MARK: - Period Recap
 
+    /// The correlation field is sanitised on the way out, not only when generated.
+    /// Recaps written before that guard existed can hold a literal `nil` — the string the
+    /// model produced when its `@Guide` said "return nil" — and a cache entry is never
+    /// regenerated just because its prose is stale. The persisted format is this layer's
+    /// concern, so every reader of `AICoachCaching.loadPeriodRecap` inherits the guard
+    /// rather than having to remember it. See docs/ai-coach.md § "Prompt grounding rules".
     func loadPeriodRecap(key: String) -> PeriodRecapOutput? {
-        load(PeriodRecapOutput.self, from: periodRecapURL(key))
+        guard let stored = load(PeriodRecapOutput.self, from: periodRecapURL(key)) else { return nil }
+        return PeriodRecapOutput(
+            headline: stored.headline,
+            trendsNarrative: stored.trendsNarrative,
+            correlationHighlight: CoachCorrelationSanitizer.sanitized(stored.correlationHighlight),
+            closingSentence: stored.closingSentence
+        )
     }
 
     func savePeriodRecap(key: String, output: PeriodRecapOutput) {

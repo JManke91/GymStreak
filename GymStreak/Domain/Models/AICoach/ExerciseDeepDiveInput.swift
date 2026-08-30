@@ -155,8 +155,13 @@ extension ExerciseDeepDiveInput {
     }
 
     /// A frequency, not a weight — same reader convention, no conversion.
+    ///
+    /// Goes through `plainDecimal` rather than `String(format:locale:)`, which inserts
+    /// grouping separators as well as the decimal one. A sessions-per-week figure never
+    /// reaches a grouping threshold, so this renders identically today; it routes through
+    /// the shared helper so a future fix inside it reaches this surface too.
     private func sessionsPerWeek(_ value: Double) -> String {
-        String(format: "%.1f", locale: Locale(identifier: locale), value)
+        AICoachUnitVocabulary.plainDecimal(value, locale: Locale(identifier: locale))
     }
 
     /// The all-time peak as one finished sentence in the reader's language — **composed

@@ -49,28 +49,59 @@ enum AICoachUnitVocabulary {
     // MARK: - Numbers
 
     /// A weight for a prompt line: converted, rounded to the unit's precision, and
-    /// written without a trailing `.0` — "87.5", "220.5", "40".
+    /// written without a trailing `.0` — "87,5", "220,5", "40".
     ///
-    /// The C locale is deliberate: this rendering feeds the fact lines that are
-    /// uniformly English (`ChatFactBuilder`, `WorkoutAnalysisInput`). Where a
-    /// surface writes its figures in the reader's own convention instead — the
-    /// deep dive does, so the model only ever copies them — use
-    /// `decimal(_:in:locale:)`.
+    /// **The locale is the reader's, not the C locale.** Every narrating coach prompt
+    /// now tells the model to copy each figure "digit for digit, including its decimal
+    /// separator" (docs/ai-coach.md § "Prompt grounding rules", rule 1), and it obeys:
+    /// a figure rendered as `1830.0` came back inside a German sentence as `1830.0 kg`
+    /// (device, 2026-08-30). A model that is told to copy verbatim must be handed the
+    /// string the reader should see, which is what `ExerciseDeepDiveInput` has always
+    /// done. Pass `en_US_POSIX` only for a figure that is genuinely not a reader-facing
+    /// number.
     ///
     /// Trailing zeros are trimmed by hand rather than with `%g`, whose six
     /// significant digits turn a real all-time tonnage into `1.23457e+06`.
-    static func compact(_ kilograms: Double, in unit: WeightUnit) -> String {
-        var text = String(format: "%.\(unit.fractionDigits)f", unit.roundedDisplay(fromKilograms: kilograms))
-        guard text.contains(".") else { return text }
+    static func compact(_ kilograms: Double, in unit: WeightUnit, locale: Locale) -> String {
+        var text = fixed(unit.roundedDisplay(fromKilograms: kilograms), places: unit.fractionDigits, locale: locale)
+        let separator = locale.decimalSeparator ?? "."
+        guard text.hasSuffix("0"), text.contains(separator) else { return text }
         while text.hasSuffix("0") { text.removeLast() }
-        if text.hasSuffix(".") { text.removeLast() }
+        if text.hasSuffix(separator) { text.removeLast() }
         return text
     }
 
     /// A weight for a prompt line or a reader-facing sentence, in the reader's own
     /// decimal convention and always with one decimal place — "20,0" / "20.0".
+    ///
+    /// Same rule as `compact(_:in:locale:)`: a prompt figure carries the reader's
+    /// separator, because the prompt tells the model to copy it verbatim.
     static func decimal(_ kilograms: Double, in unit: WeightUnit, locale: Locale) -> String {
-        String(format: "%.1f", locale: locale, unit.converting(fromKilograms: kilograms))
+        fixed(unit.converting(fromKilograms: kilograms), places: 1, locale: locale)
+    }
+
+    /// A figure that is not a weight — a frequency, a percentage — at one decimal, in the
+    /// reader's convention. Same rule as the weights: a prompt figure carries the reader's
+    /// separator because the model is told to copy it verbatim.
+    static func plainDecimal(_ value: Double, locale: Locale) -> String {
+        fixed(value, places: 1, locale: locale)
+    }
+
+    /// `value` at `places` decimals, carrying the locale's decimal separator and **no
+    /// grouping separator**.
+    ///
+    /// `String(format:locale:)` cannot be used directly: handed a locale it also inserts
+    /// grouping separators, so an all-time tonnage came out as `1,234,567.8` where the
+    /// caller needs `1234567.8`. Worse for a prompt figure, German groups with the period
+    /// and separates decimals with the comma, so `1.830,0` puts two locale-dependent
+    /// characters into a string the model is told to copy character for character.
+    ///
+    /// Formatting in the C locale and substituting only the separator keeps the change to
+    /// exactly the one character that was wrong.
+    private static func fixed(_ value: Double, places: Int, locale: Locale) -> String {
+        let text = String(format: "%.\(places)f", value)
+        guard let separator = locale.decimalSeparator, separator != "." else { return text }
+        return text.replacingOccurrences(of: ".", with: separator)
     }
 
     // MARK: - Phrases

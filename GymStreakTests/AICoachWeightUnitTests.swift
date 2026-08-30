@@ -26,10 +26,25 @@ struct AICoachWeightUnitTests {
 
     @Test("A weight is converted once and rounded to the unit's own precision")
     func vocabularyConvertsAndRounds() {
+        let english = Locale(identifier: "en_US")
         // 100 kg is 220.46226… lb; pounds display one decimal.
-        #expect(AICoachUnitVocabulary.compact(100, in: .pounds) == "220.5")
-        #expect(AICoachUnitVocabulary.compact(100, in: .kilograms) == "100")
-        #expect(AICoachUnitVocabulary.compact(87.5, in: .kilograms) == "87.5")
+        #expect(AICoachUnitVocabulary.compact(100, in: .pounds, locale: english) == "220.5")
+        #expect(AICoachUnitVocabulary.compact(100, in: .kilograms, locale: english) == "100")
+        #expect(AICoachUnitVocabulary.compact(87.5, in: .kilograms, locale: english) == "87.5")
+    }
+
+    /// A prompt figure carries the **reader's** separator, because every narrating prompt
+    /// now tells the model to copy each figure digit for digit including that separator.
+    /// Handed an `en_US_POSIX` `1830.0`, the model wrote "1830.0 kg" into a German
+    /// sentence (device, 2026-08-30).
+    @Test("A prompt figure carries the reader's decimal separator, and trims its trailing zero")
+    func vocabularyCompactFollowsTheReadersSeparator() {
+        let german = Locale(identifier: "de_DE")
+        #expect(AICoachUnitVocabulary.compact(87.5, in: .kilograms, locale: german) == "87,5")
+        #expect(AICoachUnitVocabulary.compact(100, in: .pounds, locale: german) == "220,5")
+        // The trailing-zero trim has to follow the comma, not a hardcoded period.
+        #expect(AICoachUnitVocabulary.compact(100, in: .kilograms, locale: german) == "100")
+        #expect(AICoachUnitVocabulary.compact(2.5, in: .kilograms, locale: german) == "2,5")
     }
 
     /// `%g` was the obvious rendering and it is wrong: its six significant digits turn a
@@ -37,7 +52,7 @@ struct AICoachWeightUnitTests {
     /// have handed straight to the model.
     @Test("A tonnage renders as digits, never in scientific notation")
     func vocabularyNeverRendersScientificNotation() {
-        let line = AICoachUnitVocabulary.compact(1_234_567.8, in: .kilograms)
+        let line = AICoachUnitVocabulary.compact(1_234_567.8, in: .kilograms, locale: Locale(identifier: "en_US"))
         #expect(!line.contains("e+"))
         #expect(line.hasPrefix("1234567"))
     }
@@ -73,10 +88,12 @@ struct AICoachWeightUnitTests {
         #expect(!pounds.contains(" kg"))
 
         // The instructions teach the model to echo the input's unit word verbatim, so
-        // they have to carry the same one — the "87.5 kg → 87.5 kg" example is exactly
-        // how a kilogram literal would teach it to write the wrong word.
+        // they have to name the same one. They used to teach it with a worked example
+        // ("87.5 kg → 87.5 kg"), which carried the unit but also carried a figure the
+        // model lifted into the reader's data — see `CoachPromptGroundingTests`. The
+        // unit is now named by the rule itself, and nothing else in the prompt is
+        // unit-shaped.
         let instructions = PostWorkoutRecapInstructions.systemPrompt(unit: .pounds)
-        #expect(instructions.contains("87.5 lb"))
         #expect(instructions.contains("pounds (lb)"))
         #expect(!instructions.contains("kg"))
 
@@ -127,10 +144,13 @@ struct AICoachWeightUnitTests {
         #expect(input.headlineSentence(in: .pounds).contains("220.5 lb"))
         #expect(input.headlineSentence(in: .kilograms).contains("100 kg"))
 
-        // The German example patterns are copied almost verbatim by the model, so they
-        // carry the active unit rather than a hardcoded "kg".
+        // The German sentence patterns are copied almost verbatim by the model, so they
+        // carry the active unit rather than a hardcoded "kg". Their figures are
+        // `<placeholders>` now — a plausible weight inside a pattern is a literal the
+        // model lifts, see `CoachPromptGroundingTests` — but the unit word beside the
+        // placeholder still has to be the reader's.
         let instructions = WorkoutAnalysisInstructions.systemPrompt(unit: .pounds)
-        #expect(instructions.contains("Topsatz 2,5 lb schwerer"))
+        #expect(instructions.contains("Topsatz <Gewicht> lb schwerer"))
         #expect(!instructions.contains("kg"))
     }
 

@@ -7,9 +7,17 @@
 
 enum WorkoutAnalysisInstructions {
 
+    /// **No rule here carries a data-shaped literal**, and none may be added — see
+    /// docs/ai-coach.md § "Prompt grounding rules". The German sentence patterns below used to be worked
+    /// examples (`Topsatz 2,5 kg schwerer: jetzt 37,5 kg x 6.`); they now carry
+    /// `<placeholders>` instead, because the patterns exist to teach *phrasing* and a
+    /// plausible weight inside one is a literal the model can lift into the reader's
+    /// data. This prompt has never carried an example exercise name for the same
+    /// reason — a generated headline once named `Bankdrücken` for a session without it.
+    ///
     /// - Parameter unit: the unit every weight in the prompt has already been
-    ///   converted into. Two rules below name the unit outright and the German
-    ///   example patterns write it into a sentence the model copies, so all three
+    ///   converted into. One rule below names the unit outright and the German
+    ///   sentence patterns write it into a sentence the model copies, so both
     ///   have to carry the active one — see docs/weight-unit-preference.md §13.
     static func systemPrompt(unit: WeightUnit) -> String {
         let unitWord = AICoachUnitVocabulary.unitWord(unit)
@@ -21,14 +29,14 @@ enum WorkoutAnalysisInstructions {
     Each exercise is tagged with a verdict (IMPROVED, UNCHANGED, DECREASED, MIXED, or NEW SETS) and a "Fact:" line stating its concrete change. Trust the verdicts — never re-interpret them. Copy the verdict into the highlight's trend field: IMPROVED → improved, DECREASED → declined, UNCHANGED → unchanged, MIXED → mixed, NEW SETS → new.
 
     Strict rules:
-    - Use only the exact numeric values listed in the input. Do not round, estimate, or invent any number. If a number isn't in the input, do not write it.
+    - Use only the exact numeric values listed in the input. Copy each figure digit for digit, including its decimal separator. Do not round it, shorten it, or hedge it with "about" or "around". If a number isn't in the input, do not write it.
     - Every weight in the input is in \(AICoachUnitVocabulary.englishName(unit)), written as `\(unitWord)`. Write every weight with that unit and never any other. \(unitWord) values are always weight; rep counts are always repetitions. Never attach "\(unitWord)" to a rep count and never call a weight change "reps".
     - Never mention dates or day counts. Refer to the previous session only as "last session" / "letzte Einheit".
     - Never mention total volume.
     - Write in the language indicated by the `locale` field. For 'de_*' use German; for 'en_*' use English; for any other locale, use English. Use natural, simple sentences — short main clauses, no nested clauses.
     - Translate every general fitness term into the target language — never leave English wording in a German sentence. German glossary: "top set" → "Topsatz", "reps" / "repetitions" → "Wiederholungen", "set" → "Satz", "personal record" / "PR" → "Bestwert", "weight" → "Gewicht". Words like "Topset" or "Bestset" do not exist — always "Topsatz".
     - EXERCISE NAMES ARE THE ONE EXCEPTION TO THAT RULE, AND IT IS ABSOLUTE. An exercise name is the reader's own label for it: copy it from the input letter for letter, in every field. Never translate it, never Germanise it, never replace it with a similar exercise, never shorten or expand it, and never name an exercise the input does not list. An English exercise name stays English inside a German sentence. This prompt deliberately contains no example exercise name: the only exercise names that exist are the ones in the input below.
-    - Each highlight detail: rephrase that exercise's "Fact:" line as one short sentence with the same numbers. Example patterns: "Topsatz 2,5 \(unitWord) schwerer: jetzt 37,5 \(unitWord) x 6.", "2 Wiederholungen mehr bei gleichem Gewicht.", "Topsatz 5 \(unitWord) leichter als letzte Einheit.", "Gewicht und Wiederholungen unverändert."
+    - Each highlight detail: rephrase that exercise's "Fact:" line as one short sentence with the same numbers. These sentence patterns show the phrasing to use; every angle-bracket placeholder is filled from that exercise's "Fact:" line and never with a figure of your own: "Topsatz <Gewicht> \(unitWord) schwerer: jetzt <Gewicht> \(unitWord) x <Wdh>.", "<Anzahl> Wiederholungen mehr bei gleichem Gewicht.", "Topsatz <Gewicht> \(unitWord) leichter als letzte Einheit.", "Gewicht und Wiederholungen unverändert."
     - Only exercises with a verdict tag may become highlights. Exercises listed in the "done for the first time" note have nothing to compare — never create a highlight for them; at most mention in the closing observation that they were new.
     - Pick the 1-4 most notable exercises: a new PR always comes first, then the biggest improvements, then declines. Skip UNCHANGED exercises unless nothing else changed.
     - If a PR is present, the matching highlight must state weight and reps of the PR set.

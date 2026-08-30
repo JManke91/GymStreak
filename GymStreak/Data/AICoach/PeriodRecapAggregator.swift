@@ -53,12 +53,13 @@ struct PeriodRecapAggregator {
             recommendationFact = nil
         } else {
             let liveExercises = (try? modelContext.fetch(FetchDescriptor<Exercise>())) ?? []
-            trends = buildTrends(sessions: sessions, liveExercises: liveExercises, maxCount: 5, weightUnit: weightUnit)
+            trends = buildTrends(sessions: sessions, liveExercises: liveExercises, maxCount: 5, weightUnit: weightUnit, locale: locale)
             correlations = buildCorrelations(sessions: sessions, locale: locale, now: now)
             recommendationFact = buildRecommendation(
                 sessions: sessions,
                 trends: trends,
                 consistency: consistency,
+                locale: locale,
                 now: now
             )
         }
@@ -97,6 +98,12 @@ struct PeriodRecapAggregator {
             headline: full.headline,
             consistency: full.consistency,
             trends: Array(full.trends.prefix(3)),
+            // `prefix(1)`, never `prefix(0)`: `PeriodRecapViewModel` derives
+            // `hasDetectedPatterns` from the *full* input and uses it to drop
+            // `correlationHighlight`, so a compact fallback that emptied this array would
+            // leave the flag saying a "Detected patterns:" block exists in a prompt that
+            // no longer has one. Non-empty must stay non-empty. See docs/ai-coach.md
+            // § "Prompt grounding rules", rule 4.
             correlations: Array(full.correlations.prefix(1)),
             recommendationFact: full.recommendationFact,
             isInsufficient: full.isInsufficient
@@ -219,6 +226,7 @@ struct PeriodRecapAggregator {
         sessions: [WorkoutSession],
         trends: [TrendFinding],
         consistency: ConsistencyMetrics,
+        locale: Locale,
         now: Date
     ) -> String? {
         let hasImprovement = trends.contains { $0.direction == "improved" }
@@ -226,7 +234,7 @@ struct PeriodRecapAggregator {
 
         if let adherence = adherenceDipsVsRegressionCorrelation(sessions: sessions, now: now),
            adherence.lowAdherencePrecededRegression {
-            return "performance dips followed weeks with fewer sessions — keeping the frequency steady at about \(String(format: "%.1f", consistency.averageSessionsPerWeek)) sessions per week should help"
+            return "performance dips followed weeks with fewer sessions — keeping the frequency steady at about \(AICoachUnitVocabulary.plainDecimal(consistency.averageSessionsPerWeek, locale: locale)) sessions per week should help"
         }
         if consistency.isIrregular && hasStagnation && !hasImprovement {
             return "progress stalled while training was irregular (longest gap \(consistency.longestGapDays) days) — more evenly spaced sessions would likely get progress moving again"
@@ -240,7 +248,8 @@ struct PeriodRecapAggregator {
         sessions: [WorkoutSession],
         liveExercises: [Exercise],
         maxCount: Int,
-        weightUnit: WeightUnit
+        weightUnit: WeightUnit,
+        locale: Locale
     ) -> [TrendFinding] {
         // Build lookup tables mirroring FortschrittAggregator's resolveLive pattern
         var liveById: [UUID: Exercise] = [:]
@@ -315,7 +324,11 @@ struct PeriodRecapAggregator {
             // verbatim and `PeriodRecapInput` never touches it again.
             let deltaKg = (points.last?.est1RM ?? 0) - (points.first?.est1RM ?? 0)
             let sign = deltaKg >= 0 ? "+" : ""
-            let magnitude = "\(sign)\(AICoachUnitVocabulary.decimal(deltaKg, in: weightUnit, locale: .init(identifier: "en_US_POSIX"))) \(AICoachUnitVocabulary.unitWord(weightUnit))"
+            // The reader's locale, not the C locale: the prompt tells the model to copy
+            // this figure digit for digit including its separator, and it does — an
+            // `en_US_POSIX` magnitude came back as "+10.0 kg" inside a German sentence
+            // (device, 2026-08-30). See docs/ai-coach.md § "Prompt grounding rules", rule 1.
+            let magnitude = "\(sign)\(AICoachUnitVocabulary.decimal(deltaKg, in: weightUnit, locale: locale)) \(AICoachUnitVocabulary.unitWord(weightUnit))"
 
             candidates.append(TrendCandidate(
                 name: data.name,

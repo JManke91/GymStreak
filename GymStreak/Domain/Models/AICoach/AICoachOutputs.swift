@@ -33,7 +33,17 @@ struct PeriodRecapOutput: Codable {
     @Guide(description: "Two to three short sentences in the user's locale: improved exercises with their exact gains copied from the input — figure and unit word together, exactly as written there — then declined ones, then unchanged ones by name. Mention the consistency fact when marked irregular.")
     let trendsNarrative: String
 
-    @Guide(description: "The 'Detected patterns' statement reproduced as one sentence in the user's locale. Return nil when the input has no detected patterns. Do NOT write explanatory or apologetic text. nil means the UI hides this section.")
+    /// **This guide names no programming construct**, and none may be added. It used to
+    /// say *"Return nil when the input has no detected patterns"* — and on a device check
+    /// the model answered that literally, writing the four-character string `nil` into the
+    /// field, which the Auffälligkeiten card rendered verbatim (German, 2026-08-30). A
+    /// `@Guide(description:)` is prompt text, so `nil` in it is a word to write, not an
+    /// absence to produce. Ask for the absence in plain language instead.
+    ///
+    /// A Swift-side guard rejects a placeholder answer whatever arrives — the half of the
+    /// guarantee that does not depend on the model obeying anything. See
+    /// docs/ai-coach.md § "Prompt grounding rules", rule 4.
+    @Guide(description: "The 'Detected patterns' statement reproduced as one sentence in the user's locale. OMIT THIS FIELD ENTIRELY when the input has no 'Detected patterns' section — do not return it empty, return nothing for it. Never fill it with a placeholder word, a dash, or a sentence explaining or apologising for the absence; whatever is written here is shown to the reader exactly as written.")
     let correlationHighlight: String?
 
     @Guide(description: "One sentence in the user's locale rephrasing the 'Closing fact'. When marked as a recommendation, one concrete suggestion; otherwise purely observational.")

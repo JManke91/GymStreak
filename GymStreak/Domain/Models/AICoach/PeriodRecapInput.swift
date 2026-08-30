@@ -3,6 +3,7 @@
 //  GymStreak
 //
 
+import Foundation
 import FoundationModels
 
 @Generable
@@ -116,7 +117,8 @@ extension PeriodRecapInput {
         lines.append("")
         lines.append("Sessions: \(headline.totalSessions), average \(headline.averageSessionMinutes) min, \(headline.distinctExercises) distinct exercises")
 
-        var consistencyLine = "Consistency: trained in \(consistency.trainedWeeks) of \(consistency.totalWeeks) weeks, on average \(String(format: "%.1f", consistency.averageSessionsPerWeek)) sessions per week"
+        // Reader's separator — the prompt has the model copy figures verbatim.
+        var consistencyLine = "Consistency: trained in \(consistency.trainedWeeks) of \(consistency.totalWeeks) weeks, on average \(AICoachUnitVocabulary.plainDecimal(consistency.averageSessionsPerWeek, locale: Locale(identifier: locale))) sessions per week"
         if consistency.longestGapDays > 0 {
             consistencyLine += ", longest gap \(consistency.longestGapDays) days"
         }

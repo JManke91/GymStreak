@@ -36,6 +36,15 @@ final class PostWorkoutRecapViewModel {
     enum RecapState: Equatable {
         /// Initial — nothing shown yet.
         case idle
+        /// Every gate passed and generation is under way, but no token has arrived.
+        ///
+        /// Set synchronously at the end of `start`, so the card appears with skeleton bars
+        /// the moment the sheet does. Without it the reader watched blank space for the
+        /// availability retry, the prewarm and the first token, and the finished paragraph
+        /// then appeared out of nowhere (device, 2026-08-30). Every other coach surface
+        /// already had this: `WorkoutAnalysisViewModel` and `ExerciseDeepDiveViewModel`
+        /// both call it `.preparing`, and `PeriodRecapViewModel` has `.loading`.
+        case preparing
         /// Model is streaming; associated text grows incrementally.
         case streaming(text: String)
         /// Generation complete; shows the final narrative.
@@ -221,6 +230,7 @@ final class PostWorkoutRecapViewModel {
             workoutId: workoutId
         )
 
+        state = .preparing
         runTask = Task { [weak self] in await self?.run(pending) }
     }
 

@@ -107,6 +107,30 @@ struct AISkeletonBar: View {
     }
 }
 
+/// A paragraph's worth of `AISkeletonBar` rows — full-width lines with a short last one,
+/// so the block reads as prose rather than as a filled rectangle.
+///
+/// Every coach surface that streams a paragraph draws this same shape while it waits, and
+/// each one had hand-rolled it. See docs/ai-coach.md § "Streaming".
+struct AISkeletonLines: View {
+
+    let count: Int
+    var lastLineWidth: CGFloat = 200
+    var lineHeight: CGFloat = 12
+    var spacing: CGFloat = 8
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: spacing) {
+            ForEach(0..<count, id: \.self) { index in
+                AISkeletonBar(
+                    width: index == count - 1 ? lastLineWidth : nil,
+                    height: lineHeight
+                )
+            }
+        }
+    }
+}
+
 // MARK: - Previews
 
 #Preview("Default") {

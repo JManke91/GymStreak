@@ -56,6 +56,14 @@ final class PeriodRecapViewModel {
         var correlationHighlight: String? = nil
         var closingSentence: String = ""
         var headlineMetrics: HeadlineMetrics?
+
+        /// Whether the input carried a "Detected patterns" section — known before the
+        /// stream starts, so the screen never reserves a card that cannot fill.
+        ///
+        /// Without it the correlation slot was rendered for every stream, the closing card
+        /// was numbered `03` throughout, and at `.success` with no correlation the card
+        /// vanished and the closing card renumbered to `02` in front of the reader.
+        var hasDetectedPatterns: Bool = false
     }
 
     // MARK: - Public Properties
@@ -119,6 +127,23 @@ final class PeriodRecapViewModel {
             state: allowanceGate.nudgeState,
             remainingFormat: "ai_coach.period_recap.allowance.nudge".localized,
             exhaustedText: "ai_coach.period_recap.allowance.nudge.exhausted".localized
+        )
+    }
+
+    /// The message to confirm a regenerate with, or `nil` when regenerating costs
+    /// nothing.
+    ///
+    /// Non-nil only for a metered reader who still has a unit: regenerating then spends
+    /// one of their free monthly recaps, and this screen's whole allowance design is that
+    /// spending it is "a single, irreversible choice" the reader makes deliberately —
+    /// which is why `load` and `setRange` never generate for them either. An exhausted
+    /// reader needs no confirmation because `requestGeneration` raises the paywall instead
+    /// of running, and a Pro reader is not metered at all.
+    var regenerateConfirmationMessage: String? {
+        guard allowanceGate.isMetered, !allowanceGate.isExhausted else { return nil }
+        return String(
+            format: "ai_coach.period_recap.regenerate.confirm.message".localized,
+            allowanceGate.remaining
         )
     }
 
@@ -289,6 +314,9 @@ final class PeriodRecapViewModel {
                let cached = cache.loadPeriodRecap(key: key) {
                 let fileDate = cacheFileDate(key: key) ?? Date()
                 let metrics = buildHeadlineMetrics(range: range, modelContext: modelContext)
+                // `AICoachCache.loadPeriodRecap` already sanitised the correlation field
+                // on the way out — a recap written before that guard existed can hold a
+                // literal "nil", and a cache entry is never regenerated for stale prose.
                 state = .success(cached, isCached: true, generatedAt: fileDate, metrics: metrics)
                 return
             }
@@ -312,7 +340,8 @@ final class PeriodRecapViewModel {
             range: range,
             modelContext: modelContext,
             weightUnit: weightUnit,
-            headlineMetrics: sampleInput.headline
+            headlineMetrics: sampleInput.headline,
+            hasDetectedPatterns: !sampleInput.correlations.isEmpty
         ) {
             pending = nil
         }
@@ -345,6 +374,12 @@ final class PeriodRecapViewModel {
 
     // MARK: - Streaming
 
+    /// - Parameter hasDetectedPatterns: whether the aggregated input actually carries a
+    ///   "Detected patterns" section. When it does not, `correlationHighlight` is dropped
+    ///   whatever the model returned — presence is a property of the input, which Swift
+    ///   already knows, so it is not left as the model's decision. Same guarantee, and the
+    ///   same reason, as `ExerciseDeepDiveNarrative` dropping the progression paragraph on
+    ///   a blended view.
     /// - Returns: `true` only when a complete recap reached the screen and the
     ///   cache. The caller keeps the allowance unit on `true` and refunds it
     ///   otherwise — a cancelled or superseded stream surfaces nothing and
@@ -354,7 +389,8 @@ final class PeriodRecapViewModel {
         range: PeriodRange,
         modelContext: ModelContext,
         weightUnit: WeightUnit,
-        headlineMetrics: HeadlineMetrics
+        headlineMetrics: HeadlineMetrics,
+        hasDetectedPatterns: Bool
     ) async -> Bool {
         let locale = Locale.current
         let capturedRange = range
@@ -362,6 +398,7 @@ final class PeriodRecapViewModel {
         // Seed partial content with known headline metrics
         var partial = PartialContent()
         partial.headlineMetrics = headlineMetrics
+        partial.hasDetectedPatterns = hasDetectedPatterns
         state = .streaming(partial)
 
         let start = ContinuousClock.now
@@ -400,8 +437,12 @@ final class PeriodRecapViewModel {
                 partial.trendsNarrative = p.trendsNarrative ?? ""
                 // PartiallyGenerated wraps Optional fields in another Optional.
                 // p.correlationHighlight is String?? — inner nil means "field not yet generated",
-                // outer nil means schema returned null. Flatten both to String?.
-                partial.correlationHighlight = p.correlationHighlight ?? nil
+                // outer nil means schema returned null. Flatten both to String?, then apply
+                // the two guards: the input decides whether the section exists at all, and
+                // `CoachCorrelationSanitizer` rejects a placeholder or an apology if it does.
+                partial.correlationHighlight = hasDetectedPatterns
+                    ? CoachCorrelationSanitizer.sanitized(p.correlationHighlight ?? nil)
+                    : nil
                 partial.closingSentence = p.closingSentence ?? ""
                 partial.headlineMetrics = headlineMetrics
                 // Only update state if the range hasn't changed under us
@@ -412,8 +453,9 @@ final class PeriodRecapViewModel {
                 if let headline = p.headline,
                    let trends = p.trendsNarrative,
                    let closing = p.closingSentence {
-                    let rawCorr: String? = p.correlationHighlight ?? nil
-                    let corr = Self.isApologeticCorrelation(rawCorr) ? nil : rawCorr
+                    let corr = hasDetectedPatterns
+                        ? CoachCorrelationSanitizer.sanitized(p.correlationHighlight ?? nil)
+                        : nil
                     finalOutput = PeriodRecapOutput(
                         headline: headline,
                         trendsNarrative: trends,
@@ -508,24 +550,6 @@ final class PeriodRecapViewModel {
             .appending(path: "AICoachCache", directoryHint: .isDirectory)
             .appending(path: "period_recap_\(safe).json", directoryHint: .notDirectory)
         return (try? fm.attributesOfItem(atPath: url.path))?[.modificationDate] as? Date
-    }
-
-    // MARK: - Apologetic correlation guard
-
-    /// Returns `true` if `text` is most likely an "apologetic empty correlation" rather
-    /// than a real finding (e.g. "There are no notable correlations…"). The prompt's
-    /// pattern statements are pre-written findings the model reproduces verbatim, so
-    /// only explicit "nothing found" phrasing needs to be caught — a subject-matching
-    /// heuristic would misclassify the (short, exercise-name-free) real statements.
-    private static func isApologeticCorrelation(_ text: String?) -> Bool {
-        guard let text, !text.isEmpty else { return true }
-        let lower = text.lowercased()
-        let markers = [
-            "no correlation", "no notable", "no pattern", "not enough data",
-            "keine korrelation", "keine zusammenhänge", "keine muster",
-            "keine auffälligkeiten", "nicht genug daten"
-        ]
-        return markers.contains { lower.contains($0) }
     }
 
     // MARK: - Quick Headline (no full aggregation)

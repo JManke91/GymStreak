@@ -984,16 +984,16 @@
 "ai_coach.period_recap.eyebrow.streaming" = "COACH SCHREIBT";
 "ai_coach.period_recap.eyebrow.static" = "COACH · RÜCKBLICK";
 "ai_coach.period_recap.cache.from_cache" = "Aus Cache";
-"ai_coach.period_recap.cache.regenerate" = "Neu generieren";
 "ai_coach.period_recap.chip.this_week" = "Diese Woche";
 "ai_coach.period_recap.chip.last_week" = "Letzte Woche";
 "ai_coach.period_recap.chip.this_month" = "Diesen Monat";
 "ai_coach.period_recap.chip.last_month" = "Letzten Monat";
 "ai_coach.period_recap.chip.last_3_months" = "3 Monate";
 "ai_coach.period_recap.chip.this_year" = "Dieses Jahr";
-"ai_coach.period_recap.section.trends" = "01 · Was sich verändert hat";
-"ai_coach.period_recap.section.correlation" = "02 · Auffälligkeit";
-"ai_coach.period_recap.section.closing" = "03 · Ausblick";
+"ai_coach.period_recap.section.format" = "%1$02d · %2$@";
+"ai_coach.period_recap.section.trends" = "Was sich verändert hat";
+"ai_coach.period_recap.section.correlation" = "Auffälligkeit";
+"ai_coach.period_recap.section.closing" = "Ausblick";
 "ai_coach.period_recap.correlation.label" = "MUSTER";
 "ai_coach.period_recap.stat.sessions" = "Sessions";
 "ai_coach.period_recap.stat.volume" = "Volumen";
@@ -1068,6 +1068,8 @@
 "ai_coach.chat.allowance.nudge.exhausted" = "Diesen Monat keine Coach-Nachrichten mehr. Mit Gym Streak Pro chattest du unbegrenzt.";
 
 // P4 — AI-Rückblick, monatliche Kostprobe
+"ai_coach.period_recap.regenerate.confirm.title" = "Rückblick neu generieren?";
+"ai_coach.period_recap.regenerate.confirm.message" = "Das schreibt einen neuen Rückblick und verbraucht einen deiner kostenlosen AI-Rückblicke. Diesen Monat noch %d übrig.";
 "ai_coach.period_recap.allowance.nudge" = "%1$d von %2$d kostenlosen AI-Rückblicken diesen Monat übrig";
 "ai_coach.period_recap.allowance.nudge.exhausted" = "Diesen Monat keine kostenlosen AI-Rückblicke mehr. Mit Gym Streak Pro sind sie unbegrenzt.";
 "ai_coach.period_recap.offer.title" = "AI-Rückblick erstellen";

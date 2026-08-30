@@ -207,29 +207,11 @@ struct ExerciseDeepDiveGroundingTests {
         }
     }
 
-    /// The single worst failure this surface has produced: the model lifted `87.5 kg` out
-    /// of the instructions' own worked example and presented it as the reader's data,
-    /// then derived `88.2 kg` from it and the real `+0,7 kg` delta — for a reader whose
-    /// actual best is 20,0 kg. Instructions are placed verbatim in the prompt, so an
-    /// example number is indistinguishable from an input number. `blendedViewPrompt` is
-    /// the control: no data-shaped literal, nothing invented on any device check.
-    @Test("No prompt teaches a rule with a number, date or frequency that could pass as data")
-    func promptsCarryNoDataShapedLiterals() throws {
-        // Digits that are not part of an ordinary English word or a field name — the
-        // "2 to 3 sentences" style counts are fine; `87.5 kg`, `20.08.2026` and
-        // `1.3 sessions per week` are not.
-        let dataShaped = try NSRegularExpression(
-            pattern: #"\d+[.,]\d+|\d{4}"#
-        )
-        for (name, prompt) in [
-            ("single-variant", ExerciseDeepDiveInstructions.singleVariantPrompt),
-            ("blended", ExerciseDeepDiveInstructions.blendedViewPrompt)
-        ] {
-            let hits = dataShaped.matches(in: prompt, range: NSRange(prompt.startIndex..., in: prompt))
-                .map { String(prompt[Range($0.range, in: prompt)!]) }
-            #expect(hits.isEmpty, "\(name) prompt carries data-shaped literals: \(hits)")
-        }
-    }
+    // The single worst failure this surface has produced — the model lifting `87.5 kg`
+    // out of the instructions' own worked example and presenting it as the reader's data
+    // — is now pinned for **every** coach surface at once, in
+    // `CoachPromptGroundingTests.noCoachPromptCarriesADataShapedLiteral`. Both deep-dive
+    // prompts are in that scan; the rule is one rule and is stated once.
 
     /// The whole app addresses the reader informally; the model wrote formal German
     /// throughout ("Sie haben insgesamt 6 Trainingseinheiten analysiert", "Ihre

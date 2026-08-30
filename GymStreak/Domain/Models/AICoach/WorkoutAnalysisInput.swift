@@ -116,11 +116,15 @@ extension WorkoutAnalysisInput {
     /// - Parameter unit: the reader's unit. `WorkoutAnalysisInstructions` must be built
     ///   with the same one; its German example patterns spell the unit out.
     func toPromptText(in unit: WeightUnit) -> String {
+        // The fact lines' words are English and get translated; their figures are copied
+        // verbatim, so every figure below carries the reader's decimal separator. See
+        // docs/ai-coach.md § "Prompt grounding rules", rule 1.
+        let readerLocale = Locale(identifier: locale)
         // First-time exercises have no baseline: they never become highlights,
         // only a closing-observation note.
         let comparableExercises = exercises.filter { !$0.isFirstTime }
         let firstTimeNames = exercises.filter(\.isFirstTime).map(\.exerciseName)
-        let verdicts = comparableExercises.map { Self.exerciseVerdict($0, in: unit) }
+        let verdicts = comparableExercises.map { Self.exerciseVerdict($0, in: unit, locale: readerLocale) }
 
         var lines: [String] = []
         lines.append("Locale: \(locale)")
@@ -131,7 +135,7 @@ extension WorkoutAnalysisInput {
         // Swift (`headlineSentence`) and never generated, so nothing here is rendered
         // verbatim. The exercise name in a PR story still crosses over because the PR
         // highlight has to state that set.
-        lines.append("Session summary: \(Self.promptFact(for: headlineStory(verdicts: verdicts), in: unit))")
+        lines.append("Session summary: \(Self.promptFact(for: headlineStory(verdicts: verdicts), in: unit, locale: readerLocale))")
 
         if currentCompletionPercentage < Self.cutShortThreshold {
             lines.append("Note: the workout was cut short — only \(currentCompletionPercentage)% of the planned sets were completed. Missing sets are not lost strength.")
@@ -153,7 +157,7 @@ extension WorkoutAnalysisInput {
             lines.append("")
             lines.append("New PRs:")
             for pr in newPRs {
-                lines.append("- \(pr.exerciseName): \(Self.fmt(pr.weightKg, in: unit)) \(AICoachUnitVocabulary.unitWord(unit)) x \(pr.reps) reps")
+                lines.append("- \(pr.exerciseName): \(Self.fmt(pr.weightKg, in: unit, locale: readerLocale)) \(AICoachUnitVocabulary.unitWord(unit)) x \(pr.reps) reps")
             }
         }
 
@@ -191,10 +195,13 @@ extension WorkoutAnalysisInput {
     /// - Parameter unit: the reader's unit, from the same preference the surrounding
     ///   screen renders with.
     func headlineSentence(in unit: WeightUnit) -> String {
+        let readerLocale = Locale(identifier: locale)
         let comparable = exercises.filter { !$0.isFirstTime }
         return Self.localizedSentence(
-            for: headlineStory(verdicts: comparable.map { Self.exerciseVerdict($0, in: unit) }),
-            locale: Locale(identifier: locale),
+            for: headlineStory(verdicts: comparable.map {
+                Self.exerciseVerdict($0, in: unit, locale: readerLocale)
+            }),
+            locale: readerLocale,
             unit: unit
         )
     }
@@ -232,10 +239,10 @@ extension WorkoutAnalysisInput {
     }
 
     /// The English rendering that reaches the prompt as context for the closing sentence.
-    private static func promptFact(for headline: WorkoutAnalysisHeadline, in unit: WeightUnit) -> String {
+    private static func promptFact(for headline: WorkoutAnalysisHeadline, in unit: WeightUnit, locale: Locale) -> String {
         switch headline {
         case let .personalRecord(name, weightKg, reps, additionalCount):
-            var fact = "new personal record on \(name): \(fmt(weightKg, in: unit)) \(AICoachUnitVocabulary.unitWord(unit)) x \(reps) reps"
+            var fact = "new personal record on \(name): \(fmt(weightKg, in: unit, locale: locale)) \(AICoachUnitVocabulary.unitWord(unit)) x \(reps) reps"
             if additionalCount > 0 {
                 fact += " (and \(additionalCount) more PRs)"
             }
@@ -309,7 +316,8 @@ extension WorkoutAnalysisInput {
     /// leads with the top set, the number a lifter actually cares about.
     private static func exerciseVerdict(
         _ exercise: WorkoutAnalysisExerciseInput,
-        in unit: WeightUnit
+        in unit: WeightUnit,
+        locale: Locale
     ) -> ExerciseVerdict {
         let unitWord = AICoachUnitVocabulary.unitWord(unit)
         let completedSets = exercise.sets.filter(\.isCompleted)
@@ -329,8 +337,8 @@ extension WorkoutAnalysisInput {
             (lhs.previousWeightKg ?? 0, lhs.previousReps ?? 0) < (rhs.previousWeightKg ?? 0, rhs.previousReps ?? 0)
         } ?? curTop
         let topWeightDelta = curTop.currentWeightKg - (prevTop.previousWeightKg ?? 0)
-        let topNow = "\(fmt(curTop.currentWeightKg, in: unit)) \(unitWord) x \(curTop.currentReps) reps"
-        let topPrevious = "\(fmt(prevTop.previousWeightKg ?? 0, in: unit)) \(unitWord) x \(prevTop.previousReps ?? 0) reps"
+        let topNow = "\(fmt(curTop.currentWeightKg, in: unit, locale: locale)) \(unitWord) x \(curTop.currentReps) reps"
+        let topPrevious = "\(fmt(prevTop.previousWeightKg ?? 0, in: unit, locale: locale)) \(unitWord) x \(prevTop.previousReps ?? 0) reps"
         let extraSets = completedSets.count - comparable.count
 
         let weightUp = totalWeightDelta >= 0.01
@@ -346,24 +354,24 @@ extension WorkoutAnalysisInput {
             fact = "same weight and reps as last session (top set \(topNow))"
         } else if (weightUp && repsDown) || (weightDown && repsUp) {
             label = "MIXED"
-            fact = "weight \(signed(totalWeightDelta, in: unit)) \(unitWord) but reps \(signedInt(totalRepsDelta)) vs last session (top set \(topNow))"
+            fact = "weight \(signed(totalWeightDelta, in: unit, locale: locale)) \(unitWord) but reps \(signedInt(totalRepsDelta)) vs last session (top set \(topNow))"
         } else if weightUp || repsUp {
             label = "IMPROVED"
             if topWeightDelta >= 0.01 {
-                fact = "top set +\(fmt(topWeightDelta, in: unit)) \(unitWord): now \(topNow), was \(topPrevious)"
+                fact = "top set +\(fmt(topWeightDelta, in: unit, locale: locale)) \(unitWord): now \(topNow), was \(topPrevious)"
             } else if repsUp {
                 fact = "+\(totalRepsDelta) reps in total at the same weight (top set \(topNow))"
             } else {
-                fact = "weight +\(fmt(totalWeightDelta, in: unit)) \(unitWord) summed across sets (top set \(topNow))"
+                fact = "weight +\(fmt(totalWeightDelta, in: unit, locale: locale)) \(unitWord) summed across sets (top set \(topNow))"
             }
         } else {
             label = "DECREASED"
             if topWeightDelta <= -0.01 {
-                fact = "top set \(fmt(topWeightDelta, in: unit)) \(unitWord): now \(topNow), was \(topPrevious)"
+                fact = "top set \(fmt(topWeightDelta, in: unit, locale: locale)) \(unitWord): now \(topNow), was \(topPrevious)"
             } else if repsDown {
                 fact = "\(totalRepsDelta) reps in total at the same weight (top set \(topNow))"
             } else {
-                fact = "weight \(fmt(totalWeightDelta, in: unit)) \(unitWord) summed across sets (top set \(topNow))"
+                fact = "weight \(fmt(totalWeightDelta, in: unit, locale: locale)) \(unitWord) summed across sets (top set \(topNow))"
             }
         }
 
@@ -381,10 +389,15 @@ extension WorkoutAnalysisInput {
         sets.max { ($0.currentWeightKg, $0.currentReps) < ($1.currentWeightKg, $1.currentReps) }
     }
 
-    /// A canonical-kilogram figure as the English fact lines write it, in the
-    /// reader's unit and rounded to that unit's precision.
-    private static func fmt(_ kilograms: Double, in unit: WeightUnit) -> String {
-        AICoachUnitVocabulary.compact(kilograms, in: unit)
+    /// A canonical-kilogram figure as the fact lines write it: the reader's unit, that
+    /// unit's precision, and **the reader's decimal separator**.
+    ///
+    /// The fact lines' *words* are English and the model translates them; their *figures*
+    /// are copied verbatim, because the prompt says to copy each one digit for digit
+    /// including its separator. So the separator has to be the one the reader should end
+    /// up reading. See docs/ai-coach.md § "Prompt grounding rules", rule 1.
+    private static func fmt(_ kilograms: Double, in unit: WeightUnit, locale: Locale) -> String {
+        AICoachUnitVocabulary.compact(kilograms, in: unit, locale: locale)
     }
 
     /// Weight for the reader's own sentence: the locale's decimal separator, no
@@ -397,8 +410,8 @@ extension WorkoutAnalysisInput {
         return "\(number) \(AICoachUnitVocabulary.unitWord(unit))"
     }
 
-    private static func signed(_ kilograms: Double, in unit: WeightUnit) -> String {
-        kilograms >= 0 ? "+\(fmt(kilograms, in: unit))" : fmt(kilograms, in: unit)
+    private static func signed(_ kilograms: Double, in unit: WeightUnit, locale: Locale) -> String {
+        kilograms >= 0 ? "+\(fmt(kilograms, in: unit, locale: locale))" : fmt(kilograms, in: unit, locale: locale)
     }
 
     private static func signedInt(_ value: Int) -> String {
