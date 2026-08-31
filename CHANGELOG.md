@@ -4,6 +4,48 @@ All notable changes to GymStreak are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.1.13] - 2026-08-31
+
+### Added
+
+- If you have no routines yet, the Routines tab now starts you off with a ready-made full-body routine that shows rep ranges, a superset and per-exercise rest times. Edit it, start it or delete it like any other routine — once deleted, it stays gone.
+- The ready-made starter routine does not use up one of your three free routines — you can still create three of your own.
+- New in Settings → Units: you can now switch weights between kilograms and pounds. Everything in an active workout follows, including the +/− steps, and switching back leaves your logged numbers exactly as they were.
+
+### Improved
+
+- Settings now shows when iCloud sync is actually broken instead of quietly saying "Waiting".
+- You now get told when a routine change couldn't be saved, instead of it silently disappearing.
+- The app stays noticeably smoother while a large iCloud sync is running, for example on a new device or right after reinstalling.
+- The Routines tab opens and scrolls noticeably faster, especially with many routines.
+- The kilogram/pound setting now also covers routine building: the set editor, the create-routine flow, alternative exercises and the routine cards all read and accept your unit.
+- Weight increases now offer real pound plate steps (+1.25, +2.5, +5, +10 lb) instead of converted kilogram values, when pounds are selected.
+- Your kilogram/pound setting now also covers everything you read back: workout history, the progress charts, personal-record badges and every volume figure. Volume rolls up as tonnes in kilograms (12.5 t) and as thousands of pounds in pounds (27.6k lb).
+- The AI Coach's exercise analysis now describes exactly the variant you have selected above it. It used to blend every way you train an exercise into one trend, so it could report a different number of workouts and a different progression than the chart right above it. With "All variants" selected it now reports your record and your workout count and tells you to pick a variant for a progression analysis, instead of stating a blended percentage.
+- The Coach analysis now shows, right above its text, which variant it is describing and that it covers your whole history for it — so it no longer looks like it disagrees with the percentage on the chart, which follows the selected time range. It also stopped mistaking the estimated 1RM for your actual weight, stopped inventing exact dates, and no longer garbles the variant name.
+- Kilograms/pounds now reach the Apple Watch too: every weight, the +/− buttons and the Digital Crown follow your unit, with real pound plate steps (+1.25, +2.5, +5, +10 lb).
+- The Coach's exercise analysis is now written in clearly separated paragraphs, and your all-time best is shown as its own line built from your logged sets rather than written by the model. It no longer invents an exact day for a record it only knows the month of, and no longer describes your history as covering a longer stretch of time than it does. Existing analyses are regenerated once in the new format.
+- The Coach's exercise analysis stays observational: it describes what your training did and no longer tells you to raise or lower your weights, intensity or training frequency. It also states your training frequency the right way round ("1.3 sessions per week", not "1.3 weeks per session").
+- The AI Coach now writes in your unit. If you use pounds, the post-workout recap, the monthly recap, the exercise analysis and the Coach chat all state weights in pounds instead of kilograms — including the "Best:" line under an exercise analysis and the headline above a workout analysis, which used to read kilograms right under a pounds chart. Recaps you have already generated keep the unit they were written in; anything generated from now on follows your setting.
+- The Coach's post-workout summary now shows placeholder lines while it is being written, instead of leaving a blank gap until the finished text appears.
+- The Coach now writes numbers the way your language does. In German a weight reads "1830,0 kg" and a training frequency "2,0 Einheiten pro Woche" — the post-workout summary, the workout analysis and the monthly recap all used to print an English decimal point there.
+- The monthly recap now has the same regenerate button as the rest of the Coach, in its top bar. It used to be a small link that only appeared on a recap loaded from cache. If you are on the free tier it asks before spending one of your free AI recaps.
+
+### Fixed
+
+- With a VPN configured, the iCloud status could stay stuck on "Syncing…" while offline instead of showing "Waiting".
+- A device whose exercise library came up empty and stayed empty now restores the built-in exercises by itself, instead of waiting forever for an iCloud sync that had already happened.
+- After reinstalling the app and syncing from iCloud, deleting a workout with "Delete in GymStreak and Apple Health" always failed. The app now asks for Apple Health permission again at that moment, and says what to do if you decline.
+- With VoiceOver, a set's weight change was announced as a rep change when pounds were selected, and a volume change was announced as "up 0 reps". Both now read correctly, and weights are spoken as "pounds" or "kilograms" instead of "kg".
+- On Apple Watch: in a US region the routine overview showed pounds while the set editor showed kilograms, and the watch rounded internally to whole kilograms, so pounds values drifted on every adjustment.
+- Fixed a crash when deleting workouts from the History tab. Deleting one workout starts a background rebuild of your history, and deleting a second one while that was still running could crash the app. Deleting a workout now waits for that rebuild to finish.
+- The same crash protection now also covers routine edits: removing an exercise from a routine, and saving or removing a routine's training plan, wait for a running history rebuild instead of risking a crash.
+- Fixed a crash when discarding a workout: if you threw a workout away while its AI recap or its "vs. last time" comparison was still being prepared, the app could crash a moment later. That work now stops as soon as the workout is discarded.
+- Fixed the Coach's workout analysis naming an exercise you did not train. Its headline could credit a personal record to the wrong exercise — even one you had swapped out for an alternative — while showing the right numbers. The headline is now built from your logged sets instead of being written by the model, and the Coach no longer translates or replaces exercise names. Existing analyses are regenerated once.
+- The monthly recap could show the word "nil" in its pattern card when there was no pattern to report. The card is now simply hidden, including for recaps that were already generated.
+- The Coach no longer picks up numbers from its own instructions. Its post-workout recap, workout analysis and monthly recap used to be taught their formatting with a worked example containing a weight, and that weight could turn up in your text as if it were your own — one analysis reported a 1RM of 87.5 kg for a lift whose real best is 20 kg. All example numbers are gone from the Coach's instructions.
+- The monthly recap numbered its sections 01 and 03 when there was no pattern card to show.
+
 ## [1.1.12] - 2026-08-25
 
 ### Added
