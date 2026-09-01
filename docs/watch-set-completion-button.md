@@ -8,7 +8,7 @@ The visual design comes from a Claude Design handoff bundle: `design/gym-streak/
 ## Screen Layout (action row pinned, editing group centered)
 0. **Top zone** (`WorkoutTopProgressView`, added 2026-07-12 from the Final design, handoff §4; **decoupled into two context levels 2026-07-23**): Fills the space between the toolbar (system clock only) and the stepper cluster with two stacked levels so the routine-level and exercise-level context never blur together:
    - **Routine level** (top): an uppercase `Exercise X / Y` label (`textMuted`, kerned; localized key `Exercise %lld / %lld` → de `Übung %lld / %lld`) with a **right-aligned trailing accessory on the same line** — the elapsed-time label, or the minimized rest timer while resting (relocated here from the top toolbar 2026-07-24, see "Elapsed time & rest timer" below). Below the label is the per-exercise segment bar — one segment per exercise in workout order, each a dark `segmentTrack` (#2A2A2C) capsule with a leading fill sized to that exercise's completed/total sets. The fill is **neutral gray `segmentFill` (#5C5C60), not green** — green is now reserved exclusively for the current set (its counter number and the Complete button fill), so the bar can never be misread as green "exercise progress". `WorkoutTopProgressView` is generic over the trailing accessory (`WorkoutTopProgressView<Trailing: View>`) so it stays a pure layout container and the rest timer's own buttons stay accessible; `FullScreenSetEditorView.topTrailingAccessory` builds the elapsed/rest-timer view.
-   - **Exercise level** (below the bar): the current exercise name (bold, `lineLimit(1)` + `minimumScaleFactor(0.85)`) on the left and a `Set X/Y` counter on the right, where the current set number is `accentGreen` + bold and the `/total` is muted (`Text` concatenation; label from localized key `Set`).
+   - **Exercise level** (below the bar): the current exercise name on the left and a `Set X/Y` counter on the right, where the current set number is `accentGreen` + bold and the `/total` is muted (`Text` concatenation; label from localized key `Set`). The name is a **`WatchMarqueeText`** (2026-09-01) — it scrolls its own overflow through the fixed slot rather than ellipsizing it; near-fits still just shrink via `minimumScaleFactor(0.85)`. See "Scrolling exercise name" below.
    - The earlier design showed the exercise name on top with a whole-workout completion **percent** (removed) and a green segment bar; both the percent and the `workoutProgress` init param are gone.
 1. **Steppers + metrics row**: two round dark-green +/− buttons adjust the focused value card; live ❤️ BPM and 🔥 kCal metrics (`WorkoutMetricsView`, shown only when HealthKit delivers values). The +/− cluster **follows focus** — it sits on the same side as the focused card (weight = left, reps = right) and slides to the other side, past the metrics column, when focus moves, so the steppers always read as directly controlling the focused card. Restored 2026-07-12 — the glass-button redesign (`0ce2bdd`) had pinned the steppers to the left, breaking this context link.
    - **Smooth swap implementation**: the row is a `ForEach(clusterOrder, id: \.self)` over a stable `ClusterSlot` identity (`.steppers`/`.metrics`), NOT an `if/else` reorder. Keying on the slot identity (never on position) lets SwiftUI treat the focus change as a *move* and interpolate each cluster's frame into a slide; an `if/else` swap only crossfades because its branches are distinct identities. Each slot uses an equal-width `frame(maxWidth: .infinity, alignment:)` (alignment derived from focus, not row position) to hug its outer edge — this stands in for the old `Spacer`, which jitters when placed between reordered `ForEach` items. Animated with `.snappy(duration: 0.22, extraBounce: 0.05)` on `value: clusterOrder`, guarded by `accessibilityReduceMotion` (no animation when reduce-motion is on). The metrics slot is dropped from `clusterOrder` entirely until HealthKit delivers values (it then fades in as an insert; the steppers still slide correctly relative to whatever is present). `matchedGeometryEffect` was evaluated and rejected as unnecessary heavier machinery for a same-container position swap (research: `.scratch`/ios-api-researcher, 2026-07-12).
@@ -93,10 +93,119 @@ Workout-screen tokens live in `OnyxWatch.Colors` (`OnyxWatchDesignSystem.swift`)
 - Value cards: combined label "WEIGHT. 80 kg" etc., `isSelected` trait on the focused card.
 - **Dynamic Type — deliberately fixed-size (non-scaling).** Every font on this workout HUD is built from a fixed `.font(.system(size:))` (the `WorkoutScreenMetrics` values, and `RestTimerMinimizedPill`'s internal 13 pt countdown / 10 pt chevron), so the whole screen is intentionally inert to the user's text-size setting. This is a deliberate trade-off for a space-critical, glanceable-during-exercise HUD: nothing reflows or clips at large accessibility text sizes, and the routine-row baseline-overlay math (which lets the elapsed time / rest-timer pill overflow upward with zero row-height contribution) stays stable. The rest-timer pill's fixed 13 pt digits are what keep it within its `.frame(maxHeight: 22)` cap. If scalable fonts are ever adopted here, pair any hard `dynamicTypeSize` ceiling with `.accessibilityShowsLargeContentViewer()` (Apple's recommendation). Verified best-practice via `ios-api-researcher` 2026-07-24.
 
+## Scrolling exercise name (`WatchMarqueeText`, 2026-09-01)
+
+**Problem.** The exercise name shares its row with the `Set X/Y` counter, so it gets
+roughly half the screen width — about 16–18 characters at `topNameSize`. German
+exercise names routinely blow past that: measured against the shipped German seed
+catalog (`GymStreak/Resources/de.lproj/Localizable.strings`, keys `seed.exercise.*`),
+**47 of 96 names overflow**, and the longest — `Kreuzheben mit gestreckten Beinen`
+(33 chars) — wants roughly 230 pt in a ~130 pt slot.
+
+**Why no static layout fixes it.** Three things were measured and rejected:
+
+- **Shrinking further.** At 33 characters, even `minimumScaleFactor(0.7)` cannot fit
+  the name on a 184–208 pt screen at a size that is legible mid-set. Static scaling
+  provably runs out before the longest names fit.
+- **Dropping the parenthetical qualifier first** (give `Kniebeuge` higher layout
+  priority than `(Langhantel)`). This was actively harmful and is the key finding:
+  **ten seed name groups differ ONLY in their trailing qualifier** — `Bankdrücken`
+  ×3 (Langhantel/Kurzhantel/Multipresse), `Bizeps-Curls` ×3, `Kniebeuge`
+  ×2 (Langhantel/Multipresse), `Schrägbankdrücken` ×2, `Schulterdrücken`,
+  `Schulterheben`, `Seitheben`, `Klimmzug`, `Crunches`, `Ausfallschritte`. Truncating
+  or dropping the tail renders genuinely different exercises **identically**. Only
+  32% of names even have a parenthetical, so it also covers a minority of the problem.
+  It takes 20 characters of prefix before no two seed names collide.
+- **Wrapping to two lines.** Costs vertical space on a screen that is already tight
+  on the `xSmall` (40 mm) tier, and the user's constraint was explicitly to leave the
+  layout dimensions alone.
+
+**Mechanism.** There is **no built-in marquee on watchOS** — verified via
+`ios-api-researcher` against Apple's docs: no SwiftUI modifier scrolls overflowing
+`Text`; `.truncationMode`, `.allowsTightening` and `.lineLimit(_:reservesSpace:)` are
+all static; `ViewThatFits` picks a variant once; the Now Playing marquee is private
+system chrome with no public equivalent; and `WKInterfaceLabel` is both static and
+unreachable from a SwiftUI-lifecycle watch app. `TextRenderer`/`Text.Layout`
+(watchOS 11+) *is* available and could draw a marquee, but it is a drawing
+customizer, not a clipping/scrolling container — it would be strictly more machinery
+for the same result. So `WatchMarqueeText` is hand-built from ordinary layout.
+
+**How it is built** (`GymStreakWatch Watch App/Views/WatchMarqueeText.swift`):
+
+- A **clear copy of the text owns the layout**. It compresses exactly like a normal
+  truncating `Text`, so it hands the row its width, height *and first text baseline*.
+  This is why it is not a `GeometryReader`: a `GeometryReader` has no text baseline
+  and would break the name/`Set X/Y` `.firstTextBaseline` alignment the row depends on.
+- A **hidden `.fixedSize()` probe** in a `.background` measures the width the text
+  *wants*; `.onGeometryChange` on the layout owner measures the slot. Overflow is the
+  difference. `.onGeometryChange` is used rather than `GeometryReader` +
+  `PreferenceKey` because the preference callback is `@Sendable` and cannot touch
+  `@State` under the watch target's `SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor`.
+- The **visible label** switches on one flag: `.fixedSize(horizontal: isAnimating)`.
+  On, it renders at natural width, is clipped by the parent, and `offset(x:)` slides
+  it. Off, it is proposed the slot width and truncates with a normal ellipsis —
+  byte-identical to the pre-marquee label.
+
+**Scroll threshold — it is not a magic number.** The label only moves when overflow
+exceeds what `minimumScaleFactor(0.85)` could still absorb. A label of natural width
+`W` in slot `S` fits at scale `f` when `W · f ≤ S`; with `f ≥ 0.85` that holds exactly
+while `W − S ≤ S · (1/0.85 − 1)`. Below that it just shrinks, as before — nothing
+slides for three points of overflow.
+
+**Cycle pacing — deliberately head-dominant.** `headDwell` 2.2 s → travel at
+32 pt/s → `tailDwell` 1.4 s → eased 0.45 s return, repeating. The resting head state
+is the single longest phase on purpose: a 1–2 second mid-set glance lands on the same
+familiar prefix the static label always showed, which is what makes continuous motion
+acceptable on a glance screen. Sequenced with `Task.sleep` inside `.task(id:)` rather
+than a `repeatForever` animation, because a single repeating animation cannot hold
+still at the ends, and the dwells are the whole point.
+
+**Gating.** Motion is suppressed and the label parks at the head when either
+`accessibilityReduceMotion` or `isLuminanceReduced` (wrist-down / Always-On) is set —
+in AOD the system throttles refresh to ~1 Hz, so an animation would neither read well
+nor be honoured, and parking guarantees a dimmed glance never catches a frozen middle
+substring. The reset runs inside a `Transaction` with `disablesAnimations = true`, so
+a cancelled cycle's in-flight linear animation cannot keep sliding the label after
+motion was switched off. `.task(id: cycleIdentity)` keys on text + animating-state,
+so the cycle restarts on exercise change and tears down immediately when motion
+becomes unwanted. It deliberately excludes the overflow — see the task-thrash defect
+below. The tradeoff: if the slot width changes mid-pass (the counter widening `1/9` →
+`1/12`), that pass still travels the previous overflow and self-corrects on the next
+one, since `runCycle()` re-reads the geometry each pass.
+
+**Two defects the architecture review caught (2026-09-01), both now fixed** — worth
+recording because neither is visible in a build or in the unit suite:
+
+- **Stale offset across an exercise change.** `offset` is `@State` on a view instance
+  that *survives* the exercise changing: `FullScreenSetEditorView` swaps the name
+  through a computed `displayedExercise` rather than re-pushing the screen, so
+  nothing resets it. `runCycle()` originally opened with its head dwell, which meant
+  the NEW name was drawn at the OLD name's scroll offset — almost entirely off its
+  own head — for a full 2.2 s, then animated backwards when the new name was
+  shorter. Fires on most long-name → long-name transitions, i.e. exactly the German
+  case the feature exists for. Fix: `settleAtHead()` runs unconditionally as the
+  first statement of `runCycle()`, before the `isAnimating` guard.
+- **Task thrash from animated geometry in the task id.** `cycleIdentity` embedded the
+  rounded overflow. An ancestor animates on `currentExerciseIndex`/`currentSetIndex`,
+  so the slot width *interpolates* (e.g. as the counter goes `1/3` → `1/12`) and
+  `onGeometryChange` reports every intermediate frame — cancelling and recreating the
+  task a dozen times per transition. The dependency was also unnecessary, since
+  `runCycle()` re-reads `cycle` on each pass. Fix: the id is `text | isAnimating`.
+
+**Accessibility.** Unchanged and unaffected: `WorkoutTopProgressView` already builds
+its combined accessibility label from the full, untruncated `exerciseName`, so
+VoiceOver never depended on the visual truncation. The measurement probe is
+`accessibilityHidden(true)`.
+
+**Tests.** `GymStreakWatchTests/WatchMarqueeTextTests.swift` — 9 cases pinning the
+shrink/scroll handover at the scale floor, the zero-width first-layout guard, travel
+timing, and the head-dominance invariant.
+
 ## Architecture
 ### Components Involved (all watchOS target)
 - **`CompactActionBar.swift`**: fused action row (glass complete button + chevrons)
 - **`WorkoutTopProgressView.swift`**: top zone — routine level (`Exercise X / Y` label + neutral-gray per-exercise segment bar) and exercise level (name + green-accented `Set X/Y` counter); pure display, reads only its init params (`exerciseName`, `exerciseIndex`/`exerciseCount`, `setIndex`/`setCount`, `exerciseProgress`)
+- **`WatchMarqueeText.swift`**: the single-line label that scrolls its overflow through a fixed slot instead of ellipsizing it, plus `WatchMarqueeCycle` (pure scroll-threshold + pacing geometry, unit-tested). Used for the exercise name in the top zone. **Single-instance only — never in a `List`/`ForEach` row**: each instance costs three text measurements, a long-lived `Task` and a repeating animation, which per row is exactly the per-item cost the rendering rules prohibit
 - **`FullScreenSetEditorView.swift`**: screen layout, shared steppers, done-flash state, rest/elapsed toolbar status; passes the current exercise/set indices and counts, and derives `exerciseProgress` (per-exercise completion fractions) from `viewModel.exercises`, into the top zone
 - **`CompactValueEditor.swift`**: weight/reps value card (steppers were moved out of it into the editor)
 - **`WorkoutScreenStyle.swift`**: `WorkoutScreenMetrics` size tiers, `PressScaleStyle`, `ChevronCircleStyle`

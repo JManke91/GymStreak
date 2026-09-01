@@ -52,6 +52,8 @@ GymStreakWatchTests/
 ├── WatchModelsWireCompatibilityTests.swift      twin of GymStreakTests/WatchModelsWireCompatibilityTests
 ├── WeightUnitTests.swift                        twin of GymStreakTests/WeightUnitTests
 ├── WatchMuscleGroupLocalizationTests.swift       watch-only: muscle group display table
+├── WatchRestNextSetSummaryTests.swift            watch-only: rest timer next-set caption
+├── WatchMarqueeTextTests.swift                   watch-only: scrolling-label threshold + pacing
 └── Support/
     └── WatchWorkoutStructuralTestFixtures.swift twin of GymStreakTests/Support/…
 ```
@@ -310,6 +312,12 @@ build warning-free. P1.4 added `WatchModelsWireCompatibilityTests` the same day
 Verified 2026-08-28: the target stands at **52 tests in 4 suites**, all passing.
 Weight-unit ticket 04 added `WeightUnitTests` and extended
 `ProgressiveOverloadServiceTests` to the per-unit increment grids.
+
+Verified 2026-09-01: the target stands at **74 tests in 7 suites**, all passing.
+Added since: `WatchMuscleGroupLocalizationTests`, `WatchRestNextSetSummaryTests`,
+and `WatchMarqueeTextTests` (the scroll-vs-shrink threshold and cycle pacing behind
+the top zone's scrolling exercise name — see `docs/watch-set-completion-button.md`,
+"Scrolling exercise name").
 
 ---
 

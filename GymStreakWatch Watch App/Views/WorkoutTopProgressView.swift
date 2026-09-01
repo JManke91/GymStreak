@@ -100,11 +100,19 @@ struct WorkoutTopProgressView<Trailing: View>: View {
 
             // Exercise level: name + green-accented set counter.
             HStack(alignment: .firstTextBaseline, spacing: 8) {
-                Text(exerciseName)
-                    .font(.system(size: metrics.topNameSize, weight: .bold))
-                    .foregroundStyle(OnyxWatch.Colors.textPrimary)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.85)
+                // Scrolls its own overflow instead of ellipsizing it: German
+                // exercise names routinely exceed this slot, and the truncated
+                // tail is often the ONLY thing telling two exercises apart
+                // ("Kniebeuge (Langhantel)" vs "Kniebeuge (Multipresse)").
+                // Claims exactly the width a truncating Text would, so the row's
+                // baseline alignment and the counter's position are unchanged;
+                // falls back to the plain ellipsized label under Reduce Motion
+                // and in Always-On. See WatchMarqueeText.swift.
+                WatchMarqueeText(
+                    text: exerciseName,
+                    font: .system(size: metrics.topNameSize, weight: .bold),
+                    color: OnyxWatch.Colors.textPrimary
+                )
 
                 Spacer(minLength: 6)
 

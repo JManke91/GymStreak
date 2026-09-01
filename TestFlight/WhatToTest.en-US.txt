@@ -1,2 +1,4 @@
 - Muscle groups now appear in your language on the Apple Watch — routine previews and the swap-exercise sheet no longer show English names.
 - The full-screen rest timer on the Apple Watch now shows what your next set asks for (e.g. "80 kg x 8") right above the countdown, so you no longer have to minimize the timer to check.
+- The "Loading Metrics" spinner at the start of a watch workout now uses the app's green accent color instead of blue.
+- Long exercise names on the Apple Watch are no longer cut off mid-word during a workout — the name now scrolls gently through its slot so you can read all of it, including the part in brackets that tells barbell and dumbbell variants apart. It holds still at the start between passes, and stays static if you use Reduce Motion or while the screen is dimmed.

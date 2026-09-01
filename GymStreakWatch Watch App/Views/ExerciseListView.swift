@@ -312,7 +312,12 @@ struct ModernSpinner: View {
                 .trim(from: 0.0, to: 0.7) // part of a circle
                 .stroke(
                     AngularGradient(
-                        gradient: Gradient(colors: [Color.blue.opacity(0.8), Color.cyan, Color.blue, Color.cyan]),
+                        gradient: Gradient(colors: [
+                            OnyxWatch.Colors.tint.opacity(0.8),
+                            OnyxWatch.Colors.accentGreen,
+                            OnyxWatch.Colors.tint,
+                            OnyxWatch.Colors.accentGreen
+                        ]),
                         center: .center
                     ),
                     style: StrokeStyle(lineWidth: 8, lineCap: .round)
