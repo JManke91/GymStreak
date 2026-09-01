@@ -973,7 +973,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Vordere Schultern"
+            "value" : "Vordere Schulter"
           }
         }
       }
@@ -993,7 +993,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Gesäß"
+            "value" : "Gesäßmuskel"
           }
         }
       }
@@ -1275,7 +1275,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Seitliche Bauchmuskeln"
+            "value" : "Schräge Bauchmuskeln"
           }
         }
       }
@@ -1391,7 +1391,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Hintere Schultern"
+            "value" : "Hintere Schulter"
           }
         }
       }
@@ -1739,7 +1739,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Seitliche Schultern"
+            "value" : "Seitliche Schulter"
           }
         }
       }

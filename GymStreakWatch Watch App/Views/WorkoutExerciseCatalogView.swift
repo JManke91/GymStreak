@@ -113,39 +113,3 @@ struct WorkoutExerciseCatalogView: View {
         return "\(muscle) · \(equipment)"
     }
 }
-
-func localizedWatchMuscleGroup(_ value: String) -> String {
-    switch value {
-    case "Biceps": String(localized: "Biceps")
-    case "Triceps": String(localized: "Triceps")
-    case "Forearms": String(localized: "Forearms")
-    case "Chest": String(localized: "Chest")
-    case "Upper Chest": String(localized: "Upper Chest")
-    case "Upper Back": String(localized: "Upper Back")
-    case "Lats": String(localized: "Lats")
-    case "Lower Back": String(localized: "Lower Back")
-    case "Shoulders": String(localized: "Shoulders")
-    case "Front Delts": String(localized: "Front Delts")
-    case "Side Delts": String(localized: "Side Delts")
-    case "Rear Delts": String(localized: "Rear Delts")
-    case "Abs": String(localized: "Abs")
-    case "Obliques": String(localized: "Obliques")
-    case "Quadriceps": String(localized: "Quadriceps")
-    case "Hamstrings": String(localized: "Hamstrings")
-    case "Glutes": String(localized: "Glutes")
-    case "Calves": String(localized: "Calves")
-    case "Hip Flexors": String(localized: "Hip Flexors")
-    default: value
-    }
-}
-
-func localizedWatchEquipment(_ value: String) -> String {
-    switch value {
-    case "dumbbell": String(localized: "Dumbbell")
-    case "barbell": String(localized: "Barbell")
-    case "machine": String(localized: "Machine")
-    case "cable": String(localized: "Cable")
-    case "bodyweight": String(localized: "Bodyweight")
-    default: value.replacingOccurrences(of: "_", with: " ").capitalized
-    }
-}

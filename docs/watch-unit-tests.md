@@ -51,6 +51,7 @@ GymStreakWatchTests/
 ├── WatchWorkoutStructuralReducerTests.swift     twin of GymStreakTests/WatchWorkoutStructuralReducerTests
 ├── WatchModelsWireCompatibilityTests.swift      twin of GymStreakTests/WatchModelsWireCompatibilityTests
 ├── WeightUnitTests.swift                        twin of GymStreakTests/WeightUnitTests
+├── WatchMuscleGroupLocalizationTests.swift       watch-only: muscle group display table
 └── Support/
     └── WatchWorkoutStructuralTestFixtures.swift twin of GymStreakTests/Support/…
 ```
@@ -82,6 +83,15 @@ devices. Three assertions have no iOS twin, covering watch-only defects that
 ticket removed: the routine summary rendering the unit it is *given* rather than
 the locale's, and display-space stepping surviving a round trip that rounding
 stored kilograms does not. See `docs/weight-unit-preference.md` §9a.
+
+`WatchMuscleGroupLocalizationTests` (2026-08-31) covers
+`localizedWatchMuscleGroup(_:)` — the watch's display-time table for the raw
+English muscle group keys iOS puts on the sync wire. It has no iOS twin (iOS
+looks the same names up through `MuscleGroups.displayName(for:)`), but it
+asserts that the *key set* on both sides is identical, mirroring iOS's
+`MuscleGroups.localizationKeys` as a literal because the watch target may not
+import iOS `Domain/`. A key added on one side only is exactly how a German watch
+ends up printing "Upper Back"; see `docs/watch-localization.md`.
 
 Two assertions exist here that have no iOS twin, because they cover the
 watch-only half of a copied file:

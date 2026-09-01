@@ -1,0 +1,1 @@
+- Muscle groups now appear in your language on the Apple Watch — routine previews and the swap-exercise sheet no longer show English names.

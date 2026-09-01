@@ -156,7 +156,7 @@ struct WatchSwapPickerView: View {
 
     /// Muscle group plus the target's own set scheme, e.g. "Chest · 3×10".
     private func subtitle(for target: WatchExerciseAlternative) -> String {
-        var parts = [target.muscleGroup]
+        var parts = [localizedWatchMuscleGroup(target.muscleGroup)]
         if let scheme = setScheme(for: target.sets, in: weightUnit) {
             parts.append(scheme)
         }

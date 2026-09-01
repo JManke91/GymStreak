@@ -229,7 +229,7 @@ struct ExercisePreviewRow: View {
                 HStack(spacing: 4) {
                     Text("\(exercise.sets.count) sets")
                     Text("·")
-                    Text(exercise.muscleGroup)
+                    Text(localizedWatchMuscleGroup(exercise.muscleGroup))
                 }
                 .font(.caption2)
                 .foregroundStyle(.secondary)
