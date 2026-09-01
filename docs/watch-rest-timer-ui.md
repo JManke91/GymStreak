@@ -5,10 +5,12 @@
 During an active watch workout the rest countdown has two states:
 
 - **Large** (`RestTimerLargeView`) — a full-screen countdown: gradient progress
-  background that drains bottom-up, HR/kCal + elapsed time on the top row, the
-  big monospaced countdown in the center, **Minimize** / **Skip** at the bottom.
-  Pulses red in the last 3 seconds and plays notification haptics at 3/2/1 and a
-  success haptic at 0.
+  background that drains bottom-up, HR/kCal + elapsed time on the top row, a
+  one-line caption naming **what the next set asks for** (`Next ⬮ 80 kg × 8`)
+  above
+  the big monospaced countdown in the center, **Minimize** / **Skip** at the
+  bottom. Pulses red in the last 3 seconds and plays notification haptics at
+  3/2/1 and a success haptic at 0.
 - **Minimized** (`RestTimerMinimizedPill`) — a small pill (≤96×22 pt) with a
   draining capsule bar behind the remaining seconds and a chevron. **Tap** to
   expand, **long-press (0.5 s)** to grow it into the inline `−15 · 1:45 · +15`
@@ -32,9 +34,16 @@ deliberately **not** built.
 
 ## Behavior
 
-- A rest starts when a set is completed and that set's `restTime > 0` and it is
-  not the last set (`WatchWorkoutViewModel.startRestTimer`). The large timer
-  opens automatically (`isRestTimerMinimized` is reset to `false`).
+- A rest starts when a set is completed and that set's `restTime > 0` and an
+  incomplete set remains **anywhere in the workout** — not merely in the current
+  exercise. `applyToggleSetCompletion` checks `findNextIncompleteSet() == nil`
+  and takes the auto-finish path instead, so finishing an exercise's *last* set
+  starts a rest like any other as long as the workout continues. (An earlier
+  version of this document said "not the last set", which read as per-exercise;
+  it is not. `completeCurrentSet()` does carry a per-exercise `!isLastSet`
+  guard, but it has **no call site** — it is dead code superseded by
+  `toggleSetCompletion`, and nothing should be built against it.) The large
+  timer opens automatically (`isRestTimerMinimized` is reset to `false`).
 - **Minimize** collapses to the pill; **tapping** the pill expands again;
   **long-pressing** the pill opens its inline stepper (see "Adjusting from the
   minimized pill"). Both pill gestures play a haptic. Minimize and expand are a
@@ -47,6 +56,184 @@ deliberately **not** built.
   elapsed-time label) is hidden, so the two never stack.
 - The countdown keeps running across tab switches and navigation pushes/pops —
   there is only ever one timer view reading one view-model.
+
+## What the next set asks for
+
+The line directly above the countdown shows the **target of the set the user is
+resting for** — `Next` / `Als Nächstes`, a tinted dumbbell, and `80 kg × 8` — so the upcoming
+weight and rep count can be read
+without minimizing the timer. It is the caption slot's default content; "REST"
+is now only a fallback.
+
+**It costs nothing vertically, which is the only reason it exists at all.** This
+screen has no spare space (see "The vertical budget" below), and three ways of
+adding a line to it were already tried and rejected. So the next-set target does
+not get a slot — it *replaces* the one line that was saying nothing: "REST"
+repeats what the big countdown and the Skip button next to it have already said.
+`RestAdjustmentCaption` swaps one for the other at the same
+`.footnote`-rounded-semibold font, so the countdown, the metrics row and the
+Minimize/Skip row do not move.
+
+### The caption slot's four states
+
+| Priority | State | Condition |
+|---|---|---|
+| 1 | `+15 s` delta badge | `isAdjusting` — the Crown is turning |
+| 2 | `⟳ Turn = duration` Crown hint | `showsCrownHint` — the first `RestAdjustmentChrome.crownHintLife` (2 s) of the rest |
+| 3 | `Next ⬮ 80 kg × 8` target | a next set exists — in practice always |
+| 4 | `REST` | fallback only if 3 yields nothing |
+
+The first two are **overlays** on the line and may be wider and taller than it;
+the last two **are** the line, and share its font — they differ only in colour,
+weight and the leading elements, none of which changes a line's height. One
+residual, and it errs in the safe direction: when the value scales (40 mm +
+German + `220,5 lb × 12`) its line box shrinks with it, so the caption can end up
+a point or two *shorter* than the "REST" fallback and the countdown moves **up**,
+never down. Both mechanisms are
+layout-neutral, by different means.
+
+**The Crown hint keeps its two seconds** — an explicit decision, not an
+oversight. Turning the Crown is an otherwise completely invisible gesture and
+the caption is its only affordance, whereas the next set matters most later in
+the countdown, when the user is deciding whether to skip. The timeline is
+`⟳ Turn = duration` → (t = 2 s) → `Next ⬮ 80 kg × 8`.
+
+**The scope prompt still takes the whole slot.** While `RestScopeRow` is up the
+caption collapses to `height: 0` (see "The scope prompt (\"This rest\" / \"All
+sets\")"), so the next-set line disappears for the prompt's ~3 s life and returns
+afterwards. That exchange is a hard layout requirement and was not relaxed for
+this.
+
+### Where the value comes from
+
+`WatchWorkoutViewModel.advanceToNextSetAfterCompletion(fromExerciseIndex:setIndex:)`
+moves `currentExerciseIndex` / `currentSetIndex` **before the rest overlay
+mounts**. While `isResting == true` the view model's "current" set therefore
+already *is* the next one, superset rotation included — so there is **no
+lookahead, no peek and no second call into `findNextIncompleteSet()`**, and none
+should be added.
+
+The formatting lives in `WatchRestNextSetSummary`
+(`GymStreakWatch Watch App/Models/WatchRestNextSetSummary.swift`), a pure type
+with no view-model or SwiftUI reference, following the seam pattern of
+`WatchWorkoutInteractionPolicy` and `WatchSummaryOverloadPolicy`. That is what
+makes it testable — `WatchWorkoutViewModel` has no coverage of its own — and
+`GymStreakWatchTests/WatchRestNextSetSummaryTests.swift` is where the rules
+below are actually asserted.
+
+- **Weight is canonical kilograms, converted only at this seam** through
+  `WatchWeightFormatting` with the unit from `@Environment(\.weightUnit)`.
+  Never `.formatted(.measurement(...))`: it re-derives the unit from `Locale`,
+  which is a bug that already shipped once (`docs/weight-unit-preference.md`).
+  Switching the app to lb changes this line with everything else.
+- **A bodyweight set (`plannedWeight == 0`) shows reps only** — `8 reps` /
+  `8 Wdh.`, never `0 kg`, mirroring `WatchExercise.setsSummary(in:)`. The rep
+  count keeps its word here because there is no weight competing for the width.
+- **`nil` is defensive, not a designed state.** A rest cannot start with no set
+  left to rest for, so the empty case has no presentation — the caption simply
+  falls back to "REST".
+- **The line follows the cursor, not the rest.** `currentExerciseIndex` /
+  `currentSetIndex` are also moved by `navigateToPreviousExercise`,
+  `navigateToNextExercise` and the direct-jump path, so a user who minimizes the
+  timer, navigates to another exercise and re-expands sees *that* exercise's set,
+  not the one the running rest was started for. Accepted: the line answers "what
+  will you do next", and that is still true after a manual jump. Anything that
+  needed the other meaning would have to capture the target when the rest starts,
+  which is a view-model change this feature deliberately does not make.
+
+### Styling: a sibling of the metrics row
+
+The line is **`Next` / `Als Nächstes` in small `.secondary` type, a
+tint-coloured `dumbbell.fill`, then the value in semibold white** — deliberately the same
+grammar as the HR/kCal row two lines above it — `WorkoutMetricsView` in
+`ExerciseListView.swift`, which pairs a coloured glyph (`heart.fill` red,
+`flame` orange) with a **bold** value and a quiet `.secondary` word ("BPM",
+"kCal"). This line reorders the last part, putting the naming word first because
+it names the whole line rather than a unit. That row is this screen's own
+idiom for "here is a number and what it measures", and borrowing it is what
+makes the caption read as part of the screen rather than as text left over above
+the digits.
+
+**Two earlier versions failed, each in a way the next one fixed.** They are
+recorded because both mistakes are easy to make again:
+
+1. *A grey `arrow.right` and a grey value at `.secondary`.* Chosen to protect the
+   tint as this screen's **editing** signal (the delta badge, the Crown hint, the
+   digits mid-adjustment), on the theory that a permanent line would dilute it.
+   On device it produced "→ 8 Wdh." — an arrow and a number, thin and
+   unanchored, worst of all in the bodyweight case where there is no weight to
+   give the line shape. The dilution worry was misplaced: the metrics row already
+   colours its *glyphs* while keeping its *values* white, so a tinted icon is the
+   established vocabulary here, and the editing signal actually lives in the
+   tinted **digits** and the solid-tint badge fill — neither of which this
+   touches.
+2. *The glyph and colour, but no words.* Much better looking, still not
+   self-evident: a dumbbell says **exercise**, not **the set you are about to
+   do**.
+
+**The label is deliberately the cheapest element on the line**, in both senses.
+The ticket originally ruled a word out on width, and that reasoning was sound but
+aimed at the wrong size: a word is fatal *at the value's type size* and
+affordable two steps below it. So the label is drawn at `.caption2` `.secondary`
+against the value's `.footnote` — and it is kept to **one short word per
+language**. Measure it as a **fixed cost against a variable payload**: the label
+is the same width whether the value is `8 Wdh.` or `220,5 lb × 12`, so every
+point it spends is taken from the number, in every case, forever.
+
+The first version said `Next set:` / `Nächster Satz:` and spent ~25 pt of a
+~142 pt line on words nobody re-reads after the first rest. `Next` /
+`Als Nächstes` says the same thing:
+
+| Case (40 mm, ~142 pt usable) | Approx. width | Result |
+|---|---|---|
+| `Als Nächstes ⬮ 8 Wdh.` | ~119 pt | fits outright |
+| `Als Nächstes ⬮ 220,5 lb × 12` | ~159 pt | scales to ≈0.89, inside the 0.6 floor |
+| `Next ⬮ 220,5 lb × 12` (en) | ~121 pt | fits outright |
+
+German is the binding language here, as it is everywhere on this screen.
+
+Those figures are **estimates, not measurements.** German at 40 mm was walked on
+device and is clean at the default text size; the *largest* text size and a
+pounds value together — the top row of this table — were never seen. The glyph is
+the one element on the line that cannot participate in `minimumScaleFactor`, so
+it is the term that grows fastest against the available width, and that
+combination is where it would first show. If the line ever has to give something back, **dropping the glyph is the
+cheapest ≈19 pt available** now that the words carry its meaning — do that
+before touching the label or the value.
+
+**The value carries `.layoutPriority(1)`, and must.** Both `Text`s inherit
+`minimumScaleFactor` and would otherwise scale *independently* against whatever
+width the stack proposes each of them, so nothing would make the shrink land on
+the label rather than on the number — the hierarchy this section is built on
+could invert in exactly the widest case it exists for. The priority is what
+makes "the label gives, the value keeps its width" true rather than merely
+intended.
+
+**`lineLimit(1)` + `minimumScaleFactor(0.6)` sit on `captionLine`, not on either
+branch**, so the "REST" fallback gets the same guarantee. That branch needs it
+more than it looks: it carries `tracking(1.5)` and is the one that could
+genuinely wrap to two lines at the accessibility text sizes and push the
+countdown down.
+
+**The glyph stays a type step below the value** (`.caption` against `.footnote`)
+for a harder reason than looks. The line is the **layout** element — unlike the
+two overlays, which need `fixedSize()` to escape the caption's width — so
+anything whose box is taller than the value's line height would push the
+countdown down, the one thing this column cannot absorb. Being the layout
+element is also what lets `lineLimit(1)` + `minimumScaleFactor(0.6)` work at
+all: it is proposed the column's full width and scales down inside it rather
+than running off the display. `dumbbell.fill` is available from the 2022 SF
+Symbols release, well below the watchOS 26 floor.
+
+### VoiceOver
+
+The countdown is one combined accessibility element, so the caption is not
+spoken on its own: the dumbbell is `accessibilityHidden` (like the Crown hint's
+glyph), the "Next" label is not repeated, and the target rides in the
+countdown's **value**, after the rest duration — "Rest timer, 1:30 remaining. Rest duration 1:30. Next set 80
+kilograms, 8 reps". The spoken form uses `WatchWeightFormatting.spokenUnitWord`,
+so a screen reader says "kilograms", not "kay gee", and spells out the rep count
+that the written `×` leaves implicit.
 
 ## Adjusting the rest duration with the Digital Crown
 
@@ -63,7 +250,7 @@ exercise starts at it.
   `matchedGeometryEffect` and `.fixedSize()`, so their size and position are
   off limits. The last-3-seconds red always wins over it: urgency outranks
   editing.
-- **The digits never move.** Only the chrome changes: the "REST" caption
+- **The digits never move.** Only the chrome changes: the caption line
   cross-fades (120 ms) into a `+15 s` delta badge, and a tick track plus a
   `1:30 → 1:45` line appear. Neither piece takes layout space of its own — the
   badge is an **overlay on the caption**, and the footer **borrows the
@@ -78,22 +265,28 @@ Turning the Crown is an **invisible gesture** — nothing about a countdown says
 is editable — so the caption slot spends the first **2 s** of every rest
 (`RestAdjustmentChrome.crownHintLife`) advertising it: a
 `digitalcrown.arrow.clockwise` glyph plus **"Turn = duration"** / *"Drehen =
-Dauer"*, tinted, then a 120 ms cross-fade back to "REST". This is the design's
-frame A1, including its "Crown-Hinweis nur in den ersten 2 s".
+Dauer"*, tinted, then a 120 ms cross-fade back to the caption underneath — the
+next set's target (see "What the next set asks for"), or "REST" if there is
+none. This is the design's frame A1, including its "Crown-Hinweis nur in den
+ersten 2 s".
 
-- **It costs zero vertical space, by construction.** The hint is a third state of
-  `RestAdjustmentCaption`, drawn as an **overlay** on the "REST" text exactly
-  like the `+15 s` delta badge — the caption keeps providing the layout
+- **It costs zero vertical space, by construction.** The hint is one of
+  `RestAdjustmentCaption`'s four states, drawn as an **overlay** on the caption
+  line exactly like the `+15 s` delta badge — the caption keeps providing the layout
   characteristics, so a wider, differently-sized hint moves nothing. That is the
   only reason this screen can afford a hint at all (see "The vertical budget"
   below), and it is why the design's own placement — a *line under the digits* —
   was not copied: that needs a slot, and at 40 mm there is none.
 - **The caption is the right slot to spend.** "REST" is the one line on this
   screen that says nothing the big countdown and the Skip button have not already
-  said. It is the same slot the scope prompt borrows, for the same reason.
-- **Precedence is hint < delta badge < scope prompt.** Once the user is actually
-  turning, the delta is the more useful thing in that slot; once the scope prompt
-  is up the whole caption collapses to zero height.
+  said. It is the same slot the scope prompt borrows, for the same reason — and
+  the same reason the next set's target was later able to take the line outright.
+- **Precedence is next-set line < hint < delta badge < scope prompt.** The hint
+  keeps the first two seconds even though the next-set target is available the
+  whole time — see "What the next set asks for" for why that order is
+  deliberate. Once the user is actually turning, the delta is the more useful
+  thing in that slot; once the scope prompt is up the whole caption collapses to
+  zero height.
 - **The window is derived, not timed.** `showsCrownHint` is
   `canAdjust && totalDuration - timeRemaining < crownHintLife` — no task, no
   `@State`. Three properties fall out of that: an adjustment moves duration and
@@ -236,8 +429,8 @@ row arrives in.
 
 That is a layout requirement, not a stylistic one. The row costs about 27 pt and
 this column has ~29 pt of slack at 46 mm and roughly half that at 41 mm (see "The
-vertical budget"), so it is paid for by **collapsing the "REST" caption while the
-row is up** — the one line that says nothing while a choice is on screen. Net
+vertical budget"), so it is paid for by **collapsing the caption while the row
+is up** — the one line that can be spared while a choice is on screen. Net
 change against the idle layout is ≈ +10 pt. Having the ruler, the row and the
 caption up at once would not fit at 41 mm.
 
@@ -817,7 +1010,7 @@ Unlike the iOS timer there is no ring to morph, so the shared elements are:
 | **Progress surface** (`WatchRestTimerMorph.surfaceID`) | the opaque, screen-filling gradient panel that drains bottom-up | the pill's card (`.ultraThinMaterial` + hairline border) |
 | **Countdown digits** (`WatchRestTimerMorph.digitsID`) | 44pt rounded bold | 13pt rounded medium |
 
-Everything else — the "REST" caption, Minimize/Skip buttons, the HR/kCal and
+Everything else — the caption line, Minimize/Skip buttons, the HR/kCal and
 elapsed-time rows, the pill's own draining capsule and chevron — is **non-shared
 chrome** that simply cross-fades with the surrounding `.transition(.opacity)`.
 
@@ -945,9 +1138,10 @@ Researched before implementing, because watchOS availability differs from iOS:
 | `WatchRestTimerMorph` | same file | Constants shared by both states and by screens that make room: the two matched-geometry ids, the surface corner radius, the morph spring, `presenceAnimation`, `reservedSlotHeight`. |
 | `ActiveWorkoutView` | `GymStreakWatch Watch App/Views/ActiveWorkoutView.swift` | Mounts the overlay as a sibling of the `NavigationStack` in its root `ZStack`. |
 | `ExerciseListView` | `GymStreakWatch Watch App/Views/ExerciseListView.swift` | Reserves the pill's slot via `safeAreaInset(edge: .top)` (`WatchRestTimerMorph.reservedSlotHeight`) while resting; declares no timer. |
-| `RestTimerLargeView` | `GymStreakWatch Watch App/Views/RestTimerLargeView.swift` | Large state; takes the morph namespace and tags the panel + digits. Owns `adjustmentBaseline` (the flag for "an adjustment is on screen") and `adjustmentScope` (the scope prompt's selection, `nil` while the row is off screen), and nothing else about the Crown. |
+| `RestTimerLargeView` | `GymStreakWatch Watch App/Views/RestTimerLargeView.swift` | Large state; takes the morph namespace and tags the panel + digits. Owns `adjustmentBaseline` (the flag for "an adjustment is on screen") and `adjustmentScope` (the scope prompt's selection, `nil` while the row is off screen), and nothing else about the Crown. Reads `@Environment(\.weightUnit)` and hands the caption its next-set line. |
 | `RestDurationCrownAdjustment` | `GymStreakWatch Watch App/Views/RestDurationCrownAdjustment.swift` | `ViewModifier` carrying the whole Crown state machine: detent binding, focus, limit haptic, animation throttle, and the single task that runs the tail (chrome out → scope prompt in → out). Applied by the large state via `.restDurationCrownAdjustment(isEnabled:baseline:scope:)`. |
-| `RestAdjustmentCaption` / `RestAdjustmentFooter` / `RestAdjustmentChrome` / `RestScopeRow` | `GymStreakWatch Watch App/Views/RestDurationAdjustmentChrome.swift` | The editing treatment — the caption slot's three states (Crown hint → "REST" → delta badge), tick track + `old → new` line cross-faded into the Minimize/Skip slot, and the "This rest / All sets" prompt that follows. Nothing here has a slot of its own; see "The vertical budget". |
+| `RestAdjustmentCaption` / `RestAdjustmentFooter` / `RestAdjustmentChrome` / `RestScopeRow` | `GymStreakWatch Watch App/Views/RestDurationAdjustmentChrome.swift` | The caption slot's four states (delta badge > Crown hint > next-set target > "REST") plus the editing treatment: tick track + `old → new` line cross-faded into the Minimize/Skip slot, and the "This rest / All sets" prompt that follows. Nothing here has a slot of its own; see "The vertical budget". |
+| `WatchRestNextSetSummary` | `GymStreakWatch Watch App/Models/WatchRestNextSetSummary.swift` | Pure: `(exercises, currentExerciseIndex, currentSetIndex, weightUnit)` → the caption's `Next ⬮ 80 kg × 8` line and its spoken form. No view model, no SwiftUI. Covered by `GymStreakWatchTests/WatchRestNextSetSummaryTests.swift`. |
 | `RestTimerMinimizedPill` | `GymStreakWatch Watch App/Views/RestTimerMinimizedPill.swift` | Minimized pill; takes the morph namespace and tags its card + digits. Owns the pill's two gestures and, while its stepper is open, the Crown state machine (detent binding, limit haptic, the 3 s collapse, the commit). |
 | `RestPillStepper` / `WatchRestPillStepper` | `GymStreakWatch Watch App/Views/RestPillStepper.swift` | The grown pill's presentation (`−15 · 1:45 · +15`) and its constants: tap step, life, spring, hit side. No state of its own. |
 | `RestLimitHaptic` | `…/RestDurationCrownAdjustment.swift` | The once-per-arrival bound haptic, shared by both adjustment paths. |
@@ -1031,6 +1225,34 @@ recorded that were never applied, kept here so they are not lost with them.
 
 ## Verification
 
+**Next-set caption line (2026-09-01).** `bundle exec fastlane test_unit` green
+on both suites (iOS 1093 tests, watch 65 including the six new
+`WatchRestNextSetSummaryTests` cases). Worth knowing for anyone adding to that
+suite: **the watch test destination runs in German**, so a localized string
+asserted against an English literal fails there — expectations are composed from
+the same seam the code uses, or restricted to the language-independent parts.
+The rule now lives in `docs/watch-unit-tests.md` § 5.
+The three-case-size device pass (40 mm `xSmall`, 41 mm `small`, 46 mm) is
+**done** — all three clean, in German, on the final `Als Nächstes ⬮ …` build.
+The kg/lb seam was confirmed on the same pass: one set read `200 lb × 8` and
+`90,72 kg × 8`, which is the round trip working in both directions off a single
+canonical value.
+
+Two gaps are deliberate rather than pending. **The Crown-adjustment and
+scope-prompt interaction with the new caption state was not separately
+exercised** — the diff changes only *what* the collapsing caption contains, not
+`captionHeight` or the opacity crossfade, but a Crown turn during a rest is the
+cheapest way to close it if this screen is ever touched again. And **VoiceOver
+was removed from the testing scope by the product owner**; the code is in place
+(`accessibilityValue(with:)`, `WatchRestNextSetSummary.spoken`, both glyphs
+hidden) and was reviewed, but the read-through has never been run — treat it as
+unverified, not as working.
+
+The widest realistic line, `Als Nächstes ⬮ 220,5 lb × 12` at the largest text
+size, is also still only *estimated* (see the width table above). It is the one
+case where anything on this line scales, so it is where to look first if the
+caption ever has to give width back.
+
 Verified on an Apple Watch Series 11 (46 mm) simulator (watchOS 26.5) with a
 throwaway XCUITest driving a real workout (test since deleted):
 
@@ -1087,6 +1309,25 @@ device-only, so check them first if jank ever appears.
 
 ## History
 
+- **2026-09-01** — the caption slot gained a **fourth state**: the next set's
+  target (`Next ⬮ 80 kg × 8`), which now takes the line from "REST" for the
+  whole
+  rest, the Crown hint's first two seconds excepted (ticket
+  `.scratch/watch-rest-next-set/issues/01`). Layout-neutral by the same rule as
+  every other addition to this column — it replaces a line rather than adding
+  one. New pure type `WatchRestNextSetSummary` with its own watch suite; the
+  value rides in the countdown's VoiceOver value. The same pass corrected this
+  document's long-standing claim that a rest does not start "on the last set" —
+  the gate is the last set of the **whole workout**, not of the exercise.
+  Restyled twice the same day against device passes: the original grey
+  `arrow.right` + grey value read as stray text, so the line took on the metrics
+  row's idiom (tinted `dumbbell.fill` + semibold white value); then a
+  `.caption2` `.secondary` label was added in front, because the glyph alone
+  said *exercise* rather than *the set you are about to do* — shortened the same
+  day from "Next set:"/"Nächster Satz:" to "Next"/"Als Nächstes", which says the
+  same thing for ~25 pt less on a line that has none to spare. See
+  "Styling: a sibling of the metrics row" for both, and for the width budget the
+  label spends.
 - **2026-07-24** — elapsed time and the rest pill were moved out of the watch
   toolbar into the set editor's top-trailing accessory so they stop colliding
   with the system clock.

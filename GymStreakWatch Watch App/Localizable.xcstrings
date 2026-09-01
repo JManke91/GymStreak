@@ -196,6 +196,35 @@
         }
       }
     },
+    "%lld reps" : {
+      "comment" : "Rep count of the next set on the rest timer, e.g. \"8 reps\"",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld Wdh."
+          }
+        },
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld rep"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld reps"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "%lld sec" : {
       "localizations" : {
         "de" : {
@@ -1178,12 +1207,34 @@
         }
       }
     },
+    "Next" : {
+      "comment" : "Rest timer: labels the upcoming set's target beside it, e.g. \"Next  ⬮ 80 kg × 8\". Kept short on purpose — it is a fixed cost against a variable value on a line with no width to spare. NOT a \"next\" button (that would be \"Weiter\"); do not reuse this key for one.",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Als Nächstes"
+          }
+        }
+      }
+    },
     "Next set" : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "Nächster Satz"
+          }
+        }
+      }
+    },
+    "Next set %@" : {
+      "comment" : "VoiceOver announcement of what the upcoming set asks for",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nächster Satz %@"
           }
         }
       }

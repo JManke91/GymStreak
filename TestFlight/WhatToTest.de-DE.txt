@@ -1,1 +1,2 @@
 - Muskelgruppen erscheinen auf der Apple Watch jetzt in deiner Sprache — die Routinen-Vorschau und das Übung-tauschen-Menü zeigen keine englischen Namen mehr.
+- Der Vollbild-Pausentimer auf der Apple Watch zeigt jetzt direkt über dem Countdown, was dein nächster Satz vorsieht (z. B. „80 kg x 8“) — du musst den Timer dafür nicht mehr verkleinern.

@@ -321,6 +321,16 @@ Weight-unit ticket 04 added `WeightUnitTests` and extended
 3. Mark the suite `@MainActor`.
 4. If it is a twin of an iOS test, say so in the header and keep the assertions
    identical — that identity *is* the drift detector.
+5. **Never assert a localized string against an English literal.** This
+   destination runs in **German**, so `String(localized:)` and anything built on
+   it come back translated, and `Locale.current`'s decimal separator is `,`.
+   `WatchRestNextSetSummaryTests` was written against `"8 reps"` and failed on
+   its first run with `"8 Wdh."`. Either compose the expectation from the same
+   seam the code uses (`WatchWeightFormatting.number(_:in:)`,
+   `String(localized: "Next set")`) or assert only the language-independent
+   parts — the digits, the `×`, and the `kg`/`lb` unit words, which are spelled
+   the same in both languages. The upside of the German destination is that it
+   exercises the translated path for free; the cost is this rule.
 
 ### Follow-up work this unblocks
 

@@ -12,6 +12,10 @@ import WatchKit
 struct RestTimerLargeView: View {
     @EnvironmentObject var viewModel: WatchWorkoutViewModel
 
+    /// The unit the caption's next-set target is rendered in. Kilograms stay the
+    /// canonical stored value; this is the display seam.
+    @Environment(\.weightUnit) private var weightUnit
+
     let timeRemaining: TimeInterval
     let totalDuration: TimeInterval
     let formattedTime: String
@@ -140,7 +144,14 @@ struct RestTimerLargeView: View {
 
     // MARK: ─── Running UI
     private var runningContent: some View {
-        VStack(spacing: metrics.restStackSpacing) {
+        // Built once per pass. It is constant for the whole rest, while this
+        // body re-evaluates every second from the countdown and 5–10×/s during
+        // a Crown rotation — and it is read twice (the caption and the
+        // countdown's accessibility value, which is built whether or not
+        // VoiceOver is running).
+        let nextSet = nextSetSummary
+
+        return VStack(spacing: metrics.restStackSpacing) {
             // MARK: - Top Row: Secondary Metrics
             HStack {
                 if let heartRate = viewModel.heartRate, let calories = viewModel.activeCalories {
@@ -174,7 +185,8 @@ struct RestTimerLargeView: View {
                 RestAdjustmentCaption(
                     isAdjusting: isAdjusting,
                     delta: adjustmentDelta,
-                    showsCrownHint: showsCrownHint
+                    showsCrownHint: showsCrownHint,
+                    nextSetTarget: nextSet?.display
                 )
                     .frame(height: captionHeight)
                     .opacity(isScopePromptUp ? 0 : 1)
@@ -213,7 +225,7 @@ struct RestTimerLargeView: View {
             }
             .accessibilityElement(children: .combine)
             .accessibilityLabel("Rest timer, \(formattedTime) remaining")
-            .accessibilityValue(Text("Rest duration \(RestAdjustmentChrome.durationText(totalDuration))"))
+            .accessibilityValue(accessibilityValue(with: nextSet))
             .accessibilityHint(Text("Turn the Digital Crown to change the rest duration"))
             .restDurationVoiceOverAdjustment(isEnabled: canAdjust)
 
@@ -264,6 +276,31 @@ struct RestTimerLargeView: View {
         .padding(.horizontal, 10)
         .padding(.vertical, metrics.restVerticalPadding)
         .opacity(state == .running ? 1 : 0)
+    }
+
+    // MARK: ─── The next set
+
+    /// What the set the user is resting *for* asks for.
+    ///
+    /// `currentExerciseIndex` / `currentSetIndex` already point at it: the view
+    /// model advances them before this overlay mounts. No lookahead is computed
+    /// here, and none should be — see `WatchRestNextSetSummary`.
+    private var nextSetSummary: WatchRestNextSetSummary? {
+        WatchRestNextSetSummary.target(
+            in: viewModel.exercises,
+            exerciseIndex: viewModel.currentExerciseIndex,
+            setIndex: viewModel.currentSetIndex,
+            unit: weightUnit
+        )
+    }
+
+    /// The countdown is one combined accessibility element, so the caption's
+    /// next-set line — decorative glyph and all — is not spoken on its own. It
+    /// rides along in the value instead, after the rest duration.
+    private func accessibilityValue(with nextSet: WatchRestNextSetSummary?) -> Text {
+        let duration = Text("Rest duration \(RestAdjustmentChrome.durationText(totalDuration))")
+        guard let spoken = nextSet?.spoken else { return duration }
+        return duration + Text(verbatim: ". ") + Text(verbatim: spoken)
     }
 
     // MARK: ─── Crown Handling

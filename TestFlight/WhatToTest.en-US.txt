@@ -1,1 +1,2 @@
 - Muscle groups now appear in your language on the Apple Watch — routine previews and the swap-exercise sheet no longer show English names.
+- The full-screen rest timer on the Apple Watch now shows what your next set asks for (e.g. "80 kg x 8") right above the countdown, so you no longer have to minimize the timer to check.

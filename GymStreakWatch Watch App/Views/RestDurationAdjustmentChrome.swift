@@ -30,28 +30,44 @@ enum RestAdjustmentChrome {
     }
 }
 
-/// "REST", the Crown hint in the first seconds of a rest, or the `+15 s` badge
-/// while adjusting.
+/// The one caption line above the countdown, in its four states: the `+15 s`
+/// badge while adjusting, the Crown hint in the first seconds of a rest, the
+/// next set's target, and "REST" as the fallback.
 ///
-/// The caption is always the layout element — the other two are drawn over it,
-/// so they may be wider and taller without moving anything below. That is the
-/// whole reason this slot carries all three: it is the only place on this screen
-/// where something can appear for free (see `docs/watch-rest-timer-ui.md`,
-/// "The vertical budget"), and "REST" is the one line that says nothing the
-/// countdown below it has not already said.
+/// The first two are drawn *over* the line, so they may be wider and taller
+/// without moving anything below; the last two swap the line itself, at one
+/// font, so neither changes its height. That is the whole reason this slot
+/// carries all four: it is the only place on this screen where something can
+/// appear for free (see `docs/watch-rest-timer-ui.md`, "The vertical budget"),
+/// and "REST" is the one line that says nothing the countdown below it has not
+/// already said — which is exactly what makes it affordable to spend on the
+/// next set's target.
 struct RestAdjustmentCaption: View {
     let isAdjusting: Bool
     let delta: TimeInterval
     /// Advertise the Crown. Loses to `isAdjusting` — once the user is turning
     /// it, the delta is the more useful thing to show in the same slot.
     let showsCrownHint: Bool
+    /// What the upcoming set asks for, e.g. `"80 kg × 8"`, rendered after a
+    /// tinted dumbbell. Takes the slot from
+    /// "REST" whenever it exists — which is always, in practice; a rest never
+    /// starts with no set left to rest for. Loses to both overlays above, and
+    /// the Crown hint keeps its two seconds: turning the Crown is an otherwise
+    /// invisible gesture, and the next set matters most later in the countdown.
+    let nextSetTarget: String?
 
     var body: some View {
-        Text("Rest")
+        captionLine
             .font(.system(.footnote, design: .rounded).weight(.semibold))
-            .foregroundStyle(.secondary)
-            .textCase(.uppercase)
-            .tracking(1.5)
+            // Applied here, before `.overlay`, so it governs the LAYOUT element
+            // and not the two overlays — which set their own (the hint clamps
+            // its Dynamic Type, the badge is `fixedSize`). Being the layout
+            // element is what lets this work at all: the line is proposed the
+            // column's full width and scales down inside it, where an overlay
+            // needs `fixedSize()` to escape the caption's width and so can only
+            // grow.
+            .lineLimit(1)
+            .minimumScaleFactor(0.6)
             .opacity(isAdjusting || showsCrownHint ? 0 : 1)
             .overlay {
                 if isAdjusting {
@@ -70,6 +86,87 @@ struct RestAdjustmentCaption: View {
             }
             .animation(.easeInOut(duration: RestAdjustmentChrome.crossfade), value: isAdjusting)
             .animation(.easeInOut(duration: RestAdjustmentChrome.crossfade), value: showsCrownHint)
+    }
+
+    /// The layout element. Both states share the caption font, so exchanging one
+    /// for the other cannot move the countdown — the acceptance bar for anything
+    /// added to this column.
+    ///
+    /// Exact while nothing is scaling. In the widest case (40 mm, German,
+    /// `220,5 lb × 12`) `minimumScaleFactor` shrinks the value and its line box
+    /// with it, so the caption can become a point or two *shorter* than the
+    /// "REST" fallback. The countdown then moves up, never down — the safe
+    /// direction, and the reason this is a note rather than a defect.
+    ///
+    /// The single-line guarantee lives here rather than on either branch, so
+    /// both get it. "REST" needs it more than it looks: it carries
+    /// `tracking(1.5)` and is the branch that could genuinely wrap to two lines
+    /// at the accessibility text sizes and push the countdown down.
+    @ViewBuilder
+    private var captionLine: some View {
+        if let nextSetTarget {
+            nextSet(nextSetTarget)
+        } else {
+            Text("Rest")
+                .foregroundStyle(.secondary)
+                .textCase(.uppercase)
+                .tracking(1.5)
+        }
+    }
+
+    /// `Next  ⬮ 80 kg × 8` — a quiet label, the tinted dumbbell, the target.
+    ///
+    /// The value is styled as a sibling of the HR/kCal row two lines above it —
+    /// `WorkoutMetricsView` in `ExerciseListView.swift`, which is the screen's
+    /// own idiom for "here is a number and what it measures": a **coloured
+    /// glyph** (`heart.fill` red, `flame` orange — so `dumbbell.fill` tint),
+    /// then the **value bold**, then a small `.secondary` word ("BPM", "kCal").
+    /// This line reorders that last part, putting the naming word first because
+    /// it names the whole line rather than a unit. Two earlier versions are
+    /// worth recording because each failed in a way the next one fixed:
+    ///
+    /// 1. A grey `arrow.right` and a grey value. Read as stray text — an arrow
+    ///    and a number, with nothing saying what either meant.
+    /// 2. The glyph and colour above, but no words. Much better, and still not
+    ///    self-evident: a dumbbell says *exercise*, not *the set you are about
+    ///    to do*.
+    ///
+    /// **The label is deliberately the cheapest element on the line**, in both
+    /// senses. It is a *fixed* cost against a *variable* payload — the same
+    /// width whether the value is `8 Wdh.` or `220,5 lb × 12` — so it is drawn
+    /// two type steps below the value (`.caption2` against `.footnote`) to keep
+    /// the number dominant, and it is kept to one short word per language:
+    /// "Next" / "Als Nächstes", not "Next set:" / "Nächster Satz:", which was
+    /// the first version and spent ~25 pt of a ~142 pt line on a label nobody
+    /// re-reads. If this line ever has to give more back, dropping the glyph is
+    /// the cheapest ≈19 pt available now that the word carries its meaning.
+    ///
+    /// The glyph stays a type step below the *value* for a harder reason. Unlike
+    /// the two overlays this is the **layout** element, so anything whose box is
+    /// taller than the value's line height would push the countdown down — the
+    /// one thing this column cannot absorb.
+    private func nextSet(_ target: String) -> some View {
+        HStack(spacing: 4) {
+            Text("Next")
+                .font(.system(.caption2, design: .rounded).weight(.semibold))
+                .foregroundStyle(.secondary)
+            Image(systemName: "dumbbell.fill")
+                .font(.system(.caption, design: .rounded).weight(.semibold))
+                .foregroundStyle(OnyxWatch.Colors.tint)
+                // Decorative, exactly like the Crown hint's glyph: the countdown
+                // speaks the whole target in its own accessibility value, and
+                // the label beside it is spoken there too.
+                .accessibilityHidden(true)
+            Text(target)
+                .foregroundStyle(.primary)
+                // Both Texts inherit `minimumScaleFactor` and would otherwise
+                // scale INDEPENDENTLY against whatever width the stack proposes
+                // each of them — nothing would make the shrink land on the
+                // label rather than on the number, and the intended hierarchy
+                // could invert in exactly the widest case it exists for. The
+                // value keeps its width; the label gives.
+                .layoutPriority(1)
+        }
     }
 
     /// Turning the Crown here is a completely invisible gesture — nothing on the
