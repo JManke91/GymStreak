@@ -662,10 +662,9 @@ struct RoutineDetailView: View {
             .transition(.move(edge: .top).combined(with: .opacity))
         }
 
-        SetsSectionLabel(text: "routine.section.sets".localized)
-
         RoutineSetsEditor(
             sets: routineExercise.setsList,
+            sectionTitle: "routine.section.sets".localized,
             targetRepMin: routineExercise.targetRepMin,
             targetRepMax: routineExercise.targetRepMax,
             valueFocus: $isEditingSetValue,

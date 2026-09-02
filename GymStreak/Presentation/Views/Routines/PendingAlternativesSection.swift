@@ -135,7 +135,10 @@ struct PendingAlternativesSection: View {
                 .transition(.opacity.combined(with: .move(edge: .top)))
             }
         }
-        .padding(.horizontal, 12)
+        // 8 to match RoutineAlternativesSection — same cell chrome hosting the
+        // same RoutineSetsEditor, so the two alternatives lists must not indent
+        // their set rows differently. See RoutineSetStepperRow.Metrics.
+        .padding(.horizontal, 8)
         .padding(.vertical, 9)
         .background(Color.white.opacity(0.03))
         .overlay(

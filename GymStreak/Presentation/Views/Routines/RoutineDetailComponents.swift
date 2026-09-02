@@ -31,6 +31,7 @@ struct SetsSectionLabel: View {
         .foregroundStyle(Color.white.opacity(0.4))
         .padding(.horizontal, 2)
         .padding(.top, 4)
+        .accessibilityAddTraits(.isHeader)
     }
 }
 

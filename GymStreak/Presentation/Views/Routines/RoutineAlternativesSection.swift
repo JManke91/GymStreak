@@ -132,7 +132,12 @@ struct RoutineAlternativesSection: View {
                     .transition(.opacity.combined(with: .move(edge: .top)))
             }
         }
-        .padding(.horizontal, 12)
+        // 8, not 12: this cell is the second indent an alternative's own set
+        // list sits behind (card 28 + connector lane 24 + this), and it is the
+        // only one of the three that is free to give. The background fill and
+        // the stroke below already carry the containment, so the 4 pt each side
+        // costs nothing legible. See RoutineSetStepperRow.Metrics.
+        .padding(.horizontal, 8)
         .padding(.vertical, 9)
         .background(Color.white.opacity(0.03))
         .overlay(
@@ -170,10 +175,9 @@ struct RoutineAlternativesSection: View {
                 }
             }
 
-            SetsSectionLabel(text: "routine.section.sets".localized)
-
             RoutineSetsEditor(
                 sets: alternative.setsList,
+                sectionTitle: "routine.section.sets".localized,
                 targetRepMin: alternative.targetRepMin,
                 targetRepMax: alternative.targetRepMax,
                 valueFocus: valueFocus,
