@@ -57,6 +57,13 @@ extension WatchWorkoutViewModel {
         cancelDelayedAutoFinish()
         pendingExerciseSelection = nil
         isWorkoutInputSuspended = false
+        // The finish dialog branches on `hasTemplateChanges`, which reads
+        // `wasRestAdjusted` — set only by this commit. A still-buffered pill or
+        // Crown adjustment would otherwise present the no-prompt branch and end
+        // with `updateTemplate: false`, so the rest change never reaches the
+        // template. Must stay AFTER the suspension is cleared: the commit is
+        // gated on `canMutateWorkout`, which reads that flag.
+        commitRestDurationAdjustment()
     }
 
     func cancelDelayedAutoFinish() {

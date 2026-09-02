@@ -56,6 +56,18 @@ deliberately **not** built.
   elapsed-time label) is hidden, so the two never stack.
 - The countdown keeps running across tab switches and navigation pushes/pops —
   there is only ever one timer view reading one view-model.
+- **The template prompt sees the latest adjustment.** A `±` or Crown change is
+  only buffered until it idles, so every End entry point flushes it at
+  `prepareForTerminalPresentation()` — ending a workout seconds after dialling a
+  new rest still offers "Save & Update Template". Picking "This rest only" in the
+  scope prompt first reverts the sets, so that case correctly offers no prompt.
+  See "The buffered write vs. the finish dialog's decision".
+- A rest **ends** by Skip, by elapsing, by a hardware complete-set press
+  (Action Button / Double Tap), by discarding the workout, or by **ending the
+  workout** — and in every one of those the surface leaves the screen in the
+  same synchronous main-actor turn as the state it reads. That is an invariant
+  of the teardown itself, not of its callers: see "Stopping a rest ends the
+  resting state".
 
 ## What the next set asks for
 
@@ -715,11 +727,11 @@ routine byte-for-byte untouched.
 an adjustment, so a rest-only change would otherwise be invisible. Each
 `ActiveWorkoutSet` therefore carries `plannedRestTime` — what the set started the
 workout with, taken from the routine (or from the alternative's scheme on a
-swap, or the draft on a watch-added exercise) — and `wasRestModified` is simply
+swap, or the draft on a watch-added exercise) — and `wasRestAdjusted` is simply
 `restTime != plannedRestTime`. It is optional: a checkpoint or payload written
 before the field existed decodes as *no rest intent*, never as a change.
 
-`wasRestModified` is **not** part of `wasModified`. A rest change is one change
+`wasRestAdjusted` is **not** part of `wasModified`. A rest change is one change
 per exercise, not per set, so folding it in would inflate the dialog's "you
 modified N sets". It surfaces as `hasRestChanges` → `hasTemplateChanges`, and
 as its own `WatchWorkoutFinishDialogState.restOnly` message ("You changed the
@@ -785,6 +797,136 @@ workout's own remaining sets. Two fixes, both load-bearing:
 **No automated coverage**: `WatchWorkoutViewModel` is not in the `GymStreakTests`
 target, so this class of bug stays device-only. The two diagnostics below exist
 because of it.
+
+#### The buffered write vs. the finish dialog's decision (root cause, 2026-09-02)
+
+The other half of the same hazard. 2026-08-11 was the buffer losing the
+**value**; this one is the buffer losing the **decision**.
+
+Ending a workout while an adjustment was still buffered offered the plain
+"Save Workout" branch — no template prompt — and the routine kept its old rest.
+The chain:
+
+```
+pill + tap → adjustRestDuration(to:)     → pendingRestDuration = 120   (buffered only)
+X → requestEndConfirmation()
+      prepareForTerminalPresentation()   ← did NOT flush
+      showEndConfirmation = true
+        hasTemplateChanges → hasRestChanges → wasRestAdjusted == false  ← never written
+        ⇒ single "Save Workout" button ⇒ endWorkout(updateTemplate: false)
+```
+
+`wasRestAdjusted` is `restTime != plannedRestTime`, and `restTime` is written
+only by `commitRestDurationAdjustment()`. With the value still pending, nothing
+in `exercises` differs from the baseline, so the dialog was decided on state the
+adjustment had not reached yet.
+
+**The damage was partial, which is why it was easy to miss.** `endWorkout()`'s
+own pre-freeze commit (the 2026-08-11 fix above) still ran, so the new rest
+reached the workout's sets, the checkpoint and the history payload — the value
+was never lost. But `payload.shouldUpdateTemplate` had been decided `false` two
+taps earlier, so only the *template* missed out, and the user was never asked.
+
+Two windows, of very different sizes:
+
+- **The pill stepper — the reachable one.** Its buffer is flushed on a **3 s**
+  idle collapse (`WatchRestPillStepper.life`) or on the pill's `onDisappear` —
+  ample time to long-press, tap `+`, and hit the End `X`.
+- **The Crown on the large timer — narrow.** `onIdle` commits within a fraction
+  of a second of the rotation settling, and reaching End from the large timer
+  needs Minimize → `X` anyway.
+
+The `onDisappear` flush is **not** a safety net here: by the time the overlay
+unmounts, `endWorkout()` has set `isEnding = true`, so
+`commitRestDurationAdjustment()` is a no-op that keeps the value buffered.
+
+**Fix: flush at the terminal-presentation boundary.** One call at the end of
+`prepareForTerminalPresentation()`, which already *is* the "a terminal
+presentation is about to read the workout state" hook and which every End entry
+point routes through (`ExerciseListView`, `ControlsView`, the toolbar `X`, and
+the auto-finish `requestsFinishConfirmation` path all reach
+`requestEndConfirmation()`). Three things make it safe:
+
+- **Ordering inside the function is load-bearing.** The commit comes *after*
+  `isWorkoutInputSuspended = false`, because it is gated on `canMutateWorkout`,
+  which reads that flag. `isEnding` is still false at this point, so the write
+  goes through.
+- **`endWorkout()`'s own commit stays.** It is not made redundant: the
+  auto-finish path and a retry can re-enter `endWorkout()` without passing
+  through `prepareForTerminalPresentation()` first. The second call is a no-op
+  by guard — `commitRestDurationAdjustment()` returns immediately on a nil
+  buffer.
+- **`captureRestTimesIfNeeded()` still snapshots once.** Its own
+  `preAdjustmentRestTimes == nil` guard means committing earlier cannot take a
+  second snapshot over already-moved values, so the scope prompt's "This rest
+  only" revert is unaffected.
+
+`requestEndConfirmation()` raises the dialog in
+`Task { @MainActor in await Task.yield(); showEndConfirmation = true }`, so the
+commit's `@Published` change is published in the earlier turn and the dialog
+body reads the updated `hasTemplateChanges`.
+
+Two consequences to keep in mind if this path is touched again. The flush
+reaches `persistActiveCheckpoint()`, so the End tap now carries one synchronous
+main-actor file write — only when a buffer is pending, and it is the same write
+every set toggle already performs. And `requestEndConfirmation()`'s `Task.yield()`
+became load-bearing in a second way: it is what lets the commit's `@Published`
+change land before the dialog reads `hasTemplateChanges`, so raising the dialog
+synchronously would re-open this bug in a different form.
+
+**Not a regression:** picking "This rest only" in the scope prompt restores the
+pre-adjustment times, which clears `wasRestAdjusted` again — so ending after
+that correctly shows **no** template prompt.
+
+Rejected: making `hasRestChanges` also consult `pendingRestDuration`. It would
+light the dialog without writing anything, so `endWorkout()`'s commit would
+still have to land the value, and the predicate would then disagree with
+`payload.restAdjustedExerciseIDs`, which is computed from `wasRestAdjusted` at
+freeze time. One source of truth: the flag, set by the commit.
+
+Side effect closed with it: the `.restOnly` message ("You changed the rest time.
+Update your routine template?") was **unreachable** inside this window, since a
+rest-only change is exactly the case that failed to register.
+
+#### Stopping a rest ends the resting state (2026-09-02)
+
+`WorkoutRestTimerOverlay` gates on **`isResting` alone**, and `endWorkout()` was
+the one `stopRestTimer()` caller that never assigned it. It then suspended at
+`await finalizer.finalize(...)` before anything dropped `isWorkoutActive`, and no
+view gates on `isEnding` or `isWorkoutFrozen`, so for the whole finalization
+window — HealthKit finish plus the durable enqueue — the rest surface stayed
+mounted showing everything the teardown had just zeroed:
+
+- `restTimeRemaining = 0` / `restDuration = 0` → a full-screen `0:00` with a
+  fully drained progress gradient;
+- `isRestTimerMinimized = false` → a rest the user had **minimized to the pill
+  was forced back open** to show it;
+- `restTimerState = .running` → the large view's content stayed at full opacity,
+  so nothing faded it out;
+- `restAdjustmentExerciseIDs = []` and `restStartedAfterExerciseID = nil` → the
+  caption also lost the next set's exercise name.
+
+The fix is the invariant rather than the instance: **`isResting = false` lives
+in `stopRestTimer()`**, which is what three of the four callers already spelled
+out by hand. Ending a workout now takes the rest surface away with the workout,
+on the same `presenceAnimation` fade as Skip.
+
+- The redundant assignments in `skipRest()` and `handleActionButtonPress()` were
+  **removed**. `resetState()` keeps its own: a blanket reset is reachable
+  without a teardown (`dismissSummary`), so it is not a duplicate.
+- `startRestTimer`'s internal `stopRestTimer()` is unaffected — it re-asserts
+  `isResting = true` a few lines later in the same turn, so the published flag
+  nets to no change, the overlay's `.animation(_:value:)` sees none, and no
+  intermediate frame can render.
+- **Nothing in the commit ordering moved.** `endWorkout` still calls
+  `commitRestDurationAdjustment()` before `isEnding = true` (the 2026-08-11 root
+  cause above), and `stopRestTimer()` still flushes before it drops the rest's
+  owners. The fix reads no rest state at all, so a retry after a failed
+  finalization re-enters exactly as before.
+
+Rejected: assigning `isResting = false` after the `stopRestTimer()` call in
+`endWorkout()` only. It is the smaller diff but it closes one instance of the
+class and leaves the next caller free to repeat it.
 
 #### Diagnosing a "my rest did not sync" report
 
@@ -1479,31 +1621,25 @@ those variants, so they were dropped in the same pass.
 The `.scratch/watch-rest-adjust/` tickets are archived; these are the items they
 recorded that were never applied, kept here so they are not lost with them.
 
+- **The finalization window has no presentation of its own.** No view gates on
+  `isEnding` or `isWorkoutFrozen`, so between the End tap and the summary there
+  is simply nothing on screen saying the workout is being saved — the rest
+  surface used to stand in for one by accident (see "Stopping a rest ends the
+  resting state"), and removing that left the window empty rather than
+  explained. An explicit "saving…" state may well be the right product answer;
+  it was held out of `.scratch/watch-rest-overlay-followups/issues/02` as a
+  separate design decision, not as work that ticket declined to finish.
 - **The watch write path has no automated coverage.** `WatchWorkoutViewModel` is
   not in the `GymStreakTests` target, so `adjustRestDuration` →
   `commitRestDurationAdjustment` → `updateRestTime` / `restoreRestTimes`,
-  including the superset fan-out and the two buffer fixes above, are verified by
-  hand only. A regression there would be silent. This is also why the
-  finalization-freeze bug reached a device.
-- **`endWorkout()` clears the running rest's state while the overlay is still
-  mounted.** It is the one `stopRestTimer()` caller that never assigns
-  `isResting`, and it then suspends at `await finalizer.finalize(...)` before
-  `onFrozen` drops `isWorkoutActive` — so a frame can render with
-  `isResting == true` and the rest state already zeroed. That frame **already**
-  shows a full-screen `0:00` today, because the same call zeroes
-  `restTimeRemaining`, `restDuration` and `restAdjustmentExerciseIDs`; since
-  2026-09-01 it also loses the next-set exercise name. One more wrong datum on an
-  already-wrong frame, which is why it is a follow-up and not a fix here — this
-  is the finalization path, and it has its own history (see "The buffered write
-  vs. the finalization freeze"). The remedy fixes the `0:00` too: assign
-  `isResting = false` immediately after the `stopRestTimer()` call in
-  `endWorkout`. The other three callers are clean — `skipRest`,
-  `handleActionButtonPress` and `discardWorkout` → `resetState` all drop
-  `isResting` in the same synchronous main-actor turn. **Ticketed:**
-  `.scratch/watch-rest-overlay-followups/issues/02-end-a-workout-mid-rest-without-flashing-a-dead-timer.md`,
-  which also records the larger symptom — `stopRestTimer` forces
-  `isRestTimerMinimized = false`, so a minimized pill is expanded to show the
-  dead timer.
+  including the superset fan-out and the three buffer fixes above, are verified
+  by hand only. A regression there would be silent. This is also why both
+  buffered-write bugs — the finalization freeze and the finish dialog's stale
+  decision — reached a device. The cheapest assertion that would have caught the
+  second one is `hasTemplateChanges` after `adjustRestDuration` +
+  `prepareForTerminalPresentation()`; it needs no UI, only a constructible view
+  model (today's init takes the concrete `WatchHealthKitManager`,
+  `WatchConnectivityManager` and `RoutineStore`).
 - **The caption's label is drawn larger than the value it annotates.** On watchOS
   `.footnote` (13 pt) is the *smallest* text style and `.caption2` (14) /
   `.caption` (15) sit above it — the reverse of iOS — so the "Next" label and the
@@ -1540,6 +1676,90 @@ recorded that were never applied, kept here so they are not lost with them.
   feature rather than bolted on here.
 
 ## Verification
+
+**The buffered adjustment vs. the finish dialog (2026-09-02).** Watch target
+builds clean and `bundle exec fastlane test_unit` is green on **both** suites
+(`test_unit_ios` and `test_unit_watch`, zero failures). No unit test was added:
+`WatchWorkoutViewModel`'s init takes the concrete `WatchHealthKitManager` /
+`WatchConnectivityManager` / `RoutineStore`, and reaching `adjustRestDuration`
+needs a live rest with a non-empty `restAdjustmentExerciseIDs`, so there is no
+pure seam for `hasTemplateChanges` after `prepareForTerminalPresentation()`
+without a fake layer this fix does not justify. That keeps this class of bug
+device-only — the standing "no coverage for `WatchWorkoutViewModel`" follow-up
+below is what would close it. `architecture-reviewer`: **PASS**, first run, no
+CRITICAL and no WARNING findings.
+
+**Device pass, 2026-09-02 — all seven checks passed**, closing the fix:
+
+- **The failing case.** Rest 90 s → complete a set → minimize → long-press the
+  pill → `+` twice → End `X` **within 3 s**: "Save & Update Template" with "You
+  changed the rest time. Update your routine template?"; accepting leaves 120 s
+  on the iPhone.
+- **The Crown case.** 90 s → 150 s on the large timer, then Minimize → `X` →
+  End without waiting for the scope row: same prompt, template holds 150 s.
+- **No spurious prompt**, both ways: an unadjusted workout, and one whose only
+  adjustment was reverted via the scope prompt's "This rest only" — both still
+  show the plain "Save Workout" and leave the routine at 90 s.
+- **Unregressed:** the wait-then-end path (adjust, let the stepper collapse,
+  then End) still prompts and still updates; a workout with two modified sets
+  and no rest change still reports "You modified 2 sets", so the earlier commit
+  does not inflate the count.
+- **Superset fan-out.** A rest adjusted at the end of a superset round and
+  ended immediately updates **every** exercise of that round in the template,
+  exactly as the wait-then-end path does.
+
+**Ending mid-rest (2026-09-02).** `bundle exec fastlane test_unit` green on both
+suites — 1027 iOS and 81 watch test cases passed, zero failures, counted from the
+per-test result lines (the totals quoted in the 2026-09-01 entries below were
+taken by a different method and are not directly comparable). Simulator pass on an Apple Watch SE 3 40 mm
+(watchOS 26.5) with the fixed build installed over the existing data container
+and driven by `simctl` plus synthetic `CGEvent` taps — the XCUITest runner still
+fails to launch on this machine:
+
+- **Skip** on the large timer closes the rest cleanly. This is the regression
+  check that matters most, because `skipRest()` is where the now-redundant
+  `isResting = false` was removed.
+- **End → "Workout speichern" with the rest minimized to the pill**: at 30 fps
+  the finish dialog cross-fades straight into the summary. No rest surface, no
+  `0:00`, no pill expanding on the way out.
+- **End with no rest running** is unchanged.
+- **End → "Verwerfen"** (discard) with a rest running returns to the routine
+  screen with nothing left over.
+
+**What a simulator cannot decide here.** The same recording on the *pre-fix*
+build also shows no bad frame: HealthKit finalization is near-instant on a
+simulator, so the summary sheet covers the window before anything can be seen.
+The symptom is device-speed-dependent, which makes the A/B inconclusive on a Mac
+and left three checks for a device pass. **All three passed on a real watch,
+2026-09-02**, closing the fix:
+
+- **The large presentation.** Reaching End from the full-screen timer needs a
+  route, because the large view offers only Minimize and Skip and covers every
+  End affordance (`ExerciseListView`, `ControlsView`, the toolbar `X`), while
+  auto-finish never coincides with a rest — completing the final set returns at
+  `findNextIncompleteSet() == nil` *before* any `startRestTimer` call. The one
+  reachable route is the **natural-elapse expand**: minimize to the pill, raise
+  the finish dialog, and let the rest reach `0:00` while it is up — the timer's
+  own completion sets `isRestTimerMinimized = false`, putting the large state
+  behind the dialog for the 2 s before its auto-dismiss. Ending inside that
+  window went straight to the summary with no drained panel.
+- **A Crown adjustment immediately before End.** 90 s → 150 s on the large
+  timer, then Minimize → `X` → End → "Save & Update Template", without waiting
+  for the scope row: the routine template holds 150 s.
+- **A failed finalization followed by a retry.** Workouts *write* access revoked
+  for GymStreak in Health, then End mid-rest: the summary still appears with no
+  `0:00` frame and no error over it (`.healthKitFailed` is deliberately silent —
+  the payload is already durable), and a second workout ended the same way
+  behaves identically.
+
+**Found on the same pass, and NOT this fix's defect:** ending a workout while a
+rest adjustment is still *buffered* (the pill stepper's 3 s window) skips the
+"Update your routine template?" prompt entirely, because the dialog branches on
+`hasTemplateChanges` → `wasRestAdjusted`, which only `commitRestDurationAdjustment()`
+sets, and `prepareForTerminalPresentation()` does not flush. The value still
+reaches the workout and its history via `endWorkout()`'s pre-freeze commit; only
+the template intent is lost. Tracked as ticket 03 of
+`.scratch/watch-rest-overlay-followups/`.
 
 **Next-set caption line (2026-09-01).** `bundle exec fastlane test_unit` green
 on both suites (iOS 1093 tests, watch 65 including the six new
@@ -1644,6 +1864,21 @@ device-only, so check them first if jank ever appears.
 
 ## History
 
+- **2026-09-02** — a rest adjustment still buffered when the workout ends now
+  reaches the **finish dialog's** template decision (ticket
+  `.scratch/watch-rest-overlay-followups/issues/03`).
+  `prepareForTerminalPresentation()` flushes the buffer, so ending within the
+  pill stepper's 3 s idle window offers "Save & Update Template" instead of the
+  silent "Save Workout" branch, and the `.restOnly` message became reachable.
+  The other half of the 2026-08-11 buffered-write hazard — that one lost the
+  value, this one lost the decision. See "The buffered write vs. the finish
+  dialog's decision".
+- **2026-09-02** — ending a workout mid-rest no longer flashes a dead timer
+  (ticket `.scratch/watch-rest-overlay-followups/issues/02`). `isResting = false`
+  moved **into** `stopRestTimer()`, so the one caller that had forgotten it
+  (`endWorkout`) can no longer leave a drained `0:00` — or a force-expanded pill
+  — on screen for the length of HealthKit finalization. See "Stopping a rest
+  ends the resting state"; the corresponding follow-up entry is closed.
 - **2026-09-02** — the set editor's exercise-name marquee stopped animating
   under the full-screen timer (ticket
   `.scratch/watch-rest-overlay-followups/issues/01`). A second environment key,

@@ -1011,7 +1011,6 @@ final class WatchWorkoutViewModel: ObservableObject {
 
     func skipRest() {
         stopRestTimer()
-        isResting = false
         WKInterfaceDevice.current().play(.click)
     }
 
@@ -1053,7 +1052,6 @@ final class WatchWorkoutViewModel: ObservableObject {
             // This is a combined hardware action, not the rest screen's
             // skip-only action. Completion below supplies the user feedback.
             stopRestTimer()
-            isResting = false
         }
 
         guard let exercise = currentExercise,
@@ -1470,6 +1468,17 @@ final class WatchWorkoutViewModel: ObservableObject {
 
         restTimer?.invalidate()
         restTimer = nil
+        // Stopping a rest ENDS the resting state, in the same synchronous
+        // main-actor turn as the values the rest surface reads. It has to be
+        // here rather than at each call site: `endWorkout()` forgot it and then
+        // suspended on HealthKit finalization, so the overlay — which gates on
+        // `isResting` alone — stayed mounted for the whole finalization window
+        // showing the drained `0:00` this function had just assigned, with a
+        // minimized pill forced back open by `isRestTimerMinimized = false`
+        // below. `startRestTimer`'s internal call is unaffected: it re-asserts
+        // `isResting = true` a few lines later in the same turn, so the flag
+        // never nets to a change and no intermediate frame can render.
+        isResting = false
         restTimeRemaining = 0
         restDuration = 0
         restAdjustmentExerciseIDs = []
@@ -1685,6 +1694,9 @@ final class WatchWorkoutViewModel: ObservableObject {
         structuralBaseline = nil
         isWorkoutInputSuspended = false
         pendingExerciseSelection = nil
+        // Kept even though `stopRestTimer()` now owns this flag: a blanket
+        // reset is reachable without it (`dismissSummary`), so this is not a
+        // duplicate of the teardown path.
         isResting = false
         restTimeRemaining = 0
         restAdjustmentExerciseIDs = []

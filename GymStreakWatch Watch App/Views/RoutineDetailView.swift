@@ -88,6 +88,7 @@ struct RoutineDetailView: View {
     private var startButton: some View {
         Button(action: onStartWorkout) {
             Label("Start Workout", systemImage: "play.fill")
+                .labelStyle(.centeredIcon)
         }
         .tint(OnyxWatch.Colors.textOnTint)
         .controlSize(.small)

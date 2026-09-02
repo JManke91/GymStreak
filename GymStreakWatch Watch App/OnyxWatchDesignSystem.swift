@@ -108,6 +108,53 @@ extension Font {
     static let watchNumberSmall = Font.system(.caption, design: .rounded).monospacedDigit().weight(.medium)
 }
 
+// MARK: - Label Styles
+
+/// Keeps a label's icon vertically centered against the whole title block.
+///
+/// `DefaultLabelStyle` pins the icon to the *first* text line, so a title that
+/// wraps on a small watch (German "Workout starten" on a 40/41 mm case) leaves
+/// the glyph riding high next to line one. SwiftUI exposes no alignment knob on
+/// the built-in styles, so composing the icon and title by hand is the only
+/// supported way to change it.
+///
+/// `imageScale` and `spacing` are not decoration — a bare
+/// `HStack { configuration.icon; configuration.title }` renders the SF Symbol
+/// visibly *smaller* and tighter than the system layout, because the default
+/// style's icon sizing and icon/title gap are internal and are lost the moment
+/// the style is replaced. Both values were matched against a screenshot of the
+/// unstyled label ("Workout starten" on a 40 mm case, `.watchSubheadline`):
+/// they reproduce its glyph size and gap exactly, so a single-line label looks
+/// unchanged. The gap is `@ScaledMetric` so it grows with the text size the way
+/// `imageScale` grows the glyph, rather than matching at the default size only.
+/// Re-measure before altering them; see `docs/watch-routine-overview.md`.
+struct CenteredIconLabelStyle: LabelStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        Content(configuration: configuration)
+    }
+
+    /// The layout lives in a nested `View` so `@ScaledMetric` resolves: a
+    /// `LabelStyle` is not a `View`, so `DynamicProperty` wrappers declared on
+    /// the style itself are never updated. Without this the gap would stay at
+    /// its base value while `imageScale` grew the glyph with the text size.
+    private struct Content: View {
+        @ScaledMetric(relativeTo: .body) private var spacing: CGFloat = 9
+        let configuration: LabelStyleConfiguration
+
+        var body: some View {
+            HStack(alignment: .center, spacing: spacing) {
+                configuration.icon
+                    .imageScale(.large)
+                configuration.title
+            }
+        }
+    }
+}
+
+extension LabelStyle where Self == CenteredIconLabelStyle {
+    static var centeredIcon: CenteredIconLabelStyle { CenteredIconLabelStyle() }
+}
+
 // MARK: - Preview
 
 #Preview {
