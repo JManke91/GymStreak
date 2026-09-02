@@ -101,11 +101,26 @@ struct WatchMarqueeText: View {
     let text: String
     let font: Font
     /// Passed in rather than inherited from the call site's `.foregroundStyle`.
+    ///
+    /// (See `isSuspended` below for the one other knob a call site has.)
     /// The layout owner below must be invisible, and relying on an overlay to
     /// escape an ancestor's foreground style is exactly the kind of subtlety that
     /// renders a label invisible if the semantics differ from what you assumed.
     /// An explicit colour makes that unrepresentable.
     let color: Color
+
+    /// The label is in the view tree but cannot be read right now — hidden behind
+    /// an `opacity(0)`, collapsed to `height: 0`, or occluded by something opaque.
+    /// Occlusion is not visibility as far as SwiftUI is concerned, so nothing
+    /// else stops the cycle: it would keep scrolling and re-animating for as long
+    /// as the label is mounted. Suspending parks it at the head and tears the
+    /// cycle down, and lifting the suspension restarts it from the head dwell —
+    /// which is what a reader wants at the moment the label becomes visible.
+    ///
+    /// Gated here rather than by an `if` around the whole label at the call site:
+    /// removing the view would destroy this type's `@State` and recreate the task
+    /// on every toggle, which for a two-second hint is worse than what it saves.
+    var isSuspended: Bool = false
 
     /// Motion is not the only way to read this label — VoiceOver already speaks
     /// the untruncated name — so both of these fall back to the plain ellipsized
@@ -125,7 +140,7 @@ struct WatchMarqueeText: View {
     }
 
     private var isAnimating: Bool {
-        cycle.scrolls && !reduceMotion && !isLuminanceReduced
+        cycle.scrolls && !reduceMotion && !isLuminanceReduced && !isSuspended
     }
 
     /// Restarts the cycle when the exercise changes, and tears it down the moment
@@ -149,6 +164,15 @@ struct WatchMarqueeText: View {
         Text(text)
             .font(font)
             .lineLimit(1)
+            // Pinned, because an ANCESTOR's `minimumScaleFactor` would otherwise
+            // reach this copy and not the visible one below, which floors at
+            // `scaleFloor` and goes `fixedSize` at full scale while scrolling.
+            // The base would then be SHORTER than the label it owns, and
+            // `.clipped()` clips to the base — so a scrolling name would lose
+            // its ascenders and descenders. The rest timer's caption is the
+            // first call site with such an ancestor (0.6, for the number beside
+            // this label); where there is none this is the default and a no-op.
+            .minimumScaleFactor(1)
             .hidden()
             .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { slotWidth = $0 }
             .background(alignment: .leading) { naturalWidthProbe }

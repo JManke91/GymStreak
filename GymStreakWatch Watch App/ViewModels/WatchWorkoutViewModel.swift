@@ -37,6 +37,26 @@ final class WatchWorkoutViewModel: ObservableObject {
     /// next round running on the stale value.
     @Published private(set) var restAdjustmentExerciseIDs: [UUID] = []
 
+    /// The exercise whose set STARTED the running rest — what the user has just
+    /// finished, not what they are about to do.
+    ///
+    /// It exists because the cursor is already gone by the time anything can
+    /// look: `advanceToNextSetAfterCompletion` moves
+    /// `currentExerciseIndex` / `currentSetIndex` before the rest overlay
+    /// mounts, so "is the next set a different exercise?" is unanswerable from
+    /// the current state alone. The rest timer's caption compares this against
+    /// the exercise the cursor now points at and names the upcoming exercise
+    /// only when it actually changed — an exercise boundary, or every superset
+    /// round rollover, where the next set is always a different exercise
+    /// (`WatchRestNextSetSummary`).
+    ///
+    /// Written on every rest start and cleared beside `restAdjustmentExerciseIDs`
+    /// on all three teardown paths, so it never outlives the rest that set it.
+    /// `nil` also before the first rest of a session and after a mid-rest
+    /// relaunch — a checkpoint does not carry it — and every one of those cases
+    /// falls back to the unnamed line rather than guessing.
+    @Published private(set) var restStartedAfterExerciseID: UUID?
+
     @Published var workoutState: WorkoutState = .idle
 
 
@@ -733,6 +753,7 @@ final class WatchWorkoutViewModel: ObservableObject {
                     if restTime > 0 {
                         startRestTimer(
                             duration: restTime,
+                            startedAfter: exercise.id,
                             ownedBy: restOwnerExerciseIDs(forExerciseIndex: exerciseIndex)
                         )
                     }
@@ -745,6 +766,7 @@ final class WatchWorkoutViewModel: ObservableObject {
                 if restTime > 0 {
                     startRestTimer(
                         duration: restTime,
+                        startedAfter: exercise.id,
                         ownedBy: restOwnerExerciseIDs(forExerciseIndex: exerciseIndex)
                     )
                 }
@@ -977,6 +999,7 @@ final class WatchWorkoutViewModel: ObservableObject {
         if restTime > 0 && !isLastSet {
             startRestTimer(
                 duration: restTime,
+                startedAfter: exercise.id,
                 ownedBy: restOwnerExerciseIDs(forExerciseIndex: currentExerciseIndex)
             )
         }
@@ -1352,7 +1375,11 @@ final class WatchWorkoutViewModel: ObservableObject {
 
     // MARK: - Rest Timer
 
-    private func startRestTimer(duration: TimeInterval, ownedBy exerciseIDs: [UUID]) {
+    private func startRestTimer(
+        duration: TimeInterval,
+        startedAfter originExerciseID: UUID,
+        ownedBy exerciseIDs: [UUID]
+    ) {
         print("▶️ startRestTimer called - duration: \(duration)s")
 
         // Cancel any existing timer first
@@ -1365,6 +1392,7 @@ final class WatchWorkoutViewModel: ObservableObject {
         restTimeRemaining = duration
         restDuration = duration
         restAdjustmentExerciseIDs = exerciseIDs
+        restStartedAfterExerciseID = originExerciseID
         // One snapshot per rest. The teardown paths clear it too; doing it here
         // as well keeps the invariant local to where a rest begins.
         preAdjustmentRestTimes = nil
@@ -1408,6 +1436,7 @@ final class WatchWorkoutViewModel: ObservableObject {
                         self.restTimeRemaining = 0
                         self.restDuration = 0
                         self.restAdjustmentExerciseIDs = []
+                        self.restStartedAfterExerciseID = nil
                         self.preAdjustmentRestTimes = nil
                         // Same rule as `stopRestTimer`: an unwritten buffer must
                         // not outlive the owners this line drops.
@@ -1444,6 +1473,7 @@ final class WatchWorkoutViewModel: ObservableObject {
         restTimeRemaining = 0
         restDuration = 0
         restAdjustmentExerciseIDs = []
+        restStartedAfterExerciseID = nil
         preAdjustmentRestTimes = nil
         // The buffer holds a duration but not its owners — `commitRestDurationAdjustment`
         // resolves those from `restAdjustmentExerciseIDs` at commit time, which
@@ -1658,6 +1688,7 @@ final class WatchWorkoutViewModel: ObservableObject {
         isResting = false
         restTimeRemaining = 0
         restAdjustmentExerciseIDs = []
+        restStartedAfterExerciseID = nil
         pendingRestDuration = nil
         preAdjustmentRestTimes = nil
         isPaused = false

@@ -55,6 +55,18 @@ struct RestAdjustmentCaption: View {
     /// the Crown hint keeps its two seconds: turning the Crown is an otherwise
     /// invisible gesture, and the next set matters most later in the countdown.
     let nextSetTarget: String?
+    /// The exercise the target belongs to, supplied **only when it differs from
+    /// the one the user has just been doing** (an exercise boundary, or any
+    /// superset round rollover). `nil` in the common case, where the line stays
+    /// exactly as it was.
+    ///
+    /// It takes the "Next" label's place rather than joining it. That is forced,
+    /// not stylistic: measured at 40 mm the line has 142 pt, `Als Nächstes`
+    /// alone is 81.4 pt and the glyph plus `80 kg × 8` another 75.6 — so the
+    /// label and a name cannot share this line at any scale factor, before the
+    /// first character of the name. Losing the word costs nothing, because a
+    /// named exercise says "here is what is next" more concretely than it does.
+    let nextSetExerciseName: String?
 
     var body: some View {
         captionLine
@@ -105,7 +117,7 @@ struct RestAdjustmentCaption: View {
     @ViewBuilder
     private var captionLine: some View {
         if let nextSetTarget {
-            nextSet(nextSetTarget)
+            nextSet(nextSetTarget, exerciseName: nextSetExerciseName)
         } else {
             Text("Rest")
                 .foregroundStyle(.secondary)
@@ -141,15 +153,22 @@ struct RestAdjustmentCaption: View {
     /// re-reads. If this line ever has to give more back, dropping the glyph is
     /// the cheapest ≈19 pt available now that the word carries its meaning.
     ///
-    /// The glyph stays a type step below the *value* for a harder reason. Unlike
-    /// the two overlays this is the **layout** element, so anything whose box is
-    /// taller than the value's line height would push the countdown down — the
-    /// one thing this column cannot absorb.
-    private func nextSet(_ target: String) -> some View {
+    /// The glyph is the tallest element of the line — `.caption` is 15 pt against
+    /// the value's `.footnote` 13, because on watchOS `.footnote` is the
+    /// *smallest* text style and the captions sit above it, the reverse of iOS.
+    /// That is load-bearing here: unlike the two overlays this is the **layout**
+    /// element, so the glyph governs the caption's height and neither branch's
+    /// text can push the countdown down — which is what makes swapping the label
+    /// for an exercise name at a third font size layout-neutral.
+    private func nextSet(_ target: String, exerciseName: String?) -> some View {
         HStack(spacing: 4) {
-            Text("Next")
-                .font(.system(.caption2, design: .rounded).weight(.semibold))
-                .foregroundStyle(.secondary)
+            if let exerciseName {
+                exerciseNameLabel(exerciseName)
+            } else {
+                Text("Next")
+                    .font(.system(.caption2, design: .rounded).weight(.semibold))
+                    .foregroundStyle(.secondary)
+            }
             Image(systemName: "dumbbell.fill")
                 .font(.system(.caption, design: .rounded).weight(.semibold))
                 .foregroundStyle(OnyxWatch.Colors.tint)
@@ -167,6 +186,41 @@ struct RestAdjustmentCaption: View {
                 // value keeps its width; the label gives.
                 .layoutPriority(1)
         }
+    }
+
+    /// The exercise name in the label's slot, when the next set belongs to a
+    /// different exercise than the one just performed.
+    ///
+    /// **It scrolls rather than truncates**, reusing `WatchMarqueeText` — built
+    /// for this exact problem one screen over. The measured budget leaves the
+    /// name 58 pt at 40 mm (142 usable − 23 glyph − 53 for `80 kg × 8` − 8 of
+    /// gaps) against real names of 76–224 pt, so *every* name overflows here and
+    /// a tail ellipsis would delete the disambiguating token —
+    /// "Kniebeuge (Langhantel)" and "Kniebeuge (Multipresse)" both render as
+    /// "Kniebeuge (…" in this width, which is worse than showing no name at all
+    /// because it reads as certainty. The marquee parks at the head under Reduce
+    /// Motion and in Always-On, so the still frame is the familiar prefix.
+    ///
+    /// Drawn at `.footnote` — the *smallest* watchOS text style (13 pt;
+    /// `.caption2` is 14 and `.caption` 15, the reverse of iOS) — in muted grey
+    /// against the value's semibold white. The glyph, at `.caption`, is the
+    /// tallest element of the line in **both** branches, so which font the name
+    /// takes cannot move the countdown.
+    ///
+    /// No `layoutPriority`, deliberately: the value has 1, so the name is what
+    /// gives width up, and the number never shrinks to make room for a name.
+    private func exerciseNameLabel(_ name: String) -> some View {
+        WatchMarqueeText(
+            text: name,
+            font: .system(.footnote, design: .rounded).weight(.medium),
+            color: OnyxWatch.Colors.textMuted,
+            // The line is at `opacity(0)` for the whole of both overlay states —
+            // the first two seconds of every rest and every Crown rotation — and
+            // scrolling a label nobody can see is the cost this file already
+            // refuses to pay for the adjustment footer. Restarting from the head
+            // when the hint expires is the behaviour a reader wants anyway.
+            isSuspended: isAdjusting || showsCrownHint
+        )
     }
 
     /// Turning the Crown here is a completely invisible gesture — nothing on the

@@ -177,6 +177,8 @@ Handles uneven set counts gracefully (e.g., A has 3 sets, B has 4 → round 4 on
 
 Rest time is stored on the **last exercise's sets** in the superset. Rationale: rest comes after completing all exercises in the round.
 
+**watchOS:** because a round's rest is followed by the *next* round's first exercise, the set the user is resting for is never the exercise they just performed. The full-screen rest timer therefore **names that exercise** on the line above the countdown (`Kniebeuge (Multipresse) ⬮ 80 kg × 8`) instead of the generic "Next" label — without it, a superset rest shows a weight that belongs to a different movement. See `docs/watch-rest-timer-ui.md` § "Naming the exercise when it changes".
+
 ### Set Completion Flow
 
 1. Mark set complete

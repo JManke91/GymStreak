@@ -65,6 +65,10 @@ weight and rep count can be read
 without minimizing the timer. It is the caption slot's default content; "REST"
 is now only a fallback.
 
+**When that set belongs to a different exercise, the line names it instead of
+saying "Next"** — `Kniebeuge (Multipresse) ⬮ 80 kg × 8`. That is a correctness
+requirement, not a nicety: see "Naming the exercise when it changes" below.
+
 **It costs nothing vertically, which is the only reason it exists at all.** This
 screen has no spare space (see "The vertical budget" below), and three ways of
 adding a line to it were already tried and rejected. So the next-set target does
@@ -80,7 +84,7 @@ Minimize/Skip row do not move.
 |---|---|---|
 | 1 | `+15 s` delta badge | `isAdjusting` — the Crown is turning |
 | 2 | `⟳ Turn = duration` Crown hint | `showsCrownHint` — the first `RestAdjustmentChrome.crownHintLife` (2 s) of the rest |
-| 3 | `Next ⬮ 80 kg × 8` target | a next set exists — in practice always |
+| 3 | `Next ⬮ 80 kg × 8` target, or `Kniebeuge (Multipresse) ⬮ 80 kg × 8` when the exercise changed | a next set exists — in practice always |
 | 4 | `REST` | fallback only if 3 yields nothing |
 
 The first two are **overlays** on the line and may be wider and taller than it;
@@ -113,6 +117,14 @@ already *is* the next one, superset rotation included — so there is **no
 lookahead, no peek and no second call into `findNextIncompleteSet()`**, and none
 should be added.
 
+That same fact is why one thing *has* to be stored: by the time anything can
+look, the exercise the user just finished is gone. `startRestTimer` records it as
+`restStartedAfterExerciseID` (`@Published private(set)`, written on every rest
+start from the completing exercise's id), and that is the whole view-model
+addition the exercise naming needed — no lookahead there either. It is **not**
+in the active-workout checkpoint, so a mid-rest relaunch has no origin and falls
+back to the unnamed line rather than guessing.
+
 The formatting lives in `WatchRestNextSetSummary`
 (`GymStreakWatch Watch App/Models/WatchRestNextSetSummary.swift`), a pure type
 with no view-model or SwiftUI reference, following the seam pattern of
@@ -129,6 +141,28 @@ below are actually asserted.
 - **A bodyweight set (`plannedWeight == 0`) shows reps only** — `8 reps` /
   `8 Wdh.`, never `0 kg`, mirroring `WatchExercise.setsSummary(in:)`. The rep
   count keeps its word here because there is no weight competing for the width.
+
+  This reads, from testing, as *"in pounds it shows the weight, in kg only the
+  reps"* — and it is worth knowing that the reading is wrong, because it will
+  recur. Those are two different sets, not one set in two units: the kg one was a
+  `plannedWeight == 0` exercise. The display unit **cannot** reach that branch —
+  the only test is `kilograms > 0` against the canonical stored value, and
+  `WatchRestNextSetSummaryTests.bodyweightShowsRepsOnly` renders the same set in
+  both units and requires the two strings to be equal. Confirmed on device: the
+  same weighted set read `200 lb × 8` and `90,72 kg × 8`.
+
+  The residual asymmetry is real and deliberate: a weighted set renders the
+  multiplication form (`200 lb × 8`), a bodyweight set renders the reps word
+  (`8 Wdh.`). Strict parallelism would need a bodyweight token in the weight
+  slot, and the natural German abbreviation for *Körpergewicht* is "KG" — which
+  collides with kilograms on the one line where that ambiguity would be worst.
+  Not doing it.
+
+  `90,72 kg` is the lb→kg round-trip residue surfacing (200 lb = 90,7184 kg at
+  `kilogramStyle`'s `fractionLength(0...2)`). Correct, and consistent with every
+  other kg display in the app; `WatchWeightFormatting` is the single place to
+  change it if a coarser precision is ever wanted, and that is an app-wide
+  decision rather than a rest-timer one.
 - **`nil` is defensive, not a designed state.** A rest cannot start with no set
   left to rest for, so the empty case has no presentation — the caption simply
   falls back to "REST".
@@ -171,35 +205,12 @@ recorded because both mistakes are easy to make again:
    self-evident: a dumbbell says **exercise**, not **the set you are about to
    do**.
 
-**The label is deliberately the cheapest element on the line**, in both senses.
-The ticket originally ruled a word out on width, and that reasoning was sound but
-aimed at the wrong size: a word is fatal *at the value's type size* and
-affordable two steps below it. So the label is drawn at `.caption2` `.secondary`
-against the value's `.footnote` — and it is kept to **one short word per
-language**. Measure it as a **fixed cost against a variable payload**: the label
-is the same width whether the value is `8 Wdh.` or `220,5 lb × 12`, so every
-point it spends is taken from the number, in every case, forever.
-
-The first version said `Next set:` / `Nächster Satz:` and spent ~25 pt of a
-~142 pt line on words nobody re-reads after the first rest. `Next` /
-`Als Nächstes` says the same thing:
-
-| Case (40 mm, ~142 pt usable) | Approx. width | Result |
-|---|---|---|
-| `Als Nächstes ⬮ 8 Wdh.` | ~119 pt | fits outright |
-| `Als Nächstes ⬮ 220,5 lb × 12` | ~159 pt | scales to ≈0.89, inside the 0.6 floor |
-| `Next ⬮ 220,5 lb × 12` (en) | ~121 pt | fits outright |
-
-German is the binding language here, as it is everywhere on this screen.
-
-Those figures are **estimates, not measurements.** German at 40 mm was walked on
-device and is clean at the default text size; the *largest* text size and a
-pounds value together — the top row of this table — were never seen. The glyph is
-the one element on the line that cannot participate in `minimumScaleFactor`, so
-it is the term that grows fastest against the available width, and that
-combination is where it would first show. If the line ever has to give something back, **dropping the glyph is the
-cheapest ≈19 pt available** now that the words carry its meaning — do that
-before touching the label or the value.
+**The label is a fixed cost against a variable payload**: it is the same width
+whether the value is `8 Wdh.` or `220,5 lb × 12`, so every point it spends is
+taken from the number, in every case, forever. That is why it is kept to **one
+short word per language** — the first version said `Next set:` /
+`Nächster Satz:` and spent ~25 pt of a 142 pt line on words nobody re-reads
+after the first rest.
 
 **The value carries `.layoutPriority(1)`, and must.** Both `Text`s inherit
 `minimumScaleFactor` and would otherwise scale *independently* against whatever
@@ -215,15 +226,187 @@ more than it looks: it carries `tracking(1.5)` and is the one that could
 genuinely wrap to two lines at the accessibility text sizes and push the
 countdown down.
 
-**The glyph stays a type step below the value** (`.caption` against `.footnote`)
-for a harder reason than looks. The line is the **layout** element — unlike the
-two overlays, which need `fixedSize()` to escape the caption's width — so
-anything whose box is taller than the value's line height would push the
-countdown down, the one thing this column cannot absorb. Being the layout
-element is also what lets `lineLimit(1)` + `minimumScaleFactor(0.6)` work at
-all: it is proposed the column's full width and scales down inside it rather
-than running off the display. `dumbbell.fill` is available from the 2022 SF
-Symbols release, well below the watchOS 26 floor.
+**The glyph is the tallest element of the line** — `.caption` (15 pt) against the
+value's `.footnote` (13 pt), the reverse of what an iOS reflex expects — so **it**
+governs the caption's height, and that is what makes the slot's height
+independent of which branch is drawn. The line is the **layout** element, unlike
+the two overlays that need `fixedSize()` to escape the caption's width, so
+anything taller than the glyph would push the countdown down, the one thing this
+column cannot absorb. Being the layout element is also what lets `lineLimit(1)`
++ `minimumScaleFactor(0.6)` work at all: it is proposed the column's full width
+and scales down inside it rather than running off the display. `dumbbell.fill` is
+available from the 2022 SF Symbols release, well below the watchOS 26 floor.
+
+### Measured widths (2026-09-01) — and a correction
+
+The numbers below replace an earlier set of estimates in this document, and they
+matter because **one of the assumptions behind those estimates was wrong.**
+Measured with CoreText at the real text styles on watchOS 26.1 simulators, at
+the default text size:
+
+| | 40 mm (SE 3) | 42 mm (S11) | 46 mm (S11) |
+|---|---|---|---|
+| Screen | 162 × 197 | 187 × 223 | 208 × 248 |
+| Caption line, usable (− 20 pt padding) | **142** | 167 | 188 |
+| `.caption2` / `.caption` / `.footnote` | 14 / 15 / **13** | 14 / 15 / **13** | 15 / 16 / **14** |
+| `dumbbell.fill` @ `.caption` | 23.0 | 23.0 | 24.5 |
+| `Next` @ `.caption2` | 29.7 | 29.7 | 31.8 |
+| `Als Nächstes` @ `.caption2` | **81.4** | 81.4 | 87.2 |
+| `8 Wdh.` @ `.footnote` | 39.7 | 39.7 | 42.7 |
+| `80 kg × 8` @ `.footnote` | 52.6 | 52.6 | 56.6 |
+| `220,5 lb × 12` @ `.footnote` | 71.3 | 71.3 | 76.8 |
+
+**The correction: on watchOS `.footnote` is the *smallest* text style, not a step
+above the captions.** It is 13 pt where `.caption2` is 14 and `.caption` is 15 —
+the reverse of iOS, where footnote 13 > caption1 12 > caption2 11. So the claim
+this section used to make, that the label sits "two type steps below" the value,
+is false on this platform: the label is drawn **one step larger** than the number
+it annotates, and the tinted glyph is larger still. The type hierarchy that keeps
+the number dominant is therefore carried entirely by **colour and weight**
+(muted vs. semibold white), not by size. Left as it shipped — the user signed the
+line off on device at all three case sizes — and recorded under "Open
+follow-ups".
+
+The width estimates were low for the same reason. The German line actually
+measures, at 40 mm (three 4 pt gaps between four elements):
+
+| Case (40 mm, 142 pt usable) | Measured | Result |
+|---|---|---|
+| `Als Nächstes ⬮ 8 Wdh.` | 156.1 pt | scales to ≈0.91 |
+| `Als Nächstes ⬮ 80 kg × 8` | 169.0 pt | scales to ≈0.84 |
+| `Als Nächstes ⬮ 220,5 lb × 12` | 187.7 pt | scales to ≈0.76 |
+| `Next ⬮ 220,5 lb × 12` (en) | 136.0 pt | fits outright |
+
+So the shipped German line is *always* scaling slightly at 40 mm — comfortably
+inside the 0.6 floor, which is why it looks right on device, but it has less
+headroom than the old table suggested. German is the binding language here, as it
+is everywhere on this screen. If the line ever has to give something back,
+**dropping the glyph is ≈23 pt** — the cheapest available now that the words
+carry its meaning — and that is the escape hatch to take before touching the
+label or the value.
+
+### Naming the exercise when it changes
+
+`Als Nächstes ⬮ 80 kg × 8` is fine while the exercise continues and **actively
+misleading when it does not**: the user's next physical action is to load a bar,
+and they would load 80 kg for the wrong movement. So when the next set belongs to
+a different exercise, the line names it:
+
+    Kniebeuge (Multipresse) ⬮ 80 kg × 8
+
+Two paths reach that state, and the second one is the reason this is not optional:
+
+- **An exercise boundary.** Completing an exercise's final set starts a rest like
+  any other set (the gate is the last set of the *whole workout* — see "Where the
+  value comes from"), and the cursor then moves into the next exercise.
+- **Every superset round rollover.** A superset's rest starts only at the end of a
+  full round (`isEndOfSupersetRound`), and `findNextIncompleteSetInSuperset`
+  interleaves A1→B1→A2→B2 — so the set after a round is *always* the next round's
+  **first** exercise and therefore never the one just performed. For supersets
+  this is the difference between the line working and not.
+
+**The name takes the label's place; it does not join it.** That is forced by
+measurement, not taste. At 40 mm the line has 142 pt, `Als Nächstes` alone is
+81.4 pt and the glyph plus `80 kg × 8` another 75.6 — the label and a name cannot
+share this line at any scale factor. Losing the word costs nothing, because a
+named exercise says "here is what is next" more concretely than the word does.
+
+**What is left for the name**, measured (usable − glyph − value − two 4 pt gaps):
+
+| Value on the line | 40 mm | 42 mm | 46 mm |
+|---|---|---|---|
+| `8 Wdh.` (bodyweight) | 71.3 pt | 96.3 | 112.8 |
+| `80 kg × 8` | **58.4 pt** | 83.4 | 98.9 |
+| `220,5 lb × 12` | **39.7 pt** | 64.7 | 78.7 |
+
+…against real exercise names at `.footnote`, 40 mm: `Bankdrücken` 76.0 pt,
+`Bulgarian Split Squat` 120.6, `Kniebeuge (Multipresse)` 141.1,
+`Kreuzheben mit gestreckten Beinen` 205.9, `Rumänisches Kreuzheben (Kurzhantel)`
+224.5. **So at 40 mm essentially every name overflows its share of the line** —
+by 2× to 4×.
+
+**Which is why the name scrolls rather than truncates.** It is rendered with
+`WatchMarqueeText` (`docs/watch-set-completion-button.md` § marquee), the
+component built one screen over for exactly this: a tail ellipsis at a 58 pt
+window leaves ~8 characters, which deletes the *disambiguating* token —
+`Kniebeuge (Langhantel)` and `Kniebeuge (Multipresse)` both render as
+`Kniebeuge (…`, i.e. two different movements shown identically, which is worse
+than showing no name at all because it reads as certainty. The marquee holds the
+head for 2.2 s, walks the surplus at 32 pt/s, holds the tail 1.4 s and returns;
+under Reduce Motion and in Always-On it parks at the head and behaves as a plain
+ellipsized label. One instance, in one fixed slot — never per row, which is what
+its own documentation prohibits.
+
+**The number never shrinks to make room for a name.** The value carries
+`.layoutPriority(1)` and the name carries none, so the stack satisfies the value's
+ideal width first and the name lives on the remainder. The accepted consequence at
+the extreme Dynamic Type sizes is the opposite one: the name can be squeezed to
+zero width and disappear. That is the right way round — this line's payload is the
+target, and the criterion was explicitly that the weight and reps stay legible.
+
+**Layout-neutral by construction.** The glyph (`.caption`, 15 pt) is the tallest
+element of the line in *both* branches, so swapping a `.caption2` word for a
+`.footnote` name cannot change the caption's height; and `WatchMarqueeText`'s
+hidden layout owner is a plain single-line `Text`, so it claims exactly the width
+and the line height a truncating `Text` would. Nothing above or below the caption
+moves.
+
+#### Two things the marquee needed before it could live here
+
+Both came out of the architecture review, and both are about the *component*
+rather than this screen — this is simply the first call site that stresses them:
+
+- **The layout owner is now pinned to `minimumScaleFactor(1)`.**
+  `WatchMarqueeText` hands its size to a hidden single-line `Text`; the visible
+  copy floors at `scaleFloor` (0.85) and goes `fixedSize` at *full* scale while
+  scrolling. The caption applies `minimumScaleFactor(0.6)` to the whole line, and
+  that reached the hidden owner and not the visible label — so the base box could
+  end up **shorter** than the label it owns, and `.clipped()` clips to the base,
+  which would have shaved the ascenders and descenders off a scrolling name. The
+  top-zone call site has no such ancestor, so 1 was already its effective value
+  and the pin is a no-op there.
+- **The cycle is suspended while the line is invisible** (`isSuspended`, folded
+  into `isAnimating` and therefore into `cycleIdentity`). The caption is at
+  `opacity(0)` for the first two seconds of *every* rest (the Crown hint) and for
+  the whole of every rotation; scrolling a label nobody can see is exactly the
+  cost this screen already refuses to pay for the adjustment footer. Suspension
+  toggles the `.task`'s identity rather than the view's existence, so `@State`
+  survives and the label parks at the head — which means the name starts from its
+  beginning at the moment it becomes readable, not mid-scroll. **Not covered:** the
+  ~3 s the caption is collapsed for `RestScopeRow`, which the caption is not told
+  about; a rare window, and not worth a parameter.
+
+#### Candidates rejected, with the reason
+
+Recorded so none of them is re-proposed:
+
+- **Name prefixed to the line, keeping `Next`** (the ticket's starting
+  recommendation). Impossible, not merely tight: 81.4 + 23.0 + 52.6 + 12 = 169 pt
+  of a 142 pt line **before the first character of the name**.
+- **Name in the top row's `Spacer` gap.** That gap is real only while the HR/kCal
+  readout is absent; with both metrics present at 40 mm the row is already full,
+  so the line would vanish exactly when a user is mid-workout — which is the only
+  time it is needed. Would need a `ViewThatFits`/metrics-tiered fallback to be
+  trustworthy, which is more machinery than the caption swap.
+- **A second layout-neutral line below the digits.** This is attempt 2 from "The
+  vertical budget, and two layouts that failed" under a new name: with ~29 pt of
+  gap at 46 mm it drew over the Minimize/Skip buttons, and at 40 mm the gap is
+  smaller still.
+- **Tail truncation instead of the marquee.** See above — it deletes the one token
+  that tells two exercises apart.
+- **Suppressing the name on `xSmall` (40 mm).** Sanctioned by the ticket as an
+  accepted outcome and deliberately not taken: 40 mm users run supersets too, and
+  suppression restores the exact wrong-weight failure the naming exists to
+  prevent. A narrow scrolling window still delivers the name.
+- **Adding `WatchSupersetBadge` or its letter beside the name.** Costs ~15–18 pt
+  of width at the case size where the name has the least. The name already
+  disambiguates; the badge would not add information the user lacks.
+- **Dropping the dumbbell in the name branch** (separating with ` · `, ≈9.7 pt).
+  Measured: it returns ≈13 pt to the name at 40 mm (58.4 → 71.7 with
+  `80 kg × 8`). Not taken, because one glyph in both branches keeps this as *one*
+  line design rather than two, and 13 pt does not change the outcome — the name
+  scrolls either way. **This is the first thing to try if the device pass finds
+  the 40 mm window too narrow.**
 
 ### VoiceOver
 
@@ -234,6 +417,16 @@ countdown's **value**, after the rest duration — "Rest timer, 1:30 remaining. 
 kilograms, 8 reps". The spoken form uses `WatchWeightFormatting.spokenUnitWord`,
 so a screen reader says "kilograms", not "kay gee", and spells out the rep count
 that the written `×` leaves implicit.
+
+**A changed exercise is named first** — "…Next set Bulgarian Split Squat, 80
+kilograms, 8 reps" — because it is the part a listener cannot infer from the
+numbers. It is folded into the existing `"Next set %@"` catalog key's argument
+rather than getting a key of its own, so there is one phrase to translate instead
+of two that would have to stay in sync. `.accessibilityElement(children:
+.combine)` merges child labels, but the explicit `accessibilityLabel` on that
+element overrides them, so the marquee's visible `Text` is not spoken twice; the
+marquee's two measurement copies are `.hidden()` / `accessibilityHidden(true)`
+and never reach the accessibility tree at all.
 
 ## Adjusting the rest duration with the Digital Crown
 
@@ -1198,6 +1391,48 @@ recorded that were never applied, kept here so they are not lost with them.
   including the superset fan-out and the two buffer fixes above, are verified by
   hand only. A regression there would be silent. This is also why the
   finalization-freeze bug reached a device.
+- **`endWorkout()` clears the running rest's state while the overlay is still
+  mounted.** It is the one `stopRestTimer()` caller that never assigns
+  `isResting`, and it then suspends at `await finalizer.finalize(...)` before
+  `onFrozen` drops `isWorkoutActive` — so a frame can render with
+  `isResting == true` and the rest state already zeroed. That frame **already**
+  shows a full-screen `0:00` today, because the same call zeroes
+  `restTimeRemaining`, `restDuration` and `restAdjustmentExerciseIDs`; since
+  2026-09-01 it also loses the next-set exercise name. One more wrong datum on an
+  already-wrong frame, which is why it is a follow-up and not a fix here — this
+  is the finalization path, and it has its own history (see "The buffered write
+  vs. the finalization freeze"). The remedy fixes the `0:00` too: assign
+  `isResting = false` immediately after the `stopRestTimer()` call in
+  `endWorkout`. The other three callers are clean — `skipRest`,
+  `handleActionButtonPress` and `discardWorkout` → `resetState` all drop
+  `isResting` in the same synchronous main-actor turn. **Ticketed:**
+  `.scratch/watch-rest-overlay-followups/issues/02-end-a-workout-mid-rest-without-flashing-a-dead-timer.md`,
+  which also records the larger symptom — `stopRestTimer` forces
+  `isRestTimerMinimized = false`, so a minimized pill is expanded to show the
+  dead timer.
+- **The set editor's marquee keeps animating underneath the full-screen rest
+  timer.** `WorkoutRestTimerOverlay` is a *sibling* of the `NavigationStack`
+  (`ActiveWorkoutView.swift`), so a pushed `FullScreenSetEditorView` stays mounted
+  beneath the opaque rest surface — occlusion is not visibility as far as SwiftUI
+  is concerned, and its `WatchMarqueeText` scrolls on for the whole rest. True
+  since the marquee shipped (`73e1309`) and independent of the rest timer's own
+  name line, which now suspends itself. The mechanism to fix it already exists:
+  pass `isSuspended: viewModel.isResting && !viewModel.isRestTimerMinimized` at
+  `WorkoutTopProgressView`'s call site — the only open question is how to thread
+  that state into what is deliberately a pure layout container (it already reads
+  `@Environment(\.isRestPillStepperOpen)`, so an environment key is the obvious
+  route). **Ticketed:**
+  `.scratch/watch-rest-overlay-followups/issues/01-suspend-the-occluded-exercise-name-marquee.md`.
+- **The caption's label is drawn larger than the value it annotates.** On watchOS
+  `.footnote` (13 pt) is the *smallest* text style and `.caption2` (14) /
+  `.caption` (15) sit above it — the reverse of iOS — so the "Next" label and the
+  dumbbell are both bigger than the number, and the label spends 81 pt of a
+  142 pt line at 40 mm on a word that is a fixed cost. The hierarchy currently
+  survives on colour and weight alone. Measured 2026-09-01 (see "Measured
+  widths"); not changed, because the same-exercise line was signed off on device
+  as it is and ticket 02 required it to stay byte-identical. Worth revisiting
+  together: a genuinely smaller label would hand ~30 pt back to the value and to
+  the exercise name.
 - **`RestTimerMinimizedPill` observes the whole workout view model.** Ticket 03
   gave it an `@EnvironmentObject` on `WatchWorkoutViewModel` — which owns the
   rest timer *and* the `@Published var exercises` tree — so every unrelated
@@ -1237,6 +1472,25 @@ The three-case-size device pass (40 mm `xSmall`, 41 mm `small`, 46 mm) is
 The kg/lb seam was confirmed on the same pass: one set read `200 lb × 8` and
 `90,72 kg × 8`, which is the round trip working in both directions off a single
 canonical value.
+
+**Exercise naming (2026-09-01).** `bundle exec fastlane test_unit` green on both
+suites; the watch suite is 81 tests in 7 suites, including seven new
+`WatchRestNextSetSummaryTests` cases for the naming decision (same exercise → no
+name and byte-identical output, following exercise → named, superset round
+rollover → named, unknown origin → unnamed, a reordered array judged by id rather
+than index, a long name carried verbatim in both units, and the spoken form
+naming the exercise before its numbers). The width
+budget in "Naming the exercise when it changes" was **measured**, not estimated:
+CoreText at the real text styles on 40 mm / 42 mm / 46 mm watchOS 26.1
+simulators, via a throwaway probe in the watch test target that was deleted after
+recording. No 41 mm simulator exists; 42 mm stands in for the `small` tier and is
+11 pt wider, so 41 mm sits between the 40 mm and 42 mm columns.
+
+**Not yet seen on a device:** the rendered name line itself, at any case size, in
+either language — the numbers say what fits, they do not say how a name scrolling
+through a 58 pt window reads next to a countdown. The 40 mm × German ×
+pounds cell (39.7 pt for the name) is the one to look at first, and the
+measured escape hatch is above: drop the dumbbell in the name branch for ≈13 pt.
 
 Two gaps are deliberate rather than pending. **The Crown-adjustment and
 scope-prompt interaction with the new caption state was not separately

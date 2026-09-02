@@ -186,7 +186,8 @@ struct RestTimerLargeView: View {
                     isAdjusting: isAdjusting,
                     delta: adjustmentDelta,
                     showsCrownHint: showsCrownHint,
-                    nextSetTarget: nextSet?.display
+                    nextSetTarget: nextSet?.display,
+                    nextSetExerciseName: nextSet?.exerciseName
                 )
                     .frame(height: captionHeight)
                     .opacity(isScopePromptUp ? 0 : 1)
@@ -280,7 +281,8 @@ struct RestTimerLargeView: View {
 
     // MARK: ─── The next set
 
-    /// What the set the user is resting *for* asks for.
+    /// What the set the user is resting *for* asks for — and, when it belongs to
+    /// a different exercise, which exercise that is.
     ///
     /// `currentExerciseIndex` / `currentSetIndex` already point at it: the view
     /// model advances them before this overlay mounts. No lookahead is computed
@@ -290,6 +292,11 @@ struct RestTimerLargeView: View {
             in: viewModel.exercises,
             exerciseIndex: viewModel.currentExerciseIndex,
             setIndex: viewModel.currentSetIndex,
+            // The one thing the cursor cannot tell us: which exercise the rest
+            // was started for. Recorded at rest start, because by the time this
+            // view exists the cursor has already moved on — see
+            // `WatchWorkoutViewModel.restStartedAfterExerciseID`.
+            startedAfterExerciseID: viewModel.restStartedAfterExerciseID,
             unit: weightUnit
         )
     }

@@ -37,6 +37,7 @@ struct WatchRestNextSetSummaryTests {
             in: exercises,
             exerciseIndex: 0,
             setIndex: 1,
+            startedAfterExerciseID: nil,
             unit: .kilograms
         )
 
@@ -54,6 +55,7 @@ struct WatchRestNextSetSummaryTests {
             in: exercises,
             exerciseIndex: 1,
             setIndex: 0,
+            startedAfterExerciseID: nil,
             unit: .kilograms
         )
 
@@ -86,12 +88,225 @@ struct WatchRestNextSetSummaryTests {
             in: exercises,
             exerciseIndex: 0,
             setIndex: 1,
+            startedAfterExerciseID: nil,
             unit: .kilograms
         )
 
         // Composed, not literal: 62.5 carries a decimal separator and that one
         // is the test locale's.
         #expect(summary?.display == "\(WatchWeightFormatting.number(62.5, in: .kilograms)) kg × 10")
+    }
+
+    // MARK: - Naming the exercise when it changed
+
+    /// The common case, and the one with the strictest bar: another set of the
+    /// same exercise must leave the line byte-identical to what it was before
+    /// this feature existed.
+    @Test("Another set of the same exercise is not named")
+    func sameExerciseIsNotNamed() {
+        let exercises = [
+            makeExercise(name: "Bench Press", sets: [(reps: 10, kilograms: 60), (reps: 8, kilograms: 80)])
+        ]
+
+        let named = WatchRestNextSetSummary.target(
+            in: exercises,
+            exerciseIndex: 0,
+            setIndex: 1,
+            startedAfterExerciseID: exercises[0].id,
+            unit: .kilograms
+        )
+        let unknownOrigin = WatchRestNextSetSummary.target(
+            in: exercises,
+            exerciseIndex: 0,
+            setIndex: 1,
+            startedAfterExerciseID: nil,
+            unit: .kilograms
+        )
+
+        #expect(named?.exerciseName == nil)
+        #expect(named == unknownOrigin)
+    }
+
+    @Test("A next set in a following exercise names that exercise")
+    func nextExerciseIsNamed() {
+        let exercises = [
+            makeExercise(name: "Bench Press", sets: [(reps: 10, kilograms: 60)]),
+            makeExercise(name: "Cable Row", sets: [(reps: 12, kilograms: 45)])
+        ]
+
+        let summary = WatchRestNextSetSummary.target(
+            in: exercises,
+            exerciseIndex: 1,
+            setIndex: 0,
+            startedAfterExerciseID: exercises[0].id,
+            unit: .kilograms
+        )
+
+        #expect(summary?.exerciseName == "Cable Row")
+        // The name is additive: the target it accompanies is unchanged.
+        #expect(summary?.display == "45 kg × 12")
+    }
+
+    /// The case this exists for. A superset's rest starts only at the end of a
+    /// full round, and the next set is then always the *first* exercise of the
+    /// next round — so it is never the exercise just performed, and the name is
+    /// the difference between the line being useful and being wrong.
+    @Test("A superset round rollover names the next round's exercise")
+    func supersetRoundRolloverNamesTheNextExercise() {
+        let supersetID = UUID()
+        let exercises = [
+            makeExercise(
+                name: "Bench Press",
+                sets: [(reps: 10, kilograms: 60), (reps: 10, kilograms: 62.5)],
+                supersetID: supersetID,
+                supersetOrder: 0
+            ),
+            makeExercise(
+                name: "Cable Row",
+                sets: [(reps: 12, kilograms: 45), (reps: 12, kilograms: 45)],
+                supersetID: supersetID,
+                supersetOrder: 1
+            )
+        ]
+
+        // Round 1 ended on Cable Row; the rotation goes back to Bench Press.
+        let summary = WatchRestNextSetSummary.target(
+            in: exercises,
+            exerciseIndex: 0,
+            setIndex: 1,
+            startedAfterExerciseID: exercises[1].id,
+            unit: .kilograms
+        )
+
+        #expect(summary?.exerciseName == "Bench Press")
+    }
+
+    /// Compared by id, not index: the cursor can be moved during a rest by
+    /// `navigateToNextExercise` or a direct jump, and an index comparison would
+    /// then name whatever happens to sit at the old position.
+    @Test("A rest whose origin exercise is unknown keeps the unnamed line")
+    func unknownOriginKeepsTheUnnamedLine() {
+        let exercises = [
+            makeExercise(name: "Bench Press", sets: [(reps: 10, kilograms: 60)]),
+            makeExercise(name: "Cable Row", sets: [(reps: 12, kilograms: 45)])
+        ]
+
+        let summary = WatchRestNextSetSummary.target(
+            in: exercises,
+            exerciseIndex: 1,
+            setIndex: 0,
+            startedAfterExerciseID: nil,
+            unit: .kilograms
+        )
+
+        #expect(summary?.exerciseName == nil)
+    }
+
+    /// The comparison is by **id**, and only a reordered array can prove it: in
+    /// every other case here the origin's index differs from the cursor's, so an
+    /// index comparison would pass them all. Here the origin exercise has moved
+    /// **to** the cursor's index — a structural edit mid-workout — and an index
+    /// comparison would say "unchanged" while an id comparison correctly names
+    /// the exercise that now sits there.
+    @Test("A reordered workout is judged by exercise id, not by index")
+    func reorderingIsJudgedByIdNotIndex() {
+        let bench = makeExercise(name: "Bench Press", sets: [(reps: 10, kilograms: 60)])
+        let row = makeExercise(name: "Cable Row", sets: [(reps: 12, kilograms: 45)])
+
+        // The rest started after Bench Press, which sat at index 0. Bench Press
+        // is now at index 1, and the cursor still points at index 0 — the
+        // origin's own former index, now holding a different exercise.
+        let reordered = [row, bench]
+        let sameIndexDifferentExercise = WatchRestNextSetSummary.target(
+            in: reordered,
+            exerciseIndex: 0,
+            setIndex: 0,
+            startedAfterExerciseID: bench.id,
+            unit: .kilograms
+        )
+        #expect(sameIndexDifferentExercise?.exerciseName == "Cable Row")
+
+        // …and the mirror: the origin exercise is now AT the cursor's index, so
+        // an index comparison would wrongly name it.
+        let sameExerciseDifferentIndex = WatchRestNextSetSummary.target(
+            in: reordered,
+            exerciseIndex: 1,
+            setIndex: 0,
+            startedAfterExerciseID: bench.id,
+            unit: .kilograms
+        )
+        #expect(sameExerciseDifferentIndex?.exerciseName == nil)
+    }
+
+    /// The name is user data, not a localized string, so the only language
+    /// question is width — and width is the view's problem: `WatchMarqueeText`
+    /// scrolls the overflow, so nothing here may pre-shorten a name. A long
+    /// German compound and a long English one both have to come back whole, in
+    /// both display units.
+    @Test("A long exercise name is carried verbatim, in either language or unit")
+    func longNamesAreCarriedVerbatim() {
+        let names = ["Kreuzheben mit gestreckten Beinen", "Barbell Bulgarian Split Squat"]
+
+        for name in names {
+            let exercises = [
+                makeExercise(name: "Bench Press", sets: [(reps: 10, kilograms: 60)]),
+                makeExercise(name: name, sets: [(reps: 8, kilograms: 100)])
+            ]
+
+            for unit in WeightUnit.allCases {
+                let summary = WatchRestNextSetSummary.target(
+                    in: exercises,
+                    exerciseIndex: 1,
+                    setIndex: 0,
+                    startedAfterExerciseID: exercises[0].id,
+                    unit: unit
+                )
+
+                #expect(summary?.exerciseName == name)
+                // No ellipsis, no scale hint, no truncation of any kind.
+                #expect(summary?.exerciseName?.count == name.count)
+                // The name never leaks into the caption's own value.
+                #expect(summary?.display.contains(name) == false)
+            }
+        }
+    }
+
+    @Test("The spoken form names the changed exercise before its target")
+    func spokenFormNamesTheChangedExercise() {
+        let exercises = [
+            makeExercise(name: "Bench Press", sets: [(reps: 10, kilograms: 60)]),
+            makeExercise(name: "Cable Row", sets: [(reps: 12, kilograms: 45)]),
+            makeExercise(name: "Pull-Up", sets: [(reps: 8, kilograms: 0)])
+        ]
+
+        let weighted = WatchRestNextSetSummary.target(
+            in: exercises,
+            exerciseIndex: 1,
+            setIndex: 0,
+            startedAfterExerciseID: exercises[0].id,
+            unit: .kilograms
+        )
+        #expect(weighted?.spoken.contains("Cable Row") == true)
+        // Named first: it is the part a listener cannot infer from the numbers.
+        let spoken = weighted?.spoken ?? ""
+        let nameRange = spoken.range(of: "Cable Row")
+        let weightRange = spoken.range(of: "45")
+        #expect(nameRange != nil)
+        #expect(weightRange != nil)
+        if let nameRange, let weightRange {
+            #expect(nameRange.lowerBound < weightRange.lowerBound)
+        }
+
+        // Bodyweight, where there is no weight to follow the name.
+        let bodyweight = WatchRestNextSetSummary.target(
+            in: exercises,
+            exerciseIndex: 2,
+            setIndex: 0,
+            startedAfterExerciseID: exercises[1].id,
+            unit: .kilograms
+        )
+        #expect(bodyweight?.spoken.contains("Pull-Up") == true)
+        #expect(bodyweight?.spoken.hasSuffix(bodyweight?.display ?? "") == true)
     }
 
     // MARK: - Units
@@ -101,10 +316,10 @@ struct WatchRestNextSetSummaryTests {
         let exercises = [makeExercise(name: "Squat", sets: [(reps: 5, kilograms: 100)])]
 
         let kilograms = WatchRestNextSetSummary.target(
-            in: exercises, exerciseIndex: 0, setIndex: 0, unit: .kilograms
+            in: exercises, exerciseIndex: 0, setIndex: 0, startedAfterExerciseID: nil, unit: .kilograms
         )
         let pounds = WatchRestNextSetSummary.target(
-            in: exercises, exerciseIndex: 0, setIndex: 0, unit: .pounds
+            in: exercises, exerciseIndex: 0, setIndex: 0, startedAfterExerciseID: nil, unit: .pounds
         )
 
         #expect(kilograms?.display == "100 kg × 5")
@@ -120,7 +335,7 @@ struct WatchRestNextSetSummaryTests {
 
         let displays = WeightUnit.allCases.map { unit in
             WatchRestNextSetSummary.target(
-                in: exercises, exerciseIndex: 0, setIndex: 0, unit: unit
+                in: exercises, exerciseIndex: 0, setIndex: 0, startedAfterExerciseID: nil, unit: unit
             )?.display
         }
 
@@ -145,7 +360,7 @@ struct WatchRestNextSetSummaryTests {
         ]
 
         let weighted = WatchRestNextSetSummary.target(
-            in: exercises, exerciseIndex: 0, setIndex: 0, unit: .kilograms
+            in: exercises, exerciseIndex: 0, setIndex: 0, startedAfterExerciseID: nil, unit: .kilograms
         )
         #expect(weighted?.spoken.contains(String(localized: "Next set")) == true)
         #expect(weighted?.spoken.contains("80") == true)
@@ -156,7 +371,7 @@ struct WatchRestNextSetSummaryTests {
         #expect(weighted?.spoken.contains("×") == false)
 
         let bodyweight = WatchRestNextSetSummary.target(
-            in: exercises, exerciseIndex: 0, setIndex: 1, unit: .kilograms
+            in: exercises, exerciseIndex: 0, setIndex: 1, startedAfterExerciseID: nil, unit: .kilograms
         )
         #expect(bodyweight?.spoken.contains(String(localized: "Next set")) == true)
         #expect(bodyweight?.spoken.hasSuffix(bodyweight?.display ?? "") == true)
@@ -169,25 +384,26 @@ struct WatchRestNextSetSummaryTests {
         let exercises = [makeExercise(name: "Bench Press", sets: [(reps: 10, kilograms: 60)])]
 
         #expect(WatchRestNextSetSummary.target(
-            in: exercises, exerciseIndex: 1, setIndex: 0, unit: .kilograms
+            in: exercises, exerciseIndex: 1, setIndex: 0, startedAfterExerciseID: nil, unit: .kilograms
         ) == nil)
         #expect(WatchRestNextSetSummary.target(
-            in: exercises, exerciseIndex: 0, setIndex: 1, unit: .kilograms
+            in: exercises, exerciseIndex: 0, setIndex: 1, startedAfterExerciseID: nil, unit: .kilograms
         ) == nil)
         #expect(WatchRestNextSetSummary.target(
-            in: exercises, exerciseIndex: -1, setIndex: 0, unit: .kilograms
+            in: exercises, exerciseIndex: -1, setIndex: 0, startedAfterExerciseID: nil, unit: .kilograms
         ) == nil)
         #expect(WatchRestNextSetSummary.target(
-            in: exercises, exerciseIndex: 0, setIndex: -1, unit: .kilograms
+            in: exercises, exerciseIndex: 0, setIndex: -1, startedAfterExerciseID: nil, unit: .kilograms
         ) == nil)
         #expect(WatchRestNextSetSummary.target(
-            in: [], exerciseIndex: 0, setIndex: 0, unit: .kilograms
+            in: [], exerciseIndex: 0, setIndex: 0, startedAfterExerciseID: nil, unit: .kilograms
         ) == nil)
         // An exercise whose sets were all removed — the same guard, one level in.
         #expect(WatchRestNextSetSummary.target(
             in: [makeExercise(name: "Empty", sets: [])],
             exerciseIndex: 0,
             setIndex: 0,
+            startedAfterExerciseID: nil,
             unit: .kilograms
         ) == nil)
     }

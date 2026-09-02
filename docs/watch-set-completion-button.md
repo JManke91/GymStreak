@@ -197,6 +197,23 @@ its combined accessibility label from the full, untruncated `exerciseName`, so
 VoiceOver never depended on the visual truncation. The measurement probe is
 `accessibilityHidden(true)`.
 
+**Two invariants added 2026-09-01**, when the rest timer became the second call
+site (`docs/watch-rest-timer-ui.md` § "Naming the exercise when it changes"):
+
+- The hidden **layout owner is pinned to `minimumScaleFactor(1)`**. An ancestor's
+  scale factor reaches the owner but not the visible label (which sets its own
+  0.85 floor and goes `fixedSize` at full scale while scrolling), so without the
+  pin the base box can be *shorter* than the label — and `.clipped()` clips to
+  the base, shaving a scrolling name's ascenders. Harmless where no ancestor
+  scales (the top zone), load-bearing where one does (the rest caption's 0.6).
+- **`isSuspended`** stops the cycle while the label is mounted but unreadable
+  (behind `opacity(0)`, collapsed, or occluded). It folds into `isAnimating` and
+  therefore into `cycleIdentity`, so it toggles the `.task` rather than the
+  view's existence: `@State` survives, the label parks at the head, and lifting
+  the suspension restarts the head dwell — which is what a reader wants at the
+  moment the label becomes visible. Gating with an `if` at the call site instead
+  would destroy the `@State` and recreate the task on every toggle.
+
 **Tests.** `GymStreakWatchTests/WatchMarqueeTextTests.swift` — 9 cases pinning the
 shrink/scroll handover at the scale floor, the zero-width first-layout guard, travel
 timing, and the head-dominance invariant.
@@ -205,7 +222,7 @@ timing, and the head-dominance invariant.
 ### Components Involved (all watchOS target)
 - **`CompactActionBar.swift`**: fused action row (glass complete button + chevrons)
 - **`WorkoutTopProgressView.swift`**: top zone — routine level (`Exercise X / Y` label + neutral-gray per-exercise segment bar) and exercise level (name + green-accented `Set X/Y` counter); pure display, reads only its init params (`exerciseName`, `exerciseIndex`/`exerciseCount`, `setIndex`/`setCount`, `exerciseProgress`)
-- **`WatchMarqueeText.swift`**: the single-line label that scrolls its overflow through a fixed slot instead of ellipsizing it, plus `WatchMarqueeCycle` (pure scroll-threshold + pacing geometry, unit-tested). Used for the exercise name in the top zone. **Single-instance only — never in a `List`/`ForEach` row**: each instance costs three text measurements, a long-lived `Task` and a repeating animation, which per row is exactly the per-item cost the rendering rules prohibit
+- **`WatchMarqueeText.swift`**: the single-line label that scrolls its overflow through a fixed slot instead of ellipsizing it, plus `WatchMarqueeCycle` (pure scroll-threshold + pacing geometry, unit-tested). Used for the exercise name in the top zone, and — since 2026-09-01 — for the exercise name on the full-screen rest timer's caption line, where the slot is far narrower (58 pt at 40 mm) and the same tail-truncation argument applies with more force (`docs/watch-rest-timer-ui.md` § "Naming the exercise when it changes"). **Single-instance only — never in a `List`/`ForEach` row**: each instance costs three text measurements, a long-lived `Task` and a repeating animation, which per row is exactly the per-item cost the rendering rules prohibit
 - **`FullScreenSetEditorView.swift`**: screen layout, shared steppers, done-flash state, rest/elapsed toolbar status; passes the current exercise/set indices and counts, and derives `exerciseProgress` (per-exercise completion fractions) from `viewModel.exercises`, into the top zone
 - **`CompactValueEditor.swift`**: weight/reps value card (steppers were moved out of it into the editor)
 - **`WorkoutScreenStyle.swift`**: `WorkoutScreenMetrics` size tiers, `PressScaleStyle`, `ChevronCircleStyle`
