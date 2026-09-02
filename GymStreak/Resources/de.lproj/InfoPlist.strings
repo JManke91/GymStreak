@@ -1,0 +1,12 @@
+/*
+  InfoPlist.strings
+  GymStreak
+
+  Lokalisierte Texte für die System-Berechtigungsdialoge. Die Schlüssel selbst
+  stehen als `INFOPLIST_KEY_*` Build Settings in der gebauten Info.plist (siehe
+  project.pbxproj); diese Datei übersetzt nur den angezeigten Text.
+
+  Siehe docs/calendar-sync.md §3.
+*/
+
+"NSCalendarsFullAccessUsageDescription" = "Gym Streak trägt deine geplanten Workouts in einen Kalender ein, den die App für dich anlegt. Vollzugriff ist nötig, damit diese Einträge auch aktualisiert und entfernt werden können, wenn sich dein Plan ändert. Gym Streak greift dabei ausschließlich auf seinen eigenen Kalender zu.";

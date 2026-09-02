@@ -60,6 +60,11 @@ struct SettingsRootView: View {
                             preference: dependencies.weightUnitPreference
                         )
 
+                        CalendarSyncSettingsSectionView(
+                            preference: dependencies.calendarSyncPreference,
+                            sync: dependencies.workoutCalendarSync
+                        )
+
                         SettingsSectionView(
                             header: "settings.section.ai_coach".localized,
                             footer: "settings.section.ai_coach.footer".localized

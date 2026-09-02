@@ -115,6 +115,18 @@ final class AppDependencies: ObservableObject {
     /// it says. Presentation only ever sees `WeightUnitPreferenceProviding`.
     let weightUnitPreference: WeightUnitPreferenceProviding
 
+    /// Whether the user opted into mirroring planned workouts to Apple Calendar
+    /// (docs/calendar-sync.md). Intent only — `workoutCalendarSync` owns whether
+    /// the permission and the app's calendar are actually in place. Presentation
+    /// only ever sees `CalendarSyncPreferenceProviding`.
+    let calendarSyncPreference: CalendarSyncPreferenceProviding
+
+    /// Owner of the app's dedicated "GymStreak" calendar and the only holder of
+    /// an `EKEventStore` (docs/calendar-sync.md). App-lifetime because the store
+    /// is expensive to build and its authorization state is per-instance;
+    /// Presentation only ever sees `WorkoutCalendarSyncing`.
+    let workoutCalendarSync: WorkoutCalendarSyncing
+
     /// The Pro entitlement every gate reads (docs/pro-subscription.md): the
     /// Founder grant composed with the RevenueCat entitlement. This is the only
     /// place the purchase layer is named — Presentation only ever sees
@@ -217,6 +229,8 @@ final class AppDependencies: ObservableObject {
         self.deviceDiagnostics = SystemDeviceDiagnosticsProvider()
         let weightUnitPreference = WeightUnitPreference.shared
         self.weightUnitPreference = weightUnitPreference
+        self.calendarSyncPreference = CalendarSyncPreference.shared
+        self.workoutCalendarSync = EventKitWorkoutCalendarSync()
         // Constructing the gateway configures the RevenueCat SDK — this runs in
         // `GymStreakApp.init()`, so it happens once, before any UI exists and
         // before anything can read an entitlement.

@@ -30,6 +30,12 @@ section/row blueprint documented here.
 - **Data** section: a single iCloud row that reports at a glance whether the user's data is
   safe — state-tinted icon tile, "Last: \<timestamp\>" subtitle and a status dot (or spinner)
   with a short label. Footnote: "Your training data syncs automatically via iCloud …".
+- **Calendar** section: one toggle, "Sync to Apple Calendar", that asks for full Calendar
+  access and gives the app its own "Gym Streak" calendar; switching it off deletes that
+  calendar again. A denied or "Add Only" grant leaves the toggle off and adds a tappable row
+  that opens the app's page in Settings. The whole feature — why full access is required, the
+  source-selection rule, the concurrency answers — is documented in `docs/calendar-sync.md`;
+  this file does not repeat it.
 - **AI Coach** section: its row pushes the **existing** `AICoachSettingsView` unchanged.
 - **Support** section: "App bewerten" / "Rate app" deep-links to the App Store's
   write-a-review composer, and "Support kontaktieren" / "Contact support" hands a prefilled
@@ -58,6 +64,15 @@ section/row blueprint documented here.
 | `Presentation/Views/Settings/Components/SubscriptionSettingsSectionView.swift` | Pro plan section: renders the summary, or nothing while gating is off |
 | `Presentation/ViewModels/Pro/SubscriptionStatusSummary.swift` | Entitlement → plan + copy keys; the kill-switch visibility rule |
 | `Presentation/Views/Pro/CustomerCenterSettingsRow.swift` | The Manage-subscription row and its `CustomerCenterView` presentation |
+| `Presentation/Views/Settings/Components/CalendarSyncSettingsSectionView.swift` | Calendar section: the opt-in toggle plus the denied/failed rows (`docs/calendar-sync.md`) |
+| `Presentation/ViewModels/CalendarSyncSettingsViewModel.swift` | The toggle's state machine: request → create calendar → persist the flag, and the failure vocabulary |
+| `Domain/Interfaces/WorkoutCalendarSyncing.swift` | `CalendarAccessStatus`, `WorkoutCalendarSyncError` and the gateway protocol — no EventKit in `Domain/` |
+| `Domain/Interfaces/CalendarSyncPreferenceProviding.swift` | The opt-in flag's surface |
+| `Data/Calendar/EventKitWorkoutCalendarSync.swift` | The only holder of an `EKEventStore`: permission handshake and calendar ownership |
+| `Data/Calendar/WorkoutCalendarAdoption.swift` | Duplicate guard: adopts the calendar a previous install left behind instead of creating a second |
+| `Data/Preferences/CalendarSyncPreference.swift` | The opt-in flag, write-through into `UserDefaults` |
+| `GymStreakTests/CalendarSyncOptInTests.swift` | Flag persistence plus the grant/denied/restricted/removal branches against a fake gateway |
+| `Resources/{en,de}.lproj/InfoPlist.strings` | Localized text for the system Calendar permission prompt; the key itself stays an `INFOPLIST_KEY_*` build setting |
 | `Presentation/Views/Settings/Components/ICloudSyncRowView.swift` | iCloud row: subscribes to the status stream, maps state → icon/tint/label |
 | `Domain/Interfaces/CloudSyncStatusProviding.swift` | `CloudSyncState`, `CloudSyncStatus`, the provider protocol |
 | `Data/Sync/CloudKitSyncStatusMonitor.swift` | The status source (CloudKit account status + mirroring events + network path) |

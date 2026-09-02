@@ -899,6 +899,7 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = GymStreak/Info.plist;
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
+				INFOPLIST_KEY_NSCalendarsFullAccessUsageDescription = "Gym Streak puts your planned workouts into a calendar it creates for you. Full access is required so it can also update and remove those entries when your plan changes; Gym Streak only ever touches its own calendar.";
 				INFOPLIST_KEY_NSHealthShareUsageDescription = "GymStreak needs access to read your workout data to display your fitness history and avoid duplicate entries.";
 				INFOPLIST_KEY_NSHealthUpdateUsageDescription = "GymStreak needs access to save your workouts to Apple Health so they appear in the Fitness app and contribute to your activity rings.";
 				INFOPLIST_KEY_NSSupportsLiveActivities = YES;
@@ -943,6 +944,7 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = GymStreak/Info.plist;
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
+				INFOPLIST_KEY_NSCalendarsFullAccessUsageDescription = "Gym Streak puts your planned workouts into a calendar it creates for you. Full access is required so it can also update and remove those entries when your plan changes; Gym Streak only ever touches its own calendar.";
 				INFOPLIST_KEY_NSHealthShareUsageDescription = "GymStreak needs access to read your workout data to display your fitness history and avoid duplicate entries.";
 				INFOPLIST_KEY_NSHealthUpdateUsageDescription = "GymStreak needs access to save your workouts to Apple Health so they appear in the Fitness app and contribute to your activity rings.";
 				INFOPLIST_KEY_NSSupportsLiveActivities = YES;

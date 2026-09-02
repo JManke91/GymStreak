@@ -1261,3 +1261,15 @@
 // once at seed time into the mutable Routine.name — see
 // docs/example-starter-routine.md.
 "seed.routine.full_body_starter" = "Ganzkörper-Starter";
+
+/* MARK: - Kalender-Sync (docs/calendar-sync.md) */
+"calendar_sync.section.title" = "Kalender";
+"calendar_sync.section.footer" = "Gym Streak legt einen eigenen Kalender \"Gym Streak\" für deine geplanten Workouts an. Wenn du das ausschaltest, wird dieser Kalender wieder gelöscht — samt allem, was Gym Streak darin eingetragen hat. Deine anderen Kalender bleiben unberührt. Löschst du die App, ohne das vorher auszuschalten, bleibt der Kalender in deinem iCloud-Account — du kannst ihn in der Kalender-App unter Kalender → Bearbeiten → Kalender löschen entfernen.";
+"calendar_sync.row.title" = "Mit Apple Kalender synchronisieren";
+"calendar_sync.row.subtitle" = "Deine geplanten Workouts im Kalender";
+"calendar_sync.calendar.title" = "Gym Streak";
+"calendar_sync.denied.title" = "Kalenderzugriff erforderlich";
+"calendar_sync.denied.subtitle" = "Hier tippen, dann Kalender → Vollzugriff. Gym Streak braucht Vollzugriff, um eingetragene Workouts zu aktualisieren und zu entfernen, wenn sich dein Plan ändert.";
+"calendar_sync.failed.title" = "Kalender konnte nicht angelegt werden";
+"calendar_sync.failed.no_source.subtitle" = "Auf diesem iPhone ist kein Kalender-Account verfügbar. Füge unter Einstellungen → Kalender → Accounts einen hinzu und versuche es erneut.";
+"calendar_sync.failed.write.subtitle" = "Apple Kalender hat die Änderung abgelehnt. Bitte versuche es erneut.";

@@ -1261,3 +1261,15 @@
 // once at seed time into the mutable Routine.name — see
 // docs/example-starter-routine.md.
 "seed.routine.full_body_starter" = "Full Body Starter";
+
+/* MARK: - Calendar Sync (docs/calendar-sync.md) */
+"calendar_sync.section.title" = "Calendar";
+"calendar_sync.section.footer" = "Gym Streak creates its own \"Gym Streak\" calendar for your planned workouts. Turning this off deletes that calendar again, along with everything Gym Streak put in it. Your other calendars are never touched. If you delete the app without turning this off first, the calendar stays in your iCloud account — you can remove it in the Calendar app under Calendars → Edit → Delete Calendar.";
+"calendar_sync.row.title" = "Sync to Apple Calendar";
+"calendar_sync.row.subtitle" = "Your planned workouts, in Calendar";
+"calendar_sync.calendar.title" = "Gym Streak";
+"calendar_sync.denied.title" = "Calendar access needed";
+"calendar_sync.denied.subtitle" = "Tap here, then Calendars → Full Access. Gym Streak needs full access so it can update and remove the workouts it added when your plan changes.";
+"calendar_sync.failed.title" = "Couldn't set up the calendar";
+"calendar_sync.failed.no_source.subtitle" = "No calendar account is available on this iPhone. Add one in Settings → Calendar → Accounts and try again.";
+"calendar_sync.failed.write.subtitle" = "Apple Calendar refused the change. Please try again.";

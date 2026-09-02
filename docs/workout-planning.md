@@ -7,6 +7,8 @@ Because the number of planned sessions in a given week depends on the schedule, 
 
 Target: **iOS app only** (`GymStreak`). The watch is untouched — schedules are not part of the watch-sync DTO.
 
+These plans are also what **Apple Calendar sync** publishes — an opt-in feature with its own doc, `docs/calendar-sync.md`. Slice 1 (the opt-in toggle and the app-owned calendar) has shipped; no events are written from schedules yet.
+
 ## Decisions (confirmed with the user)
 - **Hybrid schedule model** — each routine is planned *either* by a rolling cadence (**every N days**) *or* on fixed **weekdays** (e.g. Mon/Wed/Fri). A routine can also be **unplanned**.
 - **Goal only for v1** — planning drives the weekly goal + "next due" ordering. **Reminders/notifications are intentionally deferred to phase 2** (research already done, see below).
@@ -290,5 +292,5 @@ Local notifications when a planned routine is due. Findings (via `ios-api-resear
 - **"Every N days"** is **not** expressible as a calendar recurrence (`DateComponents` only matches calendar-aligned fields). Use a **rolling window of one-shot** `UNCalendarNotificationTrigger(..., repeats: false)`, ids `routine.<id>.occurrence.<isoDate>`, refreshed on app foreground; stay under the **64 pending-notification** cap by budgeting a look-ahead window per routine.
 - **Authorization**: just-in-time `requestAuthorization(options:)` when the user first enables a reminder; check `getNotificationSettings` before scheduling; avoid `.provisional` (silent delivery defeats a reminder).
 - **Editing/removing a plan**: `removePendingNotificationRequests(withIdentifiers:)` scoped to that routine's id namespace, then reschedule (re-adding same id replaces).
-- **EventKit/`EKRecurrenceRule`**: not appropriate — it needs Calendar permission and writes user-visible calendar events. Plain `Calendar`/`DateComponents` math is correct here.
+- **EventKit/`EKRecurrenceRule`**: not appropriate **as the reminder mechanism** — it needs Calendar permission and writes user-visible calendar events, so a reminder would cost the user a permission and an event they never asked for. Plain `Calendar`/`DateComponents` math is correct here. This is *not* a rejection of calendar sync as such: mirroring planned workouts into a calendar the app owns is a separate, opt-in feature, shipped from `docs/calendar-sync.md`. The two are independent — reminders notify, calendar sync publishes.
 - Architecture: add a routine-specific `Domain/Interfaces/WorkoutReminderScheduling` protocol and implementation alongside the existing `Data/Notifications/UserNotificationRestTimerScheduler`, wired in `AppDependencies`. The existing rest-timer gateway is deliberately not reused because planned-routine reminders need per-routine identifier namespaces and rolling-window rescheduling.

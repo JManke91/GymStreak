@@ -1,0 +1,14 @@
+/*
+  InfoPlist.strings
+  GymStreak
+
+  Localized values for the system permission prompts. The keys themselves live
+  in the built Info.plist as `INFOPLIST_KEY_*` build settings (see
+  project.pbxproj); this file only translates the text the system shows.
+
+  Without it the prompt falls back to the build setting's literal, which is
+  English — that is why a German device showed an English calendar prompt.
+  See docs/calendar-sync.md §3.
+*/
+
+"NSCalendarsFullAccessUsageDescription" = "Gym Streak puts your planned workouts into a calendar it creates for you. Full access is required so it can also update and remove those entries when your plan changes; Gym Streak only ever touches its own calendar.";
