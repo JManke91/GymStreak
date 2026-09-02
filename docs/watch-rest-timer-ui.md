@@ -978,6 +978,100 @@ so the state has to live in their common parent. `WorkoutRestTimerOverlay` takes
 it as a `@Binding`; only views that actually read the key re-render when it
 changes, which is why it is not another `@Published` on the view model.
 
+### The covered screen stops working (2026-09-02)
+
+The same sibling arrangement has a second consequence, and this one is not
+cosmetic. Because the overlay is a sibling of the `NavigationStack`, a pushed
+`FullScreenSetEditorView` is **never unmounted** when a rest begins — the large
+timer merely paints an opaque, screen-filling surface over it. Occlusion is not
+visibility as far as SwiftUI is concerned, so the editor's exercise-name
+`WatchMarqueeText` kept measuring, kept a long-lived `Task` alive and kept
+re-running its scroll cycle for the whole rest, behind a surface nobody can see
+through. Completing a set in the editor is *how* a rest normally starts, so this
+was paid on every rest whose exercise name overflows the slot — 47 of 96 German
+seed names do. Nothing about it was visible; it was pure battery cost on
+battery-constrained hardware, and the same trade `RestAdjustmentFooter` already
+refuses ("must not be constructed just to be hidden").
+
+A second environment value of the same shape carries the signal:
+**`\.isCoveredByRestTimer`**, declared beside `\.isRestPillStepperOpen` in
+`WorkoutRestTimerOverlay.swift` and published by `ActiveWorkoutView` as
+`viewModel.isResting && !viewModel.isRestTimerMinimized`.
+`WorkoutTopProgressView` reads it and hands it to the marquee's `isSuspended`,
+which parks the label at its head and tears the cycle down without destroying
+the view's `@State` (`docs/watch-set-completion-button.md` § "Scrolling exercise
+name").
+
+Three things about it are load-bearing:
+
+- **The `!isRestTimerMinimized` half.** A minimized rest leaves the editor
+  genuinely visible and readable, so suspending there would be a regression
+  rather than a saving.
+- **It is independent of `isRestPillStepperOpen`** and must not be conflated
+  with it: the grown stepper *fades the routine label*, this one *suspends the
+  exercise name's motion*, and each is true in a rest state where the other is
+  not.
+- **It is an environment key, not an `@EnvironmentObject`.**
+  `WorkoutTopProgressView` is deliberately a pure layout container; observing
+  `WatchWorkoutViewModel` for this would re-render a two-property layout view on
+  every countdown tick, which is exactly what the "observe narrowly" rendering
+  rule forbids. Threading a `Bool` parameter down through
+  `FullScreenSetEditorView` was the other option and was rejected as noisier for
+  the same result.
+
+**One accepted cosmetic edge.** Suspension applies in the same frame the large
+panel begins its 0.25 s `presenceAnimation` fade-in, and `settleAtHead()` parks
+the offset with `disablesAnimations = true` while `.fixedSize(horizontal:)` flips
+off — so a name caught mid-scroll snaps to its head and to the ellipsized form
+during the first frames of the fade, before the panel is fully opaque. Accepted
+rather than delayed: a timer to hold the suspension until the panel is opaque
+would buy back 250 ms of animation and add state to do it. It is never a frozen
+half-scrolled state, which is the invariant that actually matters.
+
+**Audited at the same time: no other `WatchMarqueeText` is mounted off-screen** — but
+note the audit was scoped to **marquees**, not to animations in general.
+The vertical `TabView` does keep neighbouring pages alive — the reason this
+overlay is single-instance at all — but none of its three pages
+(`ExerciseListView`, `MetricsView`, `ControlsView`) contains a marquee, and the
+only other call site, the rest caption's (`RestAdjustmentCaption`), lives inside
+`RestTimerLargeView`, which is mounted only while the large timer is the topmost
+thing on screen. So the set editor was the only marquee ever
+animating unseen.
+
+**Two same-class offenders found, both fixed with the same signal.**
+
+- `StatusIcon` pulsed the in-progress row's glyph in the exercise list
+  (`.symbolEffect(.pulse, isActive: !reduceMotion)`).
+- `WorkoutMetricsView` breathed its `heart.fill` and `flame` glyphs — **four
+  `.symbolEffect(.breathe)` calls with no `isActive:` argument at all**, so they ignored
+  Reduce Motion as well as occlusion. It is a *shared subview* instantiated on three
+  screens: `FullScreenSetEditorView` (the covered set editor — the very screen this
+  ticket was about), `WorkoutProgressHeader` (the exercise list's header card in tab 0),
+  and `RestTimerLargeView` (inside the timer itself).
+
+Both now gate on `!reduceMotion && !isCoveredByRestTimer`. The Reduce Motion half of the
+second one is a **genuine accessibility fix**, independent of the rest timer: these were
+the codebase's only ungated indefinite symbol effects, and after this change the watch
+target has none left.
+
+**The timer's own copy is exempt by construction, and that is why the environment key
+beats a parameter.** `RestTimerLargeView`'s `WorkoutMetricsView` must keep breathing
+while the timer is on screen. It does, for free: `WorkoutRestTimerOverlay` is a ZStack
+*sibling* of the `NavigationStack` the key is published on, so nothing inside the
+overlay inherits the value and it stays at its `false` default. Threading a `Bool`
+parameter instead would have required remembering to pass `false` down two levels into
+the overlay, and getting that wrong is a visible regression — freezing the heart on the
+screen the user is looking at. The default supplies the correct answer by doing nothing.
+
+**Why two sweeps missed it — the durable lesson.** The first audit searched for
+`WatchMarqueeText`; the second searched for `symbolEffect` *within the row*. Neither
+swept a **shared subview used by several screens**, which is exactly how four looping
+effects on the covered set editor survived both passes. The rule this page establishes
+is not "marquees suspend under the timer" but **anything that repeats or holds a task
+suspends when the large timer covers it**, and `\.isCoveredByRestTimer` is the signal for
+all of it. When auditing for it, sweep the *screens'* whole view trees, not the files
+that look relevant. A new repeating animation on any workout screen should read the key.
+
 ### Implementation rules
 
 1. **`.focusable()` must precede `.digitalCrownRotation(...)`** in the modifier
@@ -1410,19 +1504,6 @@ recorded that were never applied, kept here so they are not lost with them.
   which also records the larger symptom — `stopRestTimer` forces
   `isRestTimerMinimized = false`, so a minimized pill is expanded to show the
   dead timer.
-- **The set editor's marquee keeps animating underneath the full-screen rest
-  timer.** `WorkoutRestTimerOverlay` is a *sibling* of the `NavigationStack`
-  (`ActiveWorkoutView.swift`), so a pushed `FullScreenSetEditorView` stays mounted
-  beneath the opaque rest surface — occlusion is not visibility as far as SwiftUI
-  is concerned, and its `WatchMarqueeText` scrolls on for the whole rest. True
-  since the marquee shipped (`73e1309`) and independent of the rest timer's own
-  name line, which now suspends itself. The mechanism to fix it already exists:
-  pass `isSuspended: viewModel.isResting && !viewModel.isRestTimerMinimized` at
-  `WorkoutTopProgressView`'s call site — the only open question is how to thread
-  that state into what is deliberately a pure layout container (it already reads
-  `@Environment(\.isRestPillStepperOpen)`, so an environment key is the obvious
-  route). **Ticketed:**
-  `.scratch/watch-rest-overlay-followups/issues/01-suspend-the-occluded-exercise-name-marquee.md`.
 - **The caption's label is drawn larger than the value it annotates.** On watchOS
   `.footnote` (13 pt) is the *smallest* text style and `.caption2` (14) /
   `.caption` (15) sit above it — the reverse of iOS — so the "Next" label and the
@@ -1563,6 +1644,16 @@ device-only, so check them first if jank ever appears.
 
 ## History
 
+- **2026-09-02** — the set editor's exercise-name marquee stopped animating
+  under the full-screen timer (ticket
+  `.scratch/watch-rest-overlay-followups/issues/01`). A second environment key,
+  `\.isCoveredByRestTimer`, published beside `\.isRestPillStepperOpen`, feeds the
+  marquee's `isSuspended` — see "The covered screen stops working". Nothing
+  user-facing changed; the audit for other off-screen marquees came up empty. The
+  same key then also stopped the two non-marquee offenders in the same category:
+  `StatusIcon`'s pulse and `WorkoutMetricsView`'s four `.breathe` effects — the latter
+  previously ungated even for Reduce Motion, and shared by three screens including the
+  covered set editor.
 - **2026-09-01** — the caption slot gained a **fourth state**: the next set's
   target (`Next ⬮ 80 kg × 8`), which now takes the line from "REST" for the
   whole

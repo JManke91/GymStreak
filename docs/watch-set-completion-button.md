@@ -214,20 +214,123 @@ site (`docs/watch-rest-timer-ui.md` § "Naming the exercise when it changes"):
   moment the label becomes visible. Gating with an `if` at the call site instead
   would destroy the `@State` and recreate the task on every toggle.
 
+**Suspended under the full-screen rest timer (2026-09-02).** The top zone's own
+marquee is suspended while the large rest timer covers it. This is not optional
+tidiness: `WorkoutRestTimerOverlay` is a *sibling* of `ActiveWorkoutView`'s
+`NavigationStack`, so a pushed `FullScreenSetEditorView` is **never unmounted**
+when a rest starts — it is merely painted over by an opaque, screen-filling
+surface, and occlusion is not visibility as far as SwiftUI is concerned. Without
+a signal the name measured, scrolled and re-animated with its `Task` alive for
+the entire rest, behind a surface nobody can see through; and since completing a
+set *here* is how a rest normally starts, every rest paid it whenever the name
+overflows.
+
+The signal is the environment value **`\.isCoveredByRestTimer`** — declared
+beside `\.isRestPillStepperOpen` in `WorkoutRestTimerOverlay.swift`, published by
+`ActiveWorkoutView` as `viewModel.isResting && !viewModel.isRestTimerMinimized`,
+read by `WorkoutTopProgressView` and handed straight to `isSuspended`. Note the
+`!isRestTimerMinimized` half: a *minimized* rest leaves the editor genuinely
+visible, so suspending there would be a regression, not a saving. An environment
+key rather than an `@EnvironmentObject` because this view is a pure layout
+container and observing the view model would re-render it on every countdown
+tick; and rather than a threaded parameter because the key beside it already
+proves the route reaches a `NavigationStack` destination. Reduce Motion and
+Always-On are unaffected — all three conditions park the label at its head, so
+they compose instead of fighting. Full reasoning in
+`docs/watch-rest-timer-ui.md` § "The covered screen stops working".
+
 **Tests.** `GymStreakWatchTests/WatchMarqueeTextTests.swift` — 9 cases pinning the
 shrink/scroll handover at the scale floor, the zero-width first-layout guard, travel
 timing, and the head-dominance invariant.
 
+## Why the exercise LIST does not scroll its names (2026-09-02)
+
+The exercise list (tab 0 of the active workout) has the same overflow problem and a
+**different answer**: the name gets the full row width and wraps to a second line,
+rather than becoming a marquee.
+
+**The problem was worse here than in the top zone.** On 40 mm the row read
+"Kniebe…" / "Bankdr…" — roughly six characters — which is precisely the failure the
+marquee exists to prevent, and it lands on the screen where the user *picks* between
+`Bankdrücken (Langhantel)`, `(Kurzhantel)` and `(Multipresse)`. All four long names in
+the shipped starter routine are 22–26 characters.
+
+**Half of it was a layout bug, not a space shortage.** Measured on 40 mm against device
+screenshots: the name occupied a **45.5 pt** slot while **~51 pt of the row sat empty**
+between it and the chevron. `Text` and the trailing `Spacer(minLength: 4)` are both
+flexible, so the `HStack` split the surplus between them. Replacing the `Spacer` with
+`.frame(maxWidth: .infinity, alignment: .leading)` on the text column — the same
+substitution `CompactActionBar` makes — widened that slot to **~77 pt**, the name's
+trailing edge reaching x=122 pt against a chevron starting at x=137.5 pt (the 45.5 pt
+and ~77 pt figures are widths; 122 and 137.5 are x-coordinates on the 162 pt screen). A `.layoutPriority(1)` on the column while keeping the `Spacer` was tried
+first and only reached 60.5 pt: a **wrapped `Text` negotiates its own ideal width**
+instead of consuming the whole proposal, so the explicit frame is what is load-bearing.
+
+**Then two lines, not a marquee.** `lineLimit(2)` + `minimumScaleFactor(0.8)` renders
+`Kniebeuge (Langhantel)` in full (verified on the 40 mm simulator). Three reasons the
+marquee was rejected here even though it is the right answer one screen over:
+
+- **`WatchMarqueeText` must never go in a `List`/`ForEach` row.** Each instance costs
+  three text measurements, a long-lived `Task` and a repeating animation; per row that
+  is exactly the per-item cost the rendering rules prohibit. A six-exercise routine
+  would mount six of them, and rows scroll off-screen while still animating — the same
+  fault as `docs/watch-rest-timer-ui.md` § "The covered screen stops working", multiplied.
+- **Six names sliding at once is noise.** The top zone works *because* there is exactly
+  one moving label on the screen.
+- **Vertical growth is affordable in a scrolling list.** Wrapping was rejected for the
+  set editor because that screen is fixed-height and already tight at 40 mm; a `List`
+  simply scrolls. This is the whole reason the same problem gets opposite answers, and
+  it is why the two-line row is not an inconsistency.
+
+A row with a long name grows from the 44 pt `minTouchTarget` floor to roughly 55 pt, so
+slightly fewer rows are visible at once. Accepted: a legible name beats a denser list of
+ambiguous ones.
+
+**What still clips, and why that was accepted.** Two lines at the 0.8 scale floor hold
+roughly 25 characters (the slot is ~77 pt; `(Langhantel)` rendered 12 characters in
+74 pt, i.e. already at the floor). **20 of the 96 German seed names exceed that** — the
+longest being `Trizepsdrücken über Kopf (Kurzhantel)` (37), `Schulterdrücken sitzend
+(Kurzhantel)` (36) and `Kreuzheben mit gestreckten Beinen` (33) — so their tail still
+truncates on the second line. That is accepted because the *qualifier* becomes partially
+visible even then (`Schulterdrücken (Langhante…` vs `(Maschine)`), which is what
+disambiguation actually requires; the failure being fixed was a name cut to six
+characters, not the last two glyphs of a long one. Thirteen names also contain a single
+word over 14 characters (`Konzentrationscurls`, `Negativbankdrücken`, …) which cannot
+wrap at all and can only shrink.
+
+**The swappable row is narrower and was NOT measured.** Every figure above is from the
+**chevron** row (`!isComplete && !canSwap`). A row with `canSwap == true`
+(`completedSetsCount == 0 && !alternatives.isEmpty`) hides the ~7 pt chevron but hands a
+44 pt button plus 4 pt of spacing to a sibling of the text column, so its name slot is
+roughly **60–66 pt rather than 77 pt** — about 10–11 characters per line, i.e. ~20–22
+over two lines at the 0.8 floor. `Kniebeuge (Langhantel)` (22) is borderline there and
+`Bankdrücken (Langhantel)` (24) still clips. This is derived from the layout, **not
+measured**: the state was not reachable on the verification simulator, whose synced data
+carries no alternatives, so no row in it had `canSwap == true`. It matters more than the
+number suggests, because per `docs/alternative-exercises.md` a row offers a swap
+precisely when equipment variants exist — exactly the names whose trailing qualifier is
+the disambiguator. Reclaiming width there means shrinking the swap button's outer
+`.frame(width: 44, height: 44)`, which is a touch-target decision and was deliberately
+left alone.
+
+Two knobs remain if full names are ever wanted, in increasing cost: `lineLimit(3)`
+covers the whole catalog (37 characters) at the price of ~74 pt rows for that 21%, or
+dropping the trailing chevron frees ~24 pt of width (≈3 characters per line) for no
+vertical cost, at the price of the affordance that signals the row pushes a detail
+screen. Lowering the scale floor below 0.8 was rejected — `docs/watch-set-completion-button.md`
+already argues 0.7 is the edge of mid-workout legibility, and even 0.6 does not fit the
+longest names in two lines.
+
 ## Architecture
 ### Components Involved (all watchOS target)
 - **`CompactActionBar.swift`**: fused action row (glass complete button + chevrons)
-- **`WorkoutTopProgressView.swift`**: top zone — routine level (`Exercise X / Y` label + neutral-gray per-exercise segment bar) and exercise level (name + green-accented `Set X/Y` counter); pure display, reads only its init params (`exerciseName`, `exerciseIndex`/`exerciseCount`, `setIndex`/`setCount`, `exerciseProgress`)
+- **`WorkoutTopProgressView.swift`**: top zone — routine level (`Exercise X / Y` label + neutral-gray per-exercise segment bar) and exercise level (name + green-accented `Set X/Y` counter); a **pure layout container** — it holds no state and never reaches for the view model, taking its data as init params (`exerciseName`, `exerciseIndex`/`exerciseCount`, `setIndex`/`setCount`, `exerciseProgress`), its trailing accessory as a `@ViewBuilder`, and the two rest-timer signals it must react to from the environment (`\.isRestPillStepperOpen` fades the routine label under the grown pill; `\.isCoveredByRestTimer` suspends the name's marquee under the large timer)
 - **`WatchMarqueeText.swift`**: the single-line label that scrolls its overflow through a fixed slot instead of ellipsizing it, plus `WatchMarqueeCycle` (pure scroll-threshold + pacing geometry, unit-tested). Used for the exercise name in the top zone, and — since 2026-09-01 — for the exercise name on the full-screen rest timer's caption line, where the slot is far narrower (58 pt at 40 mm) and the same tail-truncation argument applies with more force (`docs/watch-rest-timer-ui.md` § "Naming the exercise when it changes"). **Single-instance only — never in a `List`/`ForEach` row**: each instance costs three text measurements, a long-lived `Task` and a repeating animation, which per row is exactly the per-item cost the rendering rules prohibit
 - **`FullScreenSetEditorView.swift`**: screen layout, shared steppers, done-flash state, rest/elapsed toolbar status; passes the current exercise/set indices and counts, and derives `exerciseProgress` (per-exercise completion fractions) from `viewModel.exercises`, into the top zone
 - **`CompactValueEditor.swift`**: weight/reps value card (steppers were moved out of it into the editor)
 - **`WorkoutScreenStyle.swift`**: `WorkoutScreenMetrics` size tiers, `PressScaleStyle`, `ChevronCircleStyle`
 - **`OnyxWatchDesignSystem.swift`**: workout-screen color tokens
-- **`ExerciseListView.swift`**: owns the alternative-picker sheet and visible/swipe Swap actions on eligible exercise rows (unchanged); also defines `WorkoutMetricsView` reused for the BPM/kCal column
+- **`ExerciseListView.swift`**: owns the alternative-picker sheet and visible/swipe Swap actions on eligible exercise rows; its row gives the exercise name the row's full width and up to two lines (see "Why the exercise LIST does not scroll its names"); also defines `WorkoutMetricsView` reused for the BPM/kCal column
 
 ### How It Works
 - `CompactActionBar` receives `isCompleted`, `currentSetIndex`, `totalSets`, `completedSets`, and `showDoneFlash` as parameters; it holds no state of its own.

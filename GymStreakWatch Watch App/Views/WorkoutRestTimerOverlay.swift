@@ -64,6 +64,10 @@ private struct RestPillStepperOpenKey: EnvironmentKey {
     static let defaultValue = false
 }
 
+private struct CoveredByRestTimerKey: EnvironmentKey {
+    static let defaultValue = false
+}
+
 extension EnvironmentValues {
     /// True while the minimized pill is grown into its inline ± stepper. Read by
     /// the workout screens whose top-trailing content the grown pill covers —
@@ -72,6 +76,24 @@ extension EnvironmentValues {
     var isRestPillStepperOpen: Bool {
         get { self[RestPillStepperOpenKey.self] }
         set { self[RestPillStepperOpenKey.self] = newValue }
+    }
+
+    /// True while the FULL-SCREEN rest timer covers the screen below it.
+    ///
+    /// Read by workout screens that keep an animation or a long-lived `Task`
+    /// running: this overlay is a *sibling* of the `NavigationStack`, so a
+    /// covered screen is never unmounted — it is merely painted over by an
+    /// opaque surface, and occlusion is not visibility as far as SwiftUI is
+    /// concerned. Nothing else stops that work. See the exercise-name marquee in
+    /// `WorkoutTopProgressView`.
+    ///
+    /// Deliberately false while the timer is *minimized*: the pill leaves the
+    /// screen genuinely visible and readable. Published by `ActiveWorkoutView`
+    /// for the same reason as `isRestPillStepperOpen`, and independent of it —
+    /// the grown stepper fades the routine label, this suspends motion.
+    var isCoveredByRestTimer: Bool {
+        get { self[CoveredByRestTimerKey.self] }
+        set { self[CoveredByRestTimerKey.self] = newValue }
     }
 }
 

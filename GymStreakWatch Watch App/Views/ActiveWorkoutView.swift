@@ -81,6 +81,14 @@ struct ActiveWorkoutView: View {
                         }
                 }
                 .environment(\.isRestPillStepperOpen, isRestStepperOpen)
+                // The large timer covers whatever screen is below it without
+                // unmounting it, so the screens read this and stop work that has
+                // nobody to run for — see `isCoveredByRestTimer`. False while
+                // minimized: the pill leaves the screen visible.
+                .environment(
+                    \.isCoveredByRestTimer,
+                    viewModel.isResting && !viewModel.isRestTimerMinimized
+                )
 
                 // The one and only rest timer of the active workout, in BOTH of
                 // its states. Owned here — a sibling of the NavigationStack —

@@ -341,6 +341,24 @@ struct WorkoutMetricsView: View {
     let calories: Int
     var size: WorkoutMetricsSize = .medium
 
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    /// The full-screen rest timer covers both screens that show the compact
+    /// readout without unmounting them, so these glyphs would otherwise breathe
+    /// behind an opaque surface for the length of every rest — see
+    /// `docs/watch-rest-timer-ui.md` § "The covered screen stops working".
+    ///
+    /// The rest timer's OWN copy of this view keeps breathing, for free and
+    /// correctly: `WorkoutRestTimerOverlay` is a *sibling* of the
+    /// `NavigationStack` the key is published on, so nothing inside the overlay
+    /// inherits the value and it stays `false` there.
+    @Environment(\.isCoveredByRestTimer) private var isCoveredByRestTimer
+
+    /// Gates the indefinite `.breathe` effects. They previously ran with no
+    /// `isActive:` at all, so they also ignored Reduce Motion.
+    private var isBreathing: Bool {
+        !reduceMotion && !isCoveredByRestTimer
+    }
+
     private let metrics = WorkoutScreenMetrics.current
 
     /// `.medium` is the scrollable list header and keeps its fixed sizes.
@@ -361,7 +379,7 @@ struct WorkoutMetricsView: View {
                     .resizable()
                     .foregroundColor(.red)
                     .frame(width: iconSide, height: iconSide)
-                    .symbolEffect(.breathe)
+                    .symbolEffect(.breathe, isActive: isBreathing)
             }
 
 
@@ -371,7 +389,7 @@ struct WorkoutMetricsView: View {
                         .resizable()
                         .foregroundColor(.red)
                         .frame(width: iconSide, height: iconSide)
-                        .symbolEffect(.breathe)
+                        .symbolEffect(.breathe, isActive: isBreathing)
                 }
                 Text("\(heartRate)")
                     .font(.system(size: valueSize, weight: .bold, design: .rounded).monospacedDigit())
@@ -385,7 +403,7 @@ struct WorkoutMetricsView: View {
                     .resizable()
                     .foregroundColor(.orange)
                     .frame(width: iconSide, height: iconSide)
-                    .symbolEffect(.breathe)
+                    .symbolEffect(.breathe, isActive: isBreathing)
             }
 
             HStack(spacing: 3) {
@@ -394,7 +412,7 @@ struct WorkoutMetricsView: View {
                         .resizable()
                         .foregroundColor(.orange)
                         .frame(width: iconSide, height: iconSide)
-                        .symbolEffect(.breathe)
+                        .symbolEffect(.breathe, isActive: isBreathing)
                 }
                 Text("\(calories)")
                     .font(.system(size: valueSize, weight: .bold, design: .rounded).monospacedDigit())
@@ -435,10 +453,26 @@ struct ExerciseRow: View {
                     StatusIcon(status: status)
 
                     VStack(alignment: .leading, spacing: 2) {
+                        // Wraps to a second line rather than ellipsizing. Ten
+                        // German seed name groups differ ONLY in a trailing
+                        // qualifier — `Bankdrücken` ×3
+                        // (Langhantel/Kurzhantel/Multipresse), `Kniebeuge` ×2 —
+                        // so a truncated tail renders genuinely different
+                        // exercises identically, and this is the screen where
+                        // the user picks between them. Two lines, not a
+                        // marquee: `WatchMarqueeText` is single-instance only
+                        // and must never go in a `List` row (three text
+                        // measurements, a live `Task` and a repeating animation
+                        // *per row*), and six names sliding at once is noise on
+                        // a glance screen. Vertical growth is affordable here
+                        // precisely because this is a scrolling list — the
+                        // reason the same call was made the other way on the
+                        // fixed-height set editor.
                         Text(exercise.name)
                             .font(.headline)
                             .fontWeight(isCurrent ? .semibold : .regular)
-                            .lineLimit(1)
+                            .lineLimit(2)
+                            .minimumScaleFactor(0.8)
 
                         HStack(spacing: 6) {
                             Text("\(exercise.completedSetsCount)/\(exercise.sets.count) sets")
@@ -454,7 +488,16 @@ struct ExerciseRow: View {
                         }
                     }
 
-                    Spacer(minLength: 4)
+                    // Expands to fill the row instead of letting a trailing
+                    // `Spacer` split the surplus — which is what left the name
+                    // truncating with ~51 pt of empty row still to its right
+                    // (measured on 40 mm: a 45.5 pt name slot in ~96 pt of
+                    // space). This stands in for the `Spacer`, the same
+                    // substitution `CompactActionBar` makes; a `layoutPriority`
+                    // alone was not enough, because a *wrapped* `Text`
+                    // negotiates its own ideal width rather than taking the
+                    // whole proposal.
+                    .frame(maxWidth: .infinity, alignment: .leading)
 
                     if !exercise.isComplete && !exercise.canSwap {
                         Image(systemName: "chevron.right")
@@ -552,6 +595,12 @@ enum ExerciseStatus {
 struct StatusIcon: View {
     let status: ExerciseStatus
     @Environment(\.accessibilityReduceMotion) var reduceMotion
+    /// The full-screen rest timer covers this whole page without unmounting it
+    /// (the overlay is a sibling of the `NavigationStack` that wraps the tabs),
+    /// so the pulse would otherwise repeat behind an opaque surface for the
+    /// length of every rest. Same reasoning as the set editor's marquee — see
+    /// `docs/watch-rest-timer-ui.md` § "The covered screen stops working".
+    @Environment(\.isCoveredByRestTimer) var isCoveredByRestTimer
 
     var body: some View {
         Group {
@@ -563,7 +612,7 @@ struct StatusIcon: View {
             case .inProgress:
                 Image(systemName: "circle.dotted")
                     .foregroundStyle(OnyxWatch.Colors.tint)
-                    .symbolEffect(.pulse, isActive: !reduceMotion)
+                    .symbolEffect(.pulse, isActive: !reduceMotion && !isCoveredByRestTimer)
 
             case .partiallyComplete:
                 Image(systemName: "circle.bottomhalf.filled")

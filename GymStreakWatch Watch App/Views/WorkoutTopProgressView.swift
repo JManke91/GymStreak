@@ -40,6 +40,9 @@ struct WorkoutTopProgressView<Trailing: View>: View {
     /// The minimized rest pill grown into its inline ± stepper reaches across
     /// this row, so the routine label yields to it for the few seconds it is up.
     @Environment(\.isRestPillStepperOpen) private var isRestPillStepperOpen
+    /// The full-screen rest timer covers this entire zone while it is up, and
+    /// covering is not unmounting — see the marquee's `isSuspended` below.
+    @Environment(\.isCoveredByRestTimer) private var isCoveredByRestTimer
 
     private let metrics = WorkoutScreenMetrics.current
     private let accent = OnyxWatch.Colors.accentGreen
@@ -111,7 +114,14 @@ struct WorkoutTopProgressView<Trailing: View>: View {
                 WatchMarqueeText(
                     text: exerciseName,
                     font: .system(size: metrics.topNameSize, weight: .bold),
-                    color: OnyxWatch.Colors.textPrimary
+                    color: OnyxWatch.Colors.textPrimary,
+                    // The set editor stays mounted under the full-screen rest
+                    // timer (the overlay is a sibling of the NavigationStack),
+                    // and a rest normally starts from right here — so without
+                    // this the name would scroll and re-animate, task alive, for
+                    // the whole rest behind an opaque surface. Not while the
+                    // timer is minimized: the name is readable again then.
+                    isSuspended: isCoveredByRestTimer
                 )
 
                 Spacer(minLength: 6)
