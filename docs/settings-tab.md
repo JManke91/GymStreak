@@ -76,7 +76,7 @@ section/row blueprint documented here.
 | `Presentation/Views/Settings/Components/ICloudSyncRowView.swift` | iCloud row: subscribes to the status stream, maps state → icon/tint/label |
 | `Domain/Interfaces/CloudSyncStatusProviding.swift` | `CloudSyncState`, `CloudSyncStatus`, the provider protocol |
 | `Data/Sync/CloudKitSyncStatusMonitor.swift` | The status source (CloudKit account status + mirroring events + network path) |
-| `Data/Sync/CloudKitSyncStatusMonitor+Logging.swift` | Where a sync failure gets recorded: the OSLog `.error` entries and the DEBUG event/state prints (§4.2a) |
+| `Data/Sync/CloudKitSyncStatusMonitor+Logging.swift` | Where a sync failure gets recorded: the OSLog entries — `.error` for a persistent failure or an account problem, `.notice` for a transient one — and the DEBUG event/state prints (§4.2a) |
 | `Data/Sync/CloudKitSyncStatusMonitor+NetworkPath.swift` | `isOnline` — the "actually online" predicate two device measurements produced |
 | `GymStreakTests/CloudSyncNetworkPathTests.swift` | Pins both VPN cases, plus loopback, Ethernet and the unsatisfied edge |
 | `Data/Sync/SyncEventSummary.swift` | The `Sendable` projection of a mirroring event, including the transient-vs-persistent verdict |
@@ -333,7 +333,7 @@ was indistinguishable from a queued one. Three signals close that.
 | Failure | Recorded as | Surfaced to the user as |
 | --- | --- | --- |
 | CloudKit store could not be built → local-only fallback | `Logger(subsystem: LogSubsystem.sync, category: "Mirroring")` `.error`, once at monitor init, carrying the thrown error | Settings iCloud row `.failing` |
-| A mirroring transfer finished unsuccessfully | same logger, `.error`, for **every** failed event — type, the persistent/transient verdict, the error | `.failing` if persistent, `.waiting` if transient |
+| A mirroring transfer finished unsuccessfully | same logger, for **every** failed event — type and error. `.error` when the verdict is persistent **or** an account problem, `.notice` when it is transient (§4.2b) | `.failing` if persistent; an account problem re-queries iCloud and lands `.off` when that confirms; a transient **export** leaves `.waiting` |
 | Saving a routine change threw | `Logger(subsystem: LogSubsystem.sync, category: "RoutineSave")` `.error` | Alert ("Changes couldn't be saved") via `RoutinesViewModel.didFailToSave` and the `routineSaveFailureAlert(_:)` modifier |
 
 `LogSubsystem.sync` (`Extensions/LogSubsystem.swift`) is written once so the two categories
@@ -352,9 +352,166 @@ wolf on a row users are meant to trust, while a false "waiting" only delays the 
 listed codes are the ones a missing record type or a schema drift raises, which is exactly
 the class of failure that hid the plan bug.
 
+**Both verdicts look inside a `.partialFailure`.** CloudKit reports per-zone failures wrapped in
+a `.partialFailure` (`CKError` 2) whose per-item errors carry the actual reason, so
+`SyncEventSummary` classifies through one `inspect(_:matches:)` helper that recurses into
+`partialErrorsByItemID`: `isPersistentFailure` (→ `.failing`) and `isAccountProblem` (→ re-query
+`CKContainer.accountStatus()`). `isAccountProblem` did **not** recurse before 2026-09-03, so a
+`.notAuthenticated` delivered in the shape CloudKit actually uses would have been missed — the one
+behavioural change in that day's work, and an idempotent one.
+
 **Deliberately not built.** No diagnostics screen, no error code in the UI, no retry button,
 and no signal for anything not observed in ticket 02 or named above. The row says whether
 the user's data is leaving the device; the log says why.
+
+### 4.2b Change-token expiry (`CKError` 21) and the CloudKit log noise (research, 2026-09-03)
+
+Observed on a physical iPhone 16 Pro Max running `feature/improvements` from Xcode:
+
+```
+CoreData+CloudKit: -[NSCloudKitMirroringDelegate resetAfterError:andKeepContainer:](589) - resetting
+  internal state after error: <CKError: "Change Token Expired" (21/2026); server message =
+  "client knowledge differs from server knowledge"; container ID = "iCloud.com.jmanke.gymstreak">
+CoreData+CloudKit: … Sending 'NSCloudKitMirroringDelegateWillResetSyncNotificationName'
+  with reason: 'ServerChangeTokenExpired'
+CoreData+CloudKit: -[NSCloudKitMirroringDelegate _importFinishedWithResult:importer:](1392) - Import
+  failed with error: <CKError: "Partial Failure" (2/1011); "Couldn't fetch some items when fetching
+  changes"; partial errors: { com.apple.coredata.cloudkit.zone:__defaultOwner__ = <CKError 21> }>
+mirroring 1 failed (persistent: false): Error Domain=CKErrorDomain Code=2 "(null)"   ← ours
+```
+
+**Verdict: benign and self-healing. Nothing in the sync path was broken and nothing about the
+state machine needed changing** — only how the event is *reported*, which is what the three code
+changes at the end of this section do.
+
+**What `CKError` 21 is.** The server has declared the client's change token — the cursor
+`NSPersistentCloudKitContainer` uses to ask "what changed since I last looked" — too old to answer
+incrementally ("client knowledge differs from server knowledge"; the `/2026` is CloudKit's internal
+sub-code, not a year). Apple's contract for the raw API is "discard the token and re-fetch without
+one", and the private `NSCloudKitMirroringDelegate` does exactly that by itself:
+`resetAfterError:andKeepContainer:` discards **only its sync bookkeeping — the token and in-flight
+mirroring state — never the local store**, then re-imports the zone in full. Records are matched by
+CloudKit record name, so a full re-import reconciles rather than duplicates. Nothing is asked of the
+app; Apple's own framing is that such errors "are transient and typically resolve without manual
+intervention".
+
+**What the app sees afterwards:** a `.setup` event, then one or more long-running `.import` events,
+then normal cadence. A long `.syncing` row during that re-import is the correct display. The
+re-import also posts `.NSPersistentStoreRemoteChange` in bulk — well over a hundred in a session —
+which is precisely the burst `CloudSyncObserver`'s coalescing window exists to absorb
+(`docs/sync-refresh-performance.md`).
+
+**Triggers, and what is folklore.** Real: resetting the CloudKit **Development** environment or
+zone (a dev-only concern here — see `docs/cloudkit-schema-automation.md`), a schema deployment, and
+a device left offline long enough for the token's server-side retention to lapse (Apple publishes no
+TTL, so **do not hard-code a day count anywhere**). Not a cause: `.private(_:)` vs `.automatic` —
+that only decides *which* container identifier is resolved, and the explicit form this app uses is
+the safer one. Two `NSPersistentCloudKitContainer` instances on one container *is* a real failure
+mode that runs the same reset machinery, but it surfaces as setup contention rather than token
+expiry, and it is ruled out here: `GymStreakApp.store` builds exactly one `ModelContainer`, and the
+widget extension reads the App Group via `UserDefaults` and opens no store at all. **There is no
+app-side prevention for any of the real triggers** — Apple exposes no way to keep a token alive or
+opt out of the reset.
+
+**`NSCloudKitMirroringDelegate{Will,Did}ResetSyncNotificationName` is private.** It appears in the
+console only because Core Data logs its own internal selector and notification names; it is absent
+from the public API surface, has no documented `userInfo`, and must not be observed. The supported
+channel for the whole lifecycle is `NSPersistentCloudKitContainer.eventChangedNotification`, which
+the monitor already uses (§4.3), and a reset shows up there as the `.setup` + `.import` pair above.
+
+**Why our own log line said `Code=2 "(null)"` — and what that reveals.** The first attempt at a
+fix rested on a false premise, caught in review and then measured directly (`xcrun swift`, real
+`CKError` values, 2026-09-03). `NSError.description` **does** print `userInfo`, so
+`String(describing:)` was never hiding anything:
+
+| Input | `String(describing:)` |
+| --- | --- |
+| `.partialFailure` holding a nested `CKError` 21 | `Error Domain=CKErrorDomain Code=2 "(null)" UserInfo={CKPartialErrors={"<CKRecordZoneID: …>" = "Error Domain=CKErrorDomain Code=21 \"(null)\"";}}` |
+| `.partialFailure` with an **empty** `userInfo` | `Error Domain=CKErrorDomain Code=2 "(null)"` |
+| `.serverRejectedRequest` with a server explanation | `Error Domain=CKErrorDomain Code=15 "Invalid bundle ID for container" UserInfo={ServerErrorDescription=record type Routine not found, CKRetryAfter=12, …}` |
+
+The device line was the **second** row, byte for byte: no `UserInfo={…}` segment at all. So the
+error attached to `NSPersistentCloudKitContainer.Event` was a `CKError` 2 **stripped of its
+per-item errors** — the "Couldn't fetch some items" reason and the nested `CKError` 21 that Core
+Data's own log printed never reached the app. Two consequences worth keeping:
+
+- **The app cannot identify this failure from the event.** A classifier keyed on
+  `.changeTokenExpired` returns `false` for the shape the device actually delivers, so demoting the
+  log level by *recognising the benign code* would have been dead code on the very log line that
+  prompted the work. The level therefore follows the **persistent/transient verdict**, which is
+  defined for a stripped error too: `.error` means the user's data is not moving, `.notice` means
+  CloudKit will retry. That fires on the observed shape.
+- **The third row is why a description must only ever add.** The first attempt replaced
+  `String(describing:)` with a codes-only rendering, which silently dropped
+  `ServerErrorDescription` and `CKRetryAfter` — exactly the detail that identifies the schema-drift
+  class §4.2a exists for. `describe(_:)` now *prefixes* the codes it finds and keeps the original
+  description verbatim: `CKError [2 (1), 21 (37)] Error Domain=…`. Codes are tallied rather than
+  listed per item so the prefix stays one short token however many records failed — but note what
+  that does *not* fix: because the full description is kept, the line's size is inherited from
+  before the change (measured: ~7 KB for 50 per-item errors, ~283 KB for 2,000; the tally itself
+  adds ~26 bytes), as are the pointer-address record keys inside it. A deliberate trade — nothing
+  is dropped — recorded as a follow-up in §9.
+
+So the three changes of 2026-09-03 are:
+
+1. `SyncEventSummary.describe(_:)` prefixes a tally of the `CKError` codes the error carries — its
+   own plus each one under `partialErrorsByItemID`, which is exactly the set the verdicts weigh, so
+   the prefix can never name a code the row disagrees with. An error nested at
+   `NSUnderlyingErrorKey` is *not* reached (§9). A non-`CKError` is passed straight through. Codes
+   are numbers because `CKError.Code` is an imported `NS_ENUM` whose `String(describing:)` is the
+   useless `CKErrorCode(rawValue: 2)`, and numbers are what CloudKit's own lines speak.
+2. `log(_:)` picks the level from the verdicts: `.error` for a persistent failure, `.error` for an
+   account problem, `.notice` for anything else. The account class needs its own branch precisely
+   because it is *transient* by the `isPersistentFailure` verdict — CloudKit does keep retrying —
+   while a retry is the one thing that cannot fix a signed-out or restricted account, and it is the
+   only failure where the user has to act. `.notice` still persists to the on-disk log store, so a
+   sysdiagnose still explains the re-import burst.
+3. `isAccountProblem` now recurses into partial failures like `isPersistentFailure` always did.
+
+**What the same event should now print** — expected, not yet re-captured on the device, which is
+the one open verification step of this change:
+
+```
+mirroring 1 failed transiently, CloudKit retries: CKError [2 (1)] Error Domain=CKErrorDomain Code=2 "(null)"
+```
+
+at `.notice` rather than `.error`. If the event ever does arrive with its partials intact, the same
+line reads `CKError [2 (1), 21 (1)] …` and names the reason without a code change.
+
+`.changeTokenExpired` stays **absent** from `isPersistentFailure` — it was already classified
+transient by the conservative default, which is why the row correctly never turned red (§8,
+2026-08-25). Research also confirmed the rest of the classification table (`.notAuthenticated` and
+`.managedAccountRestricted` = account, `.quotaExceeded` = persistent, `.networkUnavailable`,
+`.serverRecordChanged` and `.limitExceeded` = transient) matches Apple's guidance as it stands.
+
+**The `CoreData: debug:` lines in the same log are unrelated housekeeping.**
+`PostSaveMaintenance: incremental_vacuum with freelist_count 1643 and pages_to_free 1396` is SQLite
+returning pages freed by a large batch of deletes/replacements — exactly what a full re-import
+produces — and `WAL checkpoint` is the write-ahead log being folded back into the database. Neither
+is a warning, and a big freelist right after a bulk import is expected rather than a sign of bloat.
+No launch argument in any checked-in scheme enables them; they are Core Data's default `.debug`-level
+OSLog output, which Xcode's console subscribes to for an attached run and which is not persisted or
+paid for in a Home Screen launch. To silence them locally, add `-com.apple.CoreData.Logging.stderr 0`
+to the Run scheme's arguments (a local Xcode setting that cannot reach TestFlight). There is no knob
+to tune the vacuum or WAL behaviour: `ModelConfiguration` exposes no `NSSQLitePragmasOption`
+equivalent, and `NSPersistentCloudKitContainer` manages history tracking and WAL internally as a
+requirement of mirroring — re-confirmed here, and already recorded in
+`docs/cloudkit-sync-suspension.md` §4.3.
+
+Sources: [`CKError.Code.changeTokenExpired`](https://developer.apple.com/documentation/cloudkit/ckerror/code/changetokenexpired),
+[Syncing a Core Data store with CloudKit](https://developer.apple.com/documentation/coredata/syncing-a-core-data-store-with-cloudkit)
+("transient and typically resolve without manual intervention"),
+[`CKError.Code.partialFailure`](https://developer.apple.com/documentation/cloudkit/ckerror/code/partialfailure)
+(inspect `CKPartialErrorsByItemIDKey`), Apple technotes
+[TN3162](https://developer.apple.com/documentation/technotes/tn3162-understanding-cloudkit-throttles),
+[TN3163](https://developer.apple.com/documentation/technotes/tn3163-understanding-the-synchronization-of-nspersistentcloudkitcontainer)
+and [TN3164](https://developer.apple.com/documentation/technotes/tn3164-debugging-the-synchronization-of-nspersistentcloudkitcontainer)
+(the three DTS points a developer at, [forums thread 761012](https://developer.apple.com/forums/thread/761012)),
+[SQLite `auto_vacuum`](https://sqlite.org/pragma.html#pragma_auto_vacuum), and
+[Use Your Loaf, "Disabling Core Data CloudKit logging"](https://useyourloaf.com/blog/disabling-core-data-cloudkit-logging/).
+The mapping of the reset contract onto the private `resetAfterError:andKeepContainer:` method, and
+the reading of `PostSaveMaintenance`, are community consensus rather than Apple prose — Apple does
+not document the mirroring delegate at all.
 
 ### 4.3 API findings (research, 2026-08-12)
 
@@ -396,7 +553,7 @@ for `.NSPersistentStoreRemoteChange` — the notification DTS endorses, already 
 granularity and therefore the clean upload/download split that ticket 03's "Letzte Aktivität"
 section wants. `CloudKitSyncStatusMonitor+Logging.swift` is what proves which world we are
 in — the DEBUG `print` (prefix `☁️ [CloudKitSyncStatusMonitor]`) logs every event with its
-type, end state and error, and the OSLog `.error` alongside it (§4.2a) does the same for
+type, end state and error, and the OSLog entry alongside it (§4.2a) does the same for
 failures on a build with no console attached.
 
 ### 4.4 Discarded approaches
@@ -695,6 +852,27 @@ bar), which first looked like a broken `NavigationLink`. It is a driver limitati
 bug — confirm interactions of this kind with an XCUITest instead of synthetic clicks.
 
 ## 9. Known follow-ups (found, deliberately not applied)
+
+**From the change-token investigation (2026-09-03, §4.2b):**
+
+- **A non-`CKError` failure can put model values into a `.public` log entry.** `describe(_:)` passes
+  a foreign error through verbatim, and a Core Data validation error renders
+  `UserInfo={NSValidationErrorValue=My Leg Day Routine, …}` — measured. §4.2a's "none of them
+  contain user content" holds for the `CKError` branch only. Fixing it means logging that fallback
+  at `privacy: .private`, which costs the detail on a TestFlight sysdiagnose; the trade was not
+  taken here because no such error has been observed on the mirroring path.
+- **`NSUnderlyingErrorKey` is not traversed.** A `CKError` nested under an `NSCocoaErrorDomain`
+  wrapper (e.g. 134400) is invisible to both verdicts *and to the code tally* — it shows only in the
+  passed-through description. Not observed on this path; add it to `inspect(_:matches:)` and
+  `countCKErrorCodes(in:into:)` together if it ever is, so the two keep agreeing.
+- **A failure log line is unbounded in size.** `describe(_:)` keeps the error's own description,
+  which prints one entry per failed record: measured ~7 KB for 50, ~70 KB for 500, ~283 KB for
+  2,000, built on the main actor and emitted as a single `.public` os_log line (which truncates, so
+  the surviving prefix is an arbitrary slice — the code tally at the front is deliberately placed to
+  survive that). Inherited from before 2026-09-03 rather than introduced by it, and CloudKit batches
+  at most 400 records per operation. Fixing it means capping the appended description, which
+  reintroduces the information loss that pass rejected — so it needs a real observation first.
+
 
 Carried over from the implementation tickets so they are not lost with them. None is a defect;
 each is a threshold to act on rather than work to schedule now.

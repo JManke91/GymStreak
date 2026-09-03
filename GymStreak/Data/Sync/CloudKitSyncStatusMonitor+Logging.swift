@@ -51,15 +51,49 @@ extension CloudKitSyncStatusMonitor {
     /// Records every failed transfer, not only the ones that change the state: a
     /// schema rejection used to be indistinguishable from a queued upload, which
     /// is how the plan-mirroring bug survived a month (docs/workout-planning.md).
+    ///
+    /// **The level follows the verdict, because not every unsuccessful event is a
+    /// fault.** A transient failure means CloudKit will retry and nothing is lost
+    /// — a change-token reset (`CKError` 21) re-importing the zone is the routine
+    /// case — so it is logged at `.notice`, which still persists to the on-disk
+    /// log store and so still explains the burst that follows in a sysdiagnose.
+    /// `.error` is reserved for the two verdicts that mean the user's data is not
+    /// moving — a persistent failure, and an account problem — which is the only
+    /// way the level keeps meaning anything. Deciding this from the verdicts
+    /// rather than from a list of benign codes is deliberate: the event's error
+    /// often arrives stripped of the per-item error that names the reason
+    /// (§4.2b), and the verdicts are defined for that shape too.
+    ///
+    /// The account class needs its own branch because it is transient by the
+    /// `isPersistentFailure` verdict — CloudKit will indeed retry — yet a retry
+    /// is exactly what cannot help a signed-out or restricted account. It is the
+    /// one failure where the user has to act, so the line must not tell a
+    /// sysdiagnose reader to wait.
     static func log(_ event: SyncEventSummary) {
         if event.endDate != nil, !event.succeeded {
-            logger.error(
-                """
-                mirroring \(event.type.rawValue, privacy: .public) failed \
-                (persistent: \(event.isPersistentFailure, privacy: .public)): \
-                \(event.errorDescription ?? "unknown", privacy: .public)
-                """
-            )
+            let description = event.errorDescription ?? "unknown"
+            if event.isPersistentFailure {
+                logger.error(
+                    """
+                    mirroring \(event.type.rawValue, privacy: .public) failed permanently: \
+                    \(description, privacy: .public)
+                    """
+                )
+            } else if event.isAccountProblem {
+                logger.error(
+                    """
+                    mirroring \(event.type.rawValue, privacy: .public) failed on the iCloud \
+                    account, no retry can fix it: \(description, privacy: .public)
+                    """
+                )
+            } else {
+                logger.notice(
+                    """
+                    mirroring \(event.type.rawValue, privacy: .public) failed transiently, \
+                    CloudKit retries: \(description, privacy: .public)
+                    """
+                )
+            }
         }
         #if DEBUG
         // Whether SwiftData's container emits these events at all can only be
