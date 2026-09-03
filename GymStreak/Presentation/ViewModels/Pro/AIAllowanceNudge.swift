@@ -32,8 +32,11 @@ struct AIAllowanceNudge: Equatable {
     /// screen.
     ///
     /// Both strings are `@autoclosure` because this initializer is called from a
-    /// computed property a view `body` reads: in the common case the state is
-    /// `nil` and no bundle lookup should happen at all.
+    /// computed property a view `body` reads: for an unmetered user the state is
+    /// `nil` and no bundle lookup should happen at all. A *metered* user is
+    /// non-`nil` in every state — the hint is on screen from zero consumption —
+    /// so for them exactly one of the two lookups runs per evaluation, which is
+    /// what the `@autoclosure` buys on that path.
     ///
     /// - Parameters:
     ///   - remainingFormat: a two-placeholder format receiving **remaining**
@@ -46,7 +49,7 @@ struct AIAllowanceNudge: Equatable {
         exhaustedText: @autoclosure () -> String
     ) {
         switch state {
-        case .lastRemaining(let consumed, let limit):
+        case .remaining(let consumed, let limit):
             self.init(
                 text: String(
                     format: remainingFormat(),

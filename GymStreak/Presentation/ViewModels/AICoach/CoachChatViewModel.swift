@@ -95,8 +95,10 @@ final class CoachChatViewModel {
 
     // MARK: - Free-tier allowance
 
-    /// The §8 placement D hint, or `nil` when none belongs on screen — which is
-    /// every state but the last free message and none left.
+    /// The §8 placement D hint, or `nil` when none belongs on screen — which
+    /// only ever means this user is unmetered (Pro, Founder, gating off, or no
+    /// Apple Intelligence). A metered user sees it from the first message on, so
+    /// the meter is watched filling rather than discovered nearly full.
     ///
     /// Computed rather than stored, so it tracks both the count and the
     /// entitlement: the gate reads the `@Observable` entitlement provider here,

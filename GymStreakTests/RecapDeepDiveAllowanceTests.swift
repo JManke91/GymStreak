@@ -169,7 +169,7 @@ struct RecapDeepDiveAllowanceTests {
 
         // Unlike the chat's five, a cap of one means the *first* generation is
         // also the last — so §8 D's hint has to be there from the start.
-        #expect(harness.gate.nudgeState == .lastRemaining(consumed: 0, limit: 1))
+        #expect(harness.gate.nudgeState == .remaining(consumed: 0, limit: 1))
         _ = harness.gate.requestGeneration()
         #expect(harness.gate.nudgeState == .exhausted(consumed: 1, limit: 1))
     }

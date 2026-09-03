@@ -94,19 +94,22 @@ struct CoachChatAllowanceTests {
 
     // MARK: - The §8 D nudge
 
-    @Test("The nudge appears at one remaining and stays once the allowance is spent")
-    func nudgeAppearsOnTheLastMessageAndStays() {
+    @Test("The nudge is on screen from the first message and stays once the allowance is spent")
+    func nudgeAppearsFromTheFirstMessageAndStays() {
         let harness = makeHarness()
+        let limit = ProFeatureCaps.freeCoachChatMessagesPerMonth
 
-        #expect(harness.gate.nudgeState == nil)
-        spend(harness.gate, 3)
-        #expect(harness.gate.nudgeState == nil)
+        // Before anything is sent: the meter is empty, not absent — §8 D's
+        // endowed progress effect needs it to be watched filling.
+        #expect(harness.gate.nudgeState == .remaining(consumed: 0, limit: limit))
+
+        for consumed in 1..<limit {
+            spend(harness.gate, 1)
+            #expect(harness.gate.nudgeState == .remaining(consumed: consumed, limit: limit))
+        }
 
         spend(harness.gate, 1)
-        #expect(harness.gate.nudgeState == .lastRemaining(consumed: 4, limit: 5))
-
-        spend(harness.gate, 1)
-        #expect(harness.gate.nudgeState == .exhausted(consumed: 5, limit: 5))
+        #expect(harness.gate.nudgeState == .exhausted(consumed: limit, limit: limit))
     }
 
     @Test("Buying Pro removes the nudge with no reload")
@@ -364,7 +367,10 @@ struct CoachChatAllowanceTests {
         ))
         #expect(AIAllowancePolicy.nudgeState(
             consumed: limit - 1, limit: limit, isPro: false, isGatingEnabled: true
-        ) == .lastRemaining(consumed: limit - 1, limit: limit))
+        ) == .remaining(consumed: limit - 1, limit: limit))
+        #expect(AIAllowancePolicy.nudgeState(
+            consumed: 0, limit: limit, isPro: false, isGatingEnabled: true
+        ) == .remaining(consumed: 0, limit: limit))
     }
 
     @Test("A count above a retuned-down cap still reads as exhausted, not as a negative")
@@ -373,6 +379,15 @@ struct CoachChatAllowanceTests {
         #expect(AIAllowancePolicy.nudgeState(
             consumed: 9, limit: 5, isPro: false, isGatingEnabled: true
         ) == .exhausted(consumed: 5, limit: 5))
+    }
+
+    @Test("A cap retuned down mid-month never draws a meter past full")
+    func policyClampsALimitRetunedDownMidMonth() {
+        // Five messages spent under the old cap of five, reopened after the cap
+        // was lowered to three: the hint reads "3 of 3", never "5 of 3".
+        #expect(AIAllowancePolicy.nudgeState(
+            consumed: 5, limit: 3, isPro: false, isGatingEnabled: true
+        ) == .exhausted(consumed: 3, limit: 3))
     }
 
     // MARK: - Harness

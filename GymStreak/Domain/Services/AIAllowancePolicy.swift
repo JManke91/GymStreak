@@ -28,8 +28,9 @@ enum AIAllowancePolicy {
     /// meter in `OnyxCapNudge` draws the consumed proportion — the endowed
     /// progress effect §8 D is built on.
     enum NudgeState: Equatable {
-        /// Exactly one unit left — §8 D's "1 of 5 remaining" hint.
-        case lastRemaining(consumed: Int, limit: Int)
+        /// Free units still available — §8 D's "5 of 5 remaining" hint, from
+        /// the first one through the last.
+        case remaining(consumed: Int, limit: Int)
         /// Nothing left this month. The next attempt raises the paywall.
         case exhausted(consumed: Int, limit: Int)
     }
@@ -60,12 +61,16 @@ enum AIAllowancePolicy {
         return remaining(consumed: consumed, limit: limit) == 0
     }
 
-    /// The nudge state, or `nil` when no hint belongs on screen.
+    /// The nudge state, or `nil` when no hint belongs on screen — which only
+    /// ever means the user is not metered at all.
     ///
-    /// It starts on the **last free unit** and *stays* once the allowance is
-    /// spent, for the same reason the routine cap nudge does: §8 D exists to
-    /// remove the surprise from the gate that follows, and a hint that
-    /// disappears exactly when the wall arrives would do the opposite.
+    /// A metered user sees the hint from **zero consumption**, not from the last
+    /// free unit: §8 D is justified by the endowed progress effect, and a meter
+    /// that first appears already near full is never seen filling, so the effect
+    /// cannot pay out. It also *stays* once the allowance is spent, for the same
+    /// reason the routine cap nudge does: §8 D exists to remove the surprise
+    /// from the gate that follows, and a hint that disappears exactly when the
+    /// wall arrives would do the opposite.
     static func nudgeState(
         consumed: Int,
         limit: Int,
@@ -74,12 +79,12 @@ enum AIAllowancePolicy {
     ) -> NudgeState? {
         guard isMetered(isPro: isPro, isGatingEnabled: isGatingEnabled) else { return nil }
         let left = remaining(consumed: consumed, limit: limit)
-        guard left <= 1 else { return nil }
         // Clamped, so a limit retuned *downwards* between releases cannot draw a
-        // meter past full or print "6 of 5 used".
+        // meter past full or print "6 of 5 used". This matters more now that the
+        // hint is on screen in every metered state, not only near the wall.
         let used = min(max(0, consumed), limit)
         return left == 0
             ? .exhausted(consumed: used, limit: limit)
-            : .lastRemaining(consumed: used, limit: limit)
+            : .remaining(consumed: used, limit: limit)
     }
 }

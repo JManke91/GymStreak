@@ -1046,7 +1046,7 @@ Unavailable is a disappointment, not a conversion opportunity.
 
 - **The arithmetic** is `Domain/Services/AIAllowancePolicy.swift` — pure, isolation-agnostic
   functions over `consumed`, `limit`, `isPro` and `isGatingEnabled`, returning `isMetered`,
-  `remaining`, `isExhausted` and a `NudgeState` (`.lastRemaining` / `.exhausted` / `nil`). Like
+  `remaining`, `isExhausted` and a `NudgeState` (`.remaining` / `.exhausted` / `nil`). Like
   `RoutineCapPolicy` it produces **no user-facing text**. It is shared by all three metered
   surfaces, because the taster mechanic is identical and only the limit differs.
 - **The counters** are `Data/Purchases/MonthlyAllowanceStore.swift` behind
@@ -1116,12 +1116,24 @@ request hand the user a free message.
   at one unit and it fails toward the business rather than against the user — the alternative,
   letting the smaller count win, would make a stale device able to hand out free messages.
 
-**The nudge (§8 placement D).** `CoachChatViewModel.allowanceNudge` returns a
-`CoachChatAllowanceNudge` value struct — finished string, `used`, `limit` — rendered as
+**The nudge (§8 placement D).** `CoachChatViewModel.allowanceNudge` returns an
+`AIAllowanceNudge` value struct — finished string, `used`, `limit` — rendered as
 `OnyxCapNudge` directly above the input bar, so it is on screen *before* the send that hits the
-wall. It appears on the last free message ("1 of 5 Coach messages left this month") and *stays*
-once the allowance is spent, which is exactly what removes the surprise from the gate. It is
-computed, not stored: the gate reads the `@Observable` entitlement provider inside it, so a
+wall. It is on screen **from the first render, at "5 of 5 Coach messages left this month"**, counts
+down with each send, and *stays* once the allowance is spent, which is exactly what removes the
+surprise from the gate. All three metered surfaces now announce their allowance from zero
+consumption: the recap and the deep-dive always did, because a cap of one makes `remaining <= 1`
+true at zero, and the chat was the odd one out only by the arithmetic of a cap of five. It was
+corrected 2026-09-03 because §8 D is justified by the endowed progress effect, and a meter that
+first appears at 80 % full is never seen filling, so the effect it was built for could not pay out.
+The hoarding counter-argument (announced scarcity makes users ration a consumable) was weighed and
+rejected: the copy is loss-framed, the monthly reset is stated, and the two surfaces that already
+announced their allowance show no such effect. `nudgeAppearsFromTheFirstMessageAndStays` is the
+regression test. One naming trap the rename left behind: `NudgeState.remaining(consumed:limit:)`
+and the static `AIAllowancePolicy.remaining(consumed:limit:) -> Int` now share a name and argument
+labels, and `AIAllowanceNudge.init?` calls the second one inside a `case .remaining` binding of the
+first. It compiles unambiguously — implicit member lookup only sees the enum's members — but know
+that before "simplifying" it. It is computed, not stored: the gate reads the `@Observable` entitlement provider inside it, so a
 purchase or a lapse removes or restores the hint with no reload, and the count refreshes because
 sending changes `messages`, which the same body already reads.
 
@@ -1172,11 +1184,11 @@ Ticket 09 adds no new machinery: it instantiates `AICoachAllowanceGate` twice mo
 generation pipelines. What is genuinely new is where a *fresh* generation begins on each screen,
 and what happens when it may not.
 
-**A cap of one changes the UX problem.** Five chat messages can be metered invisibly: the user
-sends four before anything is at stake. One recap a month cannot. At a cap of one, the first
-generation is also the last — so §8 D's nudge is on screen from the very first render
+**A cap of one changes the UX problem.** One recap a month cannot be metered invisibly: the first
+generation is also the last. So §8 D's nudge is on screen from the very first render
 (`nudgeIsVisibleBeforeTheOnlyFreeGeneration`), and, on the recap, generation stopped being
-automatic.
+automatic. Since 2026-09-03 the chat announces its allowance from zero too, so the *hint* no longer
+distinguishes these surfaces — only the non-automatic generation does.
 
 **The recap does not generate on arrival for a metered user.** `PeriodRecapState` gained two cases,
 both unreachable for a Pro user and while the kill switch is off:
@@ -2555,8 +2567,9 @@ process: the debug path bypasses the coordinator entirely, and the coordinator i
   (§5e) against the real `MonthlyAllowanceStore` over a throwaway defaults suite and a fake KVS:
   five messages then the `.coachChat` wall; the refused sixth consumes nothing; opening an
   exhausted chat raises the paywall without consuming, and opening it with messages left raises
-  nothing; a failed generation refunds, including the one that hit the wall; the nudge appears at
-  one remaining, stays at zero, and disappears the instant a purchase lands; subscription, lifetime
+  nothing; a failed generation refunds, including the one that hit the wall; the nudge is on
+  screen from zero consumed, counts down 5→1, stays at zero, and disappears the instant a purchase
+  lands; a cap retuned *down* mid-month reads as exhausted at the new limit rather than past full; subscription, lifetime
   and Founder are unmetered; a lapse returns to a whole taster; **an unavailable device is never
   paywalled and never metered**, and unavailability does not clear a count already spent; the kill
   switch off behaves exactly as before; the count resets on the 1st; **a clock moved backwards
