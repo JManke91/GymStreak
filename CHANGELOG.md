@@ -4,6 +4,37 @@ All notable changes to GymStreak are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.1.14] - 2026-09-03
+
+### Added
+
+- New in Settings: "Sync to Apple Calendar". Switching it on asks for calendar access and gives Gym Streak its own "Gym Streak" calendar, which shows up in Calendar alongside your own — and on your iPad and Mac if you use iCloud. Switching it off deletes that calendar again, along with everything Gym Streak put in it; your other calendars are never touched.
+- Your planned workouts now appear in the "Gym Streak" calendar: a routine planned on a cadence gets its next 8 sessions as all-day entries ("Push Workout"), on exactly the dates the planning preview shows. Editing or clearing the plan updates them.
+- Routines planned on fixed weekdays now show up in the "Gym Streak" calendar too, as a single repeating all-day entry on exactly those days — so the calendar keeps filling itself months ahead even if you don't open the app. Change the days and the repeat is rewritten; switch a routine between fixed weekdays and an interval and the calendar swaps over cleanly, with nothing left behind. Days already past are never touched.
+- The full-screen rest timer on the Apple Watch now shows what your next set asks for (e.g. "80 kg x 8") right above the countdown, so you no longer have to minimize the timer to check.
+- The watch rest timer now names the exercise when your next set belongs to a different one — so after finishing an exercise, and after every superset round, you can see at a glance which movement the weight above the countdown is for. When the next set is another set of the same exercise, the line is unchanged.
+
+### Improved
+
+- The "Gym Streak" calendar now follows your plan. Train a routine late and its future entries move with it, counted from the day you actually trained — on the iPhone, the Apple Watch or another device. The list tops itself up, and days already past are left alone.
+- Delete the "Gym Streak" calendar in the Calendar app and Gym Streak now notices: calendar sync switches off rather than silently doing nothing, and it won't recreate the calendar behind your back. Switching it back on gives you a fresh one. Take calendar access away in Settings and the Settings row says so and takes you back to it. Your plans are never touched either way.
+- Muscle groups now appear in your language on the Apple Watch — routine previews and the swap-exercise sheet no longer show English names.
+- Long exercise names on the Apple Watch are no longer cut off mid-word during a workout — the name now scrolls gently through its slot so you can read all of it, including the part in brackets that tells barbell and dumbbell variants apart. It holds still at the start between passes, and stays static if you use Reduce Motion or while the screen is dimmed.
+- The exercise list during an Apple Watch workout no longer cuts names off after a few letters. Names now use the full width of the row and wrap to a second line when they need it, so "Bankdr…" reads as "Bankdrücken (Langhantel)" again — which matters when a routine holds two variants of the same movement.
+- Set rows in a routine are tidier and no longer cut off. The units now sit once as column headings above the list instead of beside every value, so reps and weight always fit — including converted weights like 136,08 kg, and inside supersets on smaller iPhones, where "kg" used to show as just "k". The set number also stops clipping from the tenth set on, and the red remove button is now an X so it can no longer be mistaken for the green minus beside it.
+- The routine list now updates as soon as a workout arrives from the Apple Watch — "last trained", the next due date and which routine is up next no longer wait for you to leave the tab and come back.
+- Starting a workout now opens at the very top of the exercise list instead of part-way into the first exercise. Resuming a workout you already started still jumps straight to the exercise you left off on.
+- The AI Coach chat now tells you how many free messages you have left from the moment you open it, instead of waiting until only one is left. The meter fills as you send.
+- The "Loading Metrics" spinner at the start of a watch workout now uses the app's green accent color instead of blue.
+- The play symbol on the "Start Workout" button in a routine's watch overview is now centered when the label needs two lines, which happens on smaller watches. It used to sit next to the first line only. On watches where the label fits on one line nothing changes.
+
+### Fixed
+
+- Reinstalling the app no longer gives you a second "Gym Streak" calendar: it now reuses the one it created before instead of adding another. Note that deleting the app leaves its calendar in your iCloud account — switch calendar sync off first if you want it gone, or remove it in the Calendar app.
+- Changing a rest time on the Apple Watch right before you finish is no longer ignored. If you adjusted the rest with the pill's +/- buttons or the Digital Crown and ended the workout within the next few seconds, the app saved the workout without ever asking whether to update your routine — so the routine kept the old rest time. It now offers "Save & Update Template" as it does when you wait a moment first.
+- Ending an Apple Watch workout during a rest no longer flashes a dead timer. The rest screen used to stay up showing 0:00 with an empty progress bar while the workout was being saved — and a timer you had minimized to the pill was even reopened to show it. The rest now disappears together with the workout.
+- The pulsing heart and flame icons during an Apple Watch workout now hold still if you have Reduce Motion switched on. They previously kept animating regardless.
+
 ## [1.1.13] - 2026-08-31
 
 ### Added
