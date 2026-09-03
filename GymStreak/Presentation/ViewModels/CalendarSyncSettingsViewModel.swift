@@ -32,6 +32,11 @@ final class CalendarSyncSettingsViewModel {
 
     private let preference: any CalendarSyncPreferenceProviding
     private let sync: any WorkoutCalendarSyncing
+    /// Fills the freshly created calendar with the user's existing plans, so
+    /// switching sync on shows workouts immediately rather than waiting for the
+    /// next plan edit. Optional so tests about the toggle itself need not supply
+    /// one.
+    private let mirror: (any PlannedWorkoutCalendarMirroring)?
 
     /// The value the toggle should show while the request is in flight, so the
     /// switch follows the user's finger instead of snapping back and forth.
@@ -43,10 +48,12 @@ final class CalendarSyncSettingsViewModel {
 
     init(
         preference: any CalendarSyncPreferenceProviding,
-        sync: any WorkoutCalendarSyncing
+        sync: any WorkoutCalendarSyncing,
+        mirror: (any PlannedWorkoutCalendarMirroring)? = nil
     ) {
         self.preference = preference
         self.sync = sync
+        self.mirror = mirror
     }
 
     /// What the toggle renders.
@@ -74,6 +81,9 @@ final class CalendarSyncSettingsViewModel {
             do {
                 try await sync.enable()
                 preference.isCalendarSyncEnabled = true
+                // After the flag, never before: the mirror reads it as its own
+                // gate and would do nothing.
+                mirror?.reconcile()
             } catch {
                 preference.isCalendarSyncEnabled = false
                 failure = Self.failure(for: error)

@@ -31,7 +31,8 @@ private struct RoutinesViewInternal: View {
             proEntitlements: dependencies.proEntitlements,
             paywalls: dependencies.paywalls,
             proactivePaywalls: dependencies.proactivePaywalls,
-            historyStoreGate: dependencies.historyStoreGate
+            historyStoreGate: dependencies.historyStoreGate,
+            calendarMirror: dependencies.plannedWorkoutCalendarMirror
         ))
         self._exercisesViewModel = StateObject(wrappedValue: ExercisesViewModel(
             exerciseRepository: dependencies.exerciseRepository,

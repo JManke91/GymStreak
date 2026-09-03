@@ -62,7 +62,8 @@ struct SettingsRootView: View {
 
                         CalendarSyncSettingsSectionView(
                             preference: dependencies.calendarSyncPreference,
-                            sync: dependencies.workoutCalendarSync
+                            sync: dependencies.workoutCalendarSync,
+                            mirror: dependencies.plannedWorkoutCalendarMirror
                         )
 
                         SettingsSectionView(

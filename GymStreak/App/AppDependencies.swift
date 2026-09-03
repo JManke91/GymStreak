@@ -127,6 +127,13 @@ final class AppDependencies: ObservableObject {
     /// Presentation only ever sees `WorkoutCalendarSyncing`.
     let workoutCalendarSync: WorkoutCalendarSyncing
 
+    /// Brings the app-owned calendar in line with the user's plans whenever one
+    /// changes (docs/calendar-sync.md). App-lifetime because both trigger sites —
+    /// the planning sheet and the Settings toggle — share it, and it holds no
+    /// state of its own. Presentation only ever sees
+    /// `PlannedWorkoutCalendarMirroring`.
+    let plannedWorkoutCalendarMirror: PlannedWorkoutCalendarMirroring
+
     /// The Pro entitlement every gate reads (docs/pro-subscription.md): the
     /// Founder grant composed with the RevenueCat entitlement. This is the only
     /// place the purchase layer is named — Presentation only ever sees
@@ -229,8 +236,16 @@ final class AppDependencies: ObservableObject {
         self.deviceDiagnostics = SystemDeviceDiagnosticsProvider()
         let weightUnitPreference = WeightUnitPreference.shared
         self.weightUnitPreference = weightUnitPreference
-        self.calendarSyncPreference = CalendarSyncPreference.shared
-        self.workoutCalendarSync = EventKitWorkoutCalendarSync()
+        let calendarSyncPreference = CalendarSyncPreference.shared
+        self.calendarSyncPreference = calendarSyncPreference
+        let workoutCalendarSync = EventKitWorkoutCalendarSync()
+        self.workoutCalendarSync = workoutCalendarSync
+        self.plannedWorkoutCalendarMirror = PlannedWorkoutCalendarMirror(
+            routineRepository: routineRepository,
+            workoutSessionRepository: workoutSessionRepository,
+            preference: calendarSyncPreference,
+            sync: workoutCalendarSync
+        )
         // Constructing the gateway configures the RevenueCat SDK — this runs in
         // `GymStreakApp.init()`, so it happens once, before any UI exists and
         // before anything can read an entitlement.

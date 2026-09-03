@@ -1,8 +1,9 @@
 # Calendar Sync — planned workouts in Apple Calendar
 
-**Status:** slice 1 of 4 shipped — opt-in and calendar ownership. No workout
-events are written yet (ticket 02), nothing is revised or refreshed (03), and
-weekday series are not modelled (04).
+**Status:** slices 1 and 2 of 4 shipped — opt-in and calendar ownership (§1–§10),
+and cadence plans mirrored as all-day events (§11). Nothing is refreshed on a
+completion or a foreground yet (ticket 03), and weekday plans are not modelled as
+a recurrence (04) — they contribute no events at all until then.
 
 **Target:** iOS only. **The watch is untouched** — it holds no schedule or plan
 data at all (`docs/workout-planning.md` § "Watch surface"), so there is nothing
@@ -416,10 +417,15 @@ Dependency direction is the project's usual `Presentation → Domain ← Data`.
 | Domain | `Domain/Interfaces/CalendarSyncPreferenceProviding.swift` | The opt-in flag's surface, sibling of `WeightUnitPreferenceProviding`. |
 | Data | `Data/Calendar/EventKitWorkoutCalendarSync.swift` | The **only** file in the target that imports EventKit and the only owner of an `EKEventStore`. |
 | Data | `Data/Calendar/WorkoutCalendarAdoption.swift` | The duplicate guard's matching rule — pure and EventKit-free, so it can be tested (§4a). |
+| Domain | `Domain/Services/PlannedWorkoutCalendarReconciler.swift` | The mirror's policy: the marker, the window, and the create/delete diff. Foundation only (§11). |
+| Domain | `Domain/Services/PlannedWorkoutOccurrenceBuilder.swift` | Turns routines + history into the occurrences the calendar should hold, through `WorkoutPlanningService` (§11). |
+| Domain | `Domain/Interfaces/PlannedWorkoutCalendarMirroring.swift` | The one call every trigger site makes: `reconcile()`. Never throws. |
+| Data | `Data/Calendar/PlannedWorkoutCalendarMirror.swift` | The coordinator: opt-in gate → repositories → builder → gateway, with failures logged and swallowed. |
+| Data | `Data/Calendar/EventKitWorkoutCalendarSync+Mirror.swift` | The gateway's event-writing half — read back, diff, batched commit. Split out to keep both files inside the size guidance. |
 | Data | `Data/Preferences/CalendarSyncPreference.swift` | `@Observable @MainActor final class`, `static let shared`, write-through `didSet` into `UserDefaults`, `init(defaults:)` injectable. Shaped exactly like `WeightUnitPreference`. |
 | Presentation | `Presentation/ViewModels/CalendarSyncSettingsViewModel.swift` | The toggle's state machine: request → create → persist, with the failure vocabulary the section renders. |
 | Presentation | `Presentation/Views/Settings/Components/CalendarSyncSettingsSectionView.swift` | The Settings section, composed into `SettingsRootView` after `UnitsSettingsSectionView`. |
-| App | `App/AppDependencies.swift` | Wires `calendarSyncPreference` and `workoutCalendarSync` (Hard rule 5). |
+| App | `App/AppDependencies.swift` | Wires `calendarSyncPreference`, `workoutCalendarSync` and `plannedWorkoutCalendarMirror` (Hard rule 5). |
 
 ### Two pieces of persisted state, deliberately separate
 
@@ -564,7 +570,263 @@ Two advisory notes worth carrying forward:
   `requestFullAccessToEvents()` call. §9 path 1 is what proves the key landed —
   walk it rather than assuming it.
 
-## 10. Out of scope for this slice
+## 10. Out of scope for slice 1
 
-Event writing (ticket 02), drift detection and refresh (03), weekday series (04),
-and `EventKitUI` entirely.
+Event writing (ticket 02, now shipped — §11), drift detection and refresh (03),
+weekday series (04), and `EventKitUI` entirely.
+
+---
+
+## 11. Slice 2 — cadence plans appear in the calendar
+
+With sync on, a routine planned on a rolling cadence ("every 5 days") puts its
+next occurrences into the app-owned calendar as **all-day events**: "Push" becomes
+"Push Workout" on each planned day. Editing the interval or the reference date
+updates the calendar immediately, clearing the plan removes that routine's events,
+and a routine with no plan — or a paused one — contributes nothing.
+
+This is the free tier's whole capability, and deliberately so: `everyNDays` is the
+only plan shape a free user has, because fixed weekdays are already Pro (P9 in
+`docs/workout-planning.md`). The depth gate therefore sits upstream in the
+schedule itself; **calendar sync adds no gate of its own** and nothing here reads
+an entitlement.
+
+### 11a. Why a rolling window of one-shot events, and not `EKRecurrenceRule`
+
+`EKRecurrenceRule(recurrenceWithFrequency: .daily, interval: N, end: nil)`
+expresses "every N days" perfectly, and it is still the **wrong model for this
+plan shape** — for a reason that lives in this app's semantics, not in EventKit.
+
+A cadence plan is not a fixed grid.
+`WorkoutPlanningService.cadenceAnchor(startDate:lastCompleted:calendar:)`
+re-derives the anchor from **the last completed session**, with
+`RoutineSchedule.startDate` acting only as a floor. The entire series therefore
+moves forward every time the user finishes a workout — which, for a routine
+trained on its cadence, is *every session*. A recurring event would have to be
+destroyed and recreated after almost every workout: the same churn as one-shots,
+plus an infinite tail of occurrences the app cannot justify, because they depend
+on completions that have not happened yet.
+
+A bounded forward window is also what the app already believes about itself.
+Every existing surface reads the plan through
+`WorkoutPlanningService.upcomingCadenceDates(...)` — a `count`-bounded walk used
+by `plannedWeek` and by the planning sheet's live "next sessions" preview. The
+calendar mirror calls the very same helper, so what the user sees in Calendar.app
+is exactly what the app tells itself, and no further. A unit test asserts that
+equality directly rather than trusting it.
+
+**Weekday plans are genuinely different and do get a recurrence rule** — that is
+ticket 04, and the split falls exactly on the `RoutineScheduleType` boundary.
+Until then a weekday plan mirrors nothing at all, which is a visible gap for a Pro
+user with a fixed split.
+
+### 11b. Identity lives in the event, not in local bookkeeping
+
+Every written event carries a marker in `EKEvent.url`:
+
+```
+gymstreak://routine/<routine-uuid>/occurrence/<yyyy-MM-dd>
+```
+
+and reconciliation reads it **back out of the calendar**. There is no persisted
+map of events, and `eventIdentifier` is not used as a durable key anywhere —
+Apple: *"if you change the calendar of an event, this ID will likely change. It is
+currently also possible for the ID to change due to a sync operation."*
+
+Because the app owns its calendar exclusively, the calendar *is* the state. That
+means nothing local can drift out of sync, and behaviour stays correct after a
+reinstall, or on a second device syncing the same CalDAV calendar. The marker goes
+in `url` rather than `notes` so the notes field stays the user's own; the app
+already declares `CFBundleURLTypes` for the scheme.
+
+Two details that are easy to get wrong:
+
+- **The day is rendered from `Calendar` components, not a `DateFormatter`.** A
+  formatter caches its time zone at construction, and the main-thread rules
+  require hoisting it to a `static let` — which together would mean a marker that
+  silently shifts by a day for a user who travels.
+- **An event whose `url` does not parse as a marker is never touched.** The user
+  can add their own events to the app's calendar in Calendar.app, and deleting
+  them would be destroying user data. Unparseable means "not ours", full stop.
+
+### 11c. The window, and why the past is never touched
+
+One pass owns whole days from **today** to the later of the furthest planned
+occurrence and a floor of `minimumWindowDays = 400`.
+
+- **Starting at today** leaves past events alone. They are a record of what the
+  user planned, and re-diffing them would quietly rewrite the user's calendar
+  history on every plan change.
+- **The 400-day floor** is a cleanup reach, not a lookahead: the planning sheet
+  caps the cadence at 30 days and the mirror writes 8 occurrences per routine, so
+  a plan anchored today reaches ~240 days out. The floor is what lets a
+  *shortened* or *cleared* long cadence still find the events it left behind.
+- **The query range is a day wider on each side than the window**, and the pass
+  filters back down to the window itself. Apple documents that
+  `predicateForEvents(withStart:end:calendars:)` evaluates its range in the
+  default time zone and caps it at four years, but says **nothing** about boundary
+  inclusivity — and it is an *overlap* query, not a containment one. Widening and
+  filtering ourselves removes the dependency on the undocumented edge at no cost.
+
+**Horizon: the next 8 occurrences per planned routine.** Far enough ahead that the
+calendar looks planned rather than sparse, short enough that a window left stale by
+an app nobody has opened in weeks is not embarrassing — and for the common 3-to-5
+day cadences, roughly a month of lookahead. Keeping it topped up is ticket 03.
+
+### 11d. Event shape: all-day, no alarm
+
+- `isAllDay = true`, `startDate` = the occurrence day, `endDate` = **the same
+  day**. A plan carries a date and no time of day, and inventing one would assert
+  something the app never captured; an all-day event also does not block the
+  user's day or attract travel-time suggestions.
+- `timeZone = nil`. That is Apple's documented meaning of a *floating* event — one
+  not tied to a time zone — and the SDK header explicitly calls all-day events
+  floating. Pinning `TimeZone.current` would enter undocumented territory.
+- **No `EKAlarm`.** An alarm would quietly deliver the deferred planned-workout
+  reminder (`docs/workout-planning.md` § "Deferred to phase 2") through a
+  different mechanism than that design chose. It stays an **open option**, to be
+  taken as a product decision on its own — not slipped in here.
+- The title comes from `calendar_sync.event.title_format` (`"%@ Workout"` in both
+  `en` and `de`), so a routine named "Push" reads "Push Workout".
+
+### 11e. Writes, batching and failure
+
+Every `save`/`remove` passes `commit: false` and one trailing
+`eventStore.commit()` sends the batch, so a plan change costs the user's calendar
+a single round-trip rather than one per event.
+
+On any throw the pass calls `eventStore.reset()` and gives up. That is Apple's
+documented recovery, not tidiness: *"If a batch operation fails, subsequent
+commits will fail until the event store is manually reset using the reset
+method."* `reset()` invalidates **every object ever fetched from the store**,
+which is safe here only because each pass re-fetches the calendar by identifier
+and holds no `EKEvent` across passes.
+
+`EKError.calendarReadOnly` needs no special case — it lands in the same handler,
+along with `.invalidCalendar` (the user deleted the calendar between passes),
+`.eventStoreNotAuthorized` (access revoked mid-session) and the rest. **The plan
+is the source of truth and the calendar is a projection of it**, so
+`PlannedWorkoutCalendarMirror` logs the failure and swallows it: a failed mirror
+must never block a plan edit or lose the user's schedule change. A test pins that
+a plan saves correctly while the gateway is throwing.
+
+### 11f. Triggers in this slice
+
+`RoutinesViewModel.setSchedule(...)` and `removeSchedule(from:)` are the **only**
+write paths for a schedule anywhere in the target — confirmed by repo-wide grep —
+so they are the only hooks, plus the Settings toggle, which reconciles right after
+it flips the flag so switching sync on fills the calendar immediately instead of
+waiting for the next plan edit. **The flag is written before the mirror runs**,
+because the mirror reads it as its own gate.
+
+No timer, no `.EKEventStoreChanged` observer, no completion hook: drift and window
+refresh are ticket 03, deliberately.
+
+### 11g. EventKit research — where Apple's docs are silent
+
+Captured so nobody re-derives it (via `ios-api-researcher`, against the iOS 26 SDK
+headers and developer.apple.com):
+
+| Question | Answer |
+| --- | --- |
+| `endDate` semantics for an all-day event | **Undocumented.** EventKit's `endDate` is *inclusive* of the last all-day day — unlike RFC 5545's exclusive `DTEND` — so the next day would render a two-day event. Empirical; verified on device (§11i). Equal start/end does not trip `EKErrorDatesInverted`, which fires only when end precedes start. |
+| `url` durability / CalDAV round-trip | **Undocumented.** Writable since iOS 5, no discussion text at all. CalDAV stores RFC 5545's `URL` property verbatim, so it very likely survives — but cross-device round-trip is unverified. |
+| Predicate boundary inclusivity | **Undocumented** — it is an overlap query. The range *is* documented as evaluated in the default time zone and capped at four years. Hence the widen-and-filter in §11c. |
+| All-day with a non-nil `timeZone` | **Undocumented.** Hence `nil`. |
+| Concurrency | `save`, `remove`, `commit`, `reset`, `events(matching:)` and `predicateForEvents` are all synchronous and closure-free — the project's rule-4 `@Sendable` trap does not apply. Nothing in EventKit is `NS_SWIFT_SENDABLE`, so main-actor confinement is the only option. |
+| `events(matching:)` on the main thread | Apple suggests running it off-thread, which a non-`Sendable` store makes impossible. Mitigated by a bounded window and a single-calendar scope. |
+| `objectBelongsToDifferentStore` | A **trap**: passing an event from another store *raises an Objective-C exception*, uncatchable in Swift. Hold one long-lived store — which this app does — and never let a foreign `EKEvent` reach `save`. |
+| Uncommitted changes | Invisible to `events(matching:)`: *"Only committed events are included in the results."* So a pass must read first, then batch-write, and can never re-query mid-batch to see its own pending work. |
+
+### 11h. Tests
+
+Three new suites, Swift Testing, `@Suite(.serialized) @MainActor`, **35 tests, and
+no `EKEventStore` is ever constructed** — the pure `Domain/` seam plus
+`FakeWorkoutCalendarSync` is what buys that:
+
+- `PlannedWorkoutCalendarReconcilerTests` — the marker (format, round-trip,
+  case-insensitive UUID, seven flavours of foreign or malformed URL), the window
+  (starts today, reaches the furthest occurrence, falls back to the floor, query
+  range wider than the window), and the diff (create-only, no-op, delete-only,
+  mixed, two independent routines, unmarked events untouched, duplicates
+  collapsed).
+- `PlannedWorkoutCalendarMirrorTests` — what actually reaches the gateway: the
+  cadence batch equals `upcomingCadenceDates` exactly; unplanned, paused and
+  weekday routines contribute nothing; two routines both mirror with unique
+  markers; the opt-in gates the whole pass; a throwing gateway leaves the plan
+  saved; and all three trigger sites fire.
+- `WorkoutPlanningServiceTests` — first *direct* coverage of `cadenceAnchor`,
+  `upcomingCadenceDates` and `nextDue`, which the calendar now makes a second
+  consumer of. Reference-date floor, re-anchoring completion, ignored stale
+  completion, the far-past `gapDays / N` fast-forward, an overdue plan, the
+  clamped interval.
+
+Full iOS suite green: **1107 tests in 123 suites**. The watch suite is not
+required — no watch code is touched.
+
+### 11i. Device verification — walked 2026-09-03, passed
+
+Verified on a physical device by the user. The checklist walked: a cadence plan's
+entries appear in the "Gym Streak" calendar on exactly the days the planning sheet
+previews; they render **all-day with no alarm**; editing the interval and editing
+the reference date both move the series with no leftovers or duplicates; re-saving
+an unchanged plan changes nothing in Calendar.app; removing a plan removes only
+that routine's entries; unplanned, paused and weekday routines write nothing; an
+event added by hand into the app's calendar survives a reconcile; switching sync
+off takes the calendar and its entries away.
+
+**The undocumented inclusive `endDate` (§11g) is confirmed**: entries render as one
+day, not two. Had it been exclusive, every event would have spanned two days — so
+`endDate = startDate` is correct for a single-day all-day event, and this is now
+observed behaviour rather than an assumption.
+
+**No hitch was reported on the Save tap**, but no latency measurement was taken —
+warning 2 in §11k therefore stays open as an unmeasured risk rather than a
+disproved one. Revisit it if ticket 03's refresh adds work to the same pass.
+
+### 11j. Follow-ups (recorded, not fixed)
+
+- **Deleting a routine does not reconcile.** Deleting a routine cascade-deletes
+  its schedule, but the mirror is hooked only to the two schedule write paths, so
+  that routine's events linger until the next pass. Ticket 03's refresh covers it;
+  worth an explicit hook if it does not.
+- **Events beyond the window are unreachable after the plan that made them is
+  cleared.** A cadence anchored far in the future can write occurrences past the
+  400-day floor; clearing it leaves nothing desired, so the window falls back to
+  the floor and those events stay. Switching sync off removes the whole calendar
+  regardless.
+- **Weekday plans mirror nothing** until ticket 04 — a visible gap for a Pro user
+  on a fixed split.
+- **The forward weekday scan is triplicated** (`WorkoutPlanningService` twice,
+  `SchedulePlanningSheet` once). Real, untouched here — this feature does not need
+  it, and a bug fix does not carry surrounding cleanup.
+
+### 11k. Architecture review
+
+`architecture-reviewer`: **PASS WITH WARNINGS**, no CRITICAL findings.
+
+- **Warning 1 — file size.** `EventKitWorkoutCalendarSync.swift` had grown to 365
+  lines. **Fixed:** `mirror(occurrences:)` and `makeEvent(for:in:)` moved to
+  `EventKitWorkoutCalendarSync+Mirror.swift` (262 + 138 lines), following the
+  `WatchTemplateTransactionService+…` precedent. `eventStore` is `internal` rather
+  than `private` purely because `private` is file-scoped; nothing outside the type
+  reads it and the `EKEventStore` still never leaves `Data/Calendar/`.
+- **Warning 2 — the pass is synchronous on the main actor on the Save tap.**
+  **Acknowledged, not fixed**, and turned into device-verification step 3 in §11i
+  with the remedy named. Deferring it now would be an unmeasured change to a
+  hot path, and the reviewer's own recommendation was to measure first.
+- Advisory taken: the delete path now guards its index rather than force-indexing,
+  so a future drift between the reconciler's handles and the array they index
+  fails a delete instead of trapping.
+
+The reviewer independently confirmed the layer placement of all four new types,
+that no `isPro` reaches the path, that `eventIdentifier` is never read or
+persisted, that the predicate is scoped to the app-owned calendar, that the
+concurrency rules are untouched (no closure literal reaches an Apple API here — the
+rule-4 `@Sendable` trap does not apply to EventKit's synchronous write API), and
+that **no `@Model` changed, so no CloudKit schema deploy is implicated**.
+
+It also flagged, independently, the two functional gaps already recorded in §11j —
+plus one cheap way to close the second: the reference-date `DatePicker` in
+`SchedulePlanningSheet` is unbounded, and bounding it to about a year out would put
+every occurrence inside the cleanup window by construction.

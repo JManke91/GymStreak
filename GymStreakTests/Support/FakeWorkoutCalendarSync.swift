@@ -21,8 +21,13 @@ final class FakeWorkoutCalendarSync: WorkoutCalendarSyncing {
     /// Thrown by `disable()` instead of removing the calendar, when set.
     var disableError: (any Error)?
 
+    /// Thrown by `mirror(occurrences:)` instead of recording, when set.
+    var mirrorError: (any Error)?
+
     private(set) var enableCallCount = 0
     private(set) var disableCallCount = 0
+    /// Every batch of occurrences handed to `mirror`, in order.
+    private(set) var mirroredOccurrences: [[PlannedWorkoutOccurrence]] = []
 
     func enable() async throws {
         enableCallCount += 1
@@ -35,6 +40,13 @@ final class FakeWorkoutCalendarSync: WorkoutCalendarSyncing {
         if appCalendarIdentifier == nil {
             appCalendarIdentifier = UUID().uuidString
         }
+    }
+
+    func mirror(occurrences: [PlannedWorkoutOccurrence]) throws {
+        if let mirrorError {
+            throw mirrorError
+        }
+        mirroredOccurrences.append(occurrences)
     }
 
     func disable() throws {

@@ -57,6 +57,21 @@ protocol WorkoutCalendarSyncing: AnyObject {
     ///   the feature switched off when this throws.
     func enable() async throws
 
+    /// Writes the given occurrences into the app-owned calendar and removes the
+    /// events it wrote that the plan no longer wants.
+    ///
+    /// Idempotent: passing the same occurrences twice writes and deletes
+    /// nothing the second time. Only the app-owned calendar is read or written,
+    /// and only events carrying the app's own marker are ever removed — an event
+    /// the user added to that calendar themselves is left alone.
+    ///
+    /// A no-op when the app owns no calendar.
+    ///
+    /// - Throws: `WorkoutCalendarSyncError`. The caller is expected to log and
+    ///   carry on: the plan is the source of truth, the calendar a projection of
+    ///   it, so a failed mirror must never undo a saved plan change.
+    func mirror(occurrences: [PlannedWorkoutOccurrence]) throws
+
     /// Removes the app-owned calendar, taking every event the app ever wrote
     /// with it, and forgets its identifier.
     ///

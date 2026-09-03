@@ -72,6 +72,12 @@ class RoutinesViewModel: ObservableObject {
     /// See `HistoryStoreGate`.
     private let historyStoreGate: HistoryStoreGate
 
+    /// Mirrors the user's plans into Apple Calendar after a plan changes
+    /// (docs/calendar-sync.md). Optional because unit-test instances that are
+    /// not about calendar sync have nothing to mirror to, and because the whole
+    /// feature is off until the user opts in — the mirror itself checks that.
+    private let calendarMirror: (any PlannedWorkoutCalendarMirroring)?
+
     init(
         routineRepository: RoutineRepository,
         workoutSessionRepository: WorkoutSessionRepository,
@@ -80,6 +86,7 @@ class RoutinesViewModel: ObservableObject {
         paywalls: any PaywallPresenting,
         proactivePaywalls: ProactivePaywallCoordinator? = nil,
         historyStoreGate: HistoryStoreGate = .unshared(),
+        calendarMirror: (any PlannedWorkoutCalendarMirroring)? = nil,
         isGatingEnabled: Bool = ProGating.isEnabled
     ) {
         self.routineRepository = routineRepository
@@ -89,6 +96,7 @@ class RoutinesViewModel: ObservableObject {
         self.paywalls = paywalls
         self.proactivePaywalls = proactivePaywalls
         self.historyStoreGate = historyStoreGate
+        self.calendarMirror = calendarMirror
         self.isGatingEnabled = isGatingEnabled
         fetchRoutines()
         observeCloudKitChanges()
@@ -792,6 +800,10 @@ class RoutinesViewModel: ObservableObject {
             save()
         }
         fetchRoutines()
+        // The plan is saved either way: the mirror logs its own failures and
+        // never throws, so a calendar that could not be updated cannot undo a
+        // schedule the user just made.
+        calendarMirror?.reconcile()
         return true
     }
 
@@ -818,6 +830,9 @@ class RoutinesViewModel: ObservableObject {
         }
         guard didRemove else { return }
         fetchRoutines()
+        // Removes this routine's events from the calendar — the reconciler sees
+        // an unplanned routine as "wants nothing".
+        calendarMirror?.reconcile()
     }
 
     // MARK: - Rep Range Management

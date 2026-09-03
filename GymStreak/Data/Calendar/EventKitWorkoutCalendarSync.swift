@@ -54,7 +54,12 @@ final class EventKitWorkoutCalendarSync: WorkoutCalendarSyncing {
     /// persisted identifier before touching this, so neither forces the store
     /// into existence. `lazy` is safe without synchronisation because the class
     /// is `@MainActor`-confined.
-    private lazy var eventStore: EKEventStore = makeEventStore()
+    ///
+    /// Internal rather than `private` only because `private` is file-scoped and
+    /// the mirroring half of this gateway lives in
+    /// `EventKitWorkoutCalendarSync+Mirror.swift`. Nothing outside this type
+    /// touches it — the `EKEventStore` still leaves `Data/Calendar/` nowhere.
+    lazy var eventStore: EKEventStore = makeEventStore()
 
     // MARK: - Init
 
@@ -126,6 +131,9 @@ final class EventKitWorkoutCalendarSync: WorkoutCalendarSyncing {
         }
         try ensureAppCalendarExists()
     }
+
+    // `mirror(occurrences:)` lives in EventKitWorkoutCalendarSync+Mirror.swift —
+    // this file owns the permission handshake and the calendar itself.
 
     func disable() throws {
         guard let identifier = appCalendarIdentifier else { return }

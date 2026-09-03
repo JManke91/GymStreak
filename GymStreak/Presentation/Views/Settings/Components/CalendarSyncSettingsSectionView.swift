@@ -22,10 +22,15 @@ struct CalendarSyncSettingsSectionView: View {
 
     init(
         preference: any CalendarSyncPreferenceProviding,
-        sync: any WorkoutCalendarSyncing
+        sync: any WorkoutCalendarSyncing,
+        mirror: any PlannedWorkoutCalendarMirroring
     ) {
         self._viewModel = State(
-            wrappedValue: CalendarSyncSettingsViewModel(preference: preference, sync: sync)
+            wrappedValue: CalendarSyncSettingsViewModel(
+                preference: preference,
+                sync: sync,
+                mirror: mirror
+            )
         )
     }
 
@@ -127,7 +132,15 @@ struct CalendarSyncSettingsSectionView: View {
         var accessStatus: CalendarAccessStatus = .fullAccess
         var appCalendarIdentifier: String?
         func enable() async throws { appCalendarIdentifier = "preview" }
+        func mirror(occurrences: [PlannedWorkoutOccurrence]) throws {}
         func disable() throws { appCalendarIdentifier = nil }
+    }
+
+    /// The preview writes no events either — it has no repositories to read
+    /// plans from and no calendar to write them to.
+    @MainActor
+    final class PreviewMirror: PlannedWorkoutCalendarMirroring {
+        func reconcile() {}
     }
 
     return ZStack {
@@ -139,7 +152,8 @@ struct CalendarSyncSettingsSectionView: View {
             preference: CalendarSyncPreference(
                 defaults: UserDefaults(suiteName: "preview.calendar_sync")!
             ),
-            sync: PreviewSync()
+            sync: PreviewSync(),
+            mirror: PreviewMirror()
         )
     }
     .preferredColorScheme(.dark)

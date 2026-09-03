@@ -1268,6 +1268,7 @@
 "calendar_sync.row.title" = "Mit Apple Kalender synchronisieren";
 "calendar_sync.row.subtitle" = "Deine geplanten Workouts im Kalender";
 "calendar_sync.calendar.title" = "Gym Streak";
+"calendar_sync.event.title_format" = "%@ Workout";
 "calendar_sync.denied.title" = "Kalenderzugriff erforderlich";
 "calendar_sync.denied.subtitle" = "Hier tippen, dann Kalender → Vollzugriff. Gym Streak braucht Vollzugriff, um eingetragene Workouts zu aktualisieren und zu entfernen, wenn sich dein Plan ändert.";
 "calendar_sync.failed.title" = "Kalender konnte nicht angelegt werden";
