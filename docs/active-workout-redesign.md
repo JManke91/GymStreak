@@ -80,6 +80,18 @@ hundred points of content leave the list in the same frame. Without the scroll t
 viewport keeps its offset and lands somewhere unrelated, which reads as "my tap
 did nothing". The same handler covers the automatic hand-off to the next exercise.
 
+**The first frame is deliberately excluded from that scroll unless the workout is
+being resumed.** The handler used to run with `initial: true`, which fired the
+same `scrollTo(_:anchor: .top)` for a workout that opens on its *first* exercise —
+and pinning that card's top to the viewport scrolls everything above it (the
+`LazyVStack`'s top padding, and the body-weight card when the workout has an
+assistance exercise) out of sight, so a freshly started workout opened part-way
+into the first exercise with its header cut off. The initial scroll now lives in
+an `onAppear` that returns early when the open exercise *is* the first one, so a
+fresh start renders at true offset 0; resuming a part-finished workout, where the
+exercise to continue with can already be below the fold on the first frame, still
+scrolls.
+
 Which exercise is open is resolved in `WorkoutScreenData`:
 
 ```

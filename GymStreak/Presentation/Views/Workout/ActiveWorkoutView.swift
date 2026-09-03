@@ -218,14 +218,27 @@ struct ActiveWorkoutView: View {
                 // viewport — without this the list appears to jump somewhere
                 // unrelated instead of showing what was just tapped. Also covers
                 // the automatic hand-off to the next exercise.
-                // `initial: true` covers resuming a part-finished workout, where
-                // the exercise to continue with can already be below the fold on
-                // the very first frame — the same "nothing happened" symptom.
-                .onChange(of: data.activeExerciseId, initial: true) { _, newValue in
+                .onChange(of: data.activeExerciseId) { _, newValue in
                     guard let newValue else { return }
                     withAnimation(DesignSystem.Animation.snappy) {
                         proxy.scrollTo(newValue, anchor: .top)
                     }
+                }
+                // Resuming a part-finished workout can open on an exercise that
+                // is already below the fold, so that case still has to be
+                // scrolled into view on the first frame. A workout starting on
+                // its first exercise must NOT be: `scrollTo(_:anchor: .top)`
+                // pins that card's top to the viewport, which scrolls the list's
+                // top padding — and the body-weight card, when there is one —
+                // out of sight, so the screen opened part-way into the first
+                // card instead of at the top.
+                // Compared against the first *rendered* exercise (`groups`), not
+                // the raw `order` sort: those agree only while supersets stay
+                // contiguous in `order`, and the list renders the groups.
+                .onAppear {
+                    guard let active = data.activeExerciseId,
+                          active != data.groups.first?.first?.id else { return }
+                    proxy.scrollTo(active, anchor: .top)
                 }
         }
     }
