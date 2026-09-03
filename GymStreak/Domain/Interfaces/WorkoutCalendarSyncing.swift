@@ -57,13 +57,19 @@ protocol WorkoutCalendarSyncing: AnyObject {
     ///   the feature switched off when this throws.
     func enable() async throws
 
-    /// Writes the given occurrences into the app-owned calendar and removes the
-    /// events it wrote that the plan no longer wants.
+    /// Brings the app-owned calendar into the given state and removes the events
+    /// it wrote that the plan no longer wants.
     ///
-    /// Idempotent: passing the same occurrences twice writes and deletes
-    /// nothing the second time. Only the app-owned calendar is read or written,
-    /// and only events carrying the app's own marker are ever removed — an event
-    /// the user added to that calendar themselves is left alone.
+    /// Both plan shapes travel in one value: a cadence plan's rolling window of
+    /// one-shot days, and a fixed-weekday plan's single open-ended repeating
+    /// event. A routine moving between the two is not a special case — it simply
+    /// contributes to the other list, and the events of the shape it left are
+    /// removed like any other unwanted ones.
+    ///
+    /// Idempotent: passing the same state twice writes and deletes nothing the
+    /// second time. Only the app-owned calendar is read or written, and only
+    /// events carrying the app's own marker are ever removed — an event the user
+    /// added to that calendar themselves is left alone.
     ///
     /// A no-op when the app owns no calendar. When it owns one that no longer
     /// resolves — the user deleted it behind the app's back — this throws
@@ -73,7 +79,7 @@ protocol WorkoutCalendarSyncing: AnyObject {
     /// - Throws: `WorkoutCalendarSyncError`. The caller is expected to log and
     ///   carry on: the plan is the source of truth, the calendar a projection of
     ///   it, so a failed mirror must never undo a saved plan change.
-    func mirror(occurrences: [PlannedWorkoutOccurrence]) throws
+    func mirror(_ desired: PlannedWorkoutCalendarState) throws
 
     /// Removes the app-owned calendar, taking every event the app ever wrote
     /// with it, and forgets its identifier.

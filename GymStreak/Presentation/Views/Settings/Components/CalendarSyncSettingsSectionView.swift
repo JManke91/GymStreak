@@ -143,7 +143,7 @@ struct CalendarSyncSettingsSectionView: View {
         var accessStatus: CalendarAccessStatus = .fullAccess
         var appCalendarIdentifier: String?
         func enable() async throws { appCalendarIdentifier = "preview" }
-        func mirror(occurrences: [PlannedWorkoutOccurrence]) throws {}
+        func mirror(_ desired: PlannedWorkoutCalendarState) throws {}
         func disable() throws { appCalendarIdentifier = nil }
     }
 

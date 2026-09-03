@@ -21,7 +21,7 @@ final class FakeWorkoutCalendarSync: WorkoutCalendarSyncing {
     /// Thrown by `disable()` instead of removing the calendar, when set.
     var disableError: (any Error)?
 
-    /// Thrown by `mirror(occurrences:)` instead of recording, when set.
+    /// Thrown by `mirror(_:)` instead of recording, when set.
     var mirrorError: (any Error)?
 
     /// The user deleted the app's calendar in Calendar.app: the app still holds
@@ -32,8 +32,13 @@ final class FakeWorkoutCalendarSync: WorkoutCalendarSyncing {
 
     private(set) var enableCallCount = 0
     private(set) var disableCallCount = 0
-    /// Every batch of occurrences handed to `mirror`, in order.
-    private(set) var mirroredOccurrences: [[PlannedWorkoutOccurrence]] = []
+    /// Every desired state handed to `mirror`, in order.
+    private(set) var mirroredStates: [PlannedWorkoutCalendarState] = []
+
+    /// The cadence half of each recorded pass — what most assertions look at.
+    var mirroredOccurrences: [[PlannedWorkoutOccurrence]] { mirroredStates.map(\.occurrences) }
+    /// The weekday half of each recorded pass.
+    var mirroredSeries: [[PlannedWorkoutSeries]] { mirroredStates.map(\.series) }
 
     func enable() async throws {
         enableCallCount += 1
@@ -48,7 +53,7 @@ final class FakeWorkoutCalendarSync: WorkoutCalendarSyncing {
         }
     }
 
-    func mirror(occurrences: [PlannedWorkoutOccurrence]) throws {
+    func mirror(_ desired: PlannedWorkoutCalendarState) throws {
         if let mirrorError {
             throw mirrorError
         }
@@ -62,7 +67,7 @@ final class FakeWorkoutCalendarSync: WorkoutCalendarSyncing {
         guard !isCalendarMissing else {
             throw WorkoutCalendarSyncError.calendarMissing
         }
-        mirroredOccurrences.append(occurrences)
+        mirroredStates.append(desired)
     }
 
     func disable() throws {

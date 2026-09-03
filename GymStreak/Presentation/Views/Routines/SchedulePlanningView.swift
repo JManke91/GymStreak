@@ -23,6 +23,29 @@ enum ScheduleFormatter {
         return formatter
     }()
 
+    /// Full standalone weekday names, indexed by Gregorian weekday (1 = Sunday).
+    ///
+    /// Hoisted for the same reason `weekdayFormatter` is: `weekdayFullLabel(for:)`
+    /// is read from a view body, and a `DateFormatter` per call there is exactly
+    /// what the main-thread rules forbid.
+    private static let fullWeekdaySymbols: [String] = {
+        let formatter = DateFormatter()
+        formatter.locale = Locale.current
+        return formatter.standaloneWeekdaySymbols
+            ?? ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]
+    }()
+
+    /// The full name of an ISO weekday (1 = Monday … 7 = Sunday), localized.
+    ///
+    /// The `% 7` is the ISO → Gregorian reindex, not a rounding trick: ISO 7
+    /// (Sunday) maps to index 0 and ISO 1…6 map to 1…6. Same conversion the
+    /// short labels below make, and the same trap `WorkoutCalendarRecurrence`
+    /// documents for `EKWeekday`.
+    static func weekdayFullLabel(for isoWeekday: Int) -> String {
+        guard (1...7).contains(isoWeekday) else { return "" }
+        return fullWeekdaySymbols[isoWeekday % 7]
+    }
+
     /// Short weekday labels keyed by ISO weekday (1 = Monday … 7 = Sunday).
     static func weekdayShortLabels() -> [(weekday: Int, label: String)] {
         let formatter = DateFormatter()

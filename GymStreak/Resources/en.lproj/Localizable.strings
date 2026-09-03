@@ -782,6 +782,8 @@
 "schedule.reference.hint" = "The cadence counts from this date. After your next completed workout it rolls off that instead — set it to start fresh.";
 "schedule.reference.is_last_workout" = "Your last workout";
 "schedule.weekdays.label" = "Training days";
+/* P9 drift hint in the planning sheet: %1$@ routine name, %2$@ full weekday */
+"schedule.hint.weekday_drift" = "Keep %1$@ on %2$@s";
 "schedule.weekdays.none" = "No days selected";
 "schedule.preview.title" = "Upcoming";
 "schedule.remove" = "Remove plan";

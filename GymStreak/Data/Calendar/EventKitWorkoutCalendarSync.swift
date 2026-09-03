@@ -132,7 +132,7 @@ final class EventKitWorkoutCalendarSync: WorkoutCalendarSyncing {
         try ensureAppCalendarExists()
     }
 
-    // `mirror(occurrences:)` lives in EventKitWorkoutCalendarSync+Mirror.swift —
+    // `mirror(_:)` lives in EventKitWorkoutCalendarSync+Mirror.swift —
     // this file owns the permission handshake and the calendar itself.
 
     func disable() throws {

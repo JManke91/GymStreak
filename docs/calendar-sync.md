@@ -1,21 +1,22 @@
 # Calendar Sync — planned workouts in Apple Calendar
 
-**Status:** slices 1–3 of 4 shipped and **device-verified** — opt-in and calendar
-ownership (§1–§10), cadence plans mirrored as all-day events (§11), and the mirror
-following the plan as it moves (§12: drift, window top-up, and both ways the user
-can take the feature away; walked on device 2026-09-03, §12i). Weekday plans are
-not modelled as a recurrence yet (ticket 04) — they contribute no events at all
-until then.
+**Status:** all four slices shipped — opt-in and calendar ownership (§1–§10),
+cadence plans mirrored as all-day events (§11), the mirror following the plan as
+it moves (§12: drift, window top-up, and both ways the user can take the feature
+away), and weekday plans mirrored as one open-ended repeating event (§14).
+All four are device-verified (§9, §11i, §12i, §14h).
 
 **Target:** iOS only. **The watch is untouched** — it holds no schedule or plan
 data at all (`docs/workout-planning.md` § "Watch surface"), so there is nothing
 to mirror there and no `WatchRoutine` DTO change.
 
-**Monetization: Free.** §3 Rule 4 (it exports the user's own data) plus the §4.1
-row "Apple Health sync + iCloud sync — platform integrations tied to the privacy
-promise". No cap, no `PaywallPlacement`, no nudge; the free residue is the entire
-capability. §7: the audience is existing planners, all founder-granted, so a gate
-would convert close to nobody.
+**Monetization: Free** — no cap, no `PaywallPlacement`, no nudge, no entitlement
+read anywhere on the path; the free residue is the entire capability. **This is a
+deliberate call, not one the gating rules made for us** — an earlier version of
+this paragraph derived it from §3 Rule 4 and the §4.1 Health/iCloud row, and both
+citations were wrong. The reasoning that actually holds, the competitive research
+behind it, and the one argument on record that must not be reused are in
+**§14**.
 
 ---
 
@@ -430,8 +431,11 @@ Dependency direction is the project's usual `Presentation → Domain ← Data`.
 | Domain | `Domain/Interfaces/CalendarSyncPreferenceProviding.swift` | The opt-in flag's surface, sibling of `WeightUnitPreferenceProviding`. |
 | Data | `Data/Calendar/EventKitWorkoutCalendarSync.swift` | The **only** file in the target that imports EventKit and the only owner of an `EKEventStore`. |
 | Data | `Data/Calendar/WorkoutCalendarAdoption.swift` | The duplicate guard's matching rule — pure and EventKit-free, so it can be tested (§4a). |
-| Domain | `Domain/Services/PlannedWorkoutCalendarReconciler.swift` | The mirror's policy: the marker, the window, and the create/delete diff. Foundation only (§11). |
-| Domain | `Domain/Services/PlannedWorkoutOccurrenceBuilder.swift` | Turns routines + history into the occurrences the calendar should hold, through `WorkoutPlanningService` (§11). |
+| Domain | `Domain/Services/PlannedWorkoutCalendarState.swift` | The vocabulary both shapes travel in: `PlannedWorkoutOccurrence`, `PlannedWorkoutSeries`, `PlannedWorkoutCalendarState`, `MirroredWorkoutEvent`, `WorkoutCalendarMirrorAction`. Foundation only (§14c). |
+| Domain | `Domain/Services/PlannedWorkoutMarker.swift` | The `gymstreak://` stamp in both forms — `/occurrence/<day>` and `/series` — and the parser that reads either back (§11b, §14c). |
+| Domain | `Domain/Services/PlannedWorkoutCalendarReconciler.swift` | The mirror's policy: the window and the create/delete diff across both shapes. Foundation only (§11, §14c). |
+| Domain | `Domain/Services/PlannedWorkoutCalendarStateBuilder.swift` | Turns routines + history into the state the calendar should hold, through `WorkoutPlanningService`. Branches on `RoutineScheduleType` (§11, §14a). |
+| Data | `Data/Calendar/WorkoutCalendarRecurrence.swift` | The ISO ↔ `EKWeekday` boundary in both directions, and the open-ended weekly `EKRecurrenceRule` (§14b). |
 | Domain | `Domain/Interfaces/PlannedWorkoutCalendarMirroring.swift` | The one call every trigger site makes: `reconcile(revalidatingCalendar:)`, with a `reconcile()` default (§12d). Never throws. |
 | Data | `Data/Calendar/PlannedWorkoutCalendarMirror.swift` | The coordinator: opt-in gate → repositories → builder → short-circuit → gateway, with failures logged and swallowed and both take-it-away cases handled (§12d, §12e). |
 | Data | `Data/Calendar/EventKitWorkoutCalendarSync+Mirror.swift` | The gateway's event-writing half — read back, diff, batched commit. Split out to keep both files inside the size guidance. |
@@ -628,10 +632,9 @@ calendar mirror calls the very same helper, so what the user sees in Calendar.ap
 is exactly what the app tells itself, and no further. A unit test asserts that
 equality directly rather than trusting it.
 
-**Weekday plans are genuinely different and do get a recurrence rule** — that is
-ticket 04, and the split falls exactly on the `RoutineScheduleType` boundary.
-Until then a weekday plan mirrors nothing at all, which is a visible gap for a Pro
-user with a fixed split.
+**Weekday plans are genuinely different and do get a recurrence rule** — the
+split falls exactly on the `RoutineScheduleType` boundary, and §14 covers the
+weekday half.
 
 ### 11b. Identity lives in the event, not in local bookkeeping
 
@@ -808,8 +811,8 @@ round-trip on a real CalDAV store (§12i step 6).
   400-day floor; clearing it leaves nothing desired, so the window falls back to
   the floor and those events stay. Switching sync off removes the whole calendar
   regardless.
-- **Weekday plans mirror nothing** until ticket 04 — a visible gap for a Pro user
-  on a fixed split.
+- **Weekday plans mirror nothing** — resolved in §14; they are now one open-ended
+  repeating event.
 - **The forward weekday scan is triplicated** (`WorkoutPlanningService` twice,
   `SchedulePlanningSheet` once). Real, untouched here — this feature does not need
   it, and a bug fix does not carry surrounding cleanup.
@@ -1190,17 +1193,23 @@ the shape of §11i:
 measurement — no Instruments trace was taken, because nothing was felt to chase.
 So the EventKit round-trip against a real CalDAV store is *not disproved* as a
 cost; it is simply below the threshold of noticeable at this library size. If a
-future slice adds work to the same pass — ticket 04's recurrence writes, say —
-re-walk this step and take a trace rather than assuming it still holds. The
+future slice adds work to the same pass — §14's recurrence writes did, and a
+weekday series expands to ~170 `EKEvent`s inside the 400-day read (§14e), and
+that read is synchronous on the main actor — re-walk this step and take a trace
+rather than assuming it still holds. §12g's figure covers 40 *cadence* routines
+and predates the expansion, so the weekday case is measured by nobody. The
 escalation path if it ever does not is in §12f.
 
 ### 12j. Follow-ups
 
 - **Resolved from §11j:** deleting a routine now reconciles — `deleteRoutine(_:)`
   ends in `fetchRoutines()`, which is a hook.
+- **Resolved in §14:** weekday plans are mirrored — as one open-ended repeating
+  event, not as one-shots — and the forward weekday scan was *not* triplicated
+  again: the series start comes from `WorkoutPlanningService.nextDue(...)`.
 - **Still open from §11j:** events written beyond the 400-day window are
-  unreachable once the plan that made them is cleared; weekday plans mirror
-  nothing until ticket 04; the forward weekday scan is triplicated.
+  unreachable once the plan that made them is cleared; the forward weekday scan
+  is triplicated inside `WorkoutPlanningService` itself.
 - **A workout finished on this iPhone does not refresh immediately** (§12b). The
   calendar is still correct on the next Routines appearance or foreground, so
   this is a latency gap and not a wrong calendar. Closing it is one line — post
@@ -1217,3 +1226,532 @@ escalation path if it ever does not is in §12f.
   foregrounds repeatedly in a minute pays one bounded, calendar-scoped query each
   time. Acceptable at this size; if it ever is not, throttle by wall-clock in the
   mirror rather than by moving the trigger.
+
+---
+
+## 13. Slice 4 — weekday plans become one repeating series
+
+A routine planned on fixed weekdays — Mon/Wed/Fri — is mirrored as a **single
+open-ended repeating all-day event**, not as a handful of dated ones. Everything
+else in the pass is unchanged: the same opt-in gate, the same triggers (§12b),
+the same pure reconciler, the same batched commit.
+
+With this slice the calendar mirror covers both plan shapes, and a routine moving
+between them swaps its calendar representation with no orphans left behind.
+
+### 13a. Two plan shapes, two mechanisms — and why that is not an inconsistency
+
+§11a refused an `EKRecurrenceRule` for cadence plans. This slice uses one for
+weekday plans. Both follow from the same rule: **the mechanism follows the
+schedule's semantics**, and the two schedules genuinely differ.
+
+| | `.everyNDays` | `.weekdays` |
+| --- | --- | --- |
+| Does the plan move? | Yes — `cadenceAnchor` re-derives it from the last completed session, so the series slides after nearly every workout (§12a). | No. Mon/Wed/Fri is Mon/Wed/Fri whether the user trained late, early or not at all. |
+| Calendar shape | A bounded rolling window of one-shot events. | One open-ended weekly recurrence. |
+| What happens if the app is not opened for months | The window goes stale and eventually runs dry. | Occurrences keep coming — the calendar never runs dry. |
+
+The last row is what the recurrence actually buys. For a cadence plan running dry
+is arguably *correct*: the next date depends on a completion the app has not seen,
+so promising an infinite tail would be a lie. For a weekday plan running dry would
+simply be a bug — nothing about Mon/Wed/Fri depends on anything the app has yet to
+learn.
+
+`WorkoutPlanningService` already treats the two this way: `plannedWeek` counts a
+weekday plan as a **fixed** number of selected days and marks past ones as
+*missed* rather than sliding them (`docs/workout-planning.md` § "Weekly goal +
+day-strip semantics"). The split therefore falls exactly on the
+`RoutineScheduleType` boundary, in `PlannedWorkoutCalendarStateBuilder.state(...)`,
+and both branches share one reconciler and one set of triggers.
+
+**The series start is `WorkoutPlanningService.nextDue(for:lastCompleted:...)`** —
+the very helper that labels the routine card and orders the up-next list. No
+second forward scan was written for the calendar; the existing triplication of
+that scan inside `WorkoutPlanningService` was not made a quadruplication.
+
+### 13b. The ISO / `EKWeekday` numbering trap
+
+The two numbering schemes in play are **not the same and never line up**:
+
+| | 1 | 2 | 3 | 4 | 5 | 6 | 7 |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| ISO (`RoutineSchedule.weekdaysMask`, `WorkoutPlanningService`) | Mon | Tue | Wed | Thu | Fri | Sat | Sun |
+| `EKWeekday` (Gregorian) | Sun | Mon | Tue | Wed | Thu | Fri | Sat |
+
+`EKWeekday(rawValue: isoWeekday)` is wrong for **all seven days**, not only at the
+Sunday boundary — it silently shifts the whole split by one day, which is exactly
+the kind of bug that ships because the code reads plausibly. `Calendar.firstWeekday`
+does not help: it does not change the value of the `.weekday` component, which is
+why `WorkoutPlanningService.isoWeekday(from:calendar:)` exists at all.
+
+`WorkoutCalendarRecurrence` therefore writes both directions out case by case
+rather than as arithmetic, and `WorkoutCalendarRecurrenceTests` pins all seven
+mappings in each direction — plus an assertion that the raw values genuinely
+differ for every day, so a future "simplification" to `rawValue` fails loudly.
+
+The rule itself is the ticket's shape exactly:
+
+```swift
+EKRecurrenceRule(
+    recurrenceWith: .weekly,
+    interval: 1,
+    daysOfTheWeek: [EKRecurrenceDayOfWeek(.monday), …],
+    daysOfTheMonth: nil, monthsOfTheYear: nil,
+    weeksOfTheYear: nil, daysOfTheYear: nil,
+    setPositions: nil,
+    end: nil                       // open-ended — that is the point
+)
+```
+
+The event is otherwise identical to a cadence occurrence: all-day, untimed,
+`timeZone = nil`, no `EKAlarm`, marker in `url` (§11d). Both shapes are built by
+one `makeAllDayEvent(titled:on:marker:in:)`; a series is that event plus a
+recurrence rule.
+
+`isoWeekdays(ofRules:)` takes the rules rather than the `EKEvent` they came off —
+an `EKEvent` needs an `EKEventStore` to construct, an `EKRecurrenceRule` does not,
+and that one signature choice is what keeps the mapping unit-testable with no
+event store anywhere in the suite.
+
+### 13c. One desired-state vocabulary, so transitions are not special cases
+
+The reconciler's desired state is now a `PlannedWorkoutCalendarState` — a list of
+`PlannedWorkoutOccurrence` **and** a list of `PlannedWorkoutSeries` — rather than a
+bare occurrence array. The action vocabulary grew alongside it:
+
+| Action | Written with | For |
+| --- | --- | --- |
+| `.create(occurrence)` / `.delete(reference:)` | `EKSpan.thisEvent` | Cadence one-shots (§11e). |
+| `.createSeries(series)` / `.deleteSeries(reference:)` | `EKSpan.futureEvents` | A weekday recurrence. |
+
+The delete span is a decision the **policy** layer makes, which is why deleting a
+series is its own case rather than a flag on `.delete` — the gateway executes it
+and does not re-derive it.
+
+This is what makes a shape transition unremarkable. `RoutinesViewModel.setSchedule`
+does not know that one happened; the routine simply contributes to the other list,
+and the diff removes whatever no longer matches:
+
+- **weekdays → cadence** → `.deleteSeries` + the window's `.create`s.
+- **cadence → weekdays** → the window's `.delete`s + one `.createSeries`.
+
+Both directions are covered by tests, at the reconciler level and end to end
+through the ViewModel. Moving a weekday plan back to the cadence is explicitly
+**ungated** (`docs/workout-planning.md` § "Pro gating (P9)"), so a lapsed user can
+walk that path and the calendar must follow it.
+
+The marker gained a second form to match: `gymstreak://routine/<uuid>/series`,
+with **no day in it**, because one event covers every occurrence — Apple documents
+that "recurring event identifiers are the same for all occurrences", so the series
+is the unit that has an identity. `PlannedWorkoutMarker.identity(of:)` replaced
+`canonicalized(_:)` and answers which of the two forms a marker is, or `nil` for
+anything the app did not write.
+
+The three value types, the marker and the diff now live in three files
+(`PlannedWorkoutCalendarState.swift`, `PlannedWorkoutMarker.swift`,
+`PlannedWorkoutCalendarReconciler.swift`) rather than one, which keeps each inside
+the 200–300-line guidance.
+
+### 13d. Destroy and rewrite, never edit into a live series
+
+When the selected weekdays change, the existing series is **removed with
+`.futureEvents` and a fresh one written** — the app never edits a live series in
+place.
+
+`EKRecurrenceRule` is immutable, so a changed pattern always means a new rule
+object regardless. The reason to remove rather than reassign
+`event.recurrenceRules` is a **documented gap**: Apple does not specify how
+`.futureEvents` behaves when occurrences in the affected range have already been
+**detached** (`EKEvent.isDetached` — the user dragged or edited one occurrence in
+Calendar.app). The API research could not resolve this from primary sources.
+Destroy-and-rewrite never edits into an existing series, so the undefined case
+never arises.
+
+The cost is that a user who changes their split repeatedly accumulates successive
+short-lived series rather than one continuous one. That is invisible in practice:
+past occurrences are left alone (the window starts today, §11c, and `.futureEvents`
+from the first in-window occurrence removes only that one onward), and nobody
+inspects series lineage in Calendar.app.
+
+### 13e. Reading a series back: collapse the expansion, match on the pattern
+
+Two things about the read path only matter for recurrences.
+
+**`events(matching:)` expands a recurrence.** One Mon/Wed/Fri series comes back as
+~170 separate `EKEvent`s across the 400-day window, every one carrying the same
+marker and the same `eventIdentifier`. Diffed naively that is 170 events wanting
+one series, i.e. 169 spurious deletes. `readMirroredEvents(in:window:)` therefore
+keeps only **one** occurrence of each recurring event.
+
+**Which one it keeps is load-bearing, and the array is unordered.** The kept
+occurrence becomes the handle for the `.futureEvents` removal, which takes the
+series from *that* occurrence onward and leaves everything before it standing —
+so it has to be the earliest occurrence inside the window. `EKEventStore.h` is
+explicit: `eventsMatchingPredicate:` returns "an array of EKEvent objects, or nil.
+**There is no guaranteed order to the events.**" Keeping whichever occurrence came
+back first would therefore, on any pass where that was not the earliest, truncate
+the old series mid-window and leave its stale days sitting beside the freshly
+written one — precisely the "nothing left behind" property this slice promises,
+and precisely what §13h step 3 checks. The candidates are sorted by `startDate`
+before the collapse, which is what makes "the earliest occurrence the mirror owns"
+true rather than hoped for.
+
+This was caught by the architecture review, not by the tests: the suite constructs
+no `EKEventStore`, so no unit test can observe the ordering of a real query. It is
+a good example of why §13h is not optional.
+
+When `eventIdentifier` is absent (it is `null_unspecified` in the SDK header) the
+**marker** stands in as the collapse key — it identifies a series equally well, one
+per routine. Collapsing on *something* matters: two uncollapsed occurrences of one
+series both carry that marker, so the diff would match the first and emit
+`.deleteSeries` for the second, truncating the very series it had just decided to
+keep, with no create to restore it.
+
+**A series is matched on its pattern, not on its start date.** The desired start
+date is `nextDue`, which walks forward *every day* — Monday's plan starts Monday,
+Tuesday's starts Wednesday. Comparing start dates would rewrite the series daily
+and churn the user's calendar for nothing. An open-ended weekly rule produces the
+same upcoming days no matter which past week it started in, so the match is on the
+ISO weekday set alone, projected back off the event's rule into
+`MirroredWorkoutEvent.recurringWeekdays`. A test pins this directly
+(`seriesIsMatchedOnThePatternNotTheStartDate`).
+
+Anything that is not the plain weekly shape this app writes — a fortnightly
+interval, a monthly "first Monday" ordinal, two rules on one event, or a repeat the
+user deleted in Calendar.app — reads as `nil` and is therefore **not** claimed as a
+match: the series is rewritten rather than trusted. Idempotency is unaffected,
+because a series the app itself wrote always round-trips.
+
+**The sync is one-way, and editing an app-written event in Calendar.app does not
+change the plan.** Confirmed on device 2026-09-03: switching the series from
+Saturday to Thursday in Calendar.app leaves the routine's schedule untouched, and
+the next pass reads the pattern back, finds it is not what the plan asks for, and
+rewrites Saturday. That is the pattern match of §13e doing exactly its job — the
+same mechanism that catches a user deleting the repeat.
+
+This is deliberate and follows from the feature's premise: **the plan is the
+source of truth and the calendar is a projection of it** (§11e, §12e). The reverse
+direction was never built and should not be added casually — it would need
+`.EKEventStoreChanged`, which §12c rules out (it carries no detail, and whether the
+app's own commits post it is undocumented, so an observer that wrote back risks a
+write → notify → write loop). Reconciliation would also have to decide what a
+detached or partially-edited occurrence *means* as a plan, which a weekday split
+cannot express.
+
+The user's own events are unaffected by any of this: an event without a marker is
+never touched (§11b). Only events the app wrote are reclaimed.
+
+**When it corrects itself** is whichever trigger fires first (§12b) — the
+revalidating pass on the next foreground, which exists precisely for out-of-band
+changes and always reaches `events(matching:)`, or any plan-adjacent refresh. Edit
+the event while the app is already in the foreground and no activation transition
+occurs, so the correction waits for the next routines-list refresh. Until then the
+calendar shows the user's edit. That latency is accepted: a wrong day in a
+projection is not worth an `.EKEventStoreChanged` observer and the loop risk it
+carries.
+
+### 13f. Entitlement-unaware, and here it is load-bearing
+
+Fixed-weekday schedules are Pro (P9), so only a subscriber can *create* one. That
+gate lives where it already lived —
+`ScheduleGatingPolicy.isScheduleTypeLocked(_:isPro:isGatingEnabled:)`, consulted
+only by `RoutinesViewModel`. **No `isPro` reaches the builder, the reconciler or
+the gateway.**
+
+The consequence is the guarantee `docs/workout-planning.md` § "Pro gating (P9)"
+already makes structurally: **a lapsed subscriber's weekday series keeps being
+maintained**, exactly as their weekly goal, day-strip markers and up-next ordering
+do. A completion or any plan-adjacent refresh after a lapse keeps the calendar
+correct. `lapsedSubscriberKeepsTheirSeries` asserts it with gating switched **on**
+(unlike the shipped app, where it would pass for the wrong reason), alongside the
+existing expectations in `GymStreakTests/ScheduleGatingTests.swift`.
+
+**Monetization: Free.** The sync adds no gate. The depth gate sits upstream — a
+free user can only build `.everyNDays`, so their calendar mirrors cadence plans
+only. That is the free residue working as designed, not a gate this slice
+introduced. §13 carries the reasoning for the feature as a whole; this slice does
+not reopen it.
+
+### 13g. Tests
+
+`bundle exec fastlane test_unit_ios` — green (1233 tests, 0 failures). **The watch
+suite was not run and is not required: no watch code was touched.** The watch holds
+no schedule data at all, so there is nothing to mirror there.
+
+No `EKEventStore` is constructed anywhere in the suite.
+
+`GymStreakTests/WorkoutCalendarRecurrenceTests.swift` (new — imports EventKit for
+the value objects only):
+
+| Test | Pins |
+| --- | --- |
+| `isoMapsToEKWeekday` (7 cases) | Every ISO weekday → the right `EKWeekday`, and that the raw values differ. |
+| `ekWeekdayMapsBackToISO` (7 cases) | Every `EKWeekday` → the right ISO weekday. |
+| `outOfRangeISOWeekdayIsRejected` | 0 and 8 map to nothing, not to a wrong day. |
+| `isoNumberingAgreesWithThePlanner` | A real Sunday is ISO 7 per `WorkoutPlanningService`, so `.sunday` is the right answer. |
+| `weeklyRuleShape` | `.weekly`, interval 1, the right days, **`recurrenceEnd == nil`**. |
+| `sundayOnlyRule`, `emptyWeekdaysProduceNoRule` | The boundary day alone; an empty set is not a plan. |
+| `ruleRoundTrips` (5 sets) | A rule this app wrote reads back as the same ISO weekdays. |
+| `foreignRulesReadAsNil`, `multipleRulesReadAsNil`, `noRulesReadsAsNil` | Patterns the app did not write are never claimed as a match. |
+
+`PlannedWorkoutCalendarReconcilerTests` (extended): the series marker's format and
+round-trip; a series created into an empty calendar; an unchanged plan as a no-op;
+**a moved start date still matching**; a changed weekday set producing
+`.deleteSeries` **then** `.createSeries`; removal; a de-recurred event rewritten; a
+duplicate collapsed; and both shape transitions.
+
+`PlannedWorkoutCalendarMirrorTests` (extended): a weekday plan mirrored as one
+series and no occurrences; the start date equal to `nextDue` and landing on a
+selected weekday; both shapes side by side; idempotency (the second pass is
+short-circuited entirely, so no EventKit call at all); both transitions end to end
+through `RoutinesViewModel.setSchedule`; removal; and the lapse case.
+
+### 13h. Device verification — walked 2026-09-03, all steps passed
+
+Slices 1–3 were each device-verified before being called done (§9, §11i, §12i)
+because EventKit's all-day and recurrence behaviour is under-documented and a
+green simulator suite proves little about what Calendar.app actually renders.
+All seven steps below passed on device.
+
+**Step 3 is the one that mattered.** It is the only empirical check on the
+`.futureEvents` ordering fix (§13e) — the bug the architecture review caught, which
+no unit test could see because the suite constructs no `EKEventStore`. Both halves
+were confirmed: the future occurrences of the dropped weekday are gone, and
+**occurrences already in the past are untouched**. That is the evidence that the
+retained deletion handle really is the earliest in-window occurrence.
+
+Step 7 was added during testing and answered the one-way question now written up in
+§13e.
+
+The steps, with Calendar sync on:
+
+1. Plan a routine Mon/Wed/Fri → Calendar.app shows **one** repeating all-day
+   event, occurrences on exactly those weekdays, no alarm, no time.
+2. Scroll months ahead → occurrences continue with no further app activity.
+3. Change the split to Mon/Wed/Sat → the Saturday occurrences appear and Friday's
+   future ones are gone; **past occurrences are untouched**.
+4. Switch the routine to a cadence → the repeat is gone, the rolling window is
+   there, no orphan series.
+5. Switch it back to weekdays → one repeating event, no leftover one-shot events.
+6. Remove the plan → the series is gone.
+
+7. Edit the repeating event in Calendar.app — Saturday to Thursday, say. The plan
+   must be unchanged in the app, and the next pass must rewrite Saturday (§13e).
+
+Step 3 cannot be replaced by a unit test: whether `.futureEvents` from the earliest
+in-window occurrence really leaves the past alone is empirical, and it is the step
+the ordering bug in §13e would have failed.
+
+### 13i. Follow-ups (recorded, not fixed)
+
+- **A renamed routine keeps its old event titles** until the plan itself changes.
+  True for both shapes and pre-existing (§11): the marker carries identity, the
+  title is not compared, so a rename is not a diff. Fixing it means either
+  comparing titles in the reconciler or reacting to a rename as a plan change.
+- **Successive short-lived series accumulate** for a user who edits their split
+  repeatedly (§13d). Deliberate, and invisible in Calendar.app.
+- **Per-occurrence customisation is out of scope** — a single `EKRecurrenceRule`
+  cannot express "different targets on different days". If that is ever wanted,
+  weekday plans have to move to materialized events too, giving up the
+  never-runs-dry property.
+- **`EKSpan.thisEvent` editing of a single occurrence is not supported**; the app
+  only ever writes or removes a whole series.
+- **The main-actor read now materializes ~170 `EKEvent`s per weekday routine per
+  pass** (§13e), against a §12g measurement that predates the expansion and covers
+  cadence routines only.
+
+  **This is paid on every foreground, not once per launch.** The plumbing triggers
+  are short-circuited on an unchanged plan (§12d), but the revalidating pass
+  deliberately steps over that cache and is the *only* trigger that always reaches
+  `events(matching:)` — that is its entire purpose (§12e). So a profiler will see
+  the expansion on every return from background; anyone reading this follow-up
+  should expect that rather than a single startup cost.
+
+  Acknowledged rather than fixed. It is bounded, scoped to the app's own calendar,
+  and the routine count that expands is small in practice — weekday plans are Pro
+  (P9), so this is one to three splits, roughly 500 events, not a library-scaled
+  number — and the activation pass already runs inside a `Task`, so it lands off
+  the activation turn rather than in front of the first frame. If it ever bites,
+  the two routes are a second, seven-day read for series only (a weekly rule's
+  next occurrence is always within a week) or the `actor`-owned store escalation
+  in §5. Measure before doing either.
+
+---
+
+## 14. Monetization — why this is free
+
+Recorded in full because the first pass got the *derivation* right by accident and
+the *reasoning* wrong, and because a future platform integration will otherwise
+inherit the shortcut. Re-examined 2026-09-03 with competitive research.
+
+### 14a. The rules do not settle this one
+
+The planning verdict and slices 01–03 all cited **§3 Rule 4** ("never hold the
+user's own data hostage") plus the **§4.1 "Apple Health sync + iCloud sync"** row.
+Neither reaches this feature:
+
+- **Rule 4 governs *logged history*.** This mirrors forward-looking *plans*.
+  Gating it would withhold nothing the user has generated — the plan stays fully
+  visible in the app, the planned week keeps working, and no logged set is touched.
+- **The §4.1 Health/iCloud row rests on §5's argument** that gating sync would
+  require an account and break the no-account pitch. Calendar sync needs no
+  account and does not touch the privacy promise.
+- **Rule 1** does not protect it either: calendar sync is nowhere on the aha path
+  (build → train → log → number goes up). **Rule 3** does not apply — it is not
+  in-workout and not on the watch.
+
+So this is a discretionary decision. It was recorded as if the rules made it,
+which is the part being corrected.
+
+### 14b. Why Free is nevertheless right
+
+1. **It is a retention surface, and §10's free-user D30 guardrail outranks
+   revenue.** The mirror puts the app inside a surface the user opens daily and
+   keeps working while the app is closed — a zero-marginal-cost re-engagement
+   channel across exactly the gaps where fitness apps lose people.
+2. **Every gate mechanism in §2's ranking fails here.** There is no countable unit,
+   so no usage cap — you cannot sell "12 calendar events". A truncated horizon
+   (`PlannedWorkoutCalendarStateBuilder.horizonPerRoutine`, 8 occurrences) produces a
+   calendar that reads as *broken*, not as a taster, and destroys trust in the
+   feature. The output lives in Calendar.app, so there is nothing to blur. What is
+   left is a **hard feature lock** — the mechanism §2 measures at 1.5–2× worse —
+   on output the user has never seen, which the Monetization Gate's "never lead
+   with a bare paywall on a feature whose output the user has never seen"
+   explicitly forbids.
+3. **It is P9's funnel, and gating it would delete P9's best pitch.** A free user
+   can only build `.everyNDays` (`ScheduleGatingPolicy.isScheduleTypeLocked`), and
+   §12a makes drift honest: train two days late and every future session slides.
+   In the calendar that drift happens *next to the user's real commitments*, over
+   and over, in a surface they chose to open. That is precisely §2's dated,
+   self-inflicted upgrade trigger — the thing a lock cannot manufacture. Gate the
+   sync and fixed-weekday scheduling becomes a price with no felt reason behind it.
+
+### 14c. Competitive position (researched 2026-09-03)
+
+| App | Writes planned workouts to the system calendar? | How its in-app calendar is tiered |
+|---|---|---|
+| Strong | No / unclear — scheduling listed, no calendar sync or `.ics` | Scheduling absent from the PRO feature list; implied free |
+| Hevy | **No** — integrations are Apple Health, Health Connect, Strava, Google Fit, Pro-gated Google Sheets | Calendar/streak view free; Pro gates routines, history, heatmaps, charts |
+| Fitbod | **No** — Apple Health sync of *completed* workouts only; scheduling is push notifications | Moot: no permanent free tier at all |
+| Jefit | No / unclear — in-app calendar and web/mobile account sync only | Calendar free in Basic; Elite gates reports and analytics |
+| Boostcamp | No / unclear — Apple Health and Health Connect only | Calendar core to the free app; Pro gates Strength Score and analytics |
+| Alpha Progression | No / unclear — in-app calendar with reports | Calendar not called out as Pro; Pro gates the generator and charts |
+
+Three conclusions:
+
+- **This is a category-wide gap.** Every competitor stops at an in-app
+  history/consistency view. The one app found doing anything adjacent, FitSync,
+  syncs *completed* Apple Watch workouts rather than planned ones and has too few
+  ratings to display a review average — so the "log to calendar" variant has no
+  pull, and the value sits specifically in **planned** sessions.
+- **Where an in-app calendar exists, it is free in all of them.** Every competitor
+  monetizes depth and analytics instead — the same shape §4.2a already runs. Being
+  the only app that *has* calendar sync and the only one that *charges* for it
+  would read as a toll at exactly the moment a switcher judges whether the free
+  tier is generous (§10).
+- **Demand is real, large and unmet, but the evidence is adjacent.** ABC
+  Trainerize's public board has had ["Ability to schedule workout onto
+  Google/Phone Calendar"](https://ideas.abcfitness.com/forums/940789-client-gym-members-abc-trainerize/suggestions/6903963-ability-to-schedule-workout-onto-google-phone-ca)
+  open since **December 2014 with 7,391 votes**, re-asked in a
+  [second 2024 thread](https://ideas.abcfitness.com/forums/167887-coach-trainer-abc-trainerize/suggestions/48746012-calendar-sync-for-workouts-training-program),
+  and the ["Google Calendar Sync" it eventually shipped](https://help.trainerize.com/hc/en-us/articles/31440370059412-Sync-Your-Google-Calendar-to-ABC-Trainerize)
+  pulls the *trainer's* calendar in rather than pushing workouts out — the
+  original ask is unresolved a decade later. Bevel Health carries the same request
+  at 211 votes, marked "planned (soon)".
+  **Research caveat:** the pass could not reach Reddit, so there is no direct
+  evidence either way about demand among Strong/Hevy users specifically, and a few
+  "not gated" readings come from marketing and help pages rather than line-by-line
+  pricing tables.
+
+High unmet demand is the honest steelman for gating — it is the profile of
+something people would pay for, and calendar sync is the only capability here that
+no rival offers *and* that needs no Apple Intelligence hardware, which is exactly
+the §4.3 gap. It still loses: **a differentiator only differentiates if a
+prospective user can experience it.** Behind a paywall it is a bullet on a
+comparison table; free, it is what someone screenshots and tells a training partner
+about. Word-of-mouth is this app's only acquisition channel (§10), and §5 already
+made and accepted this identical trade for the Apple Watch app — "the single
+biggest forgone gate."
+
+### 14d. One argument on record that must not be reused
+
+The planning verdict also said *"the audience is existing planners, all
+founder-granted, so a gate would convert close to nobody."* **Do not reuse it.** It
+proves too much — every new feature's early adopters are today's users, so that
+reasoning forbids gating anything, forever. It also runs the wrong way on
+reversibility: **Free → Pro is a taking-away** (§1's backlash, paid for in the
+review section), while **Pro → Free is a gift**. If there were a real case for
+gating, "founders would not pay anyway" would not be a reason to skip it. Free here
+stands on §14b, not on that.
+
+### 14e. What is *not* gated, and the drift hint that shipped
+
+Free applies to the **sync**. It says nothing about the schedule shapes it mirrors:
+P9 is untouched and stays upstream, creation-time only, in
+`ScheduleGatingPolicy` — no `isPro` reaches the reconciler, the mirror or the
+EventKit gateway, and a lapsed subscriber's weekday series keeps being maintained.
+
+What the sync earns instead is a **discovery surface for P9**, shipped as ticket 05
+(blocked on 04, because selling a weekly split whose calendar would have been empty
+is worse than not asking). It gates nothing; it points at a gate that already
+exists, at the moment its absence is felt. §2's reasoning is the whole case: a
+dated, self-inflicted trigger converts 1.5–2× better than a lock, because the user
+understands what they are missing.
+
+**The signal, and the two obvious versions that are wrong.**
+
+- **"Count how often the plan moved" fires for everyone, forever.** A cadence plan
+  re-anchors on the live last completion, so it moves after nearly every session
+  (§12a). That is the feature working.
+- **"The weekday changed" fires for everyone on a walking schedule.** For any
+  interval not divisible by 7 the weekday rotates by construction — every-3-days
+  is *supposed* to walk around the week, and that user chose it deliberately.
+- **What shipped is narrow and stateless:** an active `.everyNDays` plan whose
+  `intervalDays` is a **multiple of 7** — the only reason to pick 7 or 14 is to
+  express a weekly rhythm — whose next occurrence has landed on a different weekday
+  than `startDate`'s. `WeekdayScheduleHintPolicy.driftedStartWeekday(...)`, pure
+  Domain logic, no counter, no persisted state, no schema change. It returns the
+  weekday the plan *started* on, because that is the day the user meant and the one
+  the hint offers to restore.
+
+Being stateless is what makes it honest: the hint is true at the moment it is
+shown, and it **disappears by itself** when the user next trains on their intended
+day — nothing to reset, nothing to expire. A persisted "drifted N times" tally
+remains the fallback if this proves too noisy in use; it would live on the
+`MonthlyAllowanceStore` App Group precedent and never as a `RoutineSchedule`
+property, which is CloudKit schema surface and a production deploy for a nudge.
+
+**Two constraints, both held.** It is a **tappable hint, never an auto-presented
+paywall** — `WeekdayScheduleHintRow` is a `Button` whose tap is the intent §8
+requires, and nothing raises a paywall as a consequence of drift, a completion or a
+reconcile pass. And it goes **never in the `EKEvent`**: upsell text in a calendar
+event syncs to every device the user owns and to any CalDAV client, reads as spam,
+and is unremovable from the app's side once written. The written event shape is
+byte-identical to §13's.
+
+**Eligibility is a separate question from truth**, and they live in different
+places. `WeekdayScheduleHintPolicy` answers *is there something true to say?* and
+reads no entitlement. `RoutinesViewModel.weekdayScheduleHintDay(for:)` answers *may
+we say it to this user?* by asking `ScheduleGatingPolicy.isSubjectToGate(...)` —
+reused, not restated — so a subscriber, a Founder and a build with the kill switch
+off are silent for exactly the reason they are silent everywhere else. The gate is
+asked first: a Pro user's plan is never even examined. A Founder nudged toward
+something they already own is the §7 scenario the grant exists to prevent.
+
+No new `PaywallPlacement` case, no new headline key, no RevenueCat dashboard
+change: the tap calls the existing `requestWeekdaySchedule()`, so the paywall
+request has one caller and `paywall.headline.weekday_schedule` already names the
+capability rather than saying "Go Pro" (§8 C).
+
+**Measurement.** `weekday-schedule` Placement impressions in RevenueCat, before
+versus after, are the only available read — there is no analytics backend. If
+impressions do not move, the hint is not being seen and the surface is wrong; if
+impressions move and conversions do not, the *offer* is wrong, not the trigger.
+
+### 14f. Where else this decision is written down
+
+`docs/monetization-strategy.md` §4.1 carries the free-tier row.
+`docs/marketing/app-store-description.md` and
+`docs/marketing/app-store-promotional-text.md` carry the listing copy — both
+**released by §13**: a fixed-weekday plan now mirrors a real repeating event, so
+the claim holds for the Pro cohort too.

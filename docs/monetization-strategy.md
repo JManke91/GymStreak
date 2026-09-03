@@ -134,6 +134,7 @@ raw history never does. Raw CSV export stays free (see §5) precisely because th
 | **Apple Watch app — complete and standalone** | ✅ SHIPPED | Rule 3 + top-3 acquisition differentiator. |
 | Progressive overload (rep ranges + Double Progression suggestion) | ✅ SHIPPED | This is the *retention* engine. Gate its analytics (§4.2a), not its function. |
 | Apple Health sync + iCloud sync | ✅ SHIPPED | Platform integrations tied to the privacy promise. |
+| **Apple Calendar sync of planned workouts** | ✅ SHIPPED | Added 2026-09-03. **Not free by rule** — Rule 4 governs logged history, not forward-looking plans, and the row above rests on §5's account argument, which this does not trigger. Free on funnel grounds: it is a retention surface (§10 guardrail), every §2 mechanism fails on it (no countable unit; a truncated horizon reads as broken; nothing to blur), and it is P9's funnel — a free user has only `.everyNDays`, so the calendar is where drift makes fixed-weekday scheduling sell itself. No competitor writes planned workouts to the system calendar, so it is an acquisition asset on this app's only channel — the same trade §5 accepted for the watch app. Full reasoning and research: `docs/calendar-sync.md` §14. |
 | Workout summary (duration, volume, calories) | ✅ SHIPPED | |
 | Per-workout muscle map | ✅ SHIPPED | Single-workout scope. |
 | **Post-Workout Recap** (AI) | ✅ SHIPPED | Single-session scope — see §4.3. |

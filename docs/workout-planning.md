@@ -7,7 +7,7 @@ Because the number of planned sessions in a given week depends on the schedule, 
 
 Target: **iOS app only** (`GymStreak`). The watch is untouched — schedules are not part of the watch-sync DTO.
 
-These plans are also what **Apple Calendar sync** publishes — an opt-in feature with its own doc, `docs/calendar-sync.md`. The opt-in toggle, the app-owned calendar, and the mirroring of **`.everyNDays` plans** as all-day events have shipped; the calendar reads its dates from `upcomingCadenceDates` below, so it always agrees with the planning sheet's preview. Weekday plans still write nothing (they become an `EKRecurrenceRule` in a later slice), and nothing is refreshed on a completion yet.
+These plans are also what **Apple Calendar sync** publishes — an opt-in feature with its own doc, `docs/calendar-sync.md`. It is complete: the opt-in toggle, the app-owned calendar, **`.everyNDays` plans** as a rolling window of all-day events, **`.weekdays` plans** as one open-ended weekly `EKRecurrenceRule`, and refreshes on plan edits, completions and app activation. Both shapes read their dates from the helpers below — `upcomingCadenceDates` for the cadence window, `nextDue` for the series start — so the calendar always agrees with the planning sheet's preview and the routine cards. The calendar never consults the entitlement, so a lapsed subscriber's weekday series keeps being maintained, exactly as their weekly goal and day-strip markers are.
 
 ## Decisions (confirmed with the user)
 - **Hybrid schedule model** — each routine is planned *either* by a rolling cadence (**every N days**) *or* on fixed **weekdays** (e.g. Mon/Wed/Fri). A routine can also be **unplanned**.

@@ -57,6 +57,8 @@ in §9.
 | Blurred preview lock (+ `.proLocked` modifier) | `OnyxProLockOverlay` | `Presentation/Views/DesignSystem/` |
 | Pro marker for gated entry points | `OnyxProBadge` | `Presentation/Views/DesignSystem/` |
 | §8 placement D allowance hint | `OnyxCapNudge` | `Presentation/Views/DesignSystem/` |
+| P9's drift hint (§5f) — placement C with a passive entry point | `WeekdayScheduleHintRow` | `Presentation/Views/Routines/` |
+| P9's drift predicate (§5f) — pure, entitlement-free | `WeekdayScheduleHintPolicy` | `Domain/Services/` |
 | Debug placement section | `DebugPaywallSectionView` (`#if DEBUG`) | `Presentation/Views/Settings/Components/` |
 | P1 — routine cap rules | `RoutineCapPolicy` | `Domain/Services/` |
 | P2 — analytics gate rules | `ChartGatingPolicy` | `Domain/Services/` |
@@ -1303,6 +1305,51 @@ intact" true by construction (`refusedEditLeavesExistingPlanIntact`). Moving *ou
 back to the cadence is allowed — the gate is on the Pro shape, not on the routine. **Removing a
 plan is never gated**: Rule 4 constrains what a user may build, and removing only gives capability
 back.
+
+**P9 now has a discovery surface, and it is a hint rather than a gate.** A lock tells a free user
+the weekly split costs money and gives them no felt reason; §2 of the strategy measures a dated,
+self-inflicted trigger at 1.5–2× better conversion precisely because the user understands what they
+are missing. `WeekdayScheduleHintRow` supplies that trigger out of state the app already computes:
+one inline, tappable row in the planning sheet — *"Keep Leg Day on Wednesdays"* — for a user whose
+cadence is a **multiple of 7** (the only reason to pick 7 or 14 is to express a weekly rhythm) and
+whose next occurrence has landed on a different weekday than the plan started on. That user asked
+for "every Wednesday", got "every 7 days", and one late session moved them to Thursday permanently.
+
+It **gates nothing.** No new `PaywallPlacement`, no new headline key, no RevenueCat dashboard
+change: the tap calls the same `requestWeekdaySchedule()` the mode picker does, so the paywall
+request still has one caller. A user who ignores the row forever loses nothing.
+
+**Truth and eligibility are answered in different places**, deliberately.
+`WeekdayScheduleHintPolicy.driftedStartWeekday(...)` (`Domain/Services/`, pure, isolation-agnostic)
+answers *is there something true to say?* and reads no entitlement.
+`RoutinesViewModel.weekdayScheduleHintDay(for:)` answers *may we say it to this user?* by asking
+`ScheduleGatingPolicy.isSubjectToGate(...)` — reused rather than restated, which is what makes a
+subscriber, a Founder and a build with the kill switch off silent here for the same reason they are
+silent everywhere else. The gate is asked **first**, so a Pro user's plan is never examined. A
+Founder nudged toward something they already own is the §7 scenario the grant exists to prevent.
+
+**The two signals that were rejected** are worth keeping on record, because both look right:
+counting how often the plan moved fires for everyone forever (a cadence re-anchors on the live last
+completion, so it moves after nearly every session), and "the weekday changed" fires for everyone on
+a non-multiple-of-7 interval, where the weekday rotates *by construction* and the user chose that
+deliberately. `nonWeeklyIntervalsAreNeverHinted` pins the second across twelve intervals and a
+fortnight of completion offsets.
+
+**The eligibility question is evaluated inside `body`, deliberately.** `SchedulePlanningSheet`'s
+`hintWeekday` walks `routine.schedule`, builds an ISO `Calendar` and calls `nextDue` on every
+render — work the main-thread rules forbid when it scales with user data. It does not: this is a
+modal editor for one routine, and the relationship fault is already realized by the view's own
+`init`. Precomputing into `@State` would be the worse trade, for the reason `routineCapNudge`
+already documents — the entitlement is read inside that call, and reading it live during `body` is
+what makes the row vanish the instant a purchase completes. A cached copy would need its own
+invalidation on entitlement change to avoid leaving an upsell in front of someone who has just paid.
+Raised as a warning by the architecture review and accepted on those grounds.
+
+The predicate is **stateless** — no counter, no `UserDefaults`, and above all no `RoutineSchedule`
+property, which would be CloudKit schema surface and a production schema deploy for a nudge. That is
+also what makes it honest: it is true when shown and disappears by itself once the user next trains
+on their intended day, with nothing to reset. Nothing auto-presents; the tap is the intent §8
+requires before a paywall may be raised.
 
 **Why the schedule sheet closes itself on a refusal.** The paywall is hosted at the app root, and
 SwiftUI supports one presentation per context: a root `.sheet` raised while `SchedulePlanningSheet`

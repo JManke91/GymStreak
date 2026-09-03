@@ -2,121 +2,15 @@
 //  PlannedWorkoutCalendarReconciler.swift
 //  GymStreak
 //
-//  The policy half of calendar sync: given the occurrences the app wants the
-//  user's calendar to show and the markers already in it, decide what to create
-//  and what to delete. Pure Foundation — no EventKit, no ViewModel, no
-//  entitlement — so the interesting logic is unit-testable while the real
-//  `EKEventStore` stays out of the test suite entirely.
+//  The policy half of calendar sync: given the state the app wants the user's
+//  calendar to be in and the markers already in it, decide what to create and
+//  what to delete. Pure Foundation — no EventKit, no ViewModel, no entitlement —
+//  so the interesting logic is unit-testable while the real `EKEventStore` stays
+//  out of the test suite entirely.
 //  See docs/calendar-sync.md.
 //
 
 import Foundation
-
-// MARK: - Values
-
-/// One planned session the app-owned calendar should show, as an all-day event.
-struct PlannedWorkoutOccurrence: Equatable, Sendable {
-    let routineId: UUID
-    /// Start of the day the session is planned for, in the user's calendar.
-    let day: Date
-    /// What the event is called, already localized ("Push Workout").
-    let title: String
-
-    /// The identity written into `EKEvent.url` and read back on the next pass.
-    var marker: String {
-        PlannedWorkoutMarker.string(routineId: routineId, day: day)
-    }
-}
-
-/// An event already present in the mirrored window, projected off `EKEvent` so
-/// this layer never sees EventKit.
-struct MirroredWorkoutEvent: Equatable, Sendable {
-    /// A positional handle the gateway mints for **this pass only** — the index
-    /// of the event in the batch it just read.
-    ///
-    /// Deliberately *not* `eventIdentifier`: Apple documents that "if an event's
-    /// calendar is changed, the eventIdentifier is likely to change as well", so
-    /// it is unfit as a durable key and nothing here persists one.
-    let reference: Int
-    /// `EKEvent.url`, if the event carries one. `nil` — or anything that does
-    /// not parse as a marker — means the app did not write this event.
-    let markerURL: String?
-}
-
-/// What the gateway should do to bring the calendar in line with the plan.
-enum WorkoutCalendarMirrorAction: Equatable, Sendable {
-    case create(PlannedWorkoutOccurrence)
-    case delete(reference: Int)
-}
-
-// MARK: - Marker
-
-/// The `gymstreak://routine/<uuid>/occurrence/<yyyy-MM-dd>` stamp that gives
-/// every written event its identity.
-///
-/// **Identity lives in the event, not in local bookkeeping.** Because the app
-/// owns its calendar exclusively, reading the marker back out of the calendar is
-/// both simpler and more robust than persisting identifiers: there is no local
-/// map to drift, and a reinstall — or a second device syncing the same CalDAV
-/// calendar — sees exactly the same state. The calendar *is* the state.
-///
-/// The marker goes in `url` rather than `notes` so the notes field stays the
-/// user's own. The app already declares `CFBundleURLTypes` for this scheme.
-enum PlannedWorkoutMarker {
-
-    private static let scheme = "gymstreak"
-    private static let routineHost = "routine"
-    private static let occurrenceSegment = "occurrence"
-
-    /// The marker for a routine's occurrence on a given day.
-    ///
-    /// The day is rendered from `Calendar` components rather than a
-    /// `DateFormatter`: a formatter caches its time zone at construction, and
-    /// hoisting one as a `static let` (which the main-thread rules require) would
-    /// mean a marker that silently shifts by a day for a user who travels.
-    static func string(routineId: UUID, day: Date) -> String {
-        let calendar = HistoryStatsService.isoGermanCalendar()
-        let parts = calendar.dateComponents([.year, .month, .day], from: day)
-        let dayString = String(
-            format: "%04d-%02d-%02d",
-            parts.year ?? 0, parts.month ?? 0, parts.day ?? 0
-        )
-        return "\(scheme)://\(routineHost)/\(routineId.uuidString)/\(occurrenceSegment)/\(dayString)"
-    }
-
-    /// The canonical form of a marker read back off an event, or `nil` when the
-    /// string is not one of ours.
-    ///
-    /// Canonicalising rather than comparing raw strings makes the diff immune to
-    /// spelling differences that mean the same thing (a lowercase UUID, say).
-    /// Anything that fails to parse belongs to the *user* — they can add events
-    /// to the app's calendar in Calendar.app — and is never touched.
-    static func canonicalized(_ raw: String) -> String? {
-        guard let url = URL(string: raw),
-              url.scheme == scheme,
-              url.host == routineHost else { return nil }
-        // ["/", "<uuid>", "occurrence", "<yyyy-MM-dd>"]
-        let components = url.pathComponents
-        guard components.count == 4,
-              components[2] == occurrenceSegment,
-              let routineId = UUID(uuidString: components[1]),
-              let day = dayComponents(from: components[3]) else { return nil }
-        return "\(scheme)://\(routineHost)/\(routineId.uuidString)/\(occurrenceSegment)/"
-            + String(format: "%04d-%02d-%02d", day.year, day.month, day.day)
-    }
-
-    /// Strict `yyyy-MM-dd` parsing — three numeric fields of the right width and
-    /// in range. Not a `DateFormatter`, for the time-zone reason above, and not
-    /// a `Date`, because the diff only ever compares days as written.
-    private static func dayComponents(from raw: String) -> (year: Int, month: Int, day: Int)? {
-        let parts = raw.split(separator: "-", omittingEmptySubsequences: false)
-        guard parts.count == 3,
-              parts[0].count == 4, parts[1].count == 2, parts[2].count == 2,
-              let year = Int(parts[0]), let month = Int(parts[1]), let day = Int(parts[2]),
-              (1...12).contains(month), (1...31).contains(day) else { return nil }
-        return (year, month, day)
-    }
-}
 
 // MARK: - Window
 
@@ -171,6 +65,15 @@ enum PlannedWorkoutCalendarReconciler {
     /// routine, so a plan anchored today reaches ~240 days out. 400 leaves room
     /// for a reference date set a few months ahead, so shortening or clearing a
     /// long cadence still finds the events it left behind.
+    ///
+    /// A weekday series needs none of this reach — it repeats weekly, so its
+    /// next occurrence is always within seven days — and reading it back through
+    /// this window is **not** free: `events(matching:)` expands a recurrence, so
+    /// one series materializes ~170 `EKEvent`s per pass on the main actor
+    /// (docs/calendar-sync.md §13e). Measured at 40 cadence routines and found
+    /// imperceptible (§12g), but that measurement predates the expansion; a
+    /// shorter second read for series, or the `actor` escalation in §5, is the
+    /// route if it ever bites.
     static let minimumWindowDays = 400
 
     /// The span of calendar the mirror owns on this pass.
@@ -180,13 +83,13 @@ enum PlannedWorkoutCalendarReconciler {
     /// them would quietly rewrite their calendar history every time a plan
     /// changed.
     static func mirrorWindow(
-        desired: [PlannedWorkoutOccurrence],
+        desired: PlannedWorkoutCalendarState,
         referenceDate: Date = Date()
     ) -> MirrorWindow {
         let calendar = HistoryStatsService.isoGermanCalendar()
         let firstDay = calendar.startOfDay(for: referenceDate)
         let floor = calendar.date(byAdding: .day, value: minimumWindowDays, to: firstDay) ?? firstDay
-        let furthest = desired.map({ calendar.startOfDay(for: $0.day) }).max() ?? firstDay
+        let furthest = desired.occurrences.map({ calendar.startOfDay(for: $0.day) }).max() ?? firstDay
         return MirrorWindow(firstDay: firstDay, lastDay: max(floor, furthest), calendar: calendar)
     }
 
@@ -194,42 +97,78 @@ enum PlannedWorkoutCalendarReconciler {
     ///
     /// Idempotent by construction: an unchanged plan matches every marker and
     /// yields no actions at all, so a repeat pass costs the user's calendar
-    /// nothing — no churn, no CalDAV round-trips.
+    /// nothing — no churn, no CalDAV round-trips. That holds for a weekday series
+    /// too, whose match is on the *pattern* rather than on the start date: an
+    /// open-ended weekly rule produces the same upcoming days no matter which
+    /// past week it started in, so a series is left alone until the selected
+    /// weekdays themselves change.
     ///
-    /// Deletes come first so a shortened cadence frees its old days before the
-    /// new ones are written.
+    /// Deletes come first so a shortened cadence — or a routine leaving the
+    /// weekday shape — frees its old days before the new ones are written.
     static func actions(
-        desired: [PlannedWorkoutOccurrence],
+        desired: PlannedWorkoutCalendarState,
         existing: [MirroredWorkoutEvent]
     ) -> [WorkoutCalendarMirrorAction] {
-        // Deduplicate the desired side too: two markers can only collide when a
-        // routine is planned twice for the same day, and the calendar shows one
-        // event either way.
-        var wanted: [String: PlannedWorkoutOccurrence] = [:]
-        var order: [String] = []
-        for occurrence in desired where wanted[occurrence.marker] == nil {
-            wanted[occurrence.marker] = occurrence
-            order.append(occurrence.marker)
+        // Deduplicate the desired side too: two occurrence markers can only
+        // collide when a routine is planned twice for the same day, and two
+        // series markers only when one routine appears twice. The calendar shows
+        // one event either way.
+        var wantedOccurrences: [String: PlannedWorkoutOccurrence] = [:]
+        var occurrenceOrder: [String] = []
+        for occurrence in desired.occurrences where wantedOccurrences[occurrence.marker] == nil {
+            wantedOccurrences[occurrence.marker] = occurrence
+            occurrenceOrder.append(occurrence.marker)
+        }
+        var wantedSeries: [String: PlannedWorkoutSeries] = [:]
+        var seriesOrder: [String] = []
+        for series in desired.series where wantedSeries[series.marker] == nil {
+            wantedSeries[series.marker] = series
+            seriesOrder.append(series.marker)
         }
 
         var matched: Set<String> = []
-        var deletes: [Int] = []
+        var deletes: [WorkoutCalendarMirrorAction] = []
         for event in existing {
-            guard let marker = event.markerURL.flatMap(PlannedWorkoutMarker.canonicalized) else {
+            guard let identity = event.markerURL.flatMap(PlannedWorkoutMarker.identity) else {
                 // Not ours: an event the user added to the app's calendar
                 // themselves. Left exactly where it is.
                 continue
             }
-            if wanted[marker] != nil, !matched.contains(marker) {
-                matched.insert(marker)
-            } else {
-                // Either the plan no longer wants this day, or it is a duplicate
-                // of one already kept.
-                deletes.append(event.reference)
+            switch identity {
+            case .occurrence(let marker):
+                if wantedOccurrences[marker] != nil, !matched.contains(marker) {
+                    matched.insert(marker)
+                } else {
+                    // Either the plan no longer wants this day, or it is a
+                    // duplicate of one already kept.
+                    deletes.append(.delete(reference: event.reference))
+                }
+            case .series(let marker):
+                // A series only survives when the pattern in the calendar is
+                // still the pattern the plan asks for. Anything else — a changed
+                // weekday set, a routine that left the weekday shape, a duplicate
+                // — is removed and, where still wanted, written fresh below.
+                // `EKRecurrenceRule` is immutable, so there is no third option
+                // (docs/calendar-sync.md §13d).
+                if let wanted = wantedSeries[marker],
+                   event.recurringWeekdays == wanted.weekdays,
+                   !matched.contains(marker) {
+                    matched.insert(marker)
+                } else {
+                    deletes.append(.deleteSeries(reference: event.reference))
+                }
             }
         }
 
-        let creates = order.filter { !matched.contains($0) }.compactMap { wanted[$0] }
-        return deletes.map { .delete(reference: $0) } + creates.map { .create($0) }
+        let creates = occurrenceOrder
+            .filter { !matched.contains($0) }
+            .compactMap { wantedOccurrences[$0] }
+            .map { WorkoutCalendarMirrorAction.create($0) }
+        let seriesCreates = seriesOrder
+            .filter { !matched.contains($0) }
+            .compactMap { wantedSeries[$0] }
+            .map { WorkoutCalendarMirrorAction.createSeries($0) }
+
+        return deletes + creates + seriesCreates
     }
 }

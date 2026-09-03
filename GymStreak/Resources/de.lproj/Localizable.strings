@@ -781,6 +781,8 @@
 "schedule.reference.hint" = "Der Rhythmus zählt ab diesem Datum. Nach deinem nächsten erledigten Training zählt automatisch dieses – setze es, um neu zu starten.";
 "schedule.reference.is_last_workout" = "Dein letztes Training";
 "schedule.weekdays.label" = "Trainingstage";
+/* P9 drift hint in the planning sheet: %1$@ routine name, %2$@ full weekday */
+"schedule.hint.weekday_drift" = "%1$@ immer am %2$@ halten";
 "schedule.weekdays.none" = "Keine Tage gewählt";
 "schedule.preview.title" = "Als Nächstes";
 "schedule.remove" = "Plan entfernen";

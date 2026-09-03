@@ -820,6 +820,35 @@ class RoutinesViewModel: ObservableObject {
         )
     }
 
+    /// The ISO weekday to offer restoring in the planning sheet's drift hint, or
+    /// `nil` when no hint is due.
+    ///
+    /// Two independent questions, kept apart on purpose. **Is there something
+    /// true to say?** is `WeekdayScheduleHintPolicy`, pure and entitlement-free.
+    /// **May we say it to this user?** is `ScheduleGatingPolicy.isSubjectToGate`
+    /// — reused rather than restated, so a Founder, a subscriber and a build with
+    /// the kill switch off are silent here for exactly the same reason they are
+    /// silent everywhere else. A Founder nudged toward something they already own
+    /// is the §7 scenario the grant exists to prevent.
+    ///
+    /// The gate is asked **first**: a Pro user's plan is not even examined.
+    ///
+    /// This raises nothing. It answers a question the sheet asks while drawing,
+    /// and the paywall is reached only through `requestWeekdaySchedule()` when
+    /// the user taps — §8 caps placement C on genuine intent, and a paywall
+    /// raised because a plan drifted would be an unsolicited interstitial.
+    func weekdayScheduleHintDay(for routine: Routine) -> Int? {
+        guard ScheduleGatingPolicy.isSubjectToGate(
+            isPro: proEntitlements.isPro,
+            isGatingEnabled: isGatingEnabled
+        ) else { return nil }
+        guard let schedule = routine.schedule else { return nil }
+        return WeekdayScheduleHintPolicy.driftedStartWeekday(
+            for: schedule,
+            lastCompleted: lastPerformedByRoutine[routine.id]
+        )
+    }
+
     /// The single entry point behind every weekday-shaped intent in the planning
     /// sheet — picking the mode, or touching a weekday chip. Returns `false` and
     /// raises the `weekdaySchedule` paywall when the shape is locked, leaving

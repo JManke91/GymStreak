@@ -29,6 +29,11 @@ Train harder with a private AI Coach, automatic progressive overload, and full s
 Your routines, supersets, and rest timers — with a private on-device AI Coach and Apple Watch that tracks every set. Track unlimited workouts free.
 ```
 
+Calendar-sync variant — **hold until the feature is live on the App Store** (see below):
+```
+Your training plan, right in Apple Calendar. Native tracker for iPhone & Apple Watch with a private on-device AI Coach. Unlimited workouts free, no account.
+```
+
 ---
 
 ## German (de-DE)
@@ -46,3 +51,23 @@ Trainiere smarter mit privatem KI-Coach, automatischer Progression und vollstän
 ```
 Deine Routinen, Supersätze und Pausentimer – mit privatem KI-Coach auf dem Gerät und Apple Watch, die jeden Satz trackt. Unbegrenzt tracken, kostenlos.
 ```
+
+Kalender-Variante – **erst verwenden, wenn das Feature im App Store live ist** (siehe unten):
+```
+Dein Trainingsplan direkt im Apple-Kalender. Nativer Tracker für iPhone & Apple Watch mit privatem KI-Coach. Unbegrenzt tracken, kostenlos, ohne Konto.
+```
+
+---
+
+**⚠️ The two calendar variants are not live-ready yet.** All four slices are built and
+device-verified (`docs/calendar-sync.md` §13) — the earlier hold on ticket 04 is satisfied — but the
+feature is **not on the App Store**. This field is edited without a build, which is exactly why the
+variants are marked: pasting one before the binary ships would promote a feature the installed app
+does not have, and a stale variant can be pasted back months later by someone who does not know
+that.
+
+**Why they are worth holding for.** No competitor writes planned workouts to the system calendar
+(researched 2026-09-03: Strong, Hevy, Fitbod, Jefit, Boostcamp and Alpha Progression all stop at an
+in-app history view), so this is the app's only rival-free capability that needs no Apple
+Intelligence hardware — and unlike the description, this field can carry it the day it ships without
+a submission. Reasoning for keeping it free: `docs/calendar-sync.md` §14.

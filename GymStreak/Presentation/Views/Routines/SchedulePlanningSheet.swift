@@ -42,6 +42,28 @@ struct SchedulePlanningSheet: View {
         mode == .everyNDays || !weekdays.isEmpty
     }
 
+    /// The weekday the drift hint offers to restore, or `nil` when it must stay
+    /// silent — a Pro user, a Founder, the kill switch off, no plan, a weekday
+    /// plan, a non-weekly interval, or a plan still on its original day. Every
+    /// one of those decisions is the ViewModel's; this only asks.
+    ///
+    /// **This does real work in `body`, and that is a deliberate trade.** It walks
+    /// `routine.schedule`, builds an ISO `Calendar` and calls
+    /// `WorkoutPlanningService.nextDue` on every render. The main-thread rules
+    /// forbid that when it scales with user data — here it is O(1) on the single
+    /// routine this modal sheet is editing, and the relationship fault is already
+    /// realized by this view's own `init`.
+    ///
+    /// Precomputing into `@State` would be the *worse* option: the entitlement is
+    /// read inside this call, and reading it during `body` is what makes the row
+    /// vanish the instant a purchase completes (the same reason
+    /// `RoutinesViewModel.routineCapNudge` documents for reading it live). A
+    /// cached copy would need its own invalidation on entitlement change to avoid
+    /// leaving an upsell in front of someone who has just paid.
+    private var hintWeekday: Int? {
+        viewModel.weekdayScheduleHintDay(for: routine)
+    }
+
     var body: some View {
         NavigationStack {
             ZStack {
@@ -52,6 +74,20 @@ struct SchedulePlanningSheet: View {
                         modePicker
 
                         if mode == .everyNDays {
+                            // Only in the interval branch: the hint offers the
+                            // weekday shape, so it has nothing to say to someone
+                            // already looking at the weekday editor.
+                            if let hintWeekday {
+                                WeekdayScheduleHintRow(
+                                    routineName: routine.name,
+                                    weekday: hintWeekday
+                                ) {
+                                    // The tap is the intent §8 requires. Same
+                                    // entry point as the mode picker, so the
+                                    // paywall request has exactly one caller.
+                                    viewModel.requestWeekdaySchedule()
+                                }
+                            }
                             intervalEditor
                             referenceDateEditor
                         } else {

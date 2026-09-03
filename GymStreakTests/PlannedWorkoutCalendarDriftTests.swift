@@ -162,7 +162,7 @@ struct PlannedWorkoutCalendarDriftTests {
         }
         // Wanted after training two days late: +6, +13, +20.
         let actions = PlannedWorkoutCalendarReconciler.actions(
-            desired: [6, 13, 20].map(occurrence),
+            desired: PlannedWorkoutCalendarState(occurrences: [6, 13, 20].map(occurrence)),
             existing: existing
         )
 
@@ -235,7 +235,7 @@ struct PlannedWorkoutCalendarDriftTests {
         let routine = harness.makeRoutine(
             named: "Push", intervalDays: interval, startDate: Self.day(-30)
         )
-        let horizon = PlannedWorkoutOccurrenceBuilder.horizonPerRoutine
+        let horizon = PlannedWorkoutCalendarStateBuilder.horizonPerRoutine
         let calendar = HistoryStatsService.isoGermanCalendar()
 
         // Four sessions across the last month. After each one the mirror is asked
@@ -263,7 +263,9 @@ struct PlannedWorkoutCalendarDriftTests {
         let occurrence = PlannedWorkoutOccurrence(
             routineId: UUID(), day: Self.day(30), title: "Push Workout"
         )
-        let window = PlannedWorkoutCalendarReconciler.mirrorWindow(desired: [occurrence])
+        let window = PlannedWorkoutCalendarReconciler.mirrorWindow(
+            desired: PlannedWorkoutCalendarState(occurrences: [occurrence])
+        )
 
         #expect(window.firstDay == Self.day(0))
         #expect(!window.covers(startOfDay: Self.day(-1)))
@@ -386,7 +388,7 @@ struct PlannedWorkoutCalendarDriftTests {
         #expect(harness.preference.isCalendarSyncEnabled)
         #expect(harness.sync.appCalendarIdentifier != nil)
         let batch = try #require(harness.sync.mirroredOccurrences.last)
-        #expect(batch.count == PlannedWorkoutOccurrenceBuilder.horizonPerRoutine)
+        #expect(batch.count == PlannedWorkoutCalendarStateBuilder.horizonPerRoutine)
     }
 
     // MARK: - When the user takes access away
@@ -426,7 +428,7 @@ struct PlannedWorkoutCalendarDriftTests {
         harness.mirror.reconcile()
 
         let batch = try #require(harness.sync.mirroredOccurrences.last)
-        #expect(batch.count == PlannedWorkoutOccurrenceBuilder.horizonPerRoutine)
+        #expect(batch.count == PlannedWorkoutCalendarStateBuilder.horizonPerRoutine)
     }
 
     @Test("Settings shows the way back when access was revoked out of band")

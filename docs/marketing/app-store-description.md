@@ -4,13 +4,15 @@ Full App Store description copy for the GymStreak listing, per storefront locale
 
 Notes:
 - On the Apple App Store the description is **not indexed for search** — it is a pure conversion asset. No keyword stuffing; the first ~2 lines must sell before the "Read More" / "Weiterlesen" fold.
-- English is ~3,760 characters and German ~3,970 — both under the 4,000 limit, but German now has little headroom: the Pro block added at launch spent most of it, and several sentences were tightened to make room. Re-measure before adding anything to the de version.
+- English is **3,899** characters and German **3,984** (measured 2026-09-03, after the calendar-sync addition below) — both under the 4,000 limit, but **German now has 16 characters of headroom**. Nothing further can be added to the de version without trimming an existing sentence first. Re-measure with `sed -n '<block>p' | wc -m` before touching it.
 - German uses ß and umlauts (de-DE storefront).
 - **AI Coach** requires Apple Intelligence (iOS 26+, supported hardware) — phrasing kept accurate ("on-device" / "auf dem Gerät").
 - **Updated 2026-08-17 for the Pro launch (ticket 15 / `docs/pro-subscription.md` §9.6).** The "completely subscription-free" / "ganz ohne Abo" and "No account, no subscription" / "Kein Konto, kein Abo" claims are gone: leaving them live next to a paywall is a review-guideline risk and, per `monetization-strategy.md` §1, a guaranteed one-star generator. **This copy and the `ProGating.shippedValue` flip are one release or neither** — and if the kill switch is ever flipped back off, this copy has to be reverted with it.
 - The no-**account** promise is untouched and still stated, because it is still true. Only the no-**subscription** claim was false after launch.
 - **Lifetime is deliberately not mentioned.** It is deferred past the launch submission (decided 2026-08-17): the SKU does not exist in App Store Connect, and a first non-consumable needs its own version submission. Add it to the subscription block below in the release that ships it.
 - The subscription block at the end carries the title, duration and price that App Review Guideline 3.1.2 expects to find in the metadata; keep it in sync with `monetization-strategy.md` §6 if pricing changes.
+- **⚠️ Apple Calendar sync (added 2026-09-03) — paste this copy only in the release that actually carries the feature.** All four slices are now built and device-verified (`docs/calendar-sync.md` §13), so the claim is true of the code — but it is **not yet on the App Store**. Publishing the copy ahead of the binary would advertise a feature the installed app does not have. The earlier hold said "until ticket 04 ships", which is now satisfied; what remains is the submission itself.
+- **Why calendar sync is stated as free, in both the feature section and the free list.** No competitor writes planned workouts to the system calendar (Strong, Hevy, Fitbod, Jefit, Boostcamp, Alpha Progression all stop at an in-app history view — researched 2026-09-03), so this is the only capability in the app that no rival offers and that needs no Apple Intelligence hardware. Word-of-mouth is this app's only acquisition channel (`monetization-strategy.md` §10), and a differentiator only differentiates if a prospective user can actually experience it — the same trade §5 already made and accepted for the Apple Watch app. Naming it in the free list is deliberate: it is what makes the free tier read as generous next to Hevy and Strong. Full reasoning in `docs/calendar-sync.md` §14.
 
 ---
 
@@ -64,7 +66,7 @@ TEMPLATES THAT GROW WITH YOU
 Push your adjustments back into the routine template after every workout, so your plan always reflects your current level.
 
 PLAN YOUR WEEK
-Schedule your routines by cadence or on fixed weekdays. Your weekly goal adapts automatically to your plan.
+Schedule your routines by cadence or on fixed weekdays. Your weekly goal adapts automatically to your plan. Switch on calendar sync and your training plan appears right in Apple Calendar, alongside everything else in your week.
 
 APPLE HEALTH & ICLOUD
 Every workout syncs seamlessly with Apple Health and contributes to your activity rings. With iCloud, your data stays safe and up to date across all your devices.
@@ -73,7 +75,7 @@ PRIVACY FIRST
 No account, ever. Your training data belongs to you and syncs only through your personal iCloud account — we never see it.
 
 FREE, AND GYMSTREAK PRO
-Tracking is free and unlimited: workouts, sets, the Apple Watch app, supersets, rest timers, Apple Health and iCloud sync. Nothing you have already created is ever taken away.
+Tracking is free and unlimited: workouts, sets, the Apple Watch app, supersets, rest timers, Apple Calendar sync, Apple Health and iCloud sync. Nothing you have already created is ever taken away.
 Pro adds:
 – Unlimited routines (3 are free)
 – Full analytics: estimated 1RM, volume, 1-year and all-time ranges
@@ -104,7 +106,7 @@ GymStreak analysiert deine Trainingsdaten mit Apple Intelligence und liefert dir
 Alles wird auf deinem iPhone berechnet. Deine Daten verlassen nie dein Gerät.
 
 PROGRESSIVE OVERLOAD, DIE MITDENKT
-Lege für jede Übung einen Wiederholungsbereich fest (z. B. 8–12). Sobald du in allen Sätzen das obere Limit erreichst, schlägt dir GymStreak automatisch eine Gewichtssteigerung vor – nach dem Prinzip der Double Progression.
+Lege für jede Übung einen Wiederholungsbereich fest (z. B. 8–12). Sobald du in allen Sätzen das obere Limit erreichst, schlägt GymStreak automatisch mehr Gewicht vor – nach dem Prinzip der Double Progression.
 
 SUPERSÄTZE FÜR MAXIMALE INTENSITÄT
 Kombiniere Übungen zu Supersätzen. GymStreak erkennt deine Runden automatisch und startet den Pausentimer erst, wenn die Runde komplett ist.
@@ -118,14 +120,14 @@ Trainiere unabhängig vom iPhone. Deine Routinen synchronisieren sich automatisc
 – Zuverlässige Wiederherstellung: Dein laufendes Workout geht nie verloren
 
 INTELLIGENTES WORKOUT-TRACKING
-Starte ein Workout direkt aus deiner Routine und tracke jeden Satz in Echtzeit:
+Starte ein Workout aus deiner Routine und tracke jeden Satz in Echtzeit:
 – Automatischer Pausentimer zwischen den Sätzen
 – Wiederholungen und Gewicht direkt im Workout anpassen
 – Übungen hinzufügen, entfernen oder gegen eine Alternative tauschen, wenn die Maschine besetzt ist
 – Workout-Zusammenfassung mit Dauer, Volumen und Kalorien
 
 LIVE ACTIVITIES & DYNAMIC ISLAND
-Dein Pausentimer läuft direkt auf dem Sperrbildschirm und in der Dynamic Island. Eine Benachrichtigung holt dich rechtzeitig zum nächsten Satz zurück.
+Dein Pausentimer läuft auf dem Sperrbildschirm und in der Dynamic Island. Eine Benachrichtigung holt dich rechtzeitig zum nächsten Satz zurück.
 
 FORTSCHRITT SICHTBAR MACHEN
 Verfolge deine Entwicklung mit interaktiven Charts:
@@ -134,19 +136,19 @@ Verfolge deine Entwicklung mit interaktiven Charts:
 – Trainingsvolumen (Gewicht × Wiederholungen)
 
 VORLAGEN, DIE MIT DIR WACHSEN
-Übernimm deine Anpassungen nach jedem Workout direkt in die Routinenvorlage – so spiegelt dein Plan immer deinen aktuellen Stand.
+Übernimm deine Anpassungen nach jedem Workout in die Routinenvorlage – so spiegelt dein Plan immer deinen aktuellen Stand.
 
 PLANE DEINE WOCHE
-Plane deine Routinen nach Rhythmus oder festen Wochentagen – dein Wochenziel passt sich automatisch an.
+Plane deine Routinen nach Rhythmus oder festen Wochentagen – dein Wochenziel passt sich automatisch an. Auf Wunsch erscheint dein Trainingsplan in deinem Apple-Kalender.
 
 APPLE HEALTH & ICLOUD
 Jedes Workout wird mit Apple Health synchronisiert und trägt zu deinen Aktivitätsringen bei. Über iCloud sind deine Daten auf allen Geräten sicher und aktuell.
 
 PRIVATSPHÄRE AN ERSTER STELLE
-Kein Konto, niemals. Deine Trainingsdaten gehören dir und werden ausschließlich über dein persönliches iCloud-Konto synchronisiert – wir bekommen sie nie zu sehen.
+Kein Konto, niemals. Deine Trainingsdaten gehören dir und werden nur über dein persönliches iCloud-Konto synchronisiert – wir sehen sie nie.
 
 KOSTENLOS UND GYMSTREAK PRO
-Tracken ist kostenlos und unbegrenzt: Workouts, Sätze, Apple-Watch-App, Supersätze, Pausentimer, Apple Health und iCloud-Sync. Was du angelegt hast, wird dir nie weggenommen.
+Tracken ist kostenlos und unbegrenzt: Workouts, Sätze, Apple-Watch-App, Supersätze, Pausentimer, Kalender-, Apple-Health- und iCloud-Sync. Was du angelegt hast, wird dir nie weggenommen.
 Pro ergänzt:
 – Unbegrenzt viele Routinen (3 sind kostenlos)
 – Alle Auswertungen: 1RM, Volumen, Zeiträume 1 Jahr und gesamt

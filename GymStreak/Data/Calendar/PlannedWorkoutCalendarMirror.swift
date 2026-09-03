@@ -48,7 +48,7 @@ final class PlannedWorkoutCalendarMirror: PlannedWorkoutCalendarMirroring {
     /// collision here would mean a calendar that silently stops updating.
     private struct MirroredState {
         let calendarIdentifier: String?
-        let occurrences: [PlannedWorkoutOccurrence]
+        let desired: PlannedWorkoutCalendarState
     }
 
     init(
@@ -86,7 +86,7 @@ final class PlannedWorkoutCalendarMirror: PlannedWorkoutCalendarMirroring {
         let lastCompleted = workoutSessionRepository.lastCompletedStartDates(
             forRoutineIds: routines.map(\.id)
         )
-        let occurrences = PlannedWorkoutOccurrenceBuilder.occurrences(
+        let desired = PlannedWorkoutCalendarStateBuilder.state(
             routines: routines,
             lastCompleted: lastCompleted
         )
@@ -105,15 +105,15 @@ final class PlannedWorkoutCalendarMirror: PlannedWorkoutCalendarMirroring {
         if !revalidatingCalendar,
            let lastMirrored,
            lastMirrored.calendarIdentifier == sync.appCalendarIdentifier,
-           lastMirrored.occurrences == occurrences {
+           lastMirrored.desired == desired {
             return
         }
 
         do {
-            try sync.mirror(occurrences: occurrences)
+            try sync.mirror(desired)
             lastMirrored = MirroredState(
                 calendarIdentifier: sync.appCalendarIdentifier,
-                occurrences: occurrences
+                desired: desired
             )
         } catch WorkoutCalendarSyncError.calendarMissing {
             handleCalendarRemoved()
