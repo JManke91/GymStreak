@@ -65,7 +65,10 @@ protocol WorkoutCalendarSyncing: AnyObject {
     /// and only events carrying the app's own marker are ever removed — an event
     /// the user added to that calendar themselves is left alone.
     ///
-    /// A no-op when the app owns no calendar.
+    /// A no-op when the app owns no calendar. When it owns one that no longer
+    /// resolves — the user deleted it behind the app's back — this throws
+    /// `.calendarMissing` rather than passing silently, because that is the only
+    /// moment the app can find out.
     ///
     /// - Throws: `WorkoutCalendarSyncError`. The caller is expected to log and
     ///   carry on: the plan is the source of truth, the calendar a projection of
@@ -93,6 +96,12 @@ enum WorkoutCalendarSyncError: LocalizedError, Equatable {
     /// No account the app can own a calendar on — neither iCloud nor a local
     /// source came back. Vanishingly rare, and nothing the app can fix.
     case noWritableSource
+    /// The app holds an identifier, but the calendar it names is gone: the user
+    /// deleted it in Calendar.app or removed the account it lived on. No API
+    /// announces that, so it is only ever discovered on a pass — and deleting a
+    /// calendar is deliberate enough to be read as an opt-out rather than as
+    /// something to repair (docs/calendar-sync.md §12).
+    case calendarMissing
     /// EventKit refused the save or the delete.
     case calendarWriteFailed(String)
 
@@ -102,6 +111,8 @@ enum WorkoutCalendarSyncError: LocalizedError, Equatable {
             return "GymStreak is not allowed full access to your calendars"
         case .noWritableSource:
             return "No calendar account is available to create a calendar on"
+        case .calendarMissing:
+            return "The GymStreak calendar no longer exists"
         case .calendarWriteFailed(let message):
             return "Failed to update the GymStreak calendar: \(message)"
         }

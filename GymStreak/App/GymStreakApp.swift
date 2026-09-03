@@ -219,6 +219,33 @@ struct GymStreakApp: App {
                         // suppressed (the launch above landed inside a restored
                         // workout). Idempotent, and inert once it has been shown.
                         dependencies.founderCelebration.presentIfDue()
+                        // Tops the mirrored calendar window up, and is the moment
+                        // a calendar deleted — or an access revoked — outside the
+                        // app becomes discoverable, since nothing notifies the app
+                        // of either (docs/calendar-sync.md §12). Neither needs a
+                        // completion to go stale, which is why this trigger exists
+                        // alongside the routines refresh, and neither moves the
+                        // app's desired state — hence `revalidatingCalendar`,
+                        // which is what makes this pass reach the calendar rather
+                        // than short-circuit. Once per activation, so the one
+                        // query it costs is bounded.
+                        //
+                        // In a `Task`, for the same reason `reconcileCalendar()`
+                        // is: this is the *only* trigger that always reaches
+                        // `events(matching:)`, and running it inline would put a
+                        // blocking CalDAV query on the activation turn, in front
+                        // of the first frame the user sees on returning to the
+                        // app.
+                        //
+                        // Deliberately *not* an `.EKEventStoreChanged` observer:
+                        // that notification carries no detail and it is
+                        // undocumented whether the app's own commits post it, so
+                        // reconciling on it risks a write → notify → write loop.
+                        Task {
+                            dependencies.plannedWorkoutCalendarMirror.reconcile(
+                                revalidatingCalendar: true
+                            )
+                        }
                     }
                 }
         }

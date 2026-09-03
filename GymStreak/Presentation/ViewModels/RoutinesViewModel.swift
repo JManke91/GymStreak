@@ -51,6 +51,9 @@ class RoutinesViewModel: ObservableObject {
     private let proactivePaywalls: ProactivePaywallCoordinator?
     private let isGatingEnabled: Bool
     private var cloudSyncObserver: NSObjectProtocol?
+    /// Set while a coalesced refresh is waiting for its main-actor turn — see
+    /// `scheduleRefreshWithoutWatchSync()`.
+    private var isRefreshWithoutWatchSyncPending = false
     /// Republishes when the entitlement changes. Without it a purchase leaves
     /// every cap check on this screen reporting the right answer to a view that
     /// is never asked to draw again (docs/pro-subscription.md §3c).
@@ -72,10 +75,12 @@ class RoutinesViewModel: ObservableObject {
     /// See `HistoryStoreGate`.
     private let historyStoreGate: HistoryStoreGate
 
-    /// Mirrors the user's plans into Apple Calendar after a plan changes
-    /// (docs/calendar-sync.md). Optional because unit-test instances that are
-    /// not about calendar sync have nothing to mirror to, and because the whole
-    /// feature is off until the user opts in — the mirror itself checks that.
+    /// Mirrors the user's plans into Apple Calendar after anything that can move
+    /// them — a plan edit, a routine deletion, or a completion that re-anchors a
+    /// cadence (docs/calendar-sync.md §12). Optional because unit-test instances
+    /// that are not about calendar sync have nothing to mirror to, and because
+    /// the whole feature is off until the user opts in — the mirror checks that
+    /// itself.
     private let calendarMirror: (any PlannedWorkoutCalendarMirroring)?
 
     init(
@@ -102,6 +107,7 @@ class RoutinesViewModel: ObservableObject {
         observeCloudKitChanges()
         observeWatchAvailability()
         observeRoutineTemplateChanges()
+        observeWorkoutHistoryChanges()
         entitlementObserver = EntitlementChangeObserver(
             entitlements: proEntitlements
         ) { [weak self] in
@@ -156,8 +162,79 @@ class RoutinesViewModel: ObservableObject {
             queue: .main
         ) { [weak self] _ in
             Task { @MainActor in
-                self?.refreshRoutinesWithoutWatchSync()
+                self?.scheduleRefreshWithoutWatchSync()
             }
+        }
+    }
+
+    /// A finished workout moves `lastPerformedByRoutine`, and with it every card's
+    /// "last trained" line, the next-due date and the hero's ordering — and, when
+    /// calendar sync is on, the cadence anchor the mirrored events hang off.
+    ///
+    /// One observer covers **two** posting sites, which is why there is not one
+    /// per path: a workout finished on the watch and ingested here
+    /// (`WatchWorkoutIngestionService`) and a watch template transaction
+    /// (`WatchTemplateTransactionService`). A completion synced from another
+    /// device arrives as `.cloudKitDataDidChange` instead, which
+    /// `fetchRoutines()` already covers.
+    ///
+    /// **A workout finished on this iPhone is deliberately not among them.**
+    /// `WorkoutViewModel.completeWorkout(updateTemplate:notes:)` posts nothing —
+    /// the only `.workoutHistoryDidChange` post in that type is in
+    /// `recoverOrphanedWorkouts()` — so the local path converges on the next
+    /// `RoutinesView.onAppear` or the next foreground instead. Making it
+    /// immediate means posting from `completeWorkout`, which also re-enters that
+    /// type's own observer and the recovery engine, and that is a change to the
+    /// app's hottest path rather than a line to slip into calendar sync
+    /// (docs/calendar-sync.md §12j).
+    ///
+    /// Deliberately **not** a full `fetchRoutines()`: no routine template changed,
+    /// so pushing a fresh generation at the watch after every workout would be
+    /// churn — and after a watch template transaction it would emit a snapshot
+    /// competing with the authoritative one that transaction already staged.
+    private func observeWorkoutHistoryChanges() {
+        NotificationCenter.default.addObserver(
+            forName: .workoutHistoryDidChange,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in
+                self?.scheduleRefreshWithoutWatchSync()
+            }
+        }
+    }
+
+    /// Collapses a burst of refresh-worthy notifications into one refresh.
+    ///
+    /// Both posting sites fan out per item, not per batch:
+    /// `WatchWorkoutIngestionService` posts once **per inbox entry** while
+    /// `WatchWorkoutIngestionCoordinator` drains the queue, and a watch template
+    /// transaction posts `.workoutHistoryDidChange` and then
+    /// `.routineTemplateDidChangeLocally` for the same commit. Uncoalesced, a
+    /// drain of K workouts cost K × (`fetchAll()` + one bounded session fetch per
+    /// routine + a card rebuild), and that product scales with the user's
+    /// library — the shape of the hang in docs/history-performance.md.
+    ///
+    /// **The collapse works through the hop, not around it.** Each observer stays
+    /// on the file's pattern — `queue: .main` plus `Task { @MainActor in … }` —
+    /// so nothing calls main-actor state from the notification block itself. The
+    /// burst's hops are all enqueued while it is being posted, and the refresh
+    /// this schedules is created from *inside* the first of them, so it lands
+    /// behind the rest (SE-0431 ordering, the same guarantee watch sync relies
+    /// on). By the time it runs, every notification in the burst has already
+    /// found the slot taken. One main-actor turn wide, no timer and no window —
+    /// `CloudSyncObserver`'s time-based window exists for the different problem
+    /// of *remote* changes arriving over seconds.
+    ///
+    /// Nothing is dropped: the refresh re-reads the store, so it sees the newest
+    /// completion of the burst, and a notification arriving after the slot clears
+    /// schedules a fresh one.
+    private func scheduleRefreshWithoutWatchSync() {
+        guard !isRefreshWithoutWatchSyncPending else { return }
+        isRefreshWithoutWatchSyncPending = true
+        Task { @MainActor [weak self] in
+            self?.isRefreshWithoutWatchSyncPending = false
+            self?.refreshRoutinesWithoutWatchSync()
         }
     }
 
@@ -165,6 +242,7 @@ class RoutinesViewModel: ObservableObject {
         routines = routineRepository.fetchAll()
         refreshLastPerformedDates()
         rebuildCardModels()
+        reconcileCalendar()
     }
 
     func fetchRoutines() {
@@ -172,6 +250,26 @@ class RoutinesViewModel: ObservableObject {
         refreshLastPerformedDates()
         rebuildCardModels()
         syncRoutinesToWatch()
+        reconcileCalendar()
+    }
+
+    /// Brings Apple Calendar in line with the plans this fetch just refreshed.
+    ///
+    /// **Hooked here rather than once per trigger.** Every path that can move a
+    /// cadence anchor — a workout finished here or on the watch, a completion
+    /// synced from another device, a plan edited or cleared, a routine deleted —
+    /// already ends in one of the two refreshes above, and the mirror is
+    /// idempotent, so the extra passes this produces cost nothing.
+    ///
+    /// **In a `Task`, never inline.** The refresh feeds the routines list, and the
+    /// mirror's pass ends in `events(matching:)` against a CalDAV-backed store
+    /// that Apple suggests not querying on the main thread at all (main-thread
+    /// rules 3 and 7). Deferring it to its own main-actor turn keeps it off the
+    /// list's critical path; the mirror's own short-circuit then skips EventKit
+    /// entirely whenever the desired state has not moved.
+    private func reconcileCalendar() {
+        guard let calendarMirror else { return }
+        Task { calendarMirror.reconcile() }
     }
 
     /// Rebuilds the precomputed card models the list renders.
@@ -799,11 +897,10 @@ class RoutinesViewModel: ObservableObject {
             routine.updatedAt = Date()
             save()
         }
+        // `fetchRoutines()` reconciles the calendar. The plan is saved either
+        // way: the mirror logs its own failures and never throws, so a calendar
+        // that could not be updated cannot undo a schedule the user just made.
         fetchRoutines()
-        // The plan is saved either way: the mirror logs its own failures and
-        // never throws, so a calendar that could not be updated cannot undo a
-        // schedule the user just made.
-        calendarMirror?.reconcile()
         return true
     }
 
@@ -829,10 +926,9 @@ class RoutinesViewModel: ObservableObject {
             return true
         }
         guard didRemove else { return }
+        // The reconcile `fetchRoutines()` triggers removes this routine's events —
+        // the mirror sees an unplanned routine as "wants nothing".
         fetchRoutines()
-        // Removes this routine's events from the calendar — the reconciler sees
-        // an unplanned routine as "wants nothing".
-        calendarMirror?.reconcile()
     }
 
     // MARK: - Rep Range Management

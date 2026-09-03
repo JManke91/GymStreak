@@ -14,7 +14,7 @@ import Foundation
 final class FakeWorkoutCalendarSync: WorkoutCalendarSyncing {
 
     var accessStatus: CalendarAccessStatus = .notDetermined
-    private(set) var appCalendarIdentifier: String?
+    var appCalendarIdentifier: String?
 
     /// Thrown by `enable()` instead of creating a calendar, when set.
     var enableError: (any Error)?
@@ -23,6 +23,12 @@ final class FakeWorkoutCalendarSync: WorkoutCalendarSyncing {
 
     /// Thrown by `mirror(occurrences:)` instead of recording, when set.
     var mirrorError: (any Error)?
+
+    /// The user deleted the app's calendar in Calendar.app: the app still holds
+    /// an identifier, but it no longer resolves. Modelled here rather than by
+    /// clearing `appCalendarIdentifier`, because the whole point of the case is
+    /// that the app does not know until it tries.
+    var isCalendarMissing = false
 
     private(set) var enableCallCount = 0
     private(set) var disableCallCount = 0
@@ -46,6 +52,16 @@ final class FakeWorkoutCalendarSync: WorkoutCalendarSyncing {
         if let mirrorError {
             throw mirrorError
         }
+        // The real gateway's own guards, in the same order — access first, then
+        // the calendar. A fake that recorded regardless would let the mirror's
+        // handling of both take-it-away cases pass untested.
+        guard accessStatus == .fullAccess else {
+            throw WorkoutCalendarSyncError.accessDenied
+        }
+        guard appCalendarIdentifier != nil else { return }
+        guard !isCalendarMissing else {
+            throw WorkoutCalendarSyncError.calendarMissing
+        }
         mirroredOccurrences.append(occurrences)
     }
 
@@ -62,5 +78,6 @@ final class FakeWorkoutCalendarSync: WorkoutCalendarSyncing {
             throw WorkoutCalendarSyncError.accessDenied
         }
         appCalendarIdentifier = nil
+        isCalendarMissing = false
     }
 }

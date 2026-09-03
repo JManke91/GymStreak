@@ -147,6 +147,12 @@ class TestDataSeeder {
             target > templates.count
         else { return }
 
+        // Opt-in from the calendar-sync responsiveness case: with sync on, every
+        // planned routine costs the mirror a `lastCompletedStartDates` lookup and
+        // a cadence walk on each pass, and that is the part of the pass that
+        // scales with the user's library (docs/calendar-sync.md §12).
+        let planRoutines = arguments.contains("-UI_TEST_PLAN_ROUTINES")
+
         for index in templates.count..<target {
             let routine = Routine(name: "Routine \(index + 1)")
             modelContext.insert(routine)
@@ -156,6 +162,17 @@ class TestDataSeeder {
                 exerciseMap: exercises,
                 modelContext: modelContext
             )
+            guard planRoutines else { continue }
+            // Cadences spread across 2–8 days so the routines do not all land on
+            // the same days — a realistic library rather than one shape repeated.
+            let schedule = RoutineSchedule(
+                type: .everyNDays,
+                intervalDays: 2 + (index % 7),
+                weekdays: [],
+                startDate: Date()
+            )
+            schedule.routine = routine
+            modelContext.insert(schedule)
         }
     }
 

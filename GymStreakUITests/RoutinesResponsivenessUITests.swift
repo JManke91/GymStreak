@@ -69,6 +69,46 @@ final class RoutinesResponsivenessUITests: XCTestCase {
         )
     }
 
+    /// The same click path with calendar sync switched on and every one of the 40
+    /// routines planned — the shape ticket 03's reconcile hook added to this
+    /// screen (docs/calendar-sync.md §12).
+    ///
+    /// The opt-in is flipped through `NSArgumentDomain` rather than through the
+    /// Settings toggle, which keeps this a pure measurement: no production code
+    /// knows it is under test, and no Calendar permission prompt appears. What it
+    /// therefore measures is everything the mirror pays on **every** pass — the
+    /// routine fetch, one `lastCompletedStartDates` lookup per routine and 40
+    /// cadence walks — which is the half that scales with the user's library. The
+    /// EventKit round-trip is the half a simulator cannot represent (there is no
+    /// CalDAV-backed store behind it) and is verified on device instead.
+    func testRoutinesListWithCalendarSyncEnabled() {
+        app.terminate()
+        app.launchArguments += [
+            "-UI_TEST_PLAN_ROUTINES",
+            "-calendar_sync.enabled", "YES"
+        ]
+        app.launch()
+        _ = app.wait(for: .runningForeground, timeout: 30)
+        dismissCoachOptIn()
+
+        let stallProbe = app.staticTexts["routines-main-thread-max-delay-ms"]
+        XCTAssertTrue(stallProbe.waitForExistence(timeout: 10))
+
+        let history = app.tabBars.buttons["History"]
+        XCTAssertTrue(history.waitForExistence(timeout: 10))
+        history.tap()
+
+        let routines = app.tabBars.buttons["Routines"]
+        XCTAssertTrue(routines.waitForExistence(timeout: 5))
+        routines.tap()
+
+        assertNoMainThreadStall(
+            stallProbe,
+            action: "opening Routines with 40 planned routines and calendar sync on",
+            thresholdMilliseconds: 250
+        )
+    }
+
     /// Context menus on lazily-materialized rows are a documented fragile corner of SwiftUI
     /// (a window-attachment race that crashes with "UIPreviewTarget requires that the container
     /// view is in a window"). The reports involve nested lazy stacks, which this screen does not

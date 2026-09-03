@@ -25,5 +25,27 @@ protocol PlannedWorkoutCalendarMirroring: AnyObject {
     /// schedule change saved and surface nothing intrusive, so failures are
     /// logged and swallowed here rather than travelling back to a call site that
     /// has already committed.
-    func reconcile()
+    ///
+    /// - Parameter revalidatingCalendar: whether the pass must reach the
+    ///   calendar even when the app's desired state has not moved since the last
+    ///   one.
+    ///
+    ///   The plumbing triggers (a plan edit, a completion, a routines refresh)
+    ///   pass `false` and are short-circuited when nothing changed, because they
+    ///   fire often and a pass ends in a query against a CalDAV-backed store.
+    ///   But the two ways this feature can be *taken away* — the user deleting
+    ///   the app's calendar in Calendar.app, or revoking Calendar access in
+    ///   Settings — change nothing about the app's desired state, and iOS
+    ///   announces neither. They are only ever discovered by actually trying, so
+    ///   the once-per-activation trigger passes `true` and accepts one query for
+    ///   it (docs/calendar-sync.md §12).
+    func reconcile(revalidatingCalendar: Bool)
+}
+
+extension PlannedWorkoutCalendarMirroring {
+
+    /// The ordinary pass: something the app knows about changed.
+    func reconcile() {
+        reconcile(revalidatingCalendar: false)
+    }
 }

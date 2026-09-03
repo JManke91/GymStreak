@@ -98,6 +98,32 @@ final class CalendarSyncSettingsViewModel {
         }
     }
 
+    /// Re-reads the system's actual permission and reflects it in the row.
+    ///
+    /// The two ways this feature can be taken away happen entirely outside the
+    /// app — the user revokes Calendar access in Settings, or deletes the app's
+    /// calendar in Calendar.app — and iOS announces neither in a form the app can
+    /// act on. So the state is *checked* whenever this section is on screen
+    /// rather than pushed at it, which is the same deterministic choice the
+    /// mirror makes (docs/calendar-sync.md §12).
+    ///
+    /// - Sync on but access no longer granted: the denied row appears, carrying
+    ///   the path back. Nothing re-prompts, and the intent flag deliberately
+    ///   stays on so restoring access resumes the mirror by itself.
+    /// - The calendar deleted: the mirror has already switched the flag off, so
+    ///   the toggle simply reads off — which *is* the honest state, and
+    ///   re-enabling creates a fresh calendar.
+    func refreshStatus() {
+        guard !isWorking else { return }
+        if preference.isCalendarSyncEnabled, sync.accessStatus != .fullAccess {
+            failure = .accessDenied
+        } else if failure == .accessDenied {
+            // Only this one is cleared: a `.writeFailed` from the user's own
+            // toggle tap is still the last thing that happened to them.
+            failure = nil
+        }
+    }
+
     private static func failure(for error: any Error) -> Failure {
         switch error as? WorkoutCalendarSyncError {
         case .accessDenied: .accessDenied

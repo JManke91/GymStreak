@@ -26,6 +26,18 @@ struct PlannedWorkoutCalendarMirrorTests {
         let mirror: PlannedWorkoutCalendarMirror
         let viewModel: RoutinesViewModel
 
+        /// Lets the reconcile `fetchRoutines()` defers into its own main-actor
+        /// turn actually run. The pass is deliberately off the routines list's
+        /// critical path, so nothing about it is observable until the test yields.
+        /// Three, not one: a notification-driven refresh costs a hop to the main
+        /// actor, then the coalescing slot's own hop, then the reconcile the
+        /// refresh defers — and each is a separate turn.
+        func settle() async {
+            await Task.yield()
+            await Task.yield()
+            await Task.yield()
+        }
+
         @discardableResult
         func makeRoutine(
             named name: String,
@@ -65,6 +77,11 @@ struct PlannedWorkoutCalendarMirrorTests {
         let preference = CalendarSyncPreference(defaults: Self.throwawayDefaults())
         preference.isCalendarSyncEnabled = syncEnabled
         let sync = FakeWorkoutCalendarSync()
+        // The state the app is actually in once sync is on: access granted and a
+        // calendar owned. Both are the gateway's own guards, so a fake left in
+        // `.notDetermined` would exercise the revoked-access path by accident.
+        sync.accessStatus = .fullAccess
+        sync.appCalendarIdentifier = "test-calendar"
         let mirror = PlannedWorkoutCalendarMirror(
             routineRepository: routineRepository,
             workoutSessionRepository: sessionRepository,
@@ -182,6 +199,7 @@ struct PlannedWorkoutCalendarMirrorTests {
         await harness.viewModel.setSchedule(
             for: routine, type: .everyNDays, intervalDays: 4, weekdays: [], referenceDate: .now
         )
+        await harness.settle()
 
         let batch = try #require(harness.sync.mirroredOccurrences.last)
         #expect(batch.count == PlannedWorkoutOccurrenceBuilder.horizonPerRoutine)
@@ -193,6 +211,7 @@ struct PlannedWorkoutCalendarMirrorTests {
         let routine = harness.makeRoutine(named: "Push")
 
         await harness.viewModel.removeSchedule(from: routine)
+        await harness.settle()
 
         #expect(try #require(harness.sync.mirroredOccurrences.last).isEmpty)
     }

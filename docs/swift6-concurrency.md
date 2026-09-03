@@ -405,6 +405,30 @@ matters, because it is free and strictly stronger — but do not audit the codeb
 or configured* to arrive on the main thread. `CloudKitSyncStatusMonitor` uses it
 legitimately for a `NotificationCenter` observer registered with `queue: .main`.
 
+#### NotificationCenter is the *opposite* of the rule-4 hazard — and a hop is mandatory
+
+`addObserver(forName:object:queue:using:)` takes
+`using block: @escaping @Sendable (Notification) -> Void`. **The block parameter is
+`@Sendable`**, unlike WatchConnectivity's completion handlers, which annotate nothing.
+That inverts everything about it:
+
+- Under [SE-0461], a closure literal whose *contextual type* is `@Sendable` is inferred
+  **nonisolated**, even written inside a `@MainActor` class. So there is no silent
+  main-actor inference, no compiler-inserted `assumeIsolated`, and **the SE-0423 runtime
+  trap that crashed TestFlight 1.1.10 cannot occur here.** The annotation gap that makes
+  §4a dangerous is exactly what is absent.
+- The flip side: because the block is nonisolated, **some hop is mandatory** —
+  `Task { @MainActor in … }` or `MainActor.assumeIsolated`. A bare synchronous call to a
+  `@MainActor` method from inside the block is *not* merely a style choice.
+
+Measured on this project's toolchain, so nobody has to re-derive it: a bare call compiles
+with **`warning: call to main actor-isolated instance method '…' in a synchronous
+nonisolated context`** — a warning, not an error, under
+`SWIFT_APPROACHABLE_CONCURRENCY`. That makes it a **zero-warning-invariant regression that
+still builds and still passes tests**, which is precisely how it slips in. It was written
+and then reverted once during calendar sync ticket 03 (`docs/calendar-sync.md` §12b); a
+build log grepped only for `error:` will not catch it.
+
 ### Nothing non-`Sendable` may cross the hop
 
 Two categories had to be fixed, both by extracting at the boundary:

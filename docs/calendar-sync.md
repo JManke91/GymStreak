@@ -1,9 +1,11 @@
 # Calendar Sync — planned workouts in Apple Calendar
 
-**Status:** slices 1 and 2 of 4 shipped — opt-in and calendar ownership (§1–§10),
-and cadence plans mirrored as all-day events (§11). Nothing is refreshed on a
-completion or a foreground yet (ticket 03), and weekday plans are not modelled as
-a recurrence (04) — they contribute no events at all until then.
+**Status:** slices 1–3 of 4 shipped and **device-verified** — opt-in and calendar
+ownership (§1–§10), cadence plans mirrored as all-day events (§11), and the mirror
+following the plan as it moves (§12: drift, window top-up, and both ways the user
+can take the feature away; walked on device 2026-09-03, §12i). Weekday plans are
+not modelled as a recurrence yet (ticket 04) — they contribute no events at all
+until then.
 
 **Target:** iOS only. **The watch is untouched** — it holds no schedule or plan
 data at all (`docs/workout-planning.md` § "Watch surface"), so there is nothing
@@ -364,6 +366,17 @@ the app does not own is unreachable from that path.
   `@MainActor` per rule 2 of `docs/swift6-concurrency.md`. Writes here are a
   handful of events per plan change, so main-actor execution is not the
   `@ModelActor`-shaped problem History had.
+- **That is a choice, not a constraint — do not read it as "off-main is
+  impossible".** Not being `Sendable` only stops the store *crossing* an isolation
+  boundary; it says nothing about a plain (non-`@MainActor`) `actor` **owning** one
+  outright and exposing only `Sendable` request/response values. Nothing crosses,
+  the actor's executor runs the blocking query off the main thread, and no
+  `@concurrent`, `nonisolated(unsafe)` or undocumented behaviour is involved — it
+  is what SE-0306 actors are for, and it is literally Apple's own advice for
+  `events(matching:)`: *"This method is synchronous. For asynchronous behavior, run
+  the method on another thread."* This is the documented escalation path if the
+  pass ever needs to genuinely leave the main thread; it is not taken now because
+  the measured cost does not call for it (§12g).
 - **The `async throws -> Bool` variant is used:**
   `try await eventStore.requestFullAccessToEvents()`.
 - **Rule 4's runtime-trap hazard does not apply to these APIs**, and that is
@@ -419,8 +432,8 @@ Dependency direction is the project's usual `Presentation → Domain ← Data`.
 | Data | `Data/Calendar/WorkoutCalendarAdoption.swift` | The duplicate guard's matching rule — pure and EventKit-free, so it can be tested (§4a). |
 | Domain | `Domain/Services/PlannedWorkoutCalendarReconciler.swift` | The mirror's policy: the marker, the window, and the create/delete diff. Foundation only (§11). |
 | Domain | `Domain/Services/PlannedWorkoutOccurrenceBuilder.swift` | Turns routines + history into the occurrences the calendar should hold, through `WorkoutPlanningService` (§11). |
-| Domain | `Domain/Interfaces/PlannedWorkoutCalendarMirroring.swift` | The one call every trigger site makes: `reconcile()`. Never throws. |
-| Data | `Data/Calendar/PlannedWorkoutCalendarMirror.swift` | The coordinator: opt-in gate → repositories → builder → gateway, with failures logged and swallowed. |
+| Domain | `Domain/Interfaces/PlannedWorkoutCalendarMirroring.swift` | The one call every trigger site makes: `reconcile(revalidatingCalendar:)`, with a `reconcile()` default (§12d). Never throws. |
+| Data | `Data/Calendar/PlannedWorkoutCalendarMirror.swift` | The coordinator: opt-in gate → repositories → builder → short-circuit → gateway, with failures logged and swallowed and both take-it-away cases handled (§12d, §12e). |
 | Data | `Data/Calendar/EventKitWorkoutCalendarSync+Mirror.swift` | The gateway's event-writing half — read back, diff, batched commit. Split out to keep both files inside the size guidance. |
 | Data | `Data/Preferences/CalendarSyncPreference.swift` | `@Observable @MainActor final class`, `static let shared`, write-through `didSet` into `UserDefaults`, `init(defaults:)` injectable. Shaped exactly like `WeightUnitPreference`. |
 | Presentation | `Presentation/ViewModels/CalendarSyncSettingsViewModel.swift` | The toggle's state machine: request → create → persist, with the failure vocabulary the section renders. |
@@ -719,8 +732,9 @@ it flips the flag so switching sync on fills the calendar immediately instead of
 waiting for the next plan edit. **The flag is written before the mirror runs**,
 because the mirror reads it as its own gate.
 
-No timer, no `.EKEventStoreChanged` observer, no completion hook: drift and window
-refresh are ticket 03, deliberately.
+No timer, no `.EKEventStoreChanged` observer, no completion hook in *this* slice:
+drift and window refresh were deferred to slice 3, which added the completion and
+foreground triggers (§12b) and kept the `.EKEventStoreChanged` decision (§12c).
 
 ### 11g. EventKit research — where Apple's docs are silent
 
@@ -733,7 +747,7 @@ headers and developer.apple.com):
 | `url` durability / CalDAV round-trip | **Undocumented.** Writable since iOS 5, no discussion text at all. CalDAV stores RFC 5545's `URL` property verbatim, so it very likely survives — but cross-device round-trip is unverified. |
 | Predicate boundary inclusivity | **Undocumented** — it is an overlap query. The range *is* documented as evaluated in the default time zone and capped at four years. Hence the widen-and-filter in §11c. |
 | All-day with a non-nil `timeZone` | **Undocumented.** Hence `nil`. |
-| Concurrency | `save`, `remove`, `commit`, `reset`, `events(matching:)` and `predicateForEvents` are all synchronous and closure-free — the project's rule-4 `@Sendable` trap does not apply. Nothing in EventKit is `NS_SWIFT_SENDABLE`, so main-actor confinement is the only option. |
+| Concurrency | `save`, `remove`, `commit`, `reset`, `events(matching:)` and `predicateForEvents` are all synchronous and closure-free — the project's rule-4 `@Sendable` trap does not apply. Nothing in EventKit is `NS_SWIFT_SENDABLE`. Main-actor confinement is the *simplest* fit for this call volume, **not the only option** — see below. |
 | `events(matching:)` on the main thread | Apple suggests running it off-thread, which a non-`Sendable` store makes impossible. Mitigated by a bounded window and a single-calendar scope. |
 | `objectBelongsToDifferentStore` | A **trap**: passing an event from another store *raises an Objective-C exception*, uncatchable in Swift. Hold one long-lived store — which this app does — and never let a foreign `EKEvent` reach `save`. |
 | Uncommitted changes | Invisible to `events(matching:)`: *"Only committed events are included in the results."* So a pass must read first, then batch-write, and can never re-query mid-batch to see its own pending work. |
@@ -780,16 +794,15 @@ day, not two. Had it been exclusive, every event would have spanned two days —
 `endDate = startDate` is correct for a single-day all-day event, and this is now
 observed behaviour rather than an assumption.
 
-**No hitch was reported on the Save tap**, but no latency measurement was taken —
-warning 2 in §11k therefore stays open as an unmeasured risk rather than a
-disproved one. Revisit it if ticket 03's refresh adds work to the same pass.
+**No hitch was reported on the Save tap**, but no latency measurement was taken
+here. Slice 3 measured the same pass on the routines-list path instead — see
+§12g, which closes warning 2 in §11k for everything except the EventKit
+round-trip on a real CalDAV store (§12i step 6).
 
 ### 11j. Follow-ups (recorded, not fixed)
 
-- **Deleting a routine does not reconcile.** Deleting a routine cascade-deletes
-  its schedule, but the mirror is hooked only to the two schedule write paths, so
-  that routine's events linger until the next pass. Ticket 03's refresh covers it;
-  worth an explicit hook if it does not.
+- ~~**Deleting a routine does not reconcile.**~~ **Resolved in slice 3**: the hook
+  moved to `fetchRoutines()`, which `deleteRoutine(_:)` ends in (§12b).
 - **Events beyond the window are unreachable after the plan that made them is
   cleared.** A cadence anchored far in the future can write occurrences past the
   400-day floor; clearing it leaves nothing desired, so the window falls back to
@@ -812,9 +825,12 @@ disproved one. Revisit it if ticket 03's refresh adds work to the same pass.
   than `private` purely because `private` is file-scoped; nothing outside the type
   reads it and the `EKEventStore` still never leaves `Data/Calendar/`.
 - **Warning 2 — the pass is synchronous on the main actor on the Save tap.**
-  **Acknowledged, not fixed**, and turned into device-verification step 3 in §11i
-  with the remedy named. Deferring it now would be an unmeasured change to a
-  hot path, and the reviewer's own recommendation was to measure first.
+  Acknowledged, not fixed in slice 2. **Measured in slice 3** (§12g): with sync
+  on and 40 planned routines the routines list shows no regression, and the pass
+  now runs in its own `Task` off the fetch's critical path (§12f). The EventKit
+  round-trip against a real CalDAV store — which a simulator cannot represent —
+  was walked on device on 2026-09-03 with no hitch observed (§12i step 6). **This
+  warning is closed**, with the caveat that step 6 is an observation, not a trace.
 - Advisory taken: the delete path now guards its index rather than force-indexing,
   so a future drift between the reconciler's handles and the array they index
   fails a delete instead of trapping.
@@ -830,3 +846,374 @@ It also flagged, independently, the two functional gaps already recorded in §11
 plus one cheap way to close the second: the reference-date `DatePicker` in
 `SchedulePlanningSheet` is unbounded, and bounding it to about a year out would put
 every occurrence inside the cleanup window by construction.
+
+---
+
+## 12. Slice 3 — the mirror follows the plan
+
+The calendar keeps telling the truth as the plan moves underneath it. The user
+misses Tuesday's Push and trains on Thursday instead: the cadence re-anchors on
+that completion and the calendar's future occurrences shift with it — from a
+workout finished on the iPhone, on the watch, or on another device. The rolling
+window tops itself up so it never runs dry. And when the user takes the calendar
+or the permission away behind the app's back, the app notices and says so instead
+of failing silently.
+
+### 12a. The anchor is computed, never stored — which is what makes this cheap
+
+There is **no "roll the plan forward" write** anywhere in the codebase, and none
+was added. `RoutineSchedule` stores only `startDate` (a floor the user picks) and
+the plan's shape. "Trained two days late → the plan moves" is a *pure
+recomputation*:
+
+- `WorkoutPlanningService.cadenceAnchor(startDate:lastCompleted:calendar:)`
+  re-derives the anchor from the last completed session on every call.
+- `lastCompleted` comes from
+  `WorkoutSessionRepository.lastCompletedStartDates(forRoutineIds:)` — a
+  per-routine `LIMIT 1` query over sessions with `endTime != nil`.
+
+So this slice adds **no new state and no new anchor logic.** It only re-runs
+slice 2's reconciler at the right moments and lets the existing diff do its work.
+A test pins that the plan's `startDate` is unchanged after a drift.
+
+**A payoff worth naming:** because slice 2 mirrors cadence plans as one-shot
+events (§11a), an anchor shift is just "different desired dates" — delete the
+stale ones, create the new ones. The app never edits into an existing recurring
+series, so the one thing the API research could **not** verify from primary
+sources — how `EKSpan.futureEvents` behaves when occurrences in range have already
+been detached by the user editing them in Calendar.app — never arises for cadence
+plans. Do not reintroduce it by "optimising" this into a recurring-series edit.
+
+> **If a future change makes the anchor stored rather than computed, this
+> section's assumptions have to be revisited.** Everything below rests on
+> `desired` being a pure function of (plans, history, today).
+
+### 12b. One hook covers watch ingest, iCloud and every plan change
+
+Reconciliation is hooked to `RoutinesViewModel`'s two refresh paths —
+`fetchRoutines()` and `refreshRoutinesWithoutWatchSync()` — *after*
+`lastPerformedByRoutine` has been rebuilt. That single point covers every path
+that can move an anchor:
+
+| Path | How it reaches a refresh | Immediate? |
+| --- | --- | --- |
+| Workout finished on the watch | `WatchWorkoutIngestionService.ingest(_:)` materialises the session and posts `.workoutHistoryDidChange` | yes |
+| Watch template transaction | `WatchTemplateTransactionService` posts `.workoutHistoryDidChange` | yes |
+| A completion synced from another device | `.cloudKitDataDidChange` → `fetchRoutines()` | yes |
+| Plan edited or cleared | `setSchedule(...)` / `removeSchedule(from:)` end in `fetchRoutines()` | yes |
+| Routine deleted | `deleteRoutine(_:)` ends in `fetchRoutines()` | yes |
+| **Workout finished on this iPhone** | nothing is posted — see below | on next Routines appearance or foreground |
+| The routines list opened | `RoutinesView.onAppear` | — |
+| The app becomes active | `scenePhase` (§12d) | — |
+
+**The iPhone-local completion is the one path that is not immediate, and the
+planning note was wrong about it.** The ticket's table asserted that
+`WorkoutViewModel.completeWorkout(updateTemplate:notes:)` posts
+`.workoutHistoryDidChange`; it does not. The only post in that type is inside
+`recoverOrphanedWorkouts()`, and `.cloudKitDataDidChange` comes from
+`NSPersistentStoreRemoteChange`, which does not fire for a local save. So after
+finishing a workout on the iPhone the calendar re-anchors on the next
+`RoutinesView.onAppear` or the next activation — both of which happen within
+seconds of leaving the summary, so the calendar is correct at every point the user
+can actually look at it, but it is not instantaneous. Making it so is recorded as
+a follow-up (§12j) rather than done here, because it means posting from the app's
+hottest path, where the notification also re-enters `WorkoutViewModel`'s own
+observer and the workout-recovery engine.
+
+Slice 2 made the reconciler idempotent, so the extra invocations this produces
+are no-ops.
+
+**One observer had to be added, because the planning assumption was wrong.**
+The breakdown assumed `RoutinesViewModel` already observed
+`.workoutHistoryDidChange`; a repo-wide grep showed it did not — the routines list
+picked completions up only on its next `onAppear`. So `observeWorkoutHistoryChanges()`
+was added, and it routes to `refreshRoutinesWithoutWatchSync()` rather than
+`fetchRoutines()`: no routine *template* changed, so pushing a fresh generation at
+the watch after every workout would be churn — and after a watch template
+transaction it would emit a snapshot competing with the authoritative one that
+transaction already staged (`docs/watch-sync.md`, ticket 05). It is one observer
+covering two posting sites, not one per path. It also fixes a real staleness bug
+that predates calendar sync: for a watch-ingested workout, a card's "last trained"
+line, its next-due date and the hero's ordering now update as soon as it lands
+instead of waiting for the tab to be re-entered.
+
+**A hop is mandatory in these blocks, not conventional.** The first version of the
+coalescing called the main-actor method *directly* from the notification block,
+reasoning that `queue: .main` pins it to the main thread. `OperationQueue.main` does
+guarantee that at runtime — but `addObserver(forName:object:queue:using:)` takes a
+**`@Sendable`** block, so under SE-0461 the closure is inferred *nonisolated*
+regardless of being written inside a `@MainActor` class, and the direct call
+compiles with `warning: call to main actor-isolated instance method '…' in a
+synchronous nonisolated context`. A warning, not an error — it builds and the tests
+pass, so it is a silent regression against the project's zero-warning invariant.
+Reverted to the hop. The full finding, including why this API is the *opposite* of
+the rule-4 `@Sendable` hazard, is recorded in `docs/swift6-concurrency.md` §4.
+
+**Bursts are coalesced.** Both posting sites fan out per item rather than per
+batch — `WatchWorkoutIngestionService` posts once per inbox entry while the
+coordinator drains the queue, and a template transaction posts
+`.workoutHistoryDidChange` and then `.routineTemplateDidChangeLocally` for the
+same commit. Uncoalesced, a drain of K workouts cost K × (`fetchAll()` + one
+bounded session fetch per routine + a card rebuild), a product that scales with
+the user's library — the shape of the hang in `docs/history-performance.md`.
+`scheduleRefreshWithoutWatchSync()` collapses it, **through the hop rather than
+around it**: each observer keeps the file's `queue: .main` + `Task { @MainActor
+in … }` pattern, so nothing reads main-actor state from a notification block. The
+burst's hops are all enqueued while it is being posted, and the refresh the first
+of them schedules is created from inside that hop — so it lands behind the rest
+(SE-0431 ordering, the same guarantee watch sync relies on) and every later
+notification finds the slot taken. Nothing is dropped: the refresh re-reads the
+store, so it sees the newest completion of the burst. No timer and no window —
+the collapse is exactly one main-actor turn wide. `CloudSyncObserver`'s
+time-based window exists for the different problem of *remote* changes arriving
+over seconds.
+
+**Window top-up and out-of-band discovery need one more trigger,** because
+neither requires a completion: the app becoming active. `GymStreakApp`'s existing
+`scenePhase == .active` branch calls
+`plannedWorkoutCalendarMirror.reconcile(revalidatingCalendar: true)` — inside a
+`Task`, for the reason in §12f, and more pointedly than anywhere else: this is
+the one trigger that always reaches `events(matching:)`, so running it inline
+would put a blocking CalDAV query on the activation turn, in front of the first
+frame the user sees on returning to the app.
+
+### 12c. `.EKEventStoreChanged` drives nothing
+
+`.EKEventStoreChanged` is posted on the main actor and carries no detail about
+what changed. **Whether it fires for the app's own commits is undocumented** and
+could not be confirmed from primary sources, so an observer that reconciled on it
+would risk a write → notification → write loop.
+
+Decision: **check calendar state at reconcile time** — deterministic, cheap, and
+already happening on the triggers above. No `.EKEventStoreChanged` observer exists
+anywhere in the target, not even for display: the Settings row refreshes on
+`.onAppear` and on `scenePhase == .active`, which covers the only moments it is on
+screen (a revocation happens in Settings.app, so the user is necessarily away and
+coming back). If one is ever added for display, it must never initiate a write.
+
+### 12d. The short-circuit, and the one pass that deliberately steps over it
+
+The hook fires after every routines refresh, and a pass ends in
+`events(matching:)` against a CalDAV-backed store that Apple suggests not
+querying on the main thread at all (§11g). So `PlannedWorkoutCalendarMirror`
+remembers what the last **successful** pass wrote — the occurrences and the
+calendar identifier — and returns before touching EventKit when neither has moved.
+
+- **Exact, not hashed.** A handful of occurrences per routine is small enough to
+  keep verbatim, and a hash collision here would mean a calendar that silently
+  stops updating. `PlannedWorkoutOccurrence` is `Equatable`, so the comparison is
+  free to write.
+- **The calendar identifier is part of it**, so a recreated calendar — same plans,
+  empty calendar — is never mistaken for a no-op.
+- **In-memory only, for this launch.** A fresh launch always reconciles once,
+  which is the cheapest way to recover from anything that happened while the app
+  was not running. It is also cleared whenever the opt-in is off, whenever a pass
+  fails, and when the calendar is found to be gone.
+
+**`reconcile(revalidatingCalendar: true)` steps over it on purpose.** This is the
+one design point that is easy to get wrong, and the first implementation did get
+it wrong: neither take-it-away case moves the app's desired state by a single
+byte, so a pass that trusted the cache could *never* discover them. A unit test
+that deleted the calendar and then reconciled saw nothing happen. Hence the
+parameter: the plumbing triggers pass `false` (and are short-circuited), while the
+once-per-activation trigger passes `true` and accepts one query for the
+revalidation. The protocol carries a `reconcile()` extension defaulting to
+`false`, so no existing call site had to change.
+
+This is the honest reading of the acceptance criterion "an unchanged desired state
+performs no EventKit query at all": it holds for the frequently-fired hook, which
+is what the criterion protects, and is traded away exactly once per foreground for
+the only thing that can detect an out-of-band change.
+
+### 12e. When the user takes it away
+
+Two out-of-band cases, both discovered at reconcile time. **Neither loses or
+alters the user's plan** — the plan is the source of truth and the calendar is a
+projection of it.
+
+**1. The owned calendar is gone.** `calendar(withIdentifier:)` returns `nil` (the
+user deleted it in Calendar.app, or removed the account). The gateway now throws
+`WorkoutCalendarSyncError.calendarMissing` rather than returning silently, because
+a pass is the only place the app can find out — nothing notifies it.
+
+Deleting a calendar is a deliberate act, so it is **treated as an opt-out**: the
+mirror calls `disable()` (which drops the now-stale identifier, and is what stops
+the next enable from stacking a second calendar beside a dead handle) and writes
+`isCalendarSyncEnabled = false`. The Settings toggle then reads off, which *is*
+the honest state. Re-enabling creates a fresh calendar and fills a full window.
+
+*Alternative considered and rejected:* silently recreating the calendar. It fights
+the user and would make the calendar impossible to get rid of without also finding
+the toggle.
+
+**2. Access was revoked in Settings.** `authorizationStatus(for: .event)` is no
+longer `.fullAccess`, so the gateway's existing guard throws `.accessDenied`. The
+mirror stops writing and logs at `info` — a user decision is not an error — and
+**leaves the intent flag on**, so restoring access resumes the mirror by itself
+with no second trip to the toggle. Nothing re-prompts;
+`requestFullAccessToEvents()` would not present anything anyway once the user has
+decided.
+
+The Settings row reflects it: `CalendarSyncSettingsViewModel.refreshStatus()`
+shows the existing `calendar_sync.denied.*` row — which already carries the path
+back ("Tap here, then Calendars → Full Access") — whenever sync is on and access
+is not. It clears only that failure, never a `.writeFailed` the user's own toggle
+tap produced. **No new localized strings were needed for either case.**
+
+### 12f. Off the routines-list critical path
+
+`reconcileCalendar()` wraps the pass in a `Task` rather than calling it inline, so
+it runs in its own main-actor turn after the fetch and the first frame (main-thread
+rules 3 and 7). It is never called from a view body or an `onAppear`. **Every
+trigger does this**, the scene-phase one included (§12b) — a `Task` created from
+the main actor stays on it, so this defers the work rather than moving it off, and
+deferral is the whole point: the list's first frame goes first.
+
+The pass re-reads routines and last-completed dates rather than taking them from
+the refresh that triggered it. That is a deliberate duplicate: the mirror is also
+driven by the Settings toggle and by `scenePhase`, neither of which has a routines
+list to hand, and a `reconcile(routines:lastCompleted:)` surface would push that
+glue back out into every call site. The cost is one `fetchAll()` plus one bounded
+`LIMIT 1` query per routine — the same shape the list itself pays.
+
+**Known escape hatch, if measurement ever says main-actor is wrong:** the store
+cannot simply *hop* off the main actor, because it is not `Sendable` and so cannot
+cross an isolation boundary — but a plain `actor` owning the store and the gateway,
+exposing only `Sendable` values, runs the blocking query off the main thread and is
+an ordinary supported pattern (§5). Not done pre-emptively: this is the same
+failure mode as the 630 ms History hang (`docs/history-performance.md`), so it is
+measured rather than assumed, and §12g says the measurement does not call for it.
+
+### 12g. Measurement
+
+Method and probe from `docs/history-performance.md` §5: the in-app
+`MainThreadStallProbe`, read out of the UI test's result bundle. Click path:
+launch with a 40-routine library → **Routines → History → Routines** → read the
+probe (re-entering resets it on `onAppear`, so the figure is `fetchRoutines()`
+plus the first frame, not the seeding).
+
+`RoutinesResponsivenessUITests.testRoutinesListWithCalendarSyncEnabled` adds the
+sync-on case: the same 40 routines, **all planned** (`-UI_TEST_PLAN_ROUTINES`
+gives each a 2–8 day cadence), with the opt-in flipped through `NSArgumentDomain`
+(`-calendar_sync.enabled YES`) rather than through the toggle — so no production
+code knows it is under test and no permission prompt appears.
+
+Max main-run-loop delay on opening Routines, iPhone 17 Pro simulator (iOS 26.5),
+four/three runs each:
+
+| Build | Samples (ms) | Max |
+| --- | --- | --- |
+| Before this slice, sync off | 1, 35, 7, 1 | 35 |
+| After, sync off | 9, 25, 8, 9, 5 | 25 |
+| After, sync **on**, 40 planned routines | 24, 13, 36, 31 | 36 |
+
+(The last sample in each "after" row is a confirming run taken after the
+architecture review's fixes — the deferred scene-phase pass and the burst
+coalescing in §12b.)
+
+Scrolling was unchanged (before 32–50 ms, after 31–47 ms). Every figure is far
+under the test's 250 ms / 150 ms thresholds and inside the others' spread — the
+run-to-run variance (1 → 35 ms on the *unmodified* build) is larger than any
+difference between the columns. **No regression.**
+
+**What this does and does not cover.** It measures everything the mirror pays on
+every pass and everything that scales with the user's library: the routine fetch,
+40 `lastCompletedStartDates` lookups, 40 cadence walks and the digest comparison.
+It does **not** measure the EventKit round-trip, which a simulator cannot
+represent — there is no CalDAV-backed store behind it, and `events(matching:)`
+against a local store with a few dozen events is not the cost that matters. That
+half belongs to device verification (§12i), exactly as §11i's `endDate` behaviour
+did — walked on 2026-09-03 with no hitch observed, which is an observation rather
+than a number; see §12i for what that does and does not establish.
+
+### 12h. Tests
+
+One new suite, `PlannedWorkoutCalendarDriftTests` — Swift Testing,
+`@Suite(.serialized) @MainActor`, in-memory container, **no `EKEventStore` is
+constructed**:
+
+- **Drift.** Due 3 days ago on a 7-day cadence, trained 2 days late → the whole
+  series re-anchors (+6, +13, …), the stale +4 is gone, and `schedule.startDate`
+  is untouched. The same case straight through the pure reconciler, asserting the
+  create/delete actions. And the same again driven by `.workoutHistoryDidChange`,
+  which is the notification the watch's ingestion posts — no separate code path
+  and no watch file touched.
+- **Top-up.** Four completions across a month: a full horizon every time, no
+  duplicates, nothing in the past, and consecutive days exactly one interval
+  apart. Plus: the window starts today, so yesterday is outside it.
+- **The short-circuit.** Three ordinary passes cost one gateway call; a changed
+  plan gets through; a recreated calendar is refilled, not skipped; and a
+  revalidating pass reaches the calendar with nothing changed.
+- **Take-it-away.** A deleted calendar switches sync off, drops the stale handle
+  and leaves the plan intact; further passes write nothing and do not fail
+  repeatedly; re-enabling produces a fresh calendar and a full window. Revoked
+  access stops the writes, keeps the intent flag and the plan, and never calls
+  `enable()`; restoring access resumes on the next pass; and the Settings row
+  shows the denied row with the way back, then clears it.
+
+`FakeWorkoutCalendarSync` now models the real gateway's own guards — access first,
+then the calendar, with `isCalendarMissing` standing in for a calendar the user
+deleted. A fake that recorded regardless would have let all of the above pass
+untested. The existing `PlannedWorkoutCalendarMirrorTests` harness was updated to
+start from the state the app is actually in when sync is on (full access, a
+calendar owned), and its trigger tests now `await` a yield, because the pass is
+deliberately deferred off the fetch's critical path.
+
+Full iOS suite green: **1179 tests, 0 failures.** The watch suite is **not**
+required — no watch file is touched, confirmed by `git status`.
+
+### 12i. Device verification — walked 2026-09-03, passed
+
+Verified on a physical device by the user; all six steps passed. The checklist, in
+the shape of §11i:
+
+1. With sync on and an overdue cadence plan, finishing the workout **late** moves
+   the calendar's future entries onto the new cadence and takes the stale ones
+   away. **Passed** — this is the Things note's "due Tuesday, trained Thursday"
+   case, and it is now observed behaviour rather than a unit-test inference.
+2. The same for a workout finished **on the watch** and ingested with the iPhone
+   app foregrounded on another tab. **Passed** — confirming the ingest path needs
+   no code of its own.
+3. Past entries untouched throughout. **Passed.**
+4. Deleting the "Gym Streak" calendar in Calendar.app and returning to the app:
+   the Settings toggle reads **off**, no calendar is recreated, nothing crashes;
+   re-enabling produces a fresh calendar with a full window. **Passed** — so the
+   revalidating foreground pass (§12d) does discover a deletion against a real
+   CalDAV store, which is the case the short-circuit originally hid.
+5. Revoking Calendar access in Settings: the Settings row shows "Calendar access
+   needed" with the tappable path, no prompt loops, the plan is unchanged, and
+   restoring access resumes the mirror on its own. **Passed.**
+6. Opening Routines with sync on and several planned routines on a device signed
+   into iCloud. **No hitch observed.**
+
+**What step 6 does and does not establish.** It is an observation, not a
+measurement — no Instruments trace was taken, because nothing was felt to chase.
+So the EventKit round-trip against a real CalDAV store is *not disproved* as a
+cost; it is simply below the threshold of noticeable at this library size. If a
+future slice adds work to the same pass — ticket 04's recurrence writes, say —
+re-walk this step and take a trace rather than assuming it still holds. The
+escalation path if it ever does not is in §12f.
+
+### 12j. Follow-ups
+
+- **Resolved from §11j:** deleting a routine now reconciles — `deleteRoutine(_:)`
+  ends in `fetchRoutines()`, which is a hook.
+- **Still open from §11j:** events written beyond the 400-day window are
+  unreachable once the plan that made them is cleared; weekday plans mirror
+  nothing until ticket 04; the forward weekday scan is triplicated.
+- **A workout finished on this iPhone does not refresh immediately** (§12b). The
+  calendar is still correct on the next Routines appearance or foreground, so
+  this is a latency gap and not a wrong calendar. Closing it is one line — post
+  `.workoutHistoryDidChange` at the end of
+  `WorkoutViewModel.completeWorkout(updateTemplate:notes:)` — but that
+  notification also re-enters that type's own observer (which has already run
+  `refreshHistory()` inline) and drives `WorkoutRecovery.reconcile()`, so it is a
+  change to the workout-completion path that wants verifying on its own terms,
+  not inside a calendar-sync slice.
+- **`RoutinesViewModel` is 1171 lines**, ~4× the 300-line guidance, and this
+  slice added ~60 more. Pre-existing; when it is next touched substantially, the
+  four `observe…()` methods and their tokens are the natural extraction.
+- **The revalidating pass is once per activation, not throttled.** An app the user
+  foregrounds repeatedly in a minute pays one bounded, calendar-scoped query each
+  time. Acceptable at this size; if it ever is not, throttle by wall-clock in the
+  mirror rather than by moving the trigger.

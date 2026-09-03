@@ -18,6 +18,7 @@ import UIKit
 struct CalendarSyncSettingsSectionView: View {
 
     @Environment(\.openURL) private var openURL
+    @Environment(\.scenePhase) private var scenePhase
     @State private var viewModel: CalendarSyncSettingsViewModel
 
     init(
@@ -44,6 +45,16 @@ struct CalendarSyncSettingsSectionView: View {
             if let failure = viewModel.failure {
                 failureRow(failure)
             }
+        }
+        // Both take-it-away cases happen outside the app and iOS announces
+        // neither, so the row checks rather than waits (docs/calendar-sync.md
+        // §12). `.onAppear` covers opening Settings; the scene phase covers the
+        // trip to Settings.app and back, after which this view is still on
+        // screen and `.onAppear` never fires again. Two reads of a cached
+        // authorization status — no EventKit query, and no write on either path.
+        .onAppear { viewModel.refreshStatus() }
+        .onChange(of: scenePhase) { _, newPhase in
+            if newPhase == .active { viewModel.refreshStatus() }
         }
     }
 
@@ -140,7 +151,7 @@ struct CalendarSyncSettingsSectionView: View {
     /// plans from and no calendar to write them to.
     @MainActor
     final class PreviewMirror: PlannedWorkoutCalendarMirroring {
-        func reconcile() {}
+        func reconcile(revalidatingCalendar: Bool) {}
     }
 
     return ZStack {

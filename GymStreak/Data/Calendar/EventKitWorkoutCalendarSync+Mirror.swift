@@ -19,10 +19,17 @@ extension EventKitWorkoutCalendarSync {
         guard accessStatus == .fullAccess else {
             throw WorkoutCalendarSyncError.accessDenied
         }
-        // No calendar means nothing to mirror into — and nothing to clean up
-        // either, since every event the app ever wrote lives in that calendar.
-        guard let identifier = appCalendarIdentifier,
-              let calendar = eventStore.calendar(withIdentifier: identifier) else { return }
+        // No calendar at all means nothing to mirror into — and nothing to clean
+        // up either, since every event the app ever wrote lives in that calendar.
+        guard let identifier = appCalendarIdentifier else { return }
+        // An identifier that no longer resolves is a different story: the user
+        // deleted the app's calendar in Calendar.app, or removed the account it
+        // lived on. Nothing notifies the app of that, so a pass is the only place
+        // it can be found — and it is reported rather than passed over, because
+        // the caller reads it as an opt-out (docs/calendar-sync.md §12).
+        guard let calendar = eventStore.calendar(withIdentifier: identifier) else {
+            throw WorkoutCalendarSyncError.calendarMissing
+        }
 
         let window = PlannedWorkoutCalendarReconciler.mirrorWindow(desired: occurrences)
         // Scoped to the app's own calendar, so no event outside it is ever read,
