@@ -44,6 +44,10 @@ private struct ContentViewInternal: View {
     /// has to reach the user before any gate, badge or nudge can
     /// (docs/pro-subscription.md §5h).
     private let founderCelebration: FounderCelebrationCoordinator
+    /// The first-run tour. Hosted here for the same reason the Founder screen
+    /// is, and ordered **above** it: a brand-new user has to learn what the app
+    /// is before anything else can claim the screen (docs/onboarding.md).
+    private let onboarding: OnboardingFlowViewModel
 
     /// Observable singletons — @State so SwiftUI tracks their changes.
     @State private var preferences = AICoachPreferences.shared
@@ -62,6 +66,7 @@ private struct ContentViewInternal: View {
         self.entitlements = dependencies.proEntitlements
         self.proactivePaywalls = dependencies.proactivePaywalls
         self.founderCelebration = dependencies.founderCelebration
+        self.onboarding = dependencies.onboarding
         self._workoutViewModel = StateObject(wrappedValue: WorkoutViewModel(
             workoutSessionRepository: dependencies.workoutSessionRepository,
             routineRepository: dependencies.routineRepository,
@@ -88,6 +93,9 @@ private struct ContentViewInternal: View {
         // Read in `body` for the same reason, so raising the Founder screen
         // from the launch task actually re-renders this view.
         let isCelebratingFounder = founderCelebration.isPresenting
+        // Same again for the first-run tour — and read *before* the two covers
+        // below, because it suppresses both.
+        let isOnboarding = onboarding.isPresenting
 
         TabView {
             RoutinesView()
@@ -191,7 +199,19 @@ private struct ContentViewInternal: View {
         // full-screen cover above the tabs, so a grandfathered user meets the
         // good news before anything that could read as bad news. It sells
         // nothing, so it is not routed through the paywall seam.
-        .fullScreenCover(isPresented: founderCelebrationBinding(isPresenting: isCelebratingFounder)) {
+        //
+        // Suppressed while the onboarding tour is up, for the same reason the
+        // opt-in is suppressed while this screen is: one context presents one
+        // cover at a time, and nothing is spent by a screen that never showed —
+        // the thank-you raises itself again the moment onboarding ends.
+        //
+        // **This suppression is safe only because the tour never comes back.**
+        // `OnboardingFlowViewModel.isPresenting` is seeded once, at composition,
+        // and only ever goes true → false (`onboardingNeverReRaisesItself`
+        // pins that). Were it able to rise again, it would tear down a Founder
+        // cover that *is* on screen, and the binding's write-back would spend
+        // that once-ever record on a screen the user never read.
+        .fullScreenCover(isPresented: founderCelebrationBinding(isPresenting: isCelebratingFounder && !isOnboarding)) {
             FounderCelebrationView()
         }
         // AI Coach opt-in: shown once when Apple Intelligence is available
@@ -199,8 +219,15 @@ private struct ContentViewInternal: View {
         // Suppressed while the Founder screen is up: two covers on one context
         // present one at a time, and this is the ordering that matters — the
         // opt-in comes back on its own once the thank-you is dismissed.
-        .fullScreenCover(isPresented: .constant(shouldShowOptIn && !isCelebratingFounder)) {
+        .fullScreenCover(isPresented: .constant(shouldShowOptIn && !isCelebratingFounder && !isOnboarding)) {
             AICoachOptInView()
+        }
+        // The first-run tour, above everything else on this context: a user who
+        // has not been told what the app is cannot be helped by an opt-in or
+        // reassured by a thank-you. Both of those wait for it and arrive on
+        // their own once it is dismissed (docs/onboarding.md).
+        .fullScreenCover(isPresented: onboardingBinding(isPresenting: isOnboarding)) {
+            OnboardingCoverView(viewModel: onboarding)
         }
         .task {
             // Resolve availability on first foreground; the fullScreenCover
@@ -226,6 +253,16 @@ private struct ContentViewInternal: View {
         Binding(
             get: { isPresenting },
             set: { if !$0 { founderCelebration.celebrationWasDismissed() } }
+        )
+    }
+
+    /// The tour's presentation, with its dismissal reported back — which is what
+    /// spends the once-per-install record. Nothing but the view model raises it,
+    /// so only a dismissal is written back.
+    private func onboardingBinding(isPresenting: Bool) -> Binding<Bool> {
+        Binding(
+            get: { isPresenting },
+            set: { if !$0 { onboarding.flowWasDismissed() } }
         )
     }
 

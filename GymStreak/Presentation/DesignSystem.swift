@@ -99,6 +99,9 @@ extension Font {
     static let onyxCaption = Font.system(.caption, design: .rounded).weight(.medium)
     static let onyxCaption2 = Font.system(.caption2, design: .rounded)
 
+    // Labels (Monospaced — small, tracked, uppercase eyebrows and counters)
+    static let onyxMonoLabel = Font.system(.caption2, design: .monospaced).weight(.medium)
+
     // Numbers (Monospaced to prevent jumping)
     static let onyxNumber = Font.system(.body, design: .rounded).monospacedDigit().weight(.medium)
     static let onyxNumberLarge = Font.system(.title, design: .rounded).monospacedDigit().weight(.bold)

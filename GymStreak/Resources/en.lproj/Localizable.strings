@@ -1279,3 +1279,20 @@
 "calendar_sync.failed.title" = "Couldn't set up the calendar";
 "calendar_sync.failed.no_source.subtitle" = "No calendar account is available on this iPhone. Add one in Settings → Calendar → Accounts and try again.";
 "calendar_sync.failed.write.subtitle" = "Apple Calendar refused the change. Please try again.";
+
+/* MARK: - Onboarding (docs/onboarding.md) */
+/* The first-run tour. Shown once per install, to everyone, before the tab bar. */
+"onboarding.skip" = "Skip";
+"onboarding.back.accessibility" = "Back";
+"onboarding.progress.accessibility" = "Step %1$d of %2$d";
+"onboarding.step_counter" = "STEP %1$d OF %2$d";
+"onboarding.cta.continue" = "Next";
+
+/* Step 1 — welcome */
+"onboarding.welcome.eyebrow" = "WELCOME";
+"onboarding.welcome.title" = "Your training,\nfinally organised";
+"onboarding.welcome.body" = "Gym Streak is your training log: plan your workouts, log every set, and watch the numbers climb.";
+"onboarding.welcome.bullet1" = "Routines with sets, rest timers and supersets";
+"onboarding.welcome.bullet2" = "Automatic weight suggestions for your next session";
+"onboarding.welcome.bullet3" = "Full history and an on-device AI coach";
+"onboarding.welcome.cta" = "Let's go";

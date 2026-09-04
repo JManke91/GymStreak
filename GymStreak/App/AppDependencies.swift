@@ -181,6 +181,12 @@ final class AppDependencies: ObservableObject {
     /// `.fullScreenCover` straight to its `@Observable` `isPresenting`.
     let founderCelebration: FounderCelebrationCoordinator
 
+    /// The first-run onboarding tour (docs/onboarding.md). Held as the concrete
+    /// type, like `founderCelebration`: the app root binds a `.fullScreenCover`
+    /// straight to its `@Observable` `isPresenting`, and it must be the *same*
+    /// instance the cover is built from so a dismissal is recorded once.
+    let onboarding: OnboardingFlowViewModel
+
     /// The month-keyed free-tier counters behind the AI tasters (P3/P4/P5).
     /// App-lifetime because it caches its records in memory — a second instance
     /// would answer from a stale cache after the first one wrote. Presentation
@@ -285,6 +291,7 @@ final class AppDependencies: ObservableObject {
             record: FounderCelebrationStore(),
             activeWorkout: activeWorkout
         )
+        self.onboarding = OnboardingFlowViewModel(completion: OnboardingCompletionStore())
         self.aiAllowance = MonthlyAllowanceStore()
         let aiCoachPreferences = AICoachPreferences.shared
         let aiCoachAvailability = AICoachAvailability.shared
