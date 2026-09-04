@@ -13,8 +13,9 @@ struct MuscleMapPill: Identifiable, Equatable {
     let region: MuscleMapRegion
     let name: String
     let engagement: MuscleEngagement
-    /// Completed sets, shown only on primary pills — supporting work carries no count.
-    let completedSets: Int
+    /// Sets of the exercises this region led, shown only on primary pills — supporting work
+    /// carries no count.
+    let setCount: Int
 
     var id: MuscleMapRegion { region }
 }
@@ -74,13 +75,13 @@ struct MuscleMapCardModel: Equatable {
         // The design leads with the region the workout hit hardest.
         let primaryPills = primaryRegions
             .map { pill(for: $0, load: loads[$0]!) }
-            .sorted { $0.completedSets > $1.completedSets }
+            .sorted { $0.setCount > $1.setCount }
         let pills = primaryPills + secondaryRegions.map { pill(for: $0, load: loads[$0]!) }
 
         var parts: [String] = []
         if !primaryRegions.isEmpty {
             let spoken = primaryPills
-                .map { String(format: "history.detail.muscle_map.a11y.region_sets".localized, $0.name, $0.completedSets) }
+                .map { String(format: "history.detail.muscle_map.a11y.region_sets".localized, $0.name, $0.setCount) }
                 .joined(separator: ", ")
             parts.append(String(format: "history.detail.muscle_map.a11y.primary".localized, spoken))
         }
@@ -103,7 +104,7 @@ struct MuscleMapCardModel: Equatable {
             details[region] = MuscleMapDetail(
                 name: region.displayName,
                 stateLabel: isPrimary
-                    ? String(format: "history.detail.muscle_map.sets_count".localized, load.completedSets)
+                    ? String(format: "history.detail.muscle_map.sets_count".localized, load.setCount)
                     : "history.detail.muscle_map.secondary".localized,
                 exercises: load.exerciseNames.joined(separator: " · ")
             )
@@ -111,7 +112,7 @@ struct MuscleMapCardModel: Equatable {
                 ? String(
                     format: "history.detail.muscle_map.a11y.belly_primary".localized,
                     region.displayName,
-                    load.completedSets
+                    load.setCount
                 )
                 : String(
                     format: "history.detail.muscle_map.a11y.belly_secondary".localized,
@@ -133,7 +134,7 @@ struct MuscleMapCardModel: Equatable {
             region: region,
             name: region.displayName,
             engagement: load.engagement,
-            completedSets: load.completedSets
+            setCount: load.setCount
         )
     }
 }

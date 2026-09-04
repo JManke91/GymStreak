@@ -139,7 +139,7 @@ struct MuscleMapCardView: View {
                     .font(.system(size: 11.5, weight: isPrimary ? .semibold : .medium))
                     .foregroundStyle(isPrimary ? Color.white : Color.white.opacity(0.6))
                 if isPrimary {
-                    Text("\(pill.completedSets)")
+                    Text("\(pill.setCount)")
                         .font(.system(size: 10.5, weight: .bold))
                         .monospacedDigit()
                         .foregroundStyle(DesignSystem.Colors.tint)
@@ -228,10 +228,10 @@ struct MuscleMapCardView: View {
 
 #Preview("Muscle map card") {
     let loads: [MuscleMapRegion: MuscleLoad] = [
-        .chest: MuscleLoad(engagement: .primary, completedSets: 8, exerciseNames: ["Bankdrücken"]),
-        .triceps: MuscleLoad(engagement: .primary, completedSets: 4, exerciseNames: ["Dips"]),
-        .shoulders: MuscleLoad(engagement: .secondary, completedSets: 0, exerciseNames: ["Bankdrücken"]),
-        .quadriceps: MuscleLoad(engagement: .secondary, completedSets: 0, exerciseNames: ["Dips"]),
+        .chest: MuscleLoad(engagement: .primary, setCount: 8, exerciseNames: ["Bankdrücken"]),
+        .triceps: MuscleLoad(engagement: .primary, setCount: 4, exerciseNames: ["Dips"]),
+        .shoulders: MuscleLoad(engagement: .secondary, setCount: 0, exerciseNames: ["Bankdrücken"]),
+        .quadriceps: MuscleLoad(engagement: .secondary, setCount: 0, exerciseNames: ["Dips"]),
     ]
 
     return ScrollView {

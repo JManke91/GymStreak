@@ -1,11 +1,15 @@
 # Muscle Map
 
 Visualization of the muscle groups a workout trained: a schematic human body, drawn front
-and back, with the trained muscle bellies lit in the app's accent color.
+and back, with the trained muscle bellies lit in the app's accent color. The same aggregation
+also reads a routine, producing the muscle groups it *plans* to train.
 
 **Status:** tickets 01–04 of `.scratch/muscle-map/issues/` are implemented — the figure, the
 aggregation, the card on the workout detail screen, and the tap-to-inspect interaction. The
-map is a control, not a picture.
+map is a control, not a picture. Ticket 01 of `.scratch/routine-muscle-map/issues/` added the
+planned reading of a routine to the aggregator; the routine screen that renders it is ticket 02
+of that set and is not built yet, so everything below about the *card* is still
+workout-detail-only.
 
 **Targets:** iOS only. There is no watchOS counterpart and none is planned — the watch target
 is untouched by this feature.
@@ -71,8 +75,8 @@ muscleMap = MuscleMapCardModel.make(from: MuscleLoadAggregator.aggregate(session
 | File | Layer | Role |
 |---|---|---|
 | `Domain/Models/MuscleMapRegion.swift` | Domain | The 13 regions the figure is drawn in, `MuscleEngagement` (primary / secondary), and the muscle-group-key → region resolver |
-| `Domain/Models/MuscleLoad.swift` | Domain | What one workout did to one region: engagement, completed set count, contributing exercise names |
-| `Domain/Services/MuscleLoadAggregator.swift` | Domain | Turns a `WorkoutSession` into `[MuscleMapRegion: MuscleLoad]` |
+| `Domain/Models/MuscleLoad.swift` | Domain | What one reading does to one region: engagement, `setCount`, contributing exercise names |
+| `Domain/Services/MuscleLoadAggregator.swift` | Domain | Turns a `WorkoutSession` **or** a `Routine` into `[MuscleMapRegion: MuscleLoad]` |
 | `Presentation/Views/MuscleMap/MuscleMapPathParser.swift` | Presentation | Path-string parser and `MuscleMapPathShape`, the `Shape` that maps design space into the view frame |
 | `Presentation/Views/MuscleMap/MuscleMapGeometry.swift` | Presentation | The static path data, the parsed layered `MuscleMapFigure` values, and each figure's `MuscleMapRegionOutline` list (one merged path per region, for the accessibility proxies) |
 | `Presentation/Views/MuscleMap/MuscleFigureView.swift` | Presentation | The view itself: drawing, per-belly hit-testing, dimming, per-region accessibility |
@@ -89,12 +93,37 @@ badge coloring.
 
 ## Aggregation
 
-### Where the data comes from
+### The two readings
 
-`WorkoutExercise.muscleGroups` is already denormalized onto every recorded exercise, so the
-map reads history as it stands: **no schema change, no `@Model` property, and therefore no
-CloudKit schema deploy**. The live `Exercise` library is deliberately not joined — history
-must keep describing what was actually performed even after the library exercise is edited.
+One aggregator answers two questions, and `MuscleLoad` is deliberately neutral about which one
+produced it — its count field is `setCount`, not `completedSets`, because nothing in a plan is
+completed. Only the projection differs; every rule below runs on both, once, in
+`MuscleLoadAggregator.fold(_:)`.
+
+| | Workout — `aggregate(session:)` | Routine — `aggregate(routine:)` |
+|---|---|---|
+| Muscle groups | `WorkoutExercise.muscleGroups`, the denormalized copy | the live `Exercise` the slot points at |
+| Sets counted | completed sets | planned sets |
+| Contributes nothing | an exercise with no completed set | a slot with no attached exercise, or none planned |
+
+**History reads its own copy on purpose.** `WorkoutExercise.muscleGroups` is already denormalized
+onto every recorded exercise, so the map reads history as it stands — **no schema change, no
+`@Model` property, and therefore no CloudKit schema deploy** — and a workout keeps describing what
+was actually performed even after the library exercise is edited.
+
+**A routine reads the live library on purpose.** It describes what *will* happen, so there is no
+copy to fall back on: re-tagging an exercise's muscle groups changes every routine's map
+immediately, at its next recompute. That is the intent, not a leak.
+
+**Alternative exercises are not aggregated.** They are choices — the user performs the exercise
+*or* one of its alternatives, never both — so folding them in would light up regions the routine
+will most likely not train. The exclusion is simply that `aggregate(routine:)` projects
+`routineExercise.exercise` and never touches `alternativesList`; a future "everything this routine
+could hit" reading would add each alternative as its own contribution rather than change this one.
+
+**An unattached routine slot contributes nothing.** `RoutineExercise` allows a nil `exercise` so
+insertion can happen before SwiftData relationships are wired; such a slot names no exercise and
+no muscle group, so it plans nothing.
 
 ### Key → region
 
@@ -128,24 +157,27 @@ every key, so adding a key to the catalogue without a region fails the suite.
   later one is secondary. This mirrors how the app already treats `muscleGroups.first` for
   the primary-muscle badge and Fortschritt grouping. It keys off the first *mapped* entry
   rather than index 0 so an exercise led by an unmapped key (`["General", "Quadriceps"]`)
-  still counts its sets somewhere instead of silently dropping them.
+  still counts its sets somewhere instead of silently dropping them. A routine reads this off the
+  live exercise; a workout off its recorded copy.
 - **Primary wins.** A region that is secondary for one exercise and primary for another
   renders primary. The same applies within a single exercise, whose keys can collapse onto
   one region (Shoulders + Front Delts) — the region is then counted once, as primary.
-- **Set counts are completed sets of the exercises the region led.** Supporting work adds no
-  sets (the design shows a number for primary regions and the word "secondary" for the rest)
-  but still records the exercise name.
-- **An exercise with no completed sets contributes nothing at all** — no highlight, no name.
-  History shows work actually performed, and a primary region reading "0 sets" would be a
-  lie about a skipped exercise.
-- Exercise names per region are distinct and follow the session's exercise `order`.
-- A session that maps to nothing — only `General`, an empty routine, or nothing completed —
-  yields an empty dictionary, which the card reads as "hide me".
+- **Set counts are the sets of the exercises the region led** — completed ones for a workout,
+  planned ones for a routine. Supporting work adds no sets (the design shows a number for primary
+  regions and the word "secondary" for the rest) but still records the exercise name.
+- **An exercise with no sets contributes nothing at all** — no highlight, no name. History shows
+  work actually performed and a routine exercise stripped of its sets plans nothing, so a primary
+  region reading "0 sets" would be a lie about either. Removing sets one by one is reachable in
+  the routine UI, so this case is real rather than theoretical.
+- Exercise names per region are distinct and follow the source's exercise `order`.
+- A source that maps to nothing — only `General`, no exercises, or no sets — yields an empty
+  dictionary, which the card reads as "hide me".
 
 ### Consuming it
 
-`aggregate(session:)` walks `workoutExercises` and `sets`, i.e. two SwiftData relationship
-levels, so it is a service call rule 3 forbids in a `body`. `WorkoutDetailView` calls it from
+Both entry points walk two SwiftData relationship levels — `workoutExercises` → `sets`, and
+`routineExercises` → `exercise` / `sets` — so either is a service call rule 3 forbids in a
+`body`. `WorkoutDetailView` calls `aggregate(session:)` from
 `loadMuscleMap()` — once from `.task` when the screen opens and again from `reloadAfterEdit()`
 after the session is edited — and stores the finished `MuscleMapCardModel` in `@State`. Its
 output is a value type precisely so the card and the figures never touch a `@Model` per belly.
