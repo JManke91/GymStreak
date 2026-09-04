@@ -203,7 +203,7 @@ struct AICoachSettingsView: View {
                     .foregroundStyle(DesignSystem.Colors.tint)
             }
             .buttonStyle(.plain)
-            .accessibilityLabel("Mehr über Apple Intelligence erfahren – öffnet Apple Support")
+            .accessibilityLabel("ai_coach.settings.unavailable_banner.cta.accessibility".localized)
         }
         .padding(16)
         .background(
@@ -381,7 +381,7 @@ private struct HowItWorksSheet: View {
                     .multilineTextAlignment(.center)
 
                 // TODO Wave 3: Replace with full explanation content
-                Text("Dieser Bereich erklärt, wie der AI Coach deine Workout-Daten on-device analysiert und Rückblicke generiert.")
+                Text("ai_coach.how_it_works.body".localized)
                     .font(.system(size: 15))
                     .foregroundStyle(Color.white.opacity(0.6))
                     .multilineTextAlignment(.center)
@@ -389,7 +389,7 @@ private struct HowItWorksSheet: View {
 
                 Spacer()
 
-                Button("Schließen") { dismiss() }
+                Button("action.close".localized) { dismiss() }
                     .font(.system(size: 15, weight: .medium))
                     .foregroundStyle(DesignSystem.Colors.tint)
                     .padding(.bottom, 40)

@@ -335,6 +335,7 @@
 "action.retry" = "Try again";
 "action.continue" = "Continue";
 "action.back" = "Back";
+"action.close" = "Close";
 
 // MARK: - Time Formatting
 "time.seconds" = "%ds";
@@ -944,6 +945,7 @@
 "ai_coach.settings.hero.subtitle.unavailable" = "Not available on this device";
 "ai_coach.settings.unavailable_banner.body" = "The Coach requires Apple Intelligence — available on iPhone 15 Pro or later with Apple Intelligence enabled.";
 "ai_coach.settings.unavailable_banner.cta" = "Learn more →";
+"ai_coach.settings.unavailable_banner.cta.accessibility" = "Learn more about Apple Intelligence – opens Apple Support";
 "ai_coach.settings.master_toggle.title" = "Enable Coach";
 "ai_coach.settings.master_toggle.detail.active" = "On-device analysis of your workouts";
 "ai_coach.settings.master_toggle.detail.unavailable" = "No supported device";
@@ -957,6 +959,7 @@
 "ai_coach.settings.info.apple_intelligence.title" = "About Apple Intelligence";
 "ai_coach.settings.footer" = "All text is generated on your iPhone. Workouts, sets, and notes are never sent to Apple or third parties.";
 "ai_coach.how_it_works.title" = "How the Coach works";
+"ai_coach.how_it_works.body" = "This section explains how the AI Coach analyses your workout data on device and generates recaps.";
 
 // Post-workout recap
 "ai_coach.post_workout.unavailable" = "Coach recap is available on Apple Intelligence devices.";

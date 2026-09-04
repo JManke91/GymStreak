@@ -42,5 +42,33 @@ The watch therefore owns its own display-time table, `localizedWatchMuscleGroup(
 - **The "lbs" dead views are gone (2026-08-28).** `InlineSetEditorView.swift` and `ValueStepperView.swift` said `unit: "lbs"`, `step: 5` while every live surface was kilograms. The weight-unit feature (`docs/weight-unit-preference.md` §9a) made every watch weight read the unit synced from iPhone, so leaving them would have meant a *third* convention in a tree whose whole point is that there is one. Both were unreachable — `ValueStepperView`'s only caller was `InlineSetEditorView`, whose only caller was its own commented-out preview — so they were deleted rather than converted. Their `Comparable.clamped(to:)` extension has four live callers and moved to `Extensions/Comparable+Clamped.swift`.
 - **Weight unit words are now localized**: `kg` / `lb` / `kilograms` / `pounds` (`Kilogramm` / `Pfund` in German), joined by `%@ %@`, all through `WatchWeightFormatting`. `%lld kg` and `%lld kilograms` were removed — nothing renders them any more.
 
+## The permission prompts (`InfoPlist.xcstrings`)
+
+The watch requests its own HealthKit authorization (`WatchWorkoutViewModel` →
+`WatchHealthKitManager.requestAuthorization()`), so it needs its own localized usage
+descriptions — the iOS target's `Resources/{en,de}.lproj/InfoPlist.strings` cannot serve them,
+because the watch app is a separate bundle. The **keys** stay where they are, as
+`INFOPLIST_KEY_NSHealthShareUsageDescription` / `INFOPLIST_KEY_NSHealthUpdateUsageDescription`
+build settings on the watch target (they are what puts the key in the built `Info.plist`, and
+their literals remain the fallback for unsupported languages); the **text** comes from
+`GymStreakWatch Watch App/InfoPlist.xcstrings`, added 2026-09-04. Until then a German watch
+showed the English literals.
+
+`InfoPlist.xcstrings` was chosen over an `en.lproj`/`de.lproj` `InfoPlist.strings` pair to keep
+one convention in this target. It is picked up by the synchronized root group with no pbxproj
+edit, exactly like `Localizable.xcstrings`, and compiles into `InfoPlist.strings` inside both
+`.lproj` folders of the built watch app. Note the wording differs from the iOS target's on
+purpose — the watch reads heart rate, the phone reads workout history.
+
+**Unlike `Localizable.xcstrings`, every key here needs an explicit `en` entry** in state
+`translated`. The key is an Info.plist key, not English text, so there is no useful fallback —
+and a `new`-state entry is dropped at build time (see `.scratch/i18n-foundation/issues/01`).
+Verify the same way §"If the watch app renders entirely in English" prescribes, against the
+built product:
+
+```
+plutil -p "<built>/GymStreakWatch Watch App.app/de.lproj/InfoPlist.strings"
+```
+
 ## How to add a new watch string
 Write the English literal in SwiftUI as usual, then add a key + `de` entry to `Localizable.xcstrings`. If the string reaches the user through a plain `String` API (notifications, computed `String` properties, `String` function params), wrap the literal in `String(localized:)` or it will silently stay English.

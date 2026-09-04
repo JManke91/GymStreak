@@ -667,7 +667,7 @@ the History header — that button is gone, see [Settings Tab](./settings-tab.md
 Sections:
 - **Coach**: master toggle (enable/disable all AI features).
 - **When the Coach appears**: per-surface toggles for post-workout, monthly recap, exercise detail, workout detail.
-- **Info**: "How the Coach works" (placeholder sheet) and "About Apple Intelligence" (opens Apple Support URL).
+- **Info**: "How the Coach works" (sheet with placeholder *copy* — the strings are localized, the content is still a stand-in) and "About Apple Intelligence" (opens Apple Support URL).
 - Footer disclaimer (monospaced, on-device privacy statement).
 
 When device is ineligible (`!availability.isAvailable`), an unavailability banner appears and the master toggle is disabled (0.55 opacity).
@@ -683,11 +683,14 @@ The Watch app is unaffected. FoundationModels is not available on watchOS. All A
 ## Localization
 
 - German (`de.lproj/Localizable.strings`) and English (`en.lproj/Localizable.strings`) are both maintained.
-- German is the primary/source locale (the original inline strings).
+- German is the locale the coach copy was originally *written* in, but **English is the app's fallback**: `CFBundleDevelopmentRegion` is `en`, so any device whose preferred-language list contains neither German nor English resolves to `en.lproj`. Do not treat German as a default for anything.
 - All AI Coach keys are grouped under `// MARK: - AI Coach` at the bottom of both files.
 - Keys follow the pattern `ai_coach.<surface>.<element>`.
 - Interpolated strings use `String(format: "key".localized, arg1, arg2)` following the codebase's existing pattern.
-- The `locale` field is embedded in every aggregator's `toPromptText(in:)` output as `Locale.current.identifier` (e.g. `de_DE`). The system prompt instructs the model: for `de_*` use German; for `en_*` use English; for any other locale, use English.
+- The `locale` field is embedded in every aggregator's `toPromptText(in:)` output as `Locale.current.identifier` (e.g. `de_DE`). **`Locale.current` is constrained to the bundle's available localizations**, not the raw system language — verified on a simulator whose preferred language is French: `Locale.current.identifier` comes back as `en_DE`, never `fr_*`. So this field can only ever be `en_*` or `de_*`, and it always agrees with the language the UI is rendering in.
+- Output language is steered by `AICoachLocaleDirective.lines(forLocaleIdentifier:)`, which names the language in English ("You MUST respond in German.") per Apple's Foundation Models guidance — it does **not** ask the model to parse a `de_*`/`en_*` condition, which is what the reverted earlier rule did (see the type's own doc comment for the German the condition-parsing version produced). The directive short-circuits to an empty string only for exactly `en_US`; other English regions (`en_DE`, `en_GB`) get a redundant but harmless "You MUST respond in English."
+- The same constraint governs the `locale.identifier.hasPrefix("de")` branches in `PeriodRange.label(locale:)` and `PeriodRecapAggregator.buildCorrelations` — they are binary German-or-English by construction and cannot be reached with a third language.
+- **No coach string is hardcoded in a view.** `HowItWorksSheet`'s body and close button and the unavailability banner's accessibility label were German literals until 2026-09-04, rendering German to English users; they are now `ai_coach.how_it_works.body`, `action.close` and `ai_coach.settings.unavailable_banner.cta.accessibility`.
 - **No coach string bakes a unit word into its value.** `ai_coach.deep_dive.peak` and `ai_coach.workout_analysis.headline.pr{,_multiple}` — the only coach copy the app composes itself — take a preformatted weight via `%@`, per `docs/weight-unit-preference.md` §7.
 
 ---
@@ -741,5 +744,5 @@ only — so all are recorded here rather than buried with the archived ticket.
 - PR count in the Period Recap stat strip (currently shows "-" as a placeholder; requires efficient PR query).
 - Share-as-image for Period Recap output.
 - UITest coverage for all three surfaces.
-- "How the Coach works" info sheet — currently a placeholder (`HowItWorksSheet` in `AICoachSettingsView.swift`).
+- "How the Coach works" info sheet — the copy is still a placeholder (`HowItWorksSheet` in `AICoachSettingsView.swift`); its strings are localized (`ai_coach.how_it_works.body`), so replacing it is a strings-file edit, not a code change.
 - "About Apple Intelligence" info sheet — currently opens external Apple Support URL; may become in-app.

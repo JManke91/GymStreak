@@ -30,6 +30,19 @@ Two facts drive the design:
 primes share authorization (skipped under `-UI_TESTING`, when the user disabled Health sync, or
 when authorization is already granted). **No `HKWorkoutSession` is created.**
 
+### The permission prompts are localized
+`NSHealthShareUsageDescription` and `NSHealthUpdateUsageDescription` are declared as
+`INFOPLIST_KEY_*` build settings, which are single literals and therefore **not** localizable on
+their own — a German phone showed the English text until 2026-09-04. The keys stay in the build
+settings (they are what puts them in the built `Info.plist`, and the literal is the required
+fallback for unsupported languages); the localized text lives in
+`GymStreak/Resources/{en,de}.lproj/InfoPlist.strings`, alongside the calendar key that
+established this split. The watch target requests its own authorization with its own, differently
+worded descriptions — those are localized separately in
+`GymStreak/../GymStreakWatch Watch App/InfoPlist.xcstrings`. Full mechanism, the DTS quote behind
+it, and the Xcode incremental-build trap that hides a missing `InfoPlist.strings`:
+`docs/calendar-sync.md` §3; watch half: `docs/watch-localization.md`.
+
 ### At completion — one after-the-fact write
 `WorkoutViewModel.completeWorkout` → `saveWorkoutToHealthKit(session:)` builds the metadata and
 always calls `HealthKitWorkoutManager.saveWorkoutDirectly(...)`:

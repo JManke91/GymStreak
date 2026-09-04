@@ -1,0 +1,2 @@
+- Die Health-Berechtigungsdialoge erscheinen auf deutschen Geräten jetzt auf Deutsch – auf iPhone und Apple Watch
+- Drei Texte in den AI-Coach-Einstellungen wurden korrigiert, die unabhängig von der Gerätesprache immer auf Deutsch erschienen

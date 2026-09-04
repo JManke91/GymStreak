@@ -1,0 +1,64 @@
+{
+  "sourceLanguage" : "en",
+  "strings" : {
+    "CFBundleDisplayName" : {
+      "comment" : "Bundle display name",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "GymStreakWatch"
+          }
+        }
+      }
+    },
+    "CFBundleName" : {
+      "comment" : "Bundle name",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "GymStreakWatch Watch App"
+          }
+        }
+      }
+    },
+    "NSHealthShareUsageDescription" : {
+      "comment" : "Watch HealthKit read prompt. The key lives in the built Info.plist as INFOPLIST_KEY_NSHealthShareUsageDescription (project.pbxproj); this catalog only translates the text the system shows.",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gym Streak benötigt Zugriff auf deine Herzfrequenz während des Trainings."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "GymStreak needs access to read your heart rate during workouts"
+          }
+        }
+      }
+    },
+    "NSHealthUpdateUsageDescription" : {
+      "comment" : "Watch HealthKit write prompt. The key lives in the built Info.plist as INFOPLIST_KEY_NSHealthUpdateUsageDescription (project.pbxproj); this catalog only translates the text the system shows.",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gym Streak benötigt Zugriff, um deine Workouts zu sichern."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "GymStreak needs access to save your workouts"
+          }
+        }
+      }
+    }
+  },
+  "version" : "1.0"
+}

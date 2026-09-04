@@ -198,11 +198,18 @@ when iOS 26.0 shipped and was fixed in 26.1 beta 2
 ([787095](https://developer.apple.com/forums/thread/787095)). Nothing of the kind
 is reported for the calendar keys — and in this instance the OS was innocent.
 
-> **Still open, deliberately.** The **HealthKit** prompts remain English-only for
-> German users — the same defect, pre-dating this work. Now that
-> `InfoPlist.strings` exists in both lproj folders it is a two-line fix per
-> language, but it changes user-visible copy in another feature and was not part
-> of this ticket, so it is left for a change that can verify it on its own.
+> **Closed 2026-09-04.** The **HealthKit** prompts were English-only for German
+> users — the same defect, pre-dating this work — and are now localized on both
+> targets. `GymStreak/Resources/{en,de}.lproj/InfoPlist.strings` gained
+> `NSHealthShareUsageDescription` and `NSHealthUpdateUsageDescription`. The watch
+> target has no `.lproj` folders of its own, so its two (differently worded) keys
+> went into a new `GymStreakWatch Watch App/InfoPlist.xcstrings` String Catalog,
+> matching that target's existing `Localizable.xcstrings` convention — see
+> `docs/watch-localization.md`. The English values are copied verbatim from the
+> `INFOPLIST_KEY_*` build settings, which stay in place as the required fallback
+> for unsupported languages. Verified with the bundle check this section
+> prescribes: both `.lproj` folders of the built app *and* of the built watch app
+> carry an `InfoPlist.strings` holding the right text.
 
 ---
 

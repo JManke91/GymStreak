@@ -10,3 +10,5 @@
 */
 
 "NSCalendarsFullAccessUsageDescription" = "Gym Streak trägt deine geplanten Workouts in einen Kalender ein, den die App für dich anlegt. Vollzugriff ist nötig, damit diese Einträge auch aktualisiert und entfernt werden können, wenn sich dein Plan ändert. Gym Streak greift dabei ausschließlich auf seinen eigenen Kalender zu.";
+"NSHealthShareUsageDescription" = "Gym Streak benötigt Zugriff auf deine Workout-Daten, um deinen Trainingsverlauf anzuzeigen und doppelte Einträge zu vermeiden.";
+"NSHealthUpdateUsageDescription" = "Gym Streak benötigt Zugriff, um deine Workouts in Apple Health zu sichern, damit sie in der Fitness-App erscheinen und zu deinen Aktivitätsringen beitragen.";

@@ -1,0 +1,2 @@
+- Health permission prompts now appear in German on German devices, on both iPhone and Apple Watch
+- Fixed three texts in the AI Coach settings that always appeared in German, regardless of your device language
