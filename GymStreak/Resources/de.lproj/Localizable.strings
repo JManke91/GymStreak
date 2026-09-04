@@ -1290,9 +1290,17 @@
 
 /* Schritt 1 — Willkommen */
 "onboarding.welcome.eyebrow" = "WILLKOMMEN";
-"onboarding.welcome.title" = "Dein Training,\nendlich sortiert";
+"onboarding.welcome.title" = "Dein Training,\nin Zahlen.";
 "onboarding.welcome.body" = "Gym Streak ist dein Trainingstagebuch: Workouts planen, jeden Satz protokollieren und zusehen, wie die Zahlen steigen.";
-"onboarding.welcome.bullet1" = "Routinen mit Sätzen, Pausen und Supersätzen";
-"onboarding.welcome.bullet2" = "Automatische Gewichtsvorschläge fürs nächste Mal";
-"onboarding.welcome.bullet3" = "Komplette Historie und KI-Coach direkt auf dem Gerät";
+"onboarding.welcome.bullet1" = "Routinen mit Sätzen, Pausen & Supersätzen";
+"onboarding.welcome.bullet2" = "Automatische Gewichts-Erinnerungen";
+"onboarding.welcome.bullet3" = "Verlauf & AI Coach auf dem Gerät";
 "onboarding.welcome.cta" = "Los geht's";
+
+/* Routine detail — planned muscle map. Only the strings that name the card or a set count
+   differ from the history reading; the legend, captions and reset control are shared. */
+"routine.detail.muscle_map.title" = "Geplante Muskelgruppen";
+"routine.detail.muscle_map.sets_count" = "%d Sätze geplant";
+"routine.detail.muscle_map.a11y.region_sets" = "%1$@ %2$d Sätze geplant";
+"routine.detail.muscle_map.a11y.belly_primary" = "%1$@, primär, %2$d Sätze geplant";
+"routine.detail.muscle_map.a11y.belly_idle" = "%@, nicht geplant";

@@ -11,14 +11,12 @@
 import SwiftUI
 
 struct WorkoutDetailExerciseBlock: View {
-    let exercise: WorkoutExercise
+    /// Pre-resolved block content — see WorkoutDetailExerciseDisplay. The block
+    /// draws from this alone; it never reads a `WorkoutExercise`.
+    let display: WorkoutDetailExerciseDisplay
     let prDetail: PersonalRecordService.PRDetail?
     let comparison: ExerciseComparisonResult?
     @Environment(\.weightUnit) private var weightUnit
-
-    private var sortedSets: [WorkoutSet] {
-        exercise.setsList.sorted(by: { $0.order < $1.order })
-    }
 
     private var setComparisons: [ExerciseComparisonResult.CurrentExercisePerformance.SetComparison] {
         comparison?.currentPerformance.sets ?? []
@@ -48,7 +46,7 @@ struct WorkoutDetailExerciseBlock: View {
 
     private var titleRow: some View {
         HStack(spacing: 8) {
-            Text(exercise.exerciseName)
+            Text(display.name)
                 .font(.system(size: 15, weight: .bold, design: .rounded))
                 .kerning(-0.2)
                 .foregroundStyle(Color.white)
@@ -57,7 +55,7 @@ struct WorkoutDetailExerciseBlock: View {
                 prBadge
             }
             Spacer()
-            Text("history.card.sets".localized(exercise.setsList.count))
+            Text("history.card.sets".localized(display.sets.count))
                 .font(.system(size: 11))
                 .foregroundStyle(Color.white.opacity(0.5))
         }
@@ -78,7 +76,7 @@ struct WorkoutDetailExerciseBlock: View {
     }
 
     private var setsGrid: some View {
-        let sets = sortedSets
+        let sets = display.sets
         let columns = Array(
             repeating: GridItem(.flexible(), spacing: 6),
             count: max(1, min(sets.count, 6))
@@ -90,10 +88,9 @@ struct WorkoutDetailExerciseBlock: View {
         }
     }
 
-    private func setCell(index: Int, set: WorkoutSet) -> some View {
-        let usePlanned = exercise.progressiveOverloadApplied
-        let weight = usePlanned ? set.plannedWeight : set.actualWeight
-        let reps = usePlanned ? set.plannedReps : set.actualReps
+    private func setCell(index: Int, set: WorkoutDetailExerciseDisplay.SetValues) -> some View {
+        let weight = set.weight
+        let reps = set.reps
         let weightText = weight > 0
             ? WeightFormatting.label(weight, in: weightUnit)
             : "history.detail.bw".localized
@@ -109,7 +106,7 @@ struct WorkoutDetailExerciseBlock: View {
             comparison: setComparison,
             isCompleted: isCompleted,
             hasPreviousSession: comparison?.previousPerformance != nil,
-            loadBehavior: exercise.loadBehavior,
+            loadBehavior: display.loadBehavior,
             unit: weightUnit
         )
 

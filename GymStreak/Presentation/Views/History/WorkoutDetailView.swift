@@ -62,7 +62,9 @@ struct WorkoutDetailView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
                 header
-                MuscleMapCardView(model: muscleMap)
+                // The card owns no outer margin of its own — the sections around it here are
+                // laid out edge to edge, so this screen supplies the 16 pt the design asks for.
+                MuscleMapCardView(model: muscleMap, horizontalMargin: 16)
                 statsGrid
                 progressiveOverloadSection
                 if workout.healthKitWorkoutId != nil {
@@ -168,19 +170,11 @@ struct WorkoutDetailView: View {
     // MARK: - Header
 
     private var header: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            HStack(spacing: 8) {
-                WorkoutTypeChip(type: workoutType)
-                Text(dateString)
-                    .font(.system(size: 11))
-                    .foregroundStyle(Color.white.opacity(0.5))
-            }
-            Text(workout.routineName)
-                .font(.system(size: 28, weight: .bold, design: .rounded))
-                .kerning(-0.6)
-                .foregroundStyle(Color.white)
-                .lineLimit(2)
-        }
+        WorkoutSessionHeaderView(
+            type: workoutType,
+            dateText: dateString,
+            title: workout.routineName
+        )
         .padding(.horizontal, 20)
         .padding(.bottom, 4)
     }
@@ -201,63 +195,13 @@ struct WorkoutDetailView: View {
     // MARK: - Stats grid
 
     private var statsGrid: some View {
-        HStack(spacing: 6) {
-            statCard(
-                icon: "clock.fill",
-                color: Color(red: 90/255, green: 180/255, blue: 255/255),
-                value: "\(Int(workout.duration / 60))m",
-                label: "history.detail.duration".localized
-            )
-            statCard(
-                icon: "dumbbell.fill",
-                color: DesignSystem.Colors.tint,
-                value: "\(workout.completedSetsCount)",
-                label: "history.detail.sets".localized
-            )
-            statCard(
-                icon: "bolt.fill",
-                color: Color(red: 200/255, green: 140/255, blue: 255/255),
-                value: WeightFormatting.volume(workout.totalVolume, in: weightUnit),
-                label: "history.detail.volume".localized
-            )
-            statCard(
-                icon: "flame.fill",
-                color: Color(red: 255/255, green: 159/255, blue: 90/255),
-                value: "\(workout.completionPercentage)",
-                label: "history.detail.intensity".localized
-            )
-        }
-        .padding(.horizontal, 16)
-    }
-
-    private func statCard(icon: String, color: Color, value: String, label: String) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            ZStack {
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .fill(color.opacity(0.15))
-                    .frame(width: 26, height: 26)
-                Image(systemName: icon)
-                    .font(.system(size: 14, weight: .bold))
-                    .foregroundStyle(color)
-            }
-            Text(value)
-                .font(.system(size: 18, weight: .bold, design: .rounded))
-                .kerning(-0.4)
-                .monospacedDigit()
-                .foregroundStyle(Color.white)
-            Text(label.uppercased())
-                .font(.system(size: 10, weight: .semibold))
-                .tracking(0.4)
-                .foregroundStyle(Color.white.opacity(0.45))
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(12)
-        .background(Color.white.opacity(0.035))
-        .overlay(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .stroke(Color.white.opacity(0.06), lineWidth: 1)
+        WorkoutStatGrid(
+            durationText: "\(Int(workout.duration / 60))m",
+            setsText: "\(workout.completedSetsCount)",
+            volumeText: WeightFormatting.volume(workout.totalVolume, in: weightUnit),
+            intensityText: "\(workout.completionPercentage)"
         )
-        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .padding(.horizontal, 16)
     }
 
     // MARK: - Progressive overload (after-the-fact)
@@ -487,7 +431,7 @@ struct WorkoutDetailView: View {
             VStack(spacing: 8) {
                 ForEach(exercises, id: \.id) { exercise in
                     WorkoutDetailExerciseBlock(
-                        exercise: exercise,
+                        display: WorkoutDetailExerciseDisplay(exercise),
                         prDetail: prDetails[exercise.id],
                         comparison: comparisons[exercise.id]
                     )
@@ -503,7 +447,10 @@ struct WorkoutDetailView: View {
     /// run when the screen loads and after an edit — never from a view body.
     @MainActor
     private func loadMuscleMap() {
-        muscleMap = MuscleMapCardModel.make(from: MuscleLoadAggregator.aggregate(session: workout))
+        muscleMap = MuscleMapCardModel.make(
+            from: MuscleLoadAggregator.aggregate(session: workout),
+            reading: .performed
+        )
     }
 
     /// Seeds the confirmed state for increases the user already applied from

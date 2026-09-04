@@ -1438,6 +1438,9 @@ to widen its scope for. Listed in the order they were found.
   selected timeframe's session count, so it has not been measured as a problem.
 - **`WorkoutDetailExerciseBlock` takes the `@Model` itself, and `sortedSets` walks the
   relationship in a `body`-read property.** Rendering rule 4 debt, pre-existing.
+  *Resolved 2026-09-04* by the onboarding prefactor: the block now takes a
+  `WorkoutDetailExerciseDisplay` value struct — see
+  [history-redesign.md](./history-redesign.md).
 - **`ExerciseProgressViewModel.swift` is 923 lines**, past the 200–300 line convention.
   Extracting the display members would mean widening `weightUnitPreference` and `displayUnit`
   from `private` to internal purely to satisfy a line count — encapsulation traded for a

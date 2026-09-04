@@ -2,8 +2,9 @@
 //  MuscleMapCardView.swift
 //  GymStreak
 //
-//  The muscle map on workout detail: front and back schematic bodies with the
-//  regions this workout trained lit in the accent color.
+//  The muscle map, shared by workout detail and routine detail: front and back
+//  schematic bodies with the regions the source trained — or plans to train —
+//  lit in the accent color.
 //
 
 import SwiftUI
@@ -12,6 +13,10 @@ import SwiftUI
 struct MuscleMapCardView: View {
 
     let model: MuscleMapCardModel
+    /// Outer margin the caller wants around the card. It is the caller's decision because the
+    /// two screens differ: workout detail lays its sections out edge to edge, routine detail
+    /// already insets its scroll content.
+    var horizontalMargin: CGFloat = 0
 
     /// The region the user is inspecting. Deliberately local view state: selecting a region
     /// redraws the card and nothing else — it never re-runs the aggregation behind `model`.
@@ -20,8 +25,10 @@ struct MuscleMapCardView: View {
     private static let figureWidth: CGFloat = 128
 
     var body: some View {
-        // A workout whose exercises map to no region (only "General", or nothing completed)
-        // would render an all-grey body that says nothing — the card stays away instead.
+        // A source whose exercises map to no region (only "General", nothing completed, or a
+        // routine stripped of its sets) would render an all-grey body that says nothing — the
+        // card stays away instead. Hiding here rather than at the call site also keeps the
+        // margin below from leaving a gap where the card would have been.
         if model.hasTraining {
             VStack(spacing: 0) {
                 header
@@ -41,7 +48,7 @@ struct MuscleMapCardView: View {
                     .stroke(Color.white.opacity(0.06), lineWidth: 1)
             )
             .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
-            .padding(.horizontal, 16)
+            .padding(.horizontal, horizontalMargin)
             .accessibilityElement(children: .contain)
         }
     }
@@ -74,7 +81,7 @@ struct MuscleMapCardView: View {
 
     private var header: some View {
         HStack(alignment: .center, spacing: 10) {
-            Text("history.detail.muscle_map.title".localized)
+            Text(model.title)
                 .font(.system(size: 13, weight: .bold, design: .rounded))
                 .kerning(-0.2)
                 .foregroundStyle(Color.white)
@@ -226,7 +233,7 @@ struct MuscleMapCardView: View {
     }
 }
 
-#Preview("Muscle map card") {
+#Preview("Muscle map card — both readings") {
     let loads: [MuscleMapRegion: MuscleLoad] = [
         .chest: MuscleLoad(engagement: .primary, setCount: 8, exerciseNames: ["Bankdrücken"]),
         .triceps: MuscleLoad(engagement: .primary, setCount: 4, exerciseNames: ["Dips"]),
@@ -235,7 +242,10 @@ struct MuscleMapCardView: View {
     ]
 
     return ScrollView {
-        MuscleMapCardView(model: .make(from: loads))
+        VStack(spacing: 16) {
+            MuscleMapCardView(model: .make(from: loads, reading: .performed), horizontalMargin: 16)
+            MuscleMapCardView(model: .make(from: loads, reading: .planned), horizontalMargin: 16)
+        }
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity)
     .background(DesignSystem.Colors.background)

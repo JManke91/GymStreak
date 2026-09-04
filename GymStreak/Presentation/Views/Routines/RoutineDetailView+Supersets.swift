@@ -233,7 +233,7 @@ extension RoutineDetailView {
                     )
                     .contentTransition(.symbolEffect(.replace))
 
-                ExerciseHeaderView(routineExercise: routineExercise, display: display)
+                ExerciseHeaderView(display: display)
             }
             .opacity(canToggle ? 1.0 : 0.4)
         }

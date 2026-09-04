@@ -34,6 +34,11 @@ struct RoutineDetailView: View {
     /// One shared "a set value is being typed" flag drives the keyboard Done bar.
     @FocusState private var isEditingSetValue: Bool
 
+    /// Which muscle groups this routine plans to train. Derived once per edit — the
+    /// aggregation walks the routine's exercises, their live library entry and their sets, so it
+    /// must stay off the render path.
+    @State private var muscleMap: MuscleMapCardModel = .empty
+
     // Sorting mode
     @State private var isSorting: Bool = false
     @State private var removedExercise: RemovedRoutineExerciseSnapshot?
@@ -59,6 +64,26 @@ struct RoutineDetailView: View {
         expandedExerciseId = nil
         expandedAlternativeId = nil
         openParameters = [:]
+    }
+
+    /// Derives which regions this routine plans to train. One traversal of the routine graph,
+    /// run when the screen opens and after every edit — never from a view body.
+    ///
+    /// `@MainActor` is explicit rather than inherited: this reads `Routine`, its
+    /// `RoutineExercise`s and their live `Exercise` — non-`Sendable` `@Model` objects — so a
+    /// future caller from a nonisolated context must fail to compile, not read SwiftData
+    /// off-main silently.
+    @MainActor
+    private func loadMuscleMap() {
+        let next = MuscleMapCardModel.make(
+            from: MuscleLoadAggregator.aggregate(routine: routine),
+            reading: .planned
+        )
+        // `updatedAt` is stamped by *every* edit, including reps and weight changes that cannot
+        // move a single belly. The traversal is cheap and bounded by the routine's size, but the
+        // re-render it would cause is not free, so an unchanged picture stops here.
+        guard next != muscleMap else { return }
+        muscleMap = next
     }
 
     // MARK: - Alternatives doorway
@@ -227,6 +252,17 @@ struct RoutineDetailView: View {
             // their blocks before the first read of `sortedExercises` matters.
             viewModel.normalizeSupersetOrdering(in: routine)
         }
+        .task {
+            loadMuscleMap()
+        }
+        // Every edit on this screen — adding and removing exercises, adding, removing and
+        // editing sets, reordering, supersets, alternatives — reaches the store through
+        // `RoutinesViewModel.updateRoutine`, which stamps `updatedAt`. Keying the recompute on
+        // that one scalar therefore covers the whole edit surface without a trigger per
+        // mutation, and reading it costs no relationship walk.
+        .onChange(of: routine.updatedAt) { _, _ in
+            loadMuscleMap()
+        }
         .onDisappear {
             undoDismissTask?.cancel()
         }
@@ -253,6 +289,19 @@ struct RoutineDetailView: View {
                             }
                         )
                         .padding(.bottom, 10)
+
+                        // Hidden while a superset is being edited (and, by living in this
+                        // branch, while sorting): both modes take the list over, and a
+                        // decorative figure competing with a drag interaction is noise.
+                        //
+                        // The card already declines to draw a routine that maps to no region,
+                        // but the spacer below it is this screen's, so the same question is
+                        // asked here — otherwise an unmappable routine reserves 10 pt for a
+                        // card that never appears.
+                        if muscleMap.hasTraining {
+                            MuscleMapCardView(model: muscleMap)
+                                .padding(.bottom, 10)
+                        }
                     }
 
                     if routine.routineExercisesList.isEmpty {
@@ -543,7 +592,6 @@ struct RoutineDetailView: View {
             } label: {
                 HStack(spacing: 10) {
                     ExerciseHeaderView(
-                        routineExercise: routineExercise,
                         display: display,
                         supersetPosition: styling.position,
                         supersetTotal: styling.total,

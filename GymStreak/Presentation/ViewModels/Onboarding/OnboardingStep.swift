@@ -34,6 +34,15 @@ enum OnboardingStep: Int, CaseIterable, Hashable {
         OnboardingStep(rawValue: rawValue - 1)
     }
 
+    /// Whether this step's content is centred in the space between the chrome
+    /// or flows from the top.
+    ///
+    /// The welcome slide is a poster and is centred; every feature slide leads
+    /// with a fixed-height preview plate and therefore starts at the top.
+    var isContentCentred: Bool {
+        self == .welcome
+    }
+
     /// The localization key of this step's primary call to action.
     ///
     /// Per-step rather than one shared "Continue": the first slide invites the

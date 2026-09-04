@@ -272,6 +272,45 @@ low-vision users at all. That is a pre-existing property of its typography, not 
 
 The active workout screen solves the same problem the same way (`SupersetWorkoutGroupView`), with a static rail instead of anchored endpoints because its cards are uniform there.
 
+### KNOWN ISSUE: edit mode loses the scroll position (2026-09-04)
+
+**Symptom.** Open superset-edit mode from a superset partway down a routine and the list jumps;
+leave it again and the routine is scrolled to the very top. Reproduced on device against a 7-exercise
+routine. Pre-existing — not introduced by the planned muscle map, though that card enlarges the
+effect.
+
+**Root cause (confirmed).** The mode does not just hide the schedule card and the muscle-map card:
+it replaces every tall exercise card with a compact selection row and drops the "add exercise"
+button. The routine's content shrinks to a fraction of its height, `ScrollView` clamps its offset
+to the shorter content — for most routines that means offset 0 — and leaving the mode restores the
+height but not the offset.
+
+**Two fixes were tried and both reverted. Do not re-try them.**
+
+1. *Scroll back to the edited superset on the way out* — record the group's lowest-`order` member
+   as an anchor on entry, and on a non-nil → nil transition of `supersetEditMode` hand it to the
+   existing `scrollToExerciseId` → `proxy.scrollTo(id, anchor: .top)` machinery. No effect: still
+   landed at the top.
+2. *The same on the way in as well*, on the theory that entering had already clamped to offset 0,
+   leaving the `LazyVStack` with the anchor row unrealized and `scrollTo` nothing real to aim at.
+   Also no effect — and the entry-side scroll is *visible* on device as the content sliding upward,
+   which is the useful evidence: `proxy.scrollTo` **is** running, and still resolves to the top.
+
+**What that tells the next person.** `ScrollViewProxy.scrollTo` is the wrong instrument here. It
+resolves a target against the layout as it stands when it runs, and this transition changes the
+height of *everything above the target* in the same transaction, so there is no moment at which the
+call sees a geometry worth scrolling to. Deferring it (`withAnimation(_:completion:)`, a
+`Task { @MainActor in … }` hop) only moves which wrong geometry it reads.
+
+**The fix that should work**, when someone takes this on: `.scrollPosition(id:)` plus
+`.scrollTargetLayout()` on the `LazyVStack` (iOS 17+; the app targets 26). That makes SwiftUI
+maintain the position by **view identity** across content changes rather than by offset, which is
+exactly this problem. It changes the scroll semantics of the whole screen — every direct child of
+the stack becomes a scroll target and would need a stable id, including `topBar` and `titleBlock`,
+which have none today — and it has to coexist with the existing `scrollToExerciseId` jump used by
+the alternatives doorway. That is a deliberate change to `RoutineDetailView`, not a bug-fix patch,
+so it wants its own ticket.
+
 ### Routine Detail - Exercise Actions
 
 **File:** `GymStreak/RoutineDetailView.swift`

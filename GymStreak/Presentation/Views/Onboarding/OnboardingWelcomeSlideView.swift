@@ -51,12 +51,18 @@ struct OnboardingWelcomeSlideView: View {
     // MARK: - Icon tile
 
     private var iconTile: some View {
-        RoundedRectangle(cornerRadius: DesignSystem.Dimensions.cornerRadiusLG)
-            .fill(DesignSystem.Colors.tint.opacity(0.15))
-            .frame(width: 64, height: 64)
+        RoundedRectangle(cornerRadius: DesignSystem.Dimensions.cornerRadiusXL)
+            .fill(DesignSystem.Colors.tint.opacity(0.14))
+            .frame(width: 62, height: 62)
             .overlay {
-                Image(systemName: "dumbbell.fill")
-                    .font(.system(size: 28, weight: .semibold))
+                RoundedRectangle(cornerRadius: DesignSystem.Dimensions.cornerRadiusXL)
+                    .strokeBorder(DesignSystem.Colors.tint.opacity(0.36), lineWidth: 1)
+            }
+            .overlay {
+                // The outlined weight, not `dumbbell.fill`: the tile is a light
+                // tinted wash and a solid glyph turns it into a button.
+                Image(systemName: "dumbbell")
+                    .font(.system(size: 28, weight: .medium))
                     .foregroundStyle(DesignSystem.Colors.tint)
             }
             .accessibilityHidden(true)
@@ -70,15 +76,44 @@ private struct CheckBullet: View {
 
     let text: String
 
+    /// The chip scales with the label beside it. Fixed sizes here would leave an
+    /// 18pt disc next to text 2.5× that size at AX5 — the mistake
+    /// `FounderCelebrationView` already solves the same way.
+    @ScaledMetric(relativeTo: .footnote) private var chipSize: CGFloat = 18
+    @ScaledMetric(relativeTo: .footnote) private var glyphSize: CGFloat = 9
+    @ScaledMetric(relativeTo: .footnote) private var baselineInset: CGFloat = 4
+
     var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: DesignSystem.Spacing.md) {
-            Image(systemName: "checkmark.circle.fill")
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(DesignSystem.Colors.tint)
+        // `alignmentGuide`'s `computeValue` is `@Sendable` and `nonisolated` in the
+        // SDK — SwiftUI runs it during layout, off this view's actor. Reading
+        // `baselineInset` (a MainActor-isolated `@ScaledMetric` on `self`) from
+        // inside it captures `self` across that boundary. Snapshotting the CGFloat
+        // here, on the main actor, is what the closure is meant to receive: it then
+        // captures a `Sendable` value and nothing else. See CLAUDE.md §4a —
+        // outbound closure boundaries are where a green build still traps at runtime.
+        let scaledBaselineInset = baselineInset
+
+        return HStack(alignment: .firstTextBaseline, spacing: DesignSystem.Spacing.sm) {
+            // A tinted chip with a thin check, not a solid `checkmark.circle.fill`:
+            // three filled accent discs stacked in a column pull the eye off the
+            // headline, which is what the slide is actually selling.
+            ZStack {
+                Circle()
+                    .fill(DesignSystem.Colors.tint.opacity(0.14))
+                    .overlay {
+                        Circle().strokeBorder(DesignSystem.Colors.tint.opacity(0.34), lineWidth: 1)
+                    }
+
+                Image(systemName: "checkmark")
+                    .font(.system(size: glyphSize, weight: .bold))
+                    .foregroundStyle(DesignSystem.Colors.tint)
+            }
+            .frame(width: chipSize, height: chipSize)
+            .alignmentGuide(.firstTextBaseline) { $0[.bottom] - scaledBaselineInset }
 
             Text(text)
-                .font(.onyxSubheadline)
-                .foregroundStyle(DesignSystem.Colors.textPrimary)
+                .font(.onyxFootnote)
+                .foregroundStyle(DesignSystem.Colors.textSecondary)
                 .fixedSize(horizontal: false, vertical: true)
         }
         .accessibilityElement(children: .combine)

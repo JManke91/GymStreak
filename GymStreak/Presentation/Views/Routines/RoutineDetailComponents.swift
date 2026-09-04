@@ -38,8 +38,8 @@ struct SetsSectionLabel: View {
 // MARK: - Exercise card header
 
 struct ExerciseHeaderView: View {
-    let routineExercise: RoutineExercise
-    /// Pre-resolved card content — see RoutineExerciseCardDisplay.
+    /// Pre-resolved card content — see RoutineExerciseCardDisplay. The header
+    /// draws from this alone; it never reads a `RoutineExercise`.
     let display: RoutineExerciseCardDisplay
     var supersetPosition: Int? = nil
     var supersetTotal: Int? = nil
@@ -64,7 +64,7 @@ struct ExerciseHeaderView: View {
         HStack(spacing: 0) {
             Color.clear
                 .frame(width: indicatorAreaWidth)
-                .supersetConnectorAnchor(id: routineExercise.id, isActive: isSupersetMember)
+                .supersetConnectorAnchor(id: display.id, isActive: isSupersetMember)
                 .padding(.trailing, indicatorTrailingSpacing)
 
             HStack(spacing: 12) {
@@ -111,10 +111,10 @@ struct ExerciseHeaderView: View {
                                 supersetAction()
                             } label: {
                                 Label(
-                                    routineExercise.isInSuperset
+                                    display.isInSuperset
                                         ? "exercise.menu.edit_superset".localized
                                         : "exercise.menu.superset".localized,
-                                    systemImage: routineExercise.isInSuperset ? "pencil.circle" : "link"
+                                    systemImage: display.isInSuperset ? "pencil.circle" : "link"
                                 )
                             }
                         }
@@ -123,8 +123,8 @@ struct ExerciseHeaderView: View {
                                 editAlternativesAction()
                             } label: {
                                 Label(
-                                    routineExercise.hasAlternatives
-                                        ? "alternatives.menu.edit".localized(routineExercise.alternativesList.count)
+                                    display.hasAlternatives
+                                        ? "alternatives.menu.edit".localized(display.alternativesCount)
                                         : "alternatives.menu.add".localized,
                                     systemImage: "arrow.triangle.2.circlepath"
                                 )

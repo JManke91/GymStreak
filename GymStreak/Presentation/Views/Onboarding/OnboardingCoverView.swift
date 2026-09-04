@@ -28,11 +28,6 @@ struct OnboardingCoverView: View {
             header
 
             slide
-                // A fresh identity per step, which is what puts the new slide at
-                // the top of its scroll: the scroll offset belongs to the
-                // `ScrollView`, so re-identifying it is the reset. It applies
-                // going back as well as forward.
-                .id(viewModel.currentStep)
 
             footer
         }
@@ -49,13 +44,23 @@ struct OnboardingCoverView: View {
                 withAnimation(DesignSystem.Animation.easeOut) { viewModel.goBack() }
             } label: {
                 Image(systemName: "chevron.left")
-                    .font(.body.weight(.semibold))
-                    .foregroundStyle(
-                        viewModel.canGoBack
-                            ? DesignSystem.Colors.textSecondary
-                            : DesignSystem.Colors.textDisabled
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(DesignSystem.Colors.textPrimary)
+                    .frame(width: 30, height: 30)
+                    .background(
+                        RoundedRectangle(cornerRadius: DesignSystem.Dimensions.cornerRadiusSM)
+                            // A faint chip rather than a design-system surface:
+                            // it sits on the raw background and must read as a
+                            // control without competing with the accent bar.
+                            .fill(Color.white.opacity(0.06))
                     )
-                    .frame(width: 32, height: 32, alignment: .leading)
+                    // Dimmed as a whole on the first step — the disabled state
+                    // is the chip fading, not the glyph changing colour.
+                    .opacity(viewModel.canGoBack ? 1 : 0.25)
+                    // The chip stays 30pt to match the design; the *target*
+                    // around it is 44pt, because this is the flow's only way
+                    // back and the design's pixel size is not a hit box.
+                    .frame(width: 44, height: 44)
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
@@ -88,24 +93,43 @@ struct OnboardingCoverView: View {
     /// sizes overflows downwards instead of being truncated — the same trade
     /// `FounderCelebrationView` makes, with the CTA pinned below.
     private var slide: some View {
-        ScrollView {
-            Group {
-                switch viewModel.currentStep {
-                case .welcome:
-                    OnboardingWelcomeSlideView()
-                default:
-                    // Filled in by the remaining slide tickets. The chrome and
-                    // the navigation are complete around them.
-                    Color.clear.frame(height: 1)
+        // The geometry is read to give the scrolled content a *minimum* height
+        // of one viewport. That is what lets a short slide sit centred — the
+        // welcome poster does — while a slide that outgrows the screen still
+        // scrolls normally. Reading the size costs nothing here: it is one
+        // container, not a per-row measurement.
+        GeometryReader { proxy in
+            ScrollView {
+                Group {
+                    switch viewModel.currentStep {
+                    case .welcome:
+                        OnboardingWelcomeSlideView()
+                    default:
+                        // Filled in by the remaining slide tickets. The chrome
+                        // and the navigation are complete around them.
+                        Color.clear.frame(height: 1)
+                    }
                 }
+                .padding(.horizontal, DesignSystem.Spacing.xl)
+                .padding(.vertical, DesignSystem.Spacing.lg)
+                .frame(
+                    maxWidth: .infinity,
+                    minHeight: proxy.size.height,
+                    alignment: viewModel.currentStep.isContentCentred ? .leading : .topLeading
+                )
             }
-            .padding(.horizontal, DesignSystem.Spacing.xl)
-            .padding(.top, DesignSystem.Spacing.xl)
-            .padding(.bottom, DesignSystem.Spacing.lg)
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .scrollBounceBehavior(.basedOnSize)
+            .scrollIndicators(.hidden)
+            // A fresh identity per step, which is what puts the new slide at the
+            // top of its scroll: the offset belongs to the `ScrollView`, so
+            // re-identifying it is the reset — going back as well as forward.
+            //
+            // On the `ScrollView` and *not* on the `GeometryReader` around it:
+            // re-identifying the reader too would rebuild it every step, leaving
+            // `proxy.size` unresolved for one layout pass and flashing the
+            // centred content top-aligned before it settles.
+            .id(viewModel.currentStep)
         }
-        .scrollBounceBehavior(.basedOnSize)
-        .scrollIndicators(.hidden)
     }
 
     // MARK: - Footer

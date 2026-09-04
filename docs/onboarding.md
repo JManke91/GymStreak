@@ -108,11 +108,67 @@ own once the cover above it goes away. Ticket 09 pins this with tests — includ
 the case that matters most, the coach opt-in becoming eligible asynchronously
 while the tour is still on screen.
 
+## Design fidelity
+
+The screens follow the Claude Design project "Gym Streak"
+(`0d4ac3f4-2c40-43cc-b80e-84bd411c334a`), file `Onboarding.html` with
+`gs-onboarding.jsx` behind it — read them with the DesignSync tool
+(`method: "get_file"`). Conventions the shell established, which the remaining
+slides inherit:
+
+- **Welcome is centred, feature slides start at the top.** `OnboardingStep`'s
+  `isContentCentred` carries the difference; feature slides lead with a
+  fixed-height preview plate, so they flow from the top.
+- **Bullets are a tinted chip, not a solid disc** — tint at 14% with a 34% border
+  and a thin checkmark, label at footnote size in `textSecondary`. Three filled
+  accent discs stacked in a column out-shout the headline.
+- **The Back control is a chip**, dimmed as a whole to 25% when disabled rather
+  than recoloured.
+- **The icon tile is a wash, not a button** — tint at 14% with a 36% border and
+  an *outlined* glyph.
+
+Two places where the shipped screen deliberately does *not* copy the design's
+pixel values, because the design is a fixed-size web mock and the app is not:
+
+- **The bullet chip scales with its label** (`@ScaledMetric(relativeTo: .footnote)`,
+  the pattern `FounderCelebrationView` uses). A fixed 18pt disc would sit beside
+  text 2.5× that size at AX5.
+- **The Back control's hit target is 44pt**, with the 30pt chip drawn inside it.
+  The design's 30pt square is a visual size, not a hit box, and this is the
+  flow's only way back.
+
+**The shipped component is authoritative.** The design file genuinely imports production
+components only for the Routines slide; its Verlauf and Coach previews are re-implementations, and
+its Progressive-Overload prompt does not exist in the app at all (the shipped bar is orange, names
+the target rep count rather than a next weight, and offers "Erhöhen" and a dismiss X). Where a
+design preview and the shipped component disagree, the component wins and the slide's copy adapts —
+otherwise onboarding advertises a screen the user will never find, and the app owns two of
+everything. A slide that cannot be built from production components is a finding to raise, not a
+licence to redraw one.
+
+**Inert means no side effects.** Production components act on appear — `ProgressiveOverloadBanner`
+fires a success haptic in `onAppear`, buttons fire impact haptics, coach surfaces can issue
+requests. A slide must arrive silently: no haptics, no model or network work, no timers.
+
+Two deliberate departures from the design file:
+
+- Its welcome body says "Vier kurze Schritte" while its own flow has seven. The
+  shipped copy avoids the count.
+- Its background carries a radial tint glow off the top-right corner. Not built —
+  it belongs with the feature slides that will sit under it, so ticket 03 can
+  establish it once for all six.
+
 ## Scroll position across steps
 
 The slide's `ScrollView` content carries `.id(currentStep)`. Scroll offset
 belongs to the `ScrollView`, so re-identifying it on a step change is what puts
-the new slide at the top — going back as well as forward.
+the new slide at the top — going back as well as forward. The design does the
+same thing imperatively (`scrollTop = 0` on index change).
+
+The `ScrollView` sits inside a `GeometryReader` and its content is given a
+`minHeight` of one viewport. That is what lets the welcome poster sit centred
+while a slide that outgrows the screen still scrolls: the content box is never
+shorter than the visible area, and never capped.
 
 ## Monetization
 

@@ -96,6 +96,7 @@ extension Font {
     static let onyxBody = Font.system(.body, design: .default)
 
     // Captions
+    static let onyxFootnote = Font.system(.footnote, design: .rounded)
     static let onyxCaption = Font.system(.caption, design: .rounded).weight(.medium)
     static let onyxCaption2 = Font.system(.caption2, design: .rounded)
 

@@ -1,20 +1,21 @@
 # Muscle Map
 
-Visualization of the muscle groups a workout trained: a schematic human body, drawn front
-and back, with the trained muscle bellies lit in the app's accent color. The same aggregation
-also reads a routine, producing the muscle groups it *plans* to train.
+Visualization of the muscle groups a workout trained — and, on the routine screen, the ones a
+routine *plans* to train: a schematic human body, drawn front and back, with the affected muscle
+bellies lit in the app's accent color. One figure, one aggregation and one card serve both
+screens; only the wording differs.
 
-**Status:** tickets 01–04 of `.scratch/muscle-map/issues/` are implemented — the figure, the
-aggregation, the card on the workout detail screen, and the tap-to-inspect interaction. The
-map is a control, not a picture. Ticket 01 of `.scratch/routine-muscle-map/issues/` added the
-planned reading of a routine to the aggregator; the routine screen that renders it is ticket 02
-of that set and is not built yet, so everything below about the *card* is still
-workout-detail-only.
+**Status:** shipped on both screens. Tickets 01–04 of `.scratch/muscle-map/issues/` built the
+figure, the aggregation, the card on workout detail and the tap-to-inspect interaction; tickets
+01–02 of `.scratch/routine-muscle-map/issues/` added the planned reading of a routine and put the
+card on routine detail. The map is a control, not a picture.
 
 **Targets:** iOS only. There is no watchOS counterpart and none is planned — the watch target
 is untouched by this feature.
 
 ## What the user sees
+
+### On a recorded workout — Verlauf → workout detail
 
 Opening a recorded workout from Verlauf shows, between the workout header and the four stat
 tiles, a card titled **"Trainierte Muskelgruppen"**. It holds two schematic bodies side by
@@ -40,6 +41,29 @@ workout trained nothing rather than admitting the app cannot tell, and it would 
 of the screen to say it. The check is `MuscleMapCardModel.hasTraining`, inside the card view,
 so the call site in `WorkoutDetailView` stays a single line.
 
+### On a routine — Routinen → routine detail
+
+The same card sits between the schedule card and the exercise list, titled **"Geplante
+Muskelgruppen"** and lit with the regions this routine's exercises are going to train.
+Everything else behaves identically — two captioned figures, the legend, the wrapping pill row,
+tap a belly or a pill to inspect one region. What changes is that every count is phrased as a
+plan: the detail chip reads "12 SÄTZE GEPLANT" where history reads "12 SÄTZE", and VoiceOver
+speaks "Quadrizeps, primär, 12 Sätze geplant". There is no extra subline and no extra chrome —
+the wording carries the distinction (see [One card, two readings](#one-card-two-readings)).
+
+The card is hidden in **sorting mode** and in **superset-edit mode**: both take the list over,
+and a decorative figure competing with a drag interaction is noise. It hides for a routine that
+maps to no region too — an empty routine, one whose exercises only carry `General`, or one
+stripped of its sets — the same `hasTraining` call history makes.
+
+**Two muscle readings share this screen and must not be confused.** The chips under the routine
+title come from `RoutineMetricsService.primaryMuscleGroups(for:)`: the raw muscle-group
+vocabulary (the app's 19 keys), one chip per distinct `Exercise.primaryMuscleGroup`, in exercise
+order. The figure speaks the 13 coarser regions and applies the primary/secondary rule below.
+They can word the same fact differently — "Lats" as a chip, "Rücken" as a region — but they
+cannot contradict each other, because both read the live exercise the routine points at. They
+are deliberately not merged: different output type, different definition of "primary".
+
 ## Pieces
 
 `MuscleFigureView` draws one figure — front or back — at a caller-supplied width, coloring
@@ -60,14 +84,17 @@ MuscleFigureView(
 )
 ```
 
-`MuscleLoadAggregator` produces what a real workout should light up, and
-`MuscleMapCardModel.make(from:)` turns that into everything the card renders — the
+`MuscleLoadAggregator` produces what a workout — or a routine — should light up, and
+`MuscleMapCardModel.make(from:reading:)` turns that into everything the card renders — the
 `highlights` dictionary the figures take, the ordered `pills`, the per-region `details` the
 chip shows, the per-region accessibility labels, and the pre-joined VoiceOver summary:
 
 ```swift
 // In WorkoutDetailView.task — once, off the render path.
-muscleMap = MuscleMapCardModel.make(from: MuscleLoadAggregator.aggregate(session: workout))
+muscleMap = MuscleMapCardModel.make(
+    from: MuscleLoadAggregator.aggregate(session: workout),
+    reading: .performed
+)
 ```
 
 ## Architecture
@@ -80,10 +107,17 @@ muscleMap = MuscleMapCardModel.make(from: MuscleLoadAggregator.aggregate(session
 | `Presentation/Views/MuscleMap/MuscleMapPathParser.swift` | Presentation | Path-string parser and `MuscleMapPathShape`, the `Shape` that maps design space into the view frame |
 | `Presentation/Views/MuscleMap/MuscleMapGeometry.swift` | Presentation | The static path data, the parsed layered `MuscleMapFigure` values, and each figure's `MuscleMapRegionOutline` list (one merged path per region, for the accessibility proxies) |
 | `Presentation/Views/MuscleMap/MuscleFigureView.swift` | Presentation | The view itself: drawing, per-belly hit-testing, dimming, per-region accessibility |
-| `Presentation/Views/History/Components/MuscleMapCardView.swift` | Presentation | `MuscleMapCardModel` / `MuscleMapPill` / `MuscleMapDetail` (the finished values the card renders) and the card: header, legend, two captioned figures, and the pill row or detail chip |
+| `Presentation/Views/MuscleMap/MuscleMapCardModel.swift` | Presentation | `MuscleMapReading` (which of the two readings a card speaks) and the finished values it renders: `MuscleMapCardModel` / `MuscleMapPill` / `MuscleMapDetail` |
+| `Presentation/Views/MuscleMap/MuscleMapCardView.swift` | Presentation | The card: header, legend, two captioned figures, and the pill row or detail chip |
+
+The card and its model **moved out of `Presentation/Views/History/Components/`** into the
+muscle-map folder when routine detail became the second caller (routine-muscle-map ticket 02).
+Files are target-included by directory here (`PBXFileSystemSynchronizedRootGroup`), so the move
+needed no project-file edit. Nothing about the card is History-specific any more; do not move it
+back next to one of its callers.
 
 `MuscleMapRegion` lives in `Domain/` rather than alongside the view because it is shared
-vocabulary: the aggregation service of ticket 02 produces it and the figure consumes it.
+vocabulary: the aggregation service produces it and the figure consumes it.
 Putting it in `Presentation/` would have forced a duplicate enum in `Domain/` (which cannot
 depend on `Presentation/`). It imports only Foundation.
 
@@ -177,10 +211,48 @@ every key, so adding a key to the catalogue without a region fails the suite.
 
 Both entry points walk two SwiftData relationship levels — `workoutExercises` → `sets`, and
 `routineExercises` → `exercise` / `sets` — so either is a service call rule 3 forbids in a
-`body`. `WorkoutDetailView` calls `aggregate(session:)` from
-`loadMuscleMap()` — once from `.task` when the screen opens and again from `reloadAfterEdit()`
-after the session is edited — and stores the finished `MuscleMapCardModel` in `@State`. Its
-output is a value type precisely so the card and the figures never touch a `@Model` per belly.
+`body`. Both screens therefore run it in a `loadMuscleMap()` of their own and store the finished
+`MuscleMapCardModel` in `@State`; its output is a value type precisely so the card and the
+figures never touch a `@Model` per belly.
+
+`WorkoutDetailView` calls `aggregate(session:)` once from `.task` when the screen opens, and
+again from `reloadAfterEdit()` after the session is edited. A recorded session changes rarely and
+only through that one door.
+
+`RoutineDetailView` calls `aggregate(routine:)` from `.task` **and from
+`.onChange(of: routine.updatedAt)`**, because unlike workout detail this screen mutates the very
+thing it draws: exercises are added, removed and restored, sets are added, removed and edited,
+units are reordered, supersets are formed and dissolved. A one-shot load would go stale seconds
+after the screen opens.
+
+That single scalar covers the whole edit surface because **every** mutation on this screen reaches
+the store through `RoutinesViewModel.updateRoutine(_:)`, which stamps `Routine.updatedAt` — that
+was checked path by path (add configured exercise, remove and restore exercise, add/remove/update
+set, move units, rest time and apply-to-all, rep ranges, progressive overload, all five superset
+methods, alternatives) rather than assumed. It is one cheap read that faults no relationship. Keep
+it that way: a new mutation path that skips `updateRoutine` silently freezes the map, and the fix
+belongs in that path — not in a second trigger here.
+
+It is deliberately **not** a computed property. Routine detail re-evaluates its body on every
+keystroke in a set editor, and `aggregate(routine:)` is a service call plus two relationship
+traversals — precisely what CLAUDE.md's rendering rule 3 forbids on the render path.
+
+Two details of `RoutineDetailView.loadMuscleMap()` are deliberate and were added on review:
+
+- It is explicitly **`@MainActor`**, like its workout-detail twin, even though both current call
+  sites already are. It reads `Routine`, `RoutineExercise.exercise` and `setsList` — non-`Sendable`
+  `@Model` objects — so a future caller from a nonisolated context has to fail to compile rather
+  than read SwiftData off-main with no diagnostic.
+- It **compares before it assigns** (`guard next != muscleMap`). `updatedAt` is the whole edit
+  surface, which means it is also stamped by reps and weight changes that cannot move a single
+  belly — a stepper tap would otherwise re-render the card on every press. The traversal itself
+  still runs and is accepted: it is bounded by the routine's size and is small beside the `save()`
+  + `fetchRoutines()` that same path already pays, and a narrower trigger would mean one per
+  mutation, which is exactly the plumbing this design avoids.
+
+`MuscleMapCardModel.make(from:reading:)` is unit-tested in `GymStreakTests/MuscleMapCardModelTests.swift`
+— specifically that the reading reaches the strings. A mistyped key renders the raw key with a
+perfectly green build, and the routine screen would be the one showing it.
 
 `MuscleEngagement`'s raw values are storage vocabulary, not display strings. Region names are
 display strings and live in `MuscleMapRegion.displayName` under the `muscle_region.*` keys —
@@ -229,11 +301,20 @@ the map follows the app's theme. Stroke weights are in design-space units and ar
 ## The card
 
 Chrome follows `workout-detail.jsx` / `muscle-map.jsx` in the same design project: white 3 %
-fill, a white 6 % hairline border, a 22 pt continuous corner radius, 14 pt padding (12 at the
-bottom) and a 16 pt outer margin. Each figure is **128 pt wide**, so the pair plus the 6 pt
-gap needs 262 pt — comfortably inside the 315 pt of card interior on the narrowest device the
-app supports (iOS 26 requires a 375 pt-wide screen or larger), so no responsive sizing is
-needed.
+fill, a white 6 % hairline border, a 22 pt continuous corner radius and 14 pt padding (12 at the
+bottom). Each figure is **128 pt wide**, so the pair plus the 6 pt gap needs 262 pt — comfortably
+inside the 315 pt of card interior on the narrowest device the app supports (iOS 26 requires a
+375 pt-wide screen or larger), so no responsive sizing is needed.
+
+The design's 16 pt **outer margin is the caller's**, not the card's: `horizontalMargin` is a
+parameter defaulting to 0. Workout detail lays its sections out edge to edge and passes 16;
+routine detail's scroll content is already inset by 16 and passes nothing. It is a parameter
+rather than a `.padding` at the call site because the card hides itself for a source that maps to
+nothing — padding wrapped around the hidden card would still reserve its insets, and a caller
+fighting that with negative padding is how this goes wrong. Applied inside the card's
+`hasTraining` guard, a hidden card costs exactly zero. The same reasoning is why routine detail
+asks `muscleMap.hasTraining` itself before adding the 10 pt spacer beneath the card — that spacer
+is the screen's, so the screen has to answer the question too.
 
 The pills follow the design's two treatments: primary is accent @ 14 % fill with an accent
 @ 26 % capsule border, the name in white 11.5 pt semibold and the set count in the accent
@@ -253,14 +334,59 @@ here — the accent pill fill is a 14 % tint over black and the chip's is a 9 % 
 green plates, and the legend dots carry no text. Should either ever become a solid accent
 fill, its text has to switch to `DesignSystem.Colors.textOnTint`.
 
+### One card, two readings
+
+`MuscleMapReading` — `.performed` for a recorded workout, `.planned` for a routine — is the only
+thing that separates the two screens, and it is consumed entirely inside
+`MuscleMapCardModel.make(from:reading:)`: it selects a set of localization keys, the finished
+values are built from them, and the card renders whatever it is handed without knowing which
+screen it is on. That is what keeps this one implementation instead of two.
+
+Only the strings that name the card or a set count differ:
+
+| Value | `.performed` — `history.detail.muscle_map.*` | `.planned` — `routine.detail.muscle_map.*` |
+|---|---|---|
+| card title | Trained Muscle Groups | Planned Muscle Groups |
+| `sets_count` (detail chip) | %d sets | %d sets planned |
+| `a11y.region_sets` (summary) | %1$@ %2$d sets | %1$@ %2$d sets planned |
+| `a11y.belly_primary` | %1$@, primary, %2$d sets | %1$@, primary, %2$d sets planned |
+| idle belly | %@, not trained | %@, not planned |
+
+Everything else is deliberately shared and stays on the `history.*` keys, because it says the
+same thing under either reading: the legend (Primär / Sekundär), the VORNE and HINTEN captions,
+the secondary state label, the reset control, and the "Primär: … Sekundär: …" summary wrapper.
+Region names are shared too (`muscle_region.*`) — a region is a region either way. The planned
+strings live under their own `routine.detail.*` prefix rather than as extra `history.*` keys: a
+routine screen reading history keys is exactly the kind of thing that gets "tidied up" wrongly
+later.
+
+The primary **pill** shows a bare number and needs no reading of its own; VoiceOver reads it with
+the region's `a11y.belly_primary` label, which does carry the distinction.
+
 ### Placement and the scroll anchor
 
-Order on the detail screen is header → **muscle map card** → stat grid → the rest. Because the
-card is inserted above the fold only once its aggregation lands (one frame after the screen
-appears), the scroll view compensated by keeping the content below anchored, and the screen
-opened already scrolled past the workout title. `WorkoutDetailView`'s `ScrollView` therefore
-carries `.defaultScrollAnchor(.top)`. Do not remove it — the symptom returns immediately, and
-it is not obvious from reading the card's code.
+On workout detail the order is header → **muscle map card** → stat grid → the rest; on routine
+detail it is title → schedule card → **muscle map card** → exercise list.
+
+Because the card is inserted above the fold only once its aggregation lands (one frame after the
+screen appears), `WorkoutDetailView`'s scroll view compensated by keeping the content below
+anchored, and the screen opened already scrolled past the workout title. Its `ScrollView`
+therefore carries `.defaultScrollAnchor(.top)`. Do not remove it — the symptom returns
+immediately, and it is not obvious from reading the card's code.
+
+`RoutineDetailView` was checked for the same symptom when the card was added there and does
+**not** exhibit it — it opens at its title — so it carries no anchor override. If a future change
+inserts more late-arriving content above its fold, this is the first thing to suspect and
+`.defaultScrollAnchor(.top)` is the fix.
+
+It did surface a *different* scroll problem, around **superset-edit mode**: that mode hides this
+card and the schedule card and swaps every exercise card for a compact row, so the routine's
+content collapses, the scroll offset is clamped to it, and the user is dropped at the top going in
+and coming back out. This card is not the cause — the row collapse is, and the schedule card was
+already doing the same thing — but it makes the collapse larger. It is **an open known issue**, and
+two `proxy.scrollTo`-based attempts were tried and reverted; see [Superset
+Feature](./superset-feature.md), "KNOWN ISSUE: edit mode loses the scroll position", before
+attempting a third.
 
 ## Interaction
 
@@ -362,18 +488,68 @@ screenshot. Two things make that repeatable from the command line:
 
 - **Coordinates.** Synthetic clicks go through `System Events`, and the Simulator window's
   own bounds are *not* the device screen — mapping through them is off by tens of pixels and
-  silently hits neighbouring muscles. The device content is exposed as
-  `group 1 of window 1`; read its `position` and map screenshot pixels as
-  `screen = origin + pixel / 3` (3× device scale).
-- **The accessibility tree is readable from the same place.** Walking `entire contents` of
-  that group prints every element's role and label, which is how the per-region VoiceOver
-  labels were verified: trained regions appear as `AXButton ~ "Quadrizeps, primär, 7 Sätze"`,
-  untrained ones as `AXGenericElement ~ "Brust, nicht trainiert"`, and no unlabelled path
-  shapes appear at all.
+  silently hits neighbouring muscles. The device content is exposed as `group 1` of the
+  simulator window; read its `position` and map screenshot pixels as
+  `screen = origin + pixel / 3` (3× device scale). **Address the window by name**
+  (`first window whose name contains "iOS 26.1"`) rather than `window 1` — with two simulators
+  open, `window 1` is whichever one is frontmost and every click silently lands on the wrong
+  device. Raise the target window (`perform action "AXRaise"`) before clicking or the click is
+  swallowed.
+- **The accessibility tree is readable from the same place.** Recursing through `UI elements`
+  prints every element's role and label, which is how the per-region VoiceOver labels were
+  verified: trained regions appear as `AXButton ~ "Quadrizeps, primär, 7 Sätze"` (or
+  "… 7 Sätze geplant" on a routine), untrained ones as `AXGenericElement ~ "Brust, nicht
+  trainiert"` / `"Brust, nicht geplant"`, and no unlabelled path shapes appear at all. Note that
+  `entire contents` returns **nothing** on this Simulator build — it must be walked level by
+  level, and the region proxies sit deeper than 20 levels down, so a shallow walk finds only the
+  pills.
+- **`System Events` clicks take over the physical mouse pointer** for as long as the run lasts.
+  Scripting a long click-through makes the machine unusable meanwhile — script the shortest path
+  that answers the question, and say so before starting one.
 
 The AI-Coach opt-in cover does not appear on this simulator (Apple Intelligence is
-unavailable there), so seeded history is reachable directly after launch.
+unavailable there), so seeded history is reachable directly after launch. The **onboarding flow
+now runs on a fresh ephemeral store** and has to be skipped ("Überspringen", top right) before
+either tab is reachable.
+
+### The routine card (routine-muscle-map ticket 02)
+
+Verified on the seeded push routine (`-UI_TESTING -UI_TEST_EPHEMERAL_STORE`, iPhone 17 Pro,
+iOS 26.1):
+
+- The card renders between the schedule card and the exercise list, titled "Geplante
+  Muskelgruppen", with Brust 10 · Schultern 7 · Trizeps 3 — matching the routine's planned sets
+  by hand (bench 4 + incline 3 + flyes 3 chest; press 4 + raises 3 shoulders; pushdowns 3
+  triceps, with the presses' triceps work secondary and therefore uncounted).
+- The screen opens at its title, so the workout-detail scroll-anchor symptom does **not** occur
+  here and no `.defaultScrollAnchor(.top)` was added.
+- Tapping a deltoid selected Schultern; the chip read "Schultern · 7 SÄTZE GEPLANT ·
+  Zurücksetzen" over "Schulterdrücken · Seitheben". Tapping the same belly again restored the
+  pill row.
+- The accessibility tree spoke the planned phrasing throughout: `AXButton ~ "Brust, primär, 10
+  Sätze geplant"` for the lit regions and `AXGenericElement ~ "Quadrizeps, nicht geplant"` for
+  the idle ones.
+- **Live editing:** adding Beinpresse (3 × 10) grew the map by Quadrizeps 3 (primary) and Gesäß
+  (secondary) and wrapped the pill row onto a second line; deleting one of its sets moved the
+  pill to Quadrizeps 2; deleting the exercise in sorting mode dropped both regions again. The
+  `Routine.updatedAt` trigger therefore covers the add-exercise, remove-set and remove-exercise
+  paths in practice, not just on paper.
+- Sorting mode hides the card (its rows replace the whole list).
+
+The remaining shapes were confirmed **on device** by the user (2026-09-04): the leg routine, the
+pull routine's wrapping pill row, superset-edit mode hiding the card, an empty routine hiding it,
+and the workout-detail card unchanged after the refactor. Device testing also turned up the
+superset-edit scroll regression described above.
+
+One case is **not reachable through the UI at all**: a routine built only from `General`-tagged
+exercises. The create-exercise flow requires at least one muscle group, so `General` can only
+arrive from the seed catalogue's fallback or from legacy/imported data. The behaviour is covered
+by `MuscleMapCardModelTests` (an empty load map yields `hasTraining == false` under either
+reading) and by the aggregator's `General`-only tests, and the empty-routine case exercises the
+same `hasTraining` guard on screen.
 
 ## Related
 
-The screen this card lives on is documented in [History Redesign](./history-redesign.md).
+The two screens this card lives on are documented in
+[History Redesign](./history-redesign.md) (workout detail) and
+[Routines & Exercises Redesign](./routines-exercises-redesign.md) (routine detail).

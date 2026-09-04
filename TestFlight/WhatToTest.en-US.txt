@@ -1,2 +1,3 @@
 - Health permission prompts now appear in German on German devices, on both iPhone and Apple Watch
 - Fixed three texts in the AI Coach settings that always appeared in German, regardless of your device language
+- A routine now shows the muscle groups it plans to train: front and back body maps between the schedule and the exercise list, with planned set counts per muscle. Tap a muscle or a chip to see which exercises train it. The map updates as you edit the routine.
