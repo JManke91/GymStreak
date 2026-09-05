@@ -64,7 +64,11 @@ struct WorkoutDetailView: View {
                 header
                 // The card owns no outer margin of its own — the sections around it here are
                 // laid out edge to edge, so this screen supplies the 16 pt the design asks for.
-                MuscleMapCardView(model: muscleMap, horizontalMargin: 16)
+                MuscleMapCardView(
+                    model: muscleMap,
+                    discovery: dependencies.muscleMapDiscovery,
+                    horizontalMargin: 16
+                )
                 statsGrid
                 progressiveOverloadSection
                 if workout.healthKitWorkoutId != nil {

@@ -864,6 +864,7 @@
 "history.detail.muscle_map.back" = "Hinten";
 "history.detail.muscle_map.sets_count" = "%d Sätze";
 "history.detail.muscle_map.reset" = "Zurücksetzen";
+"history.detail.muscle_map.discovery_hint" = "Tippe auf einen Muskel für Details";
 "history.detail.muscle_map.a11y.region_sets" = "%1$@ %2$d Sätze";
 "history.detail.muscle_map.a11y.primary" = "Primär: %@";
 "history.detail.muscle_map.a11y.secondary" = "Sekundär: %@";
@@ -1312,6 +1313,29 @@
 "onboarding.supersets.body" = "Übungen, die du direkt hintereinander machst, gruppierst du als Supersatz. Die Pause läuft erst am Ende der Gruppe.";
 "onboarding.supersets.bullet1" = "Beliebig viele Übungen gruppieren";
 "onboarding.supersets.bullet2" = "Eine Pause für die ganze Gruppe";
+
+/* Schritt 4 — progressive Überlastung. Die Platte zeigt eine fertige Übung eines
+   laufenden Workouts und darunter den echten Überlastungs-Hinweis der App. Das
+   ist die ausgelieferte `WorkoutOverloadPromptBar`: sie nennt das Wiederholungs-
+   ziel und nie ein nächstes Gewicht — der Fließtext darf also auch keins
+   versprechen. Das Pill „Automatisch“ ist Onboarding-Beiwerk und existiert
+   nirgends in der App. */
+"onboarding.overload.breadcrumb" = "Workout › Aktiver Satz";
+"onboarding.overload.eyebrow" = "PROGRESSIVE OVERLOAD";
+"onboarding.overload.title" = "Die App sagt dir,\nwann mehr drauf muss.";
+"onboarding.overload.body" = "Gib einer Übung ein Wiederholungsziel. Sobald du in jedem Satz am oberen Ende landest, sagt Gym Streak es dir direkt im Training — und zieht das Gewicht in deiner Routine fürs nächste Mal hoch.";
+"onboarding.overload.bullet1" = "Ein Wiederholungsziel pro Übung";
+"onboarding.overload.bullet2" = "Der Hinweis kommt von selbst, mitten im Training";
+"onboarding.overload.callout" = "Automatisch";
+
+/* Schritt 5 — Verlauf. Siehe die englische Datei für die Monetarisierungs-Notiz:
+   die gezeigte Session-Detailansicht ist gratis, Pro sind die Langzeit-Kurven. */
+"onboarding.history.breadcrumb" = "Verlauf › Letztes Training";
+"onboarding.history.eyebrow" = "VERLAUF";
+"onboarding.history.title" = "Jeder Satz im Vergleich\nzur letzten Session.";
+"onboarding.history.body" = "Dein kompletter Verlauf bleibt gratis lesbar: Dauer, Volumen, Bestleistungen und Satz-für-Satz-Deltas. Pro ergänzt die Langzeit-Kurven pro Übung — geschätztes 1RM, Gesamtvolumen und ein ganzes Jahr am Stück.";
+"onboarding.history.bullet1" = "Satz-Deltas zur Vorsession — gratis";
+"onboarding.history.bullet2" = "Langzeit-Kurven pro Übung mit Pro";
 
 /* Routine detail — planned muscle map. Only the strings that name the card or a set count
    differ from the history reading; the legend, captions and reset control are shared. */

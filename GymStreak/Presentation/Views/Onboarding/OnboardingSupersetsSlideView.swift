@@ -74,6 +74,7 @@ private struct OnboardingSupersetPreview: View {
         VStack(alignment: .leading, spacing: 8) {
             OnboardingChromePill(
                 text: "superset.label".localized(OnboardingSampleRoutine.supersetLetter),
+                systemImage: "link",
                 color: color
             )
 
@@ -137,39 +138,6 @@ private struct OnboardingSupersetPreview: View {
             .padding(.leading, ExerciseHeaderView.connectorLaneWidth)
         }
         .routineExerciseCardChassis(color: color)
-    }
-}
-
-// MARK: - Onboarding chrome
-
-/// A caption the *tour* adds above a preview. **Not a piece of the Routines
-/// screen** — the app draws no pill like this anywhere, and the user will not
-/// find one.
-///
-/// It exists because a still image of two linked cards does not say what the
-/// link is called. Its text is therefore production's own name for the group
-/// (`superset.label` → "Superset A"), never an invented label: a slide that
-/// captions a feature with words the app never uses sends the user looking for
-/// something that is not there.
-private struct OnboardingChromePill: View {
-
-    let text: String
-    let color: Color
-
-    var body: some View {
-        HStack(spacing: 5) {
-            Image(systemName: "link")
-                .font(.system(size: 9, weight: .bold))
-
-            Text(text.uppercased())
-                .font(.onyxMonoLabel)
-                .tracking(1.3)
-        }
-        .foregroundStyle(color)
-        .padding(.horizontal, 8)
-        .padding(.vertical, 3)
-        .background(Capsule().fill(color.opacity(0.14)))
-        .overlay(Capsule().strokeBorder(color.opacity(0.38), lineWidth: 1))
     }
 }
 

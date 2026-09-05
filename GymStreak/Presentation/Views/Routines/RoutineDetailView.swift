@@ -10,6 +10,9 @@ struct RoutineDetailView: View {
     @ObservedObject var exercisesViewModel: ExercisesViewModel
     @ObservedObject var workoutViewModel: WorkoutViewModel
     @Environment(\.dismiss) private var dismiss
+    /// Only for the muscle map card's discovery record — this screen builds no
+    /// repositories or services of its own.
+    @EnvironmentObject private var dependencies: AppDependencies
     /// Not private — RoutineDetailView+Sorting builds card displays too, and
     /// extensions can't see private members.
     @Environment(\.weightUnit) var weightUnit
@@ -299,7 +302,10 @@ struct RoutineDetailView: View {
                         // asked here — otherwise an unmappable routine reserves 10 pt for a
                         // card that never appears.
                         if muscleMap.hasTraining {
-                            MuscleMapCardView(model: muscleMap)
+                            MuscleMapCardView(
+                                model: muscleMap,
+                                discovery: dependencies.muscleMapDiscovery
+                            )
                                 .padding(.bottom, 10)
                         }
                     }

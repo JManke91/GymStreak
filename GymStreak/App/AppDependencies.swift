@@ -187,6 +187,13 @@ final class AppDependencies: ObservableObject {
     /// instance the cover is built from so a dismissal is recorded once.
     let onboarding: OnboardingFlowViewModel
 
+    /// Whether the muscle map still needs to explain that it is tappable
+    /// (docs/muscle-map.md, "Discoverability"). App-lifetime and shared by both
+    /// screens that show the card: the flag is mirrored in memory, so a second
+    /// instance would answer from a stale copy and re-teach a gesture the user
+    /// has already used.
+    let muscleMapDiscovery: MuscleMapDiscoveryTracking
+
     /// The month-keyed free-tier counters behind the AI tasters (P3/P4/P5).
     /// App-lifetime because it caches its records in memory — a second instance
     /// would answer from a stale cache after the first one wrote. Presentation
@@ -292,6 +299,7 @@ final class AppDependencies: ObservableObject {
             activeWorkout: activeWorkout
         )
         self.onboarding = OnboardingFlowViewModel(completion: OnboardingCompletionStore())
+        self.muscleMapDiscovery = MuscleMapDiscoveryStore()
         self.aiAllowance = MonthlyAllowanceStore()
         let aiCoachPreferences = AICoachPreferences.shared
         let aiCoachAvailability = AICoachAvailability.shared

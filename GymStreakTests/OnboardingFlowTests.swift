@@ -299,6 +299,256 @@ struct OnboardingFlowTests {
         #expect(SupersetLabelProvider.labels(for: exercises)[group] == OnboardingSampleRoutine.supersetLetter)
     }
 
+    // MARK: - Step 4: progressive overload
+
+    @Test("Every string the Progressive Overload slide renders is localized")
+    func overloadSlideStringsAreLocalized() {
+        let content = OnboardingFeatureSlideContent.progressiveOverload
+        let keys = [
+            content.breadcrumbKey,
+            content.eyebrowKey,
+            content.titleKey,
+            content.bodyKey,
+            // The tour's own marker on the prompt — chrome, not an app control.
+            "onboarding.overload.callout",
+            // Borrowed rather than restated, so the tour cannot name the
+            // exercise differently than the library does.
+            OnboardingSampleWorkout.seedKey,
+            // What the two production surfaces inside the plate render.
+            "workout.exercise.sets_done",
+            "workout.exercise.rep_goal",
+            "rest_timer.rest_short",
+            "rep_range.prompt.for_exercise",
+            "rep_range.all_sets_maxed",
+            "rep_range.increase"
+        ] + content.bulletKeys
+
+        for key in keys {
+            #expect(key.localized != key)
+        }
+    }
+
+    @Test("The Progressive Overload slide's sample avatar matches the seeded library")
+    func sampleWorkoutAvatarMatchesTheCatalog() {
+        // Same pin as the other two slides: the muscle groups and equipment are
+        // restated in `Presentation`, and nothing outside this test notices the
+        // day the catalog row changes.
+        let row = seed(OnboardingSampleWorkout.seedKey)
+
+        #expect(row != nil)
+        #expect(OnboardingSampleWorkout.muscleGroups == row?.muscleGroups)
+        #expect(OnboardingSampleWorkout.equipmentType == row?.equipmentType)
+        #expect(OnboardingSampleWorkout.exercise.muscleGroups == row?.muscleGroups)
+        #expect(OnboardingSampleWorkout.exercise.equipmentType == row?.equipmentType)
+    }
+
+    @Test("Every sample set sits at the top of the rep goal, which is what the prompt claims")
+    func sampleWorkoutSetsAreAllAtTheRepCeiling() {
+        // The slide's entire premise. A set below the ceiling would leave the
+        // plate showing a prompt the app would not actually have raised.
+        let sets = OnboardingSampleWorkout.completedSets()
+
+        #expect(sets.count == OnboardingSampleWorkout.setCount)
+
+        for set in sets {
+            #expect(set.isCompleted)
+            #expect(set.isAtUpperRepLimit)
+            #expect(!set.isOutsideRepRange)
+            #expect(set.targetRepMax == OnboardingSampleWorkout.targetRepMax)
+            // No completion time: it is what pushed the reps and the weight into
+            // an ellipsis at plate width. See `completedSets()`.
+            #expect(set.completedAt == nil)
+        }
+
+        // Stable row identities across two builds of the list.
+        #expect(sets.map(\.id) == OnboardingSampleWorkout.completedSets().map(\.id))
+        #expect(Set(sets.map(\.id)).count == sets.count)
+    }
+
+    @Test("The card shows the exercise finished, and offers no swap")
+    func sampleWorkoutExerciseReadsAsFinished() {
+        let exercise = OnboardingSampleWorkout.exercise
+
+        #expect(exercise.isComplete)
+        #expect(exercise.completedSets == OnboardingSampleWorkout.setCount)
+        #expect(exercise.repRangeText == "4–6")
+        // A swap is only offered before the first set is logged, so a card with
+        // three completed sets that still showed one would be a card the app
+        // cannot produce.
+        #expect(!exercise.canSwap)
+        #expect(!exercise.isSwapLocked)
+    }
+
+    @Test("The slide previews a suggestion, and its message names no weight")
+    func overloadPromptSuggestsWithoutNamingAWeight() {
+        // The shipped bar renders `rep_range.all_sets_maxed(targetRepMax)` — the
+        // rep goal, never a next weight. The slide's copy is written to that, so
+        // this pins the message the reader is actually shown.
+        guard case .suggestion(let candidate) = OnboardingSampleWorkout.prompt else {
+            Issue.record("The tour must preview a suggestion, not an applied confirmation")
+            return
+        }
+
+        #expect(candidate.targetRepMax == OnboardingSampleWorkout.targetRepMax)
+        #expect(candidate.exerciseName == OnboardingSampleWorkout.seedKey.localized)
+        #expect(!candidate.isAssistance)
+        #expect(candidate.exerciseId == OnboardingSampleWorkout.exercise.id)
+
+        let message = "rep_range.all_sets_maxed".localized(candidate.targetRepMax)
+        let weight = WeightFormatting.number(OnboardingSampleWorkout.kilograms, in: .kilograms)
+        #expect(!message.contains(weight))
+
+        // And no slide string may name one either.
+        let content = OnboardingFeatureSlideContent.progressiveOverload
+        for key in [content.titleKey, content.bodyKey] + content.bulletKeys {
+            #expect(!key.localized.contains(weight))
+        }
+    }
+
+    // MARK: - Step 5: history
+
+    @Test("Every string the History slide renders is localized")
+    func historySlideStringsAreLocalized() {
+        let content = OnboardingFeatureSlideContent.history
+        let keys = [
+            content.breadcrumbKey,
+            content.eyebrowKey,
+            content.titleKey,
+            content.bodyKey,
+            // Borrowed rather than restated, so the tour cannot name the
+            // exercise — or the routine — differently than the app does.
+            OnboardingSampleHistory.seedKey,
+            "onboarding.routines.sample.routine_name",
+            // The marker beside the eyebrow.
+            "pro.badge.label",
+            // What the three production surfaces inside the plate render.
+            "history.detail.duration",
+            "history.detail.sets",
+            "history.detail.volume",
+            "history.detail.intensity",
+            "history.card.sets",
+            "history.detail.pr",
+            "history.detail.pr_record",
+            "history.detail.pr_e1rm_vs",
+            "history.detail.vs_date",
+            "history.detail.top_weight",
+            "history.detail.volume_short",
+            "history.detail.set_n",
+            "history.detail.reps",
+            "history.detail.set_new"
+        ] + content.bulletKeys
+
+        for key in keys {
+            #expect(key.localized != key)
+        }
+
+        // The type chip resolves its own key, so it is checked through the label
+        // rather than by restating the key the enum picks.
+        #expect(!OnboardingSampleHistory.workoutType.label.hasPrefix("history.type."))
+
+        // The slide advertises Pro; the badge is the whole of what it does about
+        // it. `OnboardingFeatureSlideView` draws `OnyxProBadge` from this flag.
+        #expect(content.showsProBadge)
+    }
+
+    @Test("The History slide's session is the routine the tour just built")
+    func historySampleIsTheTourRoutine() {
+        // The tiles describe the same routine steps 2 and 3 assemble, so the
+        // four numbers are that session's rather than plausible-looking ones.
+        // Both languages must classify to the same chip: "Upper Body A" and
+        // "Oberkörper A" are both `.upper`.
+        #expect(OnboardingSampleHistory.workoutType == .upper)
+        #expect(OnboardingSampleHistory.workoutType
+                == WorkoutType.classify(routineName: OnboardingSampleHistory.routineName))
+
+        let supersetSets = OnboardingSampleRoutine.supersetMembers.flatMap(\.plannedSets)
+        #expect(OnboardingSampleHistory.sessionSetCount
+                == OnboardingSampleHistory.currentSets.count + supersetSets.count)
+
+        let blockVolume = OnboardingSampleHistory.currentSets
+            .reduce(0.0) { $0 + $1.kilograms * Double($1.reps) }
+        #expect(OnboardingSampleHistory.sessionVolumeKilograms > blockVolume)
+
+        // The comparison strip prints the previous session's date, so it has to
+        // be before this one.
+        #expect(OnboardingSampleHistory.previousSessionDate < OnboardingSampleHistory.sessionDate)
+    }
+
+    @Test("Every delta the History slide shows is derived from the sets printed beside it")
+    func historySampleDeltasAgreeWithTheSets() {
+        guard let comparison = OnboardingSampleHistory.comparison,
+              let previous = comparison.previousPerformance else {
+            Issue.record("The slide must preview a comparison against a previous session")
+            return
+        }
+
+        let sets = comparison.currentPerformance.sets
+        #expect(sets.count == OnboardingSampleHistory.currentSets.count)
+
+        // The chips as the block builds them, so this asserts what is on screen
+        // rather than the values behind it.
+        let deltas = sets.map {
+            SetDeltaChip.Delta(
+                comparison: $0,
+                isCompleted: true,
+                hasPreviousSession: true,
+                loadBehavior: .resistance,
+                unit: .kilograms
+            )
+        }
+
+        // Set 1 took the weight up, set 2 repeated, set 3 lost a rep, and set 4
+        // did not exist last time — the four states a delta chip has.
+        guard case .gain(let gainLabel, _) = deltas[0] else {
+            Issue.record("Set 1 must read as a weight gain")
+            return
+        }
+        #expect(gainLabel == "+" + WeightFormatting.label(2.5, in: .kilograms))
+        #expect(deltas[1] == .neutral)
+        guard case .loss(_, .reps(let repsLost)) = deltas[2] else {
+            Issue.record("Set 3 must read as one rep short")
+            return
+        }
+        #expect(repsLost == 1)
+        #expect(deltas[3] == .new)
+        #expect(sets[3].previousWeight == nil)
+        #expect(sets[3].previousReps == nil)
+
+        // The strip's two summary figures, from the same sets: the top weight
+        // rose, and so did the volume — a red percentage under four mostly green
+        // chips would be a slide arguing with itself.
+        let topWeight = sets.filter(\.isCompleted).map(\.currentWeight).max() ?? 0
+        #expect(topWeight > (previous.bestSet?.weight ?? 0))
+        #expect(comparison.hasComparableVolume)
+        #expect((comparison.volumeDeltaPercentage ?? 0) > 0)
+    }
+
+    @Test("The History slide's personal record is one the app would actually award")
+    func historySamplePRIsAnActualRecord() {
+        guard let record = OnboardingSampleHistory.prDetail else {
+            Issue.record("The slide must preview a personal record")
+            return
+        }
+
+        // The set with the best Epley estimate, beating the best of the previous
+        // session — which is exactly what `PersonalRecordService` calls a PR. A
+        // gold chip on a set that is not a record would be the tour teaching a
+        // badge the user's own data will never produce that way.
+        let estimates = OnboardingSampleHistory.currentSets.map {
+            ExerciseLoadMetrics.estimatedOneRepMax(weight: $0.kilograms, reps: $0.reps)
+        }
+        #expect(record.estimatedOneRepMax == estimates.max())
+        #expect(record.estimatedOneRepMax > (record.previousBest ?? 0))
+        #expect(record.previousBest != nil)
+
+        // And it points at a set the block actually draws, so the trophy lands
+        // on the right cell.
+        #expect(OnboardingSampleHistory.exerciseDisplay.sets.map(\.id).contains(record.setId))
+        let recordSet = OnboardingSampleHistory.exerciseDisplay.sets.first { $0.id == record.setId }
+        #expect(recordSet?.weight == record.weight)
+        #expect(recordSet?.reps == record.reps)
+    }
+
     /// The smallest thing `SupersetLabelProvider` accepts — the production
     /// conformances are `@Model` types the tour has no reason to build.
     private struct SampleGroupable: SupersetGroupable {

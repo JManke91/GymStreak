@@ -24,6 +24,10 @@ accent color: solid for the primary movers, a 42 % tint for the supporting ones,
 everywhere else. The card header carries the title and a two-dot legend explaining the
 shades.
 
+A user who has never used the map also gets one faint line under the header — *"Tippe auf einen
+Muskel für Details"* — which disappears for good the first time they tap a region, and gives up
+after three unused appearances either way. See [Discoverability](#discoverability).
+
 Beneath the figures the same regions are spelled out as a wrapping row of pills, so the map
 can be read without decoding the drawing: an accent-tinted pill per primary region carrying
 its name and completed set count, ordered heaviest first, then muted pills for the supporting
@@ -120,6 +124,8 @@ muscleMap = MuscleMapCardModel.make(
 | `Presentation/Views/MuscleMap/MuscleFigureView.swift` | Presentation | The view itself: drawing, per-belly hit-testing, dimming, per-region accessibility |
 | `Presentation/Views/MuscleMap/MuscleMapCardModel.swift` | Presentation | `MuscleMapReading` (which of the two readings a card speaks) and the finished values it renders: `MuscleMapCardModel` / `MuscleMapPill` / `MuscleMapDetail` |
 | `Presentation/Views/MuscleMap/MuscleMapCardView.swift` | Presentation | The card: header, legend, two captioned figures, and the pill row or detail chip |
+| `Domain/Interfaces/MuscleMapDiscoveryTracking.swift` | Domain | Whether the tap gesture still needs explaining — the record behind the one-time discovery hint |
+| `Data/Preferences/MuscleMapDiscoveryStore.swift` | Data | The `UserDefaults.standard` conformer: the discovered flag plus the unused-appearance count |
 
 The card and its model **moved out of `Presentation/Views/History/Components/`** into the
 muscle-map folder when routine detail became the second caller (routine-muscle-map ticket 02).
@@ -433,6 +439,94 @@ re-parsed geometry, both of which are finished and static by the time the card a
   it on both the front and the back body.
 - Selection changes animate over 0.25 s (`easeInOut`); non-selected bellies drop to 30 %
   opacity, the design's dim level. Dimming is purely visual — see accessibility below.
+
+### Discoverability
+
+The pills and the bellies were tappable from the day the card shipped and were still not being
+tapped. Two independent fixes address that, and they answer different halves of the problem:
+
+- The pills' trailing **`chevron.down`** (documented under [The card](#the-card)) makes the pill
+  row *look* like controls to a user who glances at it.
+- A **one-time hint line** says it in words, which is the only signal that reaches the user who
+  reads the card as a picture and never studies the pill row — and the only one that mentions the
+  bellies on the figure at all.
+
+The hint sits between the card header and the figures, leading-aligned: `hand.tap` at 10 pt
+regular plus the copy at 10.5 pt regular, both white @ 45 %, with the same `.padding(.top, 6)` the
+figures already carry. It is **deliberately ranked below its surroundings** — lighter than the
+13 pt bold title and lighter than the 10 pt semibold legend and captions. A tip has to look
+subordinate to the content it explains; centered, or at the weight of the legend, it reads as a
+banner the card grew rather than as a note. It fades in and out through `.transition(.opacity)`
+inside the 0.25 s `easeInOut` the card already uses for selection, so dismissal is not a hard cut.
+
+Permanent explanatory chrome is the wrong price to pay forever, so the hint is **shown once and
+spent**. Two triggers retire it:
+
+1. **The user selects any region.** Wired through the card's existing `select(_:)` — both a pill
+   tap and a belly tap already funnel through that one method, so there is no second hook in
+   `MuscleFigureView`.
+2. **Three appearances go by without a tap** (`MuscleMapDiscoveryStore.unusedShowLimit`). This is
+   the safety net, and it is the point: without it, a user who simply never taps would see the
+   hint on every workout and every routine forever — the permanent chrome this design was chosen
+   to avoid, arriving by the back door. The appearance that reaches the limit *still shows the
+   hint*, because the card reads the flag before it records the showing, so the budget is a real
+   first, second and third look.
+
+**Counted per card appearance, never from `body`.** `body` re-runs on every scroll invalidation
+and on every selection change, and a counter driven from there would burn all three showings
+before the user finished reading the first one. The card decides once, in `.onAppear`, into
+`@State`: `showsDiscoveryHint` holds the answer for the life of the card and is never re-read from
+the store, because the store is not observable and a `body` that asked it directly would flip the
+hint off mid-screen, un-animated, on the very appearance that spends the last showing. A second
+`@State` flag (`hasCountedAppearance`) makes the count at most once **per card instance**, so a
+repeat `onAppear` — returning from a pushed screen — does not eat a showing.
+
+That guard is per-instance and deliberately goes no further. Anything that destroys the card's
+identity resets it and can spend a showing the user did not really get: toggling routine detail's
+superset mode (the card lives inside `if supersetEditMode == nil`), `muscleMap.hasTraining`
+flipping false→true during an edit, and the enclosing `LazyVStack` discarding offscreen subview
+state on a long scroll. This is accepted rather than engineered around, because the failure only
+ever runs in the safe direction — the hint retires *early*, and nothing brings it back once the
+flag is set — and the alternative is hoisting the counted-once fact into each host screen's own
+`@State`, which is more machinery than a tip is worth. A per-instance dedupe inside the store is
+not an option: it would contradict the durable count the budget depends on.
+
+**One shared, reading-agnostic copy key:** `history.detail.muscle_map.discovery_hint`, en + de
+("Tap a muscle for details" / "Tippe auf einen Muskel für Details", informal *du* like the rest of
+the app). It is **not** split per reading, and a `routine.detail.*` twin should not be added:
+everything in this card that does not name a set count or the card's own title already lives on
+the shared `history.detail.muscle_map.*` keys — legend, VORNE/HINTEN, "Sekundär",
+"Zurücksetzen" — precisely because it says the same thing under both readings. The gesture is
+identical whether the source is a recorded workout or a planned routine, so the sentence is too.
+
+**One global flag, not one per screen.** Learning the gesture on workout detail suppresses the
+hint on routine detail and vice versa. It is one capability, and being taught the same thing twice
+is worse than not being taught at all. The three-appearance budget is therefore shared across both
+screens — three in total, not three each. The store is app-lifetime and held once in
+`AppDependencies` for the same reason: the flag is mirrored in memory, so a second instance would
+answer from a stale copy.
+
+**Persistence follows `OnboardingCompletionStore` / `FounderCelebrationStore` exactly** — a
+`@MainActor final class` over plain `UserDefaults.standard`, both facts mirrored in memory at
+`init` because `UserDefaults` is not observable and the card reads the flag during layout, and
+idempotent one-way recording methods. Explicitly **not** the App Group suite: the watch app has no
+muscle map and must never read this. Not iCloud KVS either, for the reason
+`FounderCelebrationTracking` gives — a reinstall re-teaching the gesture is benign, a device that
+never teaches it is not. Keys: `muscleMap.gestureDiscovered` and `muscleMap.hintShownCount`. The
+store is injected into `MuscleMapCardView` from `AppDependencies.muscleMapDiscovery` by both call
+sites; the card reaches no `.shared`.
+
+The hint's presence is a boolean read of `@State`, so nothing new enters `body` — no aggregation,
+no formatter, no relationship walk — and `recordShown()` is a `UserDefaults` write on appearance,
+off the render path.
+
+**The hint is `.accessibilityHidden(true)`, deliberately.** VoiceOver users never had this problem:
+`MuscleFigureView`'s region proxies carry `.isButton` on exactly the trained regions, so VoiceOver
+has announced the tappable bellies as buttons since the card shipped and the interaction is
+discoverable by design. The hint is a sighted-user affordance; exposed, it is a redundant sentence
+spoken ahead of information VoiceOver already delivers correctly per region, and it goes stale the
+moment the flag flips. This is recorded because "the tip isn't accessible" looks like a bug to
+whoever reads this next.
 
 ### Hit-testing facts that this depends on
 

@@ -865,6 +865,7 @@
 "history.detail.muscle_map.back" = "Back";
 "history.detail.muscle_map.sets_count" = "%d sets";
 "history.detail.muscle_map.reset" = "Reset";
+"history.detail.muscle_map.discovery_hint" = "Tap a muscle for details";
 "history.detail.muscle_map.a11y.region_sets" = "%1$@ %2$d sets";
 "history.detail.muscle_map.a11y.primary" = "Primary: %@";
 "history.detail.muscle_map.a11y.secondary" = "Secondary: %@";
@@ -1312,6 +1313,33 @@
 "onboarding.supersets.body" = "Exercises you do back to back are grouped as a superset. The rest timer only starts at the end of the group.";
 "onboarding.supersets.bullet1" = "Group as many exercises as you like";
 "onboarding.supersets.bullet2" = "One rest for the whole group";
+
+/* Step 4 — progressive overload. The plate previews one finished exercise of a
+   running workout and the app's own overload prompt below it. The prompt is the
+   shipped `WorkoutOverloadPromptBar`, which names the rep goal and never a next
+   weight — the body copy must not promise one either. The "Automatic" pill is
+   onboarding chrome and exists nowhere in the app. */
+"onboarding.overload.breadcrumb" = "Workout › Active set";
+"onboarding.overload.eyebrow" = "PROGRESSIVE OVERLOAD";
+"onboarding.overload.title" = "The app tells you\nwhen to add weight.";
+"onboarding.overload.body" = "Give an exercise a rep goal. As soon as you hit the top of that range on every set, Gym Streak says so right in the workout — and takes the weight up in your routine for next time.";
+"onboarding.overload.bullet1" = "A rep goal per exercise";
+"onboarding.overload.bullet2" = "The prompt appears by itself, mid-workout";
+"onboarding.overload.callout" = "Automatic";
+
+/* Step 5 — history. The plate previews the top of a workout-detail screen: the
+   session header, the four stat tiles and one exercise block with its personal
+   record, its vs-previous strip and its per-set delta chips — all production
+   views. This slide carries the Pro badge, and it is the one place the tour has
+   to be careful: the session detail it shows is **free** in every entitlement
+   state (monetization §3 Rule 4), and what Pro actually adds is the exercise
+   progress chart's deeper metrics and its long windows. The body says so. */
+"onboarding.history.breadcrumb" = "History › Last workout";
+"onboarding.history.eyebrow" = "HISTORY";
+"onboarding.history.title" = "Every set, next to\nyour last session.";
+"onboarding.history.body" = "Your whole history stays readable for free: duration, volume, personal records and set-by-set deltas. Pro adds the long-term curves per exercise — estimated 1RM, total volume and a full year at a time.";
+"onboarding.history.bullet1" = "Set deltas vs. the last session — free";
+"onboarding.history.bullet2" = "Long-term curves per exercise with Pro";
 
 /* Routine detail — planned muscle map. Only the strings that name the card or a set count
    differ from the history reading; the legend, captions and reset control are shared. */

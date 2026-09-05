@@ -8,6 +8,16 @@
 
 import SwiftUI
 
+/// Plate measurements a slide may need to name. Not nested in `OnboardingPlate`
+/// itself, which is generic over its content — `OnboardingPlate<EmptyView>.x` is
+/// not a sentence anyone should have to write to reach a constant.
+enum OnboardingPlateMetrics {
+    /// The inset a preview gets from the panel's side edges unless a slide asks
+    /// for less. Declared once so the stored property, the initialiser and
+    /// `OnboardingFeatureSlideContent` cannot drift apart.
+    static let contentInset: CGFloat = 12
+}
+
 /// A fixed-height panel holding a preview of a real screen, headed by a mono
 /// breadcrumb that names where in the app the feature lives.
 ///
@@ -34,17 +44,29 @@ struct OnboardingPlate<Content: View>: View {
     /// Whether the bottom edge dissolves. Off for a preview that genuinely ends
     /// inside the plate.
     var fadesOutBottom: Bool = true
+    /// How far the preview is held off the panel's side edges.
+    ///
+    /// The default reads as a panel with something laid on it. A slide may claim
+    /// some of it back when the surface it previews is *dense* horizontally: the
+    /// plate is already about 50 pt narrower than the screen it is picturing
+    /// (the slide's margins plus this inset), and a production row that fits in
+    /// the app can cross into truncation here — which turns a preview meant to
+    /// show two numbers into a preview of two ellipses. Step 4's workout set
+    /// rows are that case. The breadcrumb keeps the full inset either way.
+    var contentInset: CGFloat = OnboardingPlateMetrics.contentInset
     private let content: Content
 
     init(
         breadcrumb: String,
         height: CGFloat,
         fadesOutBottom: Bool = true,
+        contentInset: CGFloat = OnboardingPlateMetrics.contentInset,
         @ViewBuilder content: () -> Content
     ) {
         self.breadcrumb = breadcrumb
         self.height = height
         self.fadesOutBottom = fadesOutBottom
+        self.contentInset = contentInset
         self.content = content()
     }
 
@@ -56,13 +78,14 @@ struct OnboardingPlate<Content: View>: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             breadcrumbRow
+                .padding(.horizontal, OnboardingPlateMetrics.contentInset)
 
             content
                 .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, contentInset)
 
             Spacer(minLength: 0)
         }
-        .padding(.horizontal, 12)
         .padding(.top, 12)
         .padding(.bottom, 14)
         .frame(maxWidth: .infinity, alignment: .leading)

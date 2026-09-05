@@ -7,8 +7,8 @@ real pieces of the app rather than illustrations.
 > **Status.** The shell is built (ticket 01) and the feature-slide scaffold with
 > it (ticket 03): the chrome, the step navigation, the persistence and the
 > presentation seam, plus the preview plate, the inert-mount seam and the shared
-> feature-slide layout — with steps 1, 2 and 3 filled in. Steps 4–7 are declared
-> in `OnboardingStep` and render nothing yet; tickets 05–08 fill them in on the
+> feature-slide layout — with steps 1–5 filled in. Steps 6 and 7 are declared in
+> `OnboardingStep` and render nothing yet; tickets 07 and 08 fill them in on the
 > scaffold, and ticket 09 owns the cover-ordering tests, the end-to-end
 > walkthrough and the rest of this document.
 
@@ -22,8 +22,8 @@ and the navigation all derive their length from the same list:
 | 1 | `.welcome` | What the app is: icon tile, eyebrow, two-line title, body, three check bullets. **Built.** |
 | 2 | `.routines` | A real routine exercise card — sets, reps, weight, rest, alternatives. **Built.** |
 | 3 | `.supersets` | Two collapsed cards joined by the real superset connector. **Built.** |
-| 4 | `.progressiveOverload` | The automatic weight suggestion. |
-| 5 | `.history` | Logged workouts and the numbers going up. |
+| 4 | `.progressiveOverload` | A finished exercise and the weight prompt it raises. **Built.** |
+| 5 | `.history` | A recorded session: its header, the four stat tiles and one exercise block with its record and per-set deltas. **Built.** |
 | 6 | `.aiCoach` | The on-device coach, as a teaser (the opt-in stays its own screen, after the tour). |
 | 7 | `.offer` | The real RevenueCat paywall on a new `onboarding` placement. |
 
@@ -43,9 +43,14 @@ Presentation/Views/Onboarding/OnboardingWelcomeSlideView.swift   step 1
 Presentation/Views/Onboarding/OnboardingPlate.swift              the preview panel
 Presentation/Views/Onboarding/OnboardingInertPreview.swift       the inert-mount seam
 Presentation/Views/Onboarding/OnboardingFeatureSlideView.swift   the steps 2–6 layout
+Presentation/Views/Onboarding/OnboardingChromePill.swift         the tour's own caption pill
 Presentation/Views/Onboarding/OnboardingRoutinesSlideView.swift   step 2
 Presentation/Views/Onboarding/OnboardingSupersetsSlideView.swift step 3
+Presentation/Views/Onboarding/OnboardingProgressiveOverloadSlideView.swift step 4
+Presentation/Views/Onboarding/OnboardingHistorySlideView.swift   step 5
 Presentation/Views/Onboarding/OnboardingSampleRoutine.swift      steps 2 and 3's sample values
+Presentation/Views/Onboarding/OnboardingSampleWorkout.swift      step 4's sample values
+Presentation/Views/Onboarding/OnboardingSampleHistory.swift      step 5's sample values
 App/AppDependencies.swift                              constructs the view model
 App/ContentView.swift                                  hosts the fullScreenCover
 ```
@@ -150,7 +155,8 @@ pixel values, because the design is a fixed-size web mock and the app is not:
 the scaffold enforces the second one, are in "The feature-slide scaffold" below. The specific
 mismatch to remember: the design's Progressive-Overload prompt does not exist in the app at all —
 the shipped bar is orange, names the target rep count rather than a next weight, and offers
-"Erhöhen" and a dismiss X.
+"Erhöhen" and a dismiss X. Step 4 was built around the shipped bar and its copy written to it; see
+"Step 4 — Progressive Overload" below.
 
 Two deliberate departures from the design file:
 
@@ -176,6 +182,7 @@ entry and a preview view rather than a screen.
 OnboardingFeatureSlideContent   what the slide says, as localization keys
 OnboardingFeatureSlideView      plate + eyebrow (+ Pro badge) + title + body + bullets
 OnboardingPlate                 the panel: breadcrumb, fixed height, bottom fade
+OnboardingChromePill            a caption the tour adds, that no app screen has
 View.onboardingInertPreview()   how a production component is mounted inside it
 ```
 
@@ -183,7 +190,17 @@ A slide is declared as a `static let` on `OnboardingFeatureSlideContent` — see
 `.routines` in `OnboardingRoutinesSlideView.swift` — and rendered by handing that
 entry plus a preview view to `OnboardingFeatureSlideView`. Nothing in the content
 struct is a literal string; it carries keys, and the layout resolves them. The
-only per-slide layout knobs are `plateHeight` and `plateFadesOutBottom`.
+only per-slide layout knobs are `plateHeight`, `plateFadesOutBottom` and
+`plateContentInset`.
+
+**`plateContentInset` is a truncation escape hatch, not a styling choice.** The
+plate is about 50 pt narrower than the screen it pictures — the slide's 24 pt
+margins on each side plus the panel's own 12 pt inset — so a production row that
+fits in the app can cross into truncation here. Step 4's workout set row is that
+case: at the default inset it rendered "6 W… × … kg", ellipsising the two numbers
+the slide exists to show. It takes 4 pt instead, which still reads as a panel with
+something laid on it. The breadcrumb keeps the full inset either way, so the
+panels stay aligned with each other.
 
 ### The plate, and why its height is a constant
 
@@ -331,10 +348,11 @@ rest.
 **The design's "SUPERSATZ · OHNE PAUSE" pill does not exist in the app** and was
 not built. The caption above the group is production's own name for it —
 `superset.label` → "Superset A" — and the pill *around* that text is declared as
-what it is: `OnboardingChromePill`, private to the slide, documented as tour
-chrome. The distinction is the point of ticket 03's rule 1. A still image of two
-linked cards does not say what the link is called, so the tour may caption it —
-but only with a word the user will meet again in the app.
+what it is: `OnboardingChromePill` — a declared component, documented as tour
+chrome, which step 4 reuses for its "Automatic" marker. The distinction is the
+point of ticket 03's rule 1. A still image of two linked cards does not say what
+the link is called, so the tour may caption it — but only with a word the user
+will meet again in the app.
 
 The letter is `OnboardingSampleRoutine.supersetLetter`, and its colour comes from
 `SupersetLabelProvider.color(for:)`, the same mapping the Routines screen uses.
@@ -363,6 +381,186 @@ what the reader must not conclude. The height is therefore a measured fit (two
 97 pt cards, the 28 pt seam, the caption and the panel's padding) with about 9 pt
 of slack, not a round number.
 
+## Step 4 — Progressive Overload
+
+The payoff slide: the app asks for more weight by itself. The plate shows one
+exercise of a running workout with all three sets logged at the top of its rep
+goal, and, directly under it, the prompt that state produces.
+
+Both pieces are production views. The card is `WorkoutExerciseCardView` with
+`WorkoutSetRowView` inside it; the prompt is `WorkoutOverloadPromptBar` itself,
+which draws `ProgressiveOverloadBanner`. The bar sits *below* the card because
+that is where the workout screen puts it — a bottom safe-area inset under the
+scrolling exercise list, not something inside the card (`WorkoutOverloadPromptBar`
+carries the note on why it had to leave the card in the first place). Sample
+values live in `OnboardingSampleWorkout`, on the same terms as
+`OnboardingSampleRoutine`: copy, never data.
+
+**The design file is wrong on this slide, and the shipped component won.** The
+design draws a green gradient card with a "Ziel erreicht" eyebrow, the line
+"Alle Sätze am oberen Ende. Nächstes Mal 92,5 kg?" and two buttons. None of that
+exists in the app. What ships is an uppercase eyebrow naming the *exercise*
+("FOR DEADLIFT") over an **orange** `.ultraThinMaterial` bar at radius 8 whose
+message is `rep_range.all_sets_maxed` — it names the **target rep count and never
+a weight** — with an "Increase" capsule and a dismiss X. So the slide was built
+around the shipped bar and **its copy was written to match**: the body says the
+app tells you when the weight should go up and deliberately names no next weight,
+because the reader will not find one on that bar.
+`OnboardingFlowTests.overloadPromptSuggestsWithoutNamingAWeight` asserts that no
+slide string contains the sample weight. Redesigning the production banner is its
+own ticket against a live workout surface, not a side effect of the tour.
+
+**Four sample choices are load-bearing:**
+
+- **Every set is at `targetRepMax`.** That is the condition
+  `OverloadPromptPolicy` actually requires, so the plate is not showing a prompt
+  the app would not have raised. Pinned by
+  `sampleWorkoutSetsAreAllAtTheRepCeiling`, which also checks the rows read as
+  in-range (`isOutsideRepRange` would draw the orange off-goal dot instead).
+- **No swap button** (`canSwap` and `isSwapLocked` both false). This is
+  production behaviour, not a simplification: a swap is only offered while the
+  slot has alternatives *and* no set is logged yet, so a card with three
+  completed sets that still showed one would be a card the app cannot produce.
+  It also hands the name and the "3/3 · 4–6" meta line the width the plate
+  cannot otherwise spare. The exercise menu stays — `WorkoutExerciseCardView`
+  always draws it, and unlike step 2's header there is no way to pass it away.
+- **No completion times** (`completedAt: nil`). The row shows the time a set was
+  checked off at its right-hand end, and it is what pushed the reps and the
+  weight into an ellipsis at plate width. `completedAt` is optional in
+  production — a set ingested from the Watch can arrive without one — so a
+  completed row with no time is a row the app itself draws. Together with
+  `plateContentInset: 4` this fits from a 375 pt phone upwards; **verified on
+  the simulator** at 402 pt (iPhone 17, German and English) and 375 pt
+  (iPhone SE 3rd gen), and **on device on 2026-09-05** in both units.
+- **A short exercise name in both languages** — `seed.exercise.deadlift`,
+  "Deadlift" / "Kreuzheben". Same constraint step 3 ran into, and worse here:
+  a long single German word cannot wrap, so it truncates. 90 kg × 6 in a 4–6
+  goal is a believable moment to add weight, and the rest is a heavy compound's
+  2 m 30 s — rendered by the card's own chip, so it reads in the app's format
+  ("2m 30s") rather than in a number this slide chose.
+
+**The plate is 500 pt with no bottom fade.** The prompt is the point of the
+slide and the real screen pins it to the bottom edge, so it has to be whole — a
+fade over the one thing the reader is here for is the crop that costs the point.
+Like step 3, the height is therefore a measured sum rather than a round number:
+the card (header, rest chip, three 62 pt set rows, the dashed "Add set" button
+and its 14 pt padding), the 10 pt gap, the prompt bar, and the panel's own
+breadcrumb and padding. Change `WorkoutSetRowView`'s `minHeight` or the card's
+padding and the prompt loses its bottom edge with no fade to admit it.
+
+**The "Automatic" pill is `OnboardingChromePill`,** the same tour chrome step 3
+captions its superset with, in the tour's own accent rather than the banner's
+orange — so it reads as the slide talking *about* the prompt rather than as a
+control inside it. It marks the thing a still picture cannot show: nobody asked
+for that bar, it appeared. It is pinned to the prompt's top-right corner with a
+vertical offset only; with the content inset down to 4 pt, a horizontal overhang
+would put it against the panel's rounded corner.
+
+**Nothing in the plate fires or reacts.** Every closure is empty and the plate
+mounts its content with hit testing off, so neither "Increase" nor the dismiss X
+can be reached. The side effect a dead pointer does not stop is
+`ProgressiveOverloadBanner`'s success haptic in `onAppear`, and it is suppressed
+by `\.isOnboardingPreview` — the environment flag ticket 03 introduced for
+exactly this component (see "Inert means no side effects" above).
+
+## Step 5 — History
+
+What the training just logged looks like afterwards. The plate shows the top of a
+workout-detail screen: `WorkoutSessionHeaderView`, `WorkoutStatGrid` and one
+`WorkoutDetailExerciseBlock` with its `PRRecordStrip`, its `ExerciseComparisonStrip`
+and its per-set delta chips. All three are production views — the first two are the
+ones ticket 02 extracted out of `WorkoutDetailView` for exactly this — and none of
+them does anything on appear, so the slide needs no guard beyond the plate's inert
+mount. Sample values live in `OnboardingSampleHistory`, on the same terms as the
+other slides: copy, never data.
+
+**It is the session the tour just built.** Steps 2 and 3 assemble "Upper Body A"
+(lat pulldown, plus a pec-deck/hammer-curl superset); this is one session of it,
+a couple of days ago. The routine name is read from step 2's own key, the chip's
+`WorkoutType` is *derived* from that name by `WorkoutType.classify` exactly as the
+app derives it, and the four stat tiles count the same routine's sets and volume —
+so a reader who followed the tour sees their own three screens close a loop rather
+than three unrelated mock-ups.
+
+**Every delta is derived, never typed.** `OnboardingSampleHistory` declares two
+lists — this session's four sets and last week's three — and everything else is
+computed from them by the production code the History screen runs:
+`ExerciseComparisonBuilder` pairs the sets (which is what makes the fourth one read
+"New": the builder leaves a set the previous session did not have without a
+counterpart), `SetDeltaChip.Delta` turns each pair into a chip, `ExerciseComparisonStrip`
+derives the top-weight and volume figures, and `ExerciseLoadMetrics.estimatedOneRepMax`
+produces both Epley numbers in the PR strip. A hand-written "+2.5 kg" is a number
+that can disagree with the sets printed beside it; there is none here.
+`historySampleDeltasAgreeWithTheSets` and `historySamplePRIsAnActualRecord` pin it.
+
+**The four sets are chosen to show all four states a delta chip has** — gain,
+unchanged, loss, and new — while keeping both summary figures positive:
+
+| set | this session | last session | chip |
+| --- | --- | --- | --- |
+| 1 | 57.5 kg × 11 | 55 kg × 11 | `+2.5 kg` — and the PR |
+| 2 | 55 kg × 10 | 55 kg × 10 | `=` |
+| 3 | 55 kg × 9 | 55 kg × 10 | `−1 rep` |
+| 4 | 55 kg × 8 | — | `New` |
+
+That combination is not free. **A lost rep costs about 55 kg of volume and a
+2.5 kg increase over 11 reps only returns 27**, so a three-set version of this
+block with a rep loss in it has *falling* volume — the design file's own Verlauf
+preview does, at −3 %. The fourth set is what buys an honest "+24 %" without
+inventing a weight jump nobody makes. Reps declining 11 → 10 → 9 → 8 is what
+fatigue looks like, which is what makes the third set's loss read as real rather
+than arranged.
+
+**Dates are relative, not calendar dates.** The session is two days ago and its
+predecessor a week before that, formatted through `WorkoutDetailView`'s own
+`"EEE d. MMM"` template (and the strip's `"d. MMM"`). A fixed "19 Apr" reads as
+stale the moment the year turns and prints a weekday that is wrong in most years.
+That is also why the breadcrumb says "History › Last workout" rather than the
+design's "Verlauf › Training vom 19. Apr" — a date in the breadcrumb would have to
+agree with the header, and only one of the two can be a literal.
+
+**The Pro badge is on the eyebrow, and the copy is written so it cannot mislead.**
+This is the tour's first badged slide, and the honesty problem is real: **the
+screen in the plate is free in every entitlement state.** Rule 4 and §5d are
+explicit — "every workout, session and set stays readable in the History tab", and
+the shipped P2 gate narrows the *exercise progress chart* (estimated 1RM and total
+volume as metrics, 1Y and All as windows), not the session detail. The design's
+copy ("Die vollen Auswertungen sind Teil von Pro") sits directly under a picture of
+a free screen and would have advertised a gate that does not exist. The shipped
+body therefore names both halves: the history stays readable for free, and Pro adds
+the long-term curves per exercise. Bullet 1 ends "— free" and bullet 2 "with Pro",
+which is also §8 C: a badge has to name the capability it unlocks.
+
+**Two findings about `WorkoutStatTile` at plate width**, both raised rather than
+fixed, because the shipped component is authoritative (see the rule above):
+
+1. **The intensity label does not fit four-across on a narrow phone.** German
+   "INTENSITÄT" wants ~64 pt at 10 pt semibold and a quarter of the plate leaves
+   ~55, so the tile either breaks the word mid-way or ellipsises it depending on
+   the vertical room left. The slide works around it *locally* — `.lineLimit(1)`
+   and `.minimumScaleFactor(0.75)` applied to the grid, which reach the labels
+   through the environment and leave the component untouched. **The same word is
+   tight on the real screen too**: at 402 pt the shipped tile has ~64 pt for it,
+   which is the width it needs, and a 375 pt phone would have ~57. If it is ever
+   seen truncated in the app, the fix belongs in `WorkoutStatTile` — a
+   `minimumScaleFactor` on its label — not here.
+2. **A four-cell set grid wraps a rep-delta chip in German.** "−1 Wdh." needs more
+   than a quarter of the plate at 390 pt, so it takes two lines there (it fits at
+   402 pt, and "−1 reps" fits at both). This is what the shipped block draws at
+   that width; `plateHeight` is measured against that taller case so nothing is
+   ever cropped, and the chip is left alone.
+
+Two more things the plate does **not** show, deliberately: the "Exercises" section
+heading above the blocks, and the muscle-map card and remaining two exercises of
+the session. The plate is a slice of a screen, and those are the parts that teach
+nothing at a third of their real width. The header keeps a 4 pt inset of its own,
+which is the difference between the real screen's 20 pt header margin and the 16 pt
+its sections below use — so the rhythm inside the panel is the screen's.
+
+**`plateContentInset: 4`, like step 4** and for the same reason: the stat row and
+the set grid are the two densest rows the app draws, and at the default 12 pt both
+broke on a 390 pt phone.
+
 ## Scroll position across steps
 
 The slide's `ScrollView` content carries `.id(currentStep)`. Scroll offset
@@ -389,6 +587,11 @@ Monetization verdict — First-run onboarding flow
   Founder note  §7 — Founders are entitled, so the presenter suppresses step 7 for them
 ```
 
+Step 5 is the first slide to carry the `OnyxProBadge`, and it gates nothing — the
+screen it previews is free in every entitlement state. What its copy sells is the
+shipped P2 chart gate (long-term curves, estimated 1RM, total volume); see
+"Step 5 — History" above for why the design's copy could not be used as written.
+
 The shell as built contains no gate at all. Ticket 08 adds the placement, and
 ticket 09 records it in `docs/monetization-strategy.md` §4 and
 `docs/pro-subscription.md` together with the §10 guardrail and the one-line
@@ -397,10 +600,14 @@ rollback (drop step 7, leaving the six value slides).
 ## Localization
 
 All copy lives in `en.lproj`/`de.lproj` under the `onboarding.` prefix; the views
-hold no literal strings. Two deliberate borrows: the exercise names on steps 2
-and 3 use `seed.exercise.*` keys so the tour and the library agree, and step 3's
-group caption uses `superset.label` so the tour calls a superset what the app
-calls it. The design was written in German and the English strings
+hold no literal strings. The deliberate borrows: the exercise names on steps 2–5
+use `seed.exercise.*` keys so the tour and the library agree, step 3's group
+caption uses `superset.label` so the tour calls a superset what the app calls it,
+and step 5 takes its routine name from step 2's own
+`onboarding.routines.sample.routine_name` rather than restating it. Everything step 4's plate says beyond its breadcrumb comes from the
+production components themselves (`workout.exercise.*`, `rest_timer.rest_short`,
+`rep_range.*`), which is what makes it a preview rather than a picture of one —
+`overloadSlideStringsAreLocalized` covers those keys too. The design was written in German and the English strings
 follow it in the same voice. `OnboardingFlowTests` asserts every key resolves —
 a missing entry resolves to the key itself, so the test fails loudly rather than
 shipping a raw key on screen.

@@ -108,6 +108,10 @@ struct OnboardingCoverView: View {
                         OnboardingRoutinesSlideView()
                     case .supersets:
                         OnboardingSupersetsSlideView()
+                    case .progressiveOverload:
+                        OnboardingProgressiveOverloadSlideView()
+                    case .history:
+                        OnboardingHistorySlideView()
                     default:
                         // Filled in by the remaining slide tickets. The chrome
                         // and the navigation are complete around them.

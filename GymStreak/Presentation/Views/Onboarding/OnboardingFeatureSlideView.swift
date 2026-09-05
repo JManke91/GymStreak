@@ -32,6 +32,9 @@ struct OnboardingFeatureSlideContent {
     /// the preview's content.
     var plateHeight: CGFloat = 376
     var plateFadesOutBottom: Bool = true
+    /// See `OnboardingPlate.contentInset` — reduced only by a slide whose
+    /// preview is horizontally dense enough to truncate at the default inset.
+    var plateContentInset: CGFloat = OnboardingPlateMetrics.contentInset
 }
 
 /// A preview plate above, and the explanation below.
@@ -55,7 +58,8 @@ struct OnboardingFeatureSlideView<Preview: View>: View {
             OnboardingPlate(
                 breadcrumb: content.breadcrumbKey.localized,
                 height: content.plateHeight,
-                fadesOutBottom: content.plateFadesOutBottom
+                fadesOutBottom: content.plateFadesOutBottom,
+                contentInset: content.plateContentInset
             ) {
                 preview
                     .onboardingInertPreview(

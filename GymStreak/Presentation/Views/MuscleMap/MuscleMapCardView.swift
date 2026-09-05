@@ -13,6 +13,10 @@ import SwiftUI
 struct MuscleMapCardView: View {
 
     let model: MuscleMapCardModel
+    /// Whether the tap gesture still needs explaining. Injected from
+    /// `AppDependencies`, never reached through `.shared`, and shared by both
+    /// screens so the lesson is taught once across the app.
+    let discovery: MuscleMapDiscoveryTracking
     /// Outer margin the caller wants around the card. It is the caller's decision because the
     /// two screens differ: workout detail lays its sections out edge to edge, routine detail
     /// already insets its scroll content.
@@ -21,6 +25,18 @@ struct MuscleMapCardView: View {
     /// The region the user is inspecting. Deliberately local view state: selecting a region
     /// redraws the card and nothing else — it never re-runs the aggregation behind `model`.
     @State private var selection: MuscleMapRegion?
+
+    /// Whether this card carries the one-time discovery hint. Decided **once**,
+    /// in `onAppear`, and never re-read from `discovery` afterwards: the store is
+    /// not observable, so a `body` that asked it directly would flip the hint off
+    /// mid-screen on the appearance that spends the last showing, and without an
+    /// animation.
+    @State private var showsDiscoveryHint = false
+    /// Guards the appearance count against a second `onAppear` for the same card
+    /// — returning from a pushed screen, or leaving routine detail's superset
+    /// mode. Three showings is the whole budget; re-entering a screen must not
+    /// eat one.
+    @State private var hasCountedAppearance = false
 
     private static let figureWidth: CGFloat = 128
 
@@ -32,6 +48,9 @@ struct MuscleMapCardView: View {
         if model.hasTraining {
             VStack(spacing: 0) {
                 header
+                if showsDiscoveryHint {
+                    discoveryHint
+                }
                 figures
                 if let detail = selectedDetail {
                     detailChip(detail)
@@ -50,6 +69,10 @@ struct MuscleMapCardView: View {
             .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
             .padding(.horizontal, horizontalMargin)
             .accessibilityElement(children: .contain)
+            // Appearance, not render: `body` re-runs on every scroll invalidation
+            // and on every selection change, and a counter driven from there
+            // would spend all three showings before the first was read.
+            .onAppear(perform: decideDiscoveryHint)
         }
     }
 
@@ -65,11 +88,31 @@ struct MuscleMapCardView: View {
         selectedDetail == nil ? nil : selection
     }
 
+    /// The one funnel for both entry points — a pill tap and a belly tap both
+    /// arrive here — which is why the hint's dismissal needs no second hook in
+    /// `MuscleFigureView`.
     private func select(_ region: MuscleMapRegion) {
         HapticManager.shared.light()
+        discovery.recordSelection()
         withAnimation(.easeInOut(duration: 0.25)) {
             selection = selection == region ? nil : region
+            showsDiscoveryHint = false
         }
+    }
+
+    /// Reads the flag *before* recording the appearance, so the third showing is
+    /// still shown rather than being retired by the very write that counts it.
+    private func decideDiscoveryHint() {
+        guard !hasCountedAppearance else { return }
+        hasCountedAppearance = true
+        guard !discovery.hasDiscoveredMuscleMap else { return }
+        // `onAppear` runs after the first render, so an unanimated assignment
+        // would shove `figures` down a frame late. The same 0.25 s the dismissal
+        // uses turns that jump into a fade.
+        withAnimation(.easeInOut(duration: 0.25)) {
+            showsDiscoveryHint = true
+        }
+        discovery.recordShown()
     }
 
     private func clearSelection() {
@@ -109,6 +152,34 @@ struct MuscleMapCardView: View {
                 .font(.system(size: 10, weight: .semibold))
                 .foregroundStyle(Color.white.opacity(0.55))
         }
+    }
+
+    /// One line of copy, spent once. Deliberately ranked *below* everything
+    /// around it — lighter than the 13 pt bold title, lighter than the 10 pt
+    /// semibold legend and captions — because a tip that matches the weight of
+    /// the content it explains reads as a banner the card grew rather than as a
+    /// note. Leading-aligned for the same reason; centered, it becomes an
+    /// announcement.
+    private var discoveryHint: some View {
+        HStack(spacing: 5) {
+            Image(systemName: "hand.tap")
+                .font(.system(size: 10))
+            Text("history.detail.muscle_map.discovery_hint".localized)
+                .font(.system(size: 10.5))
+        }
+        .foregroundStyle(Color.white.opacity(0.45))
+        .frame(maxWidth: .infinity, alignment: .leading)
+        // Reuses the spacing budget `figures` already carries below it.
+        .padding(.top, 6)
+        .transition(.opacity)
+        // Hidden from VoiceOver on purpose, and this is not an oversight:
+        // `MuscleFigureView`'s region proxies carry `.isButton` on exactly the
+        // trained regions, so VoiceOver has always announced the bellies as
+        // buttons and the gesture was never undiscoverable there. Exposed, this
+        // line would be a redundant sentence spoken ahead of information
+        // VoiceOver already delivers per region — and it would go stale the
+        // moment the flag flips. See docs/muscle-map.md, "Discoverability".
+        .accessibilityHidden(true)
     }
 
     private var figures: some View {
@@ -242,6 +313,15 @@ struct MuscleMapCardView: View {
     }
 }
 
+/// An undiscovered user that records nothing, so the preview always shows the
+/// hint and never spends the real install's three appearances. A stub rather
+/// than the Data store: a Presentation preview depends on the Domain protocol.
+private final class PreviewMuscleMapDiscovery: MuscleMapDiscoveryTracking {
+    let hasDiscoveredMuscleMap = false
+    func recordSelection() {}
+    func recordShown() {}
+}
+
 #Preview("Muscle map card — both readings") {
     let loads: [MuscleMapRegion: MuscleLoad] = [
         .chest: MuscleLoad(engagement: .primary, setCount: 8, exerciseNames: ["Bankdrücken"]),
@@ -252,8 +332,16 @@ struct MuscleMapCardView: View {
 
     return ScrollView {
         VStack(spacing: 16) {
-            MuscleMapCardView(model: .make(from: loads, reading: .performed), horizontalMargin: 16)
-            MuscleMapCardView(model: .make(from: loads, reading: .planned), horizontalMargin: 16)
+            MuscleMapCardView(
+                model: .make(from: loads, reading: .performed),
+                discovery: PreviewMuscleMapDiscovery(),
+                horizontalMargin: 16
+            )
+            MuscleMapCardView(
+                model: .make(from: loads, reading: .planned),
+                discovery: PreviewMuscleMapDiscovery(),
+                horizontalMargin: 16
+            )
         }
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity)
