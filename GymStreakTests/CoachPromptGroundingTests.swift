@@ -85,6 +85,39 @@ struct CoachPromptGroundingTests {
         ]
     }
 
+    /// Every `@Guide` on an **input** struct — the types `AICoachService` serialises with
+    /// `toPromptText(...)` rather than handing to a session as a schema.
+    ///
+    /// They are deliberately **out of scope for the literal scan**: several carry
+    /// data-shaped examples (`'May 2024 - April 2026'`, `e.g. +12 or -8`) precisely
+    /// because no model ever reads them. Rule 3 is different — a construct word costs
+    /// nothing to keep out, and `recommendationFact`'s guide read *"nil when none was
+    /// detected"* until 2026-09-05: the exact wording that produced a literal `nil` in
+    /// rendered output, sitting pre-made for the first time one of these types is used as
+    /// a generation *output*.
+    ///
+    /// Nested types are listed individually because a schema's description does not
+    /// necessarily inline the guides of the types it references.
+    private static func allInputSchemas() -> [(name: String, text: String)] {
+        [
+            ("PostWorkoutRecapInput", String(describing: PostWorkoutRecapInput.generationSchema)),
+            ("MuscleGroupSummary", String(describing: MuscleGroupSummary.generationSchema)),
+            ("PRSummary", String(describing: PRSummary.generationSchema)),
+            ("PeriodRecapInput", String(describing: PeriodRecapInput.generationSchema)),
+            ("HeadlineMetrics", String(describing: HeadlineMetrics.generationSchema)),
+            ("ConsistencyMetrics", String(describing: ConsistencyMetrics.generationSchema)),
+            ("TrendFinding", String(describing: TrendFinding.generationSchema)),
+            ("CorrelationFinding", String(describing: CorrelationFinding.generationSchema)),
+            ("WorkoutAnalysisInput", String(describing: WorkoutAnalysisInput.generationSchema)),
+            ("WorkoutAnalysisExerciseInput", String(describing: WorkoutAnalysisExerciseInput.generationSchema)),
+            ("WorkoutAnalysisSetInput", String(describing: WorkoutAnalysisSetInput.generationSchema)),
+            ("ExerciseDeepDiveInput", String(describing: ExerciseDeepDiveInput.generationSchema)),
+            ("ProgressionSummary", String(describing: ProgressionSummary.generationSchema)),
+            ("PerformancePoint", String(describing: PerformancePoint.generationSchema)),
+            ("ProgressionSegment", String(describing: ProgressionSegment.generationSchema))
+        ]
+    }
+
     // MARK: - The literal scan
 
     /// Digits that are not part of an ordinary English word or a field name — the
@@ -152,6 +185,19 @@ struct CoachPromptGroundingTests {
         }
     }
 
+    /// The same rule on the input structs. Their guides never reach a model today, which
+    /// is why the literal scan skips them — but a construct word in one is the bug above,
+    /// pre-made for the day one of these types is generated rather than serialised.
+    @Test("No input guide names a programming construct either")
+    func noInputSchemaNamesAProgrammingConstruct() {
+        let constructs = ["nil", "null", "NULL", "None"]
+        for (name, text) in Self.allInputSchemas() {
+            for construct in constructs {
+                #expect(!text.contains(construct), "\(name) names the construct '\(construct)'")
+            }
+        }
+    }
+
     /// The replacement wording, pinned so it is not quietly dropped: the field the model
     /// may omit says so, in words, in both the prompt and its guide.
     @Test("The optional correlation field asks for its absence in plain language")
@@ -193,6 +239,57 @@ struct CoachPromptGroundingTests {
     // German reader as `1830.0 kg`. That every narrating surface now writes its figures in
     // the reader's own convention is pinned across all four of them in
     // `CoachPromptFigureLocaleTests`, which needs a `ModelContext` for two of them.
+
+    // MARK: - Fact lines are facts, not finished copy
+
+    /// The period-recap headline fact used to end with an English parenthetical —
+    /// `" (N exercises improved in total)"` — and the model translated it halfway:
+    /// *"(4 Übungen verbessert in total)"* (German, on device, 2026-08-30). An aside that
+    /// already reads as finished copy invites copying instead of rephrasing, and the count
+    /// was never exclusive to it: the "Improved (estimated 1RM):" line lists every improved
+    /// exercise by name.
+    @Test("The period-recap headline fact carries no English aside for the model to copy")
+    func headlineFactIsOneFactWithoutAParenthetical() {
+        let prompt = Self.periodRecapInput(improvedSubjects: ["Arnold Press", "Dip", "Row", "Squat"])
+            .toPromptText()
+        let headlineLine = prompt
+            .split(separator: "\n", omittingEmptySubsequences: false)
+            .first { $0.hasPrefix("Headline fact:") }
+
+        let line = String(headlineLine ?? "")
+        #expect(line.contains("strongest gain"))
+        #expect(!line.contains("in total"))
+        #expect(!line.contains("("), "a parenthetical aside reads as copy, not as a fact")
+
+        // The count the aside carried is still derivable from the trend list below it.
+        #expect(prompt.contains("Improved (estimated 1RM): Arnold Press"))
+    }
+
+    private static func periodRecapInput(improvedSubjects: [String]) -> PeriodRecapInput {
+        PeriodRecapInput(
+            locale: "de_DE",
+            periodLabel: "August",
+            headline: HeadlineMetrics(
+                totalSessions: 12,
+                totalVolumeKg: 42_000,
+                averageSessionMinutes: 62,
+                distinctExercises: 14
+            ),
+            consistency: ConsistencyMetrics(
+                totalWeeks: 4,
+                trainedWeeks: 4,
+                averageSessionsPerWeek: 3,
+                longestGapDays: 3,
+                isIrregular: false
+            ),
+            trends: improvedSubjects.map {
+                TrendFinding(subject: $0, direction: "improved", magnitude: "+5,0 kg")
+            },
+            correlations: [],
+            recommendationFact: nil,
+            isInsufficient: false
+        )
+    }
 
     // MARK: - The guard that does not depend on the model
 

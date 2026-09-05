@@ -108,10 +108,15 @@ struct ExerciseDeepDiveOutput {
 /// **not** `Codable` — what the cache and the screen hold is the narrative.
 @Generable
 struct WorkoutAnalysisOutput {
-    @Guide(description: "The 1 to 4 most notable exercises from the input, ordered: PRs first, then biggest improvements, then declines. Never include exercises done for the first time.", .minimumCount(1), .maximumCount(4))
+    /// The distinctness clause is the *request* half of a guarantee that also exists in
+    /// Swift: `CoachHighlightUniquer.uniqued(_:)` drops a repeat whatever arrives.
+    /// A device check returned four highlights, all for one exercise, three of them
+    /// restating the same top-set change — the count bound was satisfied and the list was
+    /// still one exercise long.
+    @Guide(description: "The 1 to 4 most notable exercises from the input, ordered: PRs first, then biggest improvements, then declines. ONE HIGHLIGHT PER EXERCISE — each exercise may appear at most once in this list, and an exercise already highlighted is never highlighted again from another angle. Never include exercises done for the first time.", .minimumCount(1), .maximumCount(4))
     let exerciseHighlights: [WorkoutAnalysisHighlight]
 
-    @Guide(description: "One short closing sentence in the user's locale with an observation about the session as a whole. Observational, not prescriptive. No dates. NAME ONLY EXERCISES THAT APPEAR IN THE INPUT, SPELLED EXACTLY AS THE INPUT SPELLS THEM — never translate an exercise name and never invent one.")
+    @Guide(description: "One short closing sentence in the user's locale with an observation about the session as a whole. Observational, not prescriptive. No dates. NAME ONLY EXERCISES THAT APPEAR IN THE INPUT, SPELLED EXACTLY AS THE INPUT SPELLS THEM — never translate an exercise name and never invent one. Writing in German, the fixed words are Topsatz, Wiederholungen, Satz and Bestwert — write them exactly so, never an English or half-English form of them.")
     let closingObservation: String
 }
 
@@ -127,7 +132,18 @@ struct WorkoutAnalysisHighlight: Codable, Equatable, Sendable {
     @Guide(description: "Direction of change, derived from the verdict tag in the input: IMPROVED to improved, DECREASED to declined, UNCHANGED to unchanged, MIXED to mixed, NEW SETS to new.")
     let trend: WorkoutAnalysisTrend
 
-    @Guide(description: "One short sentence (max 12 words) in the user's locale rephrasing this exercise's 'Fact' line with its exact numbers. Copy each weight with the unit word the input writes it with; rep changes always as reps — never mix the two units in one figure.")
+    /// **The German terms live here, not only in the instruction list.** The prompt's
+    /// glossary line already mandated "Topsatz", and on a device check the model wrote the
+    /// non-word "Topset" in this field anyway (German, 2026-08-30) — the same lesson as
+    /// the paragraph-count rule that moved out of the instructions and into a guide.
+    /// Apple describes `@Guide(description:)` as "effectively another way of prompting",
+    /// and a constraint attached to the one field it governs is the stronger lever.
+    ///
+    /// The forbidden forms are described, never spelled out: naming a wrong token in an
+    /// instruction is the mechanism rule 1 exists to prevent, and the instruction that
+    /// *did* spell them out is the one the model ignored. See docs/ai-coach.md
+    /// § "Prompt grounding rules".
+    @Guide(description: "One short sentence (max 12 words) in the user's locale rephrasing this exercise's 'Fact' line with its exact numbers. Copy each weight with the unit word the input writes it with; rep changes always as reps — never mix the two units in one figure. WRITING IN GERMAN, THESE WORDS ARE FIXED: the top set is Topsatz, reps are Wiederholungen, a set is Satz, a personal record is Bestwert. Write each exactly as spelled here — never an English or half-English form of it, and never a compound of your own.")
     let detail: String
 }
 

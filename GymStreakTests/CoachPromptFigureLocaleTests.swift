@@ -173,7 +173,7 @@ struct CoachPromptFigureLocaleTests {
         PostWorkoutRecapInput(
             locale: locale,
             workoutVolumeKg: 1_830,
-            totalSets: 20,
+            completedSets: 20,
             durationMinutes: 32,
             muscleGroupsTrained: [
                 MuscleGroupSummary(name: "Schultern", volumeKg: 457.5, percentVsFourWeekAverage: 75)

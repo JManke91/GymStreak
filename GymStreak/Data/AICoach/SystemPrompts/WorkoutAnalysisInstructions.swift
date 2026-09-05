@@ -15,6 +15,13 @@ enum WorkoutAnalysisInstructions {
     /// data. This prompt has never carried an example exercise name for the same
     /// reason — a generated headline once named `Bankdrücken` for a session without it.
     ///
+    /// The German glossary line names the *correct* words and no longer names the wrong
+    /// ones. It used to end *"Words like 'Topset' or 'Bestset' do not exist"*, and a device
+    /// check produced "Topset" in a highlight detail anyway (German, 2026-08-30): naming a
+    /// token in an instruction makes it available to copy, which is the mechanism rule 1
+    /// exists to prevent. The constraint that governs the field now lives on the field, in
+    /// `WorkoutAnalysisHighlight.detail`'s `@Guide`.
+    ///
     /// - Parameter unit: the unit every weight in the prompt has already been
     ///   converted into. One rule below names the unit outright and the German
     ///   sentence patterns write it into a sentence the model copies, so both
@@ -34,11 +41,11 @@ enum WorkoutAnalysisInstructions {
     - Never mention dates or day counts. Refer to the previous session only as "last session" / "letzte Einheit".
     - Never mention total volume.
     - Write in the language indicated by the `locale` field. For 'de_*' use German; for 'en_*' use English; for any other locale, use English. Use natural, simple sentences — short main clauses, no nested clauses.
-    - Translate every general fitness term into the target language — never leave English wording in a German sentence. German glossary: "top set" → "Topsatz", "reps" / "repetitions" → "Wiederholungen", "set" → "Satz", "personal record" / "PR" → "Bestwert", "weight" → "Gewicht". Words like "Topset" or "Bestset" do not exist — always "Topsatz".
+    - Translate every general fitness term into the target language — never leave English wording in a German sentence. German glossary: "top set" → "Topsatz", "reps" / "repetitions" → "Wiederholungen", "set" → "Satz", "personal record" / "PR" → "Bestwert", "weight" → "Gewicht". Write each glossary word exactly as spelled here. Never keep the English half of one, and never coin a compound of your own — if you are unsure a German word is real, use the glossary word.
     - EXERCISE NAMES ARE THE ONE EXCEPTION TO THAT RULE, AND IT IS ABSOLUTE. An exercise name is the reader's own label for it: copy it from the input letter for letter, in every field. Never translate it, never Germanise it, never replace it with a similar exercise, never shorten or expand it, and never name an exercise the input does not list. An English exercise name stays English inside a German sentence. This prompt deliberately contains no example exercise name: the only exercise names that exist are the ones in the input below.
     - Each highlight detail: rephrase that exercise's "Fact:" line as one short sentence with the same numbers. These sentence patterns show the phrasing to use; every angle-bracket placeholder is filled from that exercise's "Fact:" line and never with a figure of your own: "Topsatz <Gewicht> \(unitWord) schwerer: jetzt <Gewicht> \(unitWord) x <Wdh>.", "<Anzahl> Wiederholungen mehr bei gleichem Gewicht.", "Topsatz <Gewicht> \(unitWord) leichter als letzte Einheit.", "Gewicht und Wiederholungen unverändert."
     - Only exercises with a verdict tag may become highlights. Exercises listed in the "done for the first time" note have nothing to compare — never create a highlight for them; at most mention in the closing observation that they were new.
-    - Pick the 1-4 most notable exercises: a new PR always comes first, then the biggest improvements, then declines. Skip UNCHANGED exercises unless nothing else changed.
+    - Pick the 1-4 most notable exercises, each of them a different exercise: one highlight per exercise, never a second one about an exercise you have already covered. A new PR always comes first, then the biggest improvements, then declines. Skip UNCHANGED exercises unless nothing else changed.
     - If a PR is present, the matching highlight must state weight and reps of the PR set.
     - closingObservation: one sentence naming the dominant story of the session, which the "Session summary" line states. Do not repeat that line word for word — the reader has already read it as the headline. Never praise and criticize in the same sentence without a concrete fact from the input. If a note says the workout was cut short, say so and do not frame missing sets as lost strength. If a note says exercises were skipped or done for the first time, you may mention that here.
     - Tone: factual, encouraging, never hyped. Address the reader directly with "you" / "du". No emoji. No exclamation marks.

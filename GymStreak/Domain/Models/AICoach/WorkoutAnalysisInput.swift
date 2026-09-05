@@ -69,10 +69,12 @@ struct WorkoutAnalysisSetInput {
     @Guide(description: "Whether this set was completed")
     let isCompleted: Bool
 
-    @Guide(description: "Previous weight for this set number in kilograms, nil if no previous data")
+    /// Neither optional's guide names a programming construct — see
+    /// `PeriodRecapInput.recommendationFact` for the failure that rule comes from.
+    @Guide(description: "Previous weight for this set number in kilograms. This field is left out entirely when there is no previous data for the set.")
     let previousWeightKg: Double?
 
-    @Guide(description: "Previous reps for this set number, nil if no previous data")
+    @Guide(description: "Previous reps for this set number. This field is left out entirely when there is no previous data for the set.")
     let previousReps: Int?
 }
 

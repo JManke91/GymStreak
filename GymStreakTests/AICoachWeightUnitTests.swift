@@ -73,7 +73,7 @@ struct AICoachWeightUnitTests {
         let input = PostWorkoutRecapInput(
             locale: "en_US",
             workoutVolumeKg: 5_000,
-            totalSets: 20,
+            completedSets: 20,
             durationMinutes: 60,
             muscleGroupsTrained: [
                 MuscleGroupSummary(name: "Chest", volumeKg: 2_000, percentVsFourWeekAverage: 12)

@@ -37,10 +37,16 @@ struct PostWorkoutRecapAggregator {
             now: now
         )
 
+        // Volume and set count come from one traversal, and both describe *completed*
+        // work: `totalSetsCount` counted planned sets too, which the recap then stated as
+        // the session's set count next to a volume that excluded them. See
+        // `PostWorkoutRecapInput.completedSets`.
+        let aggregates = session.aggregates
+
         return PostWorkoutRecapInput(
             locale: locale.identifier,
-            workoutVolumeKg: session.totalVolume,
-            totalSets: session.totalSetsCount,
+            workoutVolumeKg: aggregates.volume,
+            completedSets: aggregates.completedSets,
             durationMinutes: Int(session.duration / 60),
             muscleGroupsTrained: muscleGroupsTrained,
             newPRs: newPRs,

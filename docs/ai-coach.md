@@ -152,6 +152,12 @@ GymStreak/
     AICoachCaching.swift              — protocol for AICoachCache's loadXxx/saveXxx/invalidateXxx surface
     AICoachPreferencesProviding.swift — protocol for the 4 isXxxEffectivelyEnabled flags
     ExerciseDeepDiveFactProviding.swift — the deep-dive's off-main history read boundary (SwiftDataHistorySnapshotProvider conforms)
+  Domain/Services/AICoach/
+    AICoachUnitVocabulary.swift       — unit words and reader-locale figure formatting for every prompt
+    CoachCorrelationSanitizer.swift   — rejects a placeholder or apologetic correlationHighlight (String? -> String?)
+    CoachHighlightUniquer.swift       — one workout-analysis highlight per exercise, whatever the model returned
+    ChatFactBuilder.swift             — the chat's fact lines
+    ExerciseNameResolver.swift        — resolves a chat/deep-dive exercise reference to a library name
   Data/AICoach/
     AICoachAvailability.swift         — SystemLanguageModel availability mapping
     AICoachPreferences.swift          — UserDefaults-backed preferences (@Observable), conforms to AICoachPreferencesProviding
@@ -173,6 +179,7 @@ GymStreak/
     PeriodRecapViewModel.swift
     ExerciseDeepDiveViewModel.swift
     WorkoutAnalysisViewModel.swift
+    WorkoutAnalysisContent.swift      — the display shape the surface renders, mapped from the output / its streaming snapshots
   Presentation/Views/AICoach/
     Components/
       AISurface.swift                 — gradient-bordered card chrome for all surfaces
@@ -212,6 +219,8 @@ GymStreak/
 - **System prompt file**: `PostWorkoutRecapInstructions.swift`.
 - **Output struct**: `PostWorkoutRecapOutput` — single `narrative: String` field.
 
+- **The set count is the completed one (device check, German, 2026-08-30).** The recap read *"mit einem Gesamtvolumen von 1980,0 kg und 20 Sätzen"* for a session whose own summary said `8/20 (40%)`: `PostWorkoutRecapAggregator` passed `session.totalSetsCount`, which counts planned sets too, while the volume beside it had always summed completed sets only — one generated sentence stating two figures that describe different sessions. The field is `PostWorkoutRecapInput.completedSets` now, the prompt line reads `Completed sets:`, and both figures come from the same `WorkoutSession.aggregates` pass (one traversal instead of two). This was a **factual error in generated copy**, not a phrasing one, which is why the fix is in the aggregator and no prompt rule was touched. Pinned by `PostWorkoutRecapAggregatorTests`.
+
 - **Skeleton while preparing (2026-08-30).** `RecapState` has a `.preparing` case, set synchronously at the end of `PostWorkoutRecapViewModel.start` once every gate has passed. `AIRecapInline` renders it — and any `.streaming` snapshot whose text is still empty — as three `AISkeletonBar` rows cross-dissolving into the text, inside a `ZStack` with a `minHeight` so the card reserves its height from the first frame and the save sheet does not grow under the reader's thumb. Before this the card was `.idle` (nothing at all) through the availability retry, the prewarm and the first token, so the reader watched blank space and the finished paragraph appeared out of nowhere. Every other coach surface already had this: `WorkoutAnalysisViewModel` and `ExerciseDeepDiveViewModel` both call it `.preparing`, and `PeriodRecapView` has a full `loadingView`.
 
 ### 2. Period Recap
@@ -227,6 +236,7 @@ GymStreak/
 - **System prompt file**: `PeriodRecapInstructions.swift`.
 - **Output struct**: `PeriodRecapOutput` — `headline`, `trendsNarrative`, `correlationHighlight: String?` (Optional), `closingSentence`.
 - **Fact-based content redesign (July 2026, same doctrine as Workout Analysis)**: the first version let the model narrate freely — the headline restated total volume/session counts (redundant with the stat strip directly above and a metric the user doesn't care about), the trends narrative rambled and produced contradictions ("Plateau erreicht, wobei die Gewichte zurückgegangen sind" — because plateaued trends still carried a kg delta in the prompt), and the closing was pure motivational filler. Now `PeriodRecapInput.toPromptText()` resolves everything in Swift: a **Headline fact** (strongest est-1RM gain > declines > steady plateau), trend groups where **plateaued exercises are serialized by name only** (no delta → no contradiction fodder), a **Consistency line** (weeks trained of weeks covered, avg sessions/week, longest gap, regular/irregular flag — running periods only count elapsed weeks), and a **Closing fact**. The system prompt reduces the model to rephrasing, bans total volume and hype words (bemerkenswert/beeindruckend/spannend/…), and requires contradiction-free trend sentences.
+- **The headline fact is one fact, with no parenthetical aside (device check, German, 2026-08-30).** It used to append `" (N exercises improved in total)"` to the strongest-gain line, and the model translated that only halfway: *"(4 Übungen verbessert in total)"*. An aside that already reads as finished copy invites copying rather than rephrasing — the fact lines are English precisely because the model is meant to *write* them in the reader's language. The parenthetical is gone; the count it carried is still in the `Improved (estimated 1RM):` line the trends narrative is built from. Pinned by `CoachPromptGroundingTests.headlineFactIsOneFactWithoutAParenthetical`.
 - **Consistency + recommendation (July 2026)**: `ConsistencyMetrics` (totalWeeks/trainedWeeks/avgSessionsPerWeek/longestGapDays/isIrregular; irregular = skipped weeks or a gap ≥ 9 days) feeds the prompt. `buildRecommendation` resolves **at most one actionable suggestion**, only when stagnation demonstrably coincides with irregularity: (1) the adherence correlation fired (dips followed low-frequency weeks) → "keep frequency steady at ~X/week", or (2) training irregular AND no exercise improved → "more evenly spaced sessions". The closing fact is then marked as a recommendation and the system prompt allows a suggestion **only there** — the general no-prescriptive-advice rule stays for everything else. This is a deliberate product decision (user request): the Rückblick may give one concrete training-consistency recommendation; medical/nutrition advice remains banned.
 - **`correlationHighlight` is `String?`, and the model is not trusted to leave it out.** The field is schema-Optional, and `@Generable` defaults to `representNilExplicitlyInGeneratedContent: false`, so a nil property is omitted from the generated content entirely — the affordance is real. The model still does not always take it: asked to *"return nil for this field"*, it wrote the literal string `nil`, which the card rendered under the `MUSTER` label (German, on device, 2026-08-30). Three things changed, and all three are described in § "Prompt grounding rules" rules 3 and 4: the prompt and the `@Guide` no longer name a programming construct; `PeriodRecapViewModel` drops the field outright when the input carried no "Detected patterns" section (`hasDetectedPatterns`, resolved in Swift from `sampleInput.correlations`); and `CoachCorrelationSanitizer.sanitized(_:)` rejects a placeholder token or an apology in the streamed partial, the final output **and** inside `AICoachCache.loadPeriodRecap`. The earlier subject-matching heuristic (short text without a known exercise name → apologetic) stays **removed**: the pre-written pattern statements are short and contain no exercise names, so it would have suppressed every real finding once the model started reproducing them verbatim.
 - **Regenerate lives in the nav bar (2026-08-30).** Every other coach surface puts a circular `arrow.clockwise` in its `AISurface` header; this screen is a *tree* of cards rather than one surface, so the button sits at the trailing edge of `topNav` (36×36, matching the back button) and shows only in `.success` — regenerating replaces the whole recap, not one section of it, so a per-card button would have been wrong. It replaces a small "Regenerate" text link that used to end the cache sub-row, which appeared **only** on a cached recap (so a freshly generated one had no regenerate affordance at all) and which spent a metered reader's monthly recap with no prompt. **A metered reader is now asked first** — `PeriodRecapViewModel.regenerateConfirmationMessage`, `nil` for a Pro reader and while the kill switch is off: spending the month's single recap is meant to be a deliberate choice, the same reason `load` and `setRange` never generate for them. An *exhausted* reader gets no confirmation, because `AICoachAllowanceGate.requestGeneration` raises the paywall instead of running and a prompt there would be a second tap before a wall. Three tests in `PeriodRecapAllowanceTests` pin the three cases.
@@ -307,7 +317,7 @@ GymStreak/
 ### 4. Workout Analysis
 
 - **Entry**: `WorkoutDetailView` (tapping a past workout in the Verlauf/History tab). A `.task` silently checks cache on appear and whether a previous same-routine session exists. If yes, `CoachWorkoutAnalysisButton` ("Ask the Coach") is shown below the stats grid. When the button is showing (no cache hit), `AICoachService.prewarm()` is called so the model weights are warm before the user taps.
-- **Comparison logic**: `WorkoutAnalysisAggregator.buildInput` finds the most recent previous `WorkoutSession` with the same `routineName` (case-insensitive). Receives per-exercise comparison data as a `comparisons:` parameter, resolved by `WorkoutAnalysisViewModel` through `ExerciseProgressProviding` before the aggregator runs (audit P1.6 — it previously constructed `ExerciseProgressService` ad hoc and ran that scan on the main actor). Comparisons are matched to exercises by `workoutExerciseId`, not by position. Also detects new PRs via the Epley formula — **only for exercises with prior history** (`priorBestByKey` lookup must hit; a first-time exercise trivially "beats" a nonexistent baseline and must not count as a PR) — and counts exercises done last time but skipped this session (`droppedExerciseCount`, matched by `stableKey`).
+- **Comparison logic**: `WorkoutAnalysisAggregator.buildInput` finds the most recent previous finished `WorkoutSession` **of the same routine**, matched on `routine.id` — a **bounded** fetch (`candidate.routine?.id == routineId` in the `#Predicate`, `fetchLimit = 1`), because `hasPreviousSession` runs it on the main actor merely to decide whether the button is visible, and walking the finished history in memory to read `routine` on each row would fault the whole routine graph to answer that. It falls back to the denormalized `routineName` (case-insensitive, empty name matches nothing) when there is no id match; that fallback walks in memory because case-insensitive equality has no predicate form here, but it reads a stored property and so faults nothing. **The fallback only ever matches a *templateless* candidate when the current session has a routine** — one carrying a different routine is a different routine however its name reads, and one carrying ours would already have been returned by the bounded fetch. Without that clause a routine with no history of its own would borrow a namesake's session, which is the collision the id match exists to close. The clause is on the candidate, never on the current session: a watch-recorded or HealthKit-recovered predecessor has no routine link while the current session does, and that pairing is the reason the fallback exists. Receives per-exercise comparison data as a `comparisons:` parameter, resolved by `WorkoutAnalysisViewModel` through `ExerciseProgressProviding` before the aggregator runs (audit P1.6 — it previously constructed `ExerciseProgressService` ad hoc and ran that scan on the main actor). Comparisons are matched to exercises by `workoutExerciseId`, not by position. Also detects new PRs via the Epley formula — **only for exercises with prior history** (`priorBestByKey` lookup must hit; a first-time exercise trivially "beats" a nonexistent baseline and must not count as a PR) — and counts exercises done last time but skipped this session (`droppedExerciseCount`, matched by `stableKey`).
 - **Data gates**: analysis suppressed when (a) fewer than 2 completed sets, (b) no previous same-routine session, (c) completion below 40% (`minimumCompletionThreshold` — an aborted workout produces a meaningless comparison), (d) every exercise is first-time (nothing to compare), (e) AI Coach unavailable or workout detail preference off. Gates (a)/(c)/(d) surface as the generic `insufficient_data` copy if the button was already visible.
 - **Layout**: `CoachWorkoutAnalysisSurface` replaces the button after tap (cross-fade, `.animation(.easeInOut(0.3), value: state)` on the section). Renders the structured output: headline (15 pt semibold) → 1–4 highlight rows (trend icon in a tinted circle + exercise name + one-line detail) → dimmed closing sentence. `minHeight: 200`, header label `ai_coach.workout_analysis.header_label` (localized). Trend icon mapping: improved `arrow.up.right` (accent green), declined `arrow.down.right` (warning orange), unchanged `equal`, mixed `arrow.up.arrow.down`, new `plus`, still-streaming `ellipsis`.
 - **States**: `WorkoutAnalysisViewModel.AnalysisState` includes `.preparing` — set **synchronously** in `generate()`/`regenerate()` before the async pipeline starts, so the surface (with skeleton bars in every content slot) appears on the same frame as the tap. Without it the button sat frozen through availability check (up to 2 s sleep when model not ready), aggregation, and time-to-first-token. Missing fields during streaming render as `AISkeletonBar` placeholders inside the same layout, so the card fills in progressively instead of jumping.
@@ -317,7 +327,8 @@ GymStreak/
 - **Why structured output (research finding)**: the ~3B on-device model produced garbled free-text narratives — mixed units ("Wiederholungen um 30 kg"), echoed raw ISO dates, invented words ("Gesamtwertung"), unscannable walls of text. The free-form `narrative: String` approach was discarded. The `@Generable` schema constrains each field to one short sentence and forces the trend classification through a `@Generable` enum, leaving the model only the phrasing. Supporting input change: raw ISO dates replaced by `daysSincePrevious: Int` (the model echoed dates verbatim, prompt now forbids mentioning dates at all).
 - **Fact-based content redesign (July 2026)**: the first structured version still let the model *choose* what to say — the headline was contractually about total volume (a metric users don't care about) and the per-exercise `detail` was composed by the model from raw per-set lines, which it tended to echo as bare stats ("37.5 kg x 6 reps") with no comparison. Both were replaced by fully pre-resolved facts computed in Swift (`WorkoutAnalysisInput.toPromptText()`): a **Headline fact** chosen by priority (new PR > all/majority improved > all/majority declined > unchanged > mixed, e.g. `"3 of 4 exercises improved"`) and one **Fact line per exercise** that leads with the top set — the number a lifter actually cares about (`"top set +2.5 kg: now 37.5 kg x 6 reps, was 35 kg x 6 reps"`, rep gains at same weight, extra sets). Raw per-set lines and all volume figures were removed from the prompt entirely so the model cannot fall back to echoing them; the system prompt now forbids mentioning total volume and reduces the model's job to translating/rephrasing the fact lines in the user's language. Verdict classification was also fixed so MIXED is reachable (weight up + reps down or vice versa was previously reported as IMPROVED/DECREASED by summed-weight sign alone). Edge cases fed as prompt notes: cut-short sessions (completion < 70% → closing must say "cut short", missing sets must not read as strength loss), skipped exercises (`droppedExerciseCount`), and first-time exercises — all three may be mentioned in the closing only. The closing observation additionally bans hedged praise-and-criticize sentences without a concrete fact.
 - **First-time exercises are not content (user feedback, July 2026)**: "Erste Übung in dieser Routine" as a highlight is irrelevant to the user, and a first-time exercise falsely triggered the PR headline (no prior best to beat). First-timers are now excluded from PR detection (aggregator), excluded from the prompt's per-exercise fact list (they appear only as a "done for the first time" note), and forbidden as highlights by prompt + `@Guide`. Consequently `exerciseHighlights` allows `.minimumCount(1)` (was 2) so a session with a single comparable exercise doesn't force the model to invent a second highlight.
-- **Translation glossary (user feedback, July 2026)**: the model left English fitness terms in German output ("Bestset", "Topset"). The system prompt now carries an explicit German glossary (top set → Topsatz, reps → Wiederholungen, PR → Bestwert, …) and states that "Topset"/"Bestset" are not words. **Exercise names are carved out of that rule** — see the next entry for why.
+- **Translation glossary (user feedback, July 2026; moved onto the fields 2026-09-05)**: the model left English fitness terms in German output. The system prompt carries an explicit German glossary (top set → Topsatz, reps → Wiederholungen, set → Satz, PR → Bestwert, weight → Gewicht) and **exercise names are carved out of that rule** — see the entry below for why. The glossary line alone was not enough: a device check (German, 2026-08-30) produced the non-word "Topset" in a highlight detail anyway. Two changes followed, the same lesson as the paragraph-count rule that moved into a `@Guide`: the mandated words now sit on the fields that carry German prose (`WorkoutAnalysisHighlight.detail` and `WorkoutAnalysisOutput.closingObservation`), where a constraint governs the one field it applies to rather than being one of a dozen list items; and the instruction line **no longer spells the wrong forms out**. It used to end *"Words like 'Topset' or 'Bestset' do not exist"* — naming a token in an instruction makes it available to copy, which is the mechanism grounding rule 1 exists to prevent, and it is the instruction the model ignored. The forbidden forms are described as a class ("never an English or half-English form of it, and never a compound of your own"). Pinned by `WorkoutAnalysisHighlightGroundingTests`; adherence remains a device check.
+- **One highlight per exercise, guaranteed in Swift (device check, German, 2026-08-30)**: a run returned four highlights, all `Arnold Press`, three of them restating the same top-set change. The prompt asked for "the 1-4 most notable exercises" and the `@Guide` bounds the array at 1…4, but neither makes the entries *distinct* — the count bound was satisfied by four rows about one exercise. `CoachHighlightUniquer` (`Domain/Services/AICoach/`) keeps the first highlight per trimmed, case-folded exercise name, and — like `CoachCorrelationSanitizer`, whose shape and isolation-agnostic placement it copies — it is applied at every boundary the output crosses rather than at one of them: **`AICoachCache.loadWorkoutAnalysis`** (an analysis cached before it existed still holds its duplicates, and a cache entry is never regenerated just because its prose is stale) and both of `WorkoutAnalysisContent`'s mapping inits, which is where the *streaming* snapshots arrive and never touch the cache path at all. A highlight whose name has not streamed in yet is never treated as a duplicate; one whose name has arrived as a *prefix* is kept and dropped on the snapshot that completes it, which is accepted and bounded at four rows. Ids are assigned before the filter, so dropping a duplicate does not re-key the rows that stay. The `@Guide` asks for distinctness too, as the request half of the same rule.
 - **The headline is composed in Swift, not generated (device check, 2026-08-29)**: the surface headlined *"Neuer Bestwert bei Bankdrücken: 16 kg x 7 Wiederholungen."* for a session in which Bankdrücken was never trained — the routine's Bankdrücken slot had been swapped for its alternative *Flying Chest* (which matched its last session), and the figures were *Dip*'s real PR, correctly listed under Dip in the highlight rows directly below. Two causes, both in the prompt: the glossary rule above said "translate **every word** into the target language", which an English exercise name in a German sentence reads as an instruction to Germanise it; and the only German exercise name available was `Bankdrücken`, from the worked headline example in the very same instruction block (`"Neuer Bestwert bei Bankdrücken: 82,5 kg x 5."`). The closing sentence repeated the same substitution — the same failure mode as the deep-dive's `87,5 kg`, lifted from a worked example there. **The fix is structural, not another prompt rule**: `WorkoutAnalysisInput.headlineSentence` composes the sentence in Swift from a `WorkoutAnalysisHeadline` case (PR > all/majority improved > all/majority declined > unchanged > mixed) via `ai_coach.workout_analysis.headline.*` strings (en+de, locale-aware decimals, no trailing `,0`), `WorkoutAnalysisNarrative` carries it through the cache, and `headline` is gone from `WorkoutAnalysisOutput` — nothing can mangle a string it never receives. The same English fact still reaches the prompt as a `Session summary:` line (renamed from `Headline fact:`) purely as context for the closing sentence. Three prompt changes back the fields the model still owns: exercise names are the one explicit exception to the translate-everything rule, the prompt now contains **no example exercise name at all**, and the copy-exactly order moved onto the `exerciseName` `@Guide` and the `closingObservation` `@Guide` where the deep-dive found field-level constraints hold better than list items. Pinned by `GymStreakTests/WorkoutAnalysisHeadlineGroundingTests.swift` (structure only — adherence in the fields the model still writes stays a device check).
 - **Discarded, 2026-08-29: three further attempts to improve the model's own two fields.** With the headline fixed, the closing sentence restated it, so the prompt was changed to mark the summary line as already-read, then to ask for "something else", then the instructions were cut to three paragraphs with every worked example deleted, the locale directive added and the token cap raised. Each round made the card worse on device, in a new way: a fabricated exercise ("Pull-ups") and Germanised names ("Deckelpresse", "Seitheben") when the closing was asked for novelty with no facts left to state; then tautological details ("Topsatz 16 kg x 7 Wiederholungen: jetzt 16 kg x 7 Wiederholungen") under the added prohibitions; then, with the examples gone, English spans copied straight out of the prompt ("16 kg x 7 reps", "Topset 32 kg x 12 reps"). **All of it was reverted** — the surface is the state described above and nothing more. Two things are worth keeping from it: the tautology appeared in a run whose examples were *unchanged*, so it was the added prohibitions and not the examples (Apple recommends 2–15 **simple** examples, and zero is not the safe end of that range); and a `PartiallyGenerated` optional property is `String?`, not `String??` — the snapshot flattens, verified by compiling `let x: String? = partial.closingObservation`. If this surface is revisited, the option researched and not taken is `DynamicGenerationSchema(name:description:anyOf: [String])` + `GenerationSchema(root:dependencies:)` + `session.streamResponse(to:schema:)`, which constrains a string field at the decoding level to a runtime value set — the only hard guarantee available for `exerciseName`, at the cost of typed `@Generable` decoding and `PartiallyGenerated` streaming.
 - **Token cap**: 300 tokens.
@@ -378,8 +389,9 @@ These are properties of **every** coach prompt and every `@Guide`, not of one su
 pinned by `GymStreakTests/CoachPromptGroundingTests.swift`, which scans all five coach surfaces
 (post-workout recap, workout analysis, period recap, coach chat, and the deep dive — six prompt
 strings, since the deep dive has two variants, and the three unit-parameterised ones are scanned in
-both `kg` and `lb`) plus all four generation schemas. A green test
-proves the *prompt* is clean; it can never prove the *output* is. That is always a device check.
+both `kg` and `lb`) plus all four output generation schemas — and, for rule 3 only, the fifteen
+input schemas as well. A green test proves the *prompt* is clean; it can never prove the *output*
+is. That is always a device check.
 
 ### 1. No prompt carries a data-shaped literal
 
@@ -450,7 +462,8 @@ carry data-shaped literals (`ExerciseDeepDiveInput`'s `'May 2024 – April 2026'
 `PostWorkoutRecapInput`'s `e.g. +12 or -8`). Those guides never reach a model: `AICoachService`
 sends an input only as `input.toPromptText(...)` text and never hands an input's generation schema
 to the session. **If that ever changes, those guides reintroduce exactly the bug this section
-exists to prevent** — extend the scan at the same time.
+exists to prevent** — extend the scan at the same time. Rule 3 is held on them already: a construct
+word costs nothing to keep out, and one was found there in September 2026 (see rule 3).
 
 **One deliberate exception, and one deliberate non-exception.** The chat prompt's ambient
 `Today is <weekday, d MMMM yyyy>.` line carries a real four-digit year — it is genuine input, the
@@ -497,6 +510,17 @@ placeholder word, a dash, or a sentence explaining the absence").
 omitted entirely" — the model had a real, constrained-decoding-supported affordance to skip the
 key and chose not to use it. Wording, not schema, is the lever.
 
+**The rule covers the input structs too, and their guides were swept on 2026-09-05.**
+`PeriodRecapInput.recommendationFact` still read *"nil when none was detected"*, and
+`WorkoutAnalysisSetInput`'s two optionals read *"nil if no previous data"* — the exact wording
+that produced a rendered `nil`, sitting pre-made for the first time one of those types is used as
+a generation *output* rather than serialised with `toPromptText(...)`. All three now say "this
+field is left out entirely when …". Unlike rule 1, which deliberately exempts input guides (they
+carry data-shaped examples and no model reads them), rule 3 costs nothing to hold everywhere:
+`CoachPromptGroundingTests.noInputSchemaNamesAProgrammingConstruct` scans all fifteen input
+schemas, nested types listed individually because a schema's description does not necessarily
+inline the guides of the types it references.
+
 ### 4. Presence is decided in Swift wherever Swift knows
 
 A prompt rule is a request; a Swift-side drop is a guarantee. Where the app already knows whether
@@ -520,6 +544,10 @@ a field can exist, it does not leave the decision to the model:
   `prefix(0)`. `hasDetectedPatterns` is derived from the *full* input, so a compact fallback that
   emptied the array would leave the flag claiming a "Detected patterns:" block the prompt no
   longer has. Non-empty must stay non-empty.
+- **`CoachHighlightUniquer.uniqued(_:)`** (`Domain/Services/AICoach/`) keeps a workout analysis to
+  one highlight per exercise however many the model wrote — applied in `AICoachCache`'s
+  `loadWorkoutAnalysis` and in both of `WorkoutAnalysisContent`'s mapping inits, since the streamed
+  snapshots never pass through the cache.
 - **`ExerciseDeepDiveNarrative`** drops the `progression` paragraph on a blended view whatever the
   model returned — the original instance of this pattern.
 
@@ -701,42 +729,25 @@ All inference runs on-device via Foundation Models. No prompt text, no narrative
 
 ---
 
-## Known defects, found and not fixed
+## Device-round defects and where each fix lives
 
 Surfaced by the `ai-coach-prompt-literals` device rounds (German, iPhone, 2026-08-30) and by the
 architecture review of that work. None was in that ticket's scope — it was the literal-leak class
-only — so all are recorded here rather than buried with the archived ticket.
+only — so all six were recorded here and **fixed on 2026-09-05**. They are kept as a record of what
+each surface got wrong and why the fix is where it is; the sections above carry the detail.
 
-1. **The post-workout recap states the planned set count, not the completed one.**
-   `PostWorkoutRecapAggregator` passes `session.totalSetsCount`, which is
-   `workoutExercisesList.flatMap(\.setsList).count` — every set, completed or not. A session whose
-   own summary read `8/20 (40%)` was narrated as *"mit einem Gesamtvolumen von 1980,0 kg und 20
-   Sätzen"*. The volume is right (it sums completed sets); the count is not. This is a **factual
-   error in generated copy**, so it is the most serious entry here. Fix is a completed-set count in
-   the aggregator, not a prompt change.
-2. **Workout analysis can emit several highlights for the same exercise.** A device check returned
-   four highlights, all `Arnold Press`, three of them restating the same top-set change. The prompt
-   asks for "the 1–4 most notable exercises" and `@Guide` bounds the array at 1…4, but nothing
-   dedupes by exercise name — neither the prompt nor `WorkoutAnalysisViewModel`. A Swift-side
-   uniquing pass on `exerciseHighlights` is the reliable fix; a prompt rule alone has failed on
-   this surface before.
-3. **Workout analysis wrote "Topset".** `WorkoutAnalysisInstructions` names this exact word as one
-   that does not exist and mandates "Topsatz"; the model used it anyway. A glossary line in the
-   instruction list is evidently not enough — the same lesson as the paragraph-count rule that
-   moved into `@Guide`s.
-4. **The period-recap headline leaks English.** `PeriodRecapInput.toPromptText` appends
-   `" (\(improved.count) exercises improved in total)"` to the headline fact, and the model
-   translated it only partway: *"(4 Übungen verbessert in total)"*. Either drop the parenthetical
-   or compose it in Swift like `WorkoutAnalysisInput.headlineSentence` already does.
-5. **`WorkoutAnalysisAggregator.findPreviousSession` matches on the denormalized `routineName`
-   string, not the routine id.** Renaming a routine orphans it from its own history, so the first
-   analysis after a rename reports "nothing to compare". This also means a report of "no Coach
-   analysis on a new workout" is only correct behaviour if the routine was *not* renamed.
-6. **`PeriodRecapInput.recommendationFact`'s `@Guide` still reads "nil when none was detected".**
-   Harmless today — `AICoachService` sends inputs only as `toPromptText(...)`, so an input's
-   generation schema never reaches a model — but it is the same wording that made the model write a
-   literal `nil` into `correlationHighlight`. If that type is ever used as a generation *output*,
-   this is the bug, pre-made. See § "Prompt grounding rules", rule 3.
+| # | What went wrong | Where the fix lives |
+|---|---|---|
+| 1 | The post-workout recap stated the **planned** set count beside a completed-set volume — *"1980,0 kg und 20 Sätzen"* for an `8/20 (40%)` session | `PostWorkoutRecapAggregator` reads `WorkoutSession.aggregates`; the field is `completedSets`. § "1. Post-Workout Recap" |
+| 2 | Workout analysis emitted four highlights for one exercise | `CoachHighlightUniquer`, applied at the cache read and both mapping inits, + a distinctness clause in the `@Guide`. § "4. Workout Analysis" |
+| 3 | Workout analysis wrote the non-word "Topset" although the glossary mandated "Topsatz" | The mandated words moved onto `detail` / `closingObservation`'s `@Guide`s; the instruction no longer spells the wrong form out. § "4. Workout Analysis" |
+| 4 | The period-recap headline leaked English — *"(4 Übungen verbessert in total)"* | The parenthetical is gone from `PeriodRecapInput.headlineFact`. § "2. Period Recap" |
+| 5 | `findPreviousSession` matched the denormalized `routineName`, so renaming a routine orphaned it from its own history | A bounded `routine.id` fetch first, name only as the template-is-gone fallback. § "4. Workout Analysis" |
+| 6 | `recommendationFact`'s `@Guide` still read "nil when none was detected" | Swept with the other input guides. § "Prompt grounding rules", rule 3 |
+
+**Three of the six were fixed in Swift rather than in a prompt** (1, 2, 5), and the two prompt-side
+fixes (3, 4) are both *removals*: a token that should not have been named, and an English aside
+that read as finished copy. That ratio is the pattern, not a coincidence — see rule 4.
 
 ## TODO (next phase)
 

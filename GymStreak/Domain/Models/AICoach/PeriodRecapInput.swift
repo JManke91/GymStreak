@@ -26,7 +26,15 @@ struct PeriodRecapInput {
     @Guide(description: "Correlation findings between training habits and outcomes")
     let correlations: [CorrelationFinding]
 
-    @Guide(description: "Pre-resolved actionable recommendation, nil when none was detected")
+    /// **This guide names no programming construct**, and none may be added, even though
+    /// nothing sends an input's schema to a model today — `AICoachService` sends an input
+    /// only as `toPromptText(...)`. It used to read *"nil when none was detected"*, which
+    /// is the exact wording that made the model write a literal `nil` into
+    /// `PeriodRecapOutput.correlationHighlight`; a guide is prompt text, so the word is
+    /// something to write, not an absence to produce. Left as it was, this was that bug
+    /// pre-made for the first time this type is used as a generation *output*. See
+    /// docs/ai-coach.md § "Prompt grounding rules", rule 3.
+    @Guide(description: "Pre-resolved actionable recommendation. This field is left out entirely when no recommendation was detected.")
     let recommendationFact: String?
 
     @Guide(description: "True when there are fewer than 3 sessions in the period — model should respond with encouragement rather than analysis")
@@ -150,17 +158,21 @@ extension PeriodRecapInput {
 
     /// The single most important story of the period, in priority order:
     /// strongest gain > declines > steady plateau > no measurable trends.
+    ///
+    /// **The gain fact names one exercise and stops there.** It used to append
+    /// `" (N exercises improved in total)"`, and the model translated the parenthetical
+    /// only halfway: *"(4 Übungen verbessert in total)"* (German, on device, 2026-08-30).
+    /// A parenthetical aside reads as finished copy rather than as a fact to rephrase, so
+    /// the model copies part of it instead of writing the sentence itself. The count was
+    /// never exclusive to it either — the "Improved (estimated 1RM):" line below lists
+    /// every improved exercise by name, which is what `trendsNarrative` is built from.
     private func headlineFact(
         improved: [TrendFinding],
         plateaued: [TrendFinding],
         regressed: [TrendFinding]
     ) -> String {
         if let top = improved.first {
-            var fact = "strongest gain: \(top.subject) \(top.magnitude) estimated 1RM"
-            if improved.count > 1 {
-                fact += " (\(improved.count) exercises improved in total)"
-            }
-            return fact
+            return "strongest gain: \(top.subject) \(top.magnitude) estimated 1RM"
         }
         if !regressed.isEmpty {
             return plateaued.isEmpty

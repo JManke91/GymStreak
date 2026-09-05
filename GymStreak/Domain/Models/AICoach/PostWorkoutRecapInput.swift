@@ -14,8 +14,16 @@ struct PostWorkoutRecapInput {
     @Guide(description: "Total volume of this workout in kilograms")
     let workoutVolumeKg: Double
 
-    @Guide(description: "Total number of working sets")
-    let totalSets: Int
+    /// **Completed sets, never planned ones.** The recap used to be handed
+    /// `WorkoutSession.totalSetsCount`, which counts every set in the session whether it
+    /// was finished or not, and the model narrated it as fact: a session whose own summary
+    /// read `8/20 (40%)` was recapped as *"mit einem Gesamtvolumen von 1980,0 kg und 20
+    /// Sätzen"* (German, on device, 2026-08-30). The volume beside it was right — it has
+    /// always summed completed sets only — so the two figures in one sentence disagreed.
+    /// The name says which one this is, and `PostWorkoutRecapAggregator` reads both from
+    /// the same `WorkoutSession.aggregates` pass.
+    @Guide(description: "Number of sets the user actually completed in this workout")
+    let completedSets: Int
 
     @Guide(description: "Workout duration in minutes")
     let durationMinutes: Int
@@ -76,7 +84,7 @@ extension PostWorkoutRecapInput {
         var lines: [String] = []
         lines.append("Locale: \(locale)")
         lines.append("Workout volume: \(weight(workoutVolumeKg))")
-        lines.append("Total sets: \(totalSets)")
+        lines.append("Completed sets: \(completedSets)")
         lines.append("Duration: \(durationMinutes) min")
         lines.append("Sessions this week (including today): \(sessionsThisWeek)")
         lines.append("Muscle groups trained, in order of volume:")

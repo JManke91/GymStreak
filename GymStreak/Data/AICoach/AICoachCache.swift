@@ -99,8 +99,15 @@ final class AICoachCache: AICoachCaching {
 
     // MARK: - Workout Analysis
 
+    /// Uniqued on read, the same arrangement as `loadPeriodRecap`'s sanitizer: the
+    /// persisted format is the Data layer's concern, and an analysis written before
+    /// `CoachHighlightUniquer` existed still holds the duplicate highlights a device check
+    /// found. A cache entry is never regenerated just because its prose is stale.
     func loadWorkoutAnalysis(workoutId: UUID) -> WorkoutAnalysisNarrative? {
-        load(WorkoutAnalysisNarrative.self, from: workoutAnalysisURL(workoutId))
+        guard let stored = load(WorkoutAnalysisNarrative.self, from: workoutAnalysisURL(workoutId)) else {
+            return nil
+        }
+        return CoachHighlightUniquer.uniqued(stored)
     }
 
     func saveWorkoutAnalysis(workoutId: UUID, narrative: WorkoutAnalysisNarrative) {

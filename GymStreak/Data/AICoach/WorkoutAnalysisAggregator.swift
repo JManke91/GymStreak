@@ -54,11 +54,9 @@ struct WorkoutAnalysisAggregator {
         // Gate: heavily aborted workouts produce misleading comparisons
         guard session.completionPercentage >= Self.minimumCompletionThreshold else { return nil }
 
-        // Find the previous session with the same routine name
+        // Find the previous session of the same routine
         guard let previousSession = findPreviousSession(
-            routineName: session.routineName,
-            before: session.startTime,
-            excludingId: session.id,
+            matching: session,
             modelContext: modelContext
         ) else { return nil }
 
@@ -122,35 +120,79 @@ struct WorkoutAnalysisAggregator {
         session: WorkoutSession,
         modelContext: ModelContext
     ) -> Bool {
-        findPreviousSession(
-            routineName: session.routineName,
-            before: session.startTime,
-            excludingId: session.id,
-            modelContext: modelContext
-        ) != nil
+        findPreviousSession(matching: session, modelContext: modelContext) != nil
     }
 
     // MARK: - Private helpers
 
+    /// The most recent finished session of the same routine as `session`.
+    ///
+    /// **Matched on the routine's identity first, on the denormalized name only as a
+    /// fallback.** Name matching alone was the whole of it, so renaming a routine orphaned
+    /// it from its own history: the first analysis after a rename found no previous
+    /// session and the surface reported "nothing to compare". (Which also means a report
+    /// of "no Coach analysis on a workout that clearly has a predecessor" was only correct
+    /// behaviour while the routine had not been renamed.)
+    ///
+    /// The name fallback stays, because it is all a session whose template is gone still
+    /// carries — a deleted routine, a watch workout, a session recovered from HealthKit.
+    /// An empty name matches nothing: two nameless sessions are not the same routine.
     private func findPreviousSession(
-        routineName: String,
-        before date: Date,
-        excludingId: UUID,
+        matching session: WorkoutSession,
         modelContext: ModelContext
     ) -> WorkoutSession? {
+        let date = session.startTime
+        let excludedId = session.id
+
+        // The id match is a **bounded** fetch: the relationship is compared in the
+        // predicate and `fetchLimit = 1` stops at the newest hit, so the store returns one
+        // session instead of the whole finished history. This runs on the main actor from
+        // `hasPreviousSession`, on the path that only decides whether a button is visible;
+        // walking every session in memory and reading `routine` on each one would fault the
+        // routine graph of the user's entire history to answer that.
+        if let routineId = session.routine?.id {
+            var descriptor = FetchDescriptor<WorkoutSession>(
+                predicate: #Predicate { candidate in
+                    candidate.startTime < date
+                    && candidate.endTime != nil
+                    && candidate.id != excludedId
+                    && candidate.routine?.id == routineId
+                },
+                sortBy: [SortDescriptor(\.startTime, order: .reverse)]
+            )
+            descriptor.fetchLimit = 1
+            if let sameRoutine = try? modelContext.fetch(descriptor).first {
+                return sameRoutine
+            }
+        }
+
+        // The name fallback reads `routineName`, a stored property, so this walk faults
+        // nothing — it is the cost the id match replaced, paid only when there is no
+        // same-routine history to find. Case-insensitive equality has no predicate form
+        // here, hence the in-memory `first(where:)`, which short-circuits on the newest hit.
+        //
+        // **When this session has a routine, only templateless candidates qualify.** One
+        // carrying a *different* routine is definitively a different routine — sharing a
+        // name does not make it ours — and one carrying ours would already have been
+        // returned above. Without that clause the fallback re-opens the namesake collision
+        // the id match exists to close, for any routine that has no history yet. The clause
+        // is on the *candidate*, never on `session.routine`: a watch-recorded or
+        // HealthKit-recovered predecessor has no routine link while the current session
+        // does, and that pairing is the reason the fallback exists.
+        let name = session.routineName.lowercased()
+        guard !name.isEmpty else { return nil }
+        let requiresTemplatelessCandidate = session.routine != nil
         let descriptor = FetchDescriptor<WorkoutSession>(
-            predicate: #Predicate { session in
-                session.startTime < date && session.endTime != nil
+            predicate: #Predicate { candidate in
+                candidate.startTime < date
+                && candidate.endTime != nil
+                && candidate.id != excludedId
+                && (!requiresTemplatelessCandidate || candidate.routine == nil)
             },
             sortBy: [SortDescriptor(\.startTime, order: .reverse)]
         )
-
         guard let sessions = try? modelContext.fetch(descriptor) else { return nil }
-
-        return sessions.first { session in
-            session.id != excludingId
-            && session.routineName.lowercased() == routineName.lowercased()
-        }
+        return sessions.first { $0.routineName.lowercased() == name }
     }
 
     private func buildExerciseInput(
