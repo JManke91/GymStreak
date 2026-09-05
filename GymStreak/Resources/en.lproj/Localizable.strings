@@ -1341,6 +1341,26 @@
 "onboarding.history.bullet1" = "Set deltas vs. the last session — free";
 "onboarding.history.bullet2" = "Long-term curves per exercise with Pro";
 
+/* Step 6 — AI coach. A teaser only: the plate is the shipped `AISurface` with a
+   sample answer in it, and no coach request is ever issued, so the slide reads
+   the same on a device that cannot run Apple Intelligence. The Apple Intelligence
+   opt-in stays its own screen, right after the tour. The breadcrumb does **not**
+   follow the design's "History › Coach": the coach lives in the bar above the tab
+   bar and is reachable from every tab, so it names that instead. "BETA" is the
+   tour's own marker — the app itself does not label the coach a beta (see
+   docs/onboarding.md). The allowance line takes its number from
+   `ProFeatureCaps.freeCoachChatMessagesPerMonth`, never from a literal. */
+"onboarding.coach.breadcrumb" = "Anywhere › Ask your coach";
+"onboarding.coach.eyebrow" = "AI COACH · BETA";
+"onboarding.coach.title" = "A coach that has read\nyour numbers.";
+"onboarding.coach.body" = "The coach reads your workouts and your progress and answers questions about them — entirely on your iPhone, with Apple Intelligence, without a cloud.";
+"onboarding.coach.bullet1" = "On your device · no cloud";
+"onboarding.coach.bullet2" = "Unlimited messages with Pro";
+"onboarding.coach.beta" = "Beta";
+"onboarding.coach.allowance" = "%1$d Coach messages a month free · unlimited with Pro";
+"onboarding.coach.sample.answer" = "Your volume in %1$@ has grown **+18%%** over four weeks. %2$@ carries most of it, while %3$@ has been sitting at %4$@ for five sessions.";
+"onboarding.coach.sample.question" = "Why has %@ stalled?";
+
 /* Routine detail — planned muscle map. Only the strings that name the card or a set count
    differ from the history reading; the legend, captions and reset control are shared. */
 "routine.detail.muscle_map.title" = "Planned Muscle Groups";

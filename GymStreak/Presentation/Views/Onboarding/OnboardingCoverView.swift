@@ -112,6 +112,8 @@ struct OnboardingCoverView: View {
                         OnboardingProgressiveOverloadSlideView()
                     case .history:
                         OnboardingHistorySlideView()
+                    case .aiCoach:
+                        OnboardingAICoachSlideView()
                     default:
                         // Filled in by the remaining slide tickets. The chrome
                         // and the navigation are complete around them.

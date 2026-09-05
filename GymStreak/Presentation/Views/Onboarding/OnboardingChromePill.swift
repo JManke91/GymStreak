@@ -22,13 +22,18 @@ import SwiftUI
 struct OnboardingChromePill: View {
 
     let text: String
-    let systemImage: String
+    /// The leading glyph, or `nil` for a word that needs none. Step 6's "BETA"
+    /// marker is that case: there is no icon for "this feature is young", and a
+    /// glyph would make a two-word status read as a control.
+    var systemImage: String?
     let color: Color
 
     var body: some View {
         HStack(spacing: 5) {
-            Image(systemName: systemImage)
-                .font(.system(size: 9, weight: .bold))
+            if let systemImage {
+                Image(systemName: systemImage)
+                    .font(.system(size: 9, weight: .bold))
+            }
 
             Text(text.uppercased())
                 .font(.onyxMonoLabel)

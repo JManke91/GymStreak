@@ -549,6 +549,116 @@ struct OnboardingFlowTests {
         #expect(recordSet?.reps == record.reps)
     }
 
+    // MARK: - Step 6: AI coach
+
+    @Test("Every string the AI Coach slide renders is localized")
+    func coachSlideStringsAreLocalized() {
+        let content = OnboardingFeatureSlideContent.aiCoach
+        let keys = [
+            content.breadcrumbKey,
+            content.eyebrowKey,
+            content.titleKey,
+            content.bodyKey,
+            // The tour's own "BETA" marker on the surface's header row.
+            "onboarding.coach.beta",
+            // The marker beside the eyebrow.
+            "pro.badge.label",
+            // Borrowed rather than restated: the surface's eyebrow is the app's
+            // own name for the screen, the exercises are named by their catalog
+            // keys, and the routine by step 2's key.
+            "ai_coach.chat.title",
+            "ai_coach.privacy_footer",
+            OnboardingSampleHistory.seedKey,
+            OnboardingSampleCoach.stagnatingSeedKey,
+            "onboarding.routines.sample.routine_name"
+        ] + content.bulletKeys
+
+        for key in keys {
+            #expect(key.localized != key)
+        }
+
+        // Neither of the two sentences inside the plate may resolve to its key.
+        #expect(OnboardingSampleCoach.question != "onboarding.coach.sample.question")
+        #expect(!OnboardingSampleCoach.allowanceLine.hasPrefix("onboarding."))
+
+        // The slide advertises Pro; the badge is the whole of what it does about
+        // it — nothing on this slide is gated.
+        #expect(content.showsProBadge)
+    }
+
+    @Test("The AI Coach slide's allowance line follows the taster cap")
+    func coachAllowanceLineFollowsTheCap() {
+        // The acceptance criterion this pins: changing the cap changes the copy.
+        // Both halves matter — that today's figure is in the sentence, and that
+        // the sentence is a *format* rather than a literal that happens to agree
+        // with it.
+        let cap = ProFeatureCaps.freeCoachChatMessagesPerMonth
+        #expect(OnboardingSampleCoach.allowanceLine.contains("\(cap)"))
+
+        let retuned = "onboarding.coach.allowance".localized(cap + 1)
+        #expect(retuned != OnboardingSampleCoach.allowanceLine)
+        #expect(retuned.contains("\(cap + 1)"))
+    }
+
+    @Test("The AI Coach slide talks about the routine the tour built")
+    func coachSampleTalksAboutTheTourRoutine() {
+        // A coach answer naming exercises the tour never showed would read as a
+        // screenshot of somebody else's training. Every name in it is one the
+        // reader has already met: step 2's routine, step 5's exercise, and the
+        // first member of step 3's superset.
+        let weightLabel = WeightFormatting.label(
+            OnboardingSampleCoach.stagnatingKilograms,
+            in: .kilograms
+        )
+        let answer = OnboardingSampleCoach.answer(weightLabel: weightLabel)
+
+        #expect(answer.contains(OnboardingSampleCoach.routineName))
+        #expect(answer.contains(OnboardingSampleCoach.growingExerciseName))
+        #expect(answer.contains(OnboardingSampleCoach.stagnatingExerciseName))
+        // The weight is formatted, not written — so the plate prints it in the
+        // reader's own unit rather than in a number the slide chose.
+        #expect(answer.contains(weightLabel))
+
+        // And the follow-up picks up the answer's loose end.
+        #expect(OnboardingSampleCoach.question.contains(OnboardingSampleCoach.stagnatingExerciseName))
+    }
+
+    @Test("The AI Coach answer marks exactly one figure for the accent")
+    func coachAnswerMarksOneAccentedFigure() {
+        // The slide colours whatever the translation wrapped in `**…**`. If the
+        // markers were dropped or malformed the reader would see raw asterisks,
+        // and a build cannot catch that — only this can.
+        let answer = OnboardingSampleCoach.answer(weightLabel: "37,5 kg")
+        let parsed = try? AttributedString(markdown: answer)
+        let emphasized = parsed?.runs.filter {
+            $0.inlinePresentationIntent?.contains(.stronglyEmphasized) == true
+        }
+
+        #expect(emphasized?.count == 1)
+        // The parse must also have consumed the markers.
+        #expect(parsed.map { !String($0.characters).contains("**") } == true)
+    }
+
+    @Test("The AI Coach answer stagnates at the weight the routine plans")
+    func coachSampleStagnatesAtTheRoutinesWeight() {
+        // The exercise the coach calls stuck is a member of the tour's own
+        // superset, and the weight it is stuck at is the weight step 3's card
+        // plans for it. Restated in `OnboardingSampleCoach` rather than reached
+        // for, exactly as the avatars restate their muscle groups — so this is
+        // what stops the two drifting apart.
+        let member = OnboardingSampleRoutine.supersetMembers.first {
+            $0.seedKey == OnboardingSampleCoach.stagnatingSeedKey
+        }
+
+        #expect(member != nil)
+        #expect(member?.plannedSets.first?.kilograms == OnboardingSampleCoach.stagnatingKilograms)
+        // Every planned set is at that weight, which is what makes "stuck at" a
+        // fair description of the card the reader saw.
+        #expect(member?.plannedSets.allSatisfy {
+            $0.kilograms == OnboardingSampleCoach.stagnatingKilograms
+        } == true)
+    }
+
     /// The smallest thing `SupersetLabelProvider` accepts — the production
     /// conformances are `@Model` types the tour has no reason to build.
     private struct SampleGroupable: SupersetGroupable {

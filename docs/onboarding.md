@@ -7,8 +7,8 @@ real pieces of the app rather than illustrations.
 > **Status.** The shell is built (ticket 01) and the feature-slide scaffold with
 > it (ticket 03): the chrome, the step navigation, the persistence and the
 > presentation seam, plus the preview plate, the inert-mount seam and the shared
-> feature-slide layout — with steps 1–5 filled in. Steps 6 and 7 are declared in
-> `OnboardingStep` and render nothing yet; tickets 07 and 08 fill them in on the
+> feature-slide layout — with steps 1–6 filled in. Step 7 is declared in
+> `OnboardingStep` and renders nothing yet; ticket 08 fills it in on the
 > scaffold, and ticket 09 owns the cover-ordering tests, the end-to-end
 > walkthrough and the rest of this document.
 
@@ -24,7 +24,7 @@ and the navigation all derive their length from the same list:
 | 3 | `.supersets` | Two collapsed cards joined by the real superset connector. **Built.** |
 | 4 | `.progressiveOverload` | A finished exercise and the weight prompt it raises. **Built.** |
 | 5 | `.history` | A recorded session: its header, the four stat tiles and one exercise block with its record and per-set deltas. **Built.** |
-| 6 | `.aiCoach` | The on-device coach, as a teaser (the opt-in stays its own screen, after the tour). |
+| 6 | `.aiCoach` | The on-device coach, as a teaser: one answer, one question, and what the free tier gets. **Built.** |
 | 7 | `.offer` | The real RevenueCat paywall on a new `onboarding` placement. |
 
 Every step is skippable. "Skip" and finishing the last step are the same exit:
@@ -48,9 +48,11 @@ Presentation/Views/Onboarding/OnboardingRoutinesSlideView.swift   step 2
 Presentation/Views/Onboarding/OnboardingSupersetsSlideView.swift step 3
 Presentation/Views/Onboarding/OnboardingProgressiveOverloadSlideView.swift step 4
 Presentation/Views/Onboarding/OnboardingHistorySlideView.swift   step 5
+Presentation/Views/Onboarding/OnboardingAICoachSlideView.swift   step 6
 Presentation/Views/Onboarding/OnboardingSampleRoutine.swift      steps 2 and 3's sample values
 Presentation/Views/Onboarding/OnboardingSampleWorkout.swift      step 4's sample values
 Presentation/Views/Onboarding/OnboardingSampleHistory.swift      step 5's sample values
+Presentation/Views/Onboarding/OnboardingSampleCoach.swift        step 6's sample values
 App/AppDependencies.swift                              constructs the view model
 App/ContentView.swift                                  hosts the fullScreenCover
 ```
@@ -561,6 +563,108 @@ its sections below use — so the rhythm inside the panel is the screen's.
 the set grid are the two densest rows the app draws, and at the default 12 pt both
 broke on a 390 pt phone.
 
+## Step 6 — AI Coach
+
+A teaser, deliberately: the tour shows what the coach sounds like and where it
+lives, and the Apple Intelligence opt-in stays its own screen, right after the
+tour (ticket 09 orders the covers). The plate holds one coach answer about the
+routine the tour has been building, the follow-up question that answer invites,
+and one line saying what the free tier gets.
+
+Two of the three pieces are production views mounted verbatim — the answer is
+`AISurface` (its gradient edge, `AISparkleView`, the "Coach" eyebrow and
+`AIPrivacyFooter` all its own), and the question is `MessageBubble` in its
+`.user` shape, which is why it is an accent bubble with black text rather than
+the design's white-on-grey one. The third is tour chrome, and is discussed
+below. Sample values live in `OnboardingSampleCoach`, on the same terms as the
+other slides: copy, never data.
+
+**Nothing on this slide asks the coach anything.** No ViewModel is built, no
+`CoachChatService` is touched and no availability is queried, so the slide
+renders identically on a device that cannot run Apple Intelligence — which is
+most of the installed base and all of the simulator fleet. The two on-appear side
+effects in the subtree are `AISurface`'s shimmer and `AISparkleView`'s pulse, and
+both already guard on flags this slide does not set (`isStreaming`, `pulse`), so
+neither needs the `\.isOnboardingPreview` escape hatch step 4's banner does.
+
+**The breadcrumb is not the design's.** The design says "Verlauf › Coach", and
+the coach is not in the History tab: `CoachBarView` is the TabView's **bottom
+accessory** (the iOS 26 `tabViewBottomAccessory` mini-player pattern), so it
+floats above the tab bar on every tab and zoom-morphs into `CoachChatView`. A
+breadcrumb naming a place the reader would then fail to find is worse than no
+breadcrumb, so it says "Anywhere › Ask your coach" / "Überall › Frag deinen
+Coach" — the second half being the bar's own title (`ai_coach.chat.bar.title`),
+which is the label the reader is going to be looking at.
+
+**"BETA" is the tour's own marker, and the app does not use the word.** The
+design puts it on the surface's header row and in the eyebrow, and the shipped
+`AISurface` has no slot for it — its header is sparkle, label, optional streaming
+indicator, optional regenerate button. Adding one for the tour's benefit would be
+adding production surface to a live component to hold a word production never
+says, so the marker is `OnboardingChromePill` instead, pinned to the surface's
+top-right corner exactly as step 4 pins "Automatic" to its prompt. It is drawn in
+`textSecondary` rather than the tour's accent, because opposite an accent "COACH"
+eyebrow an accent pill reads as a second eyebrow. `OnboardingChromePill`'s
+`systemImage` became optional for it: there is no icon for "this feature is
+young", and a glyph would make a status read as a control.
+
+**This is a finding, not a decision the slide is entitled to make.** Nowhere in
+the app is the AI Coach labelled a beta — not the chat, not the settings screen,
+not the App Store copy. Either the app should adopt the label or the tour should
+drop it; a word that appears only during onboarding is the mirror image of the
+rule ticket 03 set for the superset caption ("only a word the user will meet
+again in the app"). It is built as specified and flagged here rather than
+silently dropped.
+
+**The allowance strip is scaffold chrome, and both shipped candidates were tried
+first.** `PeriodRecapAllowanceCard` is the recap's *gate*: a headline,
+recap-specific copy and a primary button that spends a generation and fires a
+haptic — an affordance nobody can tap has no business in a plate. `OnyxCapNudge`
+is closer, and is what the real Coach Chat screen shows above its input field,
+but it draws a consumption meter, and the tour has no consumption to report: an
+empty meter beside this sentence would state a count nobody has spent. So the
+strip states the *offer* instead — the Pro badge, and one line naming what free
+gets and what Pro adds, which is the §8 C obligation the badge above the copy
+creates.
+
+**The free-messages figure is read from `ProFeatureCaps`, never typed.** §4 calls
+the taster caps a one-line retune, and a slide carrying its own copy of the number
+starts lying the day that line changes. It resolves in
+`OnboardingSampleCoach.allowanceLine` rather than in the view so
+`coachAllowanceLineFollowsTheCap` can assert on the finished sentence — both that
+today's cap is in it, and that the sentence is a *format* rather than a literal
+that happens to agree.
+
+**The answer talks about the tour's own routine, and every number in it is
+checkable.** Steps 2 and 3 build "Upper Body A"; step 5 shows its lat pulldown
+gaining 2.5 kg and 24 % volume. So the answer credits *that* exercise with the
+growth and names the pec deck — the first member of step 3's superset — as the one
+that has not moved, at **the weight step 3's card actually plans for it (37.5 kg)**.
+`coachSampleStagnatesAtTheRoutinesWeight` compares the two, and the weight goes
+through `WeightFormatting`, so the plate prints it in the reader's own unit rather
+than in a number the slide chose. The one figure that is pure copy is the "+18 %"
+— nothing on screen contradicts it, and no production code can derive it.
+
+**The accented figure comes from the translation, not from the layout.**
+`onboarding.coach.sample.answer` wraps the figure in `**…**` and the slide colours
+whatever run the parse marks — the two lines `ProgressiveOverloadCard.accentedText`
+already uses. Which figure carries a sentence is a translation decision, and a
+slide that coloured "the third word" would be wrong in the other language.
+`coachAnswerMarksOneAccentedFigure` pins that exactly one run is marked and that
+the parse consumed the markers, because a dropped marker ships raw asterisks and
+a build cannot see it. The parse is hoisted out of `body` and keyed by
+`WeightUnit` (rendering rule 2): it is a per-render allocation otherwise, and the
+sentence it parses depends on the reader's unit.
+
+**The plate is 376 pt with no bottom fade.** The allowance strip is the last thing
+in it and the only line on the slide that names the offer — fading it would crop
+exactly the sentence the Pro badge is promising to explain. The height is
+therefore a measured sum with about 9 pt of slack, taken against the *German*
+rendering, where the answer, the privacy footer and the strip each wrap one line
+further than in English. **Verified 2026-09-05** by rendering the whole slide with
+`ImageRenderer` at 402 pt and 375 pt in both languages: nothing crops, and English
+leaves about 30 pt of panel below the strip.
+
 ## Scroll position across steps
 
 The slide's `ScrollView` content carries `.id(currentStep)`. Scroll offset
@@ -592,6 +696,26 @@ screen it previews is free in every entitlement state. What its copy sells is th
 shipped P2 chart gate (long-term curves, estimated 1RM, total volume); see
 "Step 5 — History" above for why the design's copy could not be used as written.
 
+**Step 6 is the second badged slide, and it gates nothing either.** The badge and
+the allowance strip both advertise the shipped **P3 taster** — the coach's free
+tier is `ProFeatureCaps.freeCoachChatMessagesPerMonth` messages a calendar month,
+metered by `MeteredAISurface.coachChat`, with `PaywallPlacement.coachChat` raised
+only once that runs out. So the slide names an existing cap rather than creating
+one: no new cap constant, no new placement, no new headline key. Re-checked
+against the shipped mechanism on 2026-09-05, after the slide was built:
+
+```
+Monetization verdict — Onboarding step 6 (AI Coach teaser)
+  Tier          Free
+  Derivation    §3 Rule 1 — the tour is the aha path; the slide sells, it never gates
+  Mechanism     none new; it *describes* the shipped P3 monthly taster
+  Placement     none new — the coach's own PaywallPlacement.coachChat is untouched
+  Nudge         none (OnyxCapNudge belongs on the real screen, where a count exists)
+  Free residue  the whole slide, and the coach's own monthly free messages after it
+  Founder note  §7 — Founders are entitled, so the strip's second half is already
+                true for them; the slide neither promises nor withholds anything
+```
+
 The shell as built contains no gate at all. Ticket 08 adds the placement, and
 ticket 09 records it in `docs/monetization-strategy.md` §4 and
 `docs/pro-subscription.md` together with the §10 guardrail and the one-line
@@ -600,11 +724,14 @@ rollback (drop step 7, leaving the six value slides).
 ## Localization
 
 All copy lives in `en.lproj`/`de.lproj` under the `onboarding.` prefix; the views
-hold no literal strings. The deliberate borrows: the exercise names on steps 2–5
+hold no literal strings. The deliberate borrows: the exercise names on steps 2–6
 use `seed.exercise.*` keys so the tour and the library agree, step 3's group
 caption uses `superset.label` so the tour calls a superset what the app calls it,
-and step 5 takes its routine name from step 2's own
-`onboarding.routines.sample.routine_name` rather than restating it. Everything step 4's plate says beyond its breadcrumb comes from the
+steps 5 and 6 take their routine name from step 2's own
+`onboarding.routines.sample.routine_name` rather than restating it, and step 6's
+surface eyebrow is `ai_coach.chat.title` — the app's own name for the screen —
+rather than `AISurface`'s hard-coded English default, with its breadcrumb ending
+in the coach bar's own `ai_coach.chat.bar.title`. Everything step 4's plate says beyond its breadcrumb comes from the
 production components themselves (`workout.exercise.*`, `rest_timer.rest_short`,
 `rep_range.*`), which is what makes it a preview rather than a picture of one —
 `overloadSlideStringsAreLocalized` covers those keys too. The design was written in German and the English strings

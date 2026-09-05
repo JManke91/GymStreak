@@ -1337,6 +1337,21 @@
 "onboarding.history.bullet1" = "Satz-Deltas zur Vorsession — gratis";
 "onboarding.history.bullet2" = "Langzeit-Kurven pro Übung mit Pro";
 
+/* Schritt 6 — AI Coach. Siehe die englische Datei für die Notizen: reiner Teaser,
+   kein Coach-Request, Brotkrümel bewusst nicht "Verlauf › Coach", "BETA" ist
+   Tour-Chrome, und die Zahl in der Freikontingent-Zeile kommt aus
+   `ProFeatureCaps.freeCoachChatMessagesPerMonth`. */
+"onboarding.coach.breadcrumb" = "Überall › Frag deinen Coach";
+"onboarding.coach.eyebrow" = "AI COACH · BETA";
+"onboarding.coach.title" = "Ein Coach, der deine\nZahlen gelesen hat.";
+"onboarding.coach.body" = "Der Coach liest deine Workouts und deinen Fortschritt und beantwortet Fragen dazu — komplett auf deinem iPhone, mit Apple Intelligence, ohne Cloud.";
+"onboarding.coach.bullet1" = "Lokal auf dem Gerät · keine Cloud";
+"onboarding.coach.bullet2" = "Unbegrenzte Nachrichten mit Pro";
+"onboarding.coach.beta" = "Beta";
+"onboarding.coach.allowance" = "%1$d Coach-Nachrichten pro Monat gratis · unbegrenzt mit Pro";
+"onboarding.coach.sample.answer" = "Dein Volumen in %1$@ ist über vier Wochen um **+18 %%** gewachsen. %2$@ trägt den Großteil, %3$@ steht seit fünf Sessions bei %4$@.";
+"onboarding.coach.sample.question" = "Woran liegt die Stagnation bei %@?";
+
 /* Routine detail — planned muscle map. Only the strings that name the card or a set count
    differ from the history reading; the legend, captions and reset control are shared. */
 "routine.detail.muscle_map.title" = "Geplante Muskelgruppen";
