@@ -82,6 +82,35 @@ enum ProgressiveOverloadService {
             reps: targetRepMin
         )
     }
+
+    // MARK: - Uniformity
+
+    /// Weight equality for values that made a JSON round trip or were
+    /// recomputed by a different surface. The tolerance is orders of magnitude
+    /// below the smallest offered step (1.25), so it can never mask a genuine
+    /// third value — it only avoids a spurious mismatch from a last-bit
+    /// representation difference.
+    static func weightsMatch(_ lhs: Double, _ rhs: Double) -> Bool {
+        abs(lhs - rhs) < 0.0001
+    }
+
+    /// Whether every set ends up at the SAME weight — false for a pyramid or
+    /// drop scheme, where no single number is true of all of them.
+    ///
+    /// ONE definition, because every surface must reach the same verdict on the
+    /// same scheme: the Watch recap decides whether to name a weight, the iOS
+    /// ingest decides it again from the delivered payload, and History decides
+    /// it a third time from the live template. `weightsMatch` is a tolerance
+    /// comparison and therefore NOT transitive — anchoring every comparison on
+    /// the first weight is what makes those verdicts agree, so callers must not
+    /// roll their own pairwise loop.
+    ///
+    /// An empty scheme is vacuously uniform; callers that need "there is a
+    /// weight to name" must check for a first element themselves.
+    static func haveUniformWeights(_ weights: [Double]) -> Bool {
+        guard let first = weights.first else { return true }
+        return weights.allSatisfy { weightsMatch($0, first) }
+    }
 }
 
 /// The weight steps overload surfaces offer, expressed in the unit the user

@@ -302,14 +302,23 @@ height of *everything above the target* in the same transaction, so there is no 
 call sees a geometry worth scrolling to. Deferring it (`withAnimation(_:completion:)`, a
 `Task { @MainActor in … }` hop) only moves which wrong geometry it reads.
 
-**The fix that should work**, when someone takes this on: `.scrollPosition(id:)` plus
-`.scrollTargetLayout()` on the `LazyVStack` (iOS 17+; the app targets 26). That makes SwiftUI
-maintain the position by **view identity** across content changes rather than by offset, which is
-exactly this problem. It changes the scroll semantics of the whole screen — every direct child of
-the stack becomes a scroll target and would need a stable id, including `topBar` and `titleBlock`,
-which have none today — and it has to coexist with the existing `scrollToExerciseId` jump used by
-the alternatives doorway. That is a deliberate change to `RoutineDetailView`, not a bug-fix patch,
-so it wants its own ticket.
+**The approach to try next** is `.scrollPosition(id:anchor:)` (iOS 17.0+, so fine on the iOS 26
+target) plus `.scrollTargetLayout()` on the `LazyVStack`: hold the position by **view identity**
+rather than by offset. Apple documents that "SwiftUI will attempt to keep the view with the identity
+specified in the provided binding visible when events occur that might cause it to be scrolled out
+of view by the system" — but none of the examples it lists is "the content shrank because views were
+removed", and the word is *attempt*. It is the best-supported option, not a guarantee, so it wants a
+spike before a full conversion.
+
+It also changes the scroll semantics of the whole screen: every identified child of the stack
+becomes a scroll target, `topBar` / `titleBlock` / the header cards have no ids today, and it has to
+coexist with (or absorb) the existing `scrollToExerciseId` jump the alternatives doorway uses. That
+is a deliberate change to `RoutineDetailView`, not a bug-fix patch.
+
+**Written up as its own ticket:**
+`.scratch/routine-detail-scroll-position/issues/01-preserve-scroll-position-across-superset-edit-mode.md`
+— it carries the API research, the obstacles in this file, the fallback, and the acceptance
+criteria.
 
 ### Routine Detail - Exercise Actions
 

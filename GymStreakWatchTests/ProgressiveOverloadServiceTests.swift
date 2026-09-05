@@ -194,4 +194,39 @@ struct ProgressiveOverloadServiceTests {
                     "\(option) lb looks like a converted kilogram step, not a plate step")
         }
     }
+
+    // MARK: - Uniformity
+
+    /// The verdict that decides whether a confirmed increase may name a weight
+    /// at all. Every surface reaches it through this one rule.
+    @Test
+    func aSingleSharedWeightIsUniformAndAPyramidIsNot() {
+        #expect(ProgressiveOverloadService.haveUniformWeights([62.5, 62.5, 62.5]))
+        #expect(ProgressiveOverloadService.haveUniformWeights([62.5]))
+        #expect(!ProgressiveOverloadService.haveUniformWeights([62.5, 65, 67.5]))
+        // Drop set: the fall is at the end, not the start.
+        #expect(!ProgressiveOverloadService.haveUniformWeights([62.5, 62.5, 50]))
+        // Vacuously uniform — callers needing a nameable number check `first`.
+        #expect(ProgressiveOverloadService.haveUniformWeights([]))
+    }
+
+    /// A JSON round trip and a recomputed template weight can differ in the last
+    /// bit, which is not a pyramid.
+    @Test
+    func aLastBitDifferenceIsStillOneWeight() {
+        #expect(ProgressiveOverloadService.weightsMatch(62.5, 62.500_02))
+        #expect(!ProgressiveOverloadService.weightsMatch(62.5, 62.6))
+        #expect(ProgressiveOverloadService.haveUniformWeights([62.5, 62.500_02]))
+    }
+
+    /// `weightsMatch` is a tolerance comparison and therefore NOT transitive.
+    /// Anchoring every comparison on the FIRST weight is what makes independent
+    /// surfaces agree on the same scheme; a pairwise chain would not, and this
+    /// input is the one that shows the difference.
+    @Test
+    func theVerdictIsAnchoredOnTheFirstWeightRatherThanChained() {
+        #expect(!ProgressiveOverloadService.haveUniformWeights(
+            [62.5, 62.500_05, 62.500_1, 62.500_15, 62.500_2]
+        ))
+    }
 }

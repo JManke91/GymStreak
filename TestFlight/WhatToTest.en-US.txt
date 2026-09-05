@@ -1,3 +1,4 @@
 - Health permission prompts now appear in German on German devices, on both iPhone and Apple Watch
 - Fixed three texts in the AI Coach settings that always appeared in German, regardless of your device language
 - A routine now shows the muscle groups it plans to train: front and back body maps between the schedule and the exercise list, with planned set counts per muscle. Tap a muscle or a chip to see which exercises train it. The map updates as you edit the routine.
+- When you increase a weight during a workout on iPhone, the workout details now name the new weight in the confirmation ("Increased to 18 kg") instead of only saying all sets were adjusted. Pyramid and drop sets, which have no single new weight, still show the weight-free confirmation.

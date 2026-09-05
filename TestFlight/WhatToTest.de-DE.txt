@@ -1,3 +1,4 @@
 - Die Health-Berechtigungsdialoge erscheinen auf deutschen Geräten jetzt auf Deutsch – auf iPhone und Apple Watch
 - Drei Texte in den AI-Coach-Einstellungen wurden korrigiert, die unabhängig von der Gerätesprache immer auf Deutsch erschienen
 - Eine Routine zeigt jetzt die Muskelgruppen, die sie trainieren wird: Körperkarten von vorne und hinten zwischen Zeitplan und Übungsliste, mit geplanten Satzzahlen pro Muskel. Tippe auf einen Muskel oder ein Chip, um zu sehen, welche Übungen ihn trainieren. Die Karte aktualisiert sich beim Bearbeiten der Routine.
+- Wenn du das Gewicht während eines Trainings am iPhone erhöhst, nennt die Bestätigung in den Trainingsdetails jetzt das neue Gewicht („Erhöht auf 18 kg“) statt nur „Alle Sätze angepasst“. Pyramiden- und Drop-Sätze, die kein einzelnes neues Gewicht haben, zeigen weiterhin die Bestätigung ohne Gewicht.

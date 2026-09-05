@@ -270,18 +270,32 @@ struct WorkoutDetailView: View {
             && !exercise.progressiveOverloadApplied
             && !viewModel.hasResolvableOverloadTemplate(from: workout, for: exercise)
 
-        let templateFirstSet = viewModel.overloadTemplateFirstSet(from: workout, for: exercise)
+        // One walk of the template slot for both values this card needs — it is
+        // built per row, so a second resolution would be a second relationship
+        // fault each.
+        //
+        // An increase applied on iPhone during the workout records its weight
+        // nowhere this screen can read: it raises the live template and leaves
+        // the recorded session at the performance on purpose. `uniformWeight`
+        // recovers it, because after an apply the template's set weights ARE the
+        // new weights. Nil — a deleted routine/slot, or a pyramid/drop scheme
+        // with no single true number — keeps the weight-free confirmation, which
+        // is also exactly the Watch recap's deliberate refusal to name one.
+        //
+        // Read unconditionally rather than behind an "is it confirmed?" test:
+        // that condition lives in the card (which also confirms off the
+        // exercise's own `progressiveOverloadApplied`, the very case this fixes),
+        // and restating it here is how the weight went missing in the first
+        // place. The card ignores the value unless it is confirming.
+        let templateSummary = viewModel.overloadTemplateSummary(from: workout, for: exercise)
+        let confirmedWeight = appliedNow ?? templateSummary?.uniformWeight
         return ProgressiveOverloadCard(
             exercise: exercise,
             libraryExercise: viewModel.performedExercise(in: workout, for: exercise),
             canUndo: false,
             appliedOverride: isApplied,
-            appliedWeight: appliedNow,
-            // An increase applied on iPhone during the workout leaves no
-            // correlation record and no bumped set to read a weight off, so its
-            // confirmed row states that all sets moved rather than a number.
-            hasAmbiguousAppliedWeight: appliedNow == nil,
-            templateWeight: templateFirstSet?.weight,
+            appliedWeight: confirmedWeight,
+            templateWeight: templateSummary?.firstSet.weight,
             isTemplateUnavailable: unavailable,
             onIncrease: { overloadSheetExercise = exercise },
             onUndo: {}

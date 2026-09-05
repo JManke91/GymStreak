@@ -31,6 +31,12 @@ struct ProgressiveOverloadCard: View {
     /// weight — a pyramid or drop scheme. The confirmed row then states that all
     /// sets moved instead of naming a weight that is wrong for every set but
     /// the first.
+    ///
+    /// Set this ONLY from a genuine nonuniformity verdict
+    /// (`ProgressiveOverloadService.haveUniformWeights`), never from the mere
+    /// absence of a recorded weight: "the sets do not share a number" and "we
+    /// did not record the number" are different facts, and a caller that can
+    /// still resolve the number must resolve it instead of suppressing it.
     var hasAmbiguousAppliedWeight: Bool = false
     /// The live template's current first-set weight, struck through in the
     /// actionable CTA. Nil falls back to the performed weight.

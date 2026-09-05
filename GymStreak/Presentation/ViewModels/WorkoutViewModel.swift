@@ -883,7 +883,10 @@ class WorkoutViewModel: ObservableObject {
         // exercise with no matching alternative, empty scheme) — recording one
         // would make the card announce an adjustment that never happened.
         if let first = newTemplateWeights.first {
-            let isUniform = newTemplateWeights.dropFirst().allSatisfy { $0 == first }
+            // Shared verdict, not a local loop: History reaches the same
+            // conclusion about the same scheme from the live template, and the
+            // Watch ingest from the delivered payload.
+            let isUniform = ProgressiveOverloadService.haveUniformWeights(newTemplateWeights)
             appliedOverloadWeights[workoutExercise.id] = isUniform ? first : nil
         }
 
@@ -1026,9 +1029,53 @@ class WorkoutViewModel: ObservableObject {
         return overloadTemplateFirstSet(in: routine, for: workoutExercise)
     }
 
+    /// Everything the History overload card reads off the live template, in ONE
+    /// walk of the routine slot — the card is built per row, so resolving the
+    /// same scheme twice would be a second SwiftData relationship fault each.
+    ///
+    /// `firstSet` is what the actionable CTA strikes through. `uniformWeight` is
+    /// the single weight the whole scheme now sits at, which is how a confirmed
+    /// increase recovers the number it produced when nothing recorded it: an
+    /// increase applied on iPhone during the workout raises the template and
+    /// deliberately leaves the recorded session at the performance, so the
+    /// template is the only surviving statement of the new weight.
+    ///
+    /// Note the semantics that follows — `uniformWeight` is the template's
+    /// weight NOW, not what the increase produced. The two differ if the user
+    /// hand-edited the routine afterwards, and under the heading "next workout"
+    /// the current template is the truthful one. It is a statement about the
+    /// TEMPLATE: it must never backfill history, charts or volume, all of which
+    /// stay frozen at what was performed.
+    ///
+    /// `uniformWeight` is nil where naming a number would be a lie rather than a
+    /// recovery: the scheme's sets do not share one weight — a pyramid or drop
+    /// scheme, where the first set's weight is wrong for every other set. The
+    /// whole summary is nil when the template target is gone (deleted routine
+    /// or slot).
+    func overloadTemplateSummary(
+        from session: WorkoutSession, for workoutExercise: WorkoutExercise
+    ) -> (firstSet: (weight: Double, reps: Int), uniformWeight: Double?)? {
+        guard let routine = session.routine,
+              let sets = overloadTemplateSets(in: routine, for: workoutExercise),
+              let first = sets.first
+        else { return nil }
+        let weights = sets.map(\.weight)
+        return (first, ProgressiveOverloadService.haveUniformWeights(weights) ? first.weight : nil)
+    }
+
     private func overloadTemplateFirstSet(
         in routine: Routine, for workoutExercise: WorkoutExercise
     ) -> (weight: Double, reps: Int)? {
+        guard let first = overloadTemplateSets(in: routine, for: workoutExercise)?.first else { return nil }
+        return (first.weight, first.reps)
+    }
+
+    /// The template set scheme an increase acts on, in template order. A
+    /// swapped exercise resolves against the performed alternative's own
+    /// scheme, because that is the one an apply raises.
+    private func overloadTemplateSets(
+        in routine: Routine, for workoutExercise: WorkoutExercise
+    ) -> [(weight: Double, reps: Int)]? {
         let sets: [(weight: Double, reps: Int, order: Int)]
         if workoutExercise.wasSwapped {
             guard let alternative = alternativeEntry(in: routine, for: workoutExercise) else { return nil }
@@ -1037,8 +1084,7 @@ class WorkoutViewModel: ObservableObject {
             guard let slot = routineExercise(in: routine, for: workoutExercise) else { return nil }
             sets = slot.setsList.map { ($0.weight, $0.reps, $0.order) }
         }
-        guard let first = sets.sorted(by: { $0.order < $1.order }).first else { return nil }
-        return (first.weight, first.reps)
+        return sets.sorted { $0.order < $1.order }.map { ($0.weight, $0.reps) }
     }
 
     /// Reverts an overload applied during this session: restores the sets'

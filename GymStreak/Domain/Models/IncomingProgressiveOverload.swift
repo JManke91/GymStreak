@@ -21,12 +21,11 @@ struct IncomingTemplateSetChange {
     let proposedReps: Int
     let proposedWeight: Double
 
-    /// Weight equality for values that made a JSON round trip. The tolerance is
-    /// orders of magnitude below the smallest offered step (1.25), so it can
-    /// never mask a genuine third value — it only avoids a spurious conflict
-    /// from a last-bit representation difference.
+    /// Weight equality for values that made a JSON round trip. Delegates to the
+    /// shared rule, which is what keeps this verdict identical to the wire
+    /// type's and to one reached against the live template.
     static func weightsMatch(_ lhs: Double, _ rhs: Double) -> Bool {
-        abs(lhs - rhs) < 0.0001
+        ProgressiveOverloadService.weightsMatch(lhs, rhs)
     }
 }
 

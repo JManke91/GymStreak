@@ -1053,4 +1053,92 @@ struct WorkoutViewModelTests {
         // The now-orphaned template slot is untouched.
         #expect(try #require(scenario.slot.setsList.first).weight == 50)
     }
+
+    // MARK: - Recovering the confirmed weight from the live template
+
+    /// The reported bug: an increase applied on iPhone DURING the workout
+    /// persists its new weight nowhere History can read — it raises the template
+    /// and deliberately leaves the recorded session at the performance — so the
+    /// confirmation used to fall back to a weight-free "all sets adjusted". The
+    /// number is recoverable from the template on that very screen.
+    @Test
+    func historyRecoversTheWeightOfAnIncreaseAppliedOnIPhoneMidWorkout() async throws {
+        let context = ModelContext(InMemoryModelContainer.make())
+        let sessionRepository = SwiftDataWorkoutSessionRepository(modelContext: context)
+        let routineRepository = SwiftDataRoutineRepository(modelContext: context)
+        let scenario = try makeHistoryScenario(
+            context: context, routineRepository: routineRepository, sessionRepository: sessionRepository
+        )
+        let viewModel = makeViewModel(
+            sessionRepository: sessionRepository, routineRepository: routineRepository,
+            exerciseRepository: SwiftDataExerciseRepository(modelContext: context)
+        )
+        viewModel.currentSession = scenario.session
+        viewModel.applyProgressiveOverload(for: scenario.workoutExercise, weightIncrement: 2.5)
+
+        let summary = viewModel.overloadTemplateSummary(
+            from: scenario.session, for: scenario.workoutExercise
+        )
+        #expect(summary?.uniformWeight == 52.5)
+        #expect(summary?.firstSet.weight == 52.5)
+
+        // Recovery reads the template and writes nothing: the recorded set still
+        // shows what was actually lifted.
+        let performedSet = try #require(scenario.workoutExercise.setsList.first)
+        #expect(performedSet.actualWeight == 50)
+        #expect(performedSet.plannedWeight == 50)
+    }
+
+    /// A pyramid/drop template has no single weight that is true of the
+    /// exercise, so the recovery must refuse to name one — the same verdict the
+    /// Watch recap reaches when it sends no weight at all.
+    @Test
+    func aNonuniformTemplateRecoversNoWeight() async throws {
+        let context = ModelContext(InMemoryModelContainer.make())
+        let sessionRepository = SwiftDataWorkoutSessionRepository(modelContext: context)
+        let routineRepository = SwiftDataRoutineRepository(modelContext: context)
+        let scenario = try makeHistoryScenario(
+            context: context, routineRepository: routineRepository, sessionRepository: sessionRepository
+        )
+        let heavier = ExerciseSet(reps: 12, weight: 60, restTime: 60, order: 1)
+        heavier.routineExercise = scenario.slot
+        scenario.slot.sets?.append(heavier)
+        context.insert(heavier)
+        let viewModel = makeViewModel(
+            sessionRepository: sessionRepository, routineRepository: routineRepository,
+            exerciseRepository: SwiftDataExerciseRepository(modelContext: context)
+        )
+        viewModel.currentSession = scenario.session
+        viewModel.applyProgressiveOverload(for: scenario.workoutExercise, weightIncrement: 2.5)
+
+        let summary = viewModel.overloadTemplateSummary(
+            from: scenario.session, for: scenario.workoutExercise
+        )
+        #expect(summary?.uniformWeight == nil)
+        // The first set's weight is a real number, and it is the wrong one to
+        // announce for the exercise — the CTA may still strike it through.
+        #expect(summary?.firstSet.weight == 52.5)
+        #expect(scenario.slot.setsList.sorted { $0.order < $1.order }.map(\.weight) == [52.5, 62.5])
+    }
+
+    /// A workout whose source routine is gone has no template to recover from,
+    /// so the confirmation stays weight-free rather than naming a stale number.
+    @Test
+    func aDeletedRoutineRecoversNoWeight() async throws {
+        let context = ModelContext(InMemoryModelContainer.make())
+        let sessionRepository = SwiftDataWorkoutSessionRepository(modelContext: context)
+        let routineRepository = SwiftDataRoutineRepository(modelContext: context)
+        let scenario = try makeHistoryScenario(
+            context: context, routineRepository: routineRepository, sessionRepository: sessionRepository
+        )
+        let viewModel = makeViewModel(
+            sessionRepository: sessionRepository, routineRepository: routineRepository,
+            exerciseRepository: SwiftDataExerciseRepository(modelContext: context)
+        )
+        scenario.session.routine = nil
+
+        #expect(viewModel.overloadTemplateSummary(
+            from: scenario.session, for: scenario.workoutExercise
+        ) == nil)
+    }
 }

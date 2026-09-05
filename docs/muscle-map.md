@@ -64,6 +64,16 @@ They can word the same fact differently — "Lats" as a chip, "Rücken" as a reg
 cannot contradict each other, because both read the live exercise the routine points at. They
 are deliberately not merged: different output type, different definition of "primary".
 
+**Open follow-up on those chips.** `RoutineDetailView`'s `titleBlock` calls
+`RoutineMetricsService.primaryMuscleGroups(for: routine)` *inline in a `ForEach` inside `body`* —
+a Domain service call plus a relationship walk on the render path, which is exactly what
+CLAUDE.md's rendering rule 3 forbids and what `docs/history-performance.md` was written about. It
+is **pre-existing** and was deliberately left alone by the muscle-map work (found by the
+architecture review, 2026-09-04, outside that change's scope), but it sits on the same screen and
+describes the same subject. The fix is the one the muscle map already applies next to it:
+precompute it off the render path — ideally into the same `@State` the map uses, since both are
+recomputed by the same edits and keyed by the same `Routine.updatedAt`.
+
 ## Pieces
 
 `MuscleFigureView` draws one figure — front or back — at a caller-supplied width, coloring

@@ -801,12 +801,12 @@ Two consequences worth knowing:
   the caller supplies: the completion screen passes
   `WorkoutViewModel.appliedOverloadWeight(for:)` /
   `hasNonUniformAppliedOverload(for:)`, and History passes the weight from the
-  Watch correlation ledger. When nobody knows it — a nonuniform pyramid/drop
-  scheme, or an increase applied on iPhone during a workout, which leaves no
-  correlation record — the row says "all sets adjusted" instead of naming a
-  number that would be wrong. The actionable CTA's struck-through weight and the
-  `WeightIncreaseSheet` preview likewise show the **template** value
-  (`WorkoutViewModel.overloadTemplateFirstSet(for:)`, and its
+  Watch correlation ledger, falling back to the live template (see *Naming the new
+  weight* below). Only when there genuinely is no single true number — a
+  nonuniform pyramid/drop scheme, or a template that no longer exists — does the
+  row say "all sets adjusted" instead of naming one. The actionable CTA's
+  struck-through weight and the `WeightIncreaseSheet` preview likewise show the
+  **template** value (`WorkoutViewModel.overloadTemplateFirstSet(for:)`, and its
   `from:session:` variant for History), so the picker can never preview one
   number and the confirmation announce another. On the Watch the confirmation
   already announced the template-derived weight and needed no change.
@@ -840,6 +840,123 @@ Two consequences worth knowing:
   that is never written. If every exercise the user edited also received an
   increase, the End dialog therefore still shows no template question — the
   increase *is* that exercise's template update.
+
+### Naming the new weight: four apply paths, two kinds of "no number" (2026-09-04)
+
+An increase can be applied from four places, and each has to answer the same
+question for the confirmed card: *what weight do we announce?*
+
+| Applied from | Names a weight | Where the number comes from |
+|---|---|---|
+| The history screen itself | yes | `applyProgressiveOverloadFromHistory` returns it → `WorkoutDetailView.appliedTemplateWeights` |
+| Watch post-workout recap | yes | the sync ingest writes `AppliedOverloadRecord(newWeight:)` |
+| Watch recap, pyramid/drop scheme | no — **correct** | `newWeight` is deliberately nil; no single number is true of all sets |
+| iPhone, during the workout | yes, **since 2026-09-04** | recovered from the live template (`overloadTemplateSummary`) |
+
+**The bug this fixed.** The mid-workout iPhone apply raises the routine template
+and — by the rule above — deliberately leaves the recorded session at the
+performance. It writes no `AppliedOverloadCorrelation` record either: that ledger
+is written only by the Watch recap ingest
+(`WatchTemplateTransactionCoordinator+ProgressiveOverload`), because a mid-workout
+apply reports itself inside its own completed payload. So nothing persisted the
+new weight anywhere History could read, and the card fell back to the weight-free
+"all sets adjusted" even though the number was sitting on the very screen that
+needed it. Reported on a device on 2026-09-04.
+
+**The root defect was one flag carrying two facts.**
+`ProgressiveOverloadCard.hasAmbiguousAppliedWeight` conflated *"the sets genuinely
+do not share one weight"* (a pyramid — must not name a number) with *"we did not
+record what the number was"* (the iPhone path — can recover it). History derived
+the first from the second (`hasAmbiguousAppliedWeight: appliedNow == nil`), which
+is why a perfectly knowable weight was suppressed. The card's flag now means only
+the genuine nonuniformity verdict, and History does not pass it at all: it
+resolves the number honestly and passes nil only when there is none.
+
+**Recovery.** `WorkoutViewModel.overloadTemplateSummary(from:for:)` reads the
+live template's set scheme — the same resolution `overloadTemplateFirstSet`
+already used for the struck-through CTA weight, so a swapped exercise resolves
+against the performed alternative's own scheme — and returns both values the card
+needs: `firstSet` for the CTA and `uniformWeight`, the shared weight, only when
+the scheme has one. It yields no weight in exactly the two cases where a number
+would be a lie rather than a recovery: the routine or slot is gone (the whole
+summary is nil), or the sets are nonuniform (`uniformWeight` is nil). That second
+case is what keeps the Watch recap's deliberate nil intact: a pyramid template is
+still nonuniform when History looks at it.
+
+Both values come from **one** call because `overloadCard` is built per row, and
+resolving the same slot twice would be a second SwiftData relationship fault on
+every card.
+
+**Dead end — do not reintroduce the gate.** The first attempt resolved the weight
+only when the view's own `isApplied` was true (`appliedTemplateWeights` ∪
+`appliedOverloadExerciseIDs`). That silently reproduced the bug it was fixing: a
+mid-workout iPhone apply is confirmed off `WorkoutExercise.progressiveOverloadApplied`,
+which that view knows nothing about, so the card was rendering its confirmed row
+while the gate said "not applied" and withheld the number. The gate was **removed**
+rather than corrected — the "is this confirmed?" condition lives in the card, and
+restating it in the view is exactly how the weight went missing in the first place.
+The summary is therefore read unconditionally; the card ignores it unless it is
+confirming.
+
+**Discarded approach.** Deleting `ProgressiveOverloadCard.hasAmbiguousAppliedWeight`
+outright was considered — it is redundant with `appliedWeight == nil` at both
+remaining call sites, since the card renders both cases identically. It was kept
+because `WorkoutViewModel.hasNonUniformAppliedOverload` is the only expression of
+"applied, but nonuniform" as distinct from "nothing was recorded", and three tests
+discriminate on that difference. The flag's contract was tightened instead: it may
+only ever be set from a genuine nonuniformity verdict, never from a missing record.
+
+**Semantic shift, accepted deliberately.** The recovered value is *the template's
+weight now*, not *what the increase produced*. The two differ if the user
+hand-edited the routine afterwards. Under the heading "next workout" the current
+template is the more truthful of the two — it is what the next workout will
+actually propose. It is a statement about the **template** only: it must never
+backfill history, charts, volume or records, all of which stay frozen at what was
+performed. Nothing in this path writes to the recorded workout.
+
+**One uniformity rule, five callers.**
+`ProgressiveOverloadService.haveUniformWeights(_ weights: [Double])` (with
+`weightsMatch`) is the single definition, and it lives in the service precisely
+because the watch has a per-target copy of that file. Every surface now calls
+through it: `WatchTemplateSetChange.haveUniformProposedWeights` and
+`IncomingTemplateSetChange.weightsMatch` are thin projections from their wire
+types, `WorkoutViewModel.applyProgressiveOverload` uses it for the in-session
+`appliedOverloadWeights` entry (it previously ran its own exact-equality loop),
+the watch's `makeOverloadDisplay` uses it for
+`WatchOverloadDisplay.hasUniformWeights`, and the History recovery uses it against
+the live template.
+
+**Verification.** Device-confirmed on 2026-09-05 against the originally reported
+case (exercise "Dip"). Unit coverage: `ProgressiveOverloadServiceTests` in **both**
+suites (assertion-twinned, so a drift between the two copies of the rule fails the
+watch suite) plus three `WorkoutViewModelTests` cases for the uniform, nonuniform
+and unresolvable-template verdicts — 1204 iOS tests / 128 suites and 84 watch
+tests / 7 suites green. Note what is *not* covered: the view-level wiring in
+`overloadCard`, which is where the dead end above lived.
+
+**Follow-up found while doing this, not applied.**
+
+- `WorkoutViewModel.swift` is 2126 lines against the repo's 300-line ceiling. The
+  fix is to extract the overload helpers (`applyProgressiveOverload`,
+  `undoProgressiveOverload`, `overloadTemplateFirstSet`/`Sets`/`Summary`,
+  `appliedOverloadWeight`, `hasNonUniformAppliedOverload`) into
+  `WorkoutViewModel+ProgressiveOverload.swift` — the extension-file split the watch
+  target already uses for this same feature.
+- `WorkoutDetailView.overloadCard` still walks `routine.routineExercisesList` more
+  than once per card: `overloadTemplateSummary`, `performedExercise(in:for:)` and
+  the gated `hasResolvableOverloadTemplate` each resolve independently. Pre-existing
+  and bounded by one workout's qualifying exercises. The real fix is a precomputed
+  display struct in `@State`, as this file already does for `muscleMap` and
+  `comparisons`.
+
+Why it must not be re-implemented per caller: `weightsMatch` is a *tolerance*
+comparison (`< 0.0001`) and is therefore **not transitive**. Anchoring every
+comparison on the first weight is what makes independent surfaces reach the same
+verdict on the same scheme — a pairwise chain would call
+`[62.5, 62.500_05, 62.500_1, …]` uniform while the anchored rule does not.
+Covered by `ProgressiveOverloadServiceTests` in both the iOS and watch suites
+(kept assertion-identical, like the rest of that twin) and by
+`WatchSummaryOverloadWireTests.uniformityIsOneSharedVerdictAnchoredOnTheFirstSet`.
 
 **Root cause fixed (2026-07, swapped exercises):** every overload surface used to resolve the template slot by comparing the *performed* exercise name against slot primaries (`exercise?.name == workoutExercise.exerciseName`). For a swapped exercise the names never match, so the mid-workout banner's "Increase" silently did nothing (nil sheet item) and the mid-workout template write no-opped. Resolution now goes through `WorkoutViewModel.routineExercise(for:)` (stable `routineExerciseId`, then planned-exercise fallback) and swapped exercises persist into the alternative's own set scheme. Do not reintroduce name-based slot matching against performed names.
 

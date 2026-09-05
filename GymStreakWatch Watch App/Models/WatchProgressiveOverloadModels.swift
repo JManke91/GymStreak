@@ -126,25 +126,24 @@ struct WatchProgressiveOverloadIntent: Codable, Equatable {
 }
 
 extension WatchTemplateSetChange {
-    /// Weight equality for wire values that made a JSON round trip. The
-    /// tolerance is far below any meaningful weight step, so it can never mask
-    /// a genuine third value — it only avoids a spurious conflict from a
-    /// last-bit representation difference.
+    /// Weight equality for wire values that made a JSON round trip. Delegates to
+    /// the shared rule so a wire comparison and a comparison made against the
+    /// live template can never disagree.
     static func weightsMatch(_ lhs: Double, _ rhs: Double) -> Bool {
-        abs(lhs - rhs) < 0.0001
+        ProgressiveOverloadService.weightsMatch(lhs, rhs)
     }
 
     /// Whether every affected set ends up at the SAME weight — false for a
     /// pyramid or drop scheme, where no single number is true of all of them.
     ///
-    /// One definition because both surfaces must reach the same verdict on the
-    /// same intent: the Watch recap decides whether to show a weight, and iOS
-    /// History decides the same thing again from the delivered payload. Note
-    /// `weightsMatch` is a tolerance comparison and therefore NOT transitive —
-    /// anchoring every comparison on the first set is what makes the two sides
-    /// agree, so callers must not roll their own pairwise loop.
+    /// The verdict itself lives in `ProgressiveOverloadService.haveUniformWeights`
+    /// because more than these two surfaces need it: the Watch recap decides
+    /// whether to show a weight, the iOS ingest decides it again from the
+    /// delivered payload, and History decides it a third time from the live
+    /// routine template. This is only the projection from the wire type onto
+    /// that rule — callers must not roll their own pairwise loop, since the
+    /// tolerance comparison is not transitive.
     static func haveUniformProposedWeights(_ changes: [WatchTemplateSetChange]) -> Bool {
-        guard let first = changes.first else { return true }
-        return changes.allSatisfy { weightsMatch($0.proposedWeight, first.proposedWeight) }
+        ProgressiveOverloadService.haveUniformWeights(changes.map(\.proposedWeight))
     }
 }

@@ -189,9 +189,7 @@ extension WatchWorkoutViewModel {
             templateWeight: firstSet.weight,
             isAssistance: ExerciseLoadBehavior
                 .from(raw: exercise.loadBehaviorRaw).isCounterweightAssistance,
-            hasUniformWeights: target.sets.allSatisfy {
-                WatchTemplateSetChange.weightsMatch($0.weight, firstSet.weight)
-            }
+            hasUniformWeights: ProgressiveOverloadService.haveUniformWeights(target.sets.map(\.weight))
         )
     }
 
