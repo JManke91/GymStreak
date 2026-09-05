@@ -21,7 +21,7 @@ All Swift view files have been updated to use localized strings with the `.local
 - ✅ RoutineDetailView.swift
 - ✅ CreateRoutineView.swift
 - ✅ ExerciseSelectionView.swift
-- ✅ ConfigureExerciseView.swift
+- ✅ ConfigureExerciseSetsView.swift (absorbed the former ConfigureExerciseView.swift, deleted 2026-09-05)
 - ✅ SaveWorkoutView.swift
 - ✅ WorkoutHistoryView.swift
 - ✅ WorkoutDetailView.swift

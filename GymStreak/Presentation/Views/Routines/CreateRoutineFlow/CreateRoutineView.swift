@@ -51,12 +51,26 @@ struct CreateRoutineView: View {
                 } else {
                     // Exercise list
                     ForEach(pendingExercises) { pending in
-                        NavigationLink(destination: ConfigureExerciseView(
+                        // Same screen as adding an exercise, opened on this
+                        // draft entry's configuration — see ConfigureExerciseSetsView.
+                        NavigationLink(destination: ConfigureExerciseSetsView(
                             exercise: pending.exercise,
-                            existingSets: pending.sets,
-                            existingAlternatives: pending.alternatives,
-                            onComplete: { exercise, sets, alternatives in
-                                updateExercise(pendingExercise: pending, withSets: sets, alternatives: alternatives)
+                            navigationTitleKey: "configure_exercise.edit_title",
+                            saveButtonKey: "configure_exercise.save_changes",
+                            existingConfiguration: .init(
+                                sets: pending.sets,
+                                alternatives: pending.alternatives,
+                                targetRepMin: pending.targetRepMin,
+                                targetRepMax: pending.targetRepMax
+                            ),
+                            onSave: { _, sets, alternatives, repMin, repMax in
+                                updateExercise(
+                                    pendingExercise: pending,
+                                    withSets: sets,
+                                    alternatives: alternatives,
+                                    targetRepMin: repMin,
+                                    targetRepMax: repMax
+                                )
                             }
                         )) {
                             VStack(alignment: .leading, spacing: 4) {
@@ -173,10 +187,18 @@ struct CreateRoutineView: View {
         pendingExercises.append(pending)
     }
 
-    private func updateExercise(pendingExercise: PendingRoutineExercise, withSets sets: [ExerciseSet], alternatives: [PendingAlternative]) {
+    private func updateExercise(
+        pendingExercise: PendingRoutineExercise,
+        withSets sets: [ExerciseSet],
+        alternatives: [PendingAlternative],
+        targetRepMin: Int?,
+        targetRepMax: Int?
+    ) {
         if let index = pendingExercises.firstIndex(where: { $0.id == pendingExercise.id }) {
             pendingExercises[index].sets = sets
             pendingExercises[index].alternatives = alternatives
+            pendingExercises[index].targetRepMin = targetRepMin
+            pendingExercises[index].targetRepMax = targetRepMax
         }
     }
 

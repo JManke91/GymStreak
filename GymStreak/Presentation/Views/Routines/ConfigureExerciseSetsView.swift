@@ -8,6 +8,11 @@
 //  (sets · volume · rest), the shared set editor, rep-goal and rest-timer panels,
 //  alternatives and a sticky add CTA.
 //
+//  It is also the *edit* screen for an exercise already added to a routine
+//  draft (CreateRoutineView): pass `existingConfiguration` and it opens on that
+//  configuration instead of an empty one. That case retired the legacy Form
+//  `ConfigureExerciseView`, so adding and editing look identical.
+//
 //  The set editor, rep-range editor and rest-time editor are the same components
 //  the routine detail screen uses, so both screens edit an exercise identically.
 //
@@ -22,14 +27,31 @@ struct ConfigureExerciseSetsView: View {
     /// Routine the exercise is being added to — makes the CTA name it.
     var destinationName: String? = nil
     var includesAlternatives = true
+    /// Configuration to reopen on instead of starting from an empty scheme.
+    /// Non-nil puts the screen in edit mode: the CTA saves changes and pops, and
+    /// backing out saves too (the legacy edit form's behaviour, kept so edits
+    /// can't be lost on a swipe-back).
+    var existingConfiguration: ExistingConfiguration? = nil
     /// Called with the finalized sets (rest time and order applied), the picked
     /// alternatives and the rep-range goal; the caller owns persistence.
     var onSave: (Exercise, [ExerciseSet], [PendingAlternative], Int?, Int?) -> Void
 
-    /// Set schemes offered on the empty state — the fastest way out of "no sets".
-    private static let quickSchemes: [(sets: Int, reps: Int)] = [(3, 8), (3, 10), (4, 12)]
+    /// Snapshot of an already-configured — but not yet persisted — exercise.
+    struct ExistingConfiguration {
+        var sets: [ExerciseSet]
+        var alternatives: [PendingAlternative]
+        var targetRepMin: Int?
+        var targetRepMax: Int?
+    }
 
-    @Environment(\.weightUnit) private var weightUnit
+    /// Set schemes offered on the empty state — the fastest way out of "no sets".
+    private static let quickSchemes = [
+        QuickSetScheme(sets: 3, reps: 8),
+        QuickSetScheme(sets: 3, reps: 10),
+        QuickSetScheme(sets: 4, reps: 12)
+    ]
+
+    @Environment(\.dismiss) private var dismiss
 
     @State private var sets: [ExerciseSet] = []
     @State private var globalRestTime: TimeInterval = 0
@@ -42,12 +64,16 @@ struct ConfigureExerciseSetsView: View {
     /// Shared across every set row so one Done bar dismisses whichever value is
     /// being typed.
     @FocusState private var isEditingSetValue: Bool
+    /// `onAppear` fires again when popping back from the alternative picker, so
+    /// the seed has to run exactly once — otherwise returning from the picker
+    /// would discard in-progress edits.
+    @State private var hasSeededInitialState = false
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
                 exerciseHeader
-                summaryStrip
+                ConfigureSummaryStrip(sets: sets, restTime: globalRestTime)
                 setsSection
                 repGoalSection
                 restTimerSection
@@ -80,6 +106,37 @@ struct ConfigureExerciseSetsView: View {
         }
         .navigationTitle(navigationTitleKey.localized)
         .navigationBarTitleDisplayMode(.inline)
+        .onAppear(perform: seedInitialStateIfNeeded)
+        .onDisappear {
+            // Edit mode has no explicit cancel, so leaving the screen commits
+            // what is on it. Never commit an empty scheme — an exercise with no
+            // sets is not a valid routine entry.
+            if isEditing && !sets.isEmpty {
+                commitConfiguration()
+            }
+        }
+    }
+
+    private var isEditing: Bool { existingConfiguration != nil }
+
+    /// Copies the incoming configuration: the caller still holds the originals,
+    /// and this screen must not mutate its draft while the user is editing.
+    private func seedInitialStateIfNeeded() {
+        guard !hasSeededInitialState else { return }
+        hasSeededInitialState = true
+        guard let existingConfiguration else { return }
+
+        sets = existingConfiguration.sets.map(Self.copy)
+        globalRestTime = existingConfiguration.sets.first?.restTime ?? 0
+        targetRepMin = existingConfiguration.targetRepMin
+        targetRepMax = existingConfiguration.targetRepMax
+        pendingAlternatives = existingConfiguration.alternatives.map {
+            PendingAlternative(exercise: $0.exercise, sets: $0.sets.map(Self.copy))
+        }
+    }
+
+    private static func copy(_ set: ExerciseSet) -> ExerciseSet {
+        ExerciseSet(reps: set.reps, weight: set.weight, restTime: set.restTime, order: set.order)
     }
 
     // MARK: - Header
@@ -111,77 +168,22 @@ struct ConfigureExerciseSetsView: View {
         }
     }
 
-    /// Sets · volume · rest at a glance, so the configuration reads back without
-    /// re-scanning the rows. The reduce runs over the local set array only — a
-    /// handful of value reads, no relationship traversal.
-    ///
-    /// The volume is summed in canonical kilograms and converted once for
-    /// display, like every other weight on the screen.
-    private var summaryStrip: some View {
-        let volume = sets.reduce(0.0) { $0 + Double($1.reps) * $1.weight }
-        return HStack(spacing: 0) {
-            summaryColumn(
-                value: "\(sets.count)",
-                label: "routine.section.sets".localized
-            )
-            summaryDivider
-            summaryColumn(
-                value: volume > 0 ? WeightFormatting.label(volume, in: weightUnit) : "—",
-                label: "configure_exercise.summary.volume".localized
-            )
-            summaryDivider
-            summaryColumn(
-                value: globalRestTime > 0 ? TimeFormatting.formatRestTime(globalRestTime) : "rest_timer.off".localized,
-                label: "rest_timer.rest_short".localized
-            )
-        }
-        .padding(.vertical, 11)
-        .padding(.horizontal, 4)
-        .background(DesignSystem.Colors.tint.opacity(0.07))
-        .overlay(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .stroke(DesignSystem.Colors.tint.opacity(0.18), lineWidth: 1)
-        )
-        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-        .accessibilityElement(children: .combine)
-    }
-
-    private func summaryColumn(value: String, label: String) -> some View {
-        VStack(spacing: 3) {
-            Text(value)
-                .font(.system(size: 15.5, weight: .bold, design: .rounded))
-                .monospacedDigit()
-                .foregroundStyle(.white)
-                .lineLimit(1)
-                .minimumScaleFactor(0.7)
-
-            Text(label.uppercased())
-                .font(.system(size: 10, weight: .bold))
-                .kerning(0.7)
-                .foregroundStyle(Color.white.opacity(0.4))
-                .lineLimit(1)
-        }
-        .frame(maxWidth: .infinity)
-    }
-
-    private var summaryDivider: some View {
-        Rectangle()
-            .fill(DesignSystem.Colors.tint.opacity(0.16))
-            .frame(width: 1, height: 30)
-    }
-
     // MARK: - Sets
 
     private var setsSection: some View {
         VStack(alignment: .leading, spacing: 8) {
-            sectionHeader(
+            ConfigureSectionHeader(
                 title: "routine.section.sets".localized,
                 hint: sets.isEmpty ? nil : "configure_exercise.sets_planned".localized(sets.count)
             )
 
-            sectionCard {
+            Group {
                 if sets.isEmpty {
-                    emptySetsState
+                    ConfigureEmptySetsState(
+                        schemes: Self.quickSchemes,
+                        onApplyScheme: applyQuickScheme,
+                        onAddSingleSet: addSet
+                    )
                 } else {
                     RoutineSetsEditor(
                         sets: sets,
@@ -202,46 +204,7 @@ struct ConfigureExerciseSetsView: View {
                     )
                 }
             }
-        }
-    }
-
-    private var emptySetsState: some View {
-        VStack(spacing: 14) {
-            Text("configure_exercise.empty.hint".localized)
-                .font(.system(size: 13))
-                .foregroundStyle(Color.white.opacity(0.5))
-                .multilineTextAlignment(.center)
-                .frame(maxWidth: .infinity)
-
-            HStack(spacing: 6) {
-                ForEach(Array(Self.quickSchemes.enumerated()), id: \.offset) { _, scheme in
-                    Button {
-                        HapticManager.shared.light()
-                        withAnimation(DesignSystem.Animation.spring) {
-                            applyQuickScheme(scheme)
-                        }
-                    } label: {
-                        Text("configure_exercise.quick_scheme".localized(scheme.sets, scheme.reps))
-                            .font(.system(size: 13.5, weight: .bold, design: .rounded))
-                            .monospacedDigit()
-                            .foregroundStyle(DesignSystem.Colors.tint)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 11)
-                            .background(DesignSystem.Colors.tint.opacity(0.12))
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                    .stroke(DesignSystem.Colors.tint.opacity(0.28), lineWidth: 1)
-                            )
-                            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-                            .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
-
-            DashedCreateButton(title: "configure_exercise.single_set".localized, compact: true) {
-                withAnimation(DesignSystem.Animation.spring) { addSet() }
-            }
+            .configureSectionCard()
         }
     }
 
@@ -249,7 +212,7 @@ struct ConfigureExerciseSetsView: View {
 
     private var repGoalSection: some View {
         VStack(alignment: .leading, spacing: 8) {
-            sectionHeader(
+            ConfigureSectionHeader(
                 title: "configure_exercise.rep_goal".localized,
                 hint: repGoalHint
             )
@@ -276,7 +239,7 @@ struct ConfigureExerciseSetsView: View {
 
     private var restTimerSection: some View {
         VStack(alignment: .leading, spacing: 8) {
-            sectionHeader(
+            ConfigureSectionHeader(
                 title: "rest_timer.config.title".localized,
                 hint: globalRestTime > 0
                     ? TimeFormatting.formatRestTime(globalRestTime)
@@ -294,33 +257,35 @@ struct ConfigureExerciseSetsView: View {
 
     private var alternativesSection: some View {
         VStack(alignment: .leading, spacing: 8) {
-            sectionHeader(
+            ConfigureSectionHeader(
                 title: "configure_exercise.alternatives.header".localized,
                 hint: pendingAlternatives.isEmpty
                     ? "configure_exercise.optional".localized
                     : "\(pendingAlternatives.count)"
             )
 
-            sectionCard {
-                PendingAlternativesSection(
-                    alternatives: $pendingAlternatives,
-                    showingPicker: $showingAlternativePicker,
-                    expandedAlternativeId: $expandedAlternativeId,
-                    valueFocus: $isEditingSetValue
-                )
-            }
+            PendingAlternativesSection(
+                alternatives: $pendingAlternatives,
+                showingPicker: $showingAlternativePicker,
+                expandedAlternativeId: $expandedAlternativeId,
+                valueFocus: $isEditingSetValue
+            )
+            .configureSectionCard()
         }
     }
 
-    // MARK: - Sticky CTA
+    // MARK: - Sticky CTA / commit
 
     private var addCTA: some View {
         Button {
             HapticManager.shared.light()
-            finishConfiguration()
+            commitConfiguration()
+            // Edit mode is a push with no owning sheet to close, so the screen
+            // pops itself; the add flows are dismissed by their caller.
+            if isEditing { dismiss() }
         } label: {
             HStack(spacing: 8) {
-                Image(systemName: "plus")
+                Image(systemName: isEditing ? "checkmark" : "plus")
                     .font(.system(size: 15, weight: .bold))
                 Text(ctaTitle)
                     .font(.system(size: 15.5, weight: .bold))
@@ -358,43 +323,9 @@ struct ConfigureExerciseSetsView: View {
         return saveButtonKey.localized
     }
 
-    // MARK: - Shared section chrome
-
-    private func sectionHeader(title: String, hint: String?) -> some View {
-        HStack(alignment: .firstTextBaseline, spacing: 8) {
-            Text(title.uppercased())
-                .font(.system(size: 10.5, weight: .bold))
-                .kerning(0.8)
-                .foregroundStyle(Color.white.opacity(0.42))
-
-            if let hint {
-                Text(hint)
-                    .font(.system(size: 11.5))
-                    .monospacedDigit()
-                    .foregroundStyle(Color.white.opacity(0.3))
-                    .lineLimit(1)
-            }
-
-            Spacer(minLength: 0)
-        }
-        .padding(.horizontal, 2)
-    }
-
-    private func sectionCard<Content: View>(@ViewBuilder content: () -> Content) -> some View {
-        content()
-            .padding(12)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Color.white.opacity(0.035))
-            .overlay(
-                RoundedRectangle(cornerRadius: 20, style: .continuous)
-                    .stroke(Color.white.opacity(0.06), lineWidth: 1)
-            )
-            .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
-    }
-
     // MARK: - Set mutations
 
-    private func applyQuickScheme(_ scheme: (sets: Int, reps: Int)) {
+    private func applyQuickScheme(_ scheme: QuickSetScheme) {
         sets = (0..<scheme.sets).map { order in
             ExerciseSet(reps: scheme.reps, weight: 0.0, restTime: globalRestTime, order: order)
         }
@@ -419,13 +350,28 @@ struct ConfigureExerciseSetsView: View {
         }
     }
 
-    private func finishConfiguration() {
+    /// Finalizes rest time and ordering, then hands the configuration to the
+    /// caller. Idempotent — in edit mode it can run more than once (the CTA, and
+    /// every time the screen goes away, which includes pushing the alternative
+    /// picker).
+    ///
+    /// It hands over **copies**, never the live `@State` objects: `ExerciseSet`
+    /// and `PendingAlternative` are reference types, so committing the originals
+    /// would leave the caller's draft aliasing this screen's state and every
+    /// later keystroke would write straight through it.
+    private func commitConfiguration() {
         let ordered = sets.sorted { $0.order < $1.order }
         for (index, set) in ordered.enumerated() {
             set.restTime = globalRestTime
             set.order = index
         }
 
-        onSave(exercise, ordered, pendingAlternatives, targetRepMin, targetRepMax)
+        onSave(
+            exercise,
+            ordered.map(Self.copy),
+            pendingAlternatives.map { PendingAlternative(exercise: $0.exercise, sets: $0.sets.map(Self.copy)) },
+            targetRepMin,
+            targetRepMax
+        )
     }
 }

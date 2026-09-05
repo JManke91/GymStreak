@@ -130,7 +130,6 @@
 "exercises.empty.title" = "No Exercises Yet";
 "exercises.empty.description" = "Add your first exercise to build your library";
 "exercises.add" = "Add Exercise";
-"exercises.name" = "Exercise Name";
 "exercises.description" = "Description";
 "exercises.muscle_group" = "Muscle Group";
 "exercises.search" = "Search exercises or muscle groups";
@@ -462,14 +461,7 @@
 // MARK: - Exercise Selection View
 
 // MARK: - Configure Exercise View
-"configure_exercise.info" = "Exercise Info";
 "configure_exercise.empty.title" = "No sets configured";
-"configure_exercise.empty.description" = "Tap 'Add Set' below to start";
-"configure_exercise.set_detail" = "%d reps • %@";
-"configure_exercise.duplicate_set" = "Duplicate Last Set";
-"configure_exercise.rest_timer" = "Rest Timer";
-"configure_exercise.rest_time_between_sets" = "Rest Time Between Sets";
-"configure_exercise.add_to_routine" = "Add to Routine";
 "configure_exercise.add_to_named" = "Add to %@";
 "configure_exercise.summary.volume" = "Volume";
 "configure_exercise.sets_planned" = "%d planned";
@@ -478,6 +470,8 @@
 "configure_exercise.empty.hint" = "No sets yet. Start with a scheme — you can adjust the weights afterwards.";
 "configure_exercise.quick_scheme" = "%d × %d";
 "configure_exercise.single_set" = "Add a single set";
+"configure_exercise.edit_title" = "Edit Exercise";
+"configure_exercise.save_changes" = "Save Changes";
 
 // MARK: - Save Workout View
 "save_workout.duration_label" = "Duration";
@@ -1296,6 +1290,28 @@
 "onboarding.welcome.bullet2" = "Automatic weight reminders";
 "onboarding.welcome.bullet3" = "History & AI coach, on your device";
 "onboarding.welcome.cta" = "Let's go";
+
+/* Step 2 — routines. The plate previews one expanded exercise card of a sample
+   routine; its exercise names come from the seeded library's own keys. */
+"onboarding.preview.accessibility" = "Preview of the app screen %@";
+"onboarding.routines.breadcrumb" = "Routines › Upper Body A";
+"onboarding.routines.eyebrow" = "ROUTINES";
+"onboarding.routines.title" = "Build routines exactly\nthe way you train.";
+"onboarding.routines.body" = "Sets, reps, weight, rest time and alternative exercises — all per exercise, right inside the routine.";
+"onboarding.routines.bullet1" = "Sets, reps & weight";
+"onboarding.routines.bullet2" = "Rest timer & rep range";
+"onboarding.routines.sample.routine_name" = "Upper Body A";
+"onboarding.routines.sample.routine_meta" = "3 exercises · ~28 min";
+
+/* Step 3 — supersets. The plate previews two collapsed cards of the same sample
+   routine, joined by the real superset connector. The group's caption is the
+   app's own label for a superset ("superset.label"); the pill around it is
+   onboarding chrome and exists nowhere in the app. */
+"onboarding.supersets.eyebrow" = "SUPERSETS";
+"onboarding.supersets.title" = "Two exercises,\none set.";
+"onboarding.supersets.body" = "Exercises you do back to back are grouped as a superset. The rest timer only starts at the end of the group.";
+"onboarding.supersets.bullet1" = "Group as many exercises as you like";
+"onboarding.supersets.bullet2" = "One rest for the whole group";
 
 /* Routine detail — planned muscle map. Only the strings that name the card or a set count
    differ from the history reading; the legend, captions and reset control are shared. */

@@ -2,8 +2,8 @@
 //  WeightValueField.swift
 //  GymStreak
 //
-//  The labelled weight field of the two Form-based set editors
-//  (RoutineExerciseDetailView, ConfigureExerciseView). Both used to hold a bare
+//  The labelled weight field of the Form-based set editor
+//  (RoutineExerciseDetailView), which used to hold a bare
 //  `TextField(value:format:)` over the stored kilograms — no unit, no increment
 //  and no snapping.
 //

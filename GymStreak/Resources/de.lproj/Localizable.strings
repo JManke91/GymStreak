@@ -130,7 +130,6 @@
 "exercises.empty.title" = "Noch keine Übungen";
 "exercises.empty.description" = "Füge deine erste Übung hinzu um deine Bibliothek zu erstellen";
 "exercises.add" = "Übung hinzufügen";
-"exercises.name" = "Übungsname";
 "exercises.description" = "Beschreibung";
 "exercises.muscle_group" = "Muskelgruppe";
 "exercises.search" = "Übungen oder Muskelgruppen suchen";
@@ -462,14 +461,7 @@
 // MARK: - Exercise Selection View
 
 // MARK: - Configure Exercise View
-"configure_exercise.info" = "Übungsinformationen";
 "configure_exercise.empty.title" = "Keine Sätze konfiguriert";
-"configure_exercise.empty.description" = "Tippe unten auf 'Satz hinzufügen' um zu beginnen";
-"configure_exercise.set_detail" = "%d Wdh. • %@";
-"configure_exercise.duplicate_set" = "Letzten Satz duplizieren";
-"configure_exercise.rest_timer" = "Pausentimer";
-"configure_exercise.rest_time_between_sets" = "Pausenzeit zwischen Sätzen";
-"configure_exercise.add_to_routine" = "Zur Routine hinzufügen";
 "configure_exercise.add_to_named" = "Zu %@ hinzufügen";
 "configure_exercise.summary.volume" = "Volumen";
 "configure_exercise.sets_planned" = "%d geplant";
@@ -478,6 +470,8 @@
 "configure_exercise.empty.hint" = "Noch keine Sätze. Starte mit einem Schema — Gewichte passt du danach an.";
 "configure_exercise.quick_scheme" = "%d × %d";
 "configure_exercise.single_set" = "Einzelnen Satz anlegen";
+"configure_exercise.edit_title" = "Übung bearbeiten";
+"configure_exercise.save_changes" = "Änderungen speichern";
 
 // MARK: - Save Workout View
 "save_workout.duration_label" = "Dauer";
@@ -1296,6 +1290,28 @@
 "onboarding.welcome.bullet2" = "Automatische Gewichts-Erinnerungen";
 "onboarding.welcome.bullet3" = "Verlauf & AI Coach auf dem Gerät";
 "onboarding.welcome.cta" = "Los geht's";
+
+/* Step 2 — routines. The plate previews one expanded exercise card of a sample
+   routine; its exercise names come from the seeded library's own keys. */
+"onboarding.preview.accessibility" = "Vorschau des App-Bildschirms %@";
+"onboarding.routines.breadcrumb" = "Routinen › Oberkörper A";
+"onboarding.routines.eyebrow" = "ROUTINEN";
+"onboarding.routines.title" = "Baue Routinen genau so,\nwie du trainierst.";
+"onboarding.routines.body" = "Sätze, Wiederholungen, Gewicht, Pausenzeit und Alternativ-Übungen — alles pro Übung, direkt in der Routine.";
+"onboarding.routines.bullet1" = "Sätze, Wdh. & Gewicht";
+"onboarding.routines.bullet2" = "Pausen-Timer & Wdh.-Range";
+"onboarding.routines.sample.routine_name" = "Oberkörper A";
+"onboarding.routines.sample.routine_meta" = "3 Übungen · ~28 Min";
+
+/* Schritt 3 — Supersätze. Die Platte zeigt zwei eingeklappte Karten derselben
+   Beispiel-Routine, verbunden durch die echte Supersatz-Linie. Die Beschriftung
+   der Gruppe ist das App-eigene Label ("superset.label"); die Pille darum ist
+   Onboarding-Chrome und existiert nirgends in der App. */
+"onboarding.supersets.eyebrow" = "SUPERSÄTZE";
+"onboarding.supersets.title" = "Zwei Übungen,\nein Satz.";
+"onboarding.supersets.body" = "Übungen, die du direkt hintereinander machst, gruppierst du als Supersatz. Die Pause läuft erst am Ende der Gruppe.";
+"onboarding.supersets.bullet1" = "Beliebig viele Übungen gruppieren";
+"onboarding.supersets.bullet2" = "Eine Pause für die ganze Gruppe";
 
 /* Routine detail — planned muscle map. Only the strings that name the card or a set count
    differ from the history reading; the legend, captions and reset control are shared. */

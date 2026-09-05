@@ -177,6 +177,139 @@ struct OnboardingFlowTests {
         }
     }
 
+    @Test("Every string the Routines slide renders is localized")
+    func routinesSlideStringsAreLocalized() {
+        let content = OnboardingFeatureSlideContent.routines
+        let keys = [
+            content.breadcrumbKey,
+            content.eyebrowKey,
+            content.titleKey,
+            content.bodyKey,
+            "onboarding.preview.accessibility",
+            "onboarding.routines.sample.routine_name",
+            "onboarding.routines.sample.routine_meta",
+            // Borrowed from the seeded library rather than restated, so the
+            // tour cannot name an exercise differently than the app does.
+            "seed.exercise.lat_pulldown",
+            // The set editor's own heading, rendered inside the plate.
+            "routine.section.sets"
+        ] + content.bulletKeys
+
+        for key in keys {
+            #expect(key.localized != key)
+        }
+    }
+
+    @Test("The Routines slide's sample values produce a uniform set summary")
+    func sampleRoutineReadsAsOneScheme() {
+        // The header's summary is the plate's headline number. A mixed scheme
+        // would silently swap it for the "3 sets · max 55 kg" fallback, which
+        // teaches nothing about reps — so the sample staying uniform is a
+        // property of the copy, not an accident of the numbers.
+        let display = OnboardingSampleRoutine.exerciseCard(in: .kilograms)
+        let reps = Set(OnboardingSampleRoutine.plannedSets.map(\.reps))
+        let weights = Set(OnboardingSampleRoutine.plannedSets.map(\.kilograms))
+
+        #expect(reps.count == 1)
+        #expect(weights.count == 1)
+        #expect(display.setSummary.contains("55"))
+        #expect(display.setSummary.contains("10"))
+        #expect(display.alternativesCount == 1)
+    }
+
+    @Test("The Routines slide's sample avatars match the seeded library")
+    func sampleRoutineAvatarsMatchTheCatalog() {
+        // The slide names its exercises by their seed keys but restates their
+        // muscle groups and equipment locally, because `Presentation` may not
+        // read `Data/Seeding`. Nothing in the app enforces that the two agree —
+        // so the avatar colour and glyph would drift silently the day the
+        // catalog row changes. The *test* target may reach across the layer,
+        // and this is the only thing holding the copy honest.
+        let display = OnboardingSampleRoutine.exerciseCard(in: .kilograms)
+
+        let pulldown = seed("seed.exercise.lat_pulldown")
+        #expect(display.avatar?.muscleGroups == pulldown?.muscleGroups)
+        #expect(display.avatar?.equipmentType == pulldown?.equipmentType)
+
+        let pullUp = seed("seed.exercise.pull_up")
+        #expect(display.alternativeAvatars.first?.muscleGroups == pullUp?.muscleGroups)
+        #expect(display.alternativeAvatars.first?.equipmentType == pullUp?.equipmentType)
+    }
+
+    @Test("Every string the Supersets slide renders is localized")
+    func supersetsSlideStringsAreLocalized() {
+        let content = OnboardingFeatureSlideContent.supersets
+        let keys = [
+            content.breadcrumbKey,
+            content.eyebrowKey,
+            content.titleKey,
+            content.bodyKey,
+            // The group's caption is the app's own label, not a slide string.
+            "superset.label"
+        ] + content.bulletKeys + OnboardingSampleRoutine.supersetMembers.map(\.seedKey)
+
+        for key in keys {
+            #expect(key.localized != key)
+        }
+    }
+
+    @Test("The Supersets slide's sample avatars match the seeded library")
+    func supersetSampleAvatarsMatchTheCatalog() {
+        // Same reason as the Routines slide's pin: the slide restates the two
+        // exercises' muscle groups and equipment locally, and nothing outside
+        // this test notices the day a catalog row changes.
+        for member in OnboardingSampleRoutine.supersetMembers {
+            let row = seed(member.seedKey)
+            #expect(row != nil)
+            #expect(member.muscleGroups == row?.muscleGroups)
+            #expect(member.equipmentType == row?.equipmentType)
+        }
+    }
+
+    @Test("The Supersets slide's members read as one scheme and share a rest time")
+    func supersetSampleReadsAsOneScheme() {
+        // Both header summaries have to read "3 × 10 reps · <weight>": the
+        // mixed-scheme fallback drops the reps, and a slide about grouping two
+        // exercises cannot afford two differently shaped cards. One rest time
+        // for the whole group is the slide's actual claim.
+        for member in OnboardingSampleRoutine.supersetMembers {
+            #expect(Set(member.plannedSets.map(\.reps)).count == 1)
+            #expect(Set(member.plannedSets.map(\.kilograms)).count == 1)
+            #expect(member.card(in: .kilograms).setSummary.contains("10"))
+            // A rep range on every card, so neither shows the empty goal chip.
+            #expect(member.targetRepMin < member.targetRepMax)
+        }
+
+        #expect(OnboardingSampleRoutine.supersetMembers.count == 2)
+        #expect(OnboardingSampleRoutine.supersetRestTime == 90)
+    }
+
+    @Test("The first superset of a routine is the one labelled A")
+    func theFirstSupersetOfARoutineIsLabelledA() {
+        // `OnboardingSampleRoutine.supersetLetter` is a constant, and the colour
+        // the slide tints its connector with is derived from it. What makes "A"
+        // the right constant is the production label provider, so assert that
+        // rather than the constant against itself.
+        let group = UUID()
+        let exercises = [
+            SampleGroupable(supersetId: group, order: 0),
+            SampleGroupable(supersetId: group, order: 1)
+        ]
+
+        #expect(SupersetLabelProvider.labels(for: exercises)[group] == OnboardingSampleRoutine.supersetLetter)
+    }
+
+    /// The smallest thing `SupersetLabelProvider` accepts — the production
+    /// conformances are `@Model` types the tour has no reason to build.
+    private struct SampleGroupable: SupersetGroupable {
+        let supersetId: UUID?
+        let order: Int
+    }
+
+    private func seed(_ key: String) -> SeedExercise? {
+        SeedExerciseCatalog.entries.first { $0.seedKey == key }
+    }
+
     @Test("Every step names a localized call to action")
     func everyStepHasALocalizedCTA() {
         for step in OnboardingStep.allCases {

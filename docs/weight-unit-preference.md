@@ -430,22 +430,21 @@ when it parses the buffer.
 | --- | --- |
 | `RoutineSetsEditor` / `RoutineSetStepperRow` | the primary inline set editor. Per-unit step (2.5 kg / 5 lb), display-space field, kg-space ceiling, spoken a11y unit |
 | `RoutineExerciseDetailView` | set detail line, weight label, and the bare `TextField` |
-| `ConfigureExerciseView` (create-routine flow) | set detail line and the bare `TextField` |
-| `ConfigureExerciseSetsView` | the summary strip's planned volume |
+| `ConfigureExerciseSetsView` | the summary strip's planned volume. Since 2026-09-05 it is also the create-routine flow's *edit* screen — the row for the deleted `ConfigureExerciseView` (set detail line + bare `TextField`) folded in here |
 | `PendingRoutineExercise.setSummary(in:)` | was a computed property building `"…kg"` with a local `NumberFormatter` |
 | `PendingAlternativesSection`, `RoutineAlternativesSection` | alternative set summaries via `SetSummaryFormatting` |
 | `RoutineExerciseCardDisplay` | routine card + sorting row summaries (`init(_:in:)`) |
 | `ExerciseDetailView` | the "used in routine" scheme line |
 | `WeightIncreaseSheet`, `ProgressiveOverloadCard`, `WorkoutOverloadPromptBar` | the whole progressive-overload chain (§9) |
 
-**The two bare `TextField`s are gone.** `RoutineExerciseDetailView` and
+**The two bare `TextField`s are gone.** `RoutineExerciseDetailView` and the since-deleted
 `ConfigureExerciseView` each held a `TextField(value:format:)` straight over the stored
-kilograms — no unit, no increment, no snapping. Both now use one shared
-`WeightValueField`, which wraps `WeightDisplayMirror`. Its mirror state is **private to
-each instance** on purpose: sharing one display value across the rows of a collapsible
-editor is exactly how a collapsing row's still-live `onChange` handlers write the newly
-expanded row's number into the old set (the animation race already documented for these
-two screens).
+kilograms — no unit, no increment, no snapping. Both moved to one shared
+`WeightValueField`, which wraps `WeightDisplayMirror`; `RoutineExerciseDetailView` is its
+only host now. Its mirror state is **private to each instance** on purpose: sharing one
+display value across the rows of a collapsible editor is exactly how a collapsing row's
+still-live `onChange` handlers write the newly expanded row's number into the old set (the
+animation race already documented for these two screens).
 
 **Deleted, not hoisted:** `PendingRoutineExercise`'s local `NumberFormatter` and
 `ProgressiveOverloadCard.formattedWeight` (`String(format: "%g kg", …)`). Neither had a

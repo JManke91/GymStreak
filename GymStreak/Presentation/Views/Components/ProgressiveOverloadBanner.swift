@@ -16,6 +16,10 @@ struct ProgressiveOverloadBanner: View {
     /// bar is persistent on the workout screen, so it stacks instead.
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
+    /// True while an onboarding slide is showing this bar as a still picture of
+    /// itself. See `View.onboardingInertPreview(describing:)`.
+    @Environment(\.isOnboardingPreview) private var isOnboardingPreview
+
     var body: some View {
         Group {
             if dynamicTypeSize.isAccessibilitySize {
@@ -48,6 +52,10 @@ struct ProgressiveOverloadBanner: View {
                 .strokeBorder(Color.orange.opacity(0.3), lineWidth: 1)
         )
         .onAppear {
+            // A tour that buzzes the phone while explaining a feature is a bug
+            // the user cannot even attribute. Hit testing being off does not
+            // stop this one — nobody tapped.
+            guard !isOnboardingPreview else { return }
             UINotificationFeedbackGenerator().notificationOccurred(.success)
         }
     }

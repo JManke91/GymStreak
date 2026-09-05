@@ -653,14 +653,7 @@ struct RoutineDetailView: View {
                 .transition(.opacity.combined(with: .move(edge: .top)))
             }
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(14)
-        .background(styling.color?.opacity(0.08) ?? Color.white.opacity(0.035))
-        .overlay(
-            RoundedRectangle(cornerRadius: 20, style: .continuous)
-                .stroke(styling.color?.opacity(0.3) ?? Color.white.opacity(0.06), lineWidth: 1)
-        )
-        .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+        .routineExerciseCardChassis(color: styling.color)
         .contextMenu {
             supersetContextMenu(for: routineExercise)
         }

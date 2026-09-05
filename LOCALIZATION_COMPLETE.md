@@ -91,7 +91,7 @@ Your GymStreak app is now **fully localized** for English and German! 🇬🇧�
 - ✅ EditExerciseView
 - ✅ ExerciseSelectionView
 - ✅ ExercisePickerView
-- ✅ ConfigureExerciseView
+- ✅ ConfigureExerciseSetsView (absorbed the former ConfigureExerciseView, deleted 2026-09-05)
 
 ### Workout Flow
 - ✅ ActiveWorkoutView

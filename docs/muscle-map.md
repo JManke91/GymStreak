@@ -27,7 +27,8 @@ shades.
 Beneath the figures the same regions are spelled out as a wrapping row of pills, so the map
 can be read without decoding the drawing: an accent-tinted pill per primary region carrying
 its name and completed set count, ordered heaviest first, then muted pills for the supporting
-regions in anatomical order.
+regions in anatomical order. Every pill ends in a small `chevron.down`, which is what tells
+the user the row is a set of controls and not a caption for the drawing above it.
 
 Tapping a trained muscle on either figure — or its pill — selects that region: every other
 belly dims to 30 %, and the pill row is replaced by a detail chip naming the region, its set
@@ -332,6 +333,22 @@ itself; secondary is white @ 4 % fill, white @ 7 % border, name in white @ 60 % 
 count. They wrap through the existing `FlowLayout` in `Views/Components/RedesignControls.swift`
 (spacing 6) rather than a new layout type.
 
+Each pill also ends in a trailing **`chevron.down`**, 9 pt semibold — accent @ 50 % on a
+primary pill (echoing the tint of the set-count digit beside it at half the weight, so it stays
+subordinate to the count) and white @ 35 % on a secondary one (matching its already-muted 60 %
+white label). This is a discoverability fix, not decoration: the pills were always `Button`s,
+but styled as tags and placed directly under an anatomical illustration they pattern-matched as
+a *legend for the picture*, so neither they nor the bellies they mirror were ever tried. The
+glyph is the whole of that fix — the fills, borders, type and capsule shape are deliberate,
+match the Fortschritt filter chips (`MusclePillView`), and are not what failed.
+
+**It is `chevron.down` and deliberately not `chevron.right`.** The right-chevron is the
+iOS-wide convention for "this pushes a new screen" (Settings rows, table view rows), and
+tapping a pill does not navigate — it swaps the pill row for the detail chip *in place*.
+`chevron.down` is the honest glyph for in-place disclosure (it is `DisclosureGroup`'s own
+default) and does not set up an expectation the interaction immediately breaks. Changing it to
+`chevron.right` as a tidy-up would be a regression.
+
 The detail chip that replaces the pill row while a region is selected follows the design's
 chip: accent @ 9 % fill, accent @ 22 % border, 12 pt continuous radius, 11 pt horizontal and
 9 pt vertical padding, 8 pt above. Its first row is the region name (13 pt bold rounded,
@@ -448,7 +465,12 @@ tree and no `.accessibilityHidden` is needed alongside it.
   no `.isButton` trait: dimming and inertness are visual affordances and must not cost the
   map its information. Trained regions carry `.isButton`, plus `.isSelected` while selected.
 - The pills and the reset control are ordinary `Button`s; each pill borrows the same
-  per-region label so VoiceOver does not read its set count as a stray number.
+  per-region label so VoiceOver does not read its set count as a stray number. That explicit
+  `.accessibilityLabel` overrides the button's spoken content wholesale, so the trailing
+  `chevron.down` is absorbed silently and needs no `.accessibilityHidden` of its own.
+- The chevron closes a purely **visual** gap. VoiceOver users always had this feature: the
+  figure's region proxies carry `.isButton` on exactly the trained regions, so the map has
+  spoken "button" on the tappable bellies since it shipped.
 - The card is no longer one lumped element. The card title carries the overview as its
   accessibility value ("Primär: Quadrizeps 7 Sätze… Sekundär: Gesäß, Unterer Rücken"), so a
   VoiceOver user hears the summary first and can then swipe into the individual regions.

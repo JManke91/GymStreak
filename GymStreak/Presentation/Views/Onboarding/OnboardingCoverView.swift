@@ -104,6 +104,10 @@ struct OnboardingCoverView: View {
                     switch viewModel.currentStep {
                     case .welcome:
                         OnboardingWelcomeSlideView()
+                    case .routines:
+                        OnboardingRoutinesSlideView()
+                    case .supersets:
+                        OnboardingSupersetsSlideView()
                     default:
                         // Filled in by the remaining slide tickets. The chrome
                         // and the navigation are complete around them.

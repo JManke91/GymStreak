@@ -151,6 +151,15 @@ struct MuscleMapCardView: View {
                         .monospacedDigit()
                         .foregroundStyle(DesignSystem.Colors.tint)
                 }
+                // Sitting directly under an anatomical drawing, the pill row otherwise reads as
+                // a caption for the picture and never gets tapped. `chevron.down` and not
+                // `chevron.right`: tapping swaps this row for the detail chip in place, it does
+                // not push a screen — see docs/muscle-map.md.
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 9, weight: .semibold))
+                    .foregroundStyle(
+                        isPrimary ? DesignSystem.Colors.tint.opacity(0.5) : Color.white.opacity(0.35)
+                    )
             }
             .padding(.horizontal, 9)
             .padding(.vertical, 5)

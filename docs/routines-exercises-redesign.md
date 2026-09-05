@@ -112,7 +112,18 @@ Decisions taken while adapting the mock (all confirmed with the user):
 - **Two old controls disappeared without losing capability:** the "Duplicate Last Set" button (adding a set in `RoutineSetsEditor` already seeds reps/weight from the last one) and swipe-to-delete on set rows (each row has a minus button). The "Exercise Info" name/muscle-group rows are covered by the new header.
 - **`ParameterEditorPanel` gained `isProminent`.** `RestTimeInlineEditor`/`RepRangeInlineEditor` were built as transient tinted panels opened from a chip. As permanent sections here, three accent-washed blocks in a row (summary + goal + pause) read far too loud, so both editors take `isProminent: false` and render on the neutral card background. The routine detail is unchanged (default `true`).
 
-- **Deliberate omission — set-config screens still NOT unified:** `ConfigureExerciseView` (in `CreateRoutineView`'s flow) still duplicates set-configuration UI with the picker's `ConfigureExerciseSetsView`; it remains solely for EDITING an already-added pending exercise in the create-routine draft, and it is still the legacy `Form`. The 2026-08-09 redesign therefore makes the create-routine flow visually inconsistent between *adding* an exercise (new screen) and *editing* one (old form) — accepted, because unifying them was out of the requested scope. `PendingAlternativesSection` is shared by both, so it now renders plain content and `ConfigureExerciseView` wraps it in its own `Section`. The user chose a 3-slice scope for the unified-picker feature (decouple → unify entry → filter + polish), and merging the two config screens was out of scope. To pick it up later: fold `ConfigureExerciseView`'s edit-existing-pending-exercise case into `ConfigureExerciseSetsView` (which already handles sets, rest time, and pending alternatives) and delete `ConfigureExerciseView`; the original tickets live under `.scratch/unified-exercise-picker/issues/`.
+### Editing a draft exercise uses the same screen (2026-09-05)
+
+Until this change the create-routine flow was visually inconsistent with itself: *adding* an exercise opened the redesigned `ConfigureExerciseSetsView`, while tapping an exercise already in the unsaved draft opened `CreateRoutineFlow/ConfigureExerciseView` — a legacy grouped `Form` ("Übungsinformationen" / "Sätze" / "Pausentimer" with a 0–300 s `Slider`) that the 2026-08-09 redesign had deliberately left behind as out of scope. That omission is now resolved the way this document proposed: the edit case folded into `ConfigureExerciseSetsView` and `ConfigureExerciseView.swift` was **deleted** (it had exactly one caller).
+
+- **`ConfigureExerciseSetsView.existingConfiguration`** (`ExistingConfiguration`: `sets`, `alternatives`, `targetRepMin`, `targetRepMax`) is the one new parameter. Nil — every add flow — is unchanged: the screen still starts empty on the quick-scheme state. Non-nil is **edit mode**.
+- **Seeding copies.** `onAppear` seeds the `@State` from *deep copies* of the incoming sets and alternatives, because `ExerciseSet` and `PendingAlternative` are reference types and the caller still holds the draft — editing must not write through to it before a commit. The seed is guarded by a one-shot `hasSeededInitialState`: `onAppear` fires again when popping back from the pushed `AlternativeExercisePicker`, and without the guard that reset in-progress edits (the same trap the deleted view documented).
+- **Commit points.** The sticky CTA reads "Änderungen speichern" with a checkmark instead of "+ Zu \<Routine\> hinzufügen", commits and pops itself via `@Environment(\.dismiss)` — the add flows are dismissed by their caller (a sheet), an edit push has no such owner. `onDisappear` **also** commits in edit mode, which preserves the deleted screen's save-on-back behaviour so a swipe-back cannot silently discard edits. Note that `onDisappear` fires when the alternative picker is *pushed* as well, so an edit session commits mid-flight, more than once: `commitConfiguration()` is idempotent (it re-sorts an already-normalised array and re-writes the same values) and never commits an empty set list, since an exercise with no sets is not a valid routine entry.
+- **Commits hand over copies, not the live state.** `commitConfiguration()` maps the sets and alternatives through the same copy before calling `onSave`. Handing over the `@State` objects themselves would make the caller's draft *alias* this screen's state from the first commit onward — and because that first commit can happen on a picker push, every later keystroke would then write straight through into the draft, defeating both the seed-time copy and the empty-set guard. Nothing reachable today loses data from that (`RoutineSetsEditor` refuses to remove the last set), but a Cancel button or a removable last set would turn it into a silent lost update, so the aliasing is cut at the source.
+- **Capability gained:** the rep-range goal is now editable on a draft exercise. The legacy form had no rep-goal control at all, so a goal picked at add time could not be changed until after the routine was saved. `CreateRoutineView.updateExercise(...)` carries `targetRepMin`/`targetRepMax` back into `PendingRoutineExercise`.
+- **Also gained**, simply by sharing the screen: the summary strip (Sätze · Volumen · Pause), the quick-scheme empty state, `RepRangeInlineEditor`/`RestTimeInlineEditor` in place of the rest-time slider, and the redesigned dark canvas.
+- **Dropped with the file:** the "Letzten Satz duplizieren" button and the tap-to-expand set rows — both already superseded by `RoutineSetsEditor` (adding a set seeds from the last one; every row is always editable). Localization keys that only that file used were removed: `configure_exercise.{info, empty.description, set_detail, duplicate_set, rest_timer, rest_time_between_sets, add_to_routine}` and `exercises.name`.
+- `PendingAlternativesSection` no longer needs its Form-`Section` caller, so its "renders plain content" contract now has exactly one shape: card chrome supplied by the host.
 
 ## Architecture
 
@@ -139,6 +150,9 @@ GymStreak/Presentation/Helpers/SetSummaryFormatting.swift            "3 × 6 Wdh
 
 # configure-screen redesign (2026-08-09)
 GymStreak/Presentation/Views/Routines/ConfigureExerciseSetsView.swift  Extracted from RoutineExercisePickerView.swift and rewritten
+
+# draft-exercise editing folded in (2026-09-05)
+GymStreak/Presentation/Views/Routines/ConfigureExerciseSetsComponents.swift  Summary strip, empty-sets state and the section header/card chrome
 ```
 
 ### Modified files
@@ -152,7 +166,7 @@ RoutineExercisePickerView.swift  (ex AddExerciseToRoutineView.swift) Picker rest
 RoutinesViewModel.swift       + lastPerformedByRoutine, upNextRoutine, refreshLastPerformedDates, duplicateRoutine; v2: removeRoutineExercise returns a snapshot, + restoreRoutineExercise, updateRestTime(_:for:), applyToAllSets(from:field:in:)
 ExerciseVisuals.swift         v2: + ExerciseAvatarStack (overlapping avatars + "+N")
 RedesignControls.swift        v2: DashedCreateButton gained a `compact` in-card variant
-PendingAlternativesSection.swift / ConfigureExerciseView.swift / RoutineExercisePickerView.swift  v2: use RoutineSetsEditor + a shared value-focus flag for the keyboard Done bar
+PendingAlternativesSection.swift / RoutineExercisePickerView.swift  v2: use RoutineSetsEditor + a shared value-focus flag for the keyboard Done bar
 ExercisesViewModel.swift      + routineUsageCount(for:)
 DomainColorStyling.swift      + MuscleGroups.color(for:) and categoryColor(for:) — muscle category → color mapping (Presentation)
 TimeFormatting.swift          + lastTrainedLabel(for:) relative date
@@ -162,11 +176,16 @@ Resources/{en,de}.lproj/Localizable.strings  New keys (see below)
 RoutineExercisePickerView.swift   ConfigureExerciseSetsView extracted out; + routineName; onExerciseConfigured gained (Int?, Int?)
 PendingAlternativesSection.swift  No longer a Form Section — plain card content, redesigned rows; dropped the unused primaryExercise
 RoutineParameterEditors.swift     ParameterEditorPanel / RestTimeInlineEditor / RepRangeInlineEditor gained isProminent
-ConfigureExerciseView.swift       Wraps PendingAlternativesSection in its own Section (otherwise untouched legacy Form)
 CreateRoutineView.swift / PendingRoutineExercise.swift  Carry the rep-range goal through the create-routine draft
 RoutinesViewModel.swift           addConfiguredExercise + createRoutine write targetRepMin/Max
 WorkoutViewModel.swift / AddExerciseToWorkoutView.swift  addExerciseToWorkout takes the rep-range goal
 Resources/{en,de}.lproj/Localizable.strings  + configure_exercise.{add_to_named, summary.volume, sets_planned, optional, rep_goal, empty.hint, quick_scheme, single_set}
+
+# draft-exercise editing folded in (2026-09-05)
+ConfigureExerciseSetsView.swift   + existingConfiguration (edit mode): seeded copies, checkmark CTA, self-dismiss, save-on-back; chrome moved out (491 → 378 lines)
+CreateRoutineView.swift           Pushes ConfigureExerciseSetsView instead of ConfigureExerciseView; updateExercise carries the rep range
+WeightValueField.swift            Doc comment: only RoutineExerciseDetailView hosts it now
+Resources/{en,de}.lproj/Localizable.strings  + configure_exercise.{edit_title, save_changes}; − the 8 keys only the deleted form used
 ```
 
 ### Deleted files
@@ -184,6 +203,9 @@ GymStreak/Presentation/Views/Components/RepRangeConfigView.swift        Supersed
 
 # v2 bug fixes (2026-07-29)
 GymStreak/Presentation/Views/Routines/ExerciseReorder.swift             Hand-rolled onDrag/onDrop reorder — replaced by List + .onMove in sorting mode
+
+# draft-exercise editing folded in (2026-09-05)
+GymStreak/Presentation/Views/Routines/CreateRoutineFlow/ConfigureExerciseView.swift  Legacy Form; its only case now lives in ConfigureExerciseSetsView
 ```
 
 `SupersetRestTimerConfig.swift` and `RestTimerConfigView.swift` are **kept** — the routine detail no longer uses them, but `ActiveWorkoutView` and `RoutineExerciseDetailView` still do. `WiggleModifier` was deleted with the old edit mode (the drag handle is the sorting affordance now).
@@ -210,7 +232,7 @@ New keys under `routines.*`, `routine.*`, `exercises.*`, `exercise.detail.*`, `f
 **v2 added** `routine.sort`, `routine.sort_hint`, `routine.exercise_removed`, `routine.set_scheme.uniform`, `routine.set_scheme.mixed`, `rest_timer.enable`, `rest_timer.rest_short`, `rest_timer.off`, `rep_range.goal_short`, `rep_range.value`, `rep_range.custom`, `rep_range.no_goal`, `set.weight_compact`, `set.reps_unit`, `set.weight_unit`; and removed `routine.chip.pause`, `routine.chip.goal`, `routine.drag_to_reorder`, `routine.edit_mode_announcement`, `rep_range.clear`, `rep_range.strength`, `rep_range.hypertrophy`, `rep_range.endurance` with the components that used them.
 
 ## Known constraints / notes
-- **Type-check performance**: `RoutineDetailView.exerciseRows` was originally one expression with three heavily-modified branches and hit the Swift "unable to type-check in reasonable time" error. Fixed by extracting each branch into its own function (`supersetSelectionCard`, `normalExerciseCard`, `exerciseRow`). Keep card branches as separate functions to avoid regressing this. (The former shared `ExerciseListRowChrome` `ViewModifier` was removed with the 2026-07-07 `List`→`LazyVStack` migration — per-child padding replaced it.) The same limit bit again in v2 in an *untouched* file, `CreateRoutineFlow/ConfigureExerciseView.swift`: two inline `Binding(get:set:)` closures over a subscripted `@State` array inside the row body tipped over once the module's file set changed. Fixed by extracting them to `repsBinding(at:)` / `weightBinding(at:)`.
+- **Type-check performance**: `RoutineDetailView.exerciseRows` was originally one expression with three heavily-modified branches and hit the Swift "unable to type-check in reasonable time" error. Fixed by extracting each branch into its own function (`supersetSelectionCard`, `normalExerciseCard`, `exerciseRow`). Keep card branches as separate functions to avoid regressing this. (The former shared `ExerciseListRowChrome` `ViewModifier` was removed with the 2026-07-07 `List`→`LazyVStack` migration — per-child padding replaced it.) The same limit bit again in v2 in an *untouched* file, `CreateRoutineFlow/ConfigureExerciseView.swift` (deleted 2026-09-05, but the lesson stands): two inline `Binding(get:set:)` closures over a subscripted `@State` array inside the row body tipped over once the module's file set changed. Fixed by extracting them to named `repsBinding(at:)` / `weightBinding(at:)` methods — a file you did not touch can start failing to type-check, and inline bindings over a subscripted array are the usual trigger.
 - **Header width (v2)**: the set summary is the card's primary information and must never truncate, so `ExerciseHeaderView`'s meta line is a `ViewThatFits` — the equipment tag is dropped first when the row runs out of width (the v2 header carries an ellipsis menu the design mock does not have, which costs ~30pt).
 - **Keyboard dismissal (v2)**: the set rows' typeable values use one shared `@FocusState<Bool>` per screen, passed down as a `FocusState<Bool>.Binding` into `RoutineSetsEditor`, and dismissed by `keyboardDoneBar(isFocused:)`. `ToolbarItemGroup(placement: .keyboard)` was removed from `RoutineDetailView` — it does not render on iOS 26 (see the Exercises-tab notes above for the bug family).
 - **Set-row width budget (measured 2026-09-02)** — `RoutineSetStepperRow` is the tightest row in the app. It shipped two truncation bugs because every element in it was fixed-width **except the two unit labels**, so the units absorbed 100% of any shortfall: `kg` rendered as `k`, and a weight of `136,08` was clipped to `136…` by the field's own `.frame(width: 42)`. **Unit conversion is what produces those values** — 300 lb is 136,078 kg — so any routine authored in pounds carries six-character kilogram strings throughout (see `weight-unit-preference.md`).

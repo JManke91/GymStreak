@@ -35,6 +35,32 @@ struct SetsSectionLabel: View {
     }
 }
 
+// MARK: - Exercise card chassis
+
+extension View {
+    /// The panel every routine exercise card is drawn in: the fill, the hairline
+    /// border and the 20 pt corner.
+    ///
+    /// - Parameter color: the superset group's colour, or `nil` for a card that
+    ///   is not a member.
+    ///
+    /// A modifier rather than the same five lines repeated per site: the
+    /// browsing card and the onboarding tour's previews of it (steps 2 and 3)
+    /// have to look identical, and until this existed the tour reproduced the
+    /// chain by hand — see docs/onboarding.md.
+    func routineExerciseCardChassis(color: Color? = nil) -> some View {
+        self
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(14)
+            .background(color?.opacity(0.08) ?? Color.white.opacity(0.035))
+            .overlay(
+                RoundedRectangle(cornerRadius: 20, style: .continuous)
+                    .stroke(color?.opacity(0.3) ?? Color.white.opacity(0.06), lineWidth: 1)
+            )
+            .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+    }
+}
+
 // MARK: - Exercise card header
 
 struct ExerciseHeaderView: View {
