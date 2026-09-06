@@ -1437,7 +1437,10 @@ trigger anyway, and which was the only option when A shipped, because the app ha
 flow at all. It has one since 2026-09-05, and that flow ends on its own soft placement, `onboarding`
 (A′): raised from the last step of the tour, hosted **inside the tour's own full-screen cover**, and
 once-ever like A. A and A′ are separate placements rather than one, because they fire at different
-moments and a user can meet both in a first session. See `docs/onboarding.md`.
+moments and a user can meet both in a first session — which is the one thing about A′ worth
+watching, and why `monetization-strategy.md` §10 re-bases the free-user D30 and App Store rating
+guardrails on a **pre-tour** baseline. Its rollback is one line: drop `.offer` from
+`OnboardingStep`, and the placement is simply never raised. See `docs/onboarding.md`.
 
 ### Armed, presented, and why they are different facts
 
@@ -1683,11 +1686,16 @@ action, by construction** — there is nothing on it to route anywhere.
 
 ### Hosting, and the one ordering it changes
 
-`ContentViewInternal` hosts it as a `.fullScreenCover` bound to the coordinator's `isPresenting`,
-above the tabs and above both paywall hosts. **The AI-coach opt-in cover is suppressed while it is
-up**: SwiftUI presents one cover per context, and this is the ordering that matters. If the opt-in
-happened to be on screen already (it can only be on the one launch where both are due), its binding
-goes false, it closes, the thank-you appears, and the opt-in comes back on its own afterwards.
+`ContentViewInternal` hosts it as a `.fullScreenCover`, above the tabs and above both paywall
+hosts. Since 2026-09-05 there are **three** covers that can claim a first launch, and which one is
+on screen is decided in one place — `FirstRunCoverOrder.topmost(…)` returns the first of
+**onboarding → Founder thank-you → AI Coach opt-in** that is due, so exactly one is presented and
+the ordering cannot drift apart across three hand-written suppression clauses
+(`docs/onboarding.md`, "Cover ordering"). For this screen that means two things: the first-run tour
+outranks it (a user who has not been told what the app is cannot be reassured about Pro), and it
+outranks the opt-in. If the opt-in happened to be on screen already (it can only be on the one
+launch where both are due), its binding goes false, it closes, the thank-you appears, and the
+opt-in comes back on its own afterwards.
 
 **The one rough edge, and why it is left alone.** Dismissing the thank-you clears `isPresenting`
 and un-suppresses the opt-in in the *same* state change, so the opt-in's presentation can be
@@ -1697,7 +1705,9 @@ presentation is in progress" swallow. It is left as a derived binding rather tha
 binding is `.constant(…)` over **persistent** preferences, not a one-shot, so a swallowed
 presentation simply re-presents at the next body evaluation or the next launch, while the screen
 that must not be lost — the thank-you, whose record is only written on dismissal — is the one that
-wins. Worth an eyeball during ticket 15's launch pass all the same (§7).
+wins. **Walked on the simulator on 2026-09-06** with `-PRO_GATING_ON -FOUNDER_SIMULATE_PRECUTOFF`,
+now that the tour sits above it: skipping the tour raises the thank-you by itself, and dismissing
+the thank-you raises the opt-in by itself. Nothing was swallowed in either hand-off.
 
 Nothing else needed suppressing: a Founder is `isPro`, so no gate blocks, no nudge computes, no
 badge renders and `PaywallPresenter` refuses every placement for them anyway (§5a rule 3). The
@@ -2441,14 +2451,18 @@ process: the debug path bypasses the coordinator entirely, and the coordinator i
 - **The Founder screen is recorded on dismissal, so killing the app while it is up re-shows it.**
   Deliberate (a screen nobody dismissed is still owed, §5h) and benign: the worst case is being
   thanked twice.
-- **Nothing automated covers the Founder screen's *hosting*.** `FounderCelebrationTests` asserts
-  what the coordinator decides; the unit tests cannot see whether the cover actually appears, nor
-  the opt-in suppression that keeps the three root covers from fighting. Both need a local build
-  with `ProGating.isEnabled` flipped **or** the debug row (§6). Check: the thank-you appears over
-  the tabs, the AI opt-in follows it rather than being swallowed by its dismissal transition
-  (§5h — benign and self-healing if it is, but worth seeing), and it does not come back on the next
-  launch. Flagged by `architecture-reviewer` as the one thing in ticket 12 standing on reasoning
-  rather than evidence.
+- **The Founder screen's *hosting* is still the one thing no test can see.** `FounderCelebrationTests`
+  asserts what the coordinator decides, and `FirstRunCoverOrderTests` (2026-09-06) now asserts the
+  *ordering rule* the three root covers share — including that a thank-you owed while the first-run
+  tour is up is neither shown nor spent. What no unit test can see is whether SwiftUI actually puts
+  the cover on screen, which needs a local build with `ProGating.isEnabled` flipped **or** the debug
+  row (§6). Check: the thank-you appears over the tabs, the AI opt-in follows it rather than being
+  swallowed by its dismissal transition (§5h — benign and self-healing if it is, but worth seeing),
+  and it does not come back on the next launch. **All three were walked on the simulator on
+  2026-09-06** with `-PRO_GATING_ON -FOUNDER_SIMULATE_PRECUTOFF` (see `docs/onboarding.md`,
+  "Verification"), so the `architecture-reviewer` finding from ticket 12 — that this stood on
+  reasoning rather than evidence — is now answered for the hand-offs, and only re-verification after
+  a change to the hosting remains.
 - **A Founder who reinstalls is thanked again.** The once-ever record is device-local and not
   mirrored to iCloud (§5h), while the grant itself survives via `AppTransaction`. Accepted — the
   alternative risks a Founder who never sees it at all.

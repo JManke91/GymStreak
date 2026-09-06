@@ -8,3 +8,4 @@
 - The AI Coach analysis in the workout details no longer repeats the same exercise as several highlights
 - The AI Coach analysis now finds a routine's previous workouts even after you rename the routine, instead of reporting that there is nothing to compare
 - Fixed an English word slipping into the German headline of the AI Coach period recap
+- New: a short first-run tour. On the first launch after this update it introduces the app in a few steps — routines, supersets, automatic weight increases, your workout history and the AI Coach — using real screens rather than illustrations. You can skip it at any point, and it does not come back.

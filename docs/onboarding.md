@@ -4,10 +4,10 @@ The tour a user sees once, on their first launch of the version that introduced
 it, before they can reach the tab bar. It teaches what Gym Streak is by showing
 real pieces of the app rather than illustrations.
 
-> **Status.** All seven steps are built. The shell and the feature-slide
-> scaffold came from tickets 01 and 03; steps 2–6 from tickets 04–07; step 7,
-> the Pro offer, from ticket 08. Ticket 09 owns the cover-ordering tests, the
-> end-to-end walkthrough, the TestFlight notes and the rest of this document.
+> **Status.** Complete and shipped. The shell and the feature-slide scaffold came
+> from tickets 01 and 03; steps 2–6 from tickets 04–07; step 7, the Pro offer,
+> from ticket 08; the cover ordering, its tests and the end-to-end walkthrough
+> from ticket 09 (see "Verification" at the end).
 
 ## The flow
 
@@ -40,6 +40,7 @@ Domain/Interfaces/OnboardingCompletionTracking.swift   the durable "seen it" rec
 Data/Preferences/OnboardingCompletionStore.swift       UserDefaults.standard behind it
 Presentation/ViewModels/Onboarding/OnboardingStep.swift          the step list + per-step CTA key
 Presentation/ViewModels/Onboarding/OnboardingFlowViewModel.swift presented? which step?
+Presentation/ViewModels/Onboarding/FirstRunCoverOrder.swift      which first-run cover wins
 Presentation/Views/Onboarding/OnboardingCoverView.swift          the chrome
 Presentation/Views/Onboarding/OnboardingCheckBullet.swift        the shared bullet
 Presentation/Views/Onboarding/OnboardingWelcomeSlideView.swift   step 1
@@ -57,7 +58,7 @@ Presentation/Views/Onboarding/OnboardingSampleWorkout.swift      step 4's sample
 Presentation/Views/Onboarding/OnboardingSampleHistory.swift      step 5's sample values
 Presentation/Views/Onboarding/OnboardingSampleCoach.swift        step 6's sample values
 App/AppDependencies.swift                              constructs the view model
-App/ContentView.swift                                  hosts the fullScreenCover
+App/ContentView.swift                                  hosts the three first-run covers
 ```
 
 Step 7 adds no file. It is a case of `PaywallPlacement` (`onboarding`), a query
@@ -100,12 +101,22 @@ observable and the view model is read while the app root is being composed.
 ## Cover ordering
 
 Three things want the whole screen on a first launch. The order is **onboarding →
-Founder thank-you → AI Coach opt-in**, enforced at the host in `ContentView`:
-the Founder binding and the opt-in binding are both suppressed while
-`onboarding.isPresenting`, and the Founder binding also suppresses the opt-in as
-it did before.
+Founder thank-you → AI Coach opt-in**, and it is decided in one place:
+`FirstRunCoverOrder.topmost(isOnboarding:isCelebratingFounder:shouldShowCoachOptIn:)`
+returns the first cover that is due, or `nil` for the tab bar. `ContentView`
+reads the three conditions in `body` — which is also what registers it as an
+observer of all three — and each of the three `.fullScreenCover`s binds to
+`firstRunCover == <its own case>`.
 
-Two things about this are load-bearing and easy to break:
+**A single `FirstRunCover?` is why "exactly one cover" is structurally true.**
+The earlier shape was three hand-written suppression clauses
+(`isCelebratingFounder && !isOnboarding`, `shouldShowOptIn && !isCelebratingFounder
+&& !isOnboarding`), which is an invariant that holds only as long as three
+expressions agree with each other, and which cannot be asked anything without a
+running SwiftUI hierarchy. `FirstRunCoverOrderTests` now walks all eight
+combinations of the three conditions.
+
+Three things about this are load-bearing and easy to break:
 
 - **The tour must never raise itself again.** `isPresenting` is seeded once and
   only ever goes true → false. If it could rise while the Founder cover is on
@@ -124,14 +135,21 @@ Two things about this are load-bearing and easy to break:
   SwiftUI's presentation handling rather than on anything this code controls,
   which is why ticket 09 pins it with a test.
 
-Nothing is lost by being suppressed, because none of the three spends its record
-when it fails to present: `FounderCelebrationCoordinator` only writes on
-dismissal, and the opt-in re-evaluates its own condition. Each one appears on its
-own once the cover above it goes away. Ticket 09 pins this with tests — including
-the case that matters most, the coach opt-in becoming eligible asynchronously
-while the tour is still on screen.
+- **Suppression is not consumption.** None of the three spends its record when it
+  fails to present: `FounderCelebrationCoordinator` writes only on dismissal
+  (`presentIfDue()` may therefore be called while the tour is up — it raises its
+  own flag, and the ordering keeps the screen off), the tour's flag is written
+  only when the tour ends, and the opt-in has no record to spend at all, because
+  it re-reads `AICoachAvailability`/`AICoachPreferences` on every render. The
+  order is recomputed from live conditions each time, so a cover that became due
+  behind another one becomes topmost the moment the one above it goes away.
+  `founderScreenIsNotSpentWhileSuppressed`, `optInEligibleDuringTheTourIsNotLost`
+  and `theThreeCoversArriveInOrder` pin all three cases — the last of which is
+  the one that matters most, since Apple Intelligence availability resolves
+  asynchronously after launch and therefore usually *does* turn true while the
+  tour is still on screen.
 
-**A sheet is not a cover, and that is the third rule.** The app root also hosts
+**A sheet is not a cover, and that is the fourth rule.** The app root also hosts
 the paywall — as a `.sheet` — and a sheet raised while a full-screen cover is up
 never reaches the screen at all. Step 7 raises a paywall from *inside* the tour,
 so the tour hosts its own, and `ContentView`'s root paywall host is suppressed
@@ -163,7 +181,12 @@ pixel values, because the design is a fixed-size web mock and the app is not:
 
 - **The bullet chip scales with its label** (`@ScaledMetric(relativeTo: .footnote)`,
   the pattern `FounderCelebrationView` uses). A fixed 18pt disc would sit beside
-  text 2.5× that size at AX5.
+  text 2.5× that size at AX5. The metric is **snapshotted into a local `let` in
+  `body`** before the `alignmentGuide` closure reads it: SwiftUI declares that
+  closure `@Sendable` *and* `nonisolated` and calls it off the view's actor, so
+  reading the `@MainActor` property inside it captures `self` across the boundary —
+  the isolation class that crashed TestFlight 1.1.10. Full write-up in
+  `docs/swift6-concurrency.md` §4a.
 - **The Back control's hit target is 44pt**, with the 30pt chip drawn inside it.
   The design's 30pt square is a visual size, not a hit box, and this is the
   flow's only way back.
@@ -862,3 +885,103 @@ offering the dashboard serves, never from hard-coded strings — a mocked price 
 a wrong price the moment pricing changes or the storefront differs, and App
 Review has already rejected this app once over a purchase path it could not
 follow (`appstore-rejection-1.1.9.md`).
+
+**The production progressive-overload banner was not redesigned.** The design
+file draws a nicer card than the app's shipped orange bar, and the tempting move
+was to build the design's version and use it on both surfaces. Rejected when the
+slides were scoped (2026-09-04): the shipped component is authoritative for a
+tour that claims to show the real app, and changing a control that lives inside
+an active workout is its own ticket against a live workout surface — not a side
+effect of an onboarding feature. Step 4's copy was written to the shipped bar
+instead.
+
+## Known follow-ups (found by review, deliberately not applied)
+
+The ticket-09 `architecture-reviewer` pass over the accumulated feature diff
+returned **PASS WITH WARNINGS**, no CRITICAL findings. Four things it flagged are
+recorded here rather than fixed, because each is bounded by literal sample data
+and none of them scales with anything a user can create:
+
+- **Three slides derive their display values inside `body`.**
+  `OnboardingRoutinesSlideView` builds its card (two maps over three literal sets
+  plus `SetSummaryFormatting.text`, which calls `RoutineMetricsService`),
+  `OnboardingSupersetsSlideView` does the same for two members, and
+  `OnboardingHistorySlideView` reads `OnboardingSampleHistory.workoutType` — a
+  computed `static var` that re-runs `WorkoutType.classify` (a `lowercased()` and
+  up to 18 `contains`) on every render — plus two strings that do not depend on
+  the weight unit at all. Rendering rule 3 says no aggregation in `body`, and
+  strictly these are aggregation; the input is three literal sets, so the cost is
+  constant and invisible. **The fix, when it is worth doing, already exists in
+  this folder**: a `@MainActor private static let [WeightUnit: …]` cache built
+  from `WeightUnit.allCases`, exactly as `OnboardingAICoachSlideView` does for
+  its parsed answers. The unit-independent values (`workoutType`, the duration
+  and intensity strings) simply become `static let`.
+- **`ContentView` is 304 lines**, just over the 300-line convention — 249 before
+  the tour. The natural extraction is the three first-run covers into one
+  `firstRunCovers(…)` `ViewModifier`. The ordering refactor moved logic *out* of
+  the file rather than in, so this is acknowledged rather than owed.
+
+Five more were raised by the earlier tickets' reviews and left unapplied because
+they land in **production** files this feature only read from, two of which
+carried another agent's in-flight work at the time:
+
+- `WorkoutDetailView.exercisesSection` sorts `workoutExercisesList` inside `body`
+  (rendering rule 3) and puts its `ForEach` in a plain `VStack` inside a
+  `ScrollView` (rendering rule 1). Fix: hoist the sorted array into `@State`
+  beside `prDetails`/`comparisons` and make the container lazy. This one is a
+  real rule violation on a screen that *does* scale with user data — the most
+  worthwhile of the five.
+- `WorkoutDetailExerciseBlock.swift` is 440 lines. Splitting `SetDeltaChip` out is
+  the obvious cut the next time the file is opened.
+- **The expanded routine card's chassis is not a component** — padding 14 /
+  white 3.5 % fill / hairline border / 20 pt corner live inline in
+  `RoutineDetailView.normalExerciseCard`, and `OnboardingRoutinesSlideView`
+  reproduces that five-line chain. That duplication is step 2's one drift risk.
+  Extracting it was out of scope (`RoutineDetailView` is 829 lines).
+- **"INTENSITÄT" is tight in `WorkoutStatTile`** at a quarter of the width. The
+  history slide works around it locally with `.lineLimit(1)` +
+  `.minimumScaleFactor(0.75)` through the environment; if the word is ever seen
+  truncated on the real screen, the fix belongs in the component.
+- `"\(Int(duration / 60))m"` is copied from `WorkoutDetailView.statsGrid`,
+  hardcoded "m" included, because `WorkoutStatGrid` takes pre-formatted strings by
+  design. Fix: a `static func durationText(_:)` beside the component, applied at
+  both call sites.
+
+## Verification
+
+**Unit tests.** `OnboardingFlowTests` (the flow's life, the step navigation and
+every localization key), `OnboardingOfferStepTests` (step 7's presence, its
+paywall hand-off and its three exits) and `FirstRunCoverOrderTests` (the cover
+ordering, above). Both suites — iOS and watch — pass via
+`bundle exec fastlane test_unit`; the watch target is untouched by this feature
+and stays green.
+
+**Walked end to end on the simulator (iPhone 17 Pro, iOS 26.5, 2026-09-06),** on
+a freshly installed container each time:
+
+| What was walked | Result |
+| --------------- | ------ |
+| Fresh install, first launch | The tour, on step 1 of 7, before the tab bar |
+| Steps 1 → 7 via the CTA | Every slide renders; the counter and the progress bar track it |
+| Back from step 6 | 6 → 5 → 4, each slide re-entered at the top of its scroll |
+| Step 7 | The real RevenueCat paywall, inside the tour's own cover |
+| Dismissing the paywall | The tour ends, and the AI Coach opt-in arrives **by itself**, immediately |
+| Relaunch afterwards | Straight to the tabs — no tour |
+| Fresh install, "Überspringen" on step 3 | The tour ends, the opt-in arrives by itself; a relaunch does not bring the tour back |
+| Fresh install with `-PRO_GATING_ON -FOUNDER_SIMULATE_PRECUTOFF` | **Six** steps, not seven — the offer step is absent for a Founder, and the progress bar has six segments |
+| …then "Überspringen" | The Founder thank-you arrives by itself; dismissing *it* raises the coach opt-in |
+
+The last two rows are the ordering rule end to end, live: three covers, one at a
+time, each appearing on its own once the one above it goes away — including the
+coach opt-in, whose Apple Intelligence availability had resolved while the tour
+was still on screen.
+
+Two things worth knowing for the next walkthrough. Slides 4 and 5 are **taller
+than the viewport** on a 6.3" screen, so their body copy is cut off at the
+bottom of the scroll area at rest; that is the intended overflow (see "Scroll
+position across steps" — the slide scrolls, the CTA is pinned below it rather
+than over it), not a clipped layout. And the CLI walkthrough is driven by
+`osascript` clicks mapped through the simulator window: the device screen sits
+at the window origin **+27, +80** at scale 3.0 on this machine, the window frame
+alone misses, and the target window must be matched **by name** — another
+agent's simulator is frequently window 1 and silently eats every click.

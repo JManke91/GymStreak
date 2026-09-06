@@ -429,6 +429,35 @@ still builds and still passes tests**, which is precisely how it slips in. It wa
 and then reverted once during calendar sync ticket 03 (`docs/calendar-sync.md` §12b); a
 build log grepped only for `error:` will not catch it.
 
+#### SwiftUI's `alignmentGuide` closure is genuinely off-actor
+
+Found while building the onboarding welcome slide (2026-09-04, `docs/onboarding.md`).
+`CheckBullet` read an `@ScaledMetric` property from inside an `alignmentGuide` closure and
+the build warned:
+
+> main actor-isolated property 'baselineInset' can not be referenced from a Sendable closure
+
+**Not a spurious diagnostic.** `SwiftUICore.swiftinterface` (iOS 26.5) declares it
+
+```swift
+@preconcurrency @inlinable nonisolated public func alignmentGuide(
+    _ g: VerticalAlignment,
+    computeValue: @escaping @Sendable (ViewDimensions) -> CGFloat
+) -> some View
+```
+
+`@Sendable` **and** `nonisolated`: SwiftUI calls it during layout, off the view's actor, so
+reading a `@MainActor`-isolated stored property there captures `self` across the boundary —
+the outbound half of rule 4, and the class of defect that crashed TestFlight 1.1.10.
+
+**Fix: snapshot the metric into a local `let` in `body`**, on the main actor, so the closure
+captures a plain `CGFloat` and nothing else — the *Sendable boundary projection* rung of the
+escape-hatch ranking. `@preconcurrency import`, `nonisolated(unsafe)` and
+`MainActor.assumeIsolated` would each have hidden the capture instead of removing it. The
+repo's other `alignmentGuide` call sites (`FullScreenSetEditorView`, `WorkoutTopProgressView`,
+and the note in `WorkoutRestTimerOverlay`) read only `ViewDimensions`, capture nothing, and
+were already correct.
+
 ### Nothing non-`Sendable` may cross the hop
 
 Two categories had to be fixed, both by extracting at the boundary:

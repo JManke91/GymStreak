@@ -8,3 +8,4 @@
 - Die AI-Coach-Analyse in den Trainingsdetails nennt dieselbe Übung nicht mehr mehrfach als Highlight
 - Die AI-Coach-Analyse findet die vorherigen Trainings einer Routine jetzt auch nach dem Umbenennen der Routine, statt zu melden, dass es nichts zu vergleichen gibt
 - Ein englisches Wort in der deutschen Überschrift des AI-Coach-Rückblicks wurde korrigiert
+- Neu: eine kurze Einführung beim ersten Start. Nach diesem Update stellt sie die App in wenigen Schritten vor – Routinen, Supersätze, automatische Gewichtssteigerungen, deinen Trainingsverlauf und den AI Coach – und zeigt dafür echte Bildschirme statt Illustrationen. Du kannst sie jederzeit überspringen, danach erscheint sie nicht wieder.

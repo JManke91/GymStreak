@@ -16,10 +16,15 @@ Connect, submission). Phase 3 of §9 — tuning — is what comes next.
 
 > **⚠️ Mixed inventory — §4 lists both shipped and unbuilt features.**
 > The launch-ready Pro tier is **§4.2a only** (six items, all gate-only work: P1, P2, P3, P4,
-> P5, P9). Everything in **§4.2b is 🚧 NOT BUILT** (P6, P7, P8, P10, P11) and each is a separate
-> feature project that must be built before it can be sold. Two free-tier items are also
-> unbuilt: PR celebration and CSV export. Markers are defined at the top of §4 — check them
-> before scoping any work or writing any paywall copy.
+> P5, P9). In **§4.2b**, P6, P8, P10 and P11 are 🚧 not built; **P7 ships already and needs only a
+> gate** (corrected 2026-09-06 — see §13.5). Two free-tier items are also unbuilt: PR celebration
+> and CSV export. Markers are defined at the top of §4 — check them before scoping any work or
+> writing any paywall copy.
+
+> **⚠️ Phase 3 status, 2026-09-06: zero subscribers, and that is not yet a signal.**
+> The paywall reaches almost nobody chargeable — see **§13**, which carries the addressable-population
+> math, the measurement gap that makes it unresolvable today, the retention finding that outranks
+> the feature question, and the falsifiable date on which zero *does* become evidence.
 
 ---
 
@@ -116,9 +121,10 @@ raw history never does. Raw CSV export stays free (see §5) precisely because th
 > | 🚧 **NOT BUILT — FUTURE** | **Does not exist. Proposal only.** | Build the feature *first*, then gate it |
 >
 > **The Pro tier that can actually ship in the monetization release is §4.2a alone** — six
-> items, all gate-only work. Everything in §4.2b is a separate feature project that must be
-> scoped, built, and documented on its own before it can be sold. Do not put 🚧 items on a
-> paywall, in App Store copy, or in a pricing comparison until they exist.
+> items, all gate-only work. In §4.2b, P6, P8, P10 and P11 are each a separate feature project
+> that must be scoped, built and documented on its own before it can be sold; **P7 is the
+> exception — it ships already and needs only a gate** (§13.5). Do not put 🚧 items on a paywall,
+> in App Store copy, or in a pricing comparison until they exist.
 
 ### 4.1 Free — always, unmetered
 
@@ -141,7 +147,7 @@ raw history never does. Raw CSV export stays free (see §5) precisely because th
 | **Workout Analysis** (AI, vs. previous session) | ✅ SHIPPED | Single-workout scope. |
 | Max-weight progress chart, **3-month window** | ✅ SHIPPED | The taste of the analytics. |
 | Weekly goal + simple cadence scheduling | ✅ SHIPPED | |
-| PR celebration when a record is hit | 🚧 **NOT BUILT — FUTURE** | Delight = retention, not revenue. |
+| PR celebration when a record is hit, **and PR history / timeline** | 🚧 **NOT BUILT — FUTURE** | Delight = retention, not revenue. **Moved here from §4.2b P8 on 2026-09-06 (§13.5):** PRs are the user's own logged achievements (Rule 4), Hevy monetizes the history *window* (our P2) rather than PRs themselves, and no evidence was found that PR history converts anyone. `PersonalRecordService` already computes them — only the timeline view is missing. |
 | Raw CSV export of logged data | 🚧 **NOT BUILT — FUTURE** | Deliberate brand decision, §5. No export code exists in the repo today. |
 
 ### 4.2a Pro — shippable in the monetization release (gate-only work)
@@ -198,20 +204,26 @@ is not a feature at all — each routine carries an independent schedule, so two
 already fall on the same day. P9 is therefore one gate, not three, and the launch bundle is
 correspondingly thinner than §4.3's warning already assumed.
 
-### 4.2b Pro — proposed, NOT BUILT
+### 4.2b Pro — proposed, mostly not built
 
-🚧 **None of the following exists. Each is a feature project in its own right** — scope, build,
-document in `docs/`, *then* gate. They are recorded here because the launch bundle in §4.2a is
-thin for users who cannot run Apple Intelligence (§4.3), and these are the cheapest credible
-ways to thicken it later. Treat this as a backlog, not a plan.
+Recorded because the launch bundle in §4.2a is thin for users who cannot run Apple Intelligence
+(§4.3), and these are the cheapest credible ways to thicken it later. Treat this as a backlog,
+not a plan.
+
+> **⚠️ Build costs corrected 2026-09-06 against the actual codebase (§13.5).** An earlier draft
+> of this table rated all five "🚧 NOT BUILT — Medium" from the strategy side without checking
+> the repo. Three of those ratings were wrong: **P7 already ships** and is gate-only work, **P8's
+> detection engine already ships**, and **P6 is cheaper than "Medium"** because the aggregation it
+> needs already exists. The "Rough build cost" column below is the corrected one. P8 also changed
+> tier — it belongs in §4.1, free.
 
 | # | Proposed Pro feature | Free equivalent | Why it would convert | Rough build cost |
 |---|---|---|---|---|
-| P6 | 🚧 **Muscle-balance over time** — volume per muscle group across weeks/months, with imbalance flagging | Per-workout muscle map only | Extends a beloved free feature into a genuinely new capability instead of taking one away. | Medium — new aggregation + chart surface |
-| P7 | 🚧 **Custom exercises** | 3 | Classic capacity cap; Hevy caps at 7. Only bites for users with real equipment/variation needs. | Medium — creation flow, schema, watch-sync impact |
-| P8 | 🚧 **PR history & timeline** | PR celebration (itself unbuilt) | Depth on top of a free delight. | Medium — depends on the free PR feature landing first |
-| P10 | 🚧 **Routine folders / archive** | Flat list | Only matters once you have many routines — i.e. only to someone already past P1. | Low–medium |
-| P11 | 🚧 **Alternate app icons + accent themes** | Default | Near-zero build cost, zero brand risk, and identity goods measurably lift perceived subscription value. | **Low — best effort-to-value ratio of the five** |
+| P6 | 🚧 **Muscle-balance over time** — volume per muscle group across weeks/months, with imbalance flagging | Per-workout muscle map only | Extends a beloved free feature into a genuinely new capability instead of taking one away. **Gated Pro in 4 of 5 competitors** (§13.5) — the most convergent gating decision in the market. | **Low–medium** — `MuscleLoadAggregator` already folds exercises into the 13 `MuscleMapRegion`s with primary/secondary weighting and set counts; the off-main `@ModelActor` snapshot store and the Charts surface exist. New work is the window fold + one chart surface. |
+| P7 | 🔒 **SHIPPED — NEEDS GATE. Custom exercises** | 3 → **raise to 7–10, see §13.5** | Classic capacity cap; Hevy caps at 7. Only bites for users with real equipment/variation needs — and **no demand-side evidence exists** (§13.5). | **Low — gate only, ~1 day.** Creation and editing already ship (`AddExerciseView`), and `Exercise.seedKey == ""` already distinguishes user-created from seeded, exactly as `RoutineCapPolicy` uses it for routines. |
+| P8 | 🚧 **PR history & timeline** — but **free**, not Pro (§13.5) | — | Rule 4 territory: PRs are the user's own logged achievements. Hevy monetizes the history *window* (your P2), not PRs. Value is retention and word-of-mouth. | **Low** — `PersonalRecordService` already computes PRs across all history and they already flow through `HistorySnapshot` (`prLifts`, `LastMonthStats.prs`). Only a timeline view is missing. |
+| P10 | 🚧 **Routine folders / archive** | Flat list | Only matters once you have many routines — i.e. only to someone already past P1. **Strong ships this free; no competitor monetizes it** (§13.5). Do not build it as a gate. | Low–medium |
+| P11 | 🚧 **Alternate app icons + accent themes** | Default | Near-zero build cost and zero brand risk — but the "identity goods lift perceived subscription value" claim **did not survive research** (§13.5): no RevenueCat/Adapty evidence exists and no competitor markets it standalone. Bundle sweetener, never a reason to subscribe. | Low |
 
 ### 4.3 The AI line — one sentence a user can understand
 
@@ -557,6 +569,21 @@ users into churn rather than subscribers, and it damages word-of-mouth — which
 only acquisition channel. If D30 or rating moves against the baseline in Phase 2, loosen before
 optimizing.
 
+**The first-run tour moves both baselines, so both are re-based on it (2026-09-05).** A′ (§8) puts a
+soft paywall at the end of the tour, which means a first session can now contain two soft paywalls —
+A′ on launch, A once the user creates their first routine — and the tour itself now stands between a
+new install and the tab bar. Free-user **D30 retention** and the **App Store rating** are therefore
+measured against their **pre-tour** baseline, not the pre-paywall one; the pre-paywall figures stay
+the baseline for every gate that predates the tour. Rating is the more sensitive of the two here,
+because a tour is the first thing a new user meets and a paywall at the end of it is the last.
+
+**The rollback is one line**, and it is deliberately smaller than removing the feature: drop
+`.offer` from `OnboardingStep`, which leaves the six value slides, a six-segment progress bar that
+sizes itself from the same list, and the `onboarding` placement simply never raised. The tour keeps
+working; only the offer goes. Removing the tour as well is a second, separate step — delete the
+`.fullScreenCover` in `ContentView` that binds `FirstRunCoverOrder`'s `.onboarding` case — and
+should not be needed to answer a rating dip caused by the offer. See `docs/onboarding.md`.
+
 ---
 
 ## 11. Open questions for Phase 0
@@ -597,3 +624,206 @@ against the baseline, loosen before optimizing.
 - [Airbridge — Subscription vs. one-time purchase](https://www.airbridge.io/en/blog/subscription-vs-one-time-purchase-app): lifetime-as-second-offer captures otherwise-lost value; one-time framing avoids annualized-cost loss aversion.
 - Competitor pricing/limits, verified 2026-08: [Hevy Pro vs Free](https://repreturn.com/hevy-pro-vs-free/) ($2.99/mo, $23.99/yr, $74.99 lifetime; free = 4 routines, 7 custom exercises, 3-month analytics window with logs retained), [Strong review](https://repreturn.com/strong-app-review/) ($9.99/mo, $29.99/yr; free = 3 routines, no supersets, no Apple Watch app), [Fitbod / Jefit pricing](https://www.sensai.fit/blog/fitness-app-pricing-free-tier-comparison) (Fitbod $15.99/mo, $95.99/yr; Jefit Elite $12.99/mo, $69.99/yr).
 - [Apple subscription price grandfathering](https://appsops.store/blog/apple-subscription-price-grandfathering) and [Anova's permanent grandfathering precedent](https://anovaculinary.com/blogs/blog/update-existing-users-grandfathered-in-new-users-will-pay-a-small-app-subscription-fee): permanent grants defuse backlash; time-limited grants defer it.
+
+---
+
+## 13. Phase 3 reality check — why nobody has subscribed (2026-09-06)
+
+**The question this section answers:** the app has ~120 active users and **zero** subscribers three
+weeks after gating flipped on. Which unbuilt Pro feature fixes that?
+
+**The answer:** none of them, yet — because the paywall currently reaches almost nobody it is
+allowed to charge, and because zero is the number the arithmetic predicts. This section records the
+math, the measurement gap that makes it unresolvable with today's instrumentation, a retention
+signal that outranks the whole feature question, and the date on which zero *does* become evidence.
+
+### 13.1 The addressable population is a fraction of the user base, by design
+
+Two facts compound:
+
+1. **§7's Founder grant is permanent and irrevocable.** `FounderStatusService.cutoffBuild = 1000`,
+   and every pre-monetization release shipped as build `1` (real Xcode Cloud numbers 63–66 —
+   §9.8 Fault 3). So the **entire pre-launch base is grandfathered forever**, cached in
+   `UserDefaults` and immune to any future code change. That was the deliberate trade; it means the
+   legacy base is a word-of-mouth asset, not a revenue pool.
+2. **The paywall has been live ~12 days, not three weeks.** 1.1.9 was rejected 2026-08-18, 1.1.10
+   rejected 2026-08-23, and 1.1.11 (build 1004) went in for a third review on 2026-08-23. The first
+   App Store build carrying the gates therefore reached users around **2026-08-25**.
+   *(Neither this file nor `docs/appstore-rejection-1.1.9.md` records that third review's verdict.
+   That 1.1.12–1.1.14 shipped normally is circumstantial evidence it passed, not confirmation.)*
+
+Chargeable population = installs since ~2026-08-25. Everything before that is Founders.
+
+### 13.2 What the RevenueCat charts say, and the one thing they cannot say
+
+Read 2026-09-06, 28-day window (Aug 09 – Sep 06):
+
+| Metric | Reading |
+|---|---|
+| New Customers, 28-day total | ~112 (row average 4/day) |
+| New Customers, last 7 complete days (Aug 30–Sep 05) | 3, 6, 4, 11, 6, 7, 14 = **51 → 7.3/day** |
+| Active Customers, same 7 days | 5, 10, 7, 21, 11, 10, 17 = **81 → 11.6/day** |
+| First non-zero day | **Aug 15** — the day `37fe741` ("add pro entitlement layer with revenuecat") landed. RevenueCat could not see anyone before that. |
+
+**Growth is real.** The last week roughly **doubles** the Aug 20–26 stretch, and an update backlog
+decays rather than doubling. The inflection also coincides exactly with the ASO pass
+(`docs/marketing/app-store-subtitle-keywords.md`, created 2026-08-25 against 1.1.12, shipped the
+same day) — the most plausible driver, which makes **ASO a proven lever for this app** and worth
+more attention than anything in §4.2b.
+
+**But the charts cannot size the chargeable half.** RevenueCat "New Customers" counts *new anonymous
+app-user IDs, not new installs*. Every pre-existing user became a brand-new RevenueCat ID the first
+time they launched an SDK-carrying build — and since the SDK only reached the App Store around
+Aug 24–25, **the whole legacy base entered RevenueCat as "New Customers" inside exactly this
+window.** The ~112 is a blend of two populations with opposite economic value (new install =
+chargeable; legacy updater = Founder = never chargeable) and no way to separate them.
+
+**And by design it never can be.** §9's implementation notes require the Founder grant to stay local
+and never round-trip to RevenueCat — so the dashboard has no idea who is grandfathered.
+
+> **Fix (cheap, permanent, do it with 1.1.15):** report the resolved Founder decision to RevenueCat
+> as a **subscriber attribute**. An anonymous boolean on an already-anonymous ID — no PII, no
+> account, and it does **not** make the grant depend on a network call, because the decision itself
+> stays local. That is what §9 actually requires; sending an attribute for analytics does not
+> violate it. From that point every chart and every Placement is segmentable by Founder, and §11's
+> Q1/Q3/Q5 become answerable instead of permanently open. Ticket:
+> `.scratch/founder-measurement/issues/01-founder-subscriber-attribute-and-asc-baseline.md`.
+>
+> **The architectural constraint:** `RevenueCatPurchaseGateway` is the only file in the app allowed
+> to import RevenueCat. The attribute call goes behind `ProPurchaseGateway`, not into
+> `FounderStatusService`.
+
+### 13.3 The retention signal — this outranks the feature question
+
+Subtracting the two charts gives returning users per day:
+
+| | Aug 30 | Aug 31 | Sep 01 | Sep 02 | Sep 03 | Sep 04 | Sep 05 |
+|---|---|---|---|---|---|---|---|
+| Active | 5 | 10 | 7 | 21 | 11 | 10 | 17 |
+| New | 3 | 6 | 4 | 11 | 6 | 7 | 14 |
+| **Returning** | **2** | **4** | **3** | **10** | **5** | **3** | **3** |
+
+**~4 returning users/day against ~112 acquired in 28 days.** Nearly everyone active on a given day
+arrived that day. For a strength app where a committed user trains 3–4×/week, a retained base should
+put roughly 45–55% of itself in the app on any given day; this is ~4%.
+
+**Caveats before acting:** RevenueCat's SDK caches `CustomerInfo` and does not necessarily make a
+network request on every app open, so "Active Customers" can undercount; and the legacy-updater
+blend inflates the denominator. **App Store Connect → Analytics → Retention (D1/D7/D30) is
+authoritative and free** — verify there first.
+
+If it holds, it outranks everything in §4.2b, because **every gate in §4.2a requires accumulated
+data**: `routineCap` needs 3 routines, `chartWindow` 3 months of history, `valueMoment` 3 completed
+workouts, `coachChat` 5 spent messages. A user who does not come back never reaches a paywall by
+construction. No feature converts a leaky bucket.
+
+### 13.4 When zero becomes evidence
+
+New RevenueCat customers Aug 25 – Sep 05 ≈ 73. Stripping legacy updaters leaves **30–80 genuinely
+chargeable installs** — and that width is exactly what §13.2's fix closes.
+
+Probability of observing zero subscribers if conversion were a healthy §10-target 2.1%:
+
+| Chargeable installs | P(zero) |
+|---|---|
+| 30 | 53% |
+| 55 | 31% |
+| 80 | 18% |
+
+Even at the optimistic end, roughly a 1-in-5 chance of seeing zero with a **completely healthy**
+funnel — before adjusting for tenure, and the cohort averages about a week old against gates that
+need weeks of data. Tenure-adjusted the expected count is well under 1.
+
+**So zero is not yet evidence of anything.** `0.979ⁿ < 0.05` needs **n ≈ 141**.
+
+> **Decision date: ~2026-10-15.** If by then there are **150+ post-cutoff installs with 30+ days of
+> tenure and still zero subscribers**, the funnel is broken and is worth tearing apart. Before that
+> date, zero carries no information and building features against it is guessing.
+
+### 13.5 Feature research, 2026-09-06 — and the corrections it forced
+
+Market evidence (competitor teardowns, category benchmarks) plus a direct audit of this repo.
+**Evidence quality caveat:** Reddit was effectively unreachable (`site:reddit.com` returned no
+indexed threads), so "why users subscribe" leans on comparison sites that appear to be built by
+competing indie developers — reliable for prices and limits, weak for motivation. Competitor pricing
+came back inconsistent across sources (Hevy's free routine cap reported as both 3 and 4; Strong
+Premium as both $4.99 and $9.99/mo), so treat those as directional.
+
+**What the market does:**
+
+- **Muscle-group volume / weekly sets per muscle is gated Pro in 4 of 5 competitors** (Hevy, Strong,
+  Boostcamp, Jefit) — the most convergent gating decision found anywhere. Jefit makes it the
+  headline Elite item. Because everyone gates it, it reads as **parity, not differentiation** — but
+  absence is a talking point in every comparison review.
+- **Custom exercises**: Hevy caps at 7, Strong locks entirely. **No demand-side evidence exists** —
+  no source states how often users hit a cap. Competitors gate it on faith.
+- **Routine folders**: Strong ships them **free**. Nobody monetizes them.
+- **App icons / themes**: appear only as minor bundled line items inside larger analytics paywalls,
+  never marketed standalone. **No RevenueCat or Adapty evidence** that cosmetics lift conversion.
+  §4.2b's original "identity goods measurably lift perceived subscription value" claim is
+  unsupported and has been struck.
+- **Strongest signal not on the P-list: program templates / plan generator.** Alpha Progression's
+  entire $79.99/yr subscription is this; Jefit leads Elite with it; Boostcamp's growth loop is free
+  programs → paid analytics. Three of five competitors build their core paid value here.
+
+**What the repo says (this is what corrected §4.2b):**
+
+- **P7 already ships.** `AddExerciseView.swift` provides full creation and editing, and
+  `Exercise.seedKey` is empty for user-created exercises — the same discriminator
+  `RoutineCapPolicy.countsTowardCap` already uses for routines. P7 is gate-only, ~1 day: one
+  `ProFeatureCaps` constant, a near-copy of `RoutineCapPolicy`, one `PaywallPlacement` case, two
+  headline strings (en+de), one nudge.
+- **P8's detection engine already ships.** `PersonalRecordService` computes PRs across all history
+  via Epley 1RM; they already flow through `HistorySnapshot` (`prLifts`, `LastMonthStats.prs`) and
+  render in `WorkoutDetailView` / `PRRecordStrip`. Only a timeline view is missing.
+- **P6 is cheaper than "Medium."** `MuscleLoadAggregator` already folds exercises into 13
+  `MuscleMapRegion`s with primary/secondary weighting and set counts, for both sessions and
+  routines. Folding N sessions over a window is the same fold with a different input; the off-main
+  `@ModelActor` snapshot store and the Charts surface both exist.
+- **The seeded library is only 96 exercises** (`SeedExerciseCatalog.swift`) against Hevy's 400+ and
+  Strong's 450+. **This is the binding constraint on P7's cap.** Three custom exercises on a
+  96-exercise library bites far earlier and reads far more punitively than Hevy's 7-on-400, and
+  §4.1 warns explicitly that gating the library makes the free app feel broken. If P7 is gated, cap
+  at **7–10**, and expand the seed catalogue first — that is cheap free work with real acquisition
+  value.
+
+### 13.6 Ranking of the §4.2b backlog
+
+| Rank | Feature | Verdict |
+|---|---|---|
+| 1 | **P6 — muscle volume over time** | Build and gate. Strongest competitive signal; device-independent, so it directly repairs §4.3's stated weak point (three of six Pro items are invisible without Apple Intelligence). Extends a free feature rather than removing one (Rule 2). Mechanism: depth gate + blurred preview against the user's own numbers. |
+| 2 | **P7 — custom exercises** | Gate at **7–10**, after growing the seed library. Best §2 mechanism class (usage cap) and the cheapest build — but no demand evidence, and a tight cap on a 96-exercise library is §10 guardrail damage on this app's only acquisition channel. |
+| 3 | **P8 — PR history** | Build it **free**. Rule 4 territory; retention and word-of-mouth are worth more here than a weak gate. |
+| 4 | **P11 — icons/themes** | Bundle sweetener only. Never a reason to subscribe. |
+| 5 | **P10 — folders/archive** | Don't. Strong ships it free; by construction it only matters to someone already paying. |
+| — | **Program templates** *(not on the list)* | The strategic bet after P6: the only candidate that is both a Pro anchor and an acquisition asset. Much bigger build. |
+
+### 13.7 Two non-feature levers that outrank all of them right now
+
+1. **Ship the first-run tour and its `onboarding` placement.** Confirmed 2026-09-06: `store-build`
+   and `testflight-beta` both sit at `414062b` (1.1.14, 2026-09-03), while the entire tour — seven
+   commits including the paywall offer step — exists only on `feature/improvements`. Every §8-C gate
+   requires accumulated data, so for a brand-new user the *only* reachable offers are the soft
+   `firstRoutineCreated` prompt and the Settings row. **The funnel has no front door, the door is
+   built, and ~7 new users/day are walking past it.**
+2. **Build the Lifetime SKU.** It does not exist —
+   `RevenueCatConfiguration.appStoreProductIdentifiers` holds only the two subscriptions. §6 argued
+   for it specifically because this audience *self-selected for subscription aversion*: they
+   installed under a listing that said "completely subscription-free." A one-time $69.99 converts
+   the person who will never accept a recurring charge.
+   **Constraint that sets the timing:** a non-consumable is a distinct App Store Connect product
+   type, and the **first** one an app ever offers must be submitted together with a binary and
+   reviewed alongside it. It cannot be added to the live app on its own — so it rides a release.
+   1.1.15 is already going out; the product, pricing and RevenueCat package need to exist before
+   that submission, which puts this on **1.1.16**.
+
+### 13.8 Sequencing
+
+| When | What |
+|---|---|
+| **Days** | Ship 1.1.15 with the tour. Add the Founder subscriber attribute in the same build (§13.2). Pull ASC Retention and ASC Units to establish the baseline. |
+| **2–4 weeks** | Lifetime SKU on 1.1.16 (§13.7). Read the first segmented Placement impressions. |
+| **4–8 weeks** | P6, once §13.2's fix has revealed the real addressable number. |
+| **~2026-10-15** | §13.4's decision date. |
+
+The feature question is genuinely the third-most-important thing on this list.

@@ -93,9 +93,15 @@ private struct ContentViewInternal: View {
         // Read in `body` for the same reason, so raising the Founder screen
         // from the launch task actually re-renders this view.
         let isCelebratingFounder = founderCelebration.isPresenting
-        // Same again for the first-run tour — and read *before* the two covers
-        // below, because it suppresses both.
+        // Same again for the first-run tour.
         let isOnboarding = onboarding.isPresenting
+        // The three covers that can claim a first launch resolve to exactly one
+        // — or to none, which is the tab bar (docs/onboarding.md).
+        let firstRunCover = FirstRunCoverOrder.topmost(
+            isOnboarding: isOnboarding,
+            isCelebratingFounder: isCelebratingFounder,
+            shouldShowCoachOptIn: shouldShowOptIn
+        )
 
         TabView {
             RoutinesView()
@@ -205,33 +211,36 @@ private struct ContentViewInternal: View {
         // good news before anything that could read as bad news. It sells
         // nothing, so it is not routed through the paywall seam.
         //
-        // Suppressed while the onboarding tour is up, for the same reason the
-        // opt-in is suppressed while this screen is: one context presents one
-        // cover at a time, and nothing is spent by a screen that never showed —
-        // the thank-you raises itself again the moment onboarding ends.
+        // Second in the first-run order, behind the tour: one context presents
+        // one cover at a time, and nothing is spent by a screen that never
+        // showed — the thank-you becomes the topmost cover the moment
+        // onboarding ends (`FirstRunCoverOrder`).
         //
-        // **This suppression is safe only because the tour never comes back.**
+        // **Being ordered below the tour is safe only because the tour never
+        // comes back.**
         // `OnboardingFlowViewModel.isPresenting` is seeded once, at composition,
         // and only ever goes true → false (`onboardingNeverReRaisesItself`
         // pins that). Were it able to rise again, it would tear down a Founder
         // cover that *is* on screen, and the binding's write-back would spend
         // that once-ever record on a screen the user never read.
-        .fullScreenCover(isPresented: founderCelebrationBinding(isPresenting: isCelebratingFounder && !isOnboarding)) {
+        .fullScreenCover(isPresented: founderCelebrationBinding(isPresenting: firstRunCover == .founderCelebration)) {
             FounderCelebrationView()
         }
         // AI Coach opt-in: shown once when Apple Intelligence is available
         // and the user has not yet completed or permanently dismissed opt-in.
-        // Suppressed while the Founder screen is up: two covers on one context
-        // present one at a time, and this is the ordering that matters — the
-        // opt-in comes back on its own once the thank-you is dismissed.
-        .fullScreenCover(isPresented: .constant(shouldShowOptIn && !isCelebratingFounder && !isOnboarding)) {
+        // Last in the first-run order, behind both — and the one whose condition
+        // most often turns true *while* another cover is up, because Apple
+        // Intelligence availability resolves asynchronously after launch. It is
+        // not lost by that: it re-reads its own condition on every render and
+        // becomes topmost once the covers above it are gone.
+        .fullScreenCover(isPresented: .constant(firstRunCover == .coachOptIn)) {
             AICoachOptInView()
         }
-        // The first-run tour, above everything else on this context: a user who
-        // has not been told what the app is cannot be helped by an opt-in or
-        // reassured by a thank-you. Both of those wait for it and arrive on
-        // their own once it is dismissed (docs/onboarding.md).
-        .fullScreenCover(isPresented: onboardingBinding(isPresenting: isOnboarding)) {
+        // The first-run tour, first in the order: a user who has not been told
+        // what the app is cannot be helped by an opt-in or reassured by a
+        // thank-you. Both of those wait for it and arrive on their own once it
+        // is dismissed (docs/onboarding.md).
+        .fullScreenCover(isPresented: onboardingBinding(isPresenting: firstRunCover == .onboarding)) {
             OnboardingCoverView(
                 viewModel: onboarding,
                 paywalls: paywalls,
