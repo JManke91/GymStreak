@@ -38,7 +38,7 @@ struct OnboardingFlowTests {
         let store = OnboardingCompletionStore(defaults: defaults)
         store.recordCompleted()
 
-        let viewModel = OnboardingFlowViewModel(completion: store)
+        let viewModel = OnboardingFlowViewModel(completion: store, paywalls: makePresenter())
 
         #expect(!viewModel.isPresenting)
     }
@@ -48,11 +48,12 @@ struct OnboardingFlowTests {
         let defaults = makeDefaults()
         let viewModel = makeViewModel(defaults: defaults)
 
-        // Walk to the end and one step past it — the last `advance()` is the
-        // one that ends the flow.
-        for _ in 0..<OnboardingStep.allCases.count {
+        // Walk to the end. The last step is the paywall, which ends the flow
+        // when it is dismissed rather than by advancing past it.
+        for _ in 0..<(viewModel.stepCount - 1) {
             viewModel.advance()
         }
+        viewModel.offerWasDismissed()
 
         #expect(!viewModel.isPresenting)
         // A fresh view model and store over the same defaults — the next launch.
@@ -115,9 +116,9 @@ struct OnboardingFlowTests {
     func advancingWalksTheSteps() {
         let viewModel = makeViewModel()
 
-        for step in OnboardingStep.allCases {
+        for (index, step) in viewModel.steps.enumerated() {
             #expect(viewModel.currentStep == step)
-            #expect(viewModel.stepNumber == step.rawValue + 1)
+            #expect(viewModel.stepNumber == index + 1)
             viewModel.advance()
         }
 
@@ -675,13 +676,35 @@ struct OnboardingFlowTests {
         for step in OnboardingStep.allCases {
             #expect(step.ctaKey.localized != step.ctaKey)
         }
+        #expect(OnboardingStep.finishCTAKey.localized != OnboardingStep.finishCTAKey)
     }
 
     // MARK: - Harness
 
-    private func makeViewModel(defaults: UserDefaults? = nil) -> OnboardingFlowViewModel {
+    private func makeViewModel(
+        defaults: UserDefaults? = nil,
+        paywalls: (any PaywallPresenting)? = nil
+    ) -> OnboardingFlowViewModel {
         OnboardingFlowViewModel(
-            completion: OnboardingCompletionStore(defaults: defaults ?? makeDefaults())
+            completion: OnboardingCompletionStore(defaults: defaults ?? makeDefaults()),
+            paywalls: paywalls ?? makePresenter()
+        )
+    }
+
+    /// The real presenter over a throwaway suite, with gating on. The tour's
+    /// length depends on it — the offer step is present only while it would
+    /// raise something — so a double here would change what these tests walk.
+    /// The step itself is covered by `OnboardingOfferStepTests`.
+    private func makePresenter(
+        entitlements: ProEntitlementState = .free,
+        isGatingEnabled: Bool = true,
+        defaults: UserDefaults? = nil
+    ) -> PaywallPresenter {
+        PaywallPresenter(
+            entitlements: StubProEntitlements(state: entitlements),
+            activeWorkout: ActiveWorkoutRegistry(),
+            isGatingEnabled: isGatingEnabled,
+            defaults: defaults ?? makeDefaults()
         )
     }
 

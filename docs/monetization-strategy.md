@@ -450,6 +450,7 @@ Specified explicitly because it's the easiest place to accidentally violate Rule
 | # | Placement | Trigger | Offer |
 |---|---|---|---|
 | A | **End of onboarding — soft, dismissible** | Once, after first routine created | Annual + 7-day trial. Onboarding paywalls *with a trial* produce the highest install-to-paid rate in the category (1.78% avg). Must be one tap to dismiss. |
+| A′ | **End of the first-run tour — soft, dismissible** (`onboarding`, shipped 2026-09-05) | Once, on the last step of the first-run tour, before the tab bar (`docs/onboarding.md`) | The dashboard-authored paywall, on the same terms as A: one tap to dismiss, and dismissing lands the user in the **whole free app** — the tour records itself complete either way. Absent entirely for a Pro user, a Founder, a run with gating off, and once it has fired; the tour is then six steps, not seven with a dead one. Its free residue is the entire app, so §10's guardrails carry no extra risk beyond the second paywall in one session that §8's frequency note now names. |
 | B | **Value-moment paywall** | After the 3rd completed workout, or the first automatic progressive-overload suggestion — whichever lands first | The endowed-progress screen: "You've logged N workouts, X sets, Y kg of volume." Then the offer. Paywalls triggered after a measurable value moment see **2.1× the trial-start rate** of immediate hard paywalls. This is the highest-value placement in the app. |
 | C | **Contextual gates** | Tap "New routine" at 3 · tap the 1RM or volume chart tab · scrub the chart past 3 months · open Coach Chat at 0 remaining · open Period Recap / Deep-Dive at 0 remaining · create 4th custom exercise | Direct purchase, no trial. Must name the specific thing being unlocked in the headline, not "Go Pro". |
 | D | **Cap-approach nudge** (not a paywall) | At 2 of 3 routines; on the metered AI surfaces from **zero consumed** ("5 of 5 Coach messages left this month", and the recap/deep-dive's single free generation) | An inline, non-blocking hint. This is the endowed-progress effect: showing consumed proportion of an allowance measurably lifts conversion, and it removes the surprise from placement C. The AI hint appears from the first unit rather than the last (corrected 2026-09-03) precisely because a meter that first appears near full is never seen filling. The **routine cap is deliberately unchanged** — it stays at 2 of 3, where its own nudge already shows the meter mid-fill. |
@@ -457,8 +458,14 @@ Specified explicitly because it's the easiest place to accidentally violate Rule
 **Absolute prohibition:** no paywall, upsell, or Pro badge anywhere inside an active workout
 session, on the watch app, or on the rest-timer Live Activity. Rule 3.
 
-**Frequency cap:** placement A and B fire once each, ever. Placement C fires on genuine intent
+**Frequency cap:** placements A, A′ and B fire once each, ever. Placement C fires on genuine intent
 only. No recurring interstitials, no launch-time paywalls.
+
+**A and A′ can both land in a first session** — the tour's offer on launch, and A again once the
+user creates their first routine. That is two soft paywalls in one session and it is the one thing
+about A′ worth watching: §10's free-user D30 retention and the App Store rating are measured against
+their pre-tour baseline, and the rollback is one line — drop `.offer` from `OnboardingStep`, leaving
+the six value slides (`docs/onboarding.md`).
 
 ---
 

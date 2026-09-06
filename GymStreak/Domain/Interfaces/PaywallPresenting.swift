@@ -24,13 +24,34 @@ import Foundation
 @MainActor
 protocol PaywallPresenting: AnyObject {
 
-    /// The placement currently asking to be shown, or `nil`. The host near the
-    /// app root renders this; nothing else should read it.
+    /// The placement currently asking to be shown, or `nil`.
+    ///
+    /// Read only by a **paywall host**, of which there are three and no more:
+    /// the app root's sheet, the coach-chat cover's own (`.coachChat`), and the
+    /// first-run tour's own (`.onboarding`). The two cover-local hosts exist
+    /// because a sheet raised while a full-screen cover is up never reaches the
+    /// screen; each filters to its own placement and the root suppresses itself
+    /// while either cover is up. Nothing that is not a host should read this.
     var pendingPlacement: PaywallPlacement? { get }
 
     /// Requests the paywall for `placement`. Silently does nothing when the
     /// request is not eligible — a gate has no decision to make about that.
     func present(_ placement: PaywallPlacement)
+
+    /// Whether the **standing** eligibility rules admit `placement`: the kill
+    /// switch, the entitlement (a Founder included) and §8's once-ever record.
+    ///
+    /// Exists for the one caller that has to know the answer *before* asking —
+    /// the first-run tour, whose last step is a paywall and whose progress bar
+    /// would otherwise promise a step that never comes (docs/onboarding.md).
+    /// Every other caller asks by calling `present(_:)` and lets it decide.
+    ///
+    /// Deliberately **not** the whole of `present(_:)`: Rule 3 (no paywall
+    /// inside an active workout) and "a paywall is already on screen" are
+    /// conditions of the moment, and answering them here would invite a caller
+    /// to treat this as a promise. A `true` answer means "nothing standing is in
+    /// the way", not "the next `present(_:)` will show something".
+    func isEligible(_ placement: PaywallPlacement) -> Bool
 
     /// Reported by the host when its sheet reached the screen.
     ///

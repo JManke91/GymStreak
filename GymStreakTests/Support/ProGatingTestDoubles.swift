@@ -40,6 +40,14 @@ final class RecordingPaywallPresenter: PaywallPresenting {
         pendingPlacement = placement
     }
 
+    /// Whatever a test needs it to be. The real answer belongs to
+    /// `PaywallPresenter`; this only has to let a caller that asks first through.
+    var eligiblePlacements: Set<PaywallPlacement> = Set(PaywallPlacement.allCases)
+
+    func isEligible(_ placement: PaywallPlacement) -> Bool {
+        eligiblePlacements.contains(placement)
+    }
+
     func sheetDidAppear() {}
 
     func didPresent(_ placement: PaywallPlacement) {}

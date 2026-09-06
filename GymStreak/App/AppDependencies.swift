@@ -298,7 +298,13 @@ final class AppDependencies: ObservableObject {
             record: FounderCelebrationStore(),
             activeWorkout: activeWorkout
         )
-        self.onboarding = OnboardingFlowViewModel(completion: OnboardingCompletionStore())
+        self.onboarding = OnboardingFlowViewModel(
+            completion: OnboardingCompletionStore(),
+            // The tour's last step is the real paywall, so it asks the same seam
+            // every gate asks — both whether that step is due at all and, when
+            // it is reached, for the placement itself (docs/onboarding.md).
+            paywalls: paywalls
+        )
         self.muscleMapDiscovery = MuscleMapDiscoveryStore()
         self.aiAllowance = MonthlyAllowanceStore()
         let aiCoachPreferences = AICoachPreferences.shared

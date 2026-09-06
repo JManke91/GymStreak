@@ -678,7 +678,8 @@ A gate says `paywalls.present(.routineCap)` and is done. It never learns whether
 appeared, what it looked like, or who drew it.
 
 **Placements, not booleans.** `PaywallPlacement` enumerates the `monetization-strategy.md` §8
-triggers: `firstRoutineCreated` (A), `valueMoment` (B), and the seven contextual gates (C)
+triggers: `firstRoutineCreated` (A), `onboarding` (A′ — the first-run tour's last step, soft and
+once-ever like A, see `docs/onboarding.md`), `valueMoment` (B), and the seven contextual gates (C)
 `routineCap`, `chartMetric`, `chartWindow`, `coachChat`, `periodRecap`, `exerciseDeepDive`,
 `weekdaySchedule`. The enum exists in this shape because RevenueCat's **Placements** feature keys
 dashboard-authored paywalls off exactly this kind of identifier
@@ -1431,8 +1432,12 @@ roughly 2.1× the trial-start rate of an immediate hard paywall. **The endowed f
 mechanism**, which makes their correctness a product requirement rather than a nicety — a
 placeholder or an off-by-one total does more damage than showing nothing.
 
-There is no onboarding flow in this app, so A hooks the routine-creation event rather than an
-onboarding host. That is how §8 words the trigger anyway.
+A hooks the routine-creation event rather than an onboarding host — which is how §8 words the
+trigger anyway, and which was the only option when A shipped, because the app had no onboarding
+flow at all. It has one since 2026-09-05, and that flow ends on its own soft placement, `onboarding`
+(A′): raised from the last step of the tour, hosted **inside the tour's own full-screen cover**, and
+once-ever like A. A and A′ are separate placements rather than one, because they fire at different
+moments and a user can meet both in a first session. See `docs/onboarding.md`.
 
 ### Armed, presented, and why they are different facts
 
@@ -2752,7 +2757,7 @@ Nothing else in the app names a product, a price or an entitlement.
 | Package ids | `$rc_annual`, `$rc_monthly` | `gymstreak_sale`'s packages, each carrying its Test Store **and** App Store product. There is no `$rc_lifetime` package any more — it existed only in the deleted `default`, and the Test Store `lifetime` product is now in no offering (it stays fetchable by identifier, which is all the debug store section needs) |
 | Test Store SDK key | `test_IjLklyuZDXOVrXMjaURxfwJnWxk` | `RevenueCatConfiguration.testStoreAPIKey` |
 | App Store SDK key | `appl_NjUvNeWpHECDnqaxDNJcFnbAhoW` (filled in by ticket 14a; the only key a Release build can select) | `RevenueCatConfiguration.appStoreAPIKey` |
-| Placement identifiers | `PaywallPlacement.rawValue`: `first-routine-created`, `value-moment`, `routine-cap`, `chart-metric`, `chart-window`, `coach-chat`, `period-recap`, `exercise-deep-dive`, `weekday-schedule` | RevenueCat dashboard → Placements (ticket 14). **Each must exist *and* point at an offering that has a paywall** — both halves fail silently in a Release build (§5j) |
+| Placement identifiers | `PaywallPlacement.rawValue`: `first-routine-created`, `onboarding`, `value-moment`, `routine-cap`, `chart-metric`, `chart-window`, `coach-chat`, `period-recap`, `exercise-deep-dive`, `weekday-schedule` | RevenueCat dashboard → Placements (ticket 14). **Each must exist *and* point at an offering that has a paywall** — both halves fail silently in a Release build (§5j) |
 | URL scheme (RevenueCat) | `rc-399243b0af` | `GymStreak/Info.plist` → `CFBundleURLTypes` |
 
 **The entitlement identifier is the single highest-risk string in the integration.** A wrong value

@@ -1218,6 +1218,7 @@
 // MARK: - Pro paywall placements (docs/monetization-strategy.md §8)
 // Placement C must name the specific capability being unlocked, never "Go Pro".
 "paywall.headline.first_routine_created" = "Get more out of Gym Streak";
+"paywall.headline.onboarding" = "Everything unlocked from the start";
 "paywall.headline.value_moment" = "Your progress, unlocked";
 "paywall.headline.routine_cap" = "Unlimited routines";
 "paywall.headline.chart_metric" = "Every progress metric";
@@ -1282,6 +1283,10 @@
 "onboarding.progress.accessibility" = "Step %1$d of %2$d";
 "onboarding.step_counter" = "STEP %1$d OF %2$d";
 "onboarding.cta.continue" = "Next";
+/* The CTA of whichever step ends the tour. That is the coach slide when the Pro
+   offer step is not due (a Pro user, a Founder, gating off, or the placement
+   already fired) — the offer step itself draws no CTA. */
+"onboarding.cta.start" = "Start training";
 
 /* Step 1 — welcome */
 "onboarding.welcome.eyebrow" = "WELCOME";
@@ -1360,6 +1365,11 @@
 "onboarding.coach.allowance" = "%1$d Coach messages a month free · unlimited with Pro";
 "onboarding.coach.sample.answer" = "Your volume in %1$@ has grown **+18%%** over four weeks. %2$@ carries most of it, while %3$@ has been sitting at %4$@ for five sessions.";
 "onboarding.coach.sample.question" = "Why has %@ stalled?";
+
+/* Step 7 — the offer. There is no slide copy: the step hands the screen to the
+   real RevenueCat paywall on the `onboarding` placement, whose content is
+   authored in the dashboard. The only app-owned string is `paywall.headline.onboarding`, in the placement
+   section above, which is rendered when the offering cannot be loaded. */
 
 /* Routine detail — planned muscle map. Only the strings that name the card or a set count
    differ from the history reading; the legend, captions and reset control are shared. */

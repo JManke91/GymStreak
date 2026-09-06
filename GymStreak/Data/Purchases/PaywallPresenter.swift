@@ -90,10 +90,15 @@ final class PaywallPresenter: PaywallPresenting {
     }
 
     func present(_ placement: PaywallPlacement) {
-        guard isGatingEnabled else { return }
-        guard !entitlements.isPro else { return }
-        guard !(placement.isOneShot && hasPresented(placement)) else { return }
+        guard isEligible(placement) else { return }
         show(placement)
+    }
+
+    func isEligible(_ placement: PaywallPlacement) -> Bool {
+        guard isGatingEnabled else { return false }
+        guard !entitlements.isPro else { return false }
+        guard !(placement.isOneShot && hasPresented(placement)) else { return false }
+        return true
     }
 
     func sheetDidAppear() {

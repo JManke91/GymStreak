@@ -178,7 +178,12 @@ private struct ContentViewInternal: View {
         // (docs/pro-subscription.md). Suppressed while the coach-chat cover is
         // up, because that cover hosts its own — one binding non-nil in two
         // hosts at once would have both attempt a presentation.
-        .sheet(item: paywallBinding(for: showingCoachChat ? nil : pendingPaywall)) { placement in
+        // Suppressed while the onboarding tour is up for the same reason it is
+        // suppressed under the coach chat: that cover hosts its own paywall for
+        // `.onboarding`, and a sheet raised from here could not reach the screen
+        // anyway. Any *other* placement stays pending and arrives here once the
+        // tour ends.
+        .sheet(item: paywallBinding(for: showingCoachChat || isOnboarding ? nil : pendingPaywall)) { placement in
             ProPaywallView(
                 placement: placement,
                 entitlements: entitlements,
@@ -227,7 +232,11 @@ private struct ContentViewInternal: View {
         // reassured by a thank-you. Both of those wait for it and arrive on
         // their own once it is dismissed (docs/onboarding.md).
         .fullScreenCover(isPresented: onboardingBinding(isPresenting: isOnboarding)) {
-            OnboardingCoverView(viewModel: onboarding)
+            OnboardingCoverView(
+                viewModel: onboarding,
+                paywalls: paywalls,
+                entitlements: entitlements
+            )
         }
         .task {
             // Resolve availability on first foreground; the fullScreenCover

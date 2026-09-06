@@ -125,6 +125,7 @@ private final class PreviewPinnedEntitlements: ProEntitlementProviding {
 private final class PreviewInertPaywalls: PaywallPresenting {
     var pendingPlacement: PaywallPlacement?
     func present(_ placement: PaywallPlacement) {}
+    func isEligible(_ placement: PaywallPlacement) -> Bool { true }
     func sheetDidAppear() {}
     func didPresent(_ placement: PaywallPlacement) {}
     func dismiss() {}

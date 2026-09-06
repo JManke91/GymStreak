@@ -24,6 +24,10 @@ import Foundation
 /// it is P9 in §5's gate matrix, a shipped contextual gate, and it behaves as a
 /// C placement in every respect.
 ///
+/// `onboarding` is §8's A row a second time rather than a row of its own: the
+/// first-run tour ends by offering Pro once, on the same soft, once-ever terms
+/// (docs/onboarding.md).
+///
 /// `settingsUpgrade` is the one case §8's table does not describe at all: it is
 /// not a gate and not a nudge, but the deliberate purchase entry point Settings
 /// was missing. See `appstore-rejection-1.1.9.md` §3.9.
@@ -39,6 +43,18 @@ enum PaywallPlacement: String, CaseIterable, Identifiable, Sendable {
     // MARK: §8 A — soft, dismissible in one tap, once ever
 
     case firstRoutineCreated = "first-routine-created"
+
+    /// The last step of the first-run tour (docs/onboarding.md).
+    ///
+    /// Classed with placement A rather than as a gate of its own: it is soft,
+    /// dismissible in one tap, and it must fire **once ever** — a user who
+    /// declined the offer on their first launch has answered, and the tour is
+    /// the one screen that can never be reached a second time anyway.
+    ///
+    /// It is the only placement raised from *inside* a full-screen cover other
+    /// than `coachChat`, so the tour hosts its own paywall sheet for the same
+    /// reason the coach chat does (docs/onboarding.md, "Step 7 — the offer").
+    case onboarding = "onboarding"
 
     // MARK: §8 B — the endowed-progress value moment, once ever
 
@@ -88,7 +104,7 @@ enum PaywallPlacement: String, CaseIterable, Identifiable, Sendable {
 
     var kind: Kind {
         switch self {
-        case .firstRoutineCreated: .soft
+        case .firstRoutineCreated, .onboarding: .soft
         case .valueMoment: .valueMoment
         case .routineCap, .chartMetric, .chartWindow, .coachChat,
              .periodRecap, .exerciseDeepDive, .weekdaySchedule,
@@ -110,6 +126,7 @@ enum PaywallPlacement: String, CaseIterable, Identifiable, Sendable {
     var headlineKey: String {
         switch self {
         case .firstRoutineCreated: "paywall.headline.first_routine_created"
+        case .onboarding: "paywall.headline.onboarding"
         case .valueMoment: "paywall.headline.value_moment"
         case .routineCap: "paywall.headline.routine_cap"
         case .chartMetric: "paywall.headline.chart_metric"

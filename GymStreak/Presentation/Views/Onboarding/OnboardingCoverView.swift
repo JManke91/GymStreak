@@ -23,16 +23,68 @@ struct OnboardingCoverView: View {
 
     let viewModel: OnboardingFlowViewModel
 
+    /// The paywall seam, for the offer step. Passed in rather than reached for,
+    /// and read here only to render what the view model already raised.
+    let paywalls: any PaywallPresenting
+
+    /// Handed to `ProPaywallView` so a restore made from the tour is judged by
+    /// the same rule every gate is judged by. Read nowhere else here.
+    let entitlements: any ProEntitlementProviding
+
     var body: some View {
-        VStack(spacing: 0) {
-            header
+        Group {
+            if viewModel.currentStep == .offer {
+                // The offer step draws no chrome. The paywall below owns the
+                // screen, and a progress bar with a dead CTA under a sheet the
+                // user cannot dismiss into anything is worse than a plain
+                // background for the length of one presentation animation.
+                Color.clear
+            } else {
+                VStack(spacing: 0) {
+                    header
 
-            slide
+                    slide
 
-            footer
+                    footer
+                }
+            }
         }
         .background(DesignSystem.Colors.background.ignoresSafeArea())
         .preferredColorScheme(.dark)
+        // The tour hosts its own paywall, exactly as the coach-chat cover does
+        // and for exactly the same reason: **a sheet raised while a full-screen
+        // cover is up never reaches the screen** (docs/onboarding.md, "Cover
+        // ordering"). The alternative — dismissing this cover first and letting
+        // the app root's sheet take the request — puts the dismissal and the
+        // presentation in one SwiftUI transaction, which is the case SwiftUI is
+        // documented to drop. That would silently swallow the offer, and the
+        // placement would then surface later, out of nowhere, on whatever screen
+        // the user had reached.
+        //
+        // Filtered to `.onboarding`: any other placement that somehow fires
+        // while the tour is up belongs to the app behind it, stays pending, and
+        // is picked up by the root host once this cover goes away.
+        .sheet(item: offerBinding) { placement in
+            ProPaywallView(
+                placement: placement,
+                entitlements: entitlements,
+                onPaywallShown: { paywalls.didPresent(placement) }
+            )
+            .onAppear { paywalls.sheetDidAppear() }
+        }
+    }
+
+    /// The offer step's paywall, with its dismissal ending the tour.
+    ///
+    /// Only a dismissal is written back — the view model raises the placement,
+    /// nothing here does — and every way out of the paywall arrives here:
+    /// the close button, a completed purchase and a successful restore all end
+    /// in `ProPaywallView` calling `dismiss()`.
+    private var offerBinding: Binding<PaywallPlacement?> {
+        Binding(
+            get: { paywalls.pendingPlacement == .onboarding ? .onboarding : nil },
+            set: { if $0 == nil { viewModel.offerWasDismissed() } }
+        )
     }
 
     // MARK: - Header
@@ -114,9 +166,9 @@ struct OnboardingCoverView: View {
                         OnboardingHistorySlideView()
                     case .aiCoach:
                         OnboardingAICoachSlideView()
-                    default:
-                        // Filled in by the remaining slide tickets. The chrome
-                        // and the navigation are complete around them.
+                    case .offer:
+                        // Unreachable: `body` swaps the whole chrome out for the
+                        // offer step, which is the paywall and nothing else.
                         Color.clear.frame(height: 1)
                     }
                 }
@@ -152,7 +204,7 @@ struct OnboardingCoverView: View {
                 HapticManager.shared.light()
                 withAnimation(DesignSystem.Animation.easeOut) { viewModel.advance() }
             } label: {
-                Text(viewModel.currentStep.ctaKey.localized)
+                Text(viewModel.ctaKey.localized)
                     .frame(maxWidth: .infinity)
             }
             .buttonStyle(.onyxProminent)
@@ -199,6 +251,30 @@ private struct OnboardingProgressBar: View {
     }
 }
 
+#if DEBUG
+/// Free, so the preview shows the tour at its full seven steps. Declared at file
+/// scope because `ProEntitlementProviding` is an `AnyObject` protocol.
+@MainActor
+private final class PreviewFreeEntitlements: ProEntitlementProviding {
+    let state: ProEntitlementState = .free
+    var isPro: Bool { false }
+    func refresh() async {}
+    func restorePurchases() async -> ProRestoreOutcome { .nothingFound }
+}
+
+/// Eligible but inert: the preview is about the chrome and the slides, and a
+/// preview that reached the RevenueCat SDK would render its loading spinner.
+@MainActor
+private final class PreviewEligiblePaywalls: PaywallPresenting {
+    var pendingPlacement: PaywallPlacement?
+    func present(_ placement: PaywallPlacement) {}
+    func isEligible(_ placement: PaywallPlacement) -> Bool { true }
+    func sheetDidAppear() {}
+    func didPresent(_ placement: PaywallPlacement) {}
+    func dismiss() {}
+    func hasPresented(_ placement: PaywallPlacement) -> Bool { false }
+}
+
 #Preview {
     OnboardingCoverView(
         viewModel: OnboardingFlowViewModel(
@@ -206,7 +282,11 @@ private struct OnboardingProgressBar: View {
             // real "already onboarded" flag on the simulator.
             completion: OnboardingCompletionStore(
                 defaults: UserDefaults(suiteName: "preview.onboarding") ?? .standard
-            )
-        )
+            ),
+            paywalls: PreviewEligiblePaywalls()
+        ),
+        paywalls: PreviewEligiblePaywalls(),
+        entitlements: PreviewFreeEntitlements()
     )
 }
+#endif

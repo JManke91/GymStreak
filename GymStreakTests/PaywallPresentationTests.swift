@@ -200,6 +200,46 @@ struct PaywallPresentationTests {
         #expect(presenter.pendingPlacement == .valueMoment)
     }
 
+    // MARK: - Asking before raising
+
+    /// `isEligible(_:)` exists for the first-run tour, which has to size its
+    /// progress bar before it knows whether the offer step will show anything
+    /// (docs/onboarding.md). These are the three suppressions it must report.
+    @Test("isEligible reports the standing suppressions for the onboarding placement")
+    func onboardingEligibilityFollowsTheStandingRules() {
+        #expect(makePresenter().isEligible(.onboarding))
+
+        #expect(!makePresenter(isGatingEnabled: false).isEligible(.onboarding))
+        #expect(!makePresenter(entitlements: StubEntitlements(state: .subscription))
+            .isEligible(.onboarding))
+        #expect(!makePresenter(entitlements: StubEntitlements(state: .founder))
+            .isEligible(.onboarding))
+
+        let (defaults, suiteName) = makeDefaults()
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let presenter = makePresenter(defaults: defaults)
+        raise(.onboarding, on: presenter)
+
+        #expect(!presenter.isEligible(.onboarding))
+        // …and the record survives the relaunch, so a re-entered tour is short.
+        #expect(!makePresenter(defaults: defaults).isEligible(.onboarding))
+    }
+
+    @Test("isEligible answers the standing rules only, never the moment's")
+    func eligibilityIgnoresRuleThree() {
+        // Rule 3 and "a paywall is already up" are decided inside `present(_:)`,
+        // which is what keeps a `true` answer from reading as a promise.
+        let workout = StubActiveWorkout()
+        let presenter = makePresenter(activeWorkout: workout)
+        workout.setWorkoutActive(true)
+
+        #expect(presenter.isEligible(.onboarding))
+
+        presenter.present(.onboarding)
+
+        #expect(presenter.pendingPlacement == nil)
+    }
+
     // MARK: - Presentation state
 
     @Test("A second request does not swap the sheet already on screen")
