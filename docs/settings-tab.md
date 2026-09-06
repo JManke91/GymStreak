@@ -596,21 +596,29 @@ Connect → App Information → General) lives in exactly one place,
 interpolates the ID at a call site. Because it is a universal link, on device it opens the
 App Store app straight on the review sheet instead of bouncing through Safari.
 
-**Why not the in-app rating prompt** (research, 2026-08-14 — decided, do not re-litigate).
-The obvious ask is an in-app rating "without leaving the app", and that is not permissible:
-`requestReview()` / `SKStoreReviewController.requestReview(in:)` is the only in-app review
-prompt, and Apple's documentation states outright that *"Because this method may not present
-an alert, don't call `requestReview()` or `requestReview(in:)` in response to a button tap or
-other user action."* It is additionally capped at three prompts per 365 days, never fires
-again for a user who already rated on that device, and exposes no API to detect whether the
-alert appeared — a settings button wired to it would silently do nothing for a large share of
-users. Apple's own documented alternative for exactly this case is a persistent settings link
-to the App Store product page, which is what this row is. **No `requestReview()` /
-`SKStoreReviewController` call exists anywhere in the app**, and none should be added here.
+**Why this row is a link and never `requestReview()`** (research, 2026-08-14 — decided, do
+not re-litigate). The obvious ask is an in-app rating "without leaving the app", and **not from
+a button**: `requestReview()` / `SKStoreReviewController.requestReview(in:)` is the only in-app
+review prompt, and Apple's documentation states outright that *"Because this method may not
+present an alert, don't call `requestReview()` or `requestReview(in:)` in response to a button
+tap or other user action."* It is additionally capped at three prompts per 365 days, never
+fires again for a user who already rated on that device, and exposes no API to detect whether
+the alert appeared — a settings button wired to it would silently do nothing for a large share
+of users, with no way to fall back. Apple's own documented alternative for exactly this case is
+a persistent settings link to the App Store product page, which is what this row is.
+
+**The prohibition is about this row, not about the API.** Every reason above is a property of a
+*button tap*; none of it applies to the automatic, non-interactive trigger Apple actually
+sanctions. The app therefore does have one `requestReview()` call — fired on its own after the
+fifth completed workout, from the app root, never from a control — and this row is unchanged
+beside it: it still serves the user who *wants* to write a review, at a moment of their
+choosing, with no throttle in the way. See `docs/rating-prompt.md`. What must never be added
+**here** is a `requestReview()` behind this button.
 
 Also deliberately absent: any gating of the row on a rating threshold or a pre-qualifying
 "do you like the app?" step. Filtering who gets shown the review link is an App Review
-rejection risk and is explicitly discouraged by Apple.
+rejection risk and is explicitly discouraged by Apple. That rule holds for the automatic
+trigger too — it asks every user who reaches the fifth workout, unfiltered.
 
 Sources:
 [`requestReview()`](https://developer.apple.com/documentation/storekit/requestreviewaction),

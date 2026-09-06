@@ -52,6 +52,7 @@ private struct RoutinesViewInternal: View {
             recovery: dependencies.workoutRecovery,
             activeWorkout: dependencies.activeWorkout,
             proactivePaywalls: dependencies.proactivePaywalls,
+            reviewPrompt: dependencies.reviewPrompt,
             weightUnitPreference: dependencies.weightUnitPreference,
             historyStoreGate: dependencies.historyStoreGate
         ))

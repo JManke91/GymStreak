@@ -181,6 +181,12 @@ final class AppDependencies: ObservableObject {
     /// `.fullScreenCover` straight to its `@Observable` `isPresenting`.
     let founderCelebration: FounderCelebrationCoordinator
 
+    /// The automatic App Store rating prompt (docs/rating-prompt.md). Held as
+    /// the concrete type, like `founderCelebration`: the app root reads its
+    /// `@Observable` `isRequestDue` and is the only place `requestReview` may be
+    /// invoked from.
+    let reviewPrompt: ReviewPromptCoordinator
+
     /// The first-run onboarding tour (docs/onboarding.md). Held as the concrete
     /// type, like `founderCelebration`: the app root binds a `.fullScreenCover`
     /// straight to its `@Observable` `isPresenting`, and it must be the *same*
@@ -296,6 +302,17 @@ final class AppDependencies: ObservableObject {
         self.founderCelebration = FounderCelebrationCoordinator(
             entitlements: proEntitlements,
             record: FounderCelebrationStore(),
+            activeWorkout: activeWorkout
+        )
+        self.reviewPrompt = ReviewPromptCoordinator(
+            record: ReviewPromptStore(),
+            // The same provider §8 placement B counts with, so "how many
+            // workouts are there" is answered by one query on one model actor.
+            totals: historySnapshotProvider,
+            // Read only to ask whether placement B is still owed — the rating
+            // prompt waits while a paywall could still land on the same
+            // completion (docs/rating-prompt.md).
+            paywalls: paywalls,
             activeWorkout: activeWorkout
         )
         self.onboarding = OnboardingFlowViewModel(

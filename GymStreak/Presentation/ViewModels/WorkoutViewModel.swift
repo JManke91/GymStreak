@@ -134,6 +134,11 @@ class WorkoutViewModel: ObservableObject {
     /// `activeWorkout` is: unit-test instances have no app to report to.
     private let proactivePaywalls: ProactivePaywallCoordinator?
 
+    /// The automatic App Store rating prompt — armed by the fifth completed
+    /// workout (docs/rating-prompt.md). Optional for the same reason
+    /// `proactivePaywalls` is: unit-test instances have no app to report to.
+    private let reviewPrompt: ReviewPromptCoordinator?
+
     /// The unit weights are shown in. Injected rather than reached for
     /// (`.shared` is barred inside ViewModels); nil in unit-test instances,
     /// which then read the canonical kilograms.
@@ -198,6 +203,7 @@ class WorkoutViewModel: ObservableObject {
         recovery: WorkoutRecoveryCoordinating? = nil,
         activeWorkout: (any ActiveWorkoutReporting)? = nil,
         proactivePaywalls: ProactivePaywallCoordinator? = nil,
+        reviewPrompt: ReviewPromptCoordinator? = nil,
         weightUnitPreference: WeightUnitPreferenceProviding? = nil,
         aiCoachCache: AICoachCaching? = nil,
         historyStoreGate: HistoryStoreGate = .unshared(),
@@ -214,6 +220,7 @@ class WorkoutViewModel: ObservableObject {
         self.recovery = recovery
         self.activeWorkout = activeWorkout
         self.proactivePaywalls = proactivePaywalls
+        self.reviewPrompt = reviewPrompt
         self.weightUnitPreference = weightUnitPreference
         self.aiCoachCache = aiCoachCache ?? AICoachCache.shared
         self.historyStoreGate = historyStoreGate
@@ -659,7 +666,17 @@ class WorkoutViewModel: ObservableObject {
         // §8 placement B. Reported **after** `currentSession` is cleared, which
         // is what makes Rule 3 stop suppressing — this is the "safe moment after
         // the session ends" the placement is deferred to.
-        Task { await proactivePaywalls?.workoutDidComplete() }
+        //
+        // The rating prompt follows in the **same** task rather than a second
+        // one, so the two decisions are taken in a fixed order instead of
+        // whichever the scheduler picks. Its own guard does not depend on that
+        // order — it reads standing eligibility, which nothing above mutates —
+        // but a deterministic sequence is what makes the no-collision test
+        // assert the real path (docs/rating-prompt.md §3a).
+        Task {
+            await proactivePaywalls?.workoutDidComplete()
+            await reviewPrompt?.workoutDidComplete()
+        }
     }
 
     private func saveWorkoutToHealthKit(session: WorkoutSession) {

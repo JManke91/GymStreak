@@ -75,6 +75,10 @@
             isEnabled = "NO">
          </CommandLineArgument>
          <CommandLineArgument
+            argument = "-UI_TESTING"
+            isEnabled = "YES">
+         </CommandLineArgument>
+         <CommandLineArgument
             argument = "-FOUNDER_SIMULATE_PRECUTOFF"
             isEnabled = "NO">
          </CommandLineArgument>

@@ -18,6 +18,9 @@ enum SupportLinks {
     /// A universal link, so on device it opens the App Store app directly on the
     /// review sheet instead of bouncing through Safari. Deliberately used instead
     /// of `requestReview()`, which Apple documents as unsuitable for a button tap.
+    /// The app *does* call `requestReview()` — automatically, never from a
+    /// control (`ReviewPromptCoordinator`, docs/rating-prompt.md); this row is
+    /// the path for a user who wants to write one on their own initiative.
     static let writeReview = URL(
         string: "https://apps.apple.com/app/id\(appStoreAppID)?action=write-review"
     )

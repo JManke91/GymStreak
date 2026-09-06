@@ -44,6 +44,10 @@ private struct ContentViewInternal: View {
     /// has to reach the user before any gate, badge or nudge can
     /// (docs/pro-subscription.md §5h).
     private let founderCelebration: FounderCelebrationCoordinator
+    /// The automatic rating prompt (docs/rating-prompt.md). Read here because
+    /// this is the app root: `requestReview` must be invoked from a view that is
+    /// not itself inside a sheet or a pushed screen.
+    private let reviewPrompt: ReviewPromptCoordinator
     /// The first-run tour. Hosted here for the same reason the Founder screen
     /// is, and ordered **above** it: a brand-new user has to learn what the app
     /// is before anything else can claim the screen (docs/onboarding.md).
@@ -67,6 +71,7 @@ private struct ContentViewInternal: View {
         self.proactivePaywalls = dependencies.proactivePaywalls
         self.founderCelebration = dependencies.founderCelebration
         self.onboarding = dependencies.onboarding
+        self.reviewPrompt = dependencies.reviewPrompt
         self._workoutViewModel = StateObject(wrappedValue: WorkoutViewModel(
             workoutSessionRepository: dependencies.workoutSessionRepository,
             routineRepository: dependencies.routineRepository,
@@ -79,6 +84,7 @@ private struct ContentViewInternal: View {
             recovery: dependencies.workoutRecovery,
             activeWorkout: dependencies.activeWorkout,
             proactivePaywalls: dependencies.proactivePaywalls,
+            reviewPrompt: dependencies.reviewPrompt,
             weightUnitPreference: dependencies.weightUnitPreference,
             historyStoreGate: dependencies.historyStoreGate
         ))
@@ -247,6 +253,10 @@ private struct ContentViewInternal: View {
                 entitlements: entitlements
             )
         }
+        // The automatic App Store rating prompt. Attached at the root and
+        // nowhere else — the coordinator decides, this only invokes
+        // (docs/rating-prompt.md).
+        .reviewPromptHost(reviewPrompt)
         .task {
             // Resolve availability on first foreground; the fullScreenCover
             // binding re-evaluates once state changes from .unknown → .available.

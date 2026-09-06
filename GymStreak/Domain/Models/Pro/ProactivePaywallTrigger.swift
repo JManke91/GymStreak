@@ -53,6 +53,13 @@ enum ProactivePaywallTrigger: String, CaseIterable, Sendable {
     /// Lives here rather than in `ProFeatureCaps` because it is not a free-tier
     /// limit — nothing is capped at three workouts — but it is retunable for the
     /// same §9 reason every cap is, so it stays a named constant in one place.
+    ///
+    /// ⚠️ **`ReviewPromptCoordinator.workoutCount` must stay strictly above
+    /// this.** The automatic App Store rating prompt counts the same workouts,
+    /// and a rating alert landing on the completion that raises this paywall
+    /// poisons both (docs/rating-prompt.md). Raising this value means raising
+    /// that one too; `reviewPromptThresholdClearsTheValueMoment` fails if it
+    /// does not.
     static let valueMomentWorkoutCount = 3
 
     /// The order `ProactivePaywallCoordinator` considers armed triggers in.
