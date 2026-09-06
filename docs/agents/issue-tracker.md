@@ -25,6 +25,8 @@ This runs as part of the completion prompt below, so the top level of `.scratch/
 
 **Harvest before archiving.** Ticket bodies accumulate knowledge that outlives the feature: root causes, discarded approaches, device-verification records, and follow-up work that was found but deliberately not done. Before moving the directory, confirm the feature's `docs/<feature>.md` exists and actually carries that material, and port anything missing. This is the enforcement point for the documentation rules in `CLAUDE.md` — the archive is not a substitute for them.
 
+**Update the originating document as each ticket lands — not at archive time.** A ticket set cut from a standing strategy or planning document (`docs/acquisition-strategy.md`, `docs/monetization-strategy.md`, …) leaves that document stale the moment work ships, and `.scratch/` is transient while the document is not. So the document, not the ticket, is the source of truth for *what has been done*: when a ticket reaches `**Status:** done`, set the corresponding row/entry there in the same change, rewrite in place anything the implementation proved wrong, and refresh any dated baseline the work moved. A ticket that originates from such a document says so in its **Source:** line and carries the update as an acceptance criterion — that is the mechanism, and the archive step only verifies it happened.
+
 **Open follow-ups block the archive.** If a ticket records work that was found but not applied, that work must exist somewhere durable first — written up in `docs/<feature>.md`, or raised with the user as its own ticket. Say so and let the user decide; do not archive it silently.
 
 ## Publishing and consuming tickets

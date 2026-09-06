@@ -38,6 +38,8 @@ For a clearly atomic task, `/to-tickets` should still create a single `01` local
 
 That same yes also closes out the local tickets, in this order: **harvest → mark → archive.** Confirm the feature's `docs/<feature>.md` carries the ticket bodies' durable knowledge (root causes, discarded approaches, verification records, and any follow-up work found but not applied) and port what's missing; set each ticket to `**Status:** done`; then **move** `.scratch/<feature-slug>/` to `.scratch/_done/<feature-slug>/`. The top level of `.scratch/` is the live work queue and shows open features only.
 
+**A ticket cut from a standing strategy document updates that document when it lands** — in the same change as the `done`, not at archive time. `.scratch/` is transient; the document is not, so it is the source of truth for what has shipped: set the lever/row/entry, rewrite in place anything the implementation proved wrong, and refresh any dated baseline the work moved. `docs/acquisition-strategy.md` is maintained this way (its header states the convention); so is `docs/monetization-strategy.md` §4 for gating decisions.
+
 **Never delete anything under `.scratch/` on your own initiative.** It is gitignored, so removal is permanent and unrecoverable — archival is always a move, and deletion needs an explicit, specific instruction from the user. If a ticket records follow-up work that was never applied, surface it before archiving rather than burying it. See `docs/agents/issue-tracker.md` for the full procedure and `docs/agents/triage-labels.md` for the status vocabulary.
 
 ## Working Style

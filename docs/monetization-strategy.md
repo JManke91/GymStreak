@@ -21,10 +21,12 @@ Connect, submission). Phase 3 of §9 — tuning — is what comes next.
 > and CSV export. Markers are defined at the top of §4 — check them before scoping any work or
 > writing any paywall copy.
 
-> **⚠️ Phase 3 status, 2026-09-06: zero subscribers, and that is not yet a signal.**
-> The paywall reaches almost nobody chargeable — see **§13**, which carries the addressable-population
-> math, the measurement gap that makes it unresolvable today, the retention finding that outranks
-> the feature question, and the falsifiable date on which zero *does* become evidence.
+> **⚠️ Phase 3 status, 2026-09-06: the constraint is acquisition, not the paywall.**
+> **36 first-time downloads in 90 days** and ~13 App Store impressions/day, which makes the
+> chargeable population **~12 people** and every gating question in §4 unmeasurable until 2027.
+> **Revenue is $0 and MRR is $0.** The single trial was cancelled during its trial week and lapses
+> 2026-09-10. See **§13** — and **§13.2 before trusting any RevenueCat number**, which overstated
+> acquisition by roughly 6× in this document's own first draft.
 
 ---
 
@@ -302,7 +304,7 @@ Recorded so they don't get "optimized" back in later by someone reading only the
 |---|---|---|
 | **Pro Annual** | **$24.99 / €24.99** | **Primary.** 7-day free trial. |
 | Pro Monthly | $4.99 / €4.99 | Anchor — makes annual read as 58% off. |
-| Pro Lifetime | $69.99 / €69.99 | Secondary, always visible. |
+| ~~Pro Lifetime~~ | ~~$69.99 / €69.99~~ | **Not offered (decided 2026-09-06).** The product exists in RevenueCat but is not in the offering, so it is unreachable. Reasoning and how to restore: §13.8 item 3. |
 | Founder Lifetime | free, granted | §7. |
 
 Reasoning:
@@ -312,12 +314,14 @@ Reasoning:
 - **$24.99/yr** sits deliberately at the Hevy/Strong tier and well under Jefit ($69.99/yr) and
   Fitbod ($95.99/yr). The H&F monthly median is $9.70; $4.99 monthly undercuts it while making
   the annual maths obvious ($59.88 vs $24.99).
-- **Lifetime stays visible, not hidden.** Standard advice is to bury lifetime as a
-  decline-offer, because subscriptions produce ~4.5× the lifetime revenue per user. That advice
-  assumes a neutral audience. GymStreak's audience is *selected for subscription aversion* —
-  many installed precisely because the listing said "no subscription." Fighting that selection
-  effect with a hidden lifetime option converts them to nothing. Price it at ~2.8× annual so a
-  lifetime buyer is accretive against a median subscriber lifetime, and let them self-select.
+- ~~**Lifetime stays visible, not hidden.**~~ **Superseded 2026-09-06 — lifetime is not offered
+  at all** (§13.8 item 3). The argument is kept because it is the case to re-open if the decision
+  is revisited: standard advice is to bury lifetime as a decline-offer, because subscriptions
+  produce ~4.5× the lifetime revenue per user — but that advice assumes a neutral audience, and
+  GymStreak's is *selected for subscription aversion*, many having installed precisely because the
+  listing said "no subscription." Fighting that selection effect with a hidden lifetime option
+  converts them to nothing. If it is ever offered, price it at ~2.8× annual so a lifetime buyer is
+  accretive against a median subscriber lifetime, and let them self-select.
 - **7-day trial on annual only.** H&F conversion is bimodal — users buy on Day 0 or on Days
   4–7, because they want to see a result first — so the trial must span that second window. Do
   not offer a trial on the contextual gates (§8); at those moments the user already has intent
@@ -627,203 +631,307 @@ against the baseline, loosen before optimizing.
 
 ---
 
-## 13. Phase 3 reality check — why nobody has subscribed (2026-09-06)
+## 13. Phase 3 reality check — the constraint is acquisition, not the paywall (2026-09-06)
 
-**The question this section answers:** the app has ~120 active users and **zero** subscribers three
-weeks after gating flipped on. Which unbuilt Pro feature fixes that?
+**The question this section answers:** the app had, at the time of asking, no subscribers roughly
+three weeks after gating flipped on. Which unbuilt Pro feature fixes that?
 
-**The answer:** none of them, yet — because the paywall currently reaches almost nobody it is
-allowed to charge, and because zero is the number the arithmetic predicts. This section records the
-math, the measurement gap that makes it unresolvable with today's instrumentation, a retention
-signal that outranks the whole feature question, and the date on which zero *does* become evidence.
+**The answer:** none of them. The paywall has been seen by almost nobody, because **almost nobody
+has downloaded the app** — 36 first-time downloads in ninety days, against ~13 App Store impressions
+per day, from a single acquisition channel. Every monetization question in §4 and §6 is downstream
+of a number that no feature in §4.2b can move.
 
-### 13.1 The addressable population is a fraction of the user base, by design
+> **⚠️ Revision note.** An earlier draft of this section (same day) built its conclusions on
+> RevenueCat's "New Customers" chart and reported ~7 new users/day, 30–80 chargeable installs and a
+> mid-October decision date. **All three were wrong by roughly a factor of six.** §13.2 records the
+> misreading and why it happened; it is kept rather than deleted because the same trap will catch
+> the next reader of that dashboard.
 
-Two facts compound:
+### 13.1 What is actually known
 
-1. **§7's Founder grant is permanent and irrevocable.** `FounderStatusService.cutoffBuild = 1000`,
-   and every pre-monetization release shipped as build `1` (real Xcode Cloud numbers 63–66 —
-   §9.8 Fault 3). So the **entire pre-launch base is grandfathered forever**, cached in
-   `UserDefaults` and immune to any future code change. That was the deliberate trade; it means the
-   legacy base is a word-of-mouth asset, not a revenue pool.
-2. **The paywall has been live ~12 days, not three weeks.** 1.1.9 was rejected 2026-08-18, 1.1.10
-   rejected 2026-08-23, and 1.1.11 (build 1004) went in for a third review on 2026-08-23. The first
-   App Store build carrying the gates therefore reached users around **2026-08-25**.
-   *(Neither this file nor `docs/appstore-rejection-1.1.9.md` records that third review's verdict.
-   That 1.1.12–1.1.14 shipped normally is circumstantial evidence it passed, not confirmation.)*
+Sources: App Store Connect → Analyse, 2026-09-06, window **7 Jun – 4 Sep 2026** (90 days).
 
-Chargeable population = installs since ~2026-08-25. Everything before that is Founders.
+| Metric | Value | Note |
+|---|---|---|
+| **Erstmalige Downloads** | **36** | ~0.4/day averaged; ~1–2/day in the last week |
+| Erneute Downloads | 9 | Reinstalls |
+| Aktualisierungen | **85** (+1,320%) | The update wave — see §13.2 |
+| Impressionen | **1,150** (−6.75%) | **~13/day. This is the top of the funnel.** |
+| Produktseitenaufrufe | 180 (+42.9%) | 15.7% of impressions |
+| Konversionsrate | 6.01% daily avg (+110%) | Listing conversion, materially improved |
+| In-App-Käufe / Aktive Abos | **1 / 1** | See §13.3 |
 
-### 13.2 What the RevenueCat charts say, and the one thing they cannot say
+**Chargeable population.** §7's Founder grant is permanent and irrevocable
+(`FounderStatusService.cutoffBuild = 1000`; every pre-monetization release shipped as build `1`,
+real Xcode Cloud numbers 63–66 — `docs/pro-subscription.md` §9.8 Fault 3), so only installs after the
+paywall went live can ever pay. 1.1.9 was rejected 2026-08-18, 1.1.10 rejected 2026-08-23, and
+1.1.11 (build 1004) went in for a third review on 2026-08-23 — so the first gating build reached
+users around **2026-08-25**. Downloads from the ASC daily table, Aug 27 – Sep 4: 1, 0, 0, 1, 1, 2, 3,
+2, 1 = **11**, plus whatever landed Aug 25–26.
 
-Read 2026-09-06, 28-day window (Aug 09 – Sep 06):
+> **The chargeable population is ~12 people. Total. Ever.**
 
-| Metric | Reading |
+**Measured via the RevenueCat REST API, 2026-09-06** (`/v2/projects/projfc4b2027/metrics/overview`,
+28-day window):
+
+| Metric | Value |
 |---|---|
-| New Customers, 28-day total | ~112 (row average 4/day) |
-| New Customers, last 7 complete days (Aug 30–Sep 05) | 3, 6, 4, 11, 6, 7, 14 = **51 → 7.3/day** |
-| Active Customers, same 7 days | 5, 10, 7, 21, 11, 10, 17 = **81 → 11.6/day** |
-| First non-zero day | **Aug 15** — the day `37fe741` ("add pro entitlement layer with revenuecat") landed. RevenueCat could not see anyone before that. |
+| Active Trials | 1 |
+| **Active Subscriptions** | **0** |
+| **MRR** | **$0** |
+| **Revenue (28d)** | **$0** |
+| New Customers (28d) | 114 |
+| Active Users (28d) | 114 |
 
-**Growth is real.** The last week roughly **doubles** the Aug 20–26 stretch, and an update backlog
-decays rather than doubling. The inflection also coincides exactly with the ASO pass
-(`docs/marketing/app-store-subtitle-keywords.md`, created 2026-08-25 against 1.1.12, shipped the
-same day) — the most plausible driver, which makes **ASO a proven lever for this app** and worth
-more attention than anything in §4.2b.
+**A quarter of that 114 is not App Store users at all.** Version spread across the customer base
+(n=100 of 114) is 1.1.15: **29**, 1.1.14: 18, 1.1.13: 16, 1.1.9: 13, 1.1.12: 10, 1.1.11: 8,
+1.1.10: 6. **1.1.15 has never been on the App Store** — it was *Ready for Review* on 2026-09-06 —
+so every one of those 29 is a TestFlight install or a local build. TestFlight builds carry the SDK
+and mint RevenueCat customers like any other install, and a tester who was already an App Store
+user appears **twice** (separate container, separate anonymous ID). The App Store-side base is
+therefore nearer **~85**, and even that is an upper bound.
 
-**But the charts cannot size the chargeable half.** RevenueCat "New Customers" counts *new anonymous
-app-user IDs, not new installs*. Every pre-existing user became a brand-new RevenueCat ID the first
-time they launched an SDK-carrying build — and since the SDK only reached the App Store around
-Aug 24–25, **the whole legacy base entered RevenueCat as "New Customers" inside exactly this
-window.** The ~112 is a blend of two populations with opposite economic value (new install =
-chargeable; legacy updater = Founder = never chargeable) and no way to separate them.
+**"~120 active users" was never a verified number** and should not be quoted again. It almost
+certainly came from RevenueCat's customer count, which §13.2 shows was inflated by the update wave.
+What can be defended is 36 first-time downloads since 7 June, with an unmeasured base before that.
 
-**And by design it never can be.** §9's implementation notes require the Founder grant to stay local
-and never round-trip to RevenueCat — so the dashboard has no idea who is grandfathered.
+### 13.2 The RevenueCat trap — read this before trusting that dashboard
 
-> **Fix (cheap, permanent, do it with 1.1.15):** report the resolved Founder decision to RevenueCat
-> as a **subscriber attribute**. An anonymous boolean on an already-anonymous ID — no PII, no
-> account, and it does **not** make the grant depend on a network call, because the decision itself
-> stays local. That is what §9 actually requires; sending an attribute for analytics does not
-> violate it. From that point every chart and every Placement is segmentable by Founder, and §11's
-> Q1/Q3/Q5 become answerable instead of permanently open. Ticket:
-> `.scratch/founder-measurement/issues/01-founder-subscriber-attribute-and-asc-baseline.md`.
->
-> **The architectural constraint:** `RevenueCatPurchaseGateway` is the only file in the app allowed
-> to import RevenueCat. The attribute call goes behind `ProPurchaseGateway`, not into
-> `FounderStatusService`.
+RevenueCat's "New Customers" chart showed ~112 new customers in 28 days, rising to 7.3/day in the
+last complete week. That was read as acquisition growth. **It was the update rollout.**
 
-### 13.3 The retention signal — this outranks the feature question
+**Why.** RevenueCat mints a new anonymous app-user ID the first time a device launches a build
+containing the SDK. The SDK landed in `37fe741` (2026-08-15) and first reached the App Store around
+Aug 24–25, so **every pre-existing user became a brand-new "New Customer" on their first launch of
+1.1.11+**. ASC confirms the size of that wave directly: **85 updates, +1,320%**, in the same window.
+85 updates + 36 downloads ≈ 121, which accounts for essentially the entire RevenueCat figure.
 
-Subtracting the two charts gives returning users per day:
+**Why the rising shape fooled the analysis.** The reasoning was "an update backlog decays, this
+rises, therefore it is growth." That is wrong twice over: update adoption *ramps* as users get round
+to opening the App Store, and three releases shipped inside ten days (1.1.12 Aug 25, 1.1.13 Aug 31,
+1.1.14 Sep 3), each pulling another cohort into its first SDK launch.
 
-| | Aug 30 | Aug 31 | Sep 01 | Sep 02 | Sep 03 | Sep 04 | Sep 05 |
-|---|---|---|---|---|---|---|---|
-| Active | 5 | 10 | 7 | 21 | 11 | 10 | 17 |
-| New | 3 | 6 | 4 | 11 | 6 | 7 | 14 |
-| **Returning** | **2** | **4** | **3** | **10** | **5** | **3** | **3** |
+**The measurement confirms it exactly.** New Customers (114) and Active Users (114) are *the same
+number* — every "active user" in the 28-day window is also a "new customer" in it, because
+RevenueCat has seen exactly 114 customers ever and the SDK only shipped on 15 August. There is no
+returning cohort in that figure because there cannot be one yet. Against ASC's 36 downloads + 85
+updates ≈ 121 devices, 114 is the expected match.
 
-**~4 returning users/day against ~112 acquired in 28 days.** Nearly everyone active on a given day
-arrived that day. For a strength app where a committed user trains 3–4×/week, a retained base should
-put roughly 45–55% of itself in the app on any given day; this is ~4%.
+**The rule:** RevenueCat "New Customers" counts SDK-identity creations, not installs. **App Store
+Connect → Erstmalige Downloads is the only trustworthy install number.** Cross-check any RevenueCat
+acquisition claim against it, permanently, and never quote RevenueCat customer counts as user counts.
 
-**Caveats before acting:** RevenueCat's SDK caches `CustomerInfo` and does not necessarily make a
-network request on every app open, so "Active Customers" can undercount; and the legacy-updater
-blend inflates the denominator. **App Store Connect → Analytics → Retention (D1/D7/D30) is
-authoritative and free** — verify there first.
+### 13.3 The one trial was cancelled — but the purchase path is proven
 
-If it holds, it outranks everything in §4.2b, because **every gate in §4.2a requires accumulated
-data**: `routineCap` needs 3 routines, `chartWindow` 3 months of history, `valueMoment` 3 completed
-workouts, `coachChat` 5 spent messages. A user who does not come back never reaches a paywall by
-construction. No feature converts a leaky bucket.
+Measured 2026-09-06 by scanning all 114 customers for subscription records. Exactly one exists:
 
-### 13.4 When zero becomes evidence
+```
+product        gymstreak.iap.pro.yearly.sub   (Jahresabo, P1Y, P1W trial)
+status         trialing            environment  production        country  DE
+starts_at      2026-09-03 08:28 UTC
+ends_at        2026-09-10 08:28 UTC
+auto_renewal   will_not_renew      ← cancelled during the trial
+gross revenue  $0.00
+offering       gymstreak_sale (ofrng880c8209b0)
+```
 
-New RevenueCat customers Aug 25 – Sep 05 ≈ 73. Stripping legacy updaters leaves **30–80 genuinely
-chargeable installs** — and that width is exactly what §13.2's fix closes.
+**It will not convert.** The customer turned auto-renewal off inside the trial week, so the
+entitlement lapses on 2026-09-10 and the app returns to zero subscribers having collected nothing.
+At n = 1 this says nothing about the paywall, the price or the feature mix — but it must not be
+recorded as a conversion.
 
-Probability of observing zero subscribers if conversion were a healthy §10-target 2.1%:
+**What it does settle:** RevenueCat recorded **no transaction attempted** in either App Review
+session (`docs/appstore-rejection-1.1.9.md` §3.4) and nothing anywhere recorded a successful
+production purchase, so "broken checkout" and "no demand" were indistinguishable. `environment:
+production` on a real German customer closes that: **the production purchase path works end to
+end.** The remaining question is demand, and per §13.4 there is not yet enough traffic to ask it.
+
+### 13.4 Zero was never going to be informative, and waiting is not a strategy
+
+P(zero paid conversions) if the true rate were the §10 target of 2.1%:
 
 | Chargeable installs | P(zero) |
 |---|---|
-| 30 | 53% |
+| **12 (actual)** | **78%** |
 | 55 | 31% |
-| 80 | 18% |
+| 141 | 5% |
 
-Even at the optimistic end, roughly a 1-in-5 chance of seeing zero with a **completely healthy**
-funnel — before adjusting for tenure, and the cohort averages about a week old against gates that
-need weeks of data. Tenure-adjusted the expected count is well under 1.
+Reaching **n ≈ 141** — the point at which zero would finally be evidence — takes ~117 days at the
+current ~1.2 downloads/day, plus 30 days of tenure on that cohort. That lands in **February 2027**.
 
-**So zero is not yet evidence of anything.** `0.979ⁿ < 0.05` needs **n ≈ 141**.
+> **Therefore: abandon "ship a gate and measure."** At this volume no paywall change and no Pro
+> feature can produce a readable signal before next year. Apple will not help either — `Erlöse`,
+> `Zahlende Benutzer:innen` and all three `Download zu Kauf` cards are already suppressed as
+> *Daten nicht ausreichend*, below Apple's privacy threshold.
 
-> **Decision date: ~2026-10-15.** If by then there are **150+ post-cutoff installs with 30+ days of
-> tenure and still zero subscribers**, the funnel is broken and is worth tearing apart. Before that
-> date, zero carries no information and building features against it is guessing.
+**And engagement metrics are unavailable indefinitely.** ASC → Retention reads *Daten nicht
+ausreichend* and is labelled **"Nur Opt-in"**: every ASC engagement metric (Retention, Sessions,
+Active Devices) is built only from users who opted into sharing analytics, then privacy-thresholded.
+At 36 downloads the opt-in subset is a handful of devices. **Kennzahlen** draws from the same pool;
+Sales & Trends reports units and proceeds only. There is no route around this inside ASC at this
+volume.
 
-### 13.5 Feature research, 2026-09-06 — and the corrections it forced
+*(An earlier draft of this section derived a retention crisis from RevenueCat Active minus New
+customers — ~4 returning users/day. That subtraction is void, because "New" was the update wave.
+Engagement is currently **unmeasured**, not known to be bad. RevenueCat's "Active Customers" is the
+only available signal and it counts SDK requests against a cached `CustomerInfo`, so use it as a
+trend, never as a headcount.)*
 
-Market evidence (competitor teardowns, category benchmarks) plus a direct audit of this repo.
-**Evidence quality caveat:** Reddit was effectively unreachable (`site:reddit.com` returned no
-indexed threads), so "why users subscribe" leans on comparison sites that appear to be built by
-competing indie developers — reliable for prices and limits, weak for motivation. Competitor pricing
-came back inconsistent across sources (Hevy's free routine cap reported as both 3 and 4; Strong
-Premium as both $4.99 and $9.99/mo), so treat those as directional.
+### 13.5 The acquisition diagnosis — one channel, and one telling zero
+
+ASC → Akquise → Quellen, product page views by source, 7 Jun – 4 Sep:
+
+| Source | Daily average |
+|---|---|
+| **Suche im App Store** | **1** |
+| Browsen im App Store | – (a thin secondary line from ~July) |
+| App-Referrer | – (first appears ~Sept) |
+| **Web-Referrer** | **zero, for ninety days** |
+
+**Germany is 62% of the user base** (62 DE, 28 US, 3 GB, n=100, RevenueCat 2026-09-06) — which
+makes the German keyword surface below not a hedge but the primary market.
+
+- **Search is the only channel**, and it is capped by a keyword footprint competing against Hevy and
+  Strong on every head term a lifter would type. Head terms are unwinnable; long-tail and locale
+  coverage are where a small app takes share. The German storefront is the under-served one and the
+  cheapest marginal keyword surface.
+- **Zero web referrers is the single largest gap in this document.** Every other source is Apple
+  choosing to show the app to someone. Web-Referrer is the only one under our control, and there is
+  no landing page, no community presence, no video, no press. Nothing exists outside the App Store.
+- **Produktseiten (custom product pages) and In-App-Events are unused** — both greyed out in ASC.
+  In-App Events feed Search *and* Browse surfaces and cost nothing but the work. They are the only
+  lever on *impressions* that does not require Apple to feature the app.
+
+**The listing itself is not the problem.** 20% page-view→download and conversion up 110% after the
+2026-08-25 ASO pass (`docs/marketing/app-store-subtitle-keywords.md`) is a healthy listing. Note the
+split carefully, because it decides what to do next: that pass moved **conversion**, while
+**impressions fell 6.75%**. ASO sharpened relevance; it did not buy reach. Reach is the open problem.
+
+### 13.6 Feature research, 2026-09-06 — and the corrections it forced
+
+Market evidence plus a direct audit of this repo. **Evidence caveat:** Reddit was effectively
+unreachable (`site:reddit.com` returned no indexed threads), so "why users subscribe" leans on
+comparison sites that appear to be built by competing indie developers — reliable for prices and
+limits, weak for motivation. Competitor pricing came back inconsistent across sources (Hevy's free
+routine cap reported as both 3 and 4; Strong Premium as both $4.99 and $9.99/mo); treat as
+directional.
 
 **What the market does:**
 
 - **Muscle-group volume / weekly sets per muscle is gated Pro in 4 of 5 competitors** (Hevy, Strong,
-  Boostcamp, Jefit) — the most convergent gating decision found anywhere. Jefit makes it the
-  headline Elite item. Because everyone gates it, it reads as **parity, not differentiation** — but
-  absence is a talking point in every comparison review.
+  Boostcamp, Jefit) — the most convergent gating decision found anywhere; Jefit makes it the headline
+  Elite item. Because everyone gates it, it is **parity, not differentiation** — but its absence is a
+  talking point in every comparison review.
 - **Custom exercises**: Hevy caps at 7, Strong locks entirely. **No demand-side evidence exists** —
   no source states how often users hit a cap. Competitors gate it on faith.
 - **Routine folders**: Strong ships them **free**. Nobody monetizes them.
-- **App icons / themes**: appear only as minor bundled line items inside larger analytics paywalls,
+- **App icons / themes**: only ever a minor bundled line item inside a larger analytics paywall,
   never marketed standalone. **No RevenueCat or Adapty evidence** that cosmetics lift conversion.
-  §4.2b's original "identity goods measurably lift perceived subscription value" claim is
+  §4.2b's original "identity goods measurably lift perceived subscription value" claim was
   unsupported and has been struck.
 - **Strongest signal not on the P-list: program templates / plan generator.** Alpha Progression's
   entire $79.99/yr subscription is this; Jefit leads Elite with it; Boostcamp's growth loop is free
-  programs → paid analytics. Three of five competitors build their core paid value here.
+  programs → paid analytics. Three of five competitors build their core paid value here — and unlike
+  everything else on this list it is an **acquisition** asset, which per §13.5 is the actual
+  constraint.
 
-**What the repo says (this is what corrected §4.2b):**
+**What the repo says (this is what corrected §4.2b's build costs):**
 
 - **P7 already ships.** `AddExerciseView.swift` provides full creation and editing, and
   `Exercise.seedKey` is empty for user-created exercises — the same discriminator
-  `RoutineCapPolicy.countsTowardCap` already uses for routines. P7 is gate-only, ~1 day: one
-  `ProFeatureCaps` constant, a near-copy of `RoutineCapPolicy`, one `PaywallPlacement` case, two
-  headline strings (en+de), one nudge.
+  `RoutineCapPolicy.countsTowardCap` already uses for routines. P7 is gate-only, ~1 day.
 - **P8's detection engine already ships.** `PersonalRecordService` computes PRs across all history
   via Epley 1RM; they already flow through `HistorySnapshot` (`prLifts`, `LastMonthStats.prs`) and
   render in `WorkoutDetailView` / `PRRecordStrip`. Only a timeline view is missing.
 - **P6 is cheaper than "Medium."** `MuscleLoadAggregator` already folds exercises into 13
-  `MuscleMapRegion`s with primary/secondary weighting and set counts, for both sessions and
-  routines. Folding N sessions over a window is the same fold with a different input; the off-main
+  `MuscleMapRegion`s with primary/secondary weighting and set counts, for sessions and routines
+  alike. Folding N sessions over a window is the same fold with a different input; the off-main
   `@ModelActor` snapshot store and the Charts surface both exist.
 - **The seeded library is only 96 exercises** (`SeedExerciseCatalog.swift`) against Hevy's 400+ and
   Strong's 450+. **This is the binding constraint on P7's cap.** Three custom exercises on a
-  96-exercise library bites far earlier and reads far more punitively than Hevy's 7-on-400, and
-  §4.1 warns explicitly that gating the library makes the free app feel broken. If P7 is gated, cap
-  at **7–10**, and expand the seed catalogue first — that is cheap free work with real acquisition
-  value.
+  96-exercise library bites far earlier and reads far more punitively than Hevy's 7-on-400, and §4.1
+  warns explicitly that gating the library makes the free app feel broken. If P7 is gated, cap at
+  **7–10**, and expand the seed catalogue first — cheap free work with real acquisition value.
 
-### 13.6 Ranking of the §4.2b backlog
+### 13.7 Ranking of the §4.2b backlog
+
+Unchanged by the acquisition finding — but note that per §13.4 none of it is measurable for months,
+so build these for the product's sake, not expecting revenue to move.
 
 | Rank | Feature | Verdict |
 |---|---|---|
-| 1 | **P6 — muscle volume over time** | Build and gate. Strongest competitive signal; device-independent, so it directly repairs §4.3's stated weak point (three of six Pro items are invisible without Apple Intelligence). Extends a free feature rather than removing one (Rule 2). Mechanism: depth gate + blurred preview against the user's own numbers. |
+| 1 | **P6 — muscle volume over time** | Build and gate. Strongest competitive signal; device-independent, so it repairs §4.3's stated weak point (three of six Pro items are invisible without Apple Intelligence). Extends a free feature rather than removing one (Rule 2). Mechanism: depth gate + blurred preview against the user's own numbers. |
 | 2 | **P7 — custom exercises** | Gate at **7–10**, after growing the seed library. Best §2 mechanism class (usage cap) and the cheapest build — but no demand evidence, and a tight cap on a 96-exercise library is §10 guardrail damage on this app's only acquisition channel. |
-| 3 | **P8 — PR history** | Build it **free**. Rule 4 territory; retention and word-of-mouth are worth more here than a weak gate. |
+| 3 | **P8 — PR history** | Build it **free** (now §4.1). Rule 4 territory; retention and word-of-mouth beat a weak gate. |
 | 4 | **P11 — icons/themes** | Bundle sweetener only. Never a reason to subscribe. |
 | 5 | **P10 — folders/archive** | Don't. Strong ships it free; by construction it only matters to someone already paying. |
-| — | **Program templates** *(not on the list)* | The strategic bet after P6: the only candidate that is both a Pro anchor and an acquisition asset. Much bigger build. |
+| — | **Program templates** *(not on the list)* | The strategic bet: the only candidate that is both a Pro anchor and an acquisition asset. Much bigger build. |
 
-### 13.7 Two non-feature levers that outrank all of them right now
+### 13.8 What actually matters now
 
-1. **Ship the first-run tour and its `onboarding` placement.** Confirmed 2026-09-06: `store-build`
-   and `testflight-beta` both sit at `414062b` (1.1.14, 2026-09-03), while the entire tour — seven
-   commits including the paywall offer step — exists only on `feature/improvements`. Every §8-C gate
-   requires accumulated data, so for a brand-new user the *only* reachable offers are the soft
-   `firstRoutineCreated` prompt and the Settings row. **The funnel has no front door, the door is
-   built, and ~7 new users/day are walking past it.**
-2. **Build the Lifetime SKU.** It does not exist —
-   `RevenueCatConfiguration.appStoreProductIdentifiers` holds only the two subscriptions. §6 argued
-   for it specifically because this audience *self-selected for subscription aversion*: they
-   installed under a listing that said "completely subscription-free." A one-time $69.99 converts
-   the person who will never accept a recurring charge.
-   **Constraint that sets the timing:** a non-consumable is a distinct App Store Connect product
-   type, and the **first** one an app ever offers must be submitted together with a binary and
-   reviewed alongside it. It cannot be added to the live app on its own — so it rides a release.
-   1.1.15 is already going out; the product, pricing and RevenueCat package need to exist before
-   that submission, which puts this on **1.1.16**.
+1. **Acquisition is not the first lever, it is the only one.** At ~1.2 downloads/day nothing else
+   produces a readable result — and §7's Founder grant makes it permanent, since the pre-cutoff base
+   can never be charged and revenue is therefore a function of *future installs alone*.
+   **→ `docs/acquisition-strategy.md` is the plan**: prioritized levers, how to act on each, and the
+   sequencing. Headlines: the app has **no rating prompt and no sharing at all**, storefront metadata
+   localization is the cheapest way to buy keyword surface, and a landing page is infrastructure for
+   every off-store channel rather than an SEO play.
+2. **Ship 1.1.15 with the first-run tour.** Confirmed 2026-09-06: `store-build` and
+   `testflight-beta` both sit at `414062b` (1.1.14, 2026-09-03) while the entire tour — seven commits
+   including the `onboarding` paywall step — exists only on `feature/improvements`. Every §8-C gate
+   needs accumulated data, so a brand-new user's only reachable offers are the soft
+   `firstRoutineCreated` prompt and the Settings row. The funnel has no front door and the door is
+   built.
+3. **Lifetime SKU — deliberately NOT offered (decided 2026-09-06).** §6 argued for it because this
+   audience *self-selected for subscription aversion*. It is **not** being built into the offer, by
+   product decision. Record of what exists so nobody re-derives it: the non-consumable
+   `gymstreak.iap.pro.lifetime` **already exists in RevenueCat** (product `prodfca33c7598`, app
+   `app399243b0af`, `type: non_consumable`, `state: active`, created 2026-08-17 10:50 UTC), but it
+   is **not attached to the `gymstreak_sale` offering**, which carries only `$rc_annual` and
+   `$rc_monthly` — so no user can reach it. An earlier draft of this section said the SKU did not
+   exist, reading `RevenueCatConfiguration.appStoreProductIdentifiers` (which lists only the two
+   subscriptions, and which the real paywall does not use — it reads the offering). **To restore
+   it later:** add a lifetime package to the offering in the RevenueCat dashboard and confirm the
+   App Store Connect non-consumable is approved. Whether that ASC product is approved was never
+   checked, because the decision made it moot.
+4. **Founder subscriber attribute on 1.1.16**, not 1.1.15. Its original justification (sizing the
+   chargeable population) was answered directly by ASC. Its remaining justification is stronger than
+   it sounds: per §13.4, ASC engagement metrics are unavailable indefinitely, so **RevenueCat is the
+   only active-user signal there is**, and un-segmented it mixes Founders, TestFlight testers and
+   real App Store users with no way to tell them apart (§13.1). Ticket:
+   `.scratch/founder-measurement/issues/01-founder-subscriber-attribute-and-asc-baseline.md`.
+   **Architectural constraint:** `RevenueCatPurchaseGateway` is the only file allowed to import
+   RevenueCat, so the call goes behind `ProPurchaseGateway` — never into `FounderStatusService`.
+5. **Feature work is third.** §13.7 stands, and none of it is the constraint.
 
-### 13.8 Sequencing
+### 13.9 Numbers to re-read, and how to get them
 
-| When | What |
-|---|---|
-| **Days** | Ship 1.1.15 with the tour. Add the Founder subscriber attribute in the same build (§13.2). Pull ASC Retention and ASC Units to establish the baseline. |
-| **2–4 weeks** | Lifetime SKU on 1.1.16 (§13.7). Read the first segmented Placement impressions. |
-| **4–8 weeks** | P6, once §13.2's fix has revealed the real addressable number. |
-| **~2026-10-15** | §13.4's decision date. |
+The `revenuecat` MCP server (`docs/agents/mcp-servers.md`) reads the live numbers directly, so an
+agent can pull these without a dashboard screenshot. Verified working 2026-09-06.
 
-The feature question is genuinely the third-most-important thing on this list.
+| Metric | Where | Cadence |
+|---|---|---|
+| Erstmalige Downloads | ASC → Akquise (**never** RevenueCat — §13.2) | Weekly |
+| Impressionen + Quellen split | ASC → Akquise → Quellen | Weekly — this is the constraint |
+| Konversionsrate | ASC → Übersicht | After any listing change |
+| Trials, subscriptions, MRR, revenue | RevenueCat `/v2/projects/{id}/metrics/overview` | Weekly |
+| Version + country spread, per-customer subs | RevenueCat `/v2/projects/{id}/customers` (+ `/subscriptions`) | As needed |
+| Placement impressions | RevenueCat **dashboard only** — see below | Once 1.1.15 is live |
+| Retention / Sessions | ASC — **unavailable until volume rises** (§13.4) | Re-check quarterly |
+
+**API notes, verified 2026-09-06.** `/v2/projects/{id}/metrics/overview`, `/customers`,
+`/customers/{id}/subscriptions`, `/products`, `/offerings` and `/paywalls` all return 200 with a
+scoped v2 secret key. **The Charts API does not:** both `/v2/projects/{id}/charts` and
+`/v2/projects/{id}/metrics/charts` return 404, so paywall and placement impressions are **not**
+retrievable this way and still need the dashboard. `next_page` comes back as a full URL, not a path
+— concatenating a host onto it breaks pagination and silently truncates the result.
+
+**Two data traps in the customer list.** One record carries a `first_seen_at` in **2013** (a
+sentinel, not a real install) which will skew any date-range aggregate. And ~29 of the 114 customers
+are running **1.1.15, which has never been on the App Store** — TestFlight installs and local builds
+mint RevenueCat customers exactly like real ones, and a tester who is also an App Store user is
+counted twice (§13.1).
+
+§11's five open questions stay open. Q1, Q4 and Q5 need Placement impressions that cannot accumulate
+until acquisition moves; Q2 (Apple-Intelligence share) is answerable now from ASC's device-model
+breakdown; Q3 is fixed forever and bounded by downloads before 2026-08-25.
