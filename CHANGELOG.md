@@ -4,6 +4,28 @@ All notable changes to GymStreak are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.1.15] - 2026-09-06
+
+### Added
+
+- New: a short first-run tour. On the first launch after this update it introduces the app in a few steps — routines, supersets, automatic weight increases, your workout history and the AI Coach — using real screens rather than illustrations. You can skip it at any point, and it does not come back.
+- A routine now shows the muscle groups it plans to train: front and back body maps between the schedule and the exercise list, with planned set counts per muscle. Tap a muscle or a chip to see which exercises train it. The map updates as you edit the routine.
+
+### Improved
+
+- While creating a new routine, tapping an exercise you already added now opens the same modern screen as adding one — with the sets · volume · rest summary, the quick set schemes and the rest-timer presets. The old form is gone, and you can now change an exercise's rep goal before the routine is even saved.
+- When you increase a weight during a workout on iPhone, the workout details now name the new weight in the confirmation ("Increased to 18 kg") instead of only saying all sets were adjusted. Pyramid and drop sets, which have no single new weight, still show the weight-free confirmation.
+- The muscle chips under the body map now carry a small chevron, so it is clear they can be tapped to see which exercises trained that muscle, and the map now says so once in words ("Tap a muscle for details") until you have tried it. Applies to both the workout details and the routine details.
+
+### Fixed
+
+- Health permission prompts now appear in German on German devices, on both iPhone and Apple Watch.
+- Fixed three texts in the AI Coach settings that always appeared in German, regardless of your device language.
+- The AI Coach recap after a workout now counts the sets you actually completed, not the ones the routine planned — an aborted session no longer gets summarised with its full set count.
+- The AI Coach analysis in the workout details no longer repeats the same exercise as several highlights.
+- The AI Coach analysis now finds a routine's previous workouts even after you rename the routine, instead of reporting that there is nothing to compare.
+- Fixed an English word slipping into the German headline of the AI Coach period recap.
+
 ## [1.1.14] - 2026-09-03
 
 ### Added
