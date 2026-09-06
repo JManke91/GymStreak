@@ -104,6 +104,7 @@
   },
   "enabledMcpjsonServers": [
     "context7",
-    "things"
+    "things",
+    "revenuecat"
   ]
 }

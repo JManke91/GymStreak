@@ -10,6 +10,13 @@
     "things": {
       "command": "uvx",
       "args": ["things-mcp"]
+    },
+    "revenuecat": {
+      "type": "http",
+      "url": "https://mcp.revenuecat.ai/mcp",
+      "headers": {
+        "Authorization": "Bearer ${REVENUECAT_SECRET_KEY}"
+      }
     }
   }
 }
