@@ -1,10 +1,13 @@
 # Acquisition Strategy — how GymStreak gets seen
 
-**Status (2026-09-06):** Phase A in progress — lever #1 shipped, #2 and #3 cut as tickets and not
-yet started. Per-lever status lives in the §3 table and is restated at the top of each §4 entry.
+**Status (2026-09-09):** **Phase A complete** — all three levers shipped and entered in App Store
+Connect. Nothing is *live* yet: #2 and #3 are metadata bound to a version submission, so they take
+effect when that version is released. Per-lever status lives in the §3 table and is restated at the
+top of each §4 entry. Phase B (landing page → sharing → community) is the next thing to start.
 
 **This file is the single source of truth for acquisition — strategy *and* progress.** Tickets are
-cut from it into `.scratch/acquisition-phase-a/issues/` and are transient; this document is not.
+cut from it into `.scratch/<phase>/issues/` and are transient — Phase A's are already archived to
+`.scratch/_done/acquisition-phase-a/`; this document is not transient.
 **When a ticket derived from a lever reaches `done`, record it here in the same change:** set the
 lever's row in the §3 table, put a `**Shipped** (date)` line at the top of its §4 entry, correct any
 statement the implementation proved wrong (rewrite it, never append a correction), and update §5 and
@@ -60,9 +63,29 @@ Prioritization below follows from how the App Store decides to show an app at al
 
 - **Keyword surface.** You are only impressible for terms you are indexed on. Indexed fields are
   App Name (~30 chars), Subtitle (30), Keyword field (100, private) — **per storefront localization**.
-  More localizations = more keyword fields = more impressions. This is the most mechanical lever.
+  **"More localizations = more keyword fields" is too loose, and lever #2 had to correct it:** a
+  storefront with no localization of its own is already served by the app's *primary language*, so
+  adding one **swaps** which 100 characters are indexed there rather than adding 100 more. It is
+  still the most mechanical lever, but the gain is the *difference* between the new field and the
+  fallback — a clone buys nothing. See §4.2 and `marketing/app-store-subtitle-keywords.md` §6.1.
 - **Ranking within a term.** Driven substantially by **download velocity**, **conversion rate**, and
   **ratings volume + average**. Two of those three we currently do nothing about.
+- **The App Name is a brand this app does not own, and that caps what the title field is worth.**
+  Measured 2026-09-07 while deriving lever #2: **"GymStreak Ltd"** is an established developer whose
+  app **"GymStreak: AI Personal Trainer"** (App ID `1371187280`, **5,118 ratings, 4.6★**, on the
+  store since 2018) ranks **first** for the query *gymstreak* in the US, UK, AU and DE storefronts,
+  while `GymStreak – Workout Tracker` ranks **#14 (US), #29 (GB), #78 (AU)** and **#2 (DE)**. Two
+  further apps also carry the name ("GymStreak: Gym Habit Tracker", "GymStreak: Habit Tracker").
+  Consequences, without a recommendation attached: brand-query traffic — normally the cheapest
+  traffic an app has — largely lands on a competitor; the `gym` and `streak` tokens the title spends
+  are worth even less than the exclusion-list reasoning in
+  `marketing/app-store-subtitle-keywords.md` §2 assumed; and word-of-mouth, this app's only
+  acquisition channel (`monetization-strategy.md` §10), is the channel most damaged by a name someone
+  else already ranks for. **Measurement caveat:** the ranks above come from the public iTunes Search
+  API, which is *not* the App Store's search index (it ignores the keyword field entirely — §9 of the
+  keywords document), so treat the ordering as indicative of the brand query, not as exact App Store
+  ranking. What it does establish beyond doubt is that the name is shared and that the other holder
+  is far more established.
 - **Browse/featuring surfaces.** Editorial and algorithmic. In-App Events and Custom Product Pages
   feed them; you cannot buy them.
 - **Off-store traffic.** Doesn't add impressions directly, but adds downloads — and download
@@ -72,11 +95,26 @@ Prioritization below follows from how the App Store decides to show an app at al
 Strong. GymStreak has two genuinely defensible niches with real search intent and almost no
 competition:
 
-- **Apple Watch.** A complete, free, standalone watch app. Strong paywalls theirs and is widely
-  criticized for it (`monetization-strategy.md` §5). "apple watch gym tracker", "workout tracker
-  watch standalone".
-- **Privacy / no account / offline.** "workout tracker no account", "offline gym log", "kein konto".
-  Nobody optimizes for these and the intent is high.
+- **Apple Watch — in the US storefront, and only there.** A complete, free, standalone watch app.
+  Strong paywalls theirs and is widely criticized for it (`monetization-strategy.md` §5). The live
+  query, per Apple's own autocomplete, is **"workout tracker apple watch"** — and the App Name
+  already owns two of its four tokens. **This section previously called it "an en-only asset". That
+  was wrong, and lever #2 measured it:** "apple watch workout", "apple watch gym" and "apple watch
+  tracker" are **empty in the UK and Australian storefronts** (as they are in Germany), while the US
+  self-suggests all three. The bare "apple watch" prefix *is* live in GB/AU — as watch faces, dials,
+  games and blood-pressure apps, i.e. a device-utility cluster this app cannot serve. So `apple` is
+  bought in **en-US only**; every other locale buys a cheap bare `watch` hedge
+  (`marketing/app-store-subtitle-keywords.md` §6.2). Germany's defensible gap is instead its
+  **native compound vocabulary** (`trainingstagebuch`, `krafttraining`, `muskelaufbau`), which the
+  international category leaders ship English titles into and never buy.
+- **Privacy / no account / offline.** **Smaller than this document originally claimed, and the
+  correction matters.** Lever #3 probed the store's own search autocomplete and found that
+  *"workout tracker no account"* — the example query this section used to name — **returns nothing at
+  all**, as do "workout without account", "workout no login" and "workout tracker privacy". The
+  German "ohne konto" is likewise empty. The no-account promise is real and it converts on the
+  product page, but **almost nobody searches for it**, so it cannot be bought with keywords. What
+  *is* searchable is **`offline`** — a live cluster with competitors named after it. See
+  `marketing/app-store-subtitle-keywords.md` §4.2b and §9.
 
 Every lever below should be pointed at those two niches, not at the head.
 
@@ -89,8 +127,8 @@ Ranked by expected impressions gained ÷ effort, with dependencies respected.
 | # | Lever | Tier | Effort | Moves | Status |
 |---|---|---|---|---|---|
 | 1 | Rating prompt in-app | **P0** | ~1 day | Ranking | ✅ **shipped 2026-09-06** — `docs/rating-prompt.md` |
-| 2 | Storefront metadata localization (no app translation) | **P0** | 1–2 days/locale | **Keyword surface** | 🎫 ticket cut (`03-en-gb-en-au-metadata-localizations`) |
-| 3 | Niche keyword repositioning (Watch + privacy) | **P0** | ~1 day | Keyword surface | 🎫 ticket cut (`02-niche-keyword-rotation`) |
+| 2 | Storefront metadata localization (no app translation) | **P0** | 1–2 days/locale | **Keyword surface** | ✅ **step 1 shipped 2026-09-09** — en-GB + en-AU localizations created and entered in ASC (`marketing/app-store-connect-actions.md` §7). Steps 2–3 remain Phase C |
+| 3 | Niche keyword repositioning (Watch + privacy) | **P0** | ~1 day | Keyword surface | ✅ **shipped 2026-09-06** — both fields entered in ASC, rides **1.1.16** (`marketing/app-store-connect-actions.md`) |
 | 4 | Landing page + custom domain | **P1** | 1–2 weeks | Unlocks every off-store channel | ⬜ not started |
 | 5 | In-app sharing of a workout | **P1** | 2–3 days | Web-Referrer, virality | ⬜ not started |
 | 6 | Community presence (Reddit et al.) | **P1** | Ongoing | Downloads → velocity → ranking | ⬜ not started |
@@ -141,38 +179,104 @@ semantics: `docs/rating-prompt.md`.
 **Success:** rating count rising at all. Anything above ~20 ratings starts to matter for ranking.
 Measured in App Store Connect; the API gives the app nothing to measure.
 
-### 2. Storefront metadata localization — the biggest mechanical win (P0)
+### 2. Storefront metadata localization (P0)
+
+**Shipped** (2026-09-09), step 1 only. en-GB and en-AU metadata localizations, each with its own
+98/100-character keyword field derived against that storefront's own autocomplete. Derivation and
+per-token intent: `docs/marketing/app-store-subtitle-keywords.md` §6. The strings, the
+add-a-localization click path and the screenshot answer:
+`docs/marketing/app-store-connect-actions.md` §7. **Both localizations were entered in App Store
+Connect on 2026-09-09** and ride the version they were entered on; like lever #3 they are *committed
+but not live* until that version is released, and App Store re-indexing after that is not instant.
+Steps 2–3 below are unchanged and remain Phase C.
 
 **The key fact that makes this cheap:** App Store **metadata** localization is independent of **app**
 localization. You can ship a localized App Name, Subtitle, Keyword field, screenshots and description
-for a storefront without translating a single string in the app. **Each localization is a new
-100-character keyword field**, which is the single most direct way to buy impressions.
+for a storefront without translating a single string in the app. Apple even prefills most of it: only
+the **description and keywords** have to be typed for a new localization, everything else — App Name,
+Subtitle, promotional text, **screenshots** — defaults to the primary language's values.
+
+**This section used to claim "each localization is a new 100-character keyword field, the single most
+direct way to buy impressions". Step 1 proved that overstated, and the correction is the most useful
+thing it produced:**
+
+- A storefront with no localization of its own is **already served by the app's primary language**.
+  Verified on this app: the UK and Australian storefronts return the **en-US** App Name and
+  description today. So adding en-GB **swaps** which 100 characters are indexed there — it does not
+  add 100 more, and **cloning the en-US string into it would buy literally nothing.**
+- **The one genuine addition** is that Australia and New Zealand index **en-AU *and* en-GB**
+  (unanimous across four ASO vendor tables; Apple documents none of it). Adding *both* localizations
+  is therefore what buys a second indexed field — and only if the two fields share no tokens, which
+  is why they deliberately don't.
+- **en-GB is not a UK change.** English (U.K.) is Apple's documented default for the large majority
+  of countries — Ireland, India, Singapore, South Africa, Hong Kong and a hundred-plus others, all
+  serving en-US today. That is a large collateral surface, and it is why the en-GB field carries the
+  strong general set while en-AU carries the complement.
+- **Expect a small absolute effect.** The UK is ~3% of the customer base (§1) and Australia does not
+  appear in it at all; against ~13 impressions/day the UK storefront is around half an impression a
+  day. The change is worth making because it is free, reversible and risk-free — not because it is
+  the biggest number on this page. The lever's real product is **evidence**: whether a metadata-only
+  localization moves anything, which is what steps 2–3 need before they take a rating risk.
 
 **The trade-off, stated honestly:** a user who downloads in a locale the app doesn't speak may leave
 a 1-star review. §10's guardrails put the App Store rating above revenue, so this is a real risk, not
-a formality. Two mitigations: prefer locales whose users tolerate an English UI (Nordics, NL), and
-make the localized description state the UI languages plainly.
+a formality. **Step 1 carries none of it** — en-GB and en-AU users get an English UI and English
+metadata. Steps 2–3 do: mitigate by preferring locales whose users tolerate an English UI (Nordics,
+NL) and by making the localized description state the UI languages plainly.
 
 **How:**
-1. Start with **English (UK)** and **English (Australia)** — same UI language, zero risk, two extra
-   keyword fields indexed in those storefronts. Pure upside; do these first.
+1. ✅ **Shipped 2026-09-09** — **English (UK)** and **English (Australia)**: same UI language, zero
+   rating risk. See the two marketing documents above; the remaining work is *reading the result*.
 2. Then Spanish (Mexico) / Spanish (Spain), French, Italian, Portuguese (Brazil) — metadata only,
-   with an honest UI-language note.
+   with an honest UI-language note. **Gate this on the step-1 evidence**, not on the mechanism
+   sounding plausible (`marketing/app-store-connect-actions.md` §7.6). **One input to check first,
+   found while deriving step 1:** Apple's own localizations table lists the **United States** as
+   English (U.S.) *plus* Arabic, Chinese, French, Korean, Portuguese (Brazil), Russian, Spanish
+   (Mexico) and Vietnamese as additional supported languages — so es-MX, fr and pt-BR may add keyword
+   surface **in the US storefront too**, which is a different and better case than "reach Mexico".
+   Nothing is drafted for them here (`marketing/app-store-subtitle-keywords.md` §6.1).
 3. Localize keywords **per market**, do not translate them. Terms differ: German lifters search
-   "Trainingstagebuch" and "Trainingsplan", not a translation of "workout log".
+   "Trainingstagebuch" and "Trainingsplan", not a translation of "workout log" — and step 1 found the
+   same thing *within* English: Australian English searches "gym program", British English also
+   "gym programme", and the Apple Watch cluster exists only in the US.
 4. Coordinate with `docs/marketing/app-store-subtitle-keywords.md` — it holds the indexing rules
-   (App Name tokens must not be repeated in Subtitle or Keywords) and must be extended per locale
-   rather than duplicated.
+   (App Name tokens must not be repeated in Subtitle or Keywords, and a token repeated across two
+   co-indexed localizations is a wasted slot) and is extended per locale rather than duplicated.
 
-**Success:** Impressionen rising. This is the one lever with a near-mechanical relationship to it.
+**Success:** Impressionen rising **per territory**, and a search-term report that shows the new
+tokens returning something. Read it per storefront — the four keyword fields no longer contain the
+same tokens.
 
 ### 3. Niche keyword repositioning (P0)
 
-**How:** rework Subtitle + Keyword field around the two defensible niches in §2 rather than the head
-term. Concretely: Apple Watch standalone, no account, offline, privacy, superset, progressive
-overload — terms where a 36-download app can plausibly rank. Update
-`docs/marketing/app-store-subtitle-keywords.md` in the same change; that doc's own rule is that
-subtitle and keywords ship together and then freeze.
+**Shipped** (2026-09-06). New **en-US** and **de-DE** keyword fields, both 99/100 characters, derived
+against each storefront's own search autocomplete. Derivation and per-token intent:
+`docs/marketing/app-store-subtitle-keywords.md` §4.2, §4.2a, §4.2b, §5.2, §5.2a and §9. The strings
+and the App Store Connect click path: `docs/marketing/app-store-connect-actions.md`.
+
+**Both fields were entered in App Store Connect on 2026-09-06 and 1.1.16 is submitted.** The lever is
+therefore *committed but not yet live* — it goes live with the release, and App Store re-indexing
+after that is not instant. Do not read the §6 Impressionen row as a verdict until 1.1.16 has been
+live a couple of weeks.
+
+**The keyword field moved; both subtitles did not** — and this corrects what this section used to
+say. It called for reworking "Subtitle + Keyword field" together, which conflates two fields with
+opposite risk. The **subtitle is visible** and the 2026-08-25 ASO pass it belonged to **doubled**
+page-view→download conversion (§1); rewriting it would bet a measured +110% against unproven niche
+terms. The **keyword field is invisible**, cannot affect conversion at all, and only feeds ranking —
+which is the only thing this lever is trying to move. So the invisible half rotates freely and the
+visible half is frozen.
+
+**What the rotation actually bought,** beyond the terms this section originally listed:
+- `apple` + `watch` in en-US, settled explicitly against the earlier rejection of "Apple Watch" in
+  the *subtitle* — a different field with a different cost and risk.
+- `progressive` + `overload` in **both** locales: a large live cluster in the German storefront too,
+  where the English loanword is what people type.
+- `superset` in both — and **not** the German `supersatz`, which returns nothing.
+- `calendar` in en-US: a live cluster, and **no competitor writes planned workouts to the system
+  calendar**, which makes it the most defensible token in the field.
+- `trainingstagebuch` and the German compounds, on the §2 reasoning above.
+- **Not** `account` in either locale — see §2; the query does not exist.
 
 **Note:** Apple's built-in **Product Page Optimization** A/B testing is *useless here* — it needs
 far more traffic than 13 impressions/day to reach significance. Do not wait on it.
@@ -277,9 +381,17 @@ poor at this stage. Treat it as *paid market research* with a hard budget cap, o
 
 ## 5. Sequencing
 
-**Phase A — cheap, immediate, no dependencies.** Rating prompt (#1 — ✅ shipped 2026-09-06),
-English UK/AU metadata localizations (#2 step 1), niche keyword repositioning (#3). All three can
-ship inside the current release cycle; tickets live in `.scratch/acquisition-phase-a/issues/`.
+**Phase A — done (2026-09-06 → 2026-09-09).** Rating prompt (#1 — ✅ shipped 2026-09-06), niche
+keyword repositioning (#3 — ✅ entered in ASC 2026-09-06, rides **1.1.16**), English UK/AU metadata
+localizations (#2 step 1 — ✅ entered in ASC 2026-09-09; it depended on #3 because both new fields are
+derived as a delta against the final en-US one). All three are committed and take effect as their
+versions are released. The tickets were archived to `.scratch/_done/acquisition-phase-a/` on
+2026-09-09 — **this document is what survives them.**
+
+**Phase A's remaining work is reading, not building:** the per-territory Impressionen rows and, ~4
+weeks after the carrying version is live, the first search-term report
+(`marketing/app-store-connect-actions.md` §5 and §7.6). That report is also the gate on Phase C's
+step-2 locales.
 
 **Phase B — build the missing infrastructure.** Landing page + domain (#4), then in-app sharing (#5)
 which depends on having a link worth sharing. Start community presence (#6) as soon as the page
@@ -299,7 +411,7 @@ Measure in this order — the first metric is the one that matters, and it is *n
 
 | Metric | Now | First milestone | Where |
 |---|---|---|---|
-| **Impressionen/day** | **~13** | **50** | ASC → Akquise |
+| **Impressionen/day** | **~13** | **50** | ASC → Akquise — and **by territory** once #2 is entered |
 | **Web-Referrer** | **0** | **any non-zero number** | ASC → Akquise → Quellen |
 | Erstmalige Downloads/day | ~1.2 | 5 | ASC → Akquise |
 | Ratings count | ~0 | 20 | ASC → App Store |
@@ -310,6 +422,14 @@ update it in place — this table is the only record of whether the strategy is 
 baseline is what makes a shipped lever look like it did nothing. Lever #1 (ratings) went out on
 2026-09-06 with no data yet; App Store ratings surface slowly, so give it a release cycle before
 reading the row.
+
+**Neither number can move yet, and that is expected.** Levers #2 and #3 are **entered** but not live
+— App Store metadata takes effect only when the version carrying it is released, and re-indexing
+after that is not instant. Do not read the Impressionen row as a verdict on either until the carrying
+version has been live for a couple of weeks, and at 13/day expect a single good day to look like a
+trend when it is not. The first genuinely diagnostic artefact is the
+**search-term report**, ~4 weeks after 1.1.16 goes live — it is also the first one this app will ever
+have (`marketing/app-store-subtitle-keywords.md` §8), and it is what gates the step-2 locales in §4.2.
 
 **Do not read revenue as the scoreboard yet.** `monetization-strategy.md` §13.4 shows that at the
 current rate the paywall does not produce a statistically meaningful signal until **2027**, and the
@@ -327,12 +447,17 @@ against us — and the rating feeds back into ranking, so damaging it defeats th
 - **`docs/monetization-strategy.md` §13** — the evidence base: measured numbers, the RevenueCat
   counting trap (§13.2), why the paywall is not the problem (§13.3–13.4), the source split (§13.5).
 - **`docs/monetization-strategy.md` §13.9** — how to pull these numbers without a dashboard screenshot.
-- **`docs/marketing/app-store-subtitle-keywords.md`** — the indexing rules and the current
-  subtitle/keyword set; levers #2 and #3 both edit it.
+- **`docs/marketing/app-store-subtitle-keywords.md`** — the indexing rules, the current
+  subtitle/keyword sets and the *derivation* behind them, including the autocomplete probe method
+  (§9) that any future keyword work should re-run. Levers #2 and #3 both edit it.
+- **`docs/marketing/app-store-connect-actions.md`** — the *execution* half of lever #3: the exact
+  strings, the App Store Connect click path, and the post-change checks. Lever #2 appends to it.
 - **`docs/marketing/app-store-description.md`** — the conversion asset (not indexed).
 - **`docs/agents/mcp-servers.md`** — the `revenuecat` MCP server, for reading live numbers.
 - **`.scratch/i18n-foundation/issues/`** — prerequisite hygiene for lever #9.
-- **`.scratch/acquisition-phase-a/issues/`** — the live Phase A tickets (#1–#3). Transient: they are
-  archived to `.scratch/_done/` once the set completes, and this document is what survives.
+- **`.scratch/_done/acquisition-phase-a/issues/`** — the Phase A tickets (#1–#3), **archived
+  2026-09-09** when the set completed. Transient by design; this document is what survives them. The
+  ticket bodies still hold the blow-by-blow (probe results, discarded approaches, the deviations from
+  each ticket's own acceptance criteria) if a decision here ever needs its provenance.
 - **`docs/rating-prompt.md`** — lever #1 as shipped: trigger, once-ever storage, Apple's throttling
   semantics and the `RequestReviewAction` research.
