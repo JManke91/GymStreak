@@ -70,4 +70,32 @@ protocol ProPurchaseGateway: AnyObject {
     /// Throws for the same reason `currentEntitlement()` does: a restore that
     /// could not run is not a restore that found nothing.
     func restorePurchases() async throws -> PurchasedProEntitlement
+
+    /// Tags this (anonymous) customer with the resolved Founder decision, so the
+    /// purchase backend's charts can separate the never-chargeable
+    /// grandfathered base from everyone else.
+    ///
+    /// **Analytics only, and one-way.** The grant itself is decided from
+    /// `AppTransaction` and cached locally (`FounderStatusService`); nothing
+    /// reads this back to decide an entitlement, because a grandfathered user
+    /// must never depend on a network call to keep what they were promised
+    /// (docs/monetization-strategy.md §9).
+    ///
+    /// **Neither `async` nor `throws`, deliberately.** A signature that could
+    /// suspend or fail would put a reporting call on the path of the Founder
+    /// grant and the composed `ProEntitlementState` — the two things a backend
+    /// outage must not be able to touch. Implementations record the value
+    /// locally and let the SDK sync it whenever it next talks to the backend.
+    ///
+    /// Called from every `refresh()` — so at launch, and again on paywall
+    /// dismiss and after a Customer Center restore. Reporting is idempotent, so
+    /// re-sending is both cheap and the recovery path for a first sync that
+    /// never landed; there is deliberately no "have I already sent this" flag.
+    ///
+    /// A `Bool`, not a RevenueCat type: no SDK type crosses this seam in either
+    /// direction, and `RevenueCatPurchaseGateway` stays the only place the
+    /// entitlement and attribution surfaces are named (docs/pro-subscription.md
+    /// §3b — the two `RevenueCatUI` paywall hosts of §5j are the one documented
+    /// exception, and they touch neither surface).
+    func reportFounderStatus(_ isFounder: Bool)
 }

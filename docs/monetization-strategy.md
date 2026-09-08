@@ -671,6 +671,12 @@ users around **2026-08-25**. Downloads from the ASC daily table, Aug 27 – Sep 
 
 > **The chargeable population is ~12 people. Total. Ever.**
 
+**That 2026-08-25 date is still inferred, not confirmed** (open as of 2026-09-07). Neither
+`docs/pro-subscription.md` nor `docs/appstore-rejection-1.1.9.md` records whether 1.1.11's third
+review actually passed; that 1.1.12–1.1.14 shipped normally afterwards is circumstantial. It is the
+denominator for every conversion figure in §13.4, so pin the real date from App Store Connect →
+App-Versionen when someone is next in there, and correct this paragraph in place.
+
 **Measured via the RevenueCat REST API, 2026-09-06** (`/v2/projects/projfc4b2027/metrics/overview`,
 28-day window):
 
@@ -776,6 +782,19 @@ customers — ~4 returning users/day. That subtraction is void, because "New" wa
 Engagement is currently **unmeasured**, not known to be bad. RevenueCat's "Active Customers" is the
 only available signal and it counts SDK requests against a cached `CustomerInfo`, so use it as a
 trend, never as a headcount.)*
+
+**Shipped in 1.1.16: the `founder` subscriber attribute.** Since RevenueCat is the only active-user
+signal that exists, and un-segmented it mixes Founders (never chargeable) with everyone else, the
+app now reports the resolved Founder decision to RevenueCat as an anonymous `founder` =
+`"true"`/`"false"` subscriber attribute, so every chart and Placement can be split on it. Only a
+*decided* decision is sent — an undecided one (first launch offline) reports nothing rather than a
+permanent-looking `false`. Analytics only: the grant is still decided locally from `AppTransaction`
+and nothing reads the attribute back. Mechanism in `docs/pro-subscription.md` §3c.
+
+That fixes **one** of the three axes the dashboard blends. The other two remain: the update wave
+(§13.2) and the ~29 customers on builds that were never on the App Store (§13.9). A second attribute
+for build channel was considered at the same time and deliberately not added — decide it on evidence
+that the TestFlight/local-build population is actually distorting a reading.
 
 ### 13.5 The acquisition diagnosis — one channel, and one telling zero
 
@@ -917,6 +936,7 @@ agent can pull these without a dashboard screenshot. Verified working 2026-09-06
 | Trials, subscriptions, MRR, revenue | RevenueCat `/v2/projects/{id}/metrics/overview` | Weekly |
 | Version + country spread, per-customer subs | RevenueCat `/v2/projects/{id}/customers` (+ `/subscriptions`) | As needed |
 | Placement impressions | RevenueCat **dashboard only** — see below | Once 1.1.15 is live |
+| Founder vs. chargeable split | RevenueCat — segment any chart on the `founder` attribute (1.1.16+, §13.4) | With any RevenueCat reading |
 | Retention / Sessions | ASC — **unavailable until volume rises** (§13.4) | Re-check quarterly |
 
 **API notes, verified 2026-09-06.** `/v2/projects/{id}/metrics/overview`, `/customers`,

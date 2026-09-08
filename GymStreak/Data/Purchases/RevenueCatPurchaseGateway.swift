@@ -2,8 +2,9 @@
 //  RevenueCatPurchaseGateway.swift
 //  GymStreak
 //
-//  The one and only file in the app that imports RevenueCat.
-//  See docs/pro-subscription.md §3b.
+//  The only file that imports the RevenueCat SDK proper — the two `RevenueCatUI`
+//  paywall hosts (§5j) are the one documented exception, and they name no
+//  entitlement or attribution type. See docs/pro-subscription.md §3b.
 //
 
 import Foundation
@@ -13,9 +14,12 @@ import RevenueCat
 /// Configures the RevenueCat SDK and projects `CustomerInfo` down to the two
 /// facts the app decides on.
 ///
-/// **Nothing above `Data/Purchases/` may import RevenueCat**, and this file is
-/// where that line is drawn: no `CustomerInfo`, `Package`, `EntitlementInfo` or
-/// `ErrorCode` appears in any signature outside it.
+/// **The entitlement and attribution surfaces live here and nowhere else**, and
+/// this file is where that line is drawn: no `CustomerInfo`, `Package`,
+/// `EntitlementInfo` or `ErrorCode` appears in any signature outside it.
+/// `ProPaywallView` and `CustomerCenterSettingsRow` import `RevenueCatUI` to
+/// name an `Offering` for the SDK's own paywall views (§5j) — the single
+/// sanctioned exception, and it decides nothing.
 @MainActor
 final class RevenueCatPurchaseGateway: ProPurchaseGateway {
 
@@ -231,4 +235,32 @@ final class RevenueCatPurchaseGateway: ProPurchaseGateway {
     func restorePurchases() async throws -> PurchasedProEntitlement {
         Self.entitlement(in: try await Purchases.shared.restorePurchases(), source: .restore)
     }
+
+    // MARK: - Reporting
+
+    /// Writes the Founder decision as the `founder` subscriber attribute.
+    ///
+    /// `setAttributes` only records the value locally and marks it for the next
+    /// backend call the SDK makes anyway — it neither suspends nor throws, which
+    /// is what lets `ProPurchaseGateway` declare this call unable to affect the
+    /// entitlement at all.
+    ///
+    /// The value is a string because every subscriber attribute is: RevenueCat
+    /// has no boolean attribute type, and the dashboard segments on the literal
+    /// text, so `"true"`/`"false"` is the vocabulary the charts are read with.
+    /// Nothing about the identity of the customer is sent — the app-user ID is
+    /// the SDK's own anonymous one (`appUserID: nil` above) and
+    /// `collectDeviceIdentifiers()` is still never called.
+    func reportFounderStatus(_ isFounder: Bool) {
+        // One value, computed once: what goes on the wire and what is logged are
+        // then provably the same string, which is the only thing this log line is
+        // good for.
+        let value = isFounder ? "true" : "false"
+        Purchases.shared.attribution.setAttributes([Self.founderAttributeKey: value])
+        Self.logger.info("Reported founder=\(value, privacy: .public)")
+    }
+
+    /// The dashboard's segmentation key. Reserved names start with `$`; this one
+    /// deliberately does not.
+    private static let founderAttributeKey = "founder"
 }

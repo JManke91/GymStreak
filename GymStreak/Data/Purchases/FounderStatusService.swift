@@ -76,6 +76,16 @@ protocol FounderStatusResolving: AnyObject {
     /// Undecided reports `false` — nothing is granted on a guess.
     var isFounder: Bool { get }
 
+    /// `true` once a resolution has been recorded, either way.
+    ///
+    /// On the protocol because the decision is deliberately three-valued and the
+    /// *undecided* case is not visible through `isFounder`, which reports `false`
+    /// for it. Anything that reports the decision onwards — rather than merely
+    /// acting on the grant — has to be able to say nothing at all: writing
+    /// "not a Founder" for a first-launch-offline would record the one answer
+    /// `resolveDecision()` refuses to record, and it would look permanent.
+    var isDecided: Bool { get }
+
     /// Resolves the decision unless it is already settled. A cheap no-op on
     /// every launch after the first successful resolution.
     func resolveIfNeeded() async
@@ -125,7 +135,6 @@ final class FounderStatusService: FounderStatusResolving {
 
     var isFounder: Bool { defaults.bool(forKey: Self.decisionKey) }
 
-    /// `true` once a resolution has been recorded, either way.
     var isDecided: Bool { defaults.object(forKey: Self.decisionKey) != nil }
 
     func resolveIfNeeded() async {

@@ -129,9 +129,11 @@ It imports nothing beyond Foundation and that is a hard constraint, not a coinci
 conformer's purchase infrastructure (StoreKit, RevenueCat) may appear in the signature. Ticket 03
 swapped the conformer and **did not touch the protocol** — which was the point of the exercise: had
 the SDK forced a signature change, that would have meant the protocol was shaped around the
-placeholder. **`Data/Purchases/` is the only directory permitted to import a purchase framework**:
-`FounderStatusService.swift` is the only file importing StoreKit, `RevenueCatPurchaseGateway.swift`
-the only one importing RevenueCat, and no type from either appears above them.
+placeholder. **`Data/Purchases/` is the only directory permitted to decide anything with a purchase
+framework**: `FounderStatusService.swift` is the only file importing StoreKit,
+`RevenueCatPurchaseGateway.swift` the only one importing RevenueCat itself, and no type from either
+appears above them. The single exception is §5j's two `RevenueCatUI` paywall hosts, which import the
+UI module to name an `Offering` and decide nothing.
 
 `ProEntitlementProvider` keeps `resolvedState` separate from the DEBUG-only `simulatedState`, and
 `state` reports `simulatedState ?? resolvedState`. Keeping the two distinct is what lets the debug
@@ -632,6 +634,58 @@ cached by identifier so `purchase(_:)` can name it without a RevenueCat type cro
 
 Note the Simulated Store serialises purchases — one at a time — so the debug section disables its
 buttons while a purchase is in flight.
+
+## 3c. The `founder` subscriber attribute (1.1.16)
+
+Every RevenueCat chart blends two populations that can never behave alike: Founders, who hold Pro
+permanently and are **never chargeable**, and post-cutoff users, who are. Un-segmented, the only
+active-user signal this app has is unreadable — and it is the only one it has, because every App
+Store Connect engagement metric is opt-in *and* privacy-thresholded into silence at this volume
+(`monetization-strategy.md` §13.4). The fix is one anonymous boolean, reported to RevenueCat so the
+dashboard and every Placement can be split on it.
+
+```
+FounderStatusService ── isFounder / isDecided ──┐
+                                                ├─→ ProEntitlementProvider.refresh()
+RevenueCatPurchaseGateway ←── reportFounderStatus(_:) ──┘
+        │
+        └─→ Purchases.shared.attribution.setAttributes(["founder": "true" | "false"])
+```
+
+**Nothing reads it back.** The grant is still decided from `AppTransaction` and cached in
+`UserDefaults` (§3a); the attribute is analytics only and one-way. §9's implementation notes require
+that a grandfathered user never depend on a network call to keep what they were promised, and this
+does not change that — a RevenueCat outage cannot touch the grant, because no code path consults the
+attribute to decide an entitlement.
+
+**Four decisions worth keeping:**
+
+- **Only a *decided* decision is reported.** The Founder decision is deliberately three-valued
+  (absent / `true` / `false`) so a first-launch-offline is retried rather than permanently
+  disinherited, and `isFounder` flattens that — it reports `false` for undecided. Sending that would
+  write the one answer `resolveDecision()` refuses to record, into a dashboard where it would look
+  permanent. `FounderStatusResolving` therefore exposes `isDecided`, and an undecided launch reports
+  **nothing at all**.
+- **The call can neither suspend nor throw.** `reportFounderStatus(_ isFounder: Bool)` is a plain
+  synchronous, non-throwing method on `ProPurchaseGateway`, so "a reporting call can never block or
+  alter the entitlement" is structural rather than a matter of ordering. `setAttributes` matches
+  that: it records the value locally and lets the SDK sync it with the next backend call it makes
+  anyway.
+- **It re-sends on every launch, with no bookkeeping.** Subscriber attributes are idempotent, so
+  re-setting is cheap *and* is the recovery path for a first sync that never landed. There is
+  deliberately no "have I already sent this" flag.
+- **The layering line holds.** The signature takes a `Bool`; `RevenueCatPurchaseGateway` stays the
+  only file naming the SDK's entitlement and attribution surfaces (§3b — §5j's two `RevenueCatUI`
+  paywall hosts are the one documented exception and touch neither), and `FounderStatusService`
+  gained no dependency on it.
+
+**Privacy.** An anonymous boolean on the SDK's own anonymous app-user ID (`appUserID: nil`). No PII,
+no account, no change to the no-account promise — `collectDeviceIdentifiers()` is still never called.
+The value is the string `"true"`/`"false"` because RevenueCat has no boolean attribute type and the
+dashboard segments on the literal text.
+
+**Covered by** `ProEntitlementTests`: undecided reports nothing; decided reports `true` and `false`;
+and a purchase layer that cannot be reached still gets the report while the Founder grant stands.
 
 ## 4. Caps live in one place
 
@@ -2751,6 +2805,26 @@ process: the debug path bypasses the coordinator entirely, and the coordinator i
   written from memory (2026-08-16): the app's own API usage was established by grepping all three
   targets, and each code's verbatim definition was checked. §9.7 records what that produced,
   including the categories deliberately left out.
+- **The `founder` subscriber attribute (§3c), green 2026-09-06/07.** `xcodebuild test -scheme
+  GymStreakTests` — 1291 tests in 135 suites, 0 failures, including the three new
+  `ProEntitlementTests` cases (undecided reports nothing; decided reports `true` and `false`; an
+  unreachable purchase layer is still reported to and still keeps the grant). `architecture-reviewer`
+  returned **PASS WITH WARNINGS**, its one warning a stale-invariant comment since corrected — see
+  the note below. The manual pass then walked all three decision outcomes on device, using the §9.4c
+  simulated readers: `-FOUNDER_SIMULATE_PRECUTOFF` logged `Reported founder=true` and the attribute
+  appeared on that customer in RevenueCat; `-FOUNDER_SIMULATE_CUTOFF` logged `Reported
+  founder=false` and flipped it; and a plain Debug run with neither argument logged
+  `Founder: undecided — environment is xcode` and **no `Reported founder=` line at all**, which is
+  the case that matters most. The watch suite was not re-run and is not required: the protocol and
+  its implementation live in the iOS target only and no watch type references either.
+- **A stale invariant this work corrected.** §3 and the gateway's own header both claimed
+  `RevenueCatPurchaseGateway.swift` was the *only* file importing RevenueCat. That stopped being
+  true at §5j — `ProPaywallView` imports `RevenueCat` and `RevenueCatUI`, `CustomerCenterSettingsRow`
+  imports `RevenueCatUI` — and the claim had been copied forward into new comments. The enforced
+  invariant is narrower and does hold: **no SDK entitlement or attribution type crosses the
+  `ProPurchaseGateway` seam.** Both the code comments and §3 now say that instead. Worth
+  remembering as a class of defect: an absolute stated in a header outlives the release that made it
+  false, and gets quoted by the next ticket as authority.
 
 ## 9. The runbook
 

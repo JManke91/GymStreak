@@ -125,6 +125,28 @@ final class ProEntitlementProvider: ProEntitlementProviding {
 
         await founderStatus.resolveIfNeeded()
         recompose()
+        reportFounderStatus()
+    }
+
+    /// Tags the purchase backend's customer record with the Founder decision, so
+    /// its charts — the only active-user signal this app has, since every App
+    /// Store Connect engagement metric is opt-in and privacy-thresholded into
+    /// silence at this volume (docs/monetization-strategy.md §13.4) — can be
+    /// split into the never-chargeable grandfathered base and everyone else.
+    ///
+    /// **Only a decided decision is reported.** `isFounder` alone cannot express
+    /// the undecided case: it reports `false` for it, and sending that would
+    /// write the one answer `FounderStatusService` deliberately refuses to
+    /// record, into a dashboard where it would look permanent. A launch that
+    /// could not decide reports nothing and tries again next launch.
+    ///
+    /// Runs after `recompose()`, and last: it is analytics, so nothing that
+    /// determines what the user gets may queue behind it. The call itself can
+    /// neither suspend nor throw (`ProPurchaseGateway`), so this is structural
+    /// rather than a matter of ordering.
+    private func reportFounderStatus() {
+        guard founderStatus.isDecided else { return }
+        purchases.reportFounderStatus(founderStatus.isFounder)
     }
 
     /// Runs a user-initiated restore and reports what it found.

@@ -217,6 +217,66 @@ struct ProEntitlementTests {
         #expect(provider.isPro == false)
     }
 
+    // MARK: - Founder reporting
+
+    @Test(
+        "A decided Founder decision is reported to the purchase layer, either way",
+        arguments: [true, false]
+    )
+    func decidedFounderStatusIsReported(_ isFounder: Bool) async {
+        let purchases = StubPurchaseGateway()
+        let provider = makeProvider(
+            founderStatus: StubFounderStatus(isFounder: isFounder),
+            purchases: purchases
+        )
+
+        await provider.refresh()
+
+        // Both answers matter: without the negative half, the backend's charts
+        // could not tell a post-cutoff user from one who has not decided yet.
+        #expect(purchases.reportedFounderStatuses == [isFounder])
+    }
+
+    @Test("An undecided Founder decision reports nothing at all")
+    func undecidedFounderStatusIsNotReported() async {
+        // The decision is three-valued and `isFounder` flattens it: a
+        // first-launch-offline reports `false` while still being retried next
+        // launch. Sending that would write a permanent-looking "not a Founder"
+        // into the analytics for a user who may well be one.
+        let purchases = StubPurchaseGateway()
+        let provider = makeProvider(
+            founderStatus: StubFounderStatus(isFounder: false, isDecided: false),
+            purchases: purchases
+        )
+
+        await provider.refresh()
+
+        #expect(purchases.reportedFounderStatuses.isEmpty)
+        #expect(provider.resolvedState == .free)
+    }
+
+    @Test("An unreachable purchase layer is still reported to, and still keeps the grant")
+    func reportingSurvivesAnUnreachablePurchaseLayer() async {
+        // The stronger claim — that reporting cannot disturb the entitlement —
+        // is structural and cannot be tested: `reportFounderStatus` is neither
+        // `async` nor `throws`, so no stub can make it fail. What is testable is
+        // the surrounding half, and it is the case that actually occurs: a
+        // purchase layer that cannot be reached still gets the report, and the
+        // Founder grant it is reporting on still stands.
+        let purchases = StubPurchaseGateway()
+        purchases.isUnreachable = true
+        let provider = makeProvider(
+            founderStatus: StubFounderStatus(isFounder: true),
+            purchases: purchases
+        )
+
+        await provider.refresh()
+
+        #expect(provider.resolvedState == .founder)
+        #expect(provider.isPro)
+        #expect(purchases.reportedFounderStatuses == [true])
+    }
+
     // MARK: - Debug store surface
 
     @Test("A completed purchase flips the entitlement")
@@ -399,14 +459,22 @@ private func waitUntil(_ condition: @autoclosure () -> Bool) async {
 private final class StubFounderStatus: FounderStatusResolving {
 
     var isFounder: Bool
+
+    /// Defaults to *decided*, which is what every launch after the first
+    /// successful resolution looks like. The undecided case — the one
+    /// `isFounder` cannot express, because it reports `false` for it — is opted
+    /// into explicitly by the tests that care.
+    var isDecided: Bool
+
     private(set) var resolveCount = 0
 
     /// Suspends `resolveIfNeeded()`, standing in for the `AppTransaction`
     /// round-trip the real service performs on every call outside production.
     var beforeResolve: (() async -> Void)?
 
-    init(isFounder: Bool = false) {
+    init(isFounder: Bool = false, isDecided: Bool = true) {
         self.isFounder = isFounder
+        self.isDecided = isDecided
     }
 
     func resolveIfNeeded() async {
@@ -464,5 +532,14 @@ private final class StubPurchaseGateway: ProPurchaseGateway {
     func restorePurchases() async throws -> PurchasedProEntitlement {
         if isUnreachable { throw Unreachable() }
         return restored
+    }
+
+    /// Every Founder status reported, in order. An array rather than a flag so a
+    /// test can assert that an *undecided* decision reported nothing at all —
+    /// the case a `Bool` could not tell from "reported false".
+    private(set) var reportedFounderStatuses: [Bool] = []
+
+    func reportFounderStatus(_ isFounder: Bool) {
+        reportedFounderStatuses.append(isFounder)
     }
 }
