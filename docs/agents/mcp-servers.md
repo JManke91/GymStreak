@@ -94,6 +94,32 @@ install or user counts.
   `.claude.json` under the project entry, so **adding a server to `.mcp.json` prompts once in each
   account.** Approve it in both. This is the only per-account step.
 
+### Project memory is shared (one directory, via symlink)
+
+Both accounts read and write **one** memory store for this project. `claude-private`'s memory
+directory is a symlink to the default account's:
+
+```
+~/.claude-private/projects/-Users-jmanke-Documents-Code-iOS-AI-GymStreak/memory
+  -> ~/.claude/projects/-Users-jmanke-Documents-Code-iOS-AI-GymStreak/memory
+```
+
+Before 2026-09-06 the two were separate and had diverged badly — 31 files, only 2 present in both,
+and B's index still asserted a symlink-based iOS/watch file-sharing scheme that a July-2026 audit had
+disproven. So what an agent knew about this project depended on which command was typed. They were
+reconciled to 20 files and then linked; the audit trail is in `.scratch/_done/memory-reconciliation/`.
+
+Consequences:
+
+- **Don't reconcile them again, and don't "fix" the duplication by copying files back** — that is
+  what re-forks them. Identical listings in both accounts is the intended state, not a bug.
+- A memory written from either account is immediately visible to the other.
+- The real files live in the default config dir, **inside** `~/.claude/projects/<project>/` alongside
+  session transcripts. If that project directory is ever cleaned up wholesale, the link dangles and
+  *both* accounts lose their memory. If that ever happens, restore from a
+  `~/claude-memory-backup-*.tgz` and consider moving the real directory to a neutral path outside
+  `projects/` (e.g. `~/.claude-shared/gymstreak/memory/`) with both accounts pointing at it.
+
 ## Personal servers (intentionally NOT shared)
 
 Servers unrelated to this project (e.g. work Jira, claude.ai connectors like Gmail/Drive) belong in your personal user scope (`~/.claude.json`, via `claude mcp add --scope user`), not here.
