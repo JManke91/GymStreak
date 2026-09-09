@@ -236,13 +236,7 @@ struct FirstRunCoverOrderTests {
 
     private func makeOnboarding(defaults: UserDefaults? = nil) -> OnboardingFlowViewModel {
         OnboardingFlowViewModel(
-            completion: OnboardingCompletionStore(defaults: defaults ?? makeDefaults()),
-            paywalls: PaywallPresenter(
-                entitlements: StubProEntitlements(state: .free),
-                activeWorkout: ActiveWorkoutRegistry(),
-                isGatingEnabled: true,
-                defaults: makeDefaults()
-            )
+            completion: OnboardingCompletionStore(defaults: defaults ?? makeDefaults())
         )
     }
 

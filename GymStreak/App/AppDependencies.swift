@@ -206,6 +206,14 @@ final class AppDependencies: ObservableObject {
     /// only ever sees `MonthlyAllowanceTracking`.
     let aiAllowance: MonthlyAllowanceTracking
 
+    /// The anonymous funnel buckets reported to the purchase backend
+    /// (docs/funnel-instrumentation.md). App-lifetime because it resolves the
+    /// build channel at most once per process, and because all four of the
+    /// sites that report — the launch task and the three event sites — must
+    /// share that one resolution. Presentation only ever sees
+    /// `FunnelAttributeTracking`.
+    let funnelAttributes: any FunnelAttributeTracking
+
     /// Bundle/OS/hardware metadata prefilled into the Settings support mail.
     /// Stateless, so it is cheap to hold for the app's lifetime; Presentation
     /// only ever sees `DeviceDiagnosticsProviding`.
@@ -268,9 +276,10 @@ final class AppDependencies: ObservableObject {
         // Constructing the gateway configures the RevenueCat SDK — this runs in
         // `GymStreakApp.init()`, so it happens once, before any UI exists and
         // before anything can read an entitlement.
+        let purchaseGateway = RevenueCatPurchaseGateway()
         let proEntitlements = ProEntitlementProvider(
             founderStatus: Self.makeFounderStatusService(),
-            purchases: RevenueCatPurchaseGateway()
+            purchases: purchaseGateway
         )
         self.proEntitlements = proEntitlements
         #if DEBUG
@@ -315,12 +324,32 @@ final class AppDependencies: ObservableObject {
             paywalls: paywalls,
             activeWorkout: activeWorkout
         )
+        let onboardingCompletion = OnboardingCompletionStore()
+        // The **same** gateway instance the entitlement provider reports
+        // `founder` through: the funnel buckets are siblings of that attribute
+        // on one customer record, not a second reporting path.
+        //
+        // Deliberately the real `StoreKitOriginalAppDownloadReader`, never the
+        // DEBUG founder simulator: `-FOUNDER_SIMULATE_PRECUTOFF` fakes *when*
+        // the app was downloaded, and faking how it was installed would defeat
+        // the one attribute whose job is to tell a real install from a local one.
+        let funnelAttributes = FunnelAttributeCoordinator(
+            onboarding: onboardingCompletion,
+            // The same provider §8 placement B and the rating prompt count
+            // with, so "how many workouts are there" stays one query on one
+            // model actor.
+            totals: historySnapshotProvider,
+            routineRepository: routineRepository,
+            downloads: StoreKitOriginalAppDownloadReader(),
+            reporter: purchaseGateway
+        )
+        self.funnelAttributes = funnelAttributes
         self.onboarding = OnboardingFlowViewModel(
-            completion: OnboardingCompletionStore(),
-            // The tour's last step is the real paywall, so it asks the same seam
-            // every gate asks — both whether that step is due at all and, when
-            // it is reached, for the placement itself (docs/onboarding.md).
-            paywalls: paywalls
+            completion: onboardingCompletion,
+            // Reported the moment the tour ends, not on the next cold launch — a
+            // user who finishes the tour and never returns would otherwise be
+            // recorded as a bail-out.
+            funnelAttributes: funnelAttributes
         )
         self.muscleMapDiscovery = MuscleMapDiscoveryStore()
         self.aiAllowance = MonthlyAllowanceStore()

@@ -31,6 +31,7 @@ private struct RoutinesViewInternal: View {
             proEntitlements: dependencies.proEntitlements,
             paywalls: dependencies.paywalls,
             proactivePaywalls: dependencies.proactivePaywalls,
+            funnelAttributes: dependencies.funnelAttributes,
             historyStoreGate: dependencies.historyStoreGate,
             calendarMirror: dependencies.plannedWorkoutCalendarMirror
         ))
@@ -53,6 +54,7 @@ private struct RoutinesViewInternal: View {
             activeWorkout: dependencies.activeWorkout,
             proactivePaywalls: dependencies.proactivePaywalls,
             reviewPrompt: dependencies.reviewPrompt,
+            funnelAttributes: dependencies.funnelAttributes,
             weightUnitPreference: dependencies.weightUnitPreference,
             historyStoreGate: dependencies.historyStoreGate
         ))

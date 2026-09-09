@@ -138,6 +138,9 @@ class WorkoutViewModel: ObservableObject {
     /// workout (docs/rating-prompt.md). Optional for the same reason
     /// `proactivePaywalls` is: unit-test instances have no app to report to.
     private let reviewPrompt: ReviewPromptCoordinator?
+    /// Optional for the same reason the two above are: unit-test instances have
+    /// no purchase backend to report to.
+    private let funnelAttributes: (any FunnelAttributeTracking)?
 
     /// The unit weights are shown in. Injected rather than reached for
     /// (`.shared` is barred inside ViewModels); nil in unit-test instances,
@@ -204,6 +207,7 @@ class WorkoutViewModel: ObservableObject {
         activeWorkout: (any ActiveWorkoutReporting)? = nil,
         proactivePaywalls: ProactivePaywallCoordinator? = nil,
         reviewPrompt: ReviewPromptCoordinator? = nil,
+        funnelAttributes: (any FunnelAttributeTracking)? = nil,
         weightUnitPreference: WeightUnitPreferenceProviding? = nil,
         aiCoachCache: AICoachCaching? = nil,
         historyStoreGate: HistoryStoreGate = .unshared(),
@@ -221,6 +225,7 @@ class WorkoutViewModel: ObservableObject {
         self.activeWorkout = activeWorkout
         self.proactivePaywalls = proactivePaywalls
         self.reviewPrompt = reviewPrompt
+        self.funnelAttributes = funnelAttributes
         self.weightUnitPreference = weightUnitPreference
         self.aiCoachCache = aiCoachCache ?? AICoachCache.shared
         self.historyStoreGate = historyStoreGate
@@ -676,6 +681,13 @@ class WorkoutViewModel: ObservableObject {
         Task {
             await proactivePaywalls?.workoutDidComplete()
             await reviewPrompt?.workoutDidComplete()
+            // Last in the same task, after both decisions that can put
+            // something on screen: this is analytics
+            // (docs/funnel-instrumentation.md), so nothing the user sees may
+            // queue behind it. It re-reads the completed-session count rather
+            // than incrementing anything, so it is correct however the session
+            // arrived — including one ingested from the watch.
+            await funnelAttributes?.reportCurrentState()
         }
     }
 

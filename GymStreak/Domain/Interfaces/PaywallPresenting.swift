@@ -26,12 +26,12 @@ protocol PaywallPresenting: AnyObject {
 
     /// The placement currently asking to be shown, or `nil`.
     ///
-    /// Read only by a **paywall host**, of which there are three and no more:
-    /// the app root's sheet, the coach-chat cover's own (`.coachChat`), and the
-    /// first-run tour's own (`.onboarding`). The two cover-local hosts exist
-    /// because a sheet raised while a full-screen cover is up never reaches the
-    /// screen; each filters to its own placement and the root suppresses itself
-    /// while either cover is up. Nothing that is not a host should read this.
+    /// Read only by a **paywall host**, of which there are two and no more: the
+    /// app root's sheet and the coach-chat cover's own (`.coachChat`). That
+    /// cover-local host exists because a sheet raised while a full-screen cover
+    /// is up never reaches the screen; it filters to its own placement and the
+    /// root suppresses itself while any first-run cover is up. Nothing that is
+    /// not a host should read this.
     var pendingPlacement: PaywallPlacement? { get }
 
     /// Requests the paywall for `placement`. Silently does nothing when the
@@ -41,12 +41,10 @@ protocol PaywallPresenting: AnyObject {
     /// Whether the **standing** eligibility rules admit `placement`: the kill
     /// switch, the entitlement (a Founder included) and §8's once-ever record.
     ///
-    /// Exists for the two callers that have to know the answer *before* asking.
-    /// The first-run tour's last step is a paywall, and its progress bar would
-    /// otherwise promise a step that never comes (docs/onboarding.md). The
-    /// rating prompt asks the opposite question — it never presents anything,
-    /// and uses this to stay *out of the way* of a placement that could still be
-    /// raised (docs/rating-prompt.md §3a). Every other caller asks by calling
+    /// Exists for the one caller that has to know the answer *before* asking.
+    /// The rating prompt never presents anything, and uses this to stay *out of
+    /// the way* of a placement that could still be raised
+    /// (docs/rating-prompt.md §3a). Every other caller asks by calling
     /// `present(_:)` and lets it decide.
     ///
     /// Deliberately **not** the whole of `present(_:)`: Rule 3 (no paywall

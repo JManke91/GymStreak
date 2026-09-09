@@ -1,0 +1,1 @@
+- The first-run tour no longer ends with a subscription offer. A fresh install goes straight from the last slide into the app.

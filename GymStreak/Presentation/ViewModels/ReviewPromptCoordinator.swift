@@ -134,8 +134,9 @@ final class ReviewPromptCoordinator {
     /// Whether §8 placement B could still be raised.
     ///
     /// The one coupling to the paywall surface, and it is deliberately to the
-    /// *standing* eligibility question `PaywallPresenting` already answers for
-    /// the onboarding tour, not to the coordinator's private armed state. It
+    /// *standing* eligibility question `PaywallPresenting` answers — the kill
+    /// switch, the entitlement and §8's once-ever record — not to the
+    /// coordinator's private armed state. It
     /// covers more than a same-turn collision: B is deferred, not dropped, when
     /// it cannot be shown, so "already fired" is not the same as "will never
     /// fire". While it is still owed, the rating prompt waits — the paywall is

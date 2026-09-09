@@ -16,10 +16,10 @@ import Foundation
 /// The `Int` raw values are the order and nothing else — they are never
 /// persisted, so they are free to change.
 ///
-/// This is what the tour *can* contain. What a given run actually contains is
-/// `OnboardingFlowViewModel.steps`, which drops `.offer` for a user the paywall
-/// seam would show nothing to — a Pro user, a Founder, a run with gating off,
-/// or one where the placement has already fired.
+/// Every run of the tour contains every case: the flow has no conditional step
+/// and asks for nothing. The tour used to end on a Pro offer; it was retired
+/// because a purchase request before the user has logged a single set sits in
+/// front of the aha path Rule 1 protects (docs/acquisition-strategy.md §4.12).
 enum OnboardingStep: Int, CaseIterable, Hashable {
     case welcome
     case routines
@@ -27,7 +27,6 @@ enum OnboardingStep: Int, CaseIterable, Hashable {
     case progressiveOverload
     case history
     case aiCoach
-    case offer
 
     /// Whether this step's content is centred in the space between the chrome
     /// or flows from the top.
@@ -43,9 +42,8 @@ enum OnboardingStep: Int, CaseIterable, Hashable {
     /// Per-step rather than one shared "Continue": the first slide invites the
     /// user in ("Let's go") and the rest move them along ("Next").
     ///
-    /// Read through `OnboardingFlowViewModel.ctaKey`, never directly: the *last*
-    /// step of a run says "Start training" instead, and which step that is
-    /// depends on whether the offer step is due.
+    /// Read through `OnboardingFlowViewModel.ctaKey`, never directly: the last
+    /// step of the tour says "Start training" instead.
     var ctaKey: String {
         switch self {
         case .welcome: "onboarding.welcome.cta"
@@ -53,8 +51,7 @@ enum OnboardingStep: Int, CaseIterable, Hashable {
         }
     }
 
-    /// The CTA of whichever step ends the tour — the coach slide when the offer
-    /// step is not due, and nothing at all when it is, because the offer step
-    /// hands the whole screen to the paywall and draws no chrome of its own.
+    /// The CTA of the step that ends the tour — the coach slide, whose button
+    /// opens the app rather than leading to another slide.
     static let finishCTAKey = "onboarding.cta.start"
 }

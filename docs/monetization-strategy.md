@@ -466,7 +466,7 @@ Specified explicitly because it's the easiest place to accidentally violate Rule
 | # | Placement | Trigger | Offer |
 |---|---|---|---|
 | A | **End of onboarding — soft, dismissible** | Once, after first routine created | Annual + 7-day trial. Onboarding paywalls *with a trial* produce the highest install-to-paid rate in the category (1.78% avg). Must be one tap to dismiss. |
-| A′ | **End of the first-run tour — soft, dismissible** (`onboarding`, shipped 2026-09-05) | Once, on the last step of the first-run tour, before the tab bar (`docs/onboarding.md`) | The dashboard-authored paywall, on the same terms as A: one tap to dismiss, and dismissing lands the user in the **whole free app** — the tour records itself complete either way. Absent entirely for a Pro user, a Founder, a run with gating off, and once it has fired; the tour is then six steps, not seven with a dead one. Its free residue is the entire app, so §10's guardrails carry no extra risk beyond the second paywall in one session that §8's frequency note now names. |
+| ~~A′~~ | ~~**End of the first-run tour — soft, dismissible**~~ (`onboarding`) | **RETIRED 2026-09-09.** Shipped 2026-09-05, removed four days later without ever converting anyone | It asked for a purchase before the user had logged a single set — in front of the first step of the aha path §3 Rule 1 protects, in the session 89% of users never return from. It produced **zero purchases, ever** (`docs/acquisition-strategy.md` §4.12). The case, its headline key and its en/de strings are deleted; the tour is six slides and asks for nothing. The first ask is A, then B. |
 | B | **Value-moment paywall** | After the 3rd completed workout, or the first automatic progressive-overload suggestion — whichever lands first | The endowed-progress screen: "You've logged N workouts, X sets, Y kg of volume." Then the offer. Paywalls triggered after a measurable value moment see **2.1× the trial-start rate** of immediate hard paywalls. This is the highest-value placement in the app. |
 | C | **Contextual gates** | Tap "New routine" at 3 · tap the 1RM or volume chart tab · scrub the chart past 3 months · open Coach Chat at 0 remaining · open Period Recap / Deep-Dive at 0 remaining · create 4th custom exercise | Direct purchase, no trial. Must name the specific thing being unlocked in the headline, not "Go Pro". |
 | D | **Cap-approach nudge** (not a paywall) | At 2 of 3 routines; on the metered AI surfaces from **zero consumed** ("5 of 5 Coach messages left this month", and the recap/deep-dive's single free generation) | An inline, non-blocking hint. This is the endowed-progress effect: showing consumed proportion of an allowance measurably lifts conversion, and it removes the surprise from placement C. The AI hint appears from the first unit rather than the last (corrected 2026-09-03) precisely because a meter that first appears near full is never seen filling. The **routine cap is deliberately unchanged** — it stays at 2 of 3, where its own nudge already shows the meter mid-fill. |
@@ -474,14 +474,13 @@ Specified explicitly because it's the easiest place to accidentally violate Rule
 **Absolute prohibition:** no paywall, upsell, or Pro badge anywhere inside an active workout
 session, on the watch app, or on the rest-timer Live Activity. Rule 3.
 
-**Frequency cap:** placements A, A′ and B fire once each, ever. Placement C fires on genuine intent
+**Frequency cap:** placements A and B fire once each, ever. Placement C fires on genuine intent
 only. No recurring interstitials, no launch-time paywalls.
 
-**A and A′ can both land in a first session** — the tour's offer on launch, and A again once the
-user creates their first routine. That is two soft paywalls in one session and it is the one thing
-about A′ worth watching: §10's free-user D30 retention and the App Store rating are measured against
-their pre-tour baseline, and the rollback is one line — drop `.offer` from `OnboardingStep`, leaving
-the six value slides (`docs/onboarding.md`).
+**A first session contains at most one soft paywall again** — A, once the user creates their first
+routine. It briefly contained two, while A′ existed; that is the concrete reason A′ was retired
+rather than tuned (`docs/acquisition-strategy.md` §4.12). **Nothing may be placed before the user's
+first logged set**: the first-run tour is a teaching surface, not a selling one.
 
 ---
 
@@ -573,20 +572,19 @@ users into churn rather than subscribers, and it damages word-of-mouth — which
 only acquisition channel. If D30 or rating moves against the baseline in Phase 2, loosen before
 optimizing.
 
-**The first-run tour moves both baselines, so both are re-based on it (2026-09-05).** A′ (§8) puts a
-soft paywall at the end of the tour, which means a first session can now contain two soft paywalls —
-A′ on launch, A once the user creates their first routine — and the tour itself now stands between a
-new install and the tab bar. Free-user **D30 retention** and the **App Store rating** are therefore
-measured against their **pre-tour** baseline, not the pre-paywall one; the pre-paywall figures stay
-the baseline for every gate that predates the tour. Rating is the more sensitive of the two here,
-because a tour is the first thing a new user meets and a paywall at the end of it is the last.
+**The first-run tour moves both baselines, so both are re-based on it (2026-09-05).** The tour
+stands between a new install and the tab bar, so free-user **D30 retention** and the **App Store
+rating** are measured against their **pre-tour** baseline, not the pre-paywall one; the pre-paywall
+figures stay the baseline for every gate that predates the tour. Rating is the more sensitive of the
+two, because a tour is the first thing a new user meets.
 
-**The rollback is one line**, and it is deliberately smaller than removing the feature: drop
-`.offer` from `OnboardingStep`, which leaves the six value slides, a six-segment progress bar that
-sizes itself from the same list, and the `onboarding` placement simply never raised. The tour keeps
-working; only the offer goes. Removing the tour as well is a second, separate step — delete the
-`.fullScreenCover` in `ContentView` that binds `FirstRunCoverOrder`'s `.onboarding` case — and
-should not be needed to answer a rating dip caused by the offer. See `docs/onboarding.md`.
+**The rollback held in reserve here has been taken (2026-09-09), on evidence rather than on a rating
+dip.** The tour's own soft paywall (A′) is gone: `OnboardingStep.offer`, the
+`PaywallPlacement.onboarding` case and the tour's paywall host are deleted, leaving the six value
+slides and a six-segment progress bar that sizes itself from the same list. What remains in reserve
+is removing the tour itself — a separate step, deleting the `.fullScreenCover` in `ContentView` that
+binds `FirstRunCoverOrder`'s `.onboarding` case. Trimming the tour's *length* is the likelier next
+move and is a different question (`docs/acquisition-strategy.md` §4.12). See `docs/onboarding.md`.
 
 ---
 
@@ -819,6 +817,15 @@ That fixes **one** of the three axes the dashboard blends. The other two remain:
 for build channel was considered at the same time and deliberately not added — decide it on evidence
 that the TestFlight/local-build population is actually distorting a reading.
 
+**That evidence arrived, and the deferral is spent.** §13.9's 30% of customers on builds that were
+never on the App Store *is* the distorted reading, so the `buildChannel` attribute
+(`"appstore"`/`"other"`) shipped 2026-09-09 alongside three more funnel buckets —
+`onboardingCompleted`, `workoutsCompleted`, `routinesCreated`. All four are anonymous and bucketed,
+all four are analytics that nothing reads back, and they are written through the same
+`setAttributes` call as `founder`. See `docs/funnel-instrumentation.md`; **every RevenueCat volume
+chart should now be filtered to `buildChannel = appstore`**, which is a cheaper and more reliable
+exclusion than the version-list rule above.
+
 ### 13.5 The acquisition diagnosis — one channel, and one telling zero
 
 ASC → Akquise → Quellen, product page views by source, 7 Jun – 4 Sep:
@@ -919,8 +926,9 @@ so build these for the product's sake, not expecting revenue to move.
    localization is the cheapest way to buy keyword surface, and a landing page is infrastructure for
    every off-store channel rather than an SEO play.
 2. **Ship 1.1.15 with the first-run tour.** Confirmed 2026-09-06: `store-build` and
-   `testflight-beta` both sit at `414062b` (1.1.14, 2026-09-03) while the entire tour — seven commits
-   including the `onboarding` paywall step — exists only on `feature/improvements`. Every §8-C gate
+   `testflight-beta` both sit at `414062b` (1.1.14, 2026-09-03) while the entire tour exists only on
+   `feature/improvements`. It ships as six teaching slides: the `onboarding` paywall step built
+   alongside it was retired on 2026-09-09 (§8) before ever reaching a store build. Every §8-C gate
    needs accumulated data, so a brand-new user's only reachable offers are the soft
    `firstRoutineCreated` prompt and the Settings row. The funnel has no front door and the door is
    built.
@@ -960,6 +968,8 @@ agent can pull these without a dashboard screenshot. Verified working 2026-09-06
 | Version + country spread, per-customer subs | RevenueCat `/v2/projects/{id}/customers` (+ `/subscriptions`) | As needed |
 | Placement impressions | RevenueCat **dashboard only** — see below | Once 1.1.15 is live |
 | Founder vs. chargeable split | RevenueCat — segment any chart on the `founder` attribute (1.1.16+, §13.4) | With any RevenueCat reading |
+| Real installs vs. TestFlight/simulator noise | RevenueCat — filter any chart on `buildChannel = appstore` (1.1.17+, `docs/funnel-instrumentation.md`) | **Before** any RevenueCat volume reading |
+| Where users leave the funnel | RevenueCat — segment on `onboardingCompleted` / `routinesCreated` / `workoutsCompleted` (1.1.17+) | With any retention reading |
 | Retention / Sessions | ASC — **unavailable until volume rises** (§13.4) | Re-check quarterly |
 
 **API notes, verified 2026-09-06.** `/v2/projects/{id}/metrics/overview`, `/customers`,

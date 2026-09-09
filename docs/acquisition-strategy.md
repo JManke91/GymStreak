@@ -255,19 +255,17 @@ is still zero.
 
 | Order | # | Lever | Tier | Effort | Moves | Status |
 |---|---|---|---|---|---|---|
-| 1 | 11 | **Funnel instrumentation** (anonymous RC subscriber attributes) | **P0** | ~1 day | **Measurement — unblocks every row below** | ⬜ not started |
-| 2 | 12 | **Remove the paywall from first-run onboarding** | **P0** | ~1 day | Return rate, first-session trust | ⬜ not started |
-| 3 | 13 | **Re-engagement + streak notifications** | **P0** | 2–3 days | **Return rate** | ⬜ not started |
-| 4 | 5 | In-app sharing of a workout | **P1** | 2–3 days | Web-Referrer, virality | ⬜ not started — **un-gated from #4**, see §4.5 |
-| 5 | 15 | **Decide the app name** (rename or commit) | **P1 / decision** | ~1 day to decide | Brand-query traffic, word-of-mouth | ⬜ **not decided — gates #4 and #6** |
-| 6 | 4 | Landing page + custom domain | **P1** | 1–2 weeks | Unlocks every off-store channel | ⬜ not started — blocked on #15 |
-| 7 | 6 | Community presence (Reddit et al.) | **P1** | Ongoing | Downloads → velocity → ranking | ⬜ not started — blocked on #15 |
-| 8 | 14 | **Lifetime / one-time purchase option** | **P1 / decision** | ~1 day to build | Revenue per converting user | ⬜ **needs a Monetization Gate discussion first** |
-| 9 | 2 | Storefront metadata localization, steps 2–3 | **P2** | 1–2 days/locale | Keyword surface | ⬜ gated on the first search-term report |
-| 10 | 7 | In-App Events | **P2** | ~1 day/event | Browse + Search surfaces | ⬜ not started |
-| 11 | 8 | Custom Product Pages | **P2** | ~1 day | Conversion on off-store traffic | ⬜ not started — follows #4 and #6 |
-| 12 | 9 | Full app localization, 2–3 markets | **P3** | 1–2 weeks/language | Keyword surface + market fit | ⬜ blocked on `.scratch/i18n-foundation/` |
-| 13 | 10 | Apple Search Ads | **P3 / deferred** | Money | Impressions, and keyword data | ⬜ **deferred until #13 moves the return rate** — see §4.10 |
+| 1 | 13 | **Re-engagement + streak notifications** | **P0** | 2–3 days | **Return rate** | 🎫 ticket cut 2026-09-09, split in two — `.scratch/acquisition-phase-b/issues/03` + `04` |
+| 2 | 5 | In-app sharing of a workout | **P1** | 2–3 days | Web-Referrer, virality | ⬜ not started — **un-gated from #4**, see §4.5 |
+| 3 | 15 | **Decide the app name** (rename or commit) | **P1 / decision** | ~1 day to decide | Brand-query traffic, word-of-mouth | ⬜ **not decided — gates #4 and #6** |
+| 4 | 4 | Landing page + custom domain | **P1** | 1–2 weeks | Unlocks every off-store channel | ⬜ not started — blocked on #15 |
+| 5 | 6 | Community presence (Reddit et al.) | **P1** | Ongoing | Downloads → velocity → ranking | ⬜ not started — blocked on #15 |
+| 6 | 14 | **Lifetime / one-time purchase option** | **P1 / decision** | ~1 day to build | Revenue per converting user | ⬜ **needs a Monetization Gate discussion first** |
+| 7 | 2 | Storefront metadata localization, steps 2–3 | **P2** | 1–2 days/locale | Keyword surface | ⬜ gated on the first search-term report |
+| 8 | 7 | In-App Events | **P2** | ~1 day/event | Browse + Search surfaces | ⬜ not started |
+| 9 | 8 | Custom Product Pages | **P2** | ~1 day | Conversion on off-store traffic | ⬜ not started — follows #4 and #6 |
+| 10 | 9 | Full app localization, 2–3 markets | **P3** | 1–2 weeks/language | Keyword surface + market fit | ⬜ blocked on `.scratch/i18n-foundation/` |
+| 11 | 10 | Apple Search Ads | **P3 / deferred** | Money | Impressions, and keyword data | ⬜ **deferred until #13 moves the return rate** — see §4.10 |
 
 ### Shipped
 
@@ -275,7 +273,9 @@ is still zero.
 |---|---|---|---|
 | 1 | Rating prompt in-app | **P0** | ✅ **shipped 2026-09-06** — `docs/rating-prompt.md` |
 | 3 | Niche keyword repositioning (Watch + privacy) | **P0** | ✅ **shipped 2026-09-06** — both fields entered in ASC, rides **1.1.16** (`marketing/app-store-connect-actions.md`). Confirmed not yet live, §1.3 |
-| 2 | Storefront metadata localization, step 1 | **P0** | ✅ **shipped 2026-09-09** — en-GB + en-AU localizations entered in ASC (`marketing/app-store-connect-actions.md` §7). Steps 2–3 are row 9 above |
+| 2 | Storefront metadata localization, step 1 | **P0** | ✅ **shipped 2026-09-09** — en-GB + en-AU localizations entered in ASC (`marketing/app-store-connect-actions.md` §7). Steps 2–3 are row 7 above |
+| 12 | **Remove the paywall from first-run onboarding** | **P0** | ✅ **shipped 2026-09-09** — `PaywallPlacement.onboarding`, the tour's offer step and its paywall host are deleted; a fresh install reaches the tab bar without meeting a paywall. §4.12, `docs/onboarding.md` |
+| 11 | **Funnel instrumentation** (anonymous RC subscriber attributes) | **P0** | ✅ **shipped 2026-09-09** — four bucketed subscriber attributes on every install; `docs/funnel-instrumentation.md`. Every chart below is now segmentable, and filterable to `buildChannel = appstore` |
 
 Status vocabulary: ⬜ not started · 🎫 ticket cut, not started · 🚧 in progress · ✅ shipped (date) ·
 ❌ dropped (with the reason in the §4 entry).
@@ -299,6 +299,14 @@ work is specified.
 
 ### 11. Funnel instrumentation — anonymous subscriber attributes (P0, ~1 day)
 
+**Shipped 2026-09-09.** All four attributes are live on every install —
+`docs/funnel-instrumentation.md` is the implementation, the `buildChannel` API research and the
+dashboard reading instructions. Two things the build settled that this entry had left open: the
+routine count goes through `RoutineCapPolicy.countableRoutineCount(in:)`, so the **seeded starter
+routine reports `"0"`** rather than `"1"`; and `buildChannel` is derived from the `AppTransaction`
+the Founder grant already reads (`environment == .production`), so it added no second StoreKit call
+and no new dependency. The entry below stands as written.
+
 **Why first:** every other decision on this page is currently a guess about *where* users are lost.
 §1a proves they leave, and proves nothing about which screen loses them. RevenueCat sees only "the
 app launched". Whether the drop is at the tour, at the starter routine, at the first logged set or
@@ -314,7 +322,7 @@ New Customers chart unreadable.
 
 | Attribute | Values | Answers |
 |---|---|---|
-| `onboardingCompleted` | `"true"` / `"false"` | Do they finish the seven-step tour, or bail inside it? |
+| `onboardingCompleted` | `"true"` / `"false"` | Do they finish the six-slide tour, or bail inside it? |
 | `workoutsCompleted` | `"0"` / `"1"` / `"2-4"` / `"5+"` | **The activation question.** Does anyone reach the value moment? |
 | `routinesCreated` | `"0"` / `"1"` / `"2+"` | Does the starter routine carry them, or do they build their own? |
 | `buildChannel` | `"appstore"` / `"other"` | Kills the §1.1 simulator/TestFlight contamination permanently |
@@ -348,7 +356,17 @@ Monetization verdict — anonymous funnel attributes
 
 ### 12. Remove the paywall from first-run onboarding (P0, ~1 day)
 
-**Why it is the second thing:** the first-run tour is six explanatory slides followed by
+**Shipped** (2026-09-09) — `.scratch/acquisition-phase-b/issues/02`. `OnboardingStep.offer`,
+`OnboardingFlowViewModel`'s paywall seam, `OnboardingCoverView`'s paywall host and
+`PaywallPlacement.onboarding` (case, `.soft` classification, `paywall.headline.onboarding` and both
+localized strings) are deleted. The tour is six slides with six progress segments, ending on the
+coach slide's "Start training". `PaywallPlacement` is 10 cases; the first ask is
+`.firstRoutineCreated`, then `.valueMoment`. Two things checked while in there, both clean: the
+rating-prompt guard asks about `.valueMoment` and was untouched, and the RevenueCat project has **no
+targeting rules and therefore no configured Placements at all**, so no dashboard orphan was created
+(recorded in `docs/pro-subscription.md` §5a). Why it was worth doing, kept for the record:
+
+**Why it was the second thing:** the first-run tour was six explanatory slides followed by
 `PaywallPlacement.onboarding` — **a purchase request before the user has logged a single set**, in
 exactly the session that 89% of users never return from (§1a). It is the cheapest change on this
 page, its downside is bounded, and it is the most directly implicated thing in the measured failure.
@@ -365,32 +383,46 @@ the same: move the first ask after one completed core action
 [theswiftk.it](https://theswiftk.it.com/blog/how-to-monetize-ios-app-indie-developer)) — users pay
 when an app has proved useful, not on the promise that it will be.
 
-**The seam is one line.** `OnboardingFlowViewModel.steps` (line ~64) already filters `.offer` out of
-`OnboardingStep.allCases` when the paywall seam refuses it; this makes that filter unconditional.
-Then: delete `.offer` from `OnboardingStep`, delete `OnboardingStep.offer`'s CTA string key, retire
-`PaywallPlacement.onboarding`, and remove the tour's own paywall sheet host (`docs/onboarding.md`,
-"Step 7 — the offer") which exists solely for it.
+**The seam was one line.** `OnboardingFlowViewModel.steps` filtered `.offer` out of
+`OnboardingStep.allCases` whenever the paywall seam refused it, so making that filter unconditional
+was the behavioural change and everything after it was deletion — the conditional-length machinery
+(`isOfferStepDue`, the injected `PaywallPresenting`, `requestOffer()`/`offerWasDismissed()`) existed
+only to serve a step that could be absent. `isEligible(_:)` stays on `PaywallPresenting`: the rating
+prompt is now its only caller.
 
-**The first ask then falls to placements that already exist and are better placed:**
+**The first ask now falls to placements that already existed and are better placed:**
 `.firstRoutineCreated` (§8 A) and `.valueMoment` at the 3rd completed workout (§8 B).
-**Check the rating-prompt interaction while in here:** `docs/rating-prompt.md` deliberately triggers
-on the 5th workout to stay clear of the value-moment paywall at 3. Removing a *different* placement
-does not disturb that, but the guard is worth re-reading rather than assumed.
 
-**Open question worth deciding in the same ticket, but separable:** six slides before the app opens
+**Still open, deliberately not done here — the tour's *length*.** Six slides before the app opens
 is a lot, and `docs/example-starter-routine.md` states the seeded routine already teaches rep
 ranges, supersets and per-set rest — the subjects of slides 2, 3 and 4. Cutting the tour to two or
-three slides is plausibly a second retention win. **It is not part of this ticket** — do it after
-#11 reports `onboardingCompleted`, so the decision is made on where people actually bail.
+three slides is plausibly a second retention win. It was kept out of this ticket on purpose: decide
+it once #11's `onboardingCompleted` attribute reports where people actually bail, not on a guess.
 
-**This is a gating change**, so when it lands it updates `monetization-strategy.md` §4 and
-`docs/pro-subscription.md` (a placement is being retired), plus `docs/onboarding.md`.
-
-**Acceptance:** a fresh install reaches the tab bar without ever seeing a paywall; the tour is six
-steps with six progress segments; `PaywallPlacement.onboarding` no longer exists; the iOS suite and
-the onboarding tests pass.
+**Verified on landing:** the iOS suite passes in full (1298 tests, 136 suites, 2026-09-09); the
+watch target is untouched. `monetization-strategy.md` §8/§10, `docs/pro-subscription.md` §5a and
+`docs/onboarding.md` were updated in the same change.
 
 ### 13. Re-engagement and streak notifications (P0, 2–3 days)
+
+**🎫 Tickets cut 2026-09-09** as `.scratch/acquisition-phase-b/issues/03` (planned-session reminder
++ the permission seam) and `04` (missed-session nudge with a dormancy fallback). **Two statements
+below were overridden during the breakdown, on evidence from the code. They are corrected here
+rather than silently left to mislead; the full reasoning is in the two tickets, and this entry gets
+rewritten in place when they land.**
+
+1. **"Ask after the first completed workout" is wrong for this lever.** The population it exists for
+   is §1a's 89%, most of whom never start a workout. Gating the ask behind a completed workout means
+   the notification never reaches anyone who needs it. **The ask goes right after the tour, behind an
+   in-app soft pre-prompt** — only a yes triggers the iOS system prompt, so a decline costs no
+   permission. The rest timer's existing lazy mid-workout request is left exactly as it is.
+2. **There is no daily streak to be "at risk", so slice 2 is not a streak nudge.** The only streak
+   in the codebase is `HistoryStatsService.streakWeeks` — *consecutive weeks* containing a finished
+   workout — which has no crisp lapse moment, and a second daily definition would contradict the
+   Verlauf tab. Slice 2 is instead **a missed-planned-session nudge with a dormancy fallback**: the
+   cadence trigger alone requires a `RoutineSchedule`, which the launch-once population does not
+   have, so it would fire only for users who least need it.
+
 
 **Why:** this is the largest single hole in the product. **The only `UNUserNotificationCenter` use
 in the entire codebase is the rest timer** (`GymStreak/Data/Notifications/UserNotificationRestTimerScheduler.swift`).
@@ -466,7 +498,7 @@ Pro, stop and discuss before building.** What follows is the case to discuss, no
 yearly does. That is a confusing ladder — the cheaper commitment is the riskier one to try. Either
 give monthly a trial or drop the monthly tier.
 
-**Sequencing:** this is row 8, not row 1, deliberately. With a 15% second-launch rate there is
+**Sequencing:** this is row 7, not row 1, deliberately. With a 15% second-launch rate there is
 almost nobody reaching a paywall for packaging to act on. Fix the funnel first; then this is worth a
 morning.
 
@@ -818,8 +850,8 @@ reach is the *second* broken multiplier, not the only one. Revenue remains last.
 | **Ever launched twice** (released builds) | **15%** (13 of 87) | **30%** | RC customer records, `last_seen_at` > `first_seen_at` — method in §1a |
 | **Ever launched twice, US only** | **0 of 38** | **any non-zero number** | Same, filtered to US — the read with no simulator noise |
 | Customers seen in the last 7 days | **6** (one a dev device) | 25 | RC → Active Customers |
-| **Where they leave** | **unknown** | *measurable at all* | Blocked on #11 — this row is the point of that lever |
-| Completed ≥1 workout | **unknown** | 40% of installs | Blocked on #11 (`workoutsCompleted`) |
+| **Where they leave** | **measurable from 2026-09-09** — no reading yet | a first reading | RC → segment on `onboardingCompleted` / `routinesCreated` / `workoutsCompleted`, filtered to `buildChannel = appstore` (`docs/funnel-instrumentation.md`) |
+| Completed ≥1 workout | **measurable from 2026-09-09** — no reading yet | 40% of installs | RC → `workoutsCompleted` ≠ `"0"`, same filter |
 
 ### Reach
 
@@ -880,8 +912,8 @@ against us — and the rating feeds back into ranking, so damaging it defeats th
 - **`docs/monetization-strategy.md` §13.9** — how to pull these numbers without a dashboard screenshot.
 - **`docs/monetization-strategy.md` §3** — Rule 1 (the aha path) and Rule 3, which decide the free
   verdicts on levers #12 and #13.
-- **`docs/onboarding.md`** — the seven-step first-run tour and its step-7 paywall host; lever #12
-  edits it.
+- **`docs/onboarding.md`** — the six-slide first-run tour, and the record of the offer step lever
+  #12 retired.
 - **`docs/pro-subscription.md` §3c** — the `founder` subscriber attribute, the mechanism lever #11
   extends and the one §1.3 reads to check whether a version is live.
 - **`docs/rest-timer-notifications.md`** — the only notification code in the app today, and the

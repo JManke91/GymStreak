@@ -5,13 +5,14 @@ it, before they can reach the tab bar. It teaches what Gym Streak is by showing
 real pieces of the app rather than illustrations.
 
 > **Status.** Complete and shipped. The shell and the feature-slide scaffold came
-> from tickets 01 and 03; steps 2–6 from tickets 04–07; step 7, the Pro offer,
-> from ticket 08; the cover ordering, its tests and the end-to-end walkthrough
-> from ticket 09 (see "Verification" at the end).
+> from tickets 01 and 03; steps 2–6 from tickets 04–07; the cover ordering, its
+> tests and the end-to-end walkthrough from ticket 09 (see "Verification" at the
+> end). A seventh step — a Pro offer — shipped with ticket 08 and was **retired
+> on 2026-09-09**; see "The retired offer step" below.
 
 ## The flow
 
-Seven steps, declared once in `OnboardingStep` so the progress bar, the counter
+Six steps, declared once in `OnboardingStep` so the progress bar, the counter
 and the navigation all derive their length from the same list:
 
 | # | Step | What it shows |
@@ -22,13 +23,11 @@ and the navigation all derive their length from the same list:
 | 4 | `.progressiveOverload` | A finished exercise and the weight prompt it raises. **Built.** |
 | 5 | `.history` | A recorded session: its header, the four stat tiles and one exercise block with its record and per-set deltas. **Built.** |
 | 6 | `.aiCoach` | The on-device coach, as a teaser: one answer, one question, and what the free tier gets. **Built.** |
-| 7 | `.offer` | The real RevenueCat paywall on the `onboarding` placement. **Built** — and **absent** for anyone it would show nothing to. |
 
-The seventh step is the only conditional one. `OnboardingStep.allCases` is what
-the tour *can* contain; `OnboardingFlowViewModel.steps` is what a given run
-contains, and it drops `.offer` whenever the paywall seam would refuse it. So a
-Pro user's tour is six steps, with six progress segments and a counter that says
-so — never seven with a final segment that leads nowhere.
+No step is conditional and none of them asks for anything: every run is the same
+six slides, six progress segments and a counter that says so. The tour holds no
+paywall seam at all — `OnboardingFlowViewModel` takes no presenter, and the sixth
+slide's CTA ("Start training", `OnboardingStep.finishCTAKey`) opens the app.
 
 Every step is skippable. "Skip" and finishing the last step are the same exit:
 both end the flow and both record it.
@@ -60,10 +59,6 @@ Presentation/Views/Onboarding/OnboardingSampleCoach.swift        step 6's sample
 App/AppDependencies.swift                              constructs the view model
 App/ContentView.swift                                  hosts the three first-run covers
 ```
-
-Step 7 adds no file. It is a case of `PaywallPlacement` (`onboarding`), a query
-on the paywall seam (`PaywallPresenting.isEligible(_:)`), and a sheet inside
-`OnboardingCoverView` — see "Step 7 — the offer" below.
 
 The view model is app-lifetime and held concretely by the composition root,
 mirroring `FounderCelebrationCoordinator`: the app root binds a
@@ -151,11 +146,11 @@ Three things about this are load-bearing and easy to break:
 
 **A sheet is not a cover, and that is the fourth rule.** The app root also hosts
 the paywall — as a `.sheet` — and a sheet raised while a full-screen cover is up
-never reaches the screen at all. Step 7 raises a paywall from *inside* the tour,
-so the tour hosts its own, and `ContentView`'s root paywall host is suppressed
-while `onboarding.isPresenting` for the same reason it is suppressed under the
-coach-chat cover. See "Step 7 — the offer" for why hosting it there beats
-dismissing the tour first.
+never reaches the screen at all. The tour itself raises nothing, but
+`ContentView`'s root paywall host stays suppressed while `onboarding.isPresenting`
+for the same reason it is suppressed under the coach-chat cover: a placement that
+somehow became pending during the tour would be drawn into a sheet nobody can
+see. Suppressed, it stays pending and arrives once the tour ends.
 
 ## Design fidelity
 
@@ -200,8 +195,8 @@ the shipped bar is orange, names the target rep count rather than a next weight,
 
 Two deliberate departures from the design file:
 
-- Its welcome body says "Vier kurze Schritte" while its own flow has seven. The
-  shipped copy avoids the count.
+- Its welcome body says "Vier kurze Schritte" while its own flow has seven (the
+  shipped one has six). The shipped copy avoids the count.
 - Its background carries a radial tint glow off the top-right corner. **Still not
   built.** Ticket 03 was the place to establish it and deliberately did not: on
   the shipped screen the plate's own 45 %-black drop shadow already separates the
@@ -703,82 +698,61 @@ further than in English. **Verified 2026-09-05** by rendering the whole slide wi
 `ImageRenderer` at 402 pt and 375 pt in both languages: nothing crops, and English
 leaves about 30 pt of panel below the strip.
 
-## Step 7 — the offer
+## The retired offer step
 
-The tour ends by offering Pro once, through the app's own paywall seam. Nothing
-about the offer is drawn here: the placement is `PaywallPlacement.onboarding`,
-the presenter decides whether it may be raised, and `ProPaywallView` renders
-whatever offering the RevenueCat dashboard serves for it. Purchase, restore and
-dismissal behave exactly as they do from every other placement, because they are
-the same view.
+The tour ended on a seventh step — the app's real RevenueCat paywall, on
+`PaywallPlacement.onboarding` — from 2026-09-05 until **2026-09-09**, when it was
+removed entirely: the case, its headline key, its en/de strings, the tour's own
+paywall sheet and the `PaywallPresenting` dependency that decided whether the
+step was due. `docs/acquisition-strategy.md` §4.12 carries the decision; the
+short version is that it was **a purchase request before the user had logged a
+single set**, in the session 89% of users never return from, and it had produced
+**zero purchases in its lifetime**. It also sat in front of the first step of the
+aha path that `monetization-strategy.md` §3 Rule 1 protects. The first ask now
+falls to `.firstRoutineCreated` (§8 A) and `.valueMoment` at the third completed
+workout (§8 B), both of which come after the user has done something.
 
-**The design's step 7 is a mockup and is not built** — see "Deliberate omission".
+What went with it, so a future reader does not go looking:
 
-### Where the paywall is hosted, and why it is not the app root
+- `OnboardingStep.offer`, and with it the conditional-length machinery:
+  `OnboardingFlowViewModel.isOfferStepDue`, its `paywalls` dependency, its
+  `requestOffer()`/`offerWasDismissed()` pair, and the `steps` filter. `steps` is
+  now `OnboardingStep.allCases` and is kept only as the one list the chrome sizes
+  itself from.
+- `OnboardingCoverView`'s `.sheet(item:)` host and the `paywalls`/`entitlements`
+  properties that fed it. The cover takes the view model and nothing else.
+- `PaywallPlacement.onboarding`, its `.soft` classification, `paywall.headline.onboarding`
+  and both localized strings. `PaywallPlacement` is 10 cases now, not 11.
+- `OnboardingOfferStepTests`, replaced by `tourEndsWithoutAPaywall` in
+  `OnboardingFlowTests` — which also asserts that no `PaywallPlacement` carries
+  the `onboarding` identifier any more, so an orphan case cannot creep back.
 
-A sheet raised while a full-screen cover is up **never reaches the screen**. That
-is the trap this codebase already paid for once (see "Cover ordering"), and step
-7 sits squarely in it: the tour *is* a full-screen cover, and the app root's
-paywall host is a sheet on the view underneath it.
+**`isEligible(_:)` stays on `PaywallPresenting`.** It was added for the tour, but
+the rating prompt is now its only caller: it waits while §8 placement B could
+still be raised (`docs/rating-prompt.md` §3a). That guard was re-read on
+2026-09-09 and is **intact and untouched** — it asks about `.valueMoment`, never
+about `.onboarding`, and the rating prompt's own trigger is still the 5th
+completed workout, deliberately clear of the value-moment paywall at the 3rd.
 
-Two ways out, and the shipped one is the second:
+### Two findings worth keeping from the step that was
 
-- **Dismiss the tour first, then let the root host take the request.** Rejected.
-  It puts the cover's dismissal and the sheet's presentation in one SwiftUI
-  transaction, which is the case SwiftUI is documented to drop — and a dropped
-  presentation here is not a lost animation but a placement left pending, which
-  would then surface later, out of nowhere, on whatever screen the user had
-  reached.
-- **Host the paywall inside the tour's own cover**, the way the coach-chat cover
-  hosts its own for `.coachChat`. Shipped. `OnboardingCoverView` owns a
-  `.sheet(item:)` filtered to `.onboarding`; `ContentView`'s root host is
-  suppressed while the tour is up, exactly as it is under the chat cover. Any
-  *other* placement that fires during the tour stays pending and is picked up by
-  the root host once the tour ends — the same deferral the chat cover produces.
+- **A sheet raised while a full-screen cover is up never reaches the screen**, so
+  a paywall requested from inside the tour had to be hosted *by the tour*, the
+  way the coach-chat cover hosts its own. The rejected alternative — dismiss the
+  cover first and let the app root's sheet take the request — puts the dismissal
+  and the presentation in one SwiftUI transaction, which is the case SwiftUI is
+  documented to drop; the placement would then have surfaced later, out of
+  nowhere, on whatever screen the user had reached. That rule still governs the
+  coach-chat cover and any future in-cover paywall.
+- **A `true` answer from `isEligible(_:)` is not a promise.** The entitlement
+  resolves asynchronously after launch, so a Founder could be `free` on the
+  welcome slide and Pro by the coach slide — which is why the step list had to be
+  computed on every read and why `advance()` re-checked `pendingPlacement` after
+  asking. Any future caller that sizes UI from `isEligible(_:)` inherits that
+  race.
 
-Verified on the simulator on 2026-09-05: the real paywall does appear over the
-tour's cover, with its close, purchase and restore controls, on a fresh install
-with gating on.
-
-### The step is absent, not empty, when nothing would be shown
-
-`OnboardingFlowViewModel.steps` filters `.offer` out whenever
-`PaywallPresenting.isEligible(.onboarding)` is `false` — a Pro user, a Founder,
-a run with `-PRO_GATING_OFF`, or a tour re-entered after the placement already
-fired. The progress bar, the step counter, Back and the CTA all size themselves
-from that list, so those users get a six-step tour whose last slide is the coach
-teaser and whose CTA says "Start training" (`OnboardingStep.finishCTAKey`) rather
-than "Next". Verified on the simulator with `-FOUNDER_SIMULATE_PRECUTOFF`:
-"SCHRITT 1 VON 6", six segments.
-
-`isEligible(_:)` is a new query on `PaywallPresenting`, added for this one caller
-and deliberately narrower than `present(_:)`: it answers the **standing** rules
-(the kill switch, the entitlement, §8's once-ever record) and not Rule 3 or "a
-paywall is already on screen", which are conditions of the moment. A `true`
-answer is not a promise, so `advance()` checks `pendingPlacement` after asking
-and ends the tour if nothing was raised. That is what catches the real race: the
-entitlement resolves asynchronously after launch, so a Founder can be `free` on
-the welcome slide and Pro by the coach slide. `steps` is computed on every read
-rather than fixed at init for exactly that reason — and because reading it in a
-view body is what lets SwiftUI observe the change and redraw the bar.
-
-### Whatever the user does, the tour is over
-
-Every exit from the paywall — the close button, a completed purchase, a
-successful restore — ends in `ProPaywallView` calling `dismiss()`, which clears
-the sheet binding and calls `offerWasDismissed()`. That clears the placement and
-records the tour complete. There is no path where the user answers the offer and
-is then asked again.
-
-The once-ever record is the placement's own, written by `didPresent(_:)` when an
-*offer* reaches the screen — not when the sheet does. So a tour whose offering
-could not be resolved (offline; §5j's retry state) has not spent the placement,
-and the user can still meet it later at placement A.
-
-The offer step draws no chrome of its own. `OnboardingCoverView` swaps the whole
-header/slide/footer stack for the plain background on `.offer`: the paywall owns
-the screen there, and a progress bar over a dead CTA that the user cannot reach
-would be worse than a black ground for the length of one presentation animation.
+**The design's step 7 was a mockup and was never built** — see "Deliberate
+omission".
 
 ## Scroll position across steps
 
@@ -795,15 +769,14 @@ shorter than the visible area, and never capped.
 ## Monetization
 
 ```
-Monetization verdict — First-run onboarding flow
-  Tier          Free (the tour) + one new paywall placement (step 7)
-  Derivation    §3 Rule 1 — the tour IS the aha path
-  Mechanism     no cap, no lock on the tour; step 7 = the existing RevenueCat paywall
-  Placement     PaywallPlacement.onboarding — NEW (one-shot), needs a dashboard
-                Placement + paywall.headline.onboarding en+de
+Monetization verdict — First-run onboarding flow (current, 2026-09-09)
+  Tier          Free — the whole tour, with no placement of its own
+  Derivation    §3 Rule 1 — the tour IS the aha path, and nothing may stand in front of it
+  Mechanism     none; the tour neither caps nor locks nor asks
+  Placement     none. PaywallPlacement.onboarding was retired 2026-09-09
   Nudge         none (slides 5 & 6 carry the existing Pro badge only)
-  Free residue  all six value slides, skippable at any step; "later" exits to the full free app
-  Founder note  §7 — Founders are entitled, so the presenter suppresses step 7 for them
+  Free residue  all six value slides, skippable at any step, then the full free app
+  Founder note  n/a — nobody is asked for anything here
 ```
 
 Step 5 is the first slide to carry the `OnyxProBadge`, and it gates nothing — the
@@ -831,31 +804,28 @@ Monetization verdict — Onboarding step 6 (AI Coach teaser)
                 true for them; the slide neither promises nor withholds anything
 ```
 
-The six value slides contain no gate at all. Step 7 is the one placement the
-feature adds, and it shipped on 2026-09-05 exactly as the verdict above scoped
-it — re-checked against what was built:
+The six value slides contain no gate at all, and since 2026-09-09 neither does
+the tour as a whole. The offer step it briefly carried was retired under this
+verdict:
 
 ```
-Monetization verdict — Onboarding step 7 (the offer), as shipped
-  Tier          Pro offer (the tour around it stays free)
-  Derivation    §8 A′ — soft, dismissible in one tap, once ever
-  Mechanism     the dashboard-authored RevenueCat paywall; no cap, no lock
-  Placement     PaywallPlacement.onboarding (new, one-shot),
-                paywall.headline.onboarding en+de
+Monetization verdict — retire the onboarding paywall placement (2026-09-09)
+  Tier          Free (a gate is being REMOVED, not added)
+  Derivation    §3 Rule 1 — the placement sat before the first step of the aha
+                path. §4.12 of the acquisition strategy: zero purchases, ever.
+  Mechanism     n/a — nothing is gated; one placement is retired
+  Placement     PaywallPlacement.onboarding DELETED (case, headline key, en+de)
   Nudge         none
-  Free residue  the whole app — dismissing lands the user in the full free app,
-                and the six value slides are shown either way
-  Founder note  §7 — a Founder is entitled, so the step is absent, not dismissed:
-                the tour is six steps long for them
+  Free residue  the entire first run
+  Founder note  n/a — it converted nobody, which is the point
 ```
 
-`docs/monetization-strategy.md` §4/§8 and `docs/pro-subscription.md` §5a carry it
-too, with the §10 guardrail and the one-line rollback: **drop `.offer` from
-`OnboardingStep`**, leaving the six value slides and the `onboarding` placement
-unraised. The guardrail worth watching is that a first session can now contain
-two soft paywalls — this one and A, which fires when the user creates their first
-routine — measured against free-user D30 retention and the App Store rating at
-their pre-tour baseline.
+`docs/monetization-strategy.md` §4 and `docs/pro-subscription.md` §5a carry the
+same decision. The §10 guardrail that made the removal safe to ship without a
+staged rollout is that it can only *reduce* first-session friction: a fresh
+install now reaches the tab bar without meeting a paywall, and the first ask is
+`.firstRoutineCreated` — one soft paywall in a first session where there used to
+be two.
 
 ## Localization
 
@@ -878,13 +848,15 @@ shipping a raw key on screen.
 ## Deliberate omission
 
 The design's step 7 is a **mockup** — invented prices (4,99 € / 29,99 € / 79,99 €),
-trial copy and hand-rolled plan cards. **None of it is built, and none of those
-strings exist in the app.** Step 7 raises the app's real RevenueCat paywall
-instead, because the price, the packages and the trial must come from the
-offering the dashboard serves, never from hard-coded strings — a mocked price is
-a wrong price the moment pricing changes or the storefront differs, and App
-Review has already rejected this app once over a purchase path it could not
-follow (`appstore-rejection-1.1.9.md`).
+trial copy and hand-rolled plan cards. **None of it was ever built, and none of
+those strings exist in the app.** While the offer step existed it raised the real
+RevenueCat paywall instead, because the price, the packages and the trial must
+come from the offering the dashboard serves, never from hard-coded strings — a
+mocked price is a wrong price the moment pricing changes or the storefront
+differs, and App Review has already rejected this app once over a purchase path
+it could not follow (`appstore-rejection-1.1.9.md`). The step itself is now gone
+(see "The retired offer step"), so the design's seventh screen has no
+counterpart in the app at all.
 
 **The production progressive-overload banner was not redesigned.** The design
 file draws a nicer card than the app's shipped orange bar, and the tempting move
@@ -949,12 +921,13 @@ carried another agent's in-flight work at the time:
 
 ## Verification
 
-**Unit tests.** `OnboardingFlowTests` (the flow's life, the step navigation and
-every localization key), `OnboardingOfferStepTests` (step 7's presence, its
-paywall hand-off and its three exits) and `FirstRunCoverOrderTests` (the cover
-ordering, above). Both suites — iOS and watch — pass via
-`bundle exec fastlane test_unit`; the watch target is untouched by this feature
-and stays green.
+**Unit tests.** `OnboardingFlowTests` (the flow's life, the step navigation,
+every localization key, and `tourEndsWithoutAPaywall` — six steps, the coach
+slide finishing the tour, and no `onboarding` placement anywhere in
+`PaywallPlacement`) and `FirstRunCoverOrderTests` (the cover ordering, above).
+`OnboardingOfferStepTests` was deleted with the step it covered. The iOS suite
+passed in full on 2026-09-09 (1298 tests, 136 suites); the watch target is
+untouched by this feature and stays green.
 
 **Walked end to end on the simulator (iPhone 17 Pro, iOS 26.5, 2026-09-06),** on
 a freshly installed container each time:
@@ -970,6 +943,12 @@ a freshly installed container each time:
 | Fresh install, "Überspringen" on step 3 | The tour ends, the opt-in arrives by itself; a relaunch does not bring the tour back |
 | Fresh install with `-PRO_GATING_ON -FOUNDER_SIMULATE_PRECUTOFF` | **Six** steps, not seven — the offer step is absent for a Founder, and the progress bar has six segments |
 | …then "Überspringen" | The Founder thank-you arrives by itself; dismissing *it* raises the coach opt-in |
+
+**That walkthrough predates the offer step's retirement (2026-09-09).** Its rows
+1–3, 6 and 7 still describe the shipped tour with "of 7" read as "of 6"; rows 4
+and 5 describe a step that no longer exists, and the two Founder rows describe a
+six-step tour that is now simply *the* tour. The path they walked is what the
+last two rows already proved: six slides, then the app.
 
 The last two rows are the ordering rule end to end, live: three covers, one at a
 time, each appearing on its own once the one above it goes away — including the

@@ -13,6 +13,10 @@
 //  defaults suite, because "it never comes back" is a property of what was
 //  written down, and a double would assert it away.
 //
+//  The tour used to end on a Pro offer, which made its length conditional on the
+//  paywall seam. That step is retired (docs/acquisition-strategy.md §4.12), so
+//  the flow is six steps for everyone and takes no presenter at all.
+//
 
 import Foundation
 import Testing
@@ -38,7 +42,7 @@ struct OnboardingFlowTests {
         let store = OnboardingCompletionStore(defaults: defaults)
         store.recordCompleted()
 
-        let viewModel = OnboardingFlowViewModel(completion: store, paywalls: makePresenter())
+        let viewModel = OnboardingFlowViewModel(completion: store)
 
         #expect(!viewModel.isPresenting)
     }
@@ -48,12 +52,11 @@ struct OnboardingFlowTests {
         let defaults = makeDefaults()
         let viewModel = makeViewModel(defaults: defaults)
 
-        // Walk to the end. The last step is the paywall, which ends the flow
-        // when it is dismissed rather than by advancing past it.
-        for _ in 0..<(viewModel.stepCount - 1) {
+        // Walk to the end, then advance off it — the last step's CTA opens the
+        // app rather than leading anywhere.
+        for _ in 0..<viewModel.stepCount {
             viewModel.advance()
         }
-        viewModel.offerWasDismissed()
 
         #expect(!viewModel.isPresenting)
         // A fresh view model and store over the same defaults — the next launch.
@@ -123,6 +126,31 @@ struct OnboardingFlowTests {
         }
 
         #expect(viewModel.stepCount == OnboardingStep.allCases.count)
+    }
+
+    @Test("The tour ends on the coach slide and asks for nothing")
+    func tourEndsWithoutAPaywall() {
+        let viewModel = makeViewModel()
+
+        // Six slides, six progress segments, no conditional step: the flow has
+        // no paywall seam to ask, which is what makes a fresh install reach the
+        // tab bar without ever seeing one (docs/acquisition-strategy.md §4.12).
+        #expect(viewModel.stepCount == 6)
+        #expect(viewModel.steps.last == .aiCoach)
+        // The retired `onboarding` placement is gone from the enum, not merely
+        // unused — an orphan case would let a future gate re-raise it.
+        #expect(!PaywallPlacement.allCases.contains { $0.identifier == "onboarding" })
+
+        for _ in 0..<(viewModel.stepCount - 1) {
+            viewModel.advance()
+        }
+
+        #expect(viewModel.currentStep == .aiCoach)
+        #expect(viewModel.ctaKey == OnboardingStep.finishCTAKey)
+
+        viewModel.advance()
+
+        #expect(!viewModel.isPresenting)
     }
 
     @Test("Back cannot go below the first step")
@@ -681,30 +709,9 @@ struct OnboardingFlowTests {
 
     // MARK: - Harness
 
-    private func makeViewModel(
-        defaults: UserDefaults? = nil,
-        paywalls: (any PaywallPresenting)? = nil
-    ) -> OnboardingFlowViewModel {
+    private func makeViewModel(defaults: UserDefaults? = nil) -> OnboardingFlowViewModel {
         OnboardingFlowViewModel(
-            completion: OnboardingCompletionStore(defaults: defaults ?? makeDefaults()),
-            paywalls: paywalls ?? makePresenter()
-        )
-    }
-
-    /// The real presenter over a throwaway suite, with gating on. The tour's
-    /// length depends on it — the offer step is present only while it would
-    /// raise something — so a double here would change what these tests walk.
-    /// The step itself is covered by `OnboardingOfferStepTests`.
-    private func makePresenter(
-        entitlements: ProEntitlementState = .free,
-        isGatingEnabled: Bool = true,
-        defaults: UserDefaults? = nil
-    ) -> PaywallPresenter {
-        PaywallPresenter(
-            entitlements: StubProEntitlements(state: entitlements),
-            activeWorkout: ActiveWorkoutRegistry(),
-            isGatingEnabled: isGatingEnabled,
-            defaults: defaults ?? makeDefaults()
+            completion: OnboardingCompletionStore(defaults: defaults ?? makeDefaults())
         )
     }
 

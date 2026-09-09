@@ -202,27 +202,28 @@ struct PaywallPresentationTests {
 
     // MARK: - Asking before raising
 
-    /// `isEligible(_:)` exists for the first-run tour, which has to size its
-    /// progress bar before it knows whether the offer step will show anything
-    /// (docs/onboarding.md). These are the three suppressions it must report.
-    @Test("isEligible reports the standing suppressions for the onboarding placement")
-    func onboardingEligibilityFollowsTheStandingRules() {
-        #expect(makePresenter().isEligible(.onboarding))
+    /// `isEligible(_:)` exists for the rating prompt, which waits while §8
+    /// placement B could still be raised (docs/rating-prompt.md §3a). These are
+    /// the three suppressions it must report.
+    @Test("isEligible reports the standing suppressions for a one-shot placement")
+    func standingEligibilityFollowsTheStandingRules() {
+        #expect(makePresenter().isEligible(.valueMoment))
 
-        #expect(!makePresenter(isGatingEnabled: false).isEligible(.onboarding))
+        #expect(!makePresenter(isGatingEnabled: false).isEligible(.valueMoment))
         #expect(!makePresenter(entitlements: StubEntitlements(state: .subscription))
-            .isEligible(.onboarding))
+            .isEligible(.valueMoment))
         #expect(!makePresenter(entitlements: StubEntitlements(state: .founder))
-            .isEligible(.onboarding))
+            .isEligible(.valueMoment))
 
         let (defaults, suiteName) = makeDefaults()
         defer { defaults.removePersistentDomain(forName: suiteName) }
         let presenter = makePresenter(defaults: defaults)
-        raise(.onboarding, on: presenter)
+        raise(.valueMoment, on: presenter)
 
-        #expect(!presenter.isEligible(.onboarding))
-        // …and the record survives the relaunch, so a re-entered tour is short.
-        #expect(!makePresenter(defaults: defaults).isEligible(.onboarding))
+        #expect(!presenter.isEligible(.valueMoment))
+        // …and the record survives the relaunch, so the rating prompt stops
+        // waiting on a placement that can never come again.
+        #expect(!makePresenter(defaults: defaults).isEligible(.valueMoment))
     }
 
     @Test("isEligible answers the standing rules only, never the moment's")
@@ -233,9 +234,9 @@ struct PaywallPresentationTests {
         let presenter = makePresenter(activeWorkout: workout)
         workout.setWorkoutActive(true)
 
-        #expect(presenter.isEligible(.onboarding))
+        #expect(presenter.isEligible(.firstRoutineCreated))
 
-        presenter.present(.onboarding)
+        presenter.present(.firstRoutineCreated)
 
         #expect(presenter.pendingPlacement == nil)
     }

@@ -49,6 +49,9 @@ class RoutinesViewModel: ObservableObject {
     /// §8 placement A's trigger. Optional because unit-test instances that are
     /// not about the proactive placements have nothing to report to.
     private let proactivePaywalls: ProactivePaywallCoordinator?
+    /// Optional for the same reason `proactivePaywalls` is: unit-test instances
+    /// have no purchase backend to report to.
+    private let funnelAttributes: (any FunnelAttributeTracking)?
     private let isGatingEnabled: Bool
     private var cloudSyncObserver: NSObjectProtocol?
     /// Set while a coalesced refresh is waiting for its main-actor turn — see
@@ -90,6 +93,7 @@ class RoutinesViewModel: ObservableObject {
         proEntitlements: any ProEntitlementProviding,
         paywalls: any PaywallPresenting,
         proactivePaywalls: ProactivePaywallCoordinator? = nil,
+        funnelAttributes: (any FunnelAttributeTracking)? = nil,
         historyStoreGate: HistoryStoreGate = .unshared(),
         calendarMirror: (any PlannedWorkoutCalendarMirroring)? = nil,
         isGatingEnabled: Bool = ProGating.isEnabled
@@ -100,6 +104,7 @@ class RoutinesViewModel: ObservableObject {
         self.proEntitlements = proEntitlements
         self.paywalls = paywalls
         self.proactivePaywalls = proactivePaywalls
+        self.funnelAttributes = funnelAttributes
         self.historyStoreGate = historyStoreGate
         self.calendarMirror = calendarMirror
         self.isGatingEnabled = isGatingEnabled
@@ -441,7 +446,7 @@ class RoutinesViewModel: ObservableObject {
         routineRepository.insert(routine)
         save()
         fetchRoutines()
-        Task { await proactivePaywalls?.routineWasCreated() }
+        routineCreationDidLand()
     }
 
     /// Persists a brand-new routine along with its pending exercises, sets and
@@ -499,7 +504,29 @@ class RoutinesViewModel: ObservableObject {
         // §8 placement A. Reported after the save, from the ViewModel that owns
         // the transaction — a view does not get to decide that a routine now
         // exists (Hard rule 3).
-        Task { await proactivePaywalls?.routineWasCreated() }
+        routineCreationDidLand()
+    }
+
+    /// Everything a newly saved template sets off, in one place: §8 placement
+    /// A's trigger and the funnel's `routinesCreated` bucket
+    /// (docs/funnel-instrumentation.md). One helper rather than two statements
+    /// at each of the three creation paths, so a fourth path cannot arm one and
+    /// silently forget the other.
+    ///
+    /// Named for the *event* rather than for the coordinator call inside it, so
+    /// the `proactivePaywalls.routineWasCreated()` one line down cannot be
+    /// misread as recursion.
+    ///
+    /// The funnel report goes **after** the placement, and both are detached:
+    /// neither may hold up the save the user is waiting on, and analytics may
+    /// never queue in front of something that can appear on screen. It re-counts
+    /// the user's own routines rather than incrementing a tally, so the seeded
+    /// starter routine stays excluded (`RoutineCapPolicy.countsTowardCap`).
+    private func routineCreationDidLand() {
+        Task { [proactivePaywalls, funnelAttributes] in
+            await proactivePaywalls?.routineWasCreated()
+            await funnelAttributes?.reportCurrentState()
+        }
     }
 
     func updateRoutine(_ routine: Routine) {
@@ -598,7 +625,7 @@ class RoutinesViewModel: ObservableObject {
         fetchRoutines()
         // Duplication is creation (§5c), so it arms placement A like any other
         // saved template — but only on the path that actually saved one.
-        Task { await proactivePaywalls?.routineWasCreated() }
+        routineCreationDidLand()
         return copy
     }
 

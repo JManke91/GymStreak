@@ -212,6 +212,20 @@ struct GymStreakApp: App {
                     // (docs/pro-subscription.md §5h). A no-op for everyone else.
                     dependencies.founderCelebration.presentIfDue()
                 }
+                .task {
+                    guard !isUITesting else { return }
+                    // The baseline report, so a fresh install carries all four
+                    // funnel buckets even if the user never finishes the tour,
+                    // never builds a routine and never trains — the three cases
+                    // this lever exists to count (docs/funnel-instrumentation.md).
+                    //
+                    // Its own `.task`, after the first frame, and nothing waits
+                    // on it: it reads a completed-session count off the History
+                    // model actor and may await one StoreKit answer for the
+                    // build channel, neither of which may sit in front of the
+                    // entitlement refresh above or the seeders.
+                    await dependencies.funnelAttributes.reportCurrentState()
+                }
                 .onChange(of: scenePhase) { _, newPhase in
                     if newPhase == .active {
                         watchConnectivity.requestWorkoutQueueDrain()

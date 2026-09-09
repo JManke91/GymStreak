@@ -85,6 +85,7 @@ private struct ContentViewInternal: View {
             activeWorkout: dependencies.activeWorkout,
             proactivePaywalls: dependencies.proactivePaywalls,
             reviewPrompt: dependencies.reviewPrompt,
+            funnelAttributes: dependencies.funnelAttributes,
             weightUnitPreference: dependencies.weightUnitPreference,
             historyStoreGate: dependencies.historyStoreGate
         ))
@@ -190,10 +191,10 @@ private struct ContentViewInternal: View {
         // (docs/pro-subscription.md). Suppressed while the coach-chat cover is
         // up, because that cover hosts its own — one binding non-nil in two
         // hosts at once would have both attempt a presentation.
-        // Suppressed while the onboarding tour is up for the same reason it is
-        // suppressed under the coach chat: that cover hosts its own paywall for
-        // `.onboarding`, and a sheet raised from here could not reach the screen
-        // anyway. Any *other* placement stays pending and arrives here once the
+        // Suppressed while the onboarding tour is up because a sheet raised
+        // under a full-screen cover never reaches the screen. The tour itself
+        // asks for nothing (docs/onboarding.md); any placement that somehow
+        // becomes pending while it runs stays pending and arrives here once the
         // tour ends.
         .sheet(item: paywallBinding(for: showingCoachChat || isOnboarding ? nil : pendingPaywall)) { placement in
             ProPaywallView(
@@ -247,11 +248,7 @@ private struct ContentViewInternal: View {
         // thank-you. Both of those wait for it and arrive on their own once it
         // is dismissed (docs/onboarding.md).
         .fullScreenCover(isPresented: onboardingBinding(isPresenting: firstRunCover == .onboarding)) {
-            OnboardingCoverView(
-                viewModel: onboarding,
-                paywalls: paywalls,
-                entitlements: entitlements
-            )
+            OnboardingCoverView(viewModel: onboarding)
         }
         // The automatic App Store rating prompt. Attached at the root and
         // nowhere else — the coordinator decides, this only invokes
