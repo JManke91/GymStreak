@@ -727,6 +727,14 @@ updates ≈ 121 devices, 114 is the expected match.
 Connect → Erstmalige Downloads is the only trustworthy install number.** Cross-check any RevenueCat
 acquisition claim against it, permanently, and never quote RevenueCat customer counts as user counts.
 
+**There is a second contamination source, found 2026-09-09 and larger than this one:** simulator and
+local builds. **38 of the 125 customers then on record (30%) were on 1.1.15 or 1.1.16 — builds never
+released to the App Store** — nearly all DE, on simulator runtimes, minted in working-hours bursts
+(a `simctl erase` mints a fresh anonymous ID each time). So the rule extends: **before reading any
+RevenueCat volume chart, also exclude customers whose `last_seen_app_version` was never released.**
+Full evidence in `docs/acquisition-strategy.md` §1.1; the permanent fix is the `buildChannel`
+attribute specified there as lever #11, which supersedes the deferral recorded at the end of §13.4.
+
 ### 13.3 The one trial was cancelled — but the purchase path is proven
 
 Measured 2026-09-06 by scanning all 114 customers for subscription records. Exactly one exists:
@@ -779,9 +787,24 @@ volume.
 
 *(An earlier draft of this section derived a retention crisis from RevenueCat Active minus New
 customers — ~4 returning users/day. That subtraction is void, because "New" was the update wave.
-Engagement is currently **unmeasured**, not known to be bad. RevenueCat's "Active Customers" is the
-only available signal and it counts SDK requests against a cached `CustomerInfo`, so use it as a
+RevenueCat's "Active Customers" counts SDK requests against a cached `CustomerInfo`, so use it as a
 trend, never as a headcount.)*
+
+**Engagement is no longer unmeasured, and it is bad.** This paragraph previously read "engagement is
+currently **unmeasured**, not known to be bad". That was true of *App Store Connect*, and it is
+still true there — but it was wrong about RevenueCat, which carries the signal in its per-customer
+records. Measured 2026-09-09 across all 125 customers: **89% have `last_seen_at` within ~15 ms of
+`first_seen_at` — one app launch, ever.** Excluding the unreleased-build records above, **13 of 87
+(15%) ever launched twice; of the 38 US customers, zero did.** The reading is sound because
+`Purchases.configure` runs unconditionally in `GymStreakApp.init()` and RevenueCat refreshes
+`CustomerInfo` on every app restart, so a second launch must advance `last_seen_at`.
+
+**This changes the conclusion of §13, not just a number.** §13.5's diagnosis — acquisition is the
+constraint — is necessary but incomplete: an install that never returns is not a future customer, so
+reach and return are two broken multipliers and installs alone cannot produce a subscriber. It also
+voids the "141 chargeable installs" threshold above as written, since it assumes installs convert
+like a normal cohort. Method, caveats, the corrected funnel and the resequenced work:
+**`docs/acquisition-strategy.md` §1a**, which is the authority on this.
 
 **Shipped in 1.1.16: the `founder` subscriber attribute.** Since RevenueCat is the only active-user
 signal that exists, and un-segmented it mixes Founders (never chargeable) with everyone else, the

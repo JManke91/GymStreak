@@ -1,59 +1,181 @@
-# Acquisition Strategy — how GymStreak gets seen
+# Acquisition & Retention Strategy — how GymStreak gets seen, and why nobody comes back
 
-**Status (2026-09-09):** **Phase A complete** — all three levers shipped and entered in App Store
-Connect. Nothing is *live* yet: #2 and #3 are metadata bound to a version submission, so they take
-effect when that version is released. Per-lever status lives in the §3 table and is restated at the
-top of each §4 entry. Phase B (landing page → sharing → community) is the next thing to start.
+**Status (2026-09-09):** **Phase A complete** (levers #1–#3, all entered in App Store Connect;
+#2 and #3 are metadata bound to a version submission, so they take effect when that version is
+released — independently confirmed still-not-live on 2026-09-09, see §1.3). **Phase B has been
+redefined.** It was "landing page → sharing → community". It is now **instrument the funnel → stop
+asking for money on first launch → give people a reason to come back**, because §1a measured that
+**89% of everyone who has ever launched this app launched it exactly once.** Per-lever status lives
+in the §3 table and is restated at the top of each §4 entry.
 
-**This file is the single source of truth for acquisition — strategy *and* progress.** Tickets are
-cut from it into `.scratch/<phase>/issues/` and are transient — Phase A's are already archived to
-`.scratch/_done/acquisition-phase-a/`; this document is not transient.
+**This file is the single source of truth for acquisition *and* activation — strategy *and*
+progress.** Tickets are cut from it into `.scratch/<phase>/issues/` and are transient — Phase A's
+are already archived to `.scratch/_done/acquisition-phase-a/`; this document is not transient.
 **When a ticket derived from a lever reaches `done`, record it here in the same change:** set the
 lever's row in the §3 table, put a `**Shipped** (date)` line at the top of its §4 entry, correct any
 statement the implementation proved wrong (rewrite it, never append a correction), and update §5 and
 §6 if the phase or a milestone moved. A lever whose ticket is done but whose row still reads
 "not started" makes this document worse than no document.
 
-**Why this document exists.** `docs/monetization-strategy.md` §13 established that the paywall is
-not the problem — **the app reaches almost nobody**. That makes acquisition the only input to
-revenue that can currently be moved, and it is a different discipline from gating, pricing and
-feature depth, so it gets its own file. Read §13 first for the evidence; this document assumes it.
+**Lever numbers are stable IDs, not rankings.** `#1`–`#10` are referenced from
+`monetization-strategy.md`, the two `marketing/` documents and the archived Phase A tickets, so they
+are never renumbered. **Row order in the §3 table is the priority**; new levers are appended as
+`#11`+ and sorted into place. Never renumber to reorder.
+
+**Why this document exists, and how its thesis changed.** `docs/monetization-strategy.md` §13
+established that the paywall is not the problem — **the app reaches almost nobody** — and this file
+was created to treat acquisition as the one movable input to revenue. **That framing was necessary
+but incomplete, and §1a corrects it:** reach is one of *two* broken multipliers. Roughly 15% of
+users ever open the app a second time, so installs alone cannot produce a subscriber. Read §13 for
+the reach evidence and §1a for the return evidence; the levers in §3 now serve both.
 
 ---
 
 ## 1. The situation, in numbers
 
-Measured 2026-09-06 (App Store Connect 7 Jun – 4 Sep; RevenueCat REST API):
+App Store Connect figures measured 2026-09-06 (window 7 Jun – 4 Sep). **RevenueCat figures re-pulled
+2026-09-09 via the `revenuecat` MCP server** and superseding the 09-06 pull:
 
 | | Value | |
 |---|---|---|
-| **Impressionen** | **1,150 / 90 days ≈ 13/day** | The top of the funnel. Everything else is downstream. |
+| **Impressionen** | **1,150 / 90 days ≈ 13/day** | ASC, 09-06. The top of the funnel. Everything else is downstream. |
 | Produktseitenaufrufe | 180 | 15.7% of impressions |
 | **Erstmalige Downloads** | **36** | 20% of page views — a *healthy* listing |
 | Chargeable installs since the paywall | ~12 | §13.1 |
-| Active subscriptions / MRR | **0 / $0** | The one trial was cancelled; lapses 2026-09-10 |
+| **Active subscriptions / MRR / Revenue (28d)** | **0 / €0 / €0** | RC, 09-09. Unchanged since gating went live. |
+| Active trials | 1 | The same cancelled DE trial; `will_not_renew`, lapses 2026-09-10 |
+| RevenueCat customers, total ever | **125** | RC, 09-09 (was 114 on 09-06). **Not a user count — see §1.1** |
+| **Ever launched the app twice** | **13 of 87 (15%)** | RC, 09-09. **The number that matters — §1a** |
 
 **Source split** (product page views, daily average): App Store Search ≈ 1/day; Browse a thin
 secondary from July; App-Referrer first appears in September; **Web-Referrer zero for ninety days.**
 
-**Geography:** 62% DE, 28% US, 3% GB (n=100 RevenueCat customers).
+**Geography** (n=125 RevenueCat customers, 09-09): DE 72 (58%), US 38 (30%), GB 3, IQ 2, then one
+each from AT, BE, BH, CA, CH, IE, IN, LB, SA. Platform is 100% iOS. This is consistent with the
+09-06 reading of 62/28/3 and confirms Germany as the primary market.
 
-### The three things this tells us
+**RevenueCat's own benchmarks return nothing usable.** Initial conversion and conversion-to-paying
+both read `0` in the `0-10` percentile bucket with `is_eligible_for_benchmarking: false` — the
+sample is too small to compare against the health-and-fitness peer group. Do not quote them.
 
-1. **The listing converts fine.** 20% page-view→download is healthy, and the 2026-08-25 ASO pass
-   lifted conversion +110%. Do not spend effort rewriting the description — that half works.
-2. **Reach is the whole problem.** Impressions *fell* 6.75% over the same period the conversion
-   rate doubled. The ASO pass sharpened relevance without buying reach.
-3. **Acquisition is the only lever on revenue, permanently.** §7's Founder grant is irrevocable, so
-   the pre-2026-08-25 base can never be charged. Revenue is a function of *future installs alone*.
+### 1.1 The customer count is contaminated twice over — correcting §13.2
 
-### What is NOT the problem (do not re-litigate)
+`monetization-strategy.md` §13.2 established that RevenueCat "New Customers" counts SDK identity
+creations rather than installs, and attributed the inflation to **the update wave**. That is right
+in kind but **understated in degree, because there is a second and now larger source: this
+project's own simulator and local builds.**
+
+- **38 of the 125 customers (30%) are on 1.1.15 (33) or 1.1.16 (5)** — builds that were never on the
+  App Store.
+- Nearly all are **DE**, on simulator-typical runtimes (`26.5 / 23F77`, `26.1 / 23B86`), minted in
+  **working-hours bursts**: nine fresh anonymous IDs between 09:19 and 10:11 on 09-06, four more on
+  1.1.16 between 16:06 and 16:11 the same afternoon, fourteen across 09-05. Every one of them
+  pinged exactly once.
+- That is what a `simctl erase` cycle looks like from the server side: each erase mints a new
+  anonymous app-user ID (see the `seed-catalog-kvs-flag` note — erasing is the *documented* way to
+  re-run seeding here, so this will keep happening).
+
+**Consequence: the New Customers curve is not growth.** Weekly it reads 11 → 9 → 29 → 51 → 24, with
+daily peaks of 14 on 09-05 and 20 on 09-06. §6 warns that "at 13/day a single good day looks like a
+trend when it is not" — this is precisely that failure mode, and the curve would otherwise be read
+as Phase A working. **It is mostly the developer's own machine.**
+
+**The rule, extending §13.2's:** before reading any RevenueCat volume chart, exclude customers whose
+`last_seen_app_version` was never released. The permanent fix is a build-channel subscriber
+attribute — considered and deliberately deferred in §13.4, and §4.11 now supersedes that deferral.
+
+### 1.2 What is NOT the problem (do not re-litigate)
 
 - **The paywall machinery.** Nine placements, six gates, Customer Center, a proven production
-  purchase (`environment: production`, §13.3). It works; nobody sees it.
-- **The product.** 1,083 localized strings, a standalone watch app, on-device AI, supersets,
-  CloudKit sync. This is a mature app with an audience of thirteen impressions a day.
-- **Pricing.** Untestable at this volume and not the constraint.
+  purchase (`environment: production`, §13.3). It works; almost nobody sees it.
+- **The listing.** 20% page-view→download, conversion +110% after the 2026-08-25 ASO pass. Do not
+  spend effort rewriting the description — that half works.
+- **The product's depth.** 1,083 localized strings, a standalone watch app, on-device AI, supersets,
+  CloudKit sync. Depth is not what is missing.
+
+### 1.3 Phase A is confirmed still not live — by a second, independent route
+
+Segmenting New Customers on `external_subscriber_attributes:founder` puts **all 125 customers in the
+empty bucket**: not one has ever reported the attribute. The `founder` attribute ships in **1.1.16**
+(§13.4), so this proves 1.1.16 has reached no real user, and therefore that levers **#2 and #3 are
+still committed-but-not-live** exactly as their §4 entries claim. Re-run this segment as the cheapest
+possible check on whether the carrying version has actually gone out.
+
+---
+
+## 1a. The second constraint: almost nobody comes back (measured 2026-09-09)
+
+**`monetization-strategy.md` §13.4 states that "engagement is currently unmeasured, not known to be
+bad". That is no longer true. It is measurable, it was measured, and it is bad.** §13.4's paragraph
+is corrected accordingly; this section is the evidence.
+
+### The measurement, and why it is trustworthy
+
+RevenueCat exposes `first_seen_at` and `last_seen_at` per customer. Two facts make the difference
+between them readable as *"did this person ever open the app again?"*:
+
+1. **The SDK is configured on every launch, unconditionally.**
+   `RevenueCatPurchaseGateway.init()` calls `Purchases.configure` from the composition root, which
+   runs in `GymStreakApp.init()` — before any UI exists. It is not lazy, not behind onboarding, and
+   not behind a paywall.
+2. **RevenueCat refreshes `CustomerInfo` on every app restart**, even when the cache is younger than
+   its 5-minute foreground TTL ([RevenueCat caching docs](https://www.revenuecat.com/docs/test-and-launch/debugging/caching)).
+
+So a second launch on a later day *must* advance `last_seen_at`. It does not.
+
+### What it says
+
+| | Value |
+|---|---|
+| Customers whose `last_seen_at` is within ~15 ms of `first_seen_at` | **111 of 125 (89%)** — one launch, ever |
+| Ever launched twice, all customers | 14 of 125 (11%) |
+| **Ever launched twice, excluding the 38 unreleased-build records (§1.1)** | **13 of 87 (15%)** |
+| **Ever launched twice, US customers only** | **0 of 38** |
+| Seen at all in the last 7 days | **6** — one of which is a development device |
+
+**The US column is the cleanest read in this document.** The developer is in Germany, so no
+simulator noise reaches it: 38 real App Store customers accumulated steadily across 1.1.9 → 1.1.15,
+and **not one of them opened the app a second time.** If the true second-launch rate were 20%,
+observing 0 of 38 has probability 0.8³⁸ ≈ 0.02%.
+
+For calibration: a *good* health-and-fitness app retains ~20% at **day one**
+([Business of Apps](https://www.businessofapps.com/data/health-fitness-app-benchmarks/),
+[UXCam](https://uxcam.com/blog/mobile-app-retention-benchmarks/)). 15% *ever*, across a window of up
+to three and a half weeks, is materially worse than that benchmark — not marginally below it.
+
+**Caveats, stated so they are not rediscovered as objections:**
+- A launch made entirely offline does not ping. It would ping on the next online launch, so this
+  cannot explain 89%.
+- This only covers SDK-carrying builds (1.1.9+, since 2026-08-15). Users who never updated past
+  1.1.8 are invisible here — which makes the measured population *more* engaged than average, not
+  less, since it is skewed toward people who update.
+- `last_seen_at` tells us a launch happened. It does not tell us whether a workout was logged. That
+  gap is exactly what lever **#11** exists to close.
+
+### What this does to the strategy
+
+The funnel, end to end:
+
+```
+13 impressions/day → 1.2 downloads/day → ~0.15 second launches/day → ~0 logged workouts → 0 purchases
+```
+
+1. **"Acquisition is the only lever on revenue" is no longer the right conclusion.** It is still
+   true that the Founder grant (§7 of the monetization strategy) makes revenue a function of future
+   installs alone — but an install that never returns is not a future customer. At a 15%
+   second-launch rate, **10× the installs is still approximately zero subscribers.** Reach and
+   return are two multipliers on the same product, and today both are broken.
+2. **Return is the cheaper one to fix, and it gates the value of fixing reach.** Levers #11–#13
+   total roughly a week. Lever #4 alone is one to two weeks and buys nothing if the traffic it
+   sends leaks out on first launch. **Fix the leak before opening the tap.**
+3. **§6's "141 chargeable installs → February 2027" significance target is void as written.** It
+   assumes installs convert at something like the §10 target of 2.1%. A cohort with a 15%
+   second-launch rate cannot support that prior, so reaching n=141 would not make zero informative
+   either. Restated in §6.
+4. **Two things in the app are directly implicated, and both are cheap to change.** The first-run
+   tour ends in a paywall before the user has logged a single set (#12), and the only
+   `UNUserNotificationCenter` use anywhere in the codebase is the rest timer — there is no reason to
+   come back, in an app called Gym Streak (#13).
 
 ---
 
@@ -85,7 +207,9 @@ Prioritization below follows from how the App Store decides to show an app at al
   API, which is *not* the App Store's search index (it ignores the keyword field entirely — §9 of the
   keywords document), so treat the ordering as indicative of the brand query, not as exact App Store
   ranking. What it does establish beyond doubt is that the name is shared and that the other holder
-  is far more established.
+  is far more established. **This paragraph deliberately attached no recommendation. §4.15 now
+  attaches one** — price a rename and decide it, before #4 and #6 spend weeks building assets under
+  a name that may change.
 - **Browse/featuring surfaces.** Editorial and algorithmic. In-App Events and Custom Product Pages
   feed them; you cannot buy them.
 - **Off-store traffic.** Doesn't add impressions directly, but adds downloads — and download
@@ -122,27 +246,260 @@ Every lever below should be pointed at those two niches, not at the head.
 
 ## 3. Prioritized levers
 
-Ranked by expected impressions gained ÷ effort, with dependencies respected.
+**Row order is the priority. The `#` column is a stable ID and never changes** (see the header
+note). Ranked by expected effect on *revenue* ÷ effort, with dependencies respected — which after
+§1a means return-rate levers outrank reach levers, because reach multiplied by a broken return rate
+is still zero.
 
-| # | Lever | Tier | Effort | Moves | Status |
-|---|---|---|---|---|---|
-| 1 | Rating prompt in-app | **P0** | ~1 day | Ranking | ✅ **shipped 2026-09-06** — `docs/rating-prompt.md` |
-| 2 | Storefront metadata localization (no app translation) | **P0** | 1–2 days/locale | **Keyword surface** | ✅ **step 1 shipped 2026-09-09** — en-GB + en-AU localizations created and entered in ASC (`marketing/app-store-connect-actions.md` §7). Steps 2–3 remain Phase C |
-| 3 | Niche keyword repositioning (Watch + privacy) | **P0** | ~1 day | Keyword surface | ✅ **shipped 2026-09-06** — both fields entered in ASC, rides **1.1.16** (`marketing/app-store-connect-actions.md`) |
-| 4 | Landing page + custom domain | **P1** | 1–2 weeks | Unlocks every off-store channel | ⬜ not started |
-| 5 | In-app sharing of a workout | **P1** | 2–3 days | Web-Referrer, virality | ⬜ not started |
-| 6 | Community presence (Reddit et al.) | **P1** | Ongoing | Downloads → velocity → ranking | ⬜ not started |
-| 7 | In-App Events | **P2** | ~1 day/event | Browse + Search surfaces | ⬜ not started |
-| 8 | Custom Product Pages | **P2** | ~1 day | Conversion on off-store traffic | ⬜ not started |
-| 9 | Full app localization, 2–3 markets | **P3** | 1–2 weeks/language | Keyword surface + market fit | ⬜ blocked on `.scratch/i18n-foundation/` |
-| 10 | Apple Search Ads | **P3 / optional** | Money | Impressions, and keyword data | ⬜ not started |
+### Open — in the order to do them
+
+| Order | # | Lever | Tier | Effort | Moves | Status |
+|---|---|---|---|---|---|---|
+| 1 | 11 | **Funnel instrumentation** (anonymous RC subscriber attributes) | **P0** | ~1 day | **Measurement — unblocks every row below** | ⬜ not started |
+| 2 | 12 | **Remove the paywall from first-run onboarding** | **P0** | ~1 day | Return rate, first-session trust | ⬜ not started |
+| 3 | 13 | **Re-engagement + streak notifications** | **P0** | 2–3 days | **Return rate** | ⬜ not started |
+| 4 | 5 | In-app sharing of a workout | **P1** | 2–3 days | Web-Referrer, virality | ⬜ not started — **un-gated from #4**, see §4.5 |
+| 5 | 15 | **Decide the app name** (rename or commit) | **P1 / decision** | ~1 day to decide | Brand-query traffic, word-of-mouth | ⬜ **not decided — gates #4 and #6** |
+| 6 | 4 | Landing page + custom domain | **P1** | 1–2 weeks | Unlocks every off-store channel | ⬜ not started — blocked on #15 |
+| 7 | 6 | Community presence (Reddit et al.) | **P1** | Ongoing | Downloads → velocity → ranking | ⬜ not started — blocked on #15 |
+| 8 | 14 | **Lifetime / one-time purchase option** | **P1 / decision** | ~1 day to build | Revenue per converting user | ⬜ **needs a Monetization Gate discussion first** |
+| 9 | 2 | Storefront metadata localization, steps 2–3 | **P2** | 1–2 days/locale | Keyword surface | ⬜ gated on the first search-term report |
+| 10 | 7 | In-App Events | **P2** | ~1 day/event | Browse + Search surfaces | ⬜ not started |
+| 11 | 8 | Custom Product Pages | **P2** | ~1 day | Conversion on off-store traffic | ⬜ not started — follows #4 and #6 |
+| 12 | 9 | Full app localization, 2–3 markets | **P3** | 1–2 weeks/language | Keyword surface + market fit | ⬜ blocked on `.scratch/i18n-foundation/` |
+| 13 | 10 | Apple Search Ads | **P3 / deferred** | Money | Impressions, and keyword data | ⬜ **deferred until #13 moves the return rate** — see §4.10 |
+
+### Shipped
+
+| # | Lever | Tier | Status |
+|---|---|---|---|
+| 1 | Rating prompt in-app | **P0** | ✅ **shipped 2026-09-06** — `docs/rating-prompt.md` |
+| 3 | Niche keyword repositioning (Watch + privacy) | **P0** | ✅ **shipped 2026-09-06** — both fields entered in ASC, rides **1.1.16** (`marketing/app-store-connect-actions.md`). Confirmed not yet live, §1.3 |
+| 2 | Storefront metadata localization, step 1 | **P0** | ✅ **shipped 2026-09-09** — en-GB + en-AU localizations entered in ASC (`marketing/app-store-connect-actions.md` §7). Steps 2–3 are row 9 above |
 
 Status vocabulary: ⬜ not started · 🎫 ticket cut, not started · 🚧 in progress · ✅ shipped (date) ·
 ❌ dropped (with the reason in the §4 entry).
 
+**Why the order changed on 2026-09-09.** Phase A's ranking was "expected *impressions* gained ÷
+effort", which was correct while reach was believed to be the only broken multiplier. §1a showed it
+is not. Three cheap levers (#11–#13, about a week in total) sit on the step where 89% of users are
+lost; #4 alone is one to two weeks and pours traffic into that leak. Nothing already shipped is
+invalidated — #1–#3 remain correct and stay committed — but everything unbuilt was resorted.
+
 ---
 
 ## 4. How to act on each
+
+**Entry order:** §4.11–§4.15 come first because they are the current Phase B work and the top five
+rows of the §3 table. Entries §4.1–§4.10 follow in stable-ID order. Each of §4.11–§4.15 is written
+to be **extractable as a ticket without further design work** — goal, seams, acceptance criteria and
+(where it applies) the Monetization Gate verdict are all stated. Run `/to-tickets` against them when
+starting the phase; the granularity question is whether #13 splits into two slices, not whether the
+work is specified.
+
+### 11. Funnel instrumentation — anonymous subscriber attributes (P0, ~1 day)
+
+**Why first:** every other decision on this page is currently a guess about *where* users are lost.
+§1a proves they leave, and proves nothing about which screen loses them. RevenueCat sees only "the
+app launched". Whether the drop is at the tour, at the starter routine, at the first logged set or
+after the first completed workout changes which lever is worth building — and #12 and #13 are both
+partly bets until this exists. It also permanently fixes the §1.1 contamination that made the
+New Customers chart unreadable.
+
+**The mechanism is already in the codebase.** `RevenueCatPurchaseGateway` line ~259 already calls
+`Purchases.shared.attribution.setAttributes([...])` for the `founder` flag (`pro-subscription.md`
+§3c). This lever adds siblings to that one call site — no new dependency, no new file, no new layer.
+
+**What to report** — anonymous, non-identifying, bucketed so no attribute can single out a person:
+
+| Attribute | Values | Answers |
+|---|---|---|
+| `onboardingCompleted` | `"true"` / `"false"` | Do they finish the seven-step tour, or bail inside it? |
+| `workoutsCompleted` | `"0"` / `"1"` / `"2-4"` / `"5+"` | **The activation question.** Does anyone reach the value moment? |
+| `routinesCreated` | `"0"` / `"1"` / `"2+"` | Does the starter routine carry them, or do they build their own? |
+| `buildChannel` | `"appstore"` / `"other"` | Kills the §1.1 simulator/TestFlight contamination permanently |
+
+**Constraints, and why they are not negotiable:**
+- **Buckets, never raw counts.** A precise workout count plus a country plus a first-seen timestamp
+  is re-identifying. Buckets are not, and they answer the question just as well.
+- **Nothing is ever read back.** These are analytics only, exactly as `founder` is — no gate, no
+  entitlement and no UI may branch on them, or the no-account promise starts leaking into behaviour.
+- **`setAttributes` records locally and syncs on the next SDK request**, so it costs no extra
+  network call and cannot block a launch.
+- **This supersedes §13.4's deferral** of a build-channel attribute. That deferral said "decide it
+  on evidence that the TestFlight/local-build population is actually distorting a reading". §1.1 is
+  that evidence: 30% of all customers.
+
+```
+Monetization verdict — anonymous funnel attributes
+  Tier          Free
+  Derivation    §3 Rule 4 — it reads the user's own logged data, and is not user-facing at all
+  Mechanism     n/a — nothing is gated
+  Placement     none
+  Nudge         none
+  Free residue  the entire feature
+  Founder note  n/a — analytics, not a capability
+```
+
+**Acceptance:** the four attributes appear on a fresh install in the RevenueCat dashboard; every
+§3 chart can be segmented on `buildChannel`; no non-analytics code path reads any of them.
+
+**Success:** within two weeks, §6's "where they leave" row stops reading *unknown*.
+
+### 12. Remove the paywall from first-run onboarding (P0, ~1 day)
+
+**Why it is the second thing:** the first-run tour is six explanatory slides followed by
+`PaywallPlacement.onboarding` — **a purchase request before the user has logged a single set**, in
+exactly the session that 89% of users never return from (§1a). It is the cheapest change on this
+page, its downside is bounded, and it is the most directly implicated thing in the measured failure.
+
+**The evidence that it costs nothing to remove:** the onboarding placement has produced **zero
+purchases, ever**. The one production trial this app has seen came from the `gymstreak_sale`
+offering on 2026-09-03, well after any first run (§13.3). There is nothing to lose.
+
+**It also contradicts two positions the project already holds.** `monetization-strategy.md` §3
+Rule 1 protects the aha path — build a routine → train it → see it logged → see the number go up —
+and this places a paywall *before the first step of it*. The 2026 indie-monetization consensus says
+the same: move the first ask after one completed core action
+([tesseract.academy](https://tesseract.academy/how-to-monetize-a-fitness-app-proven-strategies-for-2026/),
+[theswiftk.it](https://theswiftk.it.com/blog/how-to-monetize-ios-app-indie-developer)) — users pay
+when an app has proved useful, not on the promise that it will be.
+
+**The seam is one line.** `OnboardingFlowViewModel.steps` (line ~64) already filters `.offer` out of
+`OnboardingStep.allCases` when the paywall seam refuses it; this makes that filter unconditional.
+Then: delete `.offer` from `OnboardingStep`, delete `OnboardingStep.offer`'s CTA string key, retire
+`PaywallPlacement.onboarding`, and remove the tour's own paywall sheet host (`docs/onboarding.md`,
+"Step 7 — the offer") which exists solely for it.
+
+**The first ask then falls to placements that already exist and are better placed:**
+`.firstRoutineCreated` (§8 A) and `.valueMoment` at the 3rd completed workout (§8 B).
+**Check the rating-prompt interaction while in here:** `docs/rating-prompt.md` deliberately triggers
+on the 5th workout to stay clear of the value-moment paywall at 3. Removing a *different* placement
+does not disturb that, but the guard is worth re-reading rather than assumed.
+
+**Open question worth deciding in the same ticket, but separable:** six slides before the app opens
+is a lot, and `docs/example-starter-routine.md` states the seeded routine already teaches rep
+ranges, supersets and per-set rest — the subjects of slides 2, 3 and 4. Cutting the tour to two or
+three slides is plausibly a second retention win. **It is not part of this ticket** — do it after
+#11 reports `onboardingCompleted`, so the decision is made on where people actually bail.
+
+**This is a gating change**, so when it lands it updates `monetization-strategy.md` §4 and
+`docs/pro-subscription.md` (a placement is being retired), plus `docs/onboarding.md`.
+
+**Acceptance:** a fresh install reaches the tab bar without ever seeing a paywall; the tour is six
+steps with six progress segments; `PaywallPlacement.onboarding` no longer exists; the iOS suite and
+the onboarding tests pass.
+
+### 13. Re-engagement and streak notifications (P0, 2–3 days)
+
+**Why:** this is the largest single hole in the product. **The only `UNUserNotificationCenter` use
+in the entire codebase is the rest timer** (`GymStreak/Data/Notifications/UserNotificationRestTimerScheduler.swift`).
+There is no workout reminder, no scheduled-session nudge, and **no streak reminder in an app called
+Gym Streak.** A streak is the most notification-native mechanic that exists, the app is named after
+it, and it is doing no work at all. §1a says the problem is that people do not come back; this is
+the only lever on this page that *asks* them to.
+
+**What to build:**
+- **A planned-session reminder.** The app already has weekday scheduling — `PaywallPlacement`
+  carries a `weekdaySchedule` case, so the planning data exists. Fire on the morning of a planned
+  training day.
+- **A streak-at-risk nudge.** One notification when a streak the user has actually built is about to
+  lapse. Never on day one of no activity, and never to someone with no streak to lose.
+- **A hard cap on frequency**, decided in the ticket and written into the code, not left to
+  judgement later. This is the mechanism most able to damage §10's App Store-rating guardrail.
+
+**Where to ask for permission — and this decides whether the lever works at all.** Not at launch,
+and not during the tour. Ask **after the first completed workout**, when the app has earned the
+request and the user has something worth being reminded about. A permission prompt on first launch,
+in the session 89% never return from, converts a retention lever into another reason to leave.
+
+**Rules that apply:** never during an active workout, never on the watch, never adjacent to a
+paywall (`monetization-strategy.md` §3 Rule 3 — the same constraint `docs/rating-prompt.md` obeys).
+Reuse the `RestTimerNotificationCenter` protocol pattern in `Data/Notifications/` rather than
+inventing a second abstraction over `UNUserNotificationCenter`; a sibling protocol in the same
+folder, injected via `AppDependencies`, matches how the rest timer already does it.
+
+```
+Monetization verdict — workout and streak reminders
+  Tier          Free
+  Derivation    §3 Rule 1 — it is the aha path (train → log → see the number go up)
+  Mechanism     n/a — nothing is gated
+  Placement     none
+  Nudge         none
+  Free residue  the entire feature
+  Founder note  gating this would convert nobody. It exists to make a free user return at all,
+                and a user who does not return is not a Pro prospect. Free is not a concession here.
+```
+
+**Splitting:** if `/to-tickets` wants two slices, the seam is *planned-session reminder* (needs the
+schedule data) and *streak-at-risk nudge* (needs the streak calculation) — the notification
+plumbing, permission flow and frequency cap are shared and belong in whichever ships first.
+
+**Acceptance:** a user with a planned Tuesday session and notification permission receives exactly
+one reminder that Tuesday morning; a user with no streak and no plan receives nothing; the
+permission prompt cannot appear before a completed workout; the watch is untouched.
+
+**Success:** §6's second-launch row moves. This is the lever that row exists to measure.
+
+### 14. Lifetime / one-time purchase option (P1 — discussion before build)
+
+**This entry does not authorize a change.** Pricing and packaging changes are a
+`monetization-strategy.md` Monetization Gate matter and the gate says: **when the verdict touches
+Pro, stop and discuss before building.** What follows is the case to discuss, not a decision.
+
+**Today's ladder:** yearly (`gymstreak.iap.pro.yearly.sub`, P1Y, with a P1W trial) and monthly
+(`gymstreak.iap.pro.monthly.sub`, no trial). Both under the `gymstreak_sale` offering.
+
+**Three arguments for adding a lifetime tier:**
+1. **A one-time option alongside subscriptions lifts total conversion 15–25%** in 2026 indie data
+   ([theswiftk.it](https://theswiftk.it.com/blog/how-to-monetize-ios-app-indie-developer)).
+2. **It matches this app's own positioning, which is the stronger argument.** §2's defensible niche
+   and `monetization-strategy.md` §1's no-account promise attract the privacy / offline / own-your-
+   data cohort — precisely the people most hostile to renting access to their own training log. The
+   app's differentiator and its pricing model currently point in opposite directions.
+3. **The app-side cost is near zero.** `RevenueCatPurchaseGateway` already handles the non-expiring
+   case and documents it: *"Lifetime is the non-expiring grant. A subscription always carries an
+   `expirationDate` … the one-time purchase carries none."* The work is an App Store Connect
+   product, a RevenueCat package, and paywall copy.
+
+**A separate, smaller question to settle at the same time:** monthly carries **no trial** while
+yearly does. That is a confusing ladder — the cheaper commitment is the riskier one to try. Either
+give monthly a trial or drop the monthly tier.
+
+**Sequencing:** this is row 8, not row 1, deliberately. With a 15% second-launch rate there is
+almost nobody reaching a paywall for packaging to act on. Fix the funnel first; then this is worth a
+morning.
+
+### 15. Decide the app name — rename or commit (P1, decision, gates #4 and #6)
+
+**§2 measured the problem and deliberately attached no recommendation. This entry attaches one:
+price a rename, and decide before spending money or weeks on brand-carrying assets.**
+
+**The facts, from §2:** **"GymStreak Ltd"** is an established developer whose **"GymStreak: AI
+Personal Trainer"** (App ID `1371187280`, **5,118 ratings, 4.6★**, on the store since 2018) ranks
+**first** for the query *gymstreak* in the US, UK, AU and DE storefronts. `GymStreak – Workout
+Tracker` ranks **#14 (US), #29 (GB), #78 (AU)**, #2 (DE). Two further apps also carry the name.
+
+**Why this is a decision and not an ASO footnote:**
+- **Word-of-mouth is this app's only acquisition channel** (`monetization-strategy.md` §10). The
+  mechanism of that channel is: someone is told the name, and searches it. Today that search hands
+  the person to a competitor with 5,118 ratings. **The one channel the strategy relies on leaks
+  directly to an incumbent**, and no amount of keyword work fixes a brand query.
+- **It gates #4 and #6, which is why it sits above them.** A landing page on a `gymstreak` domain
+  and a Reddit presence built under the name are both expensive and both discarded by a later
+  rename. Deciding after building them means paying twice.
+- **There is trademark exposure** in sharing a name with an established commercial developer in the
+  same category. Not assessed here; it belongs in the decision.
+
+**What the decision needs** (this is the ticket): the cost of a rename priced honestly — App Store
+listing and all four metadata localizations, the `marketing/` keyword derivations (which are
+name-token-dependent, `app-store-subtitle-keywords.md` §2), app icon and screenshots, the 1,083
+localized strings that mention the name, the watch app, the domain, and the loss of the existing
+ratings history — set against the measured cost of keeping it. **Decide it either way and record the
+decision here**; an undecided name is what blocks #4 and #6.
+
+**Not urgent this week** — #11–#13 come first and none of them touch the name. But it must not stay
+unrecommended, because every acquisition euro spent under this name partly funds the incumbent.
 
 ### 1. Rating prompt (P0)
 
@@ -283,6 +640,11 @@ far more traffic than 13 impressions/day to reach significance. Do not wait on i
 
 ### 4. Landing page + custom domain (P1) — *separate React repo*
 
+**Blocked on two things as of 2026-09-09.** On Phase B (#11–#13): this page sends traffic into a
+funnel that currently loses 89% of it on the first launch, and it is the most expensive unbuilt item
+on this page. And on the **name decision (#15)** — the domain, the copy and the brand are all
+discarded by a later rename, so deciding after building means paying twice.
+
 **Reframe this before scoping it.** SEO on a fresh domain takes 6–12 months to rank for anything
 contested, so **do not justify this page by SEO**. Its immediate value is that it is the *destination
 that makes every other channel possible*: Reddit posts, YouTube descriptions, review-site outreach
@@ -314,15 +676,25 @@ whole first milestone.
 means your own users cannot generate a single referral. This is the only lever that makes acquisition
 partly self-sustaining.
 
+**Un-gated from #4 on 2026-09-09.** This entry used to depend on the landing page existing, so that
+shares could carry an attributable link. That gate is not worth its cost: an **App Store link with a
+campaign token** is attributable today, needs no landing page, and turns Web-Referrer non-zero on
+its own. Ship the card against an App Store link now and swap the URL when #4 exists.
+
 **How:**
 - A shareable **workout summary card** rendered with `ImageRenderer`, offered from the existing
   post-workout summary and from a history entry. Include the muscle map — it is the most visually
   distinctive thing the app has.
-- Include a short link to the landing page (depends on #4) so shares are attributable.
+- Include a short attributable link — an App Store link with a campaign token today, the landing
+  page once #4 exists.
 - **Free, always** — `monetization-strategy.md` §3 Rule 4 (the user's own data) and Rule 1.
 - Follow the rendering rules in `CLAUDE.md`: `ImageRenderer` work happens off the `body` path.
 
 ### 6. Community presence (P1)
+
+**Blocked on the name decision (#15).** Reputation in a community accrues to a name, and it is the
+one asset here that cannot be migrated: posts, comment history and the goodwill attached to them all
+stay under whatever name made them. Decide #15 before introducing the app to anyone.
 
 **Why:** for lifting apps specifically this is the highest-signal free channel. Boostcamp's entire
 growth loop was Reddit programs; the research in §13.6 found comparison sites and communities, not
@@ -369,13 +741,23 @@ addition: nothing in it adds a language, and it should not be mistaken for this 
 Verify quality in any new language before committing that market — a coach that answers in broken
 Italian is worse than none.
 
-### 10. Apple Search Ads (P3, optional — costs money)
+### 10. Apple Search Ads (P3 — deferred, not optional-but-available)
 
-**The honest case:** at 13 impressions/day even €5–10/day materially multiplies the top of the funnel,
-and its keyword report is the only source of truth about which terms actually convert — which then
-feeds #2 and #3 for free. **The honest counter-case:** it buys installs rather than earning them, it
-stops the moment you stop paying, and with ~2% conversion at €24.99/yr the payback per install is
-poor at this stage. Treat it as *paid market research* with a hard budget cap, or skip it.
+**Deferred on 2026-09-09, and the reason is §1a, not budget.** This entry previously read "treat it
+as paid market research with a hard budget cap, or skip it". That was written when the funnel below
+the install was assumed to work. It does not: **0 of 38 US customers ever opened the app a second
+time.** Paying for installs into that funnel does not buy market research, it buys a per-euro
+measurement of a leak that #11 measures for free and #13 is meant to close.
+
+**The case for it survives and is unchanged in kind:** at 13 impressions/day even €5–10/day
+materially multiplies the top of the funnel, and its keyword report is the only source of truth
+about which terms actually convert, which then feeds #2 and #3. **The counter-case is now
+quantitative:** it buys installs rather than earning them, it stops the moment you stop paying, and
+the conversion assumption that made the payback arithmetic work (~2% at €24.99/yr) is not supported
+by a cohort with a 15% second-launch rate.
+
+**Revisit when** §6's second-launch row has moved after #13 — not before, and not on the argument
+that impressions are cheap.
 
 ---
 
@@ -390,18 +772,35 @@ versions are released. The tickets were archived to `.scratch/_done/acquisition-
 
 **Phase A's remaining work is reading, not building:** the per-territory Impressionen rows and, ~4
 weeks after the carrying version is live, the first search-term report
-(`marketing/app-store-connect-actions.md` §5 and §7.6). That report is also the gate on Phase C's
-step-2 locales.
+(`marketing/app-store-connect-actions.md` §5 and §7.6). That report is also the gate on Phase D's
+step-2 locales. Use §1.3's `founder`-attribute segment as the cheap check on whether the carrying
+version has actually shipped.
 
-**Phase B — build the missing infrastructure.** Landing page + domain (#4), then in-app sharing (#5)
-which depends on having a link worth sharing. Start community presence (#6) as soon as the page
-exists.
+**Phase B — stop the leak (≈1 week). This is the next thing to do, and it replaces the old Phase B.**
+Funnel instrumentation (#11) first, because it is the prerequisite for reading everything after it.
+Then remove the onboarding paywall (#12), a one-day change on the exact session where users are
+lost. Then re-engagement and streak notifications (#13), the only lever that asks a user to return.
+**Do not start Phase C until §6's second-launch row has been read at least once after #13 ships** —
+that reading is the whole point of Phase B, and Phase C's cost is only justified if the funnel
+below it holds.
 
-**Phase C — compound it.** Additional metadata locales (#2 steps 2–3) informed by what Phase A moved,
-In-App Events (#7), Custom Product Pages (#8) once there is off-store traffic to route.
+*Why this replaces "landing page → sharing → community":* §1a. Reach multiplied by a 15%
+second-launch rate is still zero, #4 alone is one to two weeks, and #11–#13 together are about a
+week. Fix the leak before opening the tap.
 
-**Phase D — commit to markets.** Full app localization (#9) for whichever markets Phase C proved,
-after the i18n-foundation prerequisites. Reconsider Search Ads (#10).
+**Phase C — earn traffic, once it can be kept.** In-app sharing (#5) first, now un-gated from the
+landing page (§4.5). **Decide the name (#15) before the two brand-carrying items** — a landing page
+and a community presence are both discarded by a later rename, which is why the decision sits above
+them rather than beside them. Then the landing page + domain (#4), then community presence (#6) as
+soon as the page exists. The lifetime/one-time packaging discussion (#14) belongs at the end of this
+phase, when there is finally a population reaching a paywall for it to act on.
+
+**Phase D — compound it.** Additional metadata locales (#2 steps 2–3) informed by what Phase A
+moved, In-App Events (#7), Custom Product Pages (#8) once there is off-store traffic to route.
+
+**Phase E — commit to markets.** Full app localization (#9) for whichever markets Phase D proved,
+after the i18n-foundation prerequisites. Reconsider Search Ads (#10) — and only once #13 has moved
+the second-launch row (§4.10).
 
 ---
 
@@ -409,19 +808,49 @@ after the i18n-foundation prerequisites. Reconsider Search Ads (#10).
 
 Measure in this order — the first metric is the one that matters, and it is *not* revenue:
 
+**The order changed on 2026-09-09.** Return metrics now sit above reach metrics, because §1a showed
+reach is the *second* broken multiplier, not the only one. Revenue remains last.
+
+### Return — the Phase B scoreboard
+
+| Metric | Now (2026-09-09) | First milestone | Where |
+|---|---|---|---|
+| **Ever launched twice** (released builds) | **15%** (13 of 87) | **30%** | RC customer records, `last_seen_at` > `first_seen_at` — method in §1a |
+| **Ever launched twice, US only** | **0 of 38** | **any non-zero number** | Same, filtered to US — the read with no simulator noise |
+| Customers seen in the last 7 days | **6** (one a dev device) | 25 | RC → Active Customers |
+| **Where they leave** | **unknown** | *measurable at all* | Blocked on #11 — this row is the point of that lever |
+| Completed ≥1 workout | **unknown** | 40% of installs | Blocked on #11 (`workoutsCompleted`) |
+
+### Reach
+
 | Metric | Now | First milestone | Where |
 |---|---|---|---|
-| **Impressionen/day** | **~13** | **50** | ASC → Akquise — and **by territory** once #2 is entered |
+| **Impressionen/day** | **~13** | **50** | ASC → Akquise — and **by territory** once #2 is live |
 | **Web-Referrer** | **0** | **any non-zero number** | ASC → Akquise → Quellen |
 | Erstmalige Downloads/day | ~1.2 | 5 | ASC → Akquise |
 | Ratings count | ~0 | 20 | ASC → App Store |
-| Chargeable installs (cumulative) | ~12 | 141 | §13.4's significance threshold |
 
-**"Now" column measured 2026-09-06, before any lever shipped.** Re-read it after each lever lands and
-update it in place — this table is the only record of whether the strategy is working, and a stale
-baseline is what makes a shipped lever look like it did nothing. Lever #1 (ratings) went out on
-2026-09-06 with no data yet; App Store ratings surface slowly, so give it a release cycle before
-reading the row.
+### Revenue — a lagging indicator of both tables above
+
+| Metric | Now | First milestone | Where |
+|---|---|---|---|
+| Active subscriptions / MRR | **0 / €0** | 1 renewing subscriber | RC overview |
+| Chargeable installs (cumulative) | ~12 | see the correction below | §13.4 |
+
+**§13.4's "141 chargeable installs → February 2027" target is void as written.** That arithmetic
+asks how many installs are needed before *zero conversions* becomes evidence against the §10 target
+rate of 2.1%. It assumes installs behave like a normal cohort. A cohort with a 15% second-launch
+rate does not: most of those 141 would never see a paywall at all, so reaching the number would not
+make zero informative. **Do not recompute the threshold until Phase B has moved the second-launch
+row** — the denominator that matters is *activated* users, not installs, and #11 is what will first
+make that denominator countable.
+
+**Reading rules.** "Now" columns are dated per table and re-read after each lever lands — a stale
+baseline is what makes a shipped lever look like it did nothing. The reach rows were measured
+2026-09-06 before any lever was live; lever #1 (ratings) went out that day with no data yet, and App
+Store ratings surface slowly, so give it a release cycle. **Before reading any RevenueCat volume
+row, apply §1.1** and exclude customers on builds that were never released — until #11's
+`buildChannel` attribute makes that automatic.
 
 **Neither number can move yet, and that is expected.** Levers #2 and #3 are **entered** but not live
 — App Store metadata takes effect only when the version carrying it is released, and re-indexing
@@ -445,8 +874,20 @@ against us — and the rating feeds back into ranking, so damaging it defeats th
 ## 7. Cross-references
 
 - **`docs/monetization-strategy.md` §13** — the evidence base: measured numbers, the RevenueCat
-  counting trap (§13.2), why the paywall is not the problem (§13.3–13.4), the source split (§13.5).
+  counting trap (§13.2 — **extended by §1.1 here**), why the paywall is not the problem
+  (§13.3–13.4), the source split (§13.5). **§13.4's "engagement is unmeasured" claim is superseded
+  by §1a here**, and §13.4 has been corrected in place to point at it.
 - **`docs/monetization-strategy.md` §13.9** — how to pull these numbers without a dashboard screenshot.
+- **`docs/monetization-strategy.md` §3** — Rule 1 (the aha path) and Rule 3, which decide the free
+  verdicts on levers #12 and #13.
+- **`docs/onboarding.md`** — the seven-step first-run tour and its step-7 paywall host; lever #12
+  edits it.
+- **`docs/pro-subscription.md` §3c** — the `founder` subscriber attribute, the mechanism lever #11
+  extends and the one §1.3 reads to check whether a version is live.
+- **`docs/rest-timer-notifications.md`** — the only notification code in the app today, and the
+  protocol pattern lever #13 should follow rather than reinvent.
+- **`docs/example-starter-routine.md`** — what a first-run user actually finds; relevant to the tour
+  -length question parked in §4.12.
 - **`docs/marketing/app-store-subtitle-keywords.md`** — the indexing rules, the current
   subtitle/keyword sets and the *derivation* behind them, including the autocomplete probe method
   (§9) that any future keyword work should re-run. Levers #2 and #3 both edit it.
