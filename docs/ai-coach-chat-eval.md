@@ -82,7 +82,7 @@ Cannot be measured off-device (no FoundationModels on the simulator). **Build-ti
 ## Automated validation (2026-07-10)
 
 18 tests over three suites, run on iPhone 17 / iOS 26.5 simulator — all pass:
-- `ExerciseNameResolverTests` (7): folded exact/contains/token matching, German umlaut/ß equivalence, same-name aggregation, distinct-name ambiguity, misses.
+- `ExerciseNameResolverTests` (11): folded exact/word-boundary-contains/token matching, German umlaut/ß equivalence, same-name aggregation, distinct-name ambiguity, misses, and the German-compound regression (a compounded qualifier must not resolve to the stem exercise — see docs/ai-coach-chat-feasibility.md finding D2).
 - `ChatFactProviderTests` (7): fact lines against a real in-memory SwiftData store — PR best-set + estimated-1RM values, same-name variant aggregation, `__NO_MATCH__` marker with the real library, this-week count, allTime last-workout naming, and (since audit P1.3) next-workout dating through the lean `\.routine`-only fetch. All seven now run through the real `ChatFactProvider` → `ChatFactStore` boundary, so the fetch ordering and the `@concurrent` actor hop are covered too; the boundary's main-actor responsiveness is asserted separately by `chatFactLookupKeepsMainActorResponsive` in `SwiftDataHistorySnapshotStoreTests`.
 - `ChatOverflowPolicyTests` (5): condense threshold, chars/3.5 estimate, deterministic digest (recent verbatim + older topics, skips streaming/empty), markdown stripping.
 

@@ -1077,6 +1077,26 @@
 "ai_coach.chat.allowance.nudge" = "%1$d von %2$d Coach-Nachrichten diesen Monat übrig";
 "ai_coach.chat.allowance.nudge.exhausted" = "Diesen Monat keine Coach-Nachrichten mehr. Mit Gym Streak Pro chattest du unbegrenzt.";
 
+/* MARK: - AI Coach · Routinen-Entwurf (docs/ai-coach-routine-drafting.md) */
+"ai_coach.routine_draft.chip" = "Routine erstellen";
+"ai_coach.routine_draft.title" = "Routine erstellen";
+"ai_coach.routine_draft.close" = "Schließen";
+"ai_coach.routine_draft.intro.title" = "Beschreib deine Routine";
+"ai_coach.routine_draft.intro.subtitle" = "Schreib es so, wie du es sagen würdest. Nenn die Übungen und die Sätze, Wiederholungen und Gewichte, die du willst.";
+"ai_coach.routine_draft.intro.example" = "Zum Beispiel: \"Push-Tag: Bankdrücken drei Sätze à acht, Schrägbankdrücken mit Kurzhanteln drei mal zehn\"";
+"ai_coach.routine_draft.input.placeholder" = "Beschreib deine Routine…";
+"ai_coach.routine_draft.submit" = "Routine entwerfen";
+"ai_coach.routine_draft.stop" = "Stopp";
+"ai_coach.routine_draft.create" = "Erstellen";
+"ai_coach.routine_draft.discard" = "Verwerfen";
+"ai_coach.routine_draft.empty" = "Aus dieser Beschreibung passte nichts zu einer Übung in deiner Bibliothek, deshalb gibt es noch keine Routine zum Erstellen.";
+"ai_coach.routine_draft.left_out.title" = "Weggelassen — nicht in deiner Übungsbibliothek";
+"ai_coach.routine_draft.error" = "Die Routine konnte nicht entworfen werden. Bitte versuch es noch einmal.";
+"ai_coach.routine_draft.default_name" = "Neue Routine";
+"ai_coach.routine_draft.allowance.nudge" = "%1$d von %2$d freien Coach-Anfragen diesen Monat übrig";
+"ai_coach.routine_draft.allowance.nudge.exhausted" = "Diesen Monat keine freien Coach-Anfragen mehr. Mit Gym Streak Pro nutzt du den Coach unbegrenzt.";
+
+
 // P4 — AI-Rückblick, monatliche Kostprobe
 "ai_coach.period_recap.regenerate.confirm.title" = "Rückblick neu generieren?";
 "ai_coach.period_recap.regenerate.confirm.message" = "Das schreibt einen neuen Rückblick und verbraucht einen deiner kostenlosen AI-Rückblicke. Diesen Monat noch %d übrig.";

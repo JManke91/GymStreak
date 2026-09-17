@@ -10,6 +10,13 @@ Four surfaces:
 3. **Exercise Deep-Dive** — a 3–4 paragraph analysis of a single exercise's progression, surfaced on the exercise progress chart screen.
 4. **Workout Analysis** — a 3–5 sentence comparison of a past workout against the previous session of the same routine, surfaced in the workout detail view (Verlauf tab).
 
+Plus two conversational surfaces, which generate *from* the user's input rather than narrating their
+history:
+- **Coach Chat** — a multi-turn assistant over three read tools. See `docs/ai-coach-chat-plan.md`.
+- **Routine drafting** — "describe a routine, review the draft, save it", opened from a chip in
+  Coach Chat. The only surface whose output becomes **persisted user data**, which is why the model
+  drafts and Swift decides and writes. See `docs/ai-coach-routine-drafting.md`.
+
 Voice and tone constraints (enforced via system prompt):
 - Factual, analytical, grounded — never hyped.
 - Direct second person ("you" / "du"). No emoji. No exclamation marks.
@@ -386,11 +393,11 @@ GymStreak/
 ## Prompt grounding rules (binding, all surfaces)
 
 These are properties of **every** coach prompt and every `@Guide`, not of one surface. They are
-pinned by `GymStreakTests/CoachPromptGroundingTests.swift`, which scans all five coach surfaces
-(post-workout recap, workout analysis, period recap, coach chat, and the deep dive — six prompt
-strings, since the deep dive has two variants, and the three unit-parameterised ones are scanned in
-both `kg` and `lb`) plus all four output generation schemas — and, for rule 3 only, the fifteen
-input schemas as well. A green test proves the *prompt* is clean; it can never prove the *output*
+pinned by `GymStreakTests/CoachPromptGroundingTests.swift`, which scans all six coach surfaces
+(post-workout recap, workout analysis, period recap, coach chat, routine drafting, and the deep
+dive — eight prompt strings, since the deep dive has two variants and the four unit-parameterised
+ones are scanned in both `kg` and `lb`) plus all six output generation schemas — and, for rule 3
+only, the fifteen input schemas as well. A green test proves the *prompt* is clean; it can never prove the *output*
 is. That is always a device check.
 
 ### 1. No prompt carries a data-shaped literal

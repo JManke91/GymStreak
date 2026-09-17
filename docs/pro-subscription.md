@@ -1064,7 +1064,7 @@ rather than a convention.
 
 | Surface | Cap | Counting unit | Placement |
 |---|---|---|---|
-| P3 Coach Chat | `freeCoachChatMessagesPerMonth` (5) | a sent message | `.coachChat` |
+| P3 Coach Chat | `freeCoachChatMessagesPerMonth` (5) | a sent message, **or one routine-drafting session** | `.coachChat` |
 | P4 Period Recap | `freePeriodRecapsPerMonth` (1) | a fresh generation | `.periodRecap` |
 | P5 Exercise Deep-Dive | `freeExerciseDeepDivesPerMonth` (1) | a fresh generation | `.exerciseDeepDive` |
 
@@ -1074,6 +1074,17 @@ The third shipped gate (`monetization-strategy.md` §4.2a P3, §4.3, §7 lapse, 
 sends `ProFeatureCaps.freeCoachChatMessagesPerMonth` (5) chat messages per **calendar month**; the
 sixth raises `.coachChat`. This ticket also builds the month-keyed allowance store that P4 and P5
 (ticket 09) reuse without touching any of the logic below.
+
+**P3's pool is shared with routine drafting** (`docs/ai-coach-routine-drafting.md`). That feature
+raises **no new gate and no new placement** — creating a routine is the aha path, §3 Rule 1 — but its
+generation runs on the same on-device model, so it draws on the same allowance. Its counting unit is
+**one drafting session**, not one message: a guided conversation that takes several turns to land one
+routine must never cost a free user their whole month. It refunds on a failed or cancelled
+generation, and also when a draft came back with nothing the exercise library could resolve — the
+generation succeeded, the outcome did not. It does *not* refund a usable draft the person chose to
+discard. Its own preflight adds the routine cap *before* the allowance, so a free user at
+`freeRoutineLimit` meets `.routineCap` rather than spending a Coach unit on a routine that could not
+have been saved.
 
 **Availability is checked before the entitlement, and that ordering is the rule, not an
 optimisation.** Coach Chat needs iOS 26 and Apple-Intelligence hardware, and §4.3 is explicit that

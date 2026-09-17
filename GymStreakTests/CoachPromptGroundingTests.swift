@@ -52,6 +52,8 @@ struct CoachPromptGroundingTests {
                             PeriodRecapInstructions.systemPrompt(unit: unit)))
             prompts.append(("coach chat · \(unit.rawValue)",
                             chatRulesWithoutAmbientContext(unit: unit)))
+            prompts.append(("routine draft · \(unit.rawValue)",
+                            RoutineDraftInstructions.build(unit: unit)))
         }
         return prompts
     }
@@ -81,7 +83,14 @@ struct CoachPromptGroundingTests {
             ("PeriodRecapOutput", String(describing: PeriodRecapOutput.generationSchema)),
             ("WorkoutAnalysisOutput", String(describing: WorkoutAnalysisOutput.generationSchema)),
             ("ExerciseDeepDiveOutput", String(describing: ExerciseDeepDiveOutput.generationSchema)),
-            ("PostWorkoutRecapOutput", String(describing: PostWorkoutRecapOutput.generationSchema))
+            ("PostWorkoutRecapOutput", String(describing: PostWorkoutRecapOutput.generationSchema)),
+            // The routine draft is an *input-shaped* output: the model transcribes what
+            // the person typed, so its guides are exactly where a stray example weight or
+            // rep count would be indistinguishable from the person's own figures. The
+            // nested element type is listed separately because a schema's description
+            // does not necessarily inline the guides of the types it references.
+            ("RoutineDraftOutput", String(describing: RoutineDraftOutput.generationSchema)),
+            ("RoutineDraftExercise", String(describing: RoutineDraftExercise.generationSchema))
         ]
     }
 

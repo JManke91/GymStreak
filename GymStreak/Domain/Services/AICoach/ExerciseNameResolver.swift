@@ -31,8 +31,8 @@ struct ExerciseNameResolver {
         case noMatch
     }
 
-    /// Exact → contains → token-overlap match against the library, both
-    /// directions, over a folded form (diacritics/umlauts normalized — see
+    /// Exact → word-boundary contains → token-overlap match against the library,
+    /// both directions, over a folded form (diacritics/umlauts normalized — see
     /// `fold`). Distinct-name matches return `.ambiguous`; same-name matches
     /// aggregate into `.resolved`; a total miss returns `.noMatch`. A dynamic
     /// `.anyOf` over all names was rejected (token cost + fuzzy phrasing) — see docs.
@@ -44,10 +44,11 @@ struct ExerciseNameResolver {
         let exact = library.filter { fold($0.name) == normalized }
         if !exact.isEmpty { return .resolved(exact) }
 
-        // 2. Substring either direction (folded).
+        // 2. Substring either direction (folded), at a word boundary only.
         let contains = library.filter {
             let name = fold($0.name)
-            return name.contains(normalized) || normalized.contains(name)
+            return containsAtWordBoundary(name, normalized)
+                || containsAtWordBoundary(normalized, name)
         }
         if let match = disambiguate(contains) { return match }
 
@@ -103,6 +104,43 @@ struct ExerciseNameResolver {
             .folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .current)
             .lowercased()
             .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    /// Whether `needle` occurs inside `haystack` **as a word**, rather than merely as
+    /// a run of characters.
+    ///
+    /// **This is why step 2 is not a plain `contains`.** German builds exercise names by
+    /// compounding, and the qualifier that gets compounded on is exactly what names a
+    /// *different* movement: `fold("Schrägbankdrücken")` is `"schraegbankdruecken"`, which
+    /// contains `"bankdruecken"` — so a plain substring test made a library "Bankdrücken"
+    /// the single, confident `.resolved` answer for a query about incline pressing. Not
+    /// `.ambiguous`, not `.noMatch`: silently the wrong exercise. It shipped that way to a
+    /// device on 2026-09-16 via the routine draft (docs/ai-coach-routine-drafting.md),
+    /// which wrote the wrong exercise into a routine the person had just described; the
+    /// same rule had Coach Chat answer a "Schrägbankdrücken PR?" question with the
+    /// Bankdrücken numbers, which is the fabrication the whole grounding doctrine exists
+    /// to prevent. `"Frontkniebeugen"` → `"Kniebeugen"` is the same defect.
+    ///
+    /// Requiring a boundary keeps every legitimate case: a query that is the *start* of a
+    /// longer stored name still matches ("Bankdrücken" → "Bankdrücken (Langhantel)",
+    /// boundary at index 0), and so does one separated by a space or a bracket
+    /// ("Curls" → "Biceps Curls").
+    ///
+    /// **It deliberately does not police a qualifier that stands as its own word.**
+    /// "Enges Bankdrücken" still resolves to a library "Bankdrücken", because a separate
+    /// word is a qualified mention rather than a different word, and that leniency is
+    /// long-standing shipped behaviour. The compound case is the unambiguous defect.
+    private func containsAtWordBoundary(_ haystack: String, _ needle: String) -> Bool {
+        guard !needle.isEmpty else { return false }
+        var searchStart = haystack.startIndex
+        while let range = haystack.range(of: needle, range: searchStart..<haystack.endIndex) {
+            if range.lowerBound == haystack.startIndex { return true }
+            let preceding = haystack[haystack.index(before: range.lowerBound)]
+            if !preceding.isLetter && !preceding.isNumber { return true }
+            // Keep looking: the same needle may appear again at a real boundary.
+            searchStart = haystack.index(after: range.lowerBound)
+        }
+        return false
     }
 
     private func tokens(_ text: String) -> [String] {

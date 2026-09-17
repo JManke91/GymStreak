@@ -21,7 +21,8 @@ struct CoachChatView: View {
 
     var body: some View {
         CoachChatViewInternal(
-            allowanceGate: dependencies.makeAICoachAllowanceGate(for: .coachChat)
+            allowanceGate: dependencies.makeAICoachAllowanceGate(for: .coachChat),
+            routineDraftViewModel: dependencies.makeRoutineDraftViewModel()
         )
     }
 }
@@ -32,10 +33,20 @@ private struct CoachChatViewInternal: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.weightUnit) private var weightUnit
     @State private var viewModel: CoachChatViewModel
+    /// Owned here rather than by the sheet so the exercise library can be loaded on the
+    /// chip tap, before the sheet starts animating in, and so the drafting service (and
+    /// with it the `LanguageModelSession`) survives across one visit to the chat.
+    ///
+    /// A drafting *session* does not survive a dismissal: `sheetWasDismissed()` drops the
+    /// allowance ticket along with the draft, so reopening the sheet starts a new session
+    /// and reserves a new unit. See docs/ai-coach-routine-drafting.md §8.
+    @State private var routineDraftViewModel: RoutineDraftViewModel
+    @State private var isShowingRoutineDraft = false
     @FocusState private var inputFocused: Bool
 
-    init(allowanceGate: AICoachAllowanceGate) {
+    init(allowanceGate: AICoachAllowanceGate, routineDraftViewModel: RoutineDraftViewModel) {
         self._viewModel = State(wrappedValue: CoachChatViewModel(allowanceGate: allowanceGate))
+        self._routineDraftViewModel = State(wrappedValue: routineDraftViewModel)
     }
 
     var body: some View {
@@ -97,6 +108,14 @@ private struct CoachChatViewInternal: View {
                 weightUnit: weightUnit,
                 makeFactProvider: dependencies.makeChatFactProvider
             )
+        }
+        .sheet(isPresented: $isShowingRoutineDraft, onDismiss: {
+            // Ends the drafting session however it ended — Create, Discard, or a swipe
+            // away mid-stream. Cancels any generation still running and gives back a
+            // unit that bought nothing.
+            routineDraftViewModel.sheetWasDismissed()
+        }) {
+            RoutineDraftSheet(viewModel: routineDraftViewModel)
         }
         // In-flight streams are cancelled by the presenting fullScreenCover's
         // onDismiss (ContentView) — not here, so pushing settings on top of the
@@ -209,6 +228,11 @@ private struct CoachChatViewInternal: View {
             }
 
             if viewModel.isAvailable {
+                // The routine-drafting entry point. Present only while the coach is —
+                // exactly as the coach bar is — because a device that cannot run Apple
+                // Intelligence must not be offered a feature that needs it.
+                buildRoutineChip
+
                 HStack(spacing: 10) {
                     TextField(
                         "ai_coach.chat.input.placeholder".localized,
@@ -243,6 +267,43 @@ private struct CoachChatViewInternal: View {
             }
         }
         .background(DesignSystem.Colors.background)
+    }
+
+    /// Opens the drafting sheet — but only once the preflight says it may open. The
+    /// order (availability, then the routine cap) lives in the ViewModel: an ineligible
+    /// device never reaches a paywall, and a free user already at the cap is stopped
+    /// *before* typing a description for a routine that could not be saved.
+    private var buildRoutineChip: some View {
+        Button {
+            inputFocused = false
+            if routineDraftViewModel.requestDrafting() {
+                isShowingRoutineDraft = true
+            }
+        } label: {
+            HStack(spacing: 8) {
+                Image(systemName: "wand.and.sparkles")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(AICoachTheme.accent)
+                Text("ai_coach.routine_draft.chip".localized)
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundStyle(Color.white.opacity(0.85))
+                    .lineLimit(1)
+            }
+            .padding(.vertical, 9)
+            .padding(.horizontal, 14)
+            .background(
+                Capsule()
+                    .fill(Color.white.opacity(0.04))
+                    .overlay(
+                        Capsule()
+                            .strokeBorder(AICoachTheme.accent.opacity(0.18), lineWidth: 1)
+                    )
+            )
+        }
+        .buttonStyle(.plain)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 16)
+        .padding(.top, 10)
     }
 
     private var sendButton: some View {

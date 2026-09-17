@@ -1077,6 +1077,26 @@
 "ai_coach.chat.allowance.nudge" = "%1$d of %2$d Coach messages left this month";
 "ai_coach.chat.allowance.nudge.exhausted" = "No Coach messages left this month. Gym Streak Pro unlocks unlimited chat.";
 
+/* MARK: - AI Coach · Routine drafting (docs/ai-coach-routine-drafting.md) */
+"ai_coach.routine_draft.chip" = "Build a routine";
+"ai_coach.routine_draft.title" = "Build a routine";
+"ai_coach.routine_draft.close" = "Close";
+"ai_coach.routine_draft.intro.title" = "Describe your routine";
+"ai_coach.routine_draft.intro.subtitle" = "Write it the way you would say it. Name the exercises, and the sets, reps and weights you want.";
+"ai_coach.routine_draft.intro.example" = "For example: \"Push day: bench press three sets of eight, incline dumbbell press three by ten\"";
+"ai_coach.routine_draft.input.placeholder" = "Describe your routine…";
+"ai_coach.routine_draft.submit" = "Draft routine";
+"ai_coach.routine_draft.stop" = "Stop";
+"ai_coach.routine_draft.create" = "Create";
+"ai_coach.routine_draft.discard" = "Discard";
+"ai_coach.routine_draft.empty" = "Nothing in that description matched an exercise in your library, so there is no routine to create yet.";
+"ai_coach.routine_draft.left_out.title" = "Left out — not in your exercise library";
+"ai_coach.routine_draft.error" = "The routine could not be drafted. Please try again.";
+"ai_coach.routine_draft.default_name" = "New routine";
+"ai_coach.routine_draft.allowance.nudge" = "%1$d of %2$d free Coach requests left this month";
+"ai_coach.routine_draft.allowance.nudge.exhausted" = "No free Coach requests left this month. Gym Streak Pro unlocks unlimited Coach.";
+
+
 // P4 — AI Period Recap monthly taster
 "ai_coach.period_recap.regenerate.confirm.title" = "Regenerate this recap?";
 "ai_coach.period_recap.regenerate.confirm.message" = "This writes a new recap and uses one of your free AI recaps. %d left this month.";

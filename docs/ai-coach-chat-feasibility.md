@@ -238,6 +238,15 @@ Entry point (since 2026-07-10): a floating "Ask your coach" companion bar (`Coac
 
 **Fix applied (A + D):**
 - **A — model-assisted resolution bounded to real data.** `resolveExercise` now returns `.noMatch` on a total lexical miss; `exercisePRFacts` responds with the user's *actual* exercise-name list plus an instruction to re-call `getExercisePR` with the closest name "including a translation or synonym". The 3B model supplies the cross-lingual mapping (which it is good at) and re-invokes with the exact name; being bounded to the real library, it cannot invent an exercise, and Swift still computes the PR. Costs one extra tool round-trip + the name list (~100–300 tokens, capped at 60 names) **only on the miss path**. Instructions gained a matching bullet.
+- **D2 — word-boundary containment (`ExerciseNameResolver.containsAtWordBoundary`, added 2026-09-17).**
+  Step 2's substring test used to match anywhere in the string, in both directions. German compounds
+  broke it: `fold("Schrägbankdrücken")` contains `"bankdruecken"`, so a query about incline pressing
+  resolved — confidently, as a single `.resolved` — to a library "Bankdrücken", and the chat answered
+  a Schrägbankdrücken PR question with the Bankdrücken numbers. The defect surfaced on device through
+  the routine draft (docs/ai-coach-routine-drafting.md), which wrote the wrong exercise into a
+  routine. A needle now matches only at index 0 or after a non-alphanumeric character. A qualifier
+  standing as its own word ("Enges Bankdrücken") still resolves — that is a qualified mention, not a
+  different word.
 - **D — diacritic/umlaut folding (`ExerciseNameResolver.fold`).** Expands ä/ö/ü/ß → ae/oe/ue/ss and folds other diacritics before matching, so same-language variants ("Bankdrücken" / "Bankdruecken" / "bank drücken") unify. Complementary only — it does **not** bridge languages (that's A's job).
 
 Still to validate on-device: that the model reliably performs the re-call step (part of the tool-reliability eval below), and the added round-trip's latency impact.

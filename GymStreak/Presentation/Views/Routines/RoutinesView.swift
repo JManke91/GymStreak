@@ -24,17 +24,12 @@ private struct RoutinesViewInternal: View {
 #endif
 
     init(dependencies: AppDependencies) {
-        self._viewModel = StateObject(wrappedValue: RoutinesViewModel(
-            routineRepository: dependencies.routineRepository,
-            workoutSessionRepository: dependencies.workoutSessionRepository,
-            watchSync: dependencies.watchSync,
-            proEntitlements: dependencies.proEntitlements,
-            paywalls: dependencies.paywalls,
-            proactivePaywalls: dependencies.proactivePaywalls,
-            funnelAttributes: dependencies.funnelAttributes,
-            historyStoreGate: dependencies.historyStoreGate,
-            calendarMirror: dependencies.plannedWorkoutCalendarMirror
-        ))
+        // The composition root owns this one since the AI routine draft
+        // (docs/ai-coach-routine-drafting.md): the drafting sheet opens from Coach Chat,
+        // which has no routines screen in scope, and both entry points must create
+        // routines through the same instance — a second one would register a second set
+        // of notification observers and sync the watch twice.
+        self._viewModel = StateObject(wrappedValue: dependencies.routinesViewModel)
         self._exercisesViewModel = StateObject(wrappedValue: ExercisesViewModel(
             exerciseRepository: dependencies.exerciseRepository,
             routineRepository: dependencies.routineRepository,
@@ -54,6 +49,7 @@ private struct RoutinesViewInternal: View {
             activeWorkout: dependencies.activeWorkout,
             proactivePaywalls: dependencies.proactivePaywalls,
             reviewPrompt: dependencies.reviewPrompt,
+            workoutReminders: dependencies.workoutReminders,
             funnelAttributes: dependencies.funnelAttributes,
             weightUnitPreference: dependencies.weightUnitPreference,
             historyStoreGate: dependencies.historyStoreGate

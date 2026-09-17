@@ -161,7 +161,7 @@ launch with.**
 |---|---|---|---|
 | P1 | 🔒 **Unlimited routines** | 3 **of the user's own** (the built-in example routine is not counted) | The primary usage cap. Fires exactly when a user graduates from a simple split to real programming — the clearest possible commitment signal. |
 | P2 | 🔒 **Full progress analytics**: est. 1RM + training-volume metrics, and all timeframes (6M / 1Y / all-time) | Max weight only, 3-month window | The user *generated* this data. Loss aversion is maximal against your own training history, and the wall gets more painful every month you keep training. Reversible — no data deleted. |
-| P3 | 🔒 **AI Coach Chat** | 5 messages / month | Highest perceived value in the app; the taster cap is what makes it convert rather than sit unnoticed. |
+| P3 | 🔒 **AI Coach Chat** | 5 messages / month — **or one routine-drafting session**, which costs one unit however many turns it takes (shipped 2026-09-17, `docs/ai-coach-routine-drafting.md`) | Highest perceived value in the app; the taster cap is what makes it convert rather than sit unnoticed. Drafting a routine from a description shares this pool rather than raising a gate of its own: routine creation is the aha path (§3 Rule 1), so it stays free by rule. |
 | P4 | 🔒 **AI Period Recap** (week / month / quarter / year) | 1 per month | Cross-session scope (§4.3). |
 | P5 | 🔒 **AI Exercise Deep-Dive** | 1 per month | Cross-session scope. |
 | P9 | 🔒 **Fixed-weekday schedules** | Simple every-N-days cadence | Programming depth signals a committed lifter. |

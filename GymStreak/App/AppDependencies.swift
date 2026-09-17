@@ -527,6 +527,61 @@ final class AppDependencies: ObservableObject {
         HealthKitWorkoutManager()
     }
 
+    /// The app's one routines list ViewModel.
+    ///
+    /// Stored here, rather than created by the Routines tab alone, because a *second*
+    /// creation entry point exists since the AI routine draft
+    /// (docs/ai-coach-routine-drafting.md): the drafting sheet is opened from Coach Chat,
+    /// which is presented from `ContentView` and has no routines screen in scope, and it
+    /// must write through the very transaction the Create-Routine flow uses rather than a
+    /// parallel path of its own.
+    ///
+    /// **One instance, deliberately.** This ViewModel registers notification observers in
+    /// its initializer and does not unregister them, so building a throwaway one per
+    /// drafting sheet would leak a set of observers — and a second live instance would
+    /// mean two objects fetching routines and syncing them to the watch.
+    ///
+    /// `lazy` so it is still built on first use (the Routines tab, at launch) rather than
+    /// inside `AppDependencies.init`, where it would fetch before the container is fully
+    /// wired.
+    private(set) lazy var routinesViewModel: RoutinesViewModel = RoutinesViewModel(
+        routineRepository: routineRepository,
+        workoutSessionRepository: workoutSessionRepository,
+        watchSync: watchSync,
+        proEntitlements: proEntitlements,
+        paywalls: paywalls,
+        proactivePaywalls: proactivePaywalls,
+        funnelAttributes: funnelAttributes,
+        historyStoreGate: historyStoreGate,
+        calendarMirror: plannedWorkoutCalendarMirror,
+        workoutReminders: workoutReminders
+    )
+
+    /// One routine-drafting session. A factory rather than a stored property because the
+    /// session is per drafting session by design — it holds a `LanguageModelSession`
+    /// whose instructions are built for one reader's unit, and nothing about it should
+    /// outlive the sheet that used it. Constructing it is free: the model session itself
+    /// is not created until the first draft or prewarm.
+    func makeRoutineDraftService() -> any RoutineDrafting {
+        RoutineDraftService(availability: aiCoachAvailability)
+    }
+
+    /// The routine-drafting sheet's ViewModel, wired to the shared creation seam.
+    ///
+    /// It meters against `.coachChat` — the routine draft raises no new gate and gets no
+    /// new placement, because routine creation is the aha path (§3 Rule 1). It spends
+    /// **one unit per drafting session**, not one per message.
+    func makeRoutineDraftViewModel() -> RoutineDraftViewModel {
+        RoutineDraftViewModel(
+            allowanceGate: makeAICoachAllowanceGate(for: .coachChat),
+            drafting: makeRoutineDraftService(),
+            exerciseRepository: exerciseRepository,
+            routines: routinesViewModel,
+            paywalls: paywalls,
+            availability: aiCoachAvailability
+        )
+    }
+
     /// The free-tier gate for one metered AI surface (docs/pro-subscription.md
     /// §5e). A factory rather than a stored property because each surface gets
     /// its own gate and they are cheap, stateless compositions of app-lifetime
