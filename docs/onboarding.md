@@ -95,23 +95,35 @@ observable and the view model is read while the app root is being composed.
 
 ## Cover ordering
 
-Three things want the whole screen on a first launch. The order is **onboarding →
-Founder thank-you → AI Coach opt-in**, and it is decided in one place:
-`FirstRunCoverOrder.topmost(isOnboarding:isCelebratingFounder:shouldShowCoachOptIn:)`
+Four things want the whole screen on a first launch. The order is **onboarding →
+Founder thank-you → training-reminder offer → AI Coach opt-in**, and it is decided
+in one place: `FirstRunCoverOrder.topmost(isOnboarding:isCelebratingFounder:isOfferingReminders:shouldShowCoachOptIn:)`
 returns the first cover that is due, or `nil` for the tab bar. `ContentView`
-reads the three conditions in `body` — which is also what registers it as an
-observer of all three — and each of the three `.fullScreenCover`s binds to
+reads the four conditions in `body` — which is also what registers it as an
+observer of all four — and each of the four `.fullScreenCover`s binds to
 `firstRunCover == <its own case>`.
+
+The training-reminder offer (added 2026-09-09, `docs/workout-reminders.md`) sits
+third for two reasons. It **asks** for something, so it waits for the tour that
+explains what the app is and for the thank-you that carries good news — an ask
+never belongs between two pieces of good news. And it comes **before** the coach
+opt-in because it is about the core loop the tour has just described and reaches
+every device, while the coach is a peripheral feature only some hardware can run.
+It is raised at launch even while the tour is still on screen, and becomes topmost
+the moment the tour ends, which is the placement the retention lever depends on.
 
 **A single `FirstRunCover?` is why "exactly one cover" is structurally true.**
 The earlier shape was three hand-written suppression clauses
 (`isCelebratingFounder && !isOnboarding`, `shouldShowOptIn && !isCelebratingFounder
 && !isOnboarding`), which is an invariant that holds only as long as three
 expressions agree with each other, and which cannot be asked anything without a
-running SwiftUI hierarchy. `FirstRunCoverOrderTests` now walks all eight
-combinations of the three conditions.
+running SwiftUI hierarchy. `FirstRunCoverOrderTests` now walks all sixteen
+combinations of the four conditions.
 
-Three things about this are load-bearing and easy to break:
+Three things about this are load-bearing and easy to break (the reminder offer
+obeys all three: it is raised only by `presentIfDue()`, it records nothing until
+the user answers, and its own guard on `isPresenting` makes the write-back after
+an answer a no-op):
 
 - **The tour must never raise itself again.** `isPresenting` is seeded once and
   only ever goes true → false. If it could rise while the Founder cover is on
@@ -134,7 +146,8 @@ Three things about this are load-bearing and easy to break:
   fails to present: `FounderCelebrationCoordinator` writes only on dismissal
   (`presentIfDue()` may therefore be called while the tour is up — it raises its
   own flag, and the ordering keeps the screen off), the tour's flag is written
-  only when the tour ends, and the opt-in has no record to spend at all, because
+  only when the tour ends, the reminder offer records nothing until it is
+  answered, and the coach opt-in has no record to spend at all, because
   it re-reads `AICoachAvailability`/`AICoachPreferences` on every render. The
   order is recomputed from live conditions each time, so a cover that became due
   behind another one becomes topmost the moment the one above it goes away.

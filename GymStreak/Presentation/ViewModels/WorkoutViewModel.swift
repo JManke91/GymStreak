@@ -52,6 +52,15 @@ class WorkoutViewModel: ObservableObject {
             // the instance that owns no session must not clear the other's.
             guard currentSession != nil || oldValue != nil else { return }
             activeWorkout?.setWorkoutActive(currentSession != nil)
+            // Both edges matter, and both are the same call: starting a workout
+            // withdraws the pending training reminders (a notification the app
+            // has already handed to the system cannot be suppressed at delivery
+            // — removing the request is the only mechanism, see
+            // docs/workout-reminders.md), and ending one puts back whatever is
+            // still due. The refresh reads the flag written on the line above.
+            if let workoutReminders {
+                Task { await workoutReminders.refreshReminders() }
+            }
         }
     }
     @Published var elapsedTime: TimeInterval = 0
@@ -138,6 +147,11 @@ class WorkoutViewModel: ObservableObject {
     /// workout (docs/rating-prompt.md). Optional for the same reason
     /// `proactivePaywalls` is: unit-test instances have no app to report to.
     private let reviewPrompt: ReviewPromptCoordinator?
+
+    /// The training reminders, withdrawn while a session runs and rebuilt when
+    /// it ends (docs/workout-reminders.md). Optional for the same reason
+    /// `activeWorkout` is: unit-test instances have no notification centre.
+    private let workoutReminders: (any WorkoutReminderScheduling)?
     /// Optional for the same reason the two above are: unit-test instances have
     /// no purchase backend to report to.
     private let funnelAttributes: (any FunnelAttributeTracking)?
@@ -207,6 +221,7 @@ class WorkoutViewModel: ObservableObject {
         activeWorkout: (any ActiveWorkoutReporting)? = nil,
         proactivePaywalls: ProactivePaywallCoordinator? = nil,
         reviewPrompt: ReviewPromptCoordinator? = nil,
+        workoutReminders: (any WorkoutReminderScheduling)? = nil,
         funnelAttributes: (any FunnelAttributeTracking)? = nil,
         weightUnitPreference: WeightUnitPreferenceProviding? = nil,
         aiCoachCache: AICoachCaching? = nil,
@@ -225,6 +240,7 @@ class WorkoutViewModel: ObservableObject {
         self.activeWorkout = activeWorkout
         self.proactivePaywalls = proactivePaywalls
         self.reviewPrompt = reviewPrompt
+        self.workoutReminders = workoutReminders
         self.funnelAttributes = funnelAttributes
         self.weightUnitPreference = weightUnitPreference
         self.aiCoachCache = aiCoachCache ?? AICoachCache.shared

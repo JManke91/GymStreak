@@ -226,6 +226,25 @@ struct GymStreakApp: App {
                     // entitlement refresh above or the seeders.
                     await dependencies.funnelAttributes.reportCurrentState()
                 }
+                .task {
+                    guard !isUITesting else { return }
+                    // The training reminders (docs/workout-reminders.md), in
+                    // their own `.task` so neither waits on the other and
+                    // neither sits in front of the seeders.
+                    //
+                    // The offer is raised here even on the very first launch,
+                    // while the tour is still up: `FirstRunCoverOrder` orders it
+                    // behind the tour, so it simply becomes the topmost cover
+                    // the moment the tour ends — which is the placement this
+                    // lever depends on. Nothing is recorded until the user
+                    // answers, so an offer that never reaches the screen is
+                    // still owed.
+                    await dependencies.reminderOptIn.presentIfDue()
+                    // Rebuilt at launch as well as on every plan change, because
+                    // the window is dated: a day rolls over whether or not
+                    // anything in the app changed.
+                    await dependencies.workoutReminders.refreshReminders()
+                }
                 .onChange(of: scenePhase) { _, newPhase in
                     if newPhase == .active {
                         watchConnectivity.requestWorkoutQueueDrain()
@@ -259,6 +278,22 @@ struct GymStreakApp: App {
                             dependencies.plannedWorkoutCalendarMirror.reconcile(
                                 revalidatingCalendar: true
                             )
+                        }
+                        // The reminder window is dated, so it goes stale purely
+                        // by the clock — and this is also where an offer that a
+                        // rule suppressed, or a decline whose cooldown has since
+                        // elapsed, gets its next chance. Both are idempotent.
+                        //
+                        // Guarded like the launch hooks, and this one is not
+                        // optional: a UI-test run has an empty store and an
+                        // undetermined permission status, so the offer would
+                        // claim the screen on the first activation and take the
+                        // screenshot lane with it.
+                        if !isUITesting {
+                            Task {
+                                await dependencies.reminderOptIn.presentIfDue()
+                                await dependencies.workoutReminders.refreshReminders()
+                            }
                         }
                     }
                 }

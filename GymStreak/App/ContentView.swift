@@ -52,6 +52,11 @@ private struct ContentViewInternal: View {
     /// is, and ordered **above** it: a brand-new user has to learn what the app
     /// is before anything else can claim the screen (docs/onboarding.md).
     private let onboarding: OnboardingFlowViewModel
+    /// The training-reminder offer. Read here because this is where the first-run
+    /// covers are hosted, and it is ordered after the tour and the Founder
+    /// thank-you — an ask belongs behind whatever teaches and whatever reassures
+    /// (docs/workout-reminders.md).
+    private let reminderOptIn: WorkoutReminderOptInViewModel
 
     /// Observable singletons — @State so SwiftUI tracks their changes.
     @State private var preferences = AICoachPreferences.shared
@@ -71,6 +76,7 @@ private struct ContentViewInternal: View {
         self.proactivePaywalls = dependencies.proactivePaywalls
         self.founderCelebration = dependencies.founderCelebration
         self.onboarding = dependencies.onboarding
+        self.reminderOptIn = dependencies.reminderOptIn
         self.reviewPrompt = dependencies.reviewPrompt
         self._workoutViewModel = StateObject(wrappedValue: WorkoutViewModel(
             workoutSessionRepository: dependencies.workoutSessionRepository,
@@ -85,6 +91,7 @@ private struct ContentViewInternal: View {
             activeWorkout: dependencies.activeWorkout,
             proactivePaywalls: dependencies.proactivePaywalls,
             reviewPrompt: dependencies.reviewPrompt,
+            workoutReminders: dependencies.workoutReminders,
             funnelAttributes: dependencies.funnelAttributes,
             weightUnitPreference: dependencies.weightUnitPreference,
             historyStoreGate: dependencies.historyStoreGate
@@ -102,11 +109,15 @@ private struct ContentViewInternal: View {
         let isCelebratingFounder = founderCelebration.isPresenting
         // Same again for the first-run tour.
         let isOnboarding = onboarding.isPresenting
-        // The three covers that can claim a first launch resolve to exactly one
+        // And for the reminder offer, which the launch task raises while the
+        // tour is still up and which becomes topmost the moment it ends.
+        let isOfferingReminders = reminderOptIn.isPresenting
+        // The four covers that can claim a first launch resolve to exactly one
         // — or to none, which is the tab bar (docs/onboarding.md).
         let firstRunCover = FirstRunCoverOrder.topmost(
             isOnboarding: isOnboarding,
             isCelebratingFounder: isCelebratingFounder,
+            isOfferingReminders: isOfferingReminders,
             shouldShowCoachOptIn: shouldShowOptIn
         )
 
@@ -233,9 +244,22 @@ private struct ContentViewInternal: View {
         .fullScreenCover(isPresented: founderCelebrationBinding(isPresenting: firstRunCover == .founderCelebration)) {
             FounderCelebrationView()
         }
+        // The training-reminder offer (docs/workout-reminders.md). Third in the
+        // first-run order: it asks for something, so it waits for the tour that
+        // explains what the app is and for the thank-you that carries good news
+        // — but it comes before the coach opt-in, because it is about the core
+        // loop and reaches every device.
+        //
+        // It sells nothing and is deliberately not routed through the paywall
+        // seam. Ticket 02 removed an ask from exactly this moment; this must not
+        // reintroduce the same feeling, which is why the decline is a full-width
+        // control rather than a dimmed corner.
+        .fullScreenCover(isPresented: reminderOfferBinding(isPresenting: firstRunCover == .workoutReminders)) {
+            WorkoutReminderOptInView(viewModel: reminderOptIn)
+        }
         // AI Coach opt-in: shown once when Apple Intelligence is available
         // and the user has not yet completed or permanently dismissed opt-in.
-        // Last in the first-run order, behind both — and the one whose condition
+        // Last in the first-run order, behind all three — and the one whose condition
         // most often turns true *while* another cover is up, because Apple
         // Intelligence availability resolves asynchronously after launch. It is
         // not lost by that: it re-reads its own condition on every render and
@@ -288,6 +312,16 @@ private struct ContentViewInternal: View {
         Binding(
             get: { isPresenting },
             set: { if !$0 { onboarding.flowWasDismissed() } }
+        )
+    }
+
+    /// The reminder offer's presentation, with a dismissal reported back — which
+    /// is read as a decline, and costs no system permission. Nothing but the view
+    /// model raises it, so only a dismissal is written back.
+    private func reminderOfferBinding(isPresenting: Bool) -> Binding<Bool> {
+        Binding(
+            get: { isPresenting },
+            set: { if !$0 { reminderOptIn.offerWasDismissed() } }
         )
     }
 

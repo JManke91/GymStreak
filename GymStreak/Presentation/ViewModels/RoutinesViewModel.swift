@@ -85,6 +85,9 @@ class RoutinesViewModel: ObservableObject {
     /// the whole feature is off until the user opts in — the mirror checks that
     /// itself.
     private let calendarMirror: (any PlannedWorkoutCalendarMirroring)?
+    /// Optional for the same reason `calendarMirror` is: a unit-test instance
+    /// has no notification centre to schedule against.
+    private let workoutReminders: (any WorkoutReminderScheduling)?
 
     init(
         routineRepository: RoutineRepository,
@@ -96,6 +99,7 @@ class RoutinesViewModel: ObservableObject {
         funnelAttributes: (any FunnelAttributeTracking)? = nil,
         historyStoreGate: HistoryStoreGate = .unshared(),
         calendarMirror: (any PlannedWorkoutCalendarMirroring)? = nil,
+        workoutReminders: (any WorkoutReminderScheduling)? = nil,
         isGatingEnabled: Bool = ProGating.isEnabled
     ) {
         self.routineRepository = routineRepository
@@ -107,6 +111,7 @@ class RoutinesViewModel: ObservableObject {
         self.funnelAttributes = funnelAttributes
         self.historyStoreGate = historyStoreGate
         self.calendarMirror = calendarMirror
+        self.workoutReminders = workoutReminders
         self.isGatingEnabled = isGatingEnabled
         fetchRoutines()
         observeCloudKitChanges()
@@ -248,6 +253,7 @@ class RoutinesViewModel: ObservableObject {
         refreshLastPerformedDates()
         rebuildCardModels()
         reconcileCalendar()
+        refreshReminders()
     }
 
     func fetchRoutines() {
@@ -256,6 +262,7 @@ class RoutinesViewModel: ObservableObject {
         rebuildCardModels()
         syncRoutinesToWatch()
         reconcileCalendar()
+        refreshReminders()
     }
 
     /// Brings Apple Calendar in line with the plans this fetch just refreshed.
@@ -275,6 +282,23 @@ class RoutinesViewModel: ObservableObject {
     private func reconcileCalendar() {
         guard let calendarMirror else { return }
         Task { calendarMirror.reconcile() }
+    }
+
+    /// Brings the pending training reminders in line with the plans this fetch
+    /// just refreshed (docs/workout-reminders.md).
+    ///
+    /// **Hooked beside `reconcileCalendar()` and for the identical reason.**
+    /// Every path that can move a planned day — a workout finished here or on
+    /// the watch, a completion synced from another device, a plan edited or
+    /// cleared, a routine deleted — already ends in one of the two refreshes
+    /// above, and a refresh rebuilds the whole window from scratch, so the extra
+    /// passes cost a pending-requests read and nothing else.
+    ///
+    /// In a `Task` for the same reason too: it is off the routines list's
+    /// critical path, and it awaits the notification centre.
+    private func refreshReminders() {
+        guard let workoutReminders else { return }
+        Task { await workoutReminders.refreshReminders() }
     }
 
     /// Rebuilds the precomputed card models the list renders.

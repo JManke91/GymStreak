@@ -1,1 +1,4 @@
 - Die Einführungstour endet nicht mehr mit einem Abo-Angebot. Nach der letzten Folie geht es direkt in die App.
+- Neu: Trainingserinnerungen. Plane eine Routine und Gym Streak erinnert dich am Morgen jedes geplanten Trainings. Direkt nach der Tour bekommst du ein Angebot dafür — ein Nein kostet nichts und fragt iOS um gar nichts.
+- Die Erinnerungen sind streng begrenzt: höchstens eine pro Tag und drei pro Woche über alle Arten hinweg, und nie mitten im Training.
+- Neu: ein sanfter Anstoß, wenn du aus dem Rhythmus kommst. Vergeht ein geplantes Training ohne Eintrag, bekommst du am nächsten Morgen eine Erinnerung. Ohne Plan kommt eine nach vier Tagen ohne Workout und danach höchstens eine pro Woche. Ein abgeschlossenes Training hebt jede ausstehende Erinnerung auf.

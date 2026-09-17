@@ -2,7 +2,7 @@
 //  FirstRunCoverOrder.swift
 //  GymStreak
 //
-//  Which of the three first-launch full-screen covers is on screen.
+//  Which of the four first-launch full-screen covers is on screen.
 //  See docs/onboarding.md, "Cover ordering".
 //
 
@@ -10,12 +10,18 @@ import Foundation
 
 /// A screen that can claim the whole window on a first launch, declared in the
 /// order the user must meet them: the tour teaches what the app is, the Founder
-/// thank-you reassures whoever earned it, and the coach opt-in asks for a
-/// decision. Reversing any pair asks something of a user who does not yet know
-/// what they are being asked about.
+/// thank-you reassures whoever earned it, and then the two asks. Reversing any
+/// pair asks something of a user who does not yet know what they are being
+/// asked about — and good news belongs before either ask, never between them.
+///
+/// The reminder offer comes before the coach opt-in because it is about the core
+/// loop the tour has just described (train → log → see the number go up) and
+/// applies to every device, while the coach is a peripheral feature only some
+/// hardware can run (docs/workout-reminders.md).
 enum FirstRunCover: CaseIterable {
     case onboarding
     case founderCelebration
+    case workoutReminders
     case coachOptIn
 }
 
@@ -26,7 +32,7 @@ enum FirstRunCover: CaseIterable {
 /// `FirstRunCover?` cannot name two screens — rather than an invariant that
 /// holds only as long as three hand-written suppression clauses agree with each
 /// other. And the ordering becomes testable without a running SwiftUI
-/// hierarchy: `FirstRunCoverOrderTests` walks every combination of the three
+/// hierarchy: `FirstRunCoverOrderTests` walks every combination of the four
 /// conditions, which is what the host's inline `&& !isOnboarding` chain could
 /// never be asked.
 ///
@@ -45,15 +51,18 @@ enum FirstRunCoverOrder {
     /// - Parameters:
     ///   - isOnboarding: `OnboardingFlowViewModel.isPresenting`.
     ///   - isCelebratingFounder: `FounderCelebrationCoordinator.isPresenting`.
+    ///   - isOfferingReminders: `WorkoutReminderOptInViewModel.isPresenting`.
     ///   - shouldShowCoachOptIn: Apple Intelligence is available *and* the user
     ///     has neither completed nor permanently dismissed the opt-in.
     static func topmost(
         isOnboarding: Bool,
         isCelebratingFounder: Bool,
+        isOfferingReminders: Bool,
         shouldShowCoachOptIn: Bool
     ) -> FirstRunCover? {
         if isOnboarding { return .onboarding }
         if isCelebratingFounder { return .founderCelebration }
+        if isOfferingReminders { return .workoutReminders }
         if shouldShowCoachOptIn { return .coachOptIn }
         return nil
     }

@@ -193,6 +193,20 @@ final class AppDependencies: ObservableObject {
     /// instance the cover is built from so a dismissal is recorded once.
     let onboarding: OnboardingFlowViewModel
 
+    /// Keeps the pending training reminders equal to what the user's plans imply
+    /// (docs/workout-reminders.md). App-lifetime because four unrelated triggers
+    /// share it — a plan edited, a workout started or finished, the app coming
+    /// back to the foreground, and permission just granted — and because it owns
+    /// the frequency-cap ledger every reminder passes through.
+    let workoutReminders: WorkoutReminderScheduling
+
+    /// The one in-app screen that may raise the iOS notification prompt
+    /// (docs/workout-reminders.md). Held as the concrete type, like `onboarding`:
+    /// the app root binds a `.fullScreenCover` straight to its `@Observable`
+    /// `isPresenting`, and it must be the *same* instance the cover is built
+    /// from so an answer is recorded once.
+    let reminderOptIn: WorkoutReminderOptInViewModel
+
     /// Whether the muscle map still needs to explain that it is tappable
     /// (docs/muscle-map.md, "Discoverability"). App-lifetime and shared by both
     /// screens that show the card: the flag is mirrored in memory, so a second
@@ -350,6 +364,30 @@ final class AppDependencies: ObservableObject {
             // user who finishes the tour and never returns would otherwise be
             // recorded as a bail-out.
             funnelAttributes: funnelAttributes
+        )
+        // One store for both halves of the reminder feature — the offer's
+        // record and the frequency-cap ledger — shared by the scheduler that
+        // writes the ledger and the offer that writes the record.
+        let reminderRecord = WorkoutReminderStore()
+        let workoutReminders = UserNotificationWorkoutReminderScheduler(
+            routineRepository: routineRepository,
+            workoutSessionRepository: workoutSessionRepository,
+            record: reminderRecord,
+            // The same flag Rule 3 is enforced from everywhere else, so a
+            // reminder and a paywall are held to one definition of "in a
+            // workout".
+            activeWorkout: activeWorkout
+        )
+        self.workoutReminders = workoutReminders
+        self.reminderOptIn = WorkoutReminderOptInViewModel(
+            record: reminderRecord,
+            // The offer is the only place in the app allowed to raise the
+            // system notification prompt for this feature; the scheduler reads
+            // the status and never asks. Presentation sees the Domain
+            // projection, never `UNUserNotificationCenter` itself.
+            permission: UserNotificationReminderPermission(),
+            scheduler: workoutReminders,
+            activeWorkout: activeWorkout
         )
         self.muscleMapDiscovery = MuscleMapDiscoveryStore()
         self.aiAllowance = MonthlyAllowanceStore()

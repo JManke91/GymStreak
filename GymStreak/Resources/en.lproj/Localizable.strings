@@ -237,6 +237,16 @@
 "rest_timer.off" = "off";
 "notification.rest_timer.title" = "Rest Complete";
 "notification.rest_timer.body" = "Time to start your next set!";
+
+/* MARK: - Planned-session reminder (docs/workout-reminders.md) */
+"notification.planned_session.title" = "Training day";
+"notification.planned_session.body" = "A session is planned for today. Ready when you are.";
+"notification.planned_session.body_routine" = "%@ is planned for today. Ready when you are.";
+"notification.missed_session.title" = "Today works too";
+"notification.missed_session.body" = "Your planned session is still waiting. Training today counts just the same.";
+"notification.missed_session.body_routine" = "%@ is still waiting for you. Training today counts just the same.";
+"notification.dormancy.title" = "Up for a session?";
+"notification.dormancy.body" = "A short workout counts too. Pick a routine whenever it suits you.";
 "rest_timer.reminder.authorization_denied" = "Notifications are off. Keep GymStreak open for the rest-timer alert.";
 "rest_timer.reminder.alerts_unavailable" = "Rest-timer alerts are not enabled in your notification settings.";
 "rest_timer.reminder.failed" = "GymStreak couldn't schedule the rest-timer notification.";
@@ -1372,3 +1382,17 @@
 "routine.detail.muscle_map.a11y.region_sets" = "%1$@ %2$d sets planned";
 "routine.detail.muscle_map.a11y.belly_primary" = "%1$@, primary, %2$d sets planned";
 "routine.detail.muscle_map.a11y.belly_idle" = "%@, not planned";
+
+/* MARK: - Training-reminder offer (docs/workout-reminders.md) */
+"reminders.optin.eyebrow" = "REMINDERS";
+"reminders.optin.headline" = "Never miss a\ntraining day.";
+"reminders.optin.body" = "Gym Streak reminds you on the mornings you planned to train — and checks in if a few days pass without a workout.";
+"reminders.optin.benefit1.title" = "Only when it helps";
+"reminders.optin.benefit1.detail" = "On your planned days, or after a few days without training. Never right after a workout.";
+"reminders.optin.benefit2.title" = "One a day at most";
+"reminders.optin.benefit2.detail" = "And never more than three in a week — that limit is built in, not a setting.";
+"reminders.optin.benefit3.title" = "Never during a workout";
+"reminders.optin.benefit3.detail" = "Reminders stay quiet while you are training.";
+"reminders.optin.cta_primary" = "Remind me to train";
+"reminders.optin.cta_secondary" = "Not now";
+"reminders.optin.footer" = "iOS will ask you to confirm. You can turn notifications off again in Settings at any time.";

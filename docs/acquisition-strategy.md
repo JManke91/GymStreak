@@ -255,17 +255,16 @@ is still zero.
 
 | Order | # | Lever | Tier | Effort | Moves | Status |
 |---|---|---|---|---|---|---|
-| 1 | 13 | **Re-engagement + streak notifications** | **P0** | 2–3 days | **Return rate** | 🎫 ticket cut 2026-09-09, split in two — `.scratch/acquisition-phase-b/issues/03` + `04` |
-| 2 | 5 | In-app sharing of a workout | **P1** | 2–3 days | Web-Referrer, virality | ⬜ not started — **un-gated from #4**, see §4.5 |
-| 3 | 15 | **Decide the app name** (rename or commit) | **P1 / decision** | ~1 day to decide | Brand-query traffic, word-of-mouth | ⬜ **not decided — gates #4 and #6** |
-| 4 | 4 | Landing page + custom domain | **P1** | 1–2 weeks | Unlocks every off-store channel | ⬜ not started — blocked on #15 |
-| 5 | 6 | Community presence (Reddit et al.) | **P1** | Ongoing | Downloads → velocity → ranking | ⬜ not started — blocked on #15 |
-| 6 | 14 | **Lifetime / one-time purchase option** | **P1 / decision** | ~1 day to build | Revenue per converting user | ⬜ **needs a Monetization Gate discussion first** |
-| 7 | 2 | Storefront metadata localization, steps 2–3 | **P2** | 1–2 days/locale | Keyword surface | ⬜ gated on the first search-term report |
-| 8 | 7 | In-App Events | **P2** | ~1 day/event | Browse + Search surfaces | ⬜ not started |
-| 9 | 8 | Custom Product Pages | **P2** | ~1 day | Conversion on off-store traffic | ⬜ not started — follows #4 and #6 |
-| 10 | 9 | Full app localization, 2–3 markets | **P3** | 1–2 weeks/language | Keyword surface + market fit | ⬜ blocked on `.scratch/i18n-foundation/` |
-| 11 | 10 | Apple Search Ads | **P3 / deferred** | Money | Impressions, and keyword data | ⬜ **deferred until #13 moves the return rate** — see §4.10 |
+| 1 | 5 | In-app sharing of a workout | **P1** | 2–3 days | Web-Referrer, virality | ⬜ not started — **un-gated from #4**, see §4.5 |
+| 2 | 15 | **Decide the app name** (rename or commit) | **P1 / decision** | ~1 day to decide | Brand-query traffic, word-of-mouth | ⬜ **not decided — gates #4 and #6** |
+| 3 | 4 | Landing page + custom domain | **P1** | 1–2 weeks | Unlocks every off-store channel | ⬜ not started — blocked on #15 |
+| 4 | 6 | Community presence (Reddit et al.) | **P1** | Ongoing | Downloads → velocity → ranking | ⬜ not started — blocked on #15 |
+| 5 | 14 | **Lifetime / one-time purchase option** | **P1 / decision** | ~1 day to build | Revenue per converting user | ⬜ **needs a Monetization Gate discussion first** |
+| 6 | 2 | Storefront metadata localization, steps 2–3 | **P2** | 1–2 days/locale | Keyword surface | ⬜ gated on the first search-term report |
+| 7 | 7 | In-App Events | **P2** | ~1 day/event | Browse + Search surfaces | ⬜ not started |
+| 8 | 8 | Custom Product Pages | **P2** | ~1 day | Conversion on off-store traffic | ⬜ not started — follows #4 and #6 |
+| 9 | 9 | Full app localization, 2–3 markets | **P3** | 1–2 weeks/language | Keyword surface + market fit | ⬜ blocked on `.scratch/i18n-foundation/` |
+| 10 | 10 | Apple Search Ads | **P3 / deferred** | Money | Impressions, and keyword data | ⬜ **deferred until #13 moves the return rate** — see §4.10 |
 
 ### Shipped
 
@@ -273,9 +272,10 @@ is still zero.
 |---|---|---|---|
 | 1 | Rating prompt in-app | **P0** | ✅ **shipped 2026-09-06** — `docs/rating-prompt.md` |
 | 3 | Niche keyword repositioning (Watch + privacy) | **P0** | ✅ **shipped 2026-09-06** — both fields entered in ASC, rides **1.1.16** (`marketing/app-store-connect-actions.md`). Confirmed not yet live, §1.3 |
-| 2 | Storefront metadata localization, step 1 | **P0** | ✅ **shipped 2026-09-09** — en-GB + en-AU localizations entered in ASC (`marketing/app-store-connect-actions.md` §7). Steps 2–3 are row 7 above |
+| 2 | Storefront metadata localization, step 1 | **P0** | ✅ **shipped 2026-09-09** — en-GB + en-AU localizations entered in ASC (`marketing/app-store-connect-actions.md` §7). Steps 2–3 are row 6 above |
 | 12 | **Remove the paywall from first-run onboarding** | **P0** | ✅ **shipped 2026-09-09** — `PaywallPlacement.onboarding`, the tour's offer step and its paywall host are deleted; a fresh install reaches the tab bar without meeting a paywall. §4.12, `docs/onboarding.md` |
 | 11 | **Funnel instrumentation** (anonymous RC subscriber attributes) | **P0** | ✅ **shipped 2026-09-09** — four bucketed subscriber attributes on every install; `docs/funnel-instrumentation.md`. Every chart below is now segmentable, and filterable to `buildChannel = appstore` |
+| 13 | **Re-engagement notifications** | **P0** | ✅ **shipped 2026-09-16** — planned-session reminder + permission seam (slice 1, 2026-09-09), then the missed-session nudge with a dormancy fallback (slice 2), all under one cap. §4.13, `docs/workout-reminders.md`. §6's "Ever launched twice" rows are the metric now under test |
 
 Status vocabulary: ⬜ not started · 🎫 ticket cut, not started · 🚧 in progress · ✅ shipped (date) ·
 ❌ dropped (with the reason in the §4 entry).
@@ -290,8 +290,8 @@ invalidated — #1–#3 remain correct and stay committed — but everything unb
 
 ## 4. How to act on each
 
-**Entry order:** §4.11–§4.15 come first because they are the current Phase B work and the top five
-rows of the §3 table. Entries §4.1–§4.10 follow in stable-ID order. Each of §4.11–§4.15 is written
+**Entry order:** §4.11–§4.15 come first because they are the Phase B work and the levers around
+it — #11–#13 are now in the Shipped table, #14 and #15 are open rows. Entries §4.1–§4.10 follow in stable-ID order. Each of §4.11–§4.15 is written
 to be **extractable as a ticket without further design work** — goal, seams, acceptance criteria and
 (where it applies) the Monetization Gate verdict are all stated. Run `/to-tickets` against them when
 starting the phase; the granularity question is whether #13 splits into two slices, not whether the
@@ -403,25 +403,30 @@ it once #11's `onboardingCompleted` attribute reports where people actually bail
 watch target is untouched. `monetization-strategy.md` §8/§10, `docs/pro-subscription.md` §5a and
 `docs/onboarding.md` were updated in the same change.
 
-### 13. Re-engagement and streak notifications (P0, 2–3 days)
+### 13. Re-engagement notifications (P0)
 
-**🎫 Tickets cut 2026-09-09** as `.scratch/acquisition-phase-b/issues/03` (planned-session reminder
-+ the permission seam) and `04` (missed-session nudge with a dormancy fallback). **Two statements
-below were overridden during the breakdown, on evidence from the code. They are corrected here
-rather than silently left to mislead; the full reasoning is in the two tickets, and this entry gets
-rewritten in place when they land.**
+**Shipped 2026-09-16**, in two slices. Slice 1 (2026-09-09, `.scratch/acquisition-phase-b/issues/03`):
+the planned-session reminder, the in-app permission seam, the notification abstraction, the
+`AppDependencies` wiring and the frequency cap every reminder kind passes through. Slice 2
+(2026-09-16, `04`): the missed-session nudge and its dormancy fallback, added as triggers under that
+same cap. **`docs/workout-reminders.md` is the feature doc**; what follows here is the strategy
+view, rewritten to what actually shipped.
 
-1. **"Ask after the first completed workout" is wrong for this lever.** The population it exists for
+Two statements this entry originally made were overridden during the breakdown, on evidence from the
+code, and have been rewritten in place rather than left to mislead:
+
+1. **"Ask after the first completed workout" was wrong for this lever.** The population it exists for
    is §1a's 89%, most of whom never start a workout. Gating the ask behind a completed workout means
-   the notification never reaches anyone who needs it. **The ask goes right after the tour, behind an
-   in-app soft pre-prompt** — only a yes triggers the iOS system prompt, so a decline costs no
+   the notification never reaches anyone who needs it. **The ask ships right after the tour, behind
+   an in-app soft pre-prompt** — only a yes triggers the iOS system prompt, so a decline costs no
    permission. The rest timer's existing lazy mid-workout request is left exactly as it is.
-2. **There is no daily streak to be "at risk", so slice 2 is not a streak nudge.** The only streak
-   in the codebase is `HistoryStatsService.streakWeeks` — *consecutive weeks* containing a finished
-   workout — which has no crisp lapse moment, and a second daily definition would contradict the
-   Verlauf tab. Slice 2 is instead **a missed-planned-session nudge with a dormancy fallback**: the
-   cadence trigger alone requires a `RoutineSchedule`, which the launch-once population does not
-   have, so it would fire only for users who least need it.
+2. **There is no daily streak to be "at risk", so the "streak-at-risk nudge" this entry described
+   was never built.** The only streak in the codebase is `HistoryStatsService.streakWeeks` —
+   *consecutive weeks* containing a finished workout — which has no crisp lapse moment, and a second
+   daily definition would put a different number in the notification than the Verlauf tab shows. What
+   shipped instead is **a missed-planned-session nudge with a dormancy fallback**: a schedule-based
+   trigger alone requires a `RoutineSchedule`, which the launch-once population does not have (the
+   seeded starter routine is unplanned), so on its own it would fire only for users who least need it.
 
 
 **Why:** this is the largest single hole in the product. **The only `UNUserNotificationCenter` use
@@ -431,19 +436,38 @@ Gym Streak.** A streak is the most notification-native mechanic that exists, the
 it, and it is doing no work at all. §1a says the problem is that people do not come back; this is
 the only lever on this page that *asks* them to.
 
-**What to build:**
-- **A planned-session reminder.** The app already has weekday scheduling — `PaywallPlacement`
-  carries a `weekdaySchedule` case, so the planning data exists. Fire on the morning of a planned
-  training day.
-- **A streak-at-risk nudge.** One notification when a streak the user has actually built is about to
-  lapse. Never on day one of no activity, and never to someone with no streak to lose.
-- **A hard cap on frequency**, decided in the ticket and written into the code, not left to
-  judgement later. This is the mechanism most able to damage §10's App Store-rating guardrail.
+**What is built:**
+- ✅ **A planned-session reminder.** One notification at 08:00 local on the morning of each planned
+  training day, for both schedule shapes — the `.weekdays` bitmask and the `.everyNDays` cadence,
+  the latter read through `WorkoutPlanningService.cadenceAnchor` so the reminder and the Verlauf
+  day-strip can never disagree about which day is planned. One reminder per *day*, not per routine.
+- ✅ **A missed-session nudge.** The morning after a planned day on which nothing was logged —
+  any workout counts, not only the planned routine — one nudge ("still waiting, today works just as
+  well"), never guilt-based.
+- ✅ **A dormancy fallback**, for users with **no active plan** only: a nudge 4 days after the last
+  completed workout (or after first launch, for someone who never trained), a second one a week
+  later, then silence until they train. A user with a plan never gets it — they are not dormant four
+  days after a weekly session, and the planned reminder already speaks to them.
+- Both nudges are **scheduled ahead of time** and withdrawn by the refresh every completed workout
+  triggers — a nudge scheduled only once the lapse is observed would need the user to open the app,
+  which is exactly what this population does not do.
+- ✅ **A hard cap on frequency**, written into the code as named constants in one file
+  (`ReminderFrequencyPolicy`): at most **one reminder per day** and **three per rolling seven days**,
+  across every reminder kind. The nudges were added as triggers under this cap, not as a second one,
+and they take only the room planned-session reminders leave — a speculative nudge never displaces a
+reminder about a session the user actually planned. This is the
+  mechanism most able to damage §10's App Store-rating guardrail, which is why it is a policy type a
+  reviewer can read in full rather than an emergent property of the scheduling logic.
 
-**Where to ask for permission — and this decides whether the lever works at all.** Not at launch,
-and not during the tour. Ask **after the first completed workout**, when the app has earned the
-request and the user has something worth being reminded about. A permission prompt on first launch,
-in the session 89% never return from, converts a retention lever into another reason to leave.
+**Where the app asks for permission — and this decides whether the lever works at all.** Not at
+launch, not cold, and not during the tour. **The tour ends → the app opens → one in-app screen offers
+"remind me to train" → only a yes raises the iOS system prompt.** The soft pre-prompt is not
+decoration: a denial of the system prompt is permanent and unrecoverable in-app, so the app gets
+exactly one ask, and spending it cold in the session 89% never return from is how this lever fails
+silently. A no to the *in-app* screen costs no permission at all, which is what makes asking again
+possible — it is offered at most twice, with a 14-day cooldown between. A user who already granted
+permission via the rest timer is never asked again; their reminders simply start working. Rationale
+and the rejected alternatives: `docs/workout-reminders.md`.
 
 **Rules that apply:** never during an active workout, never on the watch, never adjacent to a
 paywall (`monetization-strategy.md` §3 Rule 3 — the same constraint `docs/rating-prompt.md` obeys).
@@ -463,15 +487,20 @@ Monetization verdict — workout and streak reminders
                 and a user who does not return is not a Pro prospect. Free is not a concession here.
 ```
 
-**Splitting:** if `/to-tickets` wants two slices, the seam is *planned-session reminder* (needs the
-schedule data) and *streak-at-risk nudge* (needs the streak calculation) — the notification
-plumbing, permission flow and frequency cap are shared and belong in whichever ships first.
+**Splitting:** it split in two, and the seam held. Slice 1 (`03`) took the *planned-session
+reminder* plus all the shared plumbing — the notification abstraction, the `AppDependencies` wiring,
+the permission flow and the frequency cap. Slice 2 (`04`) took the *missed-session and dormancy nudge*
+and added triggers to that cap rather than any second mechanism.
 
 **Acceptance:** a user with a planned Tuesday session and notification permission receives exactly
-one reminder that Tuesday morning; a user with no streak and no plan receives nothing; the
-permission prompt cannot appear before a completed workout; the watch is untouched.
+one reminder that Tuesday morning, and — if nothing is logged that Tuesday — one nudge the next
+morning; a user with no plan and no recent workout receives a dormancy nudge after 4 days and at most
+one a week; a user with no plan and recent activity receives nothing; **the iOS permission prompt
+cannot appear except from an explicit yes on the in-app offer** — a decline, a suppressed offer and
+every scheduling pass all leave the system unasked; the watch is untouched.
 
-**Success:** §6's second-launch row moves. This is the lever that row exists to measure.
+**Success:** §6's second-launch row moves. This is the lever that row exists to measure — and as of
+2026-09-16 it is the metric under test.
 
 ### 14. Lifetime / one-time purchase option (P1 — discussion before build)
 
@@ -498,7 +527,7 @@ Pro, stop and discuss before building.** What follows is the case to discuss, no
 yearly does. That is a confusing ladder — the cheaper commitment is the riskier one to try. Either
 give monthly a trial or drop the monthly tier.
 
-**Sequencing:** this is row 7, not row 1, deliberately. With a 15% second-launch rate there is
+**Sequencing:** this is row 5, not row 1, deliberately. With a 15% second-launch rate there is
 almost nobody reaching a paywall for packaging to act on. Fix the funnel first; then this is worth a
 morning.
 
@@ -812,6 +841,7 @@ version has actually shipped.
 Funnel instrumentation (#11) first, because it is the prerequisite for reading everything after it.
 Then remove the onboarding paywall (#12), a one-day change on the exact session where users are
 lost. Then re-engagement and streak notifications (#13), the only lever that asks a user to return.
+**All three shipped by 2026-09-16; Phase B's remaining work is reading, not building.**
 **Do not start Phase C until §6's second-launch row has been read at least once after #13 ships** —
 that reading is the whole point of Phase B, and Phase C's cost is only justified if the funnel
 below it holds.
@@ -847,8 +877,8 @@ reach is the *second* broken multiplier, not the only one. Revenue remains last.
 
 | Metric | Now (2026-09-09) | First milestone | Where |
 |---|---|---|---|
-| **Ever launched twice** (released builds) | **15%** (13 of 87) | **30%** | RC customer records, `last_seen_at` > `first_seen_at` — method in §1a |
-| **Ever launched twice, US only** | **0 of 38** | **any non-zero number** | Same, filtered to US — the read with no simulator noise |
+| **Ever launched twice** (released builds) — **under test since #13 (2026-09-16)** | **15%** (13 of 87) | **30%** | RC customer records, `last_seen_at` > `first_seen_at` — method in §1a. Read it against releases carrying #13 |
+| **Ever launched twice, US only** — **under test since #13** | **0 of 38** | **any non-zero number** | Same, filtered to US — the read with no simulator noise |
 | Customers seen in the last 7 days | **6** (one a dev device) | 25 | RC → Active Customers |
 | **Where they leave** | **measurable from 2026-09-09** — no reading yet | a first reading | RC → segment on `onboardingCompleted` / `routinesCreated` / `workoutsCompleted`, filtered to `buildChannel = appstore` (`docs/funnel-instrumentation.md`) |
 | Completed ≥1 workout | **measurable from 2026-09-09** — no reading yet | 40% of installs | RC → `workoutsCompleted` ≠ `"0"`, same filter |

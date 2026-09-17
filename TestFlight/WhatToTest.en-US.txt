@@ -1,1 +1,4 @@
 - The first-run tour no longer ends with a subscription offer. A fresh install goes straight from the last slide into the app.
+- New: training reminders. Plan a routine and Gym Streak can remind you on the morning of each planned session. Right after the tour you get one screen offering it — saying no costs nothing and asks iOS for nothing.
+- Reminders are strictly limited: at most one a day and three a week across every kind, and never while you are in the middle of a workout.
+- New: a gentle nudge when you drift. If a planned session passes with nothing logged, you get one reminder the next morning. Without a plan, you get one after four days without a workout and at most one a week after that. Finishing a workout cancels any pending nudge.

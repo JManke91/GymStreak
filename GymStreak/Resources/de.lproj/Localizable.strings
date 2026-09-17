@@ -237,6 +237,16 @@
 "rest_timer.off" = "aus";
 "notification.rest_timer.title" = "Pause beendet";
 "notification.rest_timer.body" = "Zeit für deinen nächsten Satz!";
+
+/* MARK: - Erinnerung an geplantes Training (docs/workout-reminders.md) */
+"notification.planned_session.title" = "Trainingstag";
+"notification.planned_session.body" = "Für heute ist ein Training geplant. Wann immer du bereit bist.";
+"notification.planned_session.body_routine" = "%@ steht heute an. Wann immer du bereit bist.";
+"notification.missed_session.title" = "Heute passt auch";
+"notification.missed_session.body" = "Dein geplantes Training wartet noch. Heute zu trainieren zählt genauso.";
+"notification.missed_session.body_routine" = "%@ wartet noch auf dich. Heute zu trainieren zählt genauso.";
+"notification.dormancy.title" = "Lust auf eine Einheit?";
+"notification.dormancy.body" = "Auch ein kurzes Training zählt. Such dir eine Routine aus, wann es dir passt.";
 "rest_timer.reminder.authorization_denied" = "Mitteilungen sind deaktiviert. Lass GymStreak für den Pausentimer-Hinweis geöffnet.";
 "rest_timer.reminder.alerts_unavailable" = "Pausentimer-Hinweise sind in deinen Mitteilungseinstellungen nicht aktiviert.";
 "rest_timer.reminder.failed" = "GymStreak konnte die Pausentimer-Mitteilung nicht planen.";
@@ -1363,3 +1373,17 @@
 "routine.detail.muscle_map.a11y.region_sets" = "%1$@ %2$d Sätze geplant";
 "routine.detail.muscle_map.a11y.belly_primary" = "%1$@, primär, %2$d Sätze geplant";
 "routine.detail.muscle_map.a11y.belly_idle" = "%@, nicht geplant";
+
+/* MARK: - Angebot für Trainingserinnerungen (docs/workout-reminders.md) */
+"reminders.optin.eyebrow" = "ERINNERUNGEN";
+"reminders.optin.headline" = "Verpass keinen\nTrainingstag.";
+"reminders.optin.body" = "Gym Streak erinnert dich an den Morgen, an denen du Training geplant hast — und meldet sich, wenn ein paar Tage ohne Workout vergehen.";
+"reminders.optin.benefit1.title" = "Nur, wenn es hilft";
+"reminders.optin.benefit1.detail" = "An deinen geplanten Tagen oder nach ein paar Tagen ohne Training. Nie direkt nach einem Workout.";
+"reminders.optin.benefit2.title" = "Höchstens eine pro Tag";
+"reminders.optin.benefit2.detail" = "Und nie mehr als drei pro Woche — das Limit ist fest eingebaut, keine Einstellung.";
+"reminders.optin.benefit3.title" = "Nie während des Trainings";
+"reminders.optin.benefit3.detail" = "Während du trainierst, bleiben Erinnerungen still.";
+"reminders.optin.cta_primary" = "Erinnere mich ans Training";
+"reminders.optin.cta_secondary" = "Jetzt nicht";
+"reminders.optin.footer" = "iOS fragt dich anschließend um Bestätigung. Du kannst Mitteilungen jederzeit in den Einstellungen wieder ausschalten.";

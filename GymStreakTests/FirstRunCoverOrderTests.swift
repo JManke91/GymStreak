@@ -2,12 +2,12 @@
 //  FirstRunCoverOrderTests.swift
 //  GymStreakTests
 //
-//  The order of the three screens that can claim a first launch
+//  The order of the four screens that can claim a first launch
 //  (docs/onboarding.md, "Cover ordering").
 //
 //  Two things carry the ticket. **Exactly one cover, in one order**: every
-//  combination of the three conditions resolves to the first one that is due,
-//  onboarding → Founder thank-you → coach opt-in. And **nothing is dropped by
+//  combination of the four conditions resolves to the first one that is due,
+//  onboarding → Founder thank-you → reminder offer → coach opt-in. And **nothing is dropped by
 //  being suppressed**: a condition that turns true while another cover is up —
 //  the coach opt-in above all, whose Apple Intelligence availability resolves
 //  asynchronously after launch — surfaces on its own afterwards, with nothing
@@ -32,14 +32,17 @@ struct FirstRunCoverOrderTests {
     @Test("The tour comes first, whatever else is due")
     func onboardingWinsOverEverything() {
         for founder in [true, false] {
+            for reminders in [true, false] {
             for optIn in [true, false] {
                 #expect(
                     FirstRunCoverOrder.topmost(
                         isOnboarding: true,
                         isCelebratingFounder: founder,
+                        isOfferingReminders: reminders,
                         shouldShowCoachOptIn: optIn
                     ) == .onboarding
                 )
+            }
             }
         }
     }
@@ -50,6 +53,7 @@ struct FirstRunCoverOrderTests {
             FirstRunCoverOrder.topmost(
                 isOnboarding: false,
                 isCelebratingFounder: true,
+                isOfferingReminders: true,
                 shouldShowCoachOptIn: true
             ) == .founderCelebration
         )
@@ -61,6 +65,7 @@ struct FirstRunCoverOrderTests {
             FirstRunCoverOrder.topmost(
                 isOnboarding: false,
                 isCelebratingFounder: false,
+                isOfferingReminders: false,
                 shouldShowCoachOptIn: true
             ) == .coachOptIn
         )
@@ -72,6 +77,7 @@ struct FirstRunCoverOrderTests {
             FirstRunCoverOrder.topmost(
                 isOnboarding: false,
                 isCelebratingFounder: false,
+                isOfferingReminders: false,
                 shouldShowCoachOptIn: false
             ) == nil
         )
@@ -81,21 +87,28 @@ struct FirstRunCoverOrderTests {
     func everyCombinationNamesOneCover() {
         for onboarding in [true, false] {
             for founder in [true, false] {
-                for optIn in [true, false] {
-                    let expected: FirstRunCover? =
-                        onboarding ? .onboarding
-                        : founder ? .founderCelebration
-                        : optIn ? .coachOptIn
-                        : nil
+                for reminders in [true, false] {
+                    for optIn in [true, false] {
+                        let expected: FirstRunCover? =
+                            onboarding ? .onboarding
+                            : founder ? .founderCelebration
+                            : reminders ? .workoutReminders
+                            : optIn ? .coachOptIn
+                            : nil
 
-                    #expect(
-                        FirstRunCoverOrder.topmost(
-                            isOnboarding: onboarding,
-                            isCelebratingFounder: founder,
-                            shouldShowCoachOptIn: optIn
-                        ) == expected,
-                        "onboarding: \(onboarding), founder: \(founder), optIn: \(optIn)"
-                    )
+                        #expect(
+                            FirstRunCoverOrder.topmost(
+                                isOnboarding: onboarding,
+                                isCelebratingFounder: founder,
+                                isOfferingReminders: reminders,
+                                shouldShowCoachOptIn: optIn
+                            ) == expected,
+                            """
+                            onboarding: \(onboarding), founder: \(founder), \
+                            reminders: \(reminders), optIn: \(optIn)
+                            """
+                        )
+                    }
                 }
             }
         }
@@ -113,6 +126,7 @@ struct FirstRunCoverOrderTests {
             FirstRunCoverOrder.topmost(
                 isOnboarding: viewModel.isPresenting,
                 isCelebratingFounder: false,
+                isOfferingReminders: false,
                 shouldShowCoachOptIn: true
             ) == .onboarding
         )
@@ -124,6 +138,7 @@ struct FirstRunCoverOrderTests {
             FirstRunCoverOrder.topmost(
                 isOnboarding: viewModel.isPresenting,
                 isCelebratingFounder: false,
+                isOfferingReminders: false,
                 shouldShowCoachOptIn: true
             ) == .coachOptIn
         )
@@ -143,6 +158,7 @@ struct FirstRunCoverOrderTests {
             FirstRunCoverOrder.topmost(
                 isOnboarding: viewModel.isPresenting,
                 isCelebratingFounder: coordinator.isPresenting,
+                isOfferingReminders: false,
                 shouldShowCoachOptIn: false
             ) == .onboarding,
             "but the tour is what the user sees"
@@ -156,6 +172,7 @@ struct FirstRunCoverOrderTests {
             FirstRunCoverOrder.topmost(
                 isOnboarding: viewModel.isPresenting,
                 isCelebratingFounder: coordinator.isPresenting,
+                isOfferingReminders: false,
                 shouldShowCoachOptIn: false
             ) == .founderCelebration
         )
@@ -171,6 +188,7 @@ struct FirstRunCoverOrderTests {
             FirstRunCoverOrder.topmost(
                 isOnboarding: viewModel.isPresenting,
                 isCelebratingFounder: coordinator.isPresenting,
+                isOfferingReminders: false,
                 // Available and undecided from the first launch on — the opt-in
                 // waits its turn without being asked to.
                 shouldShowCoachOptIn: true
@@ -197,6 +215,7 @@ struct FirstRunCoverOrderTests {
             FirstRunCoverOrder.topmost(
                 isOnboarding: firstLaunch.isPresenting,
                 isCelebratingFounder: false,
+                isOfferingReminders: false,
                 shouldShowCoachOptIn: false
             ) == .onboarding
         )
@@ -210,6 +229,7 @@ struct FirstRunCoverOrderTests {
             FirstRunCoverOrder.topmost(
                 isOnboarding: relaunched.isPresenting,
                 isCelebratingFounder: false,
+                isOfferingReminders: false,
                 shouldShowCoachOptIn: false
             ) == nil
         )
@@ -227,6 +247,7 @@ struct FirstRunCoverOrderTests {
             FirstRunCoverOrder.topmost(
                 isOnboarding: relaunched.isPresenting,
                 isCelebratingFounder: true,
+                isOfferingReminders: true,
                 shouldShowCoachOptIn: true
             ) == .onboarding
         )

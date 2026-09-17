@@ -63,6 +63,20 @@ final class SwiftDataWorkoutSessionRepository: WorkoutSessionRepository {
         return dates
     }
 
+    func lastCompletedWorkoutStartDate() -> Date? {
+        var descriptor = FetchDescriptor<WorkoutSession>(
+            predicate: #Predicate { $0.endTime != nil },
+            sortBy: [SortDescriptor(\.startTime, order: .reverse)]
+        )
+        descriptor.fetchLimit = 1
+        do {
+            return try modelContext.fetch(descriptor).first?.startTime
+        } catch {
+            print("Error fetching last completed workout date: \(error)")
+            return nil
+        }
+    }
+
     func findSession(id: UUID, healthKitWorkoutId: UUID?) -> WorkoutSession? {
         let descriptor = FetchDescriptor<WorkoutSession>(
             predicate: #Predicate { session in
