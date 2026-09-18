@@ -16,19 +16,25 @@ extension GroundedRoutineDraft {
 
     /// The draft as the create-routine transaction's input.
     ///
-    /// `order` is assigned from the draft's own position, not from anything the model
-    /// produced: the schema asks for the exercises in the order the description lists
-    /// them, and this is where that ordering becomes the routine's ordering. The sets are
-    /// identical by construction — a drafted exercise carries one set scheme, repeated —
-    /// and ticket 05 is what makes them differ.
+    /// **Only `resolvedExercises` reach it.** A row the person has not yet pointed at a
+    /// library exercise has no library exercise to write, and this app does not invent
+    /// one — it is left out, and the sheet says so before Create is tapped.
+    ///
+    /// `order` is assigned from position among the resolved exercises, not from anything
+    /// the model produced: the schema asks for the exercises in the order the description
+    /// lists them, and this is where that ordering becomes the routine's ordering — with
+    /// the gaps left by unresolved rows closed up. The sets are identical by construction
+    /// — a drafted exercise carries one set scheme, repeated — and ticket 05 is what makes
+    /// them differ.
     ///
     /// Alternatives and rep-range goals are deliberately left empty. Nothing in a typed
     /// description expresses them, and inventing either would be the app guessing on the
     /// person's behalf at the exact moment it writes to their store.
     func pendingExercises() -> [PendingRoutineExercise] {
-        exercises.enumerated().map { index, drafted in
-            PendingRoutineExercise(
-                exercise: drafted.exercise,
+        resolvedExercises.enumerated().compactMap { index, drafted in
+            guard let exercise = drafted.exercise else { return nil }
+            return PendingRoutineExercise(
+                exercise: exercise,
                 sets: (0..<drafted.setCount).map { order in
                     ExerciseSet(
                         reps: drafted.reps,

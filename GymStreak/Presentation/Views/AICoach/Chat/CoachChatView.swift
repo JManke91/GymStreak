@@ -115,7 +115,12 @@ private struct CoachChatViewInternal: View {
             // unit that bought nothing.
             routineDraftViewModel.sheetWasDismissed()
         }) {
-            RoutineDraftSheet(viewModel: routineDraftViewModel)
+            RoutineDraftSheet(
+                viewModel: routineDraftViewModel,
+                // Forced here rather than in `body`: the shared library ViewModel fetches
+                // on construction, and nothing needs it until a drafting sheet is open.
+                exercisesViewModel: dependencies.exercisesViewModel
+            )
         }
         // In-flight streams are cancelled by the presenting fullScreenCover's
         // onDismiss (ContentView) — not here, so pushing settings on top of the

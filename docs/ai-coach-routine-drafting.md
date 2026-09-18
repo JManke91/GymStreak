@@ -9,9 +9,10 @@ from one they built by hand. They tap **Discard** and nothing was ever written.
 **Target:** iOS only. FoundationModels does not exist on watchOS; the watch receives the finished
 routine through the ordinary sync path with no change of its own.
 
-**Status:** ticket 01 of `.scratch/ai-coach-create-routine/` — the tracer bullet. Ticket 02 makes
-unmatched names resolvable, 03 makes the draft editable, 04 lets the conversation ask questions
-back, 05 makes the sets richer.
+**Status:** tickets 01–02 of `.scratch/ai-coach-create-routine/`. 01 was the tracer bullet; 02 made
+an exercise name the library could not place into a row the person can answer — see §6a and §9.
+Ticket 03 makes the draft editable, 04 lets the conversation ask questions back, 05 makes the sets
+richer.
 
 ---
 
@@ -44,16 +45,20 @@ Two consequences that are load-bearing rather than stylistic:
 | Layer | File | What it owns |
 |---|---|---|
 | Domain/Models | `AICoach/RoutineDraftOutput.swift` | the `@Generable` schema + its `@Guide`s |
-| Domain/Models | `AICoach/RoutineDraftModels.swift` | `RoutineDraftSnapshot` / `RoutineDraftEntry` (what the model produced), `GroundedRoutineDraft` / `GroundedDraftExercise` (what Swift decided) |
+| Domain/Models | `AICoach/RoutineDraftModels.swift` | `RoutineDraftSnapshot` / `RoutineDraftEntry` (what the model produced), `GroundedRoutineDraft` / `GroundedDraftExercise` + its `Match` (what Swift decided, and what it still has to ask) |
 | Domain/Interfaces | `AICoach/RoutineDrafting.swift` | the drafting boundary |
 | Domain/Services | `AICoach/RoutineDraftGrounder.swift` | the grounding pass — pure logic, isolation-agnostic |
 | Data | `AICoach/RoutineDrafting/RoutineDraftInstructions.swift` | the system prompt |
 | Data | `AICoach/RoutineDrafting/RoutineDraftService.swift` | the `LanguageModelSession` + snapshot mapping |
 | Presentation | `ViewModels/RoutineCreating.swift` | a *name* for the existing creation seam |
-| Presentation | `ViewModels/AICoach/RoutineDraftViewModel.swift` | preflight, stream, ground, persist |
+| Presentation | `ViewModels/AICoach/RoutineDraftViewModel.swift` | preflight, stream, ground, resolve, persist |
+| Presentation | `ViewModels/AICoach/RoutineDraftRows.swift` | `RoutineDraftRow` + the composer that builds the review list |
 | Presentation | `ViewModels/AICoach/GroundedRoutineDraft+Pending.swift` | draft → `[PendingRoutineExercise]` |
 | Presentation | `Views/AICoach/RoutineDrafting/RoutineDraftSheet.swift` | the sheet |
-| App | `AppDependencies.swift` | `routinesViewModel`, `makeRoutineDraftService()`, `makeRoutineDraftViewModel()` |
+| Presentation | `Views/AICoach/RoutineDrafting/RoutineDraftRowView.swift` | one review row, resolved or not |
+| Presentation | `Views/AICoach/RoutineDrafting/RoutineDraftExercisePickerView.swift` | "which exercise did you mean?" |
+| Presentation | `Views/Exercises/ExercisePickerRowView.swift` | the library row both pickers use |
+| App | `AppDependencies.swift` | `routinesViewModel`, `exercisesViewModel`, `makeRoutineDraftService()`, `makeRoutineDraftViewModel()` |
 
 `Domain/` imports no SwiftUI and references no concrete Data type. `RoutineDraftOutput.swift` imports
 FoundationModels, exactly as `AICoachOutputs.swift` already does.
@@ -170,10 +175,75 @@ matcher in this app.**
 
 - `.resolved([Exercise])` → the first match. The resolver only aggregates rows that share one folded
   *name*, so this is not a coin toss between different exercises.
-- `.ambiguous` and `.noMatch` → **excluded from the draft and named on screen.** For this ticket they
-  are the same outcome: there is no library exercise the draft may safely claim. Ticket 02 splits
-  them apart and makes both answerable by the person. The one thing this surface may never do is
-  quietly drop something that was asked for, or invent a library entry to hold it.
+- `.ambiguous([String])` → `Match.ambiguous([Exercise])`. The reported names are mapped back to
+  library rows, in the resolver's own order, because the person picks one of *their* exercises and a
+  picker needs exercises rather than strings.
+- `.noMatch` → `Match.unmatched`: nothing to offer but the whole library.
+
+**Neither failing case is dropped.** Both stay in the draft, in the place the description gave them,
+as rows the person can answer (§6a). They are excluded from what Create writes — `resolvedExercises`
+is the only list that reaches the store — and the sheet says so before Create is tapped. The one
+thing this surface may never do is quietly drop something that was asked for, or invent a library
+entry to hold it.
+
+### 6a. Resolving a name the library could not place (ticket 02)
+
+An unresolved row is not a report; it is a question with an answer button.
+
+**The two failing cases stay apart all the way to the screen.** `Match` is
+`.resolved(Exercise)` / `.ambiguous([Exercise])` / `.unmatched`, and `GroundedDraftExercise` keeps the
+`draftedName` whether or not it resolved — an unresolved row shows *what the person actually said*,
+because that is the only thing they recognise it by. `.ambiguous` carries the few library exercises it
+matched and the picker offers those first, under "Did you mean"; `.unmatched` carries none and the
+picker is the whole library. Collapsing the two would throw away the only thing that makes the
+ambiguous case answerable in one tap.
+
+**Resolved in the UI, not with a second model round trip.** Coach Chat has a precedent for handing the
+model a capped list of ≤60 library names to re-resolve against (the `__NO_MATCH__` payload in
+`ChatFactBuilder`), but that exists because the chat has no UI to ask through. This sheet does. A
+picker is deterministic, costs no tokens and no allowance, and cannot translate or invent a name —
+all three of which the model has been measured doing in this app.
+
+**Answering keeps everything the description gave.** `GroundedRoutineDraft.resolve(_:to:)` replaces
+only the `Match`: same row identity, same position, same set count, reps and weight. That is what
+makes the described order still the routine's order after an answer. `removeUnresolved(_:)` drops the
+row outright. Both are deliberate no-ops on an already-*resolved* row — swapping or deleting an
+exercise the library did place is editing the draft, which is ticket 03.
+
+**Create can never write an unresolved row**, by construction rather than by a check at the button:
+`pendingExercises()` maps `resolvedExercises`, and `canCreate` is false when that list is empty. An
+unresolved row is excluded and the sheet's note says so *before* Create is tapped, rather than Create
+being disabled — a person whose exercise genuinely is not in their library would otherwise be stuck
+with a button that never lights up.
+
+**Answering costs no allowance.** The unit was consumed by the drafting session; correcting the
+machine's reading of a name is not a second use of the coach. Nothing in `resolveRow`/`removeRow`
+touches the gate. (The ticket-01 rule that an *all*-unmatched draft refunds its unit is unchanged: a
+person who then answers every row and creates a routine got it for free. Deliberate — the alternative
+charges for a session that ticket 01 refunded, which is a revenue-increasing change on an arguable
+case, and §10 of the monetization strategy says an arguable gate stays free. There is no exploit
+either: picking exercises out of a picker by hand is what building a routine manually already is.)
+
+**The picker routes through the app's one search implementation.**
+`ExercisesViewModel.sections(searchText:categoryKey:equipment:)` — the same one behind
+`RoutineExercisePickerView` — so there is no third search/filter in the app. The library row itself is
+`ExercisePickerRowView`, extracted from `RoutineExercisePickerView.pickerRow` so both pickers show the
+same row rather than two copies of the same styling.
+
+**`AppDependencies` owns the `ExercisesViewModel` the picker uses**, as a `lazy var`, for the same
+reason it owns `routinesViewModel`: `ExercisesViewModel.init` registers a `cloudKitDataDidChange`
+observer and never removes it, so a fresh instance per drafting sheet would leak one observer per
+presentation — and this sheet is opened and dismissed repeatedly. The Routines and Exercises tabs keep
+their own `@StateObject` instances; those are built once for the life of the app, which is the
+property the shared one reproduces for a modal. The picker still calls `fetchExercises()` on appear,
+because a shared instance that outlives any one sheet would otherwise be missing an exercise created
+since it was built — on exactly the screen that exists to find one.
+
+**Row identities are stable across snapshots.** `RoutineDraftGrounder.entryIDs` hands out one `UUID`
+per drafted *position* and reuses it on every later snapshot. Each streamed snapshot is cumulative, so
+the entry at a given index is the same entry throughout; minting a fresh id per snapshot gave every
+row a new identity on every token burst, which makes SwiftUI rebuild the list rather than diff it
+(rendering rule 8) and would leave a picker opened on a row pointing at an id that no longer exists.
 
 ### Device rounds
 
@@ -248,7 +318,7 @@ library up to *three* times (exact, then substring, then token overlap), folding
 each pass at roughly four allocations per name per pass. Unmemoized, one drafting session costs
 O(snapshots × drafted entries × library × 3) on the main actor: with a ~150-entry library, 12 entries
 and a few dozen snapshots, on the order of 10⁵–10⁶ short-string allocations *while the sheet is
-animating*. `RoutineDraftGrounder.resolutions` caches the answer per drafted name, so each distinct
+animating*. `RoutineDraftGrounder.matches` caches the answer per drafted name, so each distinct
 name is resolved exactly once per session. The cache is keyed by name alone, so **one grounder
 instance belongs to one library snapshot** — `RoutineDraftViewModel.loadLibrary()` builds a fresh one
 with every fetch.
@@ -267,9 +337,10 @@ materializes routine + exercises + sets + alternatives in one transaction, calls
 `fetchRoutines()` — and that re-fetch is what pushes the new routine to the watch. **There is no
 extra sync call and no parallel write path.**
 
-`GroundedRoutineDraft.pendingExercises()` is the whole mapping: `order` comes from the draft's own
-position (which is how the described order becomes the routine's order), and each drafted exercise
-becomes `setCount` identical `ExerciseSet`s at `RoutineDraftGrounder.defaultRestTime`. Alternatives
+`GroundedRoutineDraft.pendingExercises()` is the whole mapping, over `resolvedExercises` alone:
+`order` comes from position among those (which is how the described order becomes the routine's
+order, with the gaps left by unresolved rows closed up), and each drafted exercise becomes `setCount`
+identical `ExerciseSet`s at `RoutineDraftGrounder.defaultRestTime`. Alternatives
 and rep-range goals are left empty — nothing in a typed description expresses them, and inventing
 either would be the app guessing on the person's behalf at the exact moment it writes to their store.
 
@@ -326,6 +397,10 @@ Free residue  the whole feature, 5 drafting sessions a month, and every routine 
 Founder note  n/a — no new gate, so nothing new to convert against §7's permanent grant
 ```
 
+**Re-checked for ticket 02 (2026-09-17): unchanged.** Resolving or removing an unresolved row raises
+no gate, reserves no unit and adds no `PaywallPlacement`. It makes the free tier's routine draft work
+in more cases, which is §3 Rule 1 territory, not a gating opportunity.
+
 **One unit per drafting *session*, not per message.** The counting unit for `.coachChat` is
 documented as "a sent message"; a drafting session is one unit however many turns it takes, because a
 guided conversation (ticket 04) must never cost a free user their whole month for one routine. The
@@ -350,6 +425,22 @@ reachable from an empty chat and from a full one. Present only while `isAvailabl
 **The sheet** has three faces over one layout — describe, draft, review. The same list streams and
 reviews, so the list the person reads while it fills is the list they confirm. `AISurface` provides
 the streaming chrome; `AISkeletonBar` fills the name and the first rows before anything has landed.
+
+**A row is either an answer or a question.** `RoutineDraftRowView` renders a resolved row as the
+library exercise's name and its set summary, and an unresolved one on a warning-tinted card: the words
+the person used, the same set summary (the figures survive being answered, and showing them says so),
+the reason it is unresolved, a chevron onto the picker, and an ✕ that removes it. The two controls sit
+side by side rather than nested — a `Button` inside a `Button` swallows the inner tap. Tapping is a
+no-op while the draft is still streaming, when the list under the finger is still moving.
+
+**The picker is a push, not a second modal**, through the sheet's own `NavigationStack`
+(`navigationDestination(item:)` keyed on the row). Choosing an exercise resolves the row and pops.
+Its results are recomputed in `onChange(of: searchText)` into `@State` rather than filtered in `body`,
+and the list is a `LazyVStack` — it is the one view here whose content scales with the person's own
+library (rendering rules 1 and 3).
+
+**The "left out" note is now an explanation, not a list.** The names are in the rows above it; the
+note says what Create will do with them and that a tap fixes it.
 
 The footer lives in its own `RoutineDraftFooter.swift` — the sheet and its bottom bar are each under
 the project's 300-line convention rather than one file over it.
@@ -384,6 +475,19 @@ no literal strings in the views.
 - **Creating** — one write through the shared transaction under the drafted name, the fallback name
   for a nameless draft, and discard/dismiss writing nothing.
 
+`GymStreakTests/RoutineDraftResolutionTests.swift` covers ticket 02 on the same harness
+(`RoutineDraftHarness` in `Support/RoutineDraftTestDoubles.swift`, shared by both files):
+
+- **Ambiguous** — the matched library exercises are carried on the entry and handed to the picker.
+- **No match** — no candidates, so the picker is the whole library.
+- **The unresolved row** — shows the drafted name and its figures, never a blank or a placeholder.
+- **Resolving** — in place, keeping set count, reps, weight and position, and it reaches the
+  transaction that way; resolving an already-resolved row is a no-op.
+- **Removing** — drops the row and writes nothing.
+- **Create** — an unresolved row is excluded from what is written while the rest is created, and a
+  draft of nothing but unresolved rows offers no Create at all.
+- **Allowance** — resolving and removing consume no further unit.
+
 `CoachPromptGroundingTests` now also scans `RoutineDraftInstructions` (both units) and the
 `RoutineDraftOutput` / `RoutineDraftExercise` generation schemas for data-shaped literals and
 programming-construct words.
@@ -391,16 +495,20 @@ programming-construct words.
 **A green test proves the prompt is clean, never that the output is.** Whether the model obeys what
 it is handed is a device check, and nothing here stands in for one.
 
-## 11. Known limits (this ticket, by design)
+## 11. Known limits (by design)
 
-- An unmatched or ambiguous name is reported but not **resolvable** — no "did you mean?" and no
-  "create this exercise". Ticket 02.
-- The draft is **read-only**: no editing a set count, reordering, or removing an exercise before
-  Create. Ticket 03.
+- An unresolved name can be pointed at an existing library exercise or removed, but **not created** —
+  there is no "add this to my library" from the picker. A movement genuinely absent from the library
+  still has to be added on the Exercises tab first.
+- The draft is otherwise **read-only**: no editing a set count, reordering, or removing a *resolved*
+  exercise before Create. Ticket 03.
 - **One turn.** The session is retained and the allowance already treats a session as one unit, but
   there is no UI for a follow-up message. Ticket 04.
 - **One set scheme per exercise** — every set identical, no rep-range goals, no per-set rest.
   Ticket 05.
 - Device verification of the German path and of real model behaviour is a manual check; see §10.
   Round 1 (2026-09-16) found the compound-word defect above; it is fixed and regression-locked, and
-  the round needs repeating.
+  round 2 (2026-09-17) passed. Ticket 02's own device check — tapping the
+  "Schrägbankdrücken" row from round 2 and pointing it at the library's
+  "Schrägbank-Kurzhanteldrücken" — is outstanding: there is no on-device model in the simulator, so
+  nothing automated stands in for it.

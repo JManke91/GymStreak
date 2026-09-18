@@ -12,6 +12,8 @@
 //
 
 import Foundation
+import SwiftData
+import Testing
 @testable import GymStreak
 
 /// A `RoutineDrafting` that replays a scripted stream. Setting `failure` makes the
@@ -99,3 +101,100 @@ final class FakeExerciseRepository: ExerciseRepository {
 /// The error a scripted generation failure throws. A plain value: what matters to the
 /// ViewModel is that the stream threw, not which framework case it threw.
 struct RoutineDraftTestFailure: Error {}
+
+// MARK: - Fixtures
+
+/// Real `Exercise` models — `ExerciseNameResolver` matches on the stored `name`, so a
+/// stand-in would not exercise the folding it does.
+@MainActor
+func routineDraftLibrary(_ names: [String]) -> [Exercise] {
+    let context = ModelContext(InMemoryModelContainer.make())
+    return names.map { name in
+        let exercise = Exercise(name: name)
+        context.insert(exercise)
+        return exercise
+    }
+}
+
+func routineDraftEntry(
+    _ name: String,
+    sets: Int = 3,
+    reps: Int = 8,
+    weight: Double = 60
+) -> RoutineDraftEntry {
+    RoutineDraftEntry(name: name, setCount: sets, reps: reps, weight: weight)
+}
+
+func routineDraftSnapshot(
+    name: String = "Push Day",
+    _ entries: [RoutineDraftEntry]
+) -> RoutineDraftSnapshot {
+    RoutineDraftSnapshot(name: name, exercises: entries)
+}
+
+// MARK: - Harness
+
+/// The drafting sheet's ViewModel with every collaborator faked: a scripted stream, a
+/// recording creation seam, a spying allowance store and a stubbed device.
+///
+/// Shared by `RoutineDraftTests` (the tracer bullet) and `RoutineDraftResolutionTests`
+/// (resolving unmatched and ambiguous names) so the two read the same setup.
+@MainActor
+struct RoutineDraftHarness {
+
+    let viewModel: RoutineDraftViewModel
+    let gate: AICoachAllowanceGate
+    let drafting: FakeRoutineDrafting
+    let routines: FakeRoutineCreating
+    let paywalls: RecordingPaywallPresenter
+    let allowance: SpyAllowanceStore
+    let exercises: FakeExerciseRepository
+
+    static func make(
+        state: ProEntitlementState = .free,
+        availability: AICoachAvailabilityState = .available,
+        libraryNames: [String] = ["Bench Press", "Row", "Squat", "Bankdrücken"]
+    ) -> RoutineDraftHarness {
+        let paywalls = RecordingPaywallPresenter()
+        let allowance = SpyAllowanceStore()
+        let availabilityStub = StubAICoachAvailability(state: availability)
+        let gate = AICoachAllowanceGate(
+            surface: .coachChat,
+            entitlements: StubProEntitlements(state: state),
+            paywalls: paywalls,
+            allowance: allowance,
+            availability: availabilityStub,
+            isGatingEnabled: true
+        )
+        let drafting = FakeRoutineDrafting()
+        let routines = FakeRoutineCreating()
+        let exercises = FakeExerciseRepository(exercises: routineDraftLibrary(libraryNames))
+        return RoutineDraftHarness(
+            viewModel: RoutineDraftViewModel(
+                allowanceGate: gate,
+                drafting: drafting,
+                exerciseRepository: exercises,
+                routines: routines,
+                paywalls: paywalls,
+                availability: availabilityStub
+            ),
+            gate: gate,
+            drafting: drafting,
+            routines: routines,
+            paywalls: paywalls,
+            allowance: allowance,
+            exercises: exercises
+        )
+    }
+
+    /// Lets the scripted stream drain. The fake yields into an unbounded buffer and
+    /// finishes synchronously, so this settles in a handful of turns; the bound only stops
+    /// a bug from hanging the suite.
+    func settle(turns: Int = 500) async {
+        for _ in 0..<turns {
+            if !viewModel.isDrafting { return }
+            await Task.yield()
+        }
+        Issue.record("the draft never finished")
+    }
+}

@@ -33,17 +33,9 @@ final class RoutineDraftViewModel {
         case failed(String)
     }
 
-    /// One row of the review list: a value struct, never a `GroundedDraftExercise`.
-    ///
-    /// The row's `name` is the **library exercise's own name**, not the model's spelling
-    /// of it, and its `summary` is a finished string. A row view that held the drafted
-    /// exercise would read an `@Model` property — and format a weight — once per row per
-    /// render (CLAUDE.md § "Performance: main thread and rendering", rules 2 and 4).
-    struct Row: Identifiable, Equatable {
-        let id: UUID
-        let name: String
-        let summary: String
-    }
+    /// The review list's row type. A top-level value struct in `RoutineDraftRows.swift`,
+    /// alongside the composer that builds it.
+    typealias Row = RoutineDraftRow
 
     // MARK: - Input state
 
@@ -54,14 +46,17 @@ final class RoutineDraftViewModel {
     private(set) var phase: Phase = .describing
     /// The routine's name as drafted, or empty until the model has written one.
     private(set) var routineName: String = ""
+    /// Every drafted exercise in the order it was described, resolved or not. An
+    /// unresolved one stays in the list rather than being reported away from it — that is
+    /// what makes it something the person can point at a library exercise.
     private(set) var rows: [Row] = []
-    /// Names the live library could not place. Never silently empty — see
-    /// `GroundedRoutineDraft`.
-    private(set) var unmatchedNames: [String] = []
-    /// The same names as one finished line. Joined here rather than in the sheet's
-    /// `body`: a collection operation in a `body` is a collection operation in a `body`,
-    /// however short the collection is.
-    private(set) var unmatchedSummary: String = ""
+    /// `true` while at least one row still has to be pointed at a library exercise or
+    /// removed. The sheet turns it into the note saying those rows are left out of Create.
+    private(set) var hasUnresolvedRows = false
+    /// `true` when the draft holds at least one resolved exercise — something a Create
+    /// could actually write. Stored rather than derived in the sheet's `body`: filtering a
+    /// collection is filtering a collection, however short it is.
+    private(set) var hasCreatableExercises = false
     /// Flips once, when a routine has actually been written. The sheet dismisses on it.
     private(set) var didCreateRoutine = false
 
@@ -133,8 +128,9 @@ final class RoutineDraftViewModel {
         !descriptionText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !isDrafting
     }
 
-    /// `true` only when there is something a Create button could actually write.
-    var canCreate: Bool { phase == .review && !rows.isEmpty }
+    /// `true` only when there is something a Create button could actually write —
+    /// unresolved rows do not count, because they are exactly what Create leaves out.
+    var canCreate: Bool { phase == .review && hasCreatableExercises }
 
     /// The §8 placement D hint for the shared Coach allowance, or `nil` when none
     /// belongs on screen — which only ever means this reader is unmetered.
@@ -247,14 +243,19 @@ final class RoutineDraftViewModel {
     /// **library's** names as exercises complete, instead of with the model's spelling of
     /// them corrected afterwards.
     private func apply(_ snapshot: RoutineDraftSnapshot) {
-        let grounded = grounder.ground(snapshot, library: library, weightUnit: weightUnit)
-        draft = grounded
-        routineName = grounded.name
-        unmatchedNames = grounded.unmatchedNames
-        unmatchedSummary = grounded.unmatchedNames.joined(separator: ", ")
-        rows = grounded.exercises.map {
-            Row(id: $0.id, name: $0.exercise.name, summary: summary(for: $0))
-        }
+        draft = grounder.ground(snapshot, library: library, weightUnit: weightUnit)
+        republish()
+    }
+
+    /// Rebuilds everything the sheet reads from `draft`. Called after a streamed snapshot
+    /// and after the person resolves or removes a row, so both paths produce the list the
+    /// same way.
+    private func republish() {
+        guard let draft else { return }
+        routineName = draft.name
+        hasUnresolvedRows = draft.hasUnresolvedExercises
+        hasCreatableExercises = !draft.hasNothingToCreate
+        rows = RoutineDraftRowComposer(weightUnit: weightUnit).rows(for: draft)
     }
 
     private func finishDrafting() {
@@ -268,6 +269,36 @@ final class RoutineDraftViewModel {
             return
         }
         isTicketRefundable = false
+    }
+
+    // MARK: - Resolving an unresolved row
+
+    /// The library exercises to offer **before** the whole library for one unresolved
+    /// row: the few the resolver found equally plausible, or empty when it found none.
+    ///
+    /// A bounded lookup over a list the generation schema caps at twelve — this is not a
+    /// search.
+    func candidates(for rowID: UUID) -> [Exercise] {
+        draft?.exercises.first { $0.id == rowID }?.candidates ?? []
+    }
+
+    /// Points one unresolved row at a library exercise, keeping the set count, reps and
+    /// weight the description gave it, and the place it had in the list.
+    ///
+    /// **It costs no allowance.** The unit was spent by the drafting session in full;
+    /// correcting the machine's reading of a name is not a second use of the coach.
+    func resolveRow(_ rowID: UUID, to exercise: Exercise) {
+        guard phase == .review else { return }
+        draft?.resolve(rowID, to: exercise)
+        republish()
+    }
+
+    /// Drops one unresolved row. Writes nothing — nothing is written anywhere until
+    /// `createRoutine()` — and costs no allowance, for the same reason.
+    func removeRow(_ rowID: UUID) {
+        guard phase == .review else { return }
+        draft?.removeUnresolved(rowID)
+        republish()
     }
 
     // MARK: - Persisting
@@ -337,21 +368,7 @@ final class RoutineDraftViewModel {
         draft = nil
         routineName = ""
         rows = []
-        unmatchedNames = []
-        unmatchedSummary = ""
-    }
-
-    /// The row's finished subtitle, built here so no row view formats a weight.
-    /// A drafted exercise with no load reads as sets and reps alone, which is what a
-    /// bodyweight movement should say.
-    private func summary(for drafted: GroundedDraftExercise) -> String {
-        var parts = [
-            "routine.sets_count".localized(drafted.setCount),
-            "set.reps".localized(drafted.reps),
-        ]
-        if drafted.weightKilograms > 0 {
-            parts.append(WeightFormatting.label(drafted.weightKilograms, in: weightUnit))
-        }
-        return parts.joined(separator: " • ")
+        hasUnresolvedRows = false
+        hasCreatableExercises = false
     }
 }

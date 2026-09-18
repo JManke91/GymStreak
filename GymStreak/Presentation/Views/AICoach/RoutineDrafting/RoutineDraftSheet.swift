@@ -20,6 +20,18 @@ struct RoutineDraftSheet: View {
     /// single presentation only in the sense that the same ViewModel is reused, and
     /// `sheetWasDismissed()` resets it on the way out.
     @Bindable var viewModel: RoutineDraftViewModel
+    /// The app's shared exercise library ViewModel, from the composition root. It backs
+    /// the "which exercise did you mean?" picker through the same
+    /// `sections(searchText:categoryKey:equipment:)` the add-to-routine picker uses.
+    /// A plain `let`: this sheet only forwards the reference to the picker. As an
+    /// `@ObservedObject` it would re-render the live streaming draft list on every
+    /// unrelated `@Published` change of a broad multi-purpose object — including the
+    /// picker's own library re-fetch (rendering rule 6).
+    let exercisesViewModel: ExercisesViewModel
+
+    /// The unresolved row whose picker is open. Held here rather than in the ViewModel:
+    /// it is where the sheet is, not what the draft is.
+    @State private var pickingRow: RoutineDraftRow?
 
     var body: some View {
         NavigationStack {
@@ -33,6 +45,19 @@ struct RoutineDraftSheet: View {
             }
             .navigationTitle("ai_coach.routine_draft.title".localized)
             .navigationBarTitleDisplayMode(.inline)
+            .navigationDestination(item: $pickingRow) { row in
+                RoutineDraftExercisePickerView(
+                    draftedName: row.name,
+                    // A lookup in a list the generation schema caps at twelve, run once
+                    // when this destination is built — not a search.
+                    candidates: viewModel.candidates(for: row.id),
+                    exercisesViewModel: exercisesViewModel,
+                    onSelect: { exercise in
+                        viewModel.resolveRow(row.id, to: exercise)
+                        pickingRow = nil
+                    }
+                )
+            }
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
                     Button {
@@ -124,20 +149,26 @@ struct RoutineDraftSheet: View {
                         }
                     } else {
                         ForEach(viewModel.rows) { row in
-                            RoutineDraftRowView(row: row)
+                            RoutineDraftRowView(
+                                row: row,
+                                onChoose: { choose(row) },
+                                onRemove: { viewModel.removeRow(row.id) }
+                            )
                         }
                     }
                 }
             }
 
-            if !viewModel.unmatchedNames.isEmpty {
+            if viewModel.hasUnresolvedRows {
                 leftOutNote
             }
         }
     }
 
-    /// Never silent, never invented: an exercise the library could not place is named
-    /// here and excluded from the draft.
+    /// What Create will do with the rows above it, said before Create is tapped: an
+    /// exercise the person has not yet pointed at a library entry is left out. Never
+    /// silent, never invented, and now never a dead end either — the row itself is the way
+    /// to fix it.
     private var leftOutNote: some View {
         HStack(alignment: .top, spacing: 10) {
             Image(systemName: "questionmark.circle")
@@ -147,7 +178,7 @@ struct RoutineDraftSheet: View {
                 Text("ai_coach.routine_draft.left_out.title".localized)
                     .font(.system(size: 14, weight: .semibold))
                     .foregroundStyle(Color.white.opacity(0.85))
-                Text(viewModel.unmatchedSummary)
+                Text("ai_coach.routine_draft.left_out.body".localized)
                     .font(.system(size: 13))
                     .foregroundStyle(Color.white.opacity(0.55))
                     .fixedSize(horizontal: false, vertical: true)
@@ -171,24 +202,19 @@ struct RoutineDraftSheet: View {
         .padding(.top, 8)
     }
 
-}
-
-/// One drafted exercise. Takes a finished value struct — no `@Model` read, no formatter,
-/// no aggregation in this `body`.
-private struct RoutineDraftRowView: View {
-
-    let row: RoutineDraftViewModel.Row
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 3) {
-            Text(row.name)
-                .font(.system(size: 15, weight: .semibold))
-                .foregroundStyle(Color.white)
-                .fixedSize(horizontal: false, vertical: true)
-            Text(row.summary)
-                .font(.system(size: 13))
-                .foregroundStyle(Color.white.opacity(0.55))
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
+    /// Opens the picker for one unresolved row — but not while the draft is still
+    /// streaming, when the list under the finger is still moving.
+    ///
+    /// The library is re-fetched **here, on the tap**, rather than in the picker's
+    /// `onAppear`: it is a synchronous full-library SwiftData fetch and `onAppear` runs
+    /// while the push animates (rendering rule 7, the same reasoning as
+    /// `RoutineDraftViewModel.requestDrafting()`). It is refreshed rather than trusted
+    /// because the shared `ExercisesViewModel` outlives any one sheet, and an exercise
+    /// created since it was built would otherwise be missing from exactly the screen that
+    /// exists to find one.
+    private func choose(_ row: RoutineDraftRow) {
+        guard !row.isResolved, !viewModel.isDrafting else { return }
+        exercisesViewModel.fetchExercises()
+        pickingRow = row
     }
 }

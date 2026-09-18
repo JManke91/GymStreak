@@ -13,7 +13,6 @@
 //
 
 import Foundation
-import SwiftData
 import Testing
 @testable import GymStreak
 
@@ -21,80 +20,55 @@ import Testing
 @MainActor
 struct RoutineDraftTests {
 
-    // MARK: - Fixtures
-
-    /// Real `Exercise` models — `ExerciseNameResolver` matches on the stored `name`, so
-    /// a stand-in would not exercise the folding it does.
-    private func library(_ names: [String]) -> [Exercise] {
-        let context = ModelContext(InMemoryModelContainer.make())
-        return names.map { name in
-            let exercise = Exercise(name: name)
-            context.insert(exercise)
-            return exercise
-        }
-    }
-
-    private func entry(
-        _ name: String,
-        sets: Int = 3,
-        reps: Int = 8,
-        weight: Double = 60
-    ) -> RoutineDraftEntry {
-        RoutineDraftEntry(name: name, setCount: sets, reps: reps, weight: weight)
-    }
-
-    private func snapshot(name: String = "Push Day", _ entries: [RoutineDraftEntry]) -> RoutineDraftSnapshot {
-        RoutineDraftSnapshot(name: name, exercises: entries)
-    }
-
     // MARK: - The grounding pass
 
     @Test("A resolved name becomes the library exercise, under the library's own spelling")
     func resolvedNameBecomesTheLibraryExercise() {
-        let lib = library(["Bankdrücken", "Kniebeugen"])
+        let lib = routineDraftLibrary(["Bankdrücken", "Kniebeugen"])
 
         let draft = RoutineDraftGrounder().ground(
-            snapshot([entry("bankdruecken")]),
+            routineDraftSnapshot([routineDraftEntry("bankdruecken")]),
             library: lib,
             weightUnit: .kilograms
         )
 
         #expect(draft.exercises.count == 1)
         // The library's spelling, not the model's — the whole point of grounding.
-        #expect(draft.exercises.first?.exercise.name == "Bankdrücken")
-        #expect(draft.unmatchedNames.isEmpty)
+        #expect(draft.exercises.first?.exercise?.name == "Bankdrücken")
+        #expect(draft.exercises.allSatisfy { $0.isResolved })
     }
 
     @Test("An ambiguous name is left out and named, never resolved on the app's guess")
     func ambiguousNameIsLeftOut() {
         // "press" matches two distinct library names, so there is no exercise this draft
-        // may claim. Ticket 02 makes it answerable; this ticket must not guess.
-        let lib = library(["Bench Press", "Shoulder Press"])
+        // may claim. Ticket 02 makes it answerable (see RoutineDraftResolutionTests);
+        // nothing may guess at it in the meantime.
+        let lib = routineDraftLibrary(["Bench Press", "Shoulder Press"])
 
         let draft = RoutineDraftGrounder().ground(
-            snapshot([entry("press")]),
+            routineDraftSnapshot([routineDraftEntry("press")]),
             library: lib,
             weightUnit: .kilograms
         )
 
-        #expect(draft.exercises.isEmpty)
-        #expect(draft.unmatchedNames == ["press"])
+        #expect(draft.resolvedExercises.isEmpty)
+        #expect(draft.exercises.map(\.draftedName) == ["press"])
         #expect(draft.hasNothingToCreate)
     }
 
     @Test("An unmatched name is left out and named — never invented into the library")
     func unmatchedNameIsLeftOutAndReported() {
-        let lib = library(["Bench Press"])
+        let lib = routineDraftLibrary(["Bench Press"])
 
         let draft = RoutineDraftGrounder().ground(
-            snapshot([entry("Bench Press"), entry("Flurbelblatz")]),
+            routineDraftSnapshot([routineDraftEntry("Bench Press"), routineDraftEntry("Flurbelblatz")]),
             library: lib,
             weightUnit: .kilograms
         )
 
-        #expect(draft.exercises.count == 1)
-        #expect(draft.exercises.first?.exercise.name == "Bench Press")
-        #expect(draft.unmatchedNames == ["Flurbelblatz"])
+        #expect(draft.resolvedExercises.count == 1)
+        #expect(draft.resolvedExercises.first?.exercise?.name == "Bench Press")
+        #expect(draft.exercises.filter { !$0.isResolved }.map(\.draftedName) == ["Flurbelblatz"])
     }
 
     /// The device failure this feature shipped with on 2026-09-16, pinned at the level a
@@ -109,48 +83,55 @@ struct RoutineDraftTests {
     @Test("A German compound is left out, never swapped for the stem exercise")
     func germanCompoundIsNotSwappedForTheStem() {
         let draft = RoutineDraftGrounder().ground(
-            snapshot(name: "Push-Tag", [
-                entry("Bankdrücken", sets: 3, reps: 8, weight: 60),
-                entry("Schrägbankdrücken", sets: 3, reps: 10, weight: 22),
+            routineDraftSnapshot(name: "Push-Tag", [
+                routineDraftEntry("Bankdrücken", sets: 3, reps: 8, weight: 60),
+                routineDraftEntry("Schrägbankdrücken", sets: 3, reps: 10, weight: 22),
             ]),
-            library: library(["Bankdrücken", "Kniebeugen"]),
+            library: routineDraftLibrary(["Bankdrücken", "Kniebeugen"]),
             weightUnit: .kilograms
         )
 
-        #expect(draft.exercises.map(\.exercise.name) == ["Bankdrücken"])
-        #expect(draft.unmatchedNames == ["Schrägbankdrücken"])
+        #expect(draft.resolvedExercises.compactMap { $0.exercise?.name } == ["Bankdrücken"])
+        #expect(draft.exercises.filter { !$0.isResolved }.map(\.draftedName) == ["Schrägbankdrücken"])
         // The incline numbers went with the exercise that was left out — they did not
         // attach themselves to the flat bench press.
-        #expect(draft.exercises.first?.reps == 8)
-        #expect(draft.exercises.count == 1)
+        #expect(draft.resolvedExercises.first?.reps == 8)
+        #expect(draft.resolvedExercises.count == 1)
     }
 
-    @Test("The same unmatched name twice is reported once")
-    func unmatchedNamesAreDeduplicated() {
+    @Test("The same unmatched name twice stays two rows, each answerable on its own")
+    func theSameUnmatchedNameTwiceStaysTwoRows() {
+        // Two descriptions of the same unknown movement are two pieces of work with their
+        // own figures, so each keeps its own row rather than being collapsed into one.
         let draft = RoutineDraftGrounder().ground(
-            snapshot([entry("Flurbelblatz"), entry("flurbelblatz")]),
-            library: library(["Bench Press"]),
+            routineDraftSnapshot([
+                routineDraftEntry("Flurbelblatz", sets: 3, reps: 8),
+                routineDraftEntry("flurbelblatz", sets: 5, reps: 12),
+            ]),
+            library: routineDraftLibrary(["Bench Press"]),
             weightUnit: .kilograms
         )
 
-        #expect(draft.unmatchedNames == ["Flurbelblatz"])
+        #expect(draft.exercises.map(\.draftedName) == ["Flurbelblatz", "flurbelblatz"])
+        #expect(draft.exercises.map(\.setCount) == [3, 5])
+        #expect(Set(draft.exercises.map(\.id)).count == 2)
     }
 
     @Test("An unstated set or rep count gets the Swift-side default, never a model guess")
-    func unstatedNumbersFallBackToSwiftDefaults() {
+    func unstatedNumbersFallBackToSwiftDefaults() throws {
         let grounder = RoutineDraftGrounder()
         let draft = grounder.ground(
-            snapshot([entry("Bench Press", sets: RoutineDraftGrounder.unstatedNumber,
+            routineDraftSnapshot([routineDraftEntry("Bench Press", sets: RoutineDraftGrounder.unstatedNumber,
                             reps: RoutineDraftGrounder.unstatedNumber, weight: 0)]),
-            library: library(["Bench Press"]),
+            library: routineDraftLibrary(["Bench Press"]),
             weightUnit: .kilograms
         )
 
-        let drafted = try? #require(draft.exercises.first)
-        #expect(drafted?.setCount == RoutineDraftGrounder.defaultSetCount)
-        #expect(drafted?.reps == RoutineDraftGrounder.defaultReps)
+        let drafted = try #require(draft.exercises.first)
+        #expect(drafted.setCount == RoutineDraftGrounder.defaultSetCount)
+        #expect(drafted.reps == RoutineDraftGrounder.defaultReps)
         // No weight stated is a drafted exercise without a load, not a missing one.
-        #expect(drafted?.weightKilograms == 0)
+        #expect(drafted.weightKilograms == 0)
     }
 
     @Test("Absurd figures are bounded before they can reach the store")
@@ -166,8 +147,8 @@ struct RoutineDraftTests {
     @Test("A weight drafted in pounds is stored as canonical kilograms")
     func poundsAreConvertedOnce() {
         let draft = RoutineDraftGrounder().ground(
-            snapshot([entry("Bench Press", weight: 220)]),
-            library: library(["Bench Press"]),
+            routineDraftSnapshot([routineDraftEntry("Bench Press", weight: 220)]),
+            library: routineDraftLibrary(["Bench Press"]),
             weightUnit: .pounds
         )
 
@@ -180,12 +161,12 @@ struct RoutineDraftTests {
     @Test("Drafted exercises keep the order the description gave them")
     func orderIsPreserved() {
         let draft = RoutineDraftGrounder().ground(
-            snapshot([entry("Squat"), entry("Bench Press"), entry("Row")]),
-            library: library(["Bench Press", "Row", "Squat"]),
+            routineDraftSnapshot([routineDraftEntry("Squat"), routineDraftEntry("Bench Press"), routineDraftEntry("Row")]),
+            library: routineDraftLibrary(["Bench Press", "Row", "Squat"]),
             weightUnit: .kilograms
         )
 
-        #expect(draft.exercises.map(\.exercise.name) == ["Squat", "Bench Press", "Row"])
+        #expect(draft.exercises.compactMap { $0.exercise?.name } == ["Squat", "Bench Press", "Row"])
     }
 
     // MARK: - Draft → the create-routine transaction
@@ -193,11 +174,11 @@ struct RoutineDraftTests {
     @Test("The draft becomes pending exercises with sequential order and one set per set count")
     func draftMapsToPendingExercises() {
         let draft = RoutineDraftGrounder().ground(
-            snapshot([
-                entry("Bench Press", sets: 3, reps: 8, weight: 60),
-                entry("Row", sets: 4, reps: 10, weight: 40),
+            routineDraftSnapshot([
+                routineDraftEntry("Bench Press", sets: 3, reps: 8, weight: 60),
+                routineDraftEntry("Row", sets: 4, reps: 10, weight: 40),
             ]),
-            library: library(["Bench Press", "Row"]),
+            library: routineDraftLibrary(["Bench Press", "Row"]),
             weightUnit: .kilograms
         )
 
@@ -221,8 +202,8 @@ struct RoutineDraftTests {
     @Test("An unmatched exercise never reaches the transaction")
     func unmatchedExercisesAreNotPersisted() {
         let draft = RoutineDraftGrounder().ground(
-            snapshot([entry("Bench Press"), entry("Flurbelblatz")]),
-            library: library(["Bench Press"]),
+            routineDraftSnapshot([routineDraftEntry("Bench Press"), routineDraftEntry("Flurbelblatz")]),
+            library: routineDraftLibrary(["Bench Press"]),
             weightUnit: .kilograms
         )
 
@@ -233,7 +214,7 @@ struct RoutineDraftTests {
 
     @Test("An ineligible device never reaches a paywall — and never reaches the cap check")
     func unavailableDeviceIsNeverPaywalled() {
-        let harness = makeHarness(availability: .deviceNotEligible)
+        let harness = RoutineDraftHarness.make(availability: .deviceNotEligible)
         harness.routines.isRoutineCapReached = true
 
         #expect(harness.viewModel.requestDrafting() == false)
@@ -244,7 +225,7 @@ struct RoutineDraftTests {
 
     @Test("A free user at the routine cap is stopped before typing, by routineCap")
     func routineCapStopsTheSheetFromOpening() {
-        let harness = makeHarness()
+        let harness = RoutineDraftHarness.make()
         harness.routines.isRoutineCapReached = true
 
         #expect(harness.viewModel.requestDrafting() == false)
@@ -256,7 +237,7 @@ struct RoutineDraftTests {
 
     @Test("Below the cap on an eligible device, the sheet opens and nothing is metered yet")
     func preflightPassesWithoutMetering() {
-        let harness = makeHarness()
+        let harness = RoutineDraftHarness.make()
 
         #expect(harness.viewModel.requestDrafting())
         #expect(harness.paywalls.presentedPlacements.isEmpty)
@@ -267,13 +248,13 @@ struct RoutineDraftTests {
 
     @Test("One drafting session costs one unit, however many messages it takes")
     func oneUnitPerSessionNotPerMessage() async {
-        let harness = makeHarness()
-        harness.drafting.snapshots = [snapshot([entry("Bench Press")])]
+        let harness = RoutineDraftHarness.make()
+        harness.drafting.snapshots = [routineDraftSnapshot([routineDraftEntry("Bench Press")])]
         harness.viewModel.onAppear(weightUnit: .kilograms)
 
         harness.viewModel.descriptionText = "Push day: bench press three by eight"
         harness.viewModel.submit()
-        await settle(harness.viewModel)
+        await harness.settle()
 
         #expect(harness.allowance.consumeCount == 1)
 
@@ -281,7 +262,7 @@ struct RoutineDraftTests {
         // nothing further.
         harness.viewModel.descriptionText = "make it four sets"
         harness.viewModel.submit()
-        await settle(harness.viewModel)
+        await harness.settle()
 
         #expect(harness.allowance.consumeCount == 1)
         #expect(harness.allowance.refundCount == 0)
@@ -289,13 +270,13 @@ struct RoutineDraftTests {
 
     @Test("A failed generation gives the unit back")
     func failedGenerationRefunds() async {
-        let harness = makeHarness()
+        let harness = RoutineDraftHarness.make()
         harness.drafting.failure = RoutineDraftTestFailure()
         harness.viewModel.onAppear(weightUnit: .kilograms)
 
         harness.viewModel.descriptionText = "Push day"
         harness.viewModel.submit()
-        await settle(harness.viewModel)
+        await harness.settle()
 
         #expect(harness.allowance.consumeCount == 1)
         #expect(harness.allowance.refundCount == 1)
@@ -305,26 +286,29 @@ struct RoutineDraftTests {
 
     @Test("A draft in which nothing could be resolved gives the unit back")
     func emptyDraftRefunds() async {
-        let harness = makeHarness()
-        harness.drafting.snapshots = [snapshot([entry("Flurbelblatz")])]
+        let harness = RoutineDraftHarness.make()
+        harness.drafting.snapshots = [routineDraftSnapshot([routineDraftEntry("Flurbelblatz")])]
         harness.viewModel.onAppear(weightUnit: .kilograms)
 
         harness.viewModel.descriptionText = "Flurbelblatz day"
         harness.viewModel.submit()
-        await settle(harness.viewModel)
+        await harness.settle()
 
         #expect(harness.viewModel.phase == .review)
-        #expect(harness.viewModel.rows.isEmpty)
-        // …and it says so, rather than pretending the description was empty.
-        #expect(harness.viewModel.unmatchedNames == ["Flurbelblatz"])
+        // The row is on screen — unresolved, so Create would write nothing — rather than
+        // the description being pretended empty.
+        #expect(harness.viewModel.rows.map(\.name) == ["Flurbelblatz"])
+        #expect(harness.viewModel.rows.allSatisfy { !$0.isResolved })
+        #expect(harness.viewModel.hasUnresolvedRows)
+        #expect(harness.viewModel.hasCreatableExercises == false)
         #expect(harness.allowance.refundCount == 1)
         #expect(harness.viewModel.canCreate == false)
     }
 
     @Test("Cancelling mid-stream refunds the unit and writes nothing")
     func cancellingRefundsAndWritesNothing() async {
-        let harness = makeHarness()
-        harness.drafting.snapshots = [snapshot([entry("Bench Press")])]
+        let harness = RoutineDraftHarness.make()
+        harness.drafting.snapshots = [routineDraftSnapshot([routineDraftEntry("Bench Press")])]
         harness.viewModel.onAppear(weightUnit: .kilograms)
 
         harness.viewModel.descriptionText = "Push day"
@@ -339,7 +323,7 @@ struct RoutineDraftTests {
 
     @Test("An exhausted allowance raises the coachChat paywall and keeps what was typed")
     func exhaustedAllowanceRaisesThePaywall() async {
-        let harness = makeHarness()
+        let harness = RoutineDraftHarness.make()
         for _ in 0..<ProFeatureCaps.freeCoachChatMessagesPerMonth {
             _ = harness.gate.requestGeneration()
         }
@@ -349,7 +333,7 @@ struct RoutineDraftTests {
 
         harness.viewModel.descriptionText = "Push day"
         harness.viewModel.submit()
-        await settle(harness.viewModel)
+        await harness.settle()
 
         #expect(harness.paywalls.presentedPlacements == [.coachChat])
         #expect(harness.allowance.consumeCount == 0)
@@ -362,15 +346,15 @@ struct RoutineDraftTests {
 
     @Test("Create writes once, through the shared transaction, with the drafted name")
     func createGoesThroughTheSharedTransaction() async {
-        let harness = makeHarness()
+        let harness = RoutineDraftHarness.make()
         harness.drafting.snapshots = [
-            snapshot(name: "Push Day", [entry("Bench Press", sets: 3, reps: 8, weight: 60)])
+            routineDraftSnapshot(name: "Push Day", [routineDraftEntry("Bench Press", sets: 3, reps: 8, weight: 60)])
         ]
         harness.viewModel.onAppear(weightUnit: .kilograms)
 
         harness.viewModel.descriptionText = "Push day: bench press three by eight at sixty"
         harness.viewModel.submit()
-        await settle(harness.viewModel)
+        await harness.settle()
 
         #expect(harness.viewModel.canCreate)
         harness.viewModel.createRoutine()
@@ -383,13 +367,13 @@ struct RoutineDraftTests {
 
     @Test("A draft with no name of its own is created under the fallback name")
     func namelessDraftGetsTheFallbackName() async {
-        let harness = makeHarness()
-        harness.drafting.snapshots = [snapshot(name: "   ", [entry("Bench Press")])]
+        let harness = RoutineDraftHarness.make()
+        harness.drafting.snapshots = [routineDraftSnapshot(name: "   ", [routineDraftEntry("Bench Press")])]
         harness.viewModel.onAppear(weightUnit: .kilograms)
 
         harness.viewModel.descriptionText = "bench press"
         harness.viewModel.submit()
-        await settle(harness.viewModel)
+        await harness.settle()
         harness.viewModel.createRoutine()
 
         #expect(harness.routines.createdNames == ["ai_coach.routine_draft.default_name".localized])
@@ -397,13 +381,13 @@ struct RoutineDraftTests {
 
     @Test("Discarding, and dismissing the sheet, write nothing")
     func discardWritesNothing() async {
-        let harness = makeHarness()
-        harness.drafting.snapshots = [snapshot([entry("Bench Press")])]
+        let harness = RoutineDraftHarness.make()
+        harness.drafting.snapshots = [routineDraftSnapshot([routineDraftEntry("Bench Press")])]
         harness.viewModel.onAppear(weightUnit: .kilograms)
 
         harness.viewModel.descriptionText = "Push day"
         harness.viewModel.submit()
-        await settle(harness.viewModel)
+        await harness.settle()
 
         harness.viewModel.discard()
         #expect(harness.routines.createCount == 0)
@@ -417,74 +401,14 @@ struct RoutineDraftTests {
 
     @Test("The reader's unit reaches the drafting session")
     func readersUnitReachesTheSession() async {
-        let harness = makeHarness()
-        harness.drafting.snapshots = [snapshot([entry("Bench Press")])]
+        let harness = RoutineDraftHarness.make()
+        harness.drafting.snapshots = [routineDraftSnapshot([routineDraftEntry("Bench Press")])]
         harness.viewModel.onAppear(weightUnit: .pounds)
 
         harness.viewModel.descriptionText = "Push day"
         harness.viewModel.submit()
-        await settle(harness.viewModel)
+        await harness.settle()
 
         #expect(harness.drafting.requestedUnits == [.pounds])
-    }
-
-    // MARK: - Harness
-
-    private struct Harness {
-        let viewModel: RoutineDraftViewModel
-        let gate: AICoachAllowanceGate
-        let drafting: FakeRoutineDrafting
-        let routines: FakeRoutineCreating
-        let paywalls: RecordingPaywallPresenter
-        let allowance: SpyAllowanceStore
-        let exercises: FakeExerciseRepository
-    }
-
-    private func makeHarness(
-        state: ProEntitlementState = .free,
-        availability: AICoachAvailabilityState = .available,
-        libraryNames: [String] = ["Bench Press", "Row", "Squat", "Bankdrücken"]
-    ) -> Harness {
-        let paywalls = RecordingPaywallPresenter()
-        let allowance = SpyAllowanceStore()
-        let availabilityStub = StubAICoachAvailability(state: availability)
-        let gate = AICoachAllowanceGate(
-            surface: .coachChat,
-            entitlements: StubProEntitlements(state: state),
-            paywalls: paywalls,
-            allowance: allowance,
-            availability: availabilityStub,
-            isGatingEnabled: true
-        )
-        let drafting = FakeRoutineDrafting()
-        let routines = FakeRoutineCreating()
-        let exercises = FakeExerciseRepository(exercises: library(libraryNames))
-        return Harness(
-            viewModel: RoutineDraftViewModel(
-                allowanceGate: gate,
-                drafting: drafting,
-                exerciseRepository: exercises,
-                routines: routines,
-                paywalls: paywalls,
-                availability: availabilityStub
-            ),
-            gate: gate,
-            drafting: drafting,
-            routines: routines,
-            paywalls: paywalls,
-            allowance: allowance,
-            exercises: exercises
-        )
-    }
-
-    /// Lets the scripted stream drain. The fake yields into an unbounded buffer and
-    /// finishes synchronously, so this settles in a handful of turns; the bound only
-    /// stops a bug from hanging the suite.
-    private func settle(_ viewModel: RoutineDraftViewModel, turns: Int = 500) async {
-        for _ in 0..<turns {
-            if !viewModel.isDrafting { return }
-            await Task.yield()
-        }
-        Issue.record("the draft never finished")
     }
 }

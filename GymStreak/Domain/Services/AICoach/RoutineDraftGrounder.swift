@@ -18,8 +18,9 @@ import Foundation
 /// routine the person keeps, and it has exactly two jobs:
 ///
 /// 1. **Resolve every name against the live library.** Not "look it up if convenient" —
-///    an exercise that does not resolve is excluded and reported, never created, never
-///    guessed at. This app does not invent library entries on the model's word.
+///    an exercise that does not resolve is carried as unresolved and answered by the
+///    person, never created, never guessed at. This app does not invent library entries
+///    on the model's word.
 /// 2. **Bound every number.** The model's figures are copied from a sentence a person
 ///    typed, so they can be absent (the sentinel), absurd, or negative.
 final class RoutineDraftGrounder {
@@ -60,8 +61,6 @@ final class RoutineDraftGrounder {
     private let resolver = ExerciseNameResolver()
 
     /// What each drafted name resolved to, remembered for the life of this instance.
-    /// `nil` inside the optional is a real answer — "the library could not place this" —
-    /// which is why the value is a double optional rather than a sentinel.
     ///
     /// **This is why the type is a class and not a struct.** `ground(_:…)` runs on every
     /// streamed snapshot over the *whole* cumulative draft, and a single
@@ -75,7 +74,17 @@ final class RoutineDraftGrounder {
     /// **One instance per library snapshot.** The memo is keyed by name alone, so an
     /// instance must not outlive the `[Exercise]` it was used with — build a fresh
     /// grounder whenever the library is re-fetched. `RoutineDraftViewModel` does.
-    private var resolutions: [String: Exercise?] = [:]
+    private var matches: [String: GroundedDraftExercise.Match] = [:]
+
+    /// One identity per drafted position, handed out once and reused on every later
+    /// snapshot.
+    ///
+    /// Each streamed snapshot is cumulative, so the entry at a given index is the same
+    /// entry throughout the session. Minting a fresh `UUID` per snapshot would give the
+    /// review list a brand-new identity for every row on every token burst — SwiftUI
+    /// would rebuild the whole list rather than diff it (CLAUDE.md rendering rule 8), and
+    /// a picker opened on a row would be pointing at an id that no longer exists.
+    private var entryIDs: [UUID] = []
 
     init() {}
 
@@ -85,8 +94,8 @@ final class RoutineDraftGrounder {
     ///
     /// Safe to call on every snapshot: it allocates no formatter, touches no store, and
     /// resolves each distinct drafted name against the library exactly once for the life
-    /// of this instance (see `resolutions` — a cache miss is what costs three library
-    /// walks, and a streaming draft repeats the same names on every snapshot).
+    /// of this instance (see `matches` — a cache miss is what costs three library walks,
+    /// and a streaming draft repeats the same names on every snapshot).
     ///
     /// - Parameter weightUnit: the unit `snapshot`'s weights are written in. Converted to
     ///   canonical kilograms here, exactly once — the app never stores a converted value
@@ -97,59 +106,64 @@ final class RoutineDraftGrounder {
         weightUnit: WeightUnit
     ) -> GroundedRoutineDraft {
         var exercises: [GroundedDraftExercise] = []
-        var unmatched: [String] = []
-        var seenUnmatched = Set<String>()
 
-        for entry in snapshot.exercises {
+        for (index, entry) in snapshot.exercises.enumerated() {
             let name = entry.name.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !name.isEmpty else { continue }
 
-            if let exercise = resolution(for: name, in: library) {
-                exercises.append(
-                    GroundedDraftExercise(
-                        exercise: exercise,
-                        setCount: boundedSetCount(entry.setCount),
-                        reps: boundedReps(entry.reps),
-                        weightKilograms: kilograms(entry.weight, in: weightUnit)
-                    )
+            exercises.append(
+                GroundedDraftExercise(
+                    id: identity(at: index),
+                    draftedName: name,
+                    match: match(for: name, in: library),
+                    setCount: boundedSetCount(entry.setCount),
+                    reps: boundedReps(entry.reps),
+                    weightKilograms: kilograms(entry.weight, in: weightUnit)
                 )
-                continue
-            }
-
-            // Ambiguous and unmatched are the same outcome *for this ticket*: there is
-            // no library exercise this draft may safely claim, so it is named as left
-            // out rather than resolved on the app's guess. Ticket 02 splits them apart
-            // and makes both answerable by the person.
-            if seenUnmatched.insert(name.lowercased()).inserted {
-                unmatched.append(name)
-            }
+            )
         }
 
         return GroundedRoutineDraft(
             name: snapshot.name.trimmingCharacters(in: .whitespacesAndNewlines),
-            exercises: exercises,
-            unmatchedNames: unmatched
+            exercises: exercises
         )
     }
 
-    /// The library exercise `name` resolves to, or `nil` when the library cannot place
-    /// it. Memoized — see `resolutions`.
+    /// How the library answers `name`. Memoized — see `matches`.
     ///
     /// `.resolved` aggregates library rows that share one folded *name*, so they are
     /// indistinguishable by the only thing the model gave us; taking the first is not a
-    /// coin toss between different exercises. `.ambiguous` and `.noMatch` both answer
-    /// `nil`: neither names an exercise this draft may claim.
-    private func resolution(for name: String, in library: [Exercise]) -> Exercise? {
+    /// coin toss between different exercises. `.ambiguous` keeps its candidates, because
+    /// a short correct list is exactly what makes that case answerable in one tap.
+    private func match(for name: String, in library: [Exercise]) -> GroundedDraftExercise.Match {
         let key = name.lowercased()
-        if let cached = resolutions[key] { return cached }
+        if let cached = matches[key] { return cached }
 
-        let resolved: Exercise?
+        let match: GroundedDraftExercise.Match
         switch resolver.resolve(name, in: library) {
-        case .resolved(let matches): resolved = matches.first
-        case .ambiguous, .noMatch: resolved = nil
+        case .resolved(let resolved):
+            match = resolved.first.map { .resolved($0) } ?? .unmatched
+        case .ambiguous(let names):
+            // Back to library rows, in the order the resolver named them, and keeping
+            // same-name duplicates: the person picks one of *their* exercises, so the
+            // list has to be exercises rather than the strings the resolver reports.
+            let byName = Dictionary(grouping: library) { $0.name.lowercased() }
+            let candidates = names.flatMap { byName[$0.lowercased()] ?? [] }
+            // An ambiguous answer whose names no longer name anything in this library is
+            // not something to offer an empty list for.
+            match = candidates.isEmpty ? .unmatched : .ambiguous(candidates)
+        case .noMatch:
+            match = .unmatched
         }
-        resolutions[key] = resolved
-        return resolved
+        matches[key] = match
+        return match
+    }
+
+    /// The identity of the drafted exercise at `index`, stable for the life of this
+    /// instance — see `entryIDs`.
+    private func identity(at index: Int) -> UUID {
+        while entryIDs.count <= index { entryIDs.append(UUID()) }
+        return entryIDs[index]
     }
 
     // MARK: - Bounds

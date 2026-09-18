@@ -557,6 +557,30 @@ final class AppDependencies: ObservableObject {
         workoutReminders: workoutReminders
     )
 
+    /// The app's one exercise-library ViewModel for the **routine-drafting sheet's**
+    /// picker.
+    ///
+    /// Ticket 02 of the AI routine draft lets a person point an unresolved drafted name
+    /// at a real library exercise, and that picker routes through
+    /// `ExercisesViewModel.sections(searchText:categoryKey:equipment:)` rather than adding
+    /// a third search/filter implementation to the app.
+    ///
+    /// Stored here rather than created by the picker because `ExercisesViewModel.init`
+    /// registers a `cloudKitDataDidChange` observer and never removes it: a fresh instance
+    /// per drafting sheet would leak one observer per presentation, and the sheet is
+    /// opened and dismissed repeatedly. The Routines and Exercises tabs keep their own
+    /// long-lived `@StateObject` instances — they are created once for the life of the
+    /// app, which is the case this shared one exists to reproduce for a modal.
+    ///
+    /// `lazy` so it is not built (and does not fetch the library) until a drafting sheet
+    /// actually needs it.
+    private(set) lazy var exercisesViewModel: ExercisesViewModel = ExercisesViewModel(
+        exerciseRepository: exerciseRepository,
+        routineRepository: routineRepository,
+        catalogSync: exerciseCatalogSync,
+        historyStoreGate: historyStoreGate
+    )
+
     /// One routine-drafting session. A factory rather than a stored property because the
     /// session is per drafting session by design — it holds a `LanguageModelSession`
     /// whose instructions are built for one reader's unit, and nothing about it should
