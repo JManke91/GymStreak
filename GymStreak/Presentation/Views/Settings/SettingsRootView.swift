@@ -12,6 +12,7 @@ import UIKit
 /// Stack destinations of the Settings tab.
 private enum SettingsDestination: Hashable {
     case aiCoach
+    case heartRateProfile
 }
 
 /// Settings tab root: screen title followed by grouped sections.
@@ -65,6 +66,24 @@ struct SettingsRootView: View {
                             sync: dependencies.workoutCalendarSync,
                             mirror: dependencies.plannedWorkoutCalendarMirror
                         )
+
+                        SettingsSectionView(
+                            header: "settings.section.conditioning".localized,
+                            footer: "settings.section.conditioning.footer".localized
+                        ) {
+                            NavigationLink(value: SettingsDestination.heartRateProfile) {
+                                SettingsRowView(
+                                    icon: "heart.fill",
+                                    iconTint: DesignSystem.Colors.destructive,
+                                    title: "conditioning.hr.title".localized,
+                                    subtitle: "settings.conditioning.hr.row.subtitle".localized,
+                                    showsChevron: true,
+                                    isLast: true
+                                )
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityIdentifier("settings-row-heart-rate-profile")
+                        }
 
                         SettingsSectionView(
                             header: "settings.section.ai_coach".localized,
@@ -163,6 +182,8 @@ struct SettingsRootView: View {
                 switch destination {
                 case .aiCoach:
                     AICoachSettingsView()
+                case .heartRateProfile:
+                    HeartRateProfileView(viewModel: dependencies.makeHeartRateProfileEditor())
                 }
             }
             .alert(

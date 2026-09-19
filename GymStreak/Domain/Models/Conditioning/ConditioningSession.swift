@@ -23,8 +23,8 @@ enum ConditioningModality: String, CaseIterable, Identifiable, Sendable {
     var id: String { rawValue }
 }
 
-/// The intensity cue shown for a phase. RPE and talk-test targets only — the
-/// personal heart-rate zones are a later ticket.
+/// The intensity cue shown for a phase, as RPE / talk test. The conversational
+/// effort additionally gets a personal heart-rate range (`HeartRateZones`).
 enum ConditioningEffort: String, Sendable {
     /// Warm-up, cool-down and recovery: easy movement.
     case easy

@@ -44,6 +44,9 @@ final class AppDependencies: ObservableObject {
     /// only one session runs at a time, and it owns the pending cue requests.
     let conditioningCues: ConditioningCueDelivering = ConditioningCueDeliverer()
     let conditioningSafety: ConditioningSafetyAcknowledging = ConditioningSafetyStore()
+    /// The conditioning heart-rate profile (docs/fight-conditioning.md). One instance, so the
+    /// Settings editor and an open session preview observe the same value.
+    let heartRateProfileStore: HeartRateProfileStoring = HeartRateProfileStore()
     /// Writes a session's performed values back onto its routine template
     /// ("Update routine"). Stateless domain logic over the shared main-context
     /// repositories, so one instance serves both `WorkoutViewModel`s.
@@ -542,7 +545,15 @@ final class AppDependencies: ObservableObject {
             cues: conditioningCues,
             workoutSaver: HealthKitWorkoutManager(),
             healthSync: UserDefaultsHealthSyncPreference(),
-            records: conditioningRecordRepository
+            records: conditioningRecordRepository,
+            heartRateProfile: heartRateProfileStore.heartRateProfile
+        )
+    }
+
+    func makeHeartRateProfileEditor() -> HeartRateProfileEditorViewModel {
+        HeartRateProfileEditorViewModel(
+            store: heartRateProfileStore,
+            healthReader: HealthKitHeartRateProfileReader()
         )
     }
 

@@ -53,6 +53,8 @@ final class ConditioningRunViewModel {
     @ObservationIgnored private let records: any ConditioningRecordRepository
     @ObservationIgnored private let now: () -> Date
     @ObservationIgnored private let isTickingAutomatically: Bool
+    /// Snapshot taken when the session is created; edits mid-session do not apply.
+    @ObservationIgnored private let heartRateProfile: HeartRateProfile?
 
     init(
         plan: ConditioningSessionPlan,
@@ -60,6 +62,7 @@ final class ConditioningRunViewModel {
         workoutSaver: any ConditioningWorkoutSaving,
         healthSync: any HealthSyncPreferenceReading,
         records: any ConditioningRecordRepository,
+        heartRateProfile: HeartRateProfile? = nil,
         now: @escaping () -> Date = Date.init,
         isTickingAutomatically: Bool = true
     ) {
@@ -69,6 +72,7 @@ final class ConditioningRunViewModel {
         self.workoutSaver = workoutSaver
         self.healthSync = healthSync
         self.records = records
+        self.heartRateProfile = heartRateProfile
         self.now = now
         self.isTickingAutomatically = isTickingAutomatically
         self.position = timeline.position(at: 0)
@@ -91,6 +95,11 @@ final class ConditioningRunViewModel {
     }
 
     var sessionTitle: String { ConditioningCopy.title(plan.definition.id) }
+
+    /// The personal heart-rate range for `phase`, if its effort has one.
+    func heartRateTarget(for phase: ConditioningPhase) -> HeartRateTarget? {
+        HeartRateZones.target(for: phase.effort, profile: heartRateProfile)
+    }
 
     // MARK: - Controls
 

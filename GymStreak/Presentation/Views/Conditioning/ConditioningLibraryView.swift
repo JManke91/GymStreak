@@ -25,7 +25,9 @@ private struct ConditioningLibraryContent: View {
     init(dependencies: AppDependencies) {
         _viewModel = State(initialValue: ConditioningLibraryViewModel(
             safety: dependencies.conditioningSafety,
-            makeRun: dependencies.makeConditioningRunViewModel(plan:)
+            heartRateProfile: dependencies.heartRateProfileStore,
+            makeRun: dependencies.makeConditioningRunViewModel(plan:),
+            makeHeartRateEditor: dependencies.makeHeartRateProfileEditor
         ))
     }
 

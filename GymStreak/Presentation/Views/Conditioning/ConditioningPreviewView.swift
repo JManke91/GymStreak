@@ -17,6 +17,7 @@ struct ConditioningPreviewView: View {
     @State private var volume: Int
     @State private var isSubMaximal = false
     @State private var preview: ConditioningPreview?
+    @State private var heartRateEditor: HeartRateProfileEditorViewModel?
 
     init(definition: ConditioningSessionDefinition, viewModel: ConditioningLibraryViewModel) {
         self.definition = definition
@@ -45,6 +46,10 @@ struct ConditioningPreviewView: View {
                 if definition.supportsSubMaximal {
                     subMaximalSection
                 }
+                ConditioningHeartRateCard(
+                    guidance: viewModel.heartRateGuidance(for: definition),
+                    onEdit: { heartRateEditor = viewModel.makeHeartRateEditor() }
+                )
                 structureSection
 
                 Button {
@@ -63,6 +68,9 @@ struct ConditioningPreviewView: View {
         .background(DesignSystem.Colors.background.ignoresSafeArea())
         .navigationTitle(ConditioningCopy.title(definition.id))
         .navigationBarTitleDisplayMode(.inline)
+        .sheet(item: $heartRateEditor) { editor in
+            HeartRateProfileSheet(viewModel: editor)
+        }
         .onAppear { preview = viewModel.preview(for: plan) }
         .onChange(of: plan) { _, newPlan in preview = viewModel.preview(for: newPlan) }
     }

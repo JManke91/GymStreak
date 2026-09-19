@@ -28,6 +28,19 @@ struct ConditioningPreview: Equatable {
     let totalDuration: TimeInterval
 }
 
+/// What a session preview says about heart rate.
+enum ConditioningHeartRateGuidance: Equatable {
+    /// The session has no heart-rate guidance (intervals are steered by RPE).
+    case none
+    /// Alactic power: heart rate is never a target — cue maximal intent.
+    case maximalIntent
+    /// A heart-rate session, but no usable profile yet.
+    case needsSetup
+    /// The user takes heart-rate-affecting medication: RPE only.
+    case rpeOnly
+    case target(HeartRateTarget)
+}
+
 @Observable
 @MainActor
 final class ConditioningLibraryViewModel {
@@ -44,14 +57,30 @@ final class ConditioningLibraryViewModel {
     var activeRun: ConditioningRunViewModel?
 
     @ObservationIgnored private let safety: any ConditioningSafetyAcknowledging
+    @ObservationIgnored private let heartRateProfile: any HeartRateProfileStoring
     @ObservationIgnored private let makeRun: (ConditioningSessionPlan) -> ConditioningRunViewModel
+    @ObservationIgnored let makeHeartRateEditor: () -> HeartRateProfileEditorViewModel
 
     init(
         safety: any ConditioningSafetyAcknowledging,
-        makeRun: @escaping (ConditioningSessionPlan) -> ConditioningRunViewModel
+        heartRateProfile: any HeartRateProfileStoring,
+        makeRun: @escaping (ConditioningSessionPlan) -> ConditioningRunViewModel,
+        makeHeartRateEditor: @escaping () -> HeartRateProfileEditorViewModel
     ) {
         self.safety = safety
+        self.heartRateProfile = heartRateProfile
         self.makeRun = makeRun
+        self.makeHeartRateEditor = makeHeartRateEditor
+    }
+
+    /// Reads the profile store, which is `@Observable`, so a preview refreshes
+    /// as soon as the editor sheet saves.
+    func heartRateGuidance(for definition: ConditioningSessionDefinition) -> ConditioningHeartRateGuidance {
+        if definition.energySystem == .alactic { return .maximalIntent }
+        guard definition.effort == .conversational else { return .none }
+        guard let profile = heartRateProfile.heartRateProfile else { return .needsSetup }
+        if profile.usesHeartRateMedication { return .rpeOnly }
+        return HeartRateZones.aerobicTarget(for: profile).map(ConditioningHeartRateGuidance.target) ?? .needsSetup
     }
 
     /// Whether the runner must show the safety screen before starting.

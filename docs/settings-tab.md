@@ -36,6 +36,9 @@ section/row blueprint documented here.
   that opens the app's page in Settings. The whole feature — why full access is required, the
   source-selection rule, the concurrency answers — is documented in `docs/calendar-sync.md`;
   this file does not repeat it.
+- **Conditioning** section: one row, "Heart-rate zones", pushes `HeartRateProfileView` — the
+  conditioning heart-rate profile (max HR from age or measured, resting HR, medication switch,
+  Apple Health pre-fill). Documented in `docs/fight-conditioning.md` (ticket 03).
 - **AI Coach** section: its row pushes the **existing** `AICoachSettingsView` unchanged.
 - **Support** section: "App bewerten" / "Rate app" deep-links to the App Store's
   write-a-review composer, and "Support kontaktieren" / "Contact support" hands a prefilled

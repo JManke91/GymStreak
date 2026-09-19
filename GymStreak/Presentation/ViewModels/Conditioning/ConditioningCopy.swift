@@ -70,6 +70,37 @@ enum ConditioningCopy {
         return "conditioning.position.round".localized(round, rounds)
     }
 
+    /// "128–160 bpm".
+    static func heartRateRange(_ target: HeartRateTarget) -> String {
+        "conditioning.hr.range".localized(target.lowerBPM, target.upperBPM)
+    }
+
+    /// "60–75 % of max" / "50–70 % of heart-rate reserve".
+    static func heartRateBasis(_ target: HeartRateTarget) -> String {
+        switch target.method {
+        case .percentOfMax: "conditioning.hr.basis.max".localized(target.lowerPercent, target.upperPercent)
+        case .heartRateReserve: "conditioning.hr.basis.reserve".localized(target.lowerPercent, target.upperPercent)
+        }
+    }
+
+    static func heartRateIssue(_ issue: HeartRateZones.ValidationIssue) -> String {
+        switch issue {
+        case .missingAge: "conditioning.hr.issue.missing_age".localized
+        case .ageOutOfRange:
+            "conditioning.hr.issue.age_range".localized(HeartRateZones.ageRange.lowerBound, HeartRateZones.ageRange.upperBound)
+        case .missingMaxHeartRate: "conditioning.hr.issue.missing_max".localized
+        case .maxHeartRateOutOfRange:
+            "conditioning.hr.issue.max_range".localized(
+                HeartRateZones.maxHeartRateRange.lowerBound, HeartRateZones.maxHeartRateRange.upperBound
+            )
+        case .restingHeartRateOutOfRange:
+            "conditioning.hr.issue.resting_range".localized(
+                HeartRateZones.restingHeartRateRange.lowerBound, HeartRateZones.restingHeartRateRange.upperBound
+            )
+        case .restingTooCloseToMax: "conditioning.hr.issue.resting_close".localized
+        }
+    }
+
     /// "30 s" / "2 min" / "90 s".
     static func duration(_ seconds: TimeInterval) -> String {
         let whole = Int(seconds.rounded())

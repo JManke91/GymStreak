@@ -163,6 +163,18 @@ struct ConditioningRunnerView: View {
                 .font(.onyxTitle2)
                 .multilineTextAlignment(.center)
                 .foregroundStyle(isEffort ? DesignSystem.Colors.tint : DesignSystem.Colors.textPrimary)
+
+            if let target = viewModel.heartRateTarget(for: phase) {
+                VStack(spacing: 2) {
+                    Label(ConditioningCopy.heartRateRange(target), systemImage: "heart.fill")
+                        .font(.onyxNumber)
+                        .foregroundStyle(DesignSystem.Colors.textPrimary)
+                    Text(ConditioningCopy.heartRateBasis(target))
+                        .font(.onyxFootnote)
+                        .foregroundStyle(DesignSystem.Colors.textSecondary)
+                }
+                .accessibilityElement(children: .combine)
+            }
         }
         .frame(maxWidth: .infinity)
     }

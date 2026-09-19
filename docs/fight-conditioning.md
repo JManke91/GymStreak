@@ -2,7 +2,9 @@
 
 **Status (2026-09-19): tickets 01–02 shipped and device-verified — the iPhone runner (library,
 preview, runner, Apple Health write) and History logging (own SwiftData record, interleaved cards,
-detail, delete).** HR zones, the program and the watch are later tickets. This file holds
+detail, delete). Ticket 03 (personal heart-rate zones, incl. the Apple Health peak-HR suggestion) shipped and
+device-verified the same day.**
+The program and the watch are later tickets. This file holds
 the pre-implementation research (so it is not re-done) and the feature doc (iOS + watch
 architecture, components, edge cases) as tickets land. Parent Things task: "Add fighting conditioning into workout routine"
 (`TFUtiRbLsX4VScjcnbdZbv`, Gym Streak project).
@@ -257,6 +259,100 @@ session is still recorded in History, with a delete alert offering the single bu
 property that matters most here, because it is what makes GymStreak rather than Apple Health the
 source of truth for conditioning history.
 
+## iOS architecture (ticket 03 — personal heart-rate zones)
+
+**What the user gets.** A small heart-rate profile: maximum heart rate either *estimated from age*
+(HRmax = 208 − 0.7 × age, Tanaka) or *measured*, an optional resting heart rate, and an "I take
+medication that affects my heart rate" switch. The editor is reachable from **Settings →
+Conditioning → Heart-rate zones** and, as a sheet, from the heart-rate card of a session preview. It
+shows the resulting aerobic zone live, states that the age estimate is only ± 10 bpm, explains the
+Karvonen switch and the medication switch, and offers **Fill from Apple Health** (age from date of
+birth, latest resting heart rate). Save is disabled while the input is invalid; the zone card lists
+what is wrong.
+
+**Where targets appear.** Only the *conversational* aerobic effort (Aerobic base, the steady
+session) gets a heart-rate target:
+
+| Preview card (`ConditioningHeartRateGuidance`) | When |
+|---|---|
+| `target` — "Aerobic: 112–140 bpm (60–75 % of max)" + estimate or measured note + Edit | aerobic base with a valid profile |
+| `needsSetup` — "Get a personal heart-rate target" + Set up | aerobic base, no or incomplete profile |
+| `rpeOnly` — "RPE only" + Edit | medication switch on |
+| `maximalIntent` — "No heart-rate target … go by maximal intent" | every alactic session, whatever the profile |
+| `none` — no card | lactic and aerobic-burst intervals (heart rate lags a 30 s effort too much to steer by; RPE stays the cue) |
+
+The runner shows the range with a heart glyph and its basis under the effort cue during the steady
+phase only (`ConditioningRunViewModel.heartRateTarget(for:)`, which delegates to
+`HeartRateZones.target(for:profile:)`). The profile is snapshotted when the runner is created, so
+editing it mid-session changes nothing until the next session. The RPE cue is always shown
+alongside — heart rate never replaces it.
+
+**The math (`Domain/Services/HeartRateZones.swift`, pure, unit-tested).** Without resting HR:
+60–75 % of HRmax. With resting HR: 50–70 % of heart-rate reserve, `resting + p × (max − resting)`
+(Karvonen). Rounded to whole bpm. Plausibility: age 13–100, measured max 120–230 bpm, resting
+30–120 bpm, and reserve (max − resting) ≥ 40 bpm. Only the *active* max source is validated — the
+inactive value is kept in the profile so switching back never loses it. With the medication switch
+on nothing is required and no target is ever produced.
+
+**Persistence.** `HeartRateProfileStore` (`Data/Preferences`, `@Observable @MainActor`) writes the
+profile as JSON under `conditioning.heartRateProfile` in `UserDefaults.standard` — the same store and
+reach as the user's other settings (weight unit, calendar sync, reminders): it survives relaunches,
+not a reinstall, and does not travel between devices. One instance lives in `AppDependencies`, so
+an open preview observes a save from the sheet immediately. Deliberately not iCloud KVS: no other
+setting syncs that way, and the watch gets the zones over WatchConnectivity in ticket 06 (hook: an
+`onChange` callback like `WeightUnitPreference.onChange`, not added yet because nothing consumes it).
+
+**Apple Health pre-fill.** `HealthKitHeartRateProfileReader` (`Data/HealthKit`, behind the Domain
+protocol `HeartRateProfileHealthReading`) requests **read-only** access to
+`HKCharacteristicType(.dateOfBirth)` and `HKQuantityType(.restingHeartRate)` only when the user taps
+the pre-fill row — never at launch, never with the workout authorization. Age comes from
+`dateOfBirthComponents()`; resting HR from an `HKSampleQueryDescriptor` for the single newest sample
+(`SortDescriptor(\.endDate, order: .reverse)`, `limit: 1`) in count/min; read access to
+`HKQuantityType(.heartRate)` is requested in the same call for the peak suggestion below. A denied read and missing
+data are indistinguishable in HealthKit, so both leave the field empty and the footer says "Nothing
+found — check the Health app permissions or enter the values yourself". The pre-fill only fills
+what it found; it never clears a value.
+
+**The peak suggestion.** HealthKit has **no maximum-heart-rate type** — only heart-rate samples,
+resting HR, walking average, HRV, recovery and VO₂ max; Apple's Workout-app zones are computed
+internally and never written to Health. The pre-fill therefore also reads the highest heart-rate
+sample of the last 6 months (`HeartRateZones.peakLookbackMonths`) with an
+`HKStatisticsQueryDescriptor` and `.discreteMax` (HealthKit computes it; no months of samples are
+fetched), dropping a value outside the plausible 120–230 bpm range as a sensor artifact. It is
+**never filled in automatically**: the editor shows it as a row "Highest recorded: 192 bpm" with
+*Use* (switches the source to *Measured* and fills it) and *Ignore*, and a footer warns that
+everyday training rarely reaches the true maximum while a single optical spike (wrist movement
+while boxing) can overshoot it. Rejected: auto-filling it as the max — a wrong max silently skews
+every zone, in either direction. `NSHealthShareUsageDescription` (build setting + en/de
+`InfoPlist.strings`) now also names date of birth, resting heart rate and highest recorded heart rate.
+
+**Components (ticket 03).**
+
+| Layer | File | Role |
+|---|---|---|
+| Domain/Models | `Conditioning/HeartRateProfile.swift` | `HeartRateProfile`, `HeartRateTarget`, `HeartRateHealthPrefill` |
+| Domain/Services | `HeartRateZones.swift` | estimate, % HRmax, Karvonen, validation, which effort gets a target |
+| Domain/Interfaces | `HeartRateProfileStoring.swift`, `HeartRateProfileHealthReading.swift` | gateways |
+| Data | `Preferences/HeartRateProfileStore.swift`, `HealthKit/HealthKitHeartRateProfileReader.swift` | implementations |
+| Presentation | `ViewModels/Conditioning/HeartRateProfileEditorViewModel.swift`; `ConditioningLibraryViewModel.heartRateGuidance(for:)`; `ConditioningCopy.heartRate*` | state + copy |
+| Presentation | `Views/Conditioning/HeartRateProfileView.swift` (+ `HeartRateProfileSheet`), `ConditioningHeartRateCard.swift`; runner line in `ConditioningRunnerView`; Settings section in `SettingsRootView` | screens |
+| App | `AppDependencies.heartRateProfileStore`, `makeHeartRateProfileEditor()`, profile snapshot in `makeConditioningRunViewModel(plan:)` | wiring |
+
+Strings: `conditioning.hr.*`, `settings.section.conditioning*`, `settings.conditioning.hr.row.subtitle`.
+
+**Tests (ticket 03).** `HeartRateZonesTests` (estimate, % HRmax, measured max, Karvonen, missing
+values per source, seven implausible inputs, medication, only-conversational) and
+`HeartRateProfilePresentationTests` (store round trip and clear, editor pre-fill fills only what was
+found and refuses to save an invalid draft, the peak is only suggested — *Use* switches to a
+measured max, *Ignore* leaves the draft untouched — "nothing found" state, preview guidance per session and
+profile). The HealthKit reader is not unit-tested — it needs a real Health store.
+
+**Monetization (ticket 03).** Free — §3 Rule 3: the target is in-session guidance, and the profile
+exists only to feed it. No cap, no placement, no badge.
+
+**Watch target.** Unchanged by ticket 03. Ticket 06 syncs the profile/zones to the watch for the
+live zone indicator; RPE-only users must see no HR target there either.
+
 ## Research findings — Apple Health / HealthKit (verified 2026-09-18)
 
 - **Record conditioning as its own `HKWorkout`, separate from the strength workout.**
@@ -278,6 +374,18 @@ source of truth for conditioning history.
   an `HKWorkoutBuilder` save with zero samples is valid ([finishWorkout](https://developer.apple.com/documentation/healthkit/hkworkoutbuilder/finishworkout(completion:))); assault/air bike →
   `.cycling` indoor; sled / battle ropes / med-ball / sprint intervals → `.highIntensityIntervalTraining`;
   `.mixedCardio` only for a non-interval multi-machine circuit.
+- **Profile pre-fill (ticket 03, verified 2026-09-19):** `HKHealthStore.dateOfBirthComponents()`
+  (iOS 10+) throws both when read access is denied and when no birthday is set — no distinct error
+  code, treat as opaque. `requestAuthorization(toShare: [], read:)` is the documented read-only
+  pattern and prompts only for undecided types. Read authorization cannot be queried: denied reads
+  just return empty. `NSHealthShareUsageDescription` covers characteristic and quantity reads
+  alike. Resting HR: `HKSampleQueryDescriptor(predicates: [.quantitySample(type:)],
+  sortDescriptors: [SortDescriptor(\.endDate, order: .reverse)], limit: 1)` →
+  `result(for:)`, unit `.count().unitDivided(by: .minute())`. Extract plain values before crossing
+  actors — Apple documents no `Sendable` conformance for `HKQuantitySample`.
+  Sources: [dateOfBirthComponents()](https://developer.apple.com/documentation/healthkit/hkhealthstore/dateofbirthcomponents()),
+  [requestAuthorization(toShare:read:)](https://developer.apple.com/documentation/healthkit/hkhealthstore/requestauthorization(toshare:read:)),
+  [HKSampleQueryDescriptor](https://developer.apple.com/documentation/healthkit/hksamplequerydescriptor).
 - **Live heart rate:** the watch is the reliable source (`HKLiveWorkoutBuilder` statistics in
   `workoutBuilder(_:didCollectDataOf:)`, already used by `WatchHealthKitManager`). iPhone-originated
   `HKWorkoutSession` exists since iOS 26 but the phone has no HR sensor — HR only with a Bluetooth
