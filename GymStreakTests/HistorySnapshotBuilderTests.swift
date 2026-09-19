@@ -93,8 +93,9 @@ struct HistorySnapshotBuilderTests {
 
         let kinds = snapshot.rows.map { row -> String in
             switch row {
-            case .monthHeader: return "header"
-            case .card:        return "card"
+            case .monthHeader:  return "header"
+            case .card:         return "card"
+            case .conditioning: return "conditioning"
             }
         }
         #expect(kinds == ["card", "card", "header", "card"])
@@ -244,6 +245,173 @@ struct HistorySnapshotBuilderTests {
         session.startTime = try date(year, month, day, hour: hour, calendar: calendar)
         session.endTime = session.startTime.addingTimeInterval(3_600)
         return session
+    }
+
+    // MARK: - Conditioning merge (docs/fight-conditioning.md)
+
+    /// Conditioning rows sit between the workout cards of the same month, by start time.
+    @Test
+    func conditioningRowsInterleaveWithWorkoutsByDate() throws {
+        let context = ModelContext(InMemoryModelContainer.make())
+        let calendar = HistoryStatsService.isoGermanCalendar()
+        let morning = try makeFinishedSession(year: 2026, month: 9, day: 10, hour: 8, context: context, calendar: calendar)
+        let evening = try makeFinishedSession(year: 2026, month: 9, day: 10, hour: 20, context: context, calendar: calendar)
+        let midday = try makeConditioning(year: 2026, month: 9, day: 10, hour: 13, context: context, calendar: calendar)
+        try context.save()
+
+        let snapshot = HistorySnapshotBuilder.build(
+            sessions: [morning, evening],
+            routines: [],
+            prCountBySession: [:],
+            conditioningRecords: [midday]
+        )
+
+        #expect(snapshot.rows.map(\.id) == [
+            "card-\(evening.id.uuidString)",
+            "conditioning-\(midday.id.uuidString)",
+            "card-\(morning.id.uuidString)"
+        ])
+        #expect(snapshot.sessionCount == 2)
+        #expect(snapshot.conditioningCount == 1)
+    }
+
+    /// A month reachable only through conditioning still gets its divider — otherwise its
+    /// rows would appear under the previous month's heading.
+    @Test
+    func aMonthWithOnlyConditioningStillGetsItsDivider() throws {
+        let context = ModelContext(InMemoryModelContainer.make())
+        let calendar = HistoryStatsService.isoGermanCalendar()
+        let september = try makeFinishedSession(year: 2026, month: 9, day: 12, context: context, calendar: calendar)
+        let august = try makeConditioning(year: 2026, month: 8, day: 3, context: context, calendar: calendar)
+        try context.save()
+
+        let snapshot = HistorySnapshotBuilder.build(
+            sessions: [september],
+            routines: [],
+            prCountBySession: [:],
+            conditioningRecords: [august]
+        )
+
+        #expect(snapshot.rows.map(\.id) == [
+            "card-\(september.id.uuidString)",
+            "month-2026-8",
+            "conditioning-\(august.id.uuidString)"
+        ])
+        let augustSection = try #require(snapshot.monthTotals["2026-8"])
+        #expect(augustSection.sessionCount == 0)
+        #expect(augustSection.conditioningCount == 1)
+        #expect(augustSection.totalVolume == 0)
+    }
+
+    /// Conditioning is counted per month but deliberately stays out of the strength aggregates
+    /// the calendar and the week hero render.
+    @Test
+    func conditioningDoesNotLeakIntoStrengthAggregates() throws {
+        let context = ModelContext(InMemoryModelContainer.make())
+        let calendar = HistoryStatsService.isoGermanCalendar()
+        let reference = try date(2026, 9, 15, calendar: calendar)
+        let record = try makeConditioning(year: 2026, month: 9, day: 14, context: context, calendar: calendar)
+        try context.save()
+
+        let snapshot = HistorySnapshotBuilder.build(
+            sessions: [],
+            routines: [],
+            prCountBySession: [:],
+            conditioningRecords: [record],
+            referenceDate: reference
+        )
+
+        #expect(snapshot.rows.count == 1, "the only month never gets a divider")
+        #expect(snapshot.cardsByDay.isEmpty)
+        #expect(snapshot.weekStats.completedCount == 0)
+        #expect(snapshot.sessionCount == 0)
+        #expect(snapshot.conditioningCount == 1)
+    }
+
+    /// Ordering must not depend on the caller: the builder sorts conditioning itself, the same
+    /// way it sorts sessions.
+    @Test
+    func conditioningIsSortedNewestFirstWhateverTheCallerPassed() throws {
+        let context = ModelContext(InMemoryModelContainer.make())
+        let calendar = HistoryStatsService.isoGermanCalendar()
+        let older = try makeConditioning(year: 2026, month: 9, day: 2, context: context, calendar: calendar)
+        let newer = try makeConditioning(year: 2026, month: 9, day: 20, context: context, calendar: calendar)
+        try context.save()
+
+        let snapshot = HistorySnapshotBuilder.build(
+            sessions: [],
+            routines: [],
+            prCountBySession: [:],
+            conditioningRecords: [older, newer]
+        )
+
+        #expect(snapshot.rows.map(\.id) == [
+            "conditioning-\(newer.id.uuidString)",
+            "conditioning-\(older.id.uuidString)"
+        ])
+    }
+
+    /// The card carries the record's own denormalized values, not the library's current ones.
+    @Test
+    func conditioningCardCarriesTheRecordedValues() throws {
+        let context = ModelContext(InMemoryModelContainer.make())
+        let calendar = HistoryStatsService.isoGermanCalendar()
+        let record = try makeConditioning(year: 2026, month: 9, day: 14, context: context, calendar: calendar)
+        record.roundsCompleted = 4
+        record.roundsPlanned = 6
+        record.endedEarly = true
+        record.sessionTypeRaw = "no-longer-in-the-library"
+        record.titleSnapshot = "Retired session"
+        try context.save()
+
+        let snapshot = HistorySnapshotBuilder.build(
+            sessions: [],
+            routines: [],
+            prCountBySession: [:],
+            conditioningRecords: [record]
+        )
+
+        guard case .conditioning(let card) = try #require(snapshot.rows.first) else {
+            Issue.record("expected a conditioning row")
+            return
+        }
+        #expect(card.sessionType == nil, "an unknown session type falls back to the snapshot title")
+        #expect(card.titleSnapshot == "Retired session")
+        #expect(card.modality == .assaultBike)
+        #expect(card.energySystem == .lactic)
+        #expect(card.roundsCompleted == 4)
+        #expect(card.roundsPlanned == 6)
+        #expect(card.endedEarly)
+        #expect(card.duration == 1_200)
+    }
+
+    private func makeConditioning(
+        year: Int,
+        month: Int,
+        day: Int,
+        hour: Int = 12,
+        context: ModelContext,
+        calendar: Calendar
+    ) throws -> ConditioningRecord {
+        let start = try date(year, month, day, hour: hour, calendar: calendar)
+        let record = ConditioningRecord(
+            id: UUID(),
+            startTime: start,
+            endTime: start.addingTimeInterval(1_200),
+            sessionTypeRaw: ConditioningSessionDefinition.ID.lactic30.rawValue,
+            titleSnapshot: "Lactic 30/120",
+            energySystemRaw: ConditioningEnergySystem.lactic.rawValue,
+            modalityRaw: ConditioningModality.assaultBike.rawValue,
+            effortRaw: ConditioningEffort.hardRepeatable.rawValue,
+            roundsCompleted: 6,
+            roundsPlanned: 6,
+            setsPlanned: 0,
+            workInterval: 30,
+            restInterval: 120,
+            endedEarly: false
+        )
+        context.insert(record)
+        return record
     }
 
     @discardableResult

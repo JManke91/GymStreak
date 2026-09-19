@@ -14,6 +14,19 @@ enum ConditioningCopy {
         "conditioning.session.\(id.rawValue).title".localized
     }
 
+    /// The title for a *recorded* session.
+    ///
+    /// Re-localized from the definition while the library still names it, so History follows
+    /// the user's language. `snapshot` — the title stored on the record when it was performed —
+    /// is the fallback for a session the library no longer defines.
+    static func recordedTitle(
+        sessionType: ConditioningSessionDefinition.ID?,
+        snapshot: String
+    ) -> String {
+        guard let sessionType else { return snapshot }
+        return title(sessionType)
+    }
+
     static func summary(_ id: ConditioningSessionDefinition.ID) -> String {
         "conditioning.session.\(id.rawValue).summary".localized
     }

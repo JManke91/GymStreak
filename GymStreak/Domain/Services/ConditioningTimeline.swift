@@ -51,6 +51,20 @@ struct ConditioningTimeline: Equatable, Sendable {
         return elapsed > offset
     }
 
+    /// Work intervals the plan contains. 0 for steady state, which has none —
+    /// that is also what `ConditioningRecord.isSteadyState` reads.
+    var workIntervalCount: Int {
+        phases.filter { $0.kind == .work }.count
+    }
+
+    /// Work intervals *fully* finished at `elapsed`. A round the user is still
+    /// in does not count: History says what was completed, not what was started.
+    func completedWorkIntervals(at elapsed: TimeInterval) -> Int {
+        phases.indices.filter { index in
+            phases[index].kind == .work && startOffsets[index] + phases[index].duration <= elapsed
+        }.count
+    }
+
     /// The phase covering `elapsed`; `nil` once the session is over.
     func position(at elapsed: TimeInterval) -> ConditioningPosition? {
         guard elapsed < totalDuration else { return nil }

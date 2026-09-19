@@ -1502,3 +1502,13 @@
 "conditioning.safety.rpe" = "Die Intensität wird als RPE angegeben, eine Skala von 1–10 für das Anstrengungsgefühl. Herzfrequenzvorgaben sind Schätzungen und gelten nicht unter Betablockern — richte dich nach deinem Gefühl.";
 "conditioning.safety.weight_cut" = "Kein hartes Konditionstraining während des Gewichtmachens oder wenn du dehydriert bist.";
 "conditioning.safety.acknowledge" = "Verstanden";
+
+/* MARK: - Fight conditioning in History (docs/fight-conditioning.md) */
+"conditioning.history.rounds" = "%1$d/%2$d Runden";
+"conditioning.history.ended_early" = "Früher beendet";
+"conditioning.history.month.summary" = "%d × Kondition";
+"conditioning.history.detail.energy" = "Energiesystem";
+"conditioning.history.detail.rounds" = "Runden";
+"conditioning.history.detail.interval" = "Intervall";
+"conditioning.history.detail.effort" = "Belastung";
+"conditioning.history.detail.in_health" = "Auch in Apple Health gesichert";

@@ -397,6 +397,43 @@ struct SwiftDataHistorySnapshotStoreTests {
         #expect(count == totals.workoutCount)
     }
 
+    /// Conditioning rows reach the Trainings snapshot through the same model actor, and are
+    /// interleaved with the workout cards (docs/fight-conditioning.md). No new `@concurrent`
+    /// boundary — `fetchTrainingSnapshot` simply fetches a second, relationship-free model.
+    @Test
+    func conditioningRecordsReachTheTrainingSnapshot() async throws {
+        let container = InMemoryModelContainer.make()
+        let context = ModelContext(container)
+        try seedHistory(sessionCount: 3, context: context)
+        let start = Date().addingTimeInterval(-3_600)
+        context.insert(ConditioningRecord(
+            id: UUID(),
+            startTime: start,
+            endTime: start.addingTimeInterval(1_800),
+            sessionTypeRaw: ConditioningSessionDefinition.ID.lactic45.rawValue,
+            titleSnapshot: "Lactic 45/180",
+            energySystemRaw: ConditioningEnergySystem.lactic.rawValue,
+            modalityRaw: ConditioningModality.rower.rawValue,
+            effortRaw: ConditioningEffort.hardRepeatable.rawValue,
+            roundsCompleted: 4,
+            roundsPlanned: 4,
+            setsPlanned: 0,
+            workInterval: 45,
+            restInterval: 180,
+            endedEarly: false
+        ))
+        try context.save()
+
+        let provider: any HistorySnapshotProviding =
+            SwiftDataHistorySnapshotProvider(modelContainer: container, gate: .unshared())
+        let snapshot = try await provider.fetchTrainingSnapshot(referenceDate: Date())
+
+        #expect(snapshot.sessionCount == 3, "conditioning must not inflate the strength count")
+        #expect(snapshot.conditioningCount == 1)
+        let conditioningRows = snapshot.rows.filter { if case .conditioning = $0 { true } else { false } }
+        #expect(conditioningRows.count == 1)
+    }
+
     /// Cancellation must survive the `@concurrent` hop.
     ///
     /// `SwiftDataHistorySnapshotProvider`'s methods are `@concurrent` (SE-0461) so

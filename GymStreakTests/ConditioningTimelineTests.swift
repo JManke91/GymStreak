@@ -134,6 +134,43 @@ struct ConditioningTimelineTests {
         #expect(ConditioningLibrary.sessions.filter(\.supportsSubMaximal).map(\.id) == [.alacticPower])
     }
 
+    // MARK: - Completed work intervals (what History records)
+
+    @Test("Only fully finished work intervals count as completed rounds")
+    func completedWorkIntervals() {
+        // lactic30: 10 min warm-up, then 6 × 30 s work / 120 s rest, then 10 min cool-down.
+        let warmUp: TimeInterval = 10 * 60
+        let line = timeline(ConditioningLibrary.lactic30, volume: 6)
+        #expect(line.workIntervalCount == 6)
+
+        #expect(line.completedWorkIntervals(at: 0) == 0)
+        #expect(line.completedWorkIntervals(at: warmUp) == 0)
+        // 20 s into the first round — started, not finished.
+        #expect(line.completedWorkIntervals(at: warmUp + 20) == 0)
+        #expect(line.completedWorkIntervals(at: warmUp + 30) == 1)
+        // First rest done, second round half through.
+        #expect(line.completedWorkIntervals(at: warmUp + 30 + 120 + 15) == 1)
+        #expect(line.completedWorkIntervals(at: line.totalDuration) == 6)
+    }
+
+    @Test("Set-based sessions count every rep of every set as a round")
+    func completedWorkIntervalsAcrossSets() {
+        let line = timeline(ConditioningLibrary.alacticPower, volume: 2)
+        let repsPerSet: Int = switch ConditioningLibrary.alacticPower.volume {
+        case .sets(_, let reps): reps
+        case .rounds, .minutes: 0
+        }
+        #expect(line.workIntervalCount == 2 * repsPerSet)
+        #expect(line.completedWorkIntervals(at: line.totalDuration) == 2 * repsPerSet)
+    }
+
+    @Test("Steady state has no rounds at all")
+    func steadyStateHasNoWorkIntervals() {
+        let line = timeline(ConditioningLibrary.aerobicBase, volume: 30)
+        #expect(line.workIntervalCount == 0)
+        #expect(line.completedWorkIntervals(at: line.totalDuration) == 0)
+    }
+
     // MARK: - Clock
 
     @Test("The clock subtracts paused time and derives from wall-clock dates")

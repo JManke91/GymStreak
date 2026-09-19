@@ -23,6 +23,9 @@ struct TrainingsTabView: View {
     let didFailLoading: Bool
     let onRetry: () -> Void
     let onDeleteRequested: (UUID) -> Void
+    /// Same, for a conditioning record. Separate because the two are different models
+    /// with different delete paths (docs/fight-conditioning.md).
+    let onDeleteConditioningRequested: (UUID) -> Void
     /// Pushes a workout detail screen from calendar mode. List rows navigate
     /// through native `NavigationLink`s.
     let onSelectWorkout: (UUID) -> Void
@@ -179,6 +182,8 @@ struct TrainingsTabView: View {
                         monthDivider(for: month)
                     case .card(let card):
                         cardRow(card)
+                    case .conditioning(let card):
+                        conditioningRow(card)
                     }
                 }
             }
@@ -203,9 +208,21 @@ struct TrainingsTabView: View {
         .padding(.bottom, 10)
     }
 
+    /// Assembled from the clauses that apply, rather than one format string: a month can
+    /// now hold workouts, conditioning sessions, or both, and "0 workouts · 0 kg" next to
+    /// two conditioning rows would be a worse answer than leaving the clause out.
     private func monthSummary(for month: MonthSectionModel) -> String {
-        let volumeTxt = WeightFormatting.volume(month.totalVolume, in: weightUnit)
-        return String(format: "history.month.summary".localized, month.sessionCount, volumeTxt)
+        var parts: [String] = []
+        if month.sessionCount > 0 {
+            let volumeTxt = WeightFormatting.volume(month.totalVolume, in: weightUnit)
+            parts.append(String(
+                format: "history.month.summary".localized, month.sessionCount, volumeTxt
+            ))
+        }
+        if month.conditioningCount > 0 {
+            parts.append("conditioning.history.month.summary".localized(month.conditioningCount))
+        }
+        return parts.joined(separator: " · ")
     }
 
     private func cardRow(_ card: WorkoutCardModel) -> some View {
@@ -223,6 +240,26 @@ struct TrainingsTabView: View {
         }
         .accessibilityAction(named: Text("action.delete".localized)) {
             onDeleteRequested(card.id)
+        }
+        .padding(.horizontal, 16)
+        .padding(.bottom, 8)
+    }
+
+    private func conditioningRow(_ card: ConditioningCardModel) -> some View {
+        NavigationLink(value: ConditioningRecordDestination(id: card.id)) {
+            ConditioningHistoryCardView(card: card)
+        }
+        .buttonStyle(.plain)
+        .simultaneousGesture(TapGesture().onEnded { HapticManager.shared.light() })
+        .contextMenu {
+            Button(role: .destructive) {
+                onDeleteConditioningRequested(card.id)
+            } label: {
+                Label("action.delete".localized, systemImage: "trash")
+            }
+        }
+        .accessibilityAction(named: Text("action.delete".localized)) {
+            onDeleteConditioningRequested(card.id)
         }
         .padding(.horizontal, 16)
         .padding(.bottom, 8)

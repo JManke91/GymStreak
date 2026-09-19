@@ -24,6 +24,10 @@ struct HistoryView: View {
     @State private var currentDay = Calendar.current.startOfDay(for: Date())
     @State private var workoutToDelete: WorkoutSession?
     @State private var showingDeleteAlert = false
+    /// History's conditioning side — resolving a record and deleting it.
+    @State private var conditioning: ConditioningHistoryViewModel
+    @State private var conditioningToDelete: ConditioningRecord?
+    @State private var showingConditioningDeleteAlert = false
     @State private var isRecovering = false
     /// Type-erased because the stack pushes workout ids, exercise models and
     /// period destinations.
@@ -32,6 +36,7 @@ struct HistoryView: View {
     init(
         viewModel: WorkoutViewModel,
         historySnapshotProvider: HistorySnapshotProviding,
+        conditioningHistory: ConditioningHistoryViewModel,
         aiCoachPreferences: AICoachPreferencesProviding,
         aiCoachAvailability: AICoachAvailabilityProviding,
         proactivePromptCoordinator: ProactivePromptCoordinating
@@ -43,6 +48,7 @@ struct HistoryView: View {
         self._model = State(
             initialValue: HistoryViewModel(provider: historySnapshotProvider)
         )
+        self._conditioning = State(initialValue: conditioningHistory)
     }
 
     /// Change token for the Trainings snapshot. Replaces three separate triggers (`onAppear` +
@@ -106,9 +112,10 @@ struct HistoryView: View {
                             .padding(.top, 4)
                             .disabled(isRecovering)
                         }
-                        if let healthDeleteFailure = viewModel.healthKitDeleteFailure {
+                        if let healthDeleteFailure {
                             HealthDeleteFailureBanner(reason: healthDeleteFailure) {
                                 viewModel.dismissHealthKitDeleteNotice()
+                                conditioning.dismissHealthKitDeleteNotice()
                             }
                             .padding(.horizontal, 20)
                             .padding(.top, 4)
@@ -128,6 +135,7 @@ struct HistoryView: View {
                                         Task { await refreshSnapshot() }
                                     },
                                     onDeleteRequested: requestDelete,
+                                    onDeleteConditioningRequested: requestConditioningDelete,
                                     onSelectWorkout: pushWorkout
                                 )
                             case .fortschritt:
@@ -145,7 +153,7 @@ struct HistoryView: View {
 
                         Color.clear.frame(height: 60)
                     }
-                    .animation(.easeInOut(duration: 0.25), value: viewModel.healthKitDeleteFailure)
+                    .animation(.easeInOut(duration: 0.25), value: healthDeleteFailure)
                 }
                 .refreshable {
                     viewModel.refreshHistory()
@@ -164,6 +172,11 @@ struct HistoryView: View {
             .navigationDestination(for: UUID.self) { sessionId in
                 if let session = viewModel.workoutSession(id: sessionId) {
                     WorkoutDetailView(workout: session, viewModel: viewModel)
+                }
+            }
+            .navigationDestination(for: ConditioningRecordDestination.self) { destination in
+                if let record = conditioning.record(id: destination.id) {
+                    ConditioningRecordDetailView(record: record, viewModel: conditioning)
                 }
             }
             .navigationDestination(for: ExerciseWithHistory.self) { exercise in
@@ -224,6 +237,25 @@ struct HistoryView: View {
                 },
                 onCancel: { workoutToDelete = nil }
             )
+            .deleteWorkoutConfirmation(
+                isPresented: $showingConditioningDeleteAlert,
+                hasHealthKitWorkout: conditioningToDelete?.healthKitWorkoutId != nil,
+                onDelete: { alsoFromHealthKit in
+                    if let record = conditioningToDelete {
+                        // Cleared before the `await`, like the workout path: the list
+                        // re-renders while the delete waits on the History gate, and
+                        // `hasHealthKitWorkout` above reads this same `@Model`.
+                        conditioningToDelete = nil
+                        HapticManager.shared.success()
+                        // The delete posts `.historySourceDataDidChange`, which bumps
+                        // `historyVersion` and re-fires the rebuild task on its own.
+                        Task {
+                            await conditioning.delete(record, alsoFromHealthKit: alsoFromHealthKit)
+                        }
+                    }
+                },
+                onCancel: { conditioningToDelete = nil }
+            )
 #if DEBUG
             .overlay(alignment: .bottomLeading) {
                 MainThreadStallProbeOverlay(probe: stallProbe, identifier: "history-main-thread-max-delay-ms")
@@ -247,6 +279,18 @@ struct HistoryView: View {
         guard let session = viewModel.workoutSession(id: sessionId) else { return }
         workoutToDelete = session
         showingDeleteAlert = true
+    }
+
+    private func requestConditioningDelete(_ recordId: UUID) {
+        guard let record = conditioning.record(id: recordId) else { return }
+        conditioningToDelete = record
+        showingConditioningDeleteAlert = true
+    }
+
+    /// One banner for both delete paths — the notice says the same thing whichever kind of
+    /// session Apple Health kept, and two stacked banners would only compete for the space.
+    private var healthDeleteFailure: HealthKitDeleteFailure? {
+        viewModel.healthKitDeleteFailure ?? conditioning.healthKitDeleteFailure
     }
 
     // MARK: - Data loading

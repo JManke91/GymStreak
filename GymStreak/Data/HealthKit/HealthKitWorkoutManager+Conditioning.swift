@@ -31,15 +31,15 @@ extension HealthKitWorkoutManager: ConditioningWorkoutSaving {
         }
     }
 
-    @discardableResult
     func saveConditioningWorkout(
+        externalUUID: UUID,
         modality: ConditioningModality,
         startDate: Date,
         endDate: Date,
         title: String
-    ) async throws -> UUID {
+    ) async throws {
         checkAuthorizationStatus()
-        let result = try await writeWorkout(
+        _ = try await writeWorkout(
             configuration: Self.configuration(for: modality),
             startDate: startDate,
             endDate: endDate,
@@ -49,9 +49,10 @@ extension HealthKitWorkoutManager: ConditioningWorkoutSaving {
             metadata: [
                 HKMetadataKeyWorkoutBrandName: title,
                 Self.sessionKindMetadataKey: Self.conditioningSessionKind
-            ]
+            ],
+            // The `ConditioningRecord` already carries this id.
+            externalUUID: externalUUID
         )
-        return result.healthKitWorkoutId
     }
 
     /// Activity types per docs/fight-conditioning.md. Swim uses an unknown

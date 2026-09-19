@@ -17,6 +17,9 @@ final class AppDependencies: ObservableObject {
     let routineRepository: RoutineRepository
     let exerciseRepository: ExerciseRepository
     let workoutSessionRepository: WorkoutSessionRepository
+    /// Recorded conditioning history (docs/fight-conditioning.md). Its own repository
+    /// because `ConditioningRecord` is its own denormalized model, not a `WorkoutSession`.
+    let conditioningRecordRepository: ConditioningRecordRepository
     /// The one gate that makes History's model-actor reads and the main context's
     /// completed-session deletes mutually exclusive. Both sides must be handed *this*
     /// instance — a second gate excludes nothing. See `HistoryStoreGate`.
@@ -254,6 +257,8 @@ final class AppDependencies: ObservableObject {
         self.routineRepository = SwiftDataRoutineRepository(modelContext: modelContext)
         self.exerciseRepository = SwiftDataExerciseRepository(modelContext: modelContext)
         self.workoutSessionRepository = SwiftDataWorkoutSessionRepository(modelContext: modelContext)
+        let conditioningRecordRepository = SwiftDataConditioningRecordRepository(modelContext: modelContext)
+        self.conditioningRecordRepository = conditioningRecordRepository
         self.routineTemplateSync = RoutineTemplateSyncService(
             routineRepository: routineRepository,
             exerciseRepository: exerciseRepository
@@ -536,9 +541,24 @@ final class AppDependencies: ObservableObject {
             plan: plan,
             cues: conditioningCues,
             workoutSaver: HealthKitWorkoutManager(),
-            healthSync: UserDefaultsHealthSyncPreference()
+            healthSync: UserDefaultsHealthSyncPreference(),
+            records: conditioningRecordRepository
         )
     }
+
+    /// History's conditioning side: resolving a record for the detail screen and deleting one
+    /// (docs/fight-conditioning.md).
+    ///
+    /// Stored, not a factory. `ContentView`'s init runs on every re-render, and a factory there
+    /// would build a fresh `HealthKitWorkoutManager` each time for a view model `@State` keeps
+    /// only the first of. Its only state is the Apple Health delete notice, so one app-lifetime
+    /// instance is also the honest shape. `lazy` so it can go through
+    /// `makeHealthKitWorkoutService()` — `AppDependencies.init` cannot call its own methods.
+    private(set) lazy var conditioningHistory: ConditioningHistoryViewModel = ConditioningHistoryViewModel(
+        records: conditioningRecordRepository,
+        healthKitManager: makeHealthKitWorkoutService(),
+        historyStoreGate: historyStoreGate
+    )
 
     /// The app's one routines list ViewModel.
     ///

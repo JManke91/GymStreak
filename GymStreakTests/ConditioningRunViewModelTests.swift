@@ -27,6 +27,7 @@ struct ConditioningRunViewModelTests {
         let cues: RecordingConditioningCues
         let saver: RecordingConditioningWorkoutSaver
         let healthSync: StubHealthSyncPreference
+        let records: RecordingConditioningRecordRepository
     }
 
     private func makeHarness(
@@ -37,6 +38,7 @@ struct ConditioningRunViewModelTests {
         let cues = RecordingConditioningCues()
         let saver = RecordingConditioningWorkoutSaver()
         let healthSync = StubHealthSyncPreference()
+        let records = RecordingConditioningRecordRepository()
         let viewModel = ConditioningRunViewModel(
             plan: ConditioningSessionPlan(
                 definition: definition,
@@ -46,10 +48,18 @@ struct ConditioningRunViewModelTests {
             cues: cues,
             workoutSaver: saver,
             healthSync: healthSync,
+            records: records,
             now: { clock.now },
             isTickingAutomatically: false
         )
-        return Harness(viewModel: viewModel, clock: clock, cues: cues, saver: saver, healthSync: healthSync)
+        return Harness(
+            viewModel: viewModel,
+            clock: clock,
+            cues: cues,
+            saver: saver,
+            healthSync: healthSync,
+            records: records
+        )
     }
 
     /// Lets the view model's fire-and-forget save/schedule tasks run.
@@ -113,6 +123,157 @@ struct ConditioningRunViewModelTests {
         await settle()
 
         #expect(h.saver.saved.isEmpty)
+    }
+
+    // MARK: - History record (docs/fight-conditioning.md, ticket 02)
+
+    @Test("Finishing records exactly one session, and its id is the Health external UUID")
+    func finishRecordsOnce() async throws {
+        let h = makeHarness()
+        let start = h.clock.now
+        h.viewModel.start()
+
+        h.clock.advance(h.viewModel.timeline.totalDuration)
+        h.viewModel.refresh()
+        await settle()
+
+        #expect(h.records.records.count == 1)
+        let record = try #require(h.records.records.first)
+        #expect(record.startTime == start)
+        #expect(record.endTime == start.addingTimeInterval(h.viewModel.timeline.totalDuration))
+        #expect(record.sessionType == .lactic30)
+        #expect(record.energySystem == .lactic)
+        #expect(record.modality == .assaultBike)
+        #expect(record.effort == .hardRepeatable)
+        #expect(record.roundsCompleted == 6)
+        #expect(record.roundsPlanned == 6)
+        #expect(record.workInterval == 30)
+        #expect(record.restInterval == 120)
+        #expect(record.endedEarly == false)
+        // The Health workout is stamped with the record's own id, and the record
+        // is updated once the write lands.
+        #expect(h.saver.saved.first?.externalUUID == record.id)
+        #expect(record.healthKitWorkoutId == record.id)
+        #expect(h.viewModel.recordedSessionId == record.id)
+    }
+
+    @Test("Ending during the warm-up records nothing")
+    func endBeforeFirstEffortRecordsNothing() async {
+        let h = makeHarness()
+        h.viewModel.start()
+        h.clock.advance(300)
+        h.viewModel.end()
+        await settle()
+
+        #expect(h.records.records.isEmpty)
+        #expect(h.viewModel.recordedSessionId == nil)
+    }
+
+    @Test("Ending early records the rounds actually finished")
+    func endEarlyRecordsCompletedRounds() async throws {
+        let h = makeHarness()
+        h.viewModel.start()
+        // 10 min warm-up, then two full 30 s rounds with a 120 s rest between them,
+        // stopped 10 s into the third.
+        h.clock.advance(600 + 30 + 120 + 30 + 120 + 10)
+        h.viewModel.end()
+        await settle()
+
+        let record = try #require(h.records.records.first)
+        #expect(record.roundsCompleted == 2)
+        #expect(record.roundsPlanned == 6)
+        #expect(record.endedEarly == true)
+    }
+
+    /// GymStreak is the source of truth: History must not depend on Apple Health.
+    @Test("Health sync off still records the session")
+    func healthSyncOffStillRecords() async {
+        let h = makeHarness()
+        h.healthSync.isHealthSyncEnabled = false
+        h.viewModel.start()
+        h.clock.advance(h.viewModel.timeline.totalDuration)
+        h.viewModel.refresh()
+        await settle()
+
+        #expect(h.saver.saved.isEmpty)
+        #expect(h.records.records.count == 1)
+        #expect(h.records.records.first?.healthKitWorkoutId == nil, "nothing was written to Health")
+    }
+
+    @Test("A failed Health write leaves the record in place, without a Health id")
+    func failedHealthWriteKeepsTheRecord() async {
+        struct Boom: Error {}
+        let h = makeHarness()
+        h.saver.saveError = Boom()
+        h.viewModel.start()
+        h.clock.advance(h.viewModel.timeline.totalDuration)
+        h.viewModel.refresh()
+        await settle()
+
+        #expect(h.viewModel.healthSaveOutcome == .failed)
+        #expect(h.records.records.count == 1)
+        #expect(h.records.records.first?.healthKitWorkoutId == nil)
+    }
+
+    /// The runner screen calls `end()` from `onDisappear`, which must not add a second row
+    /// after the timeline already finished the session.
+    @Test("Ending after the session already finished does not record a second session")
+    func endAfterFinishDoesNotDoubleRecord() async {
+        let h = makeHarness()
+        h.viewModel.start()
+        h.clock.advance(h.viewModel.timeline.totalDuration)
+        h.viewModel.refresh()
+        await settle()
+
+        h.viewModel.end()
+        await settle()
+
+        #expect(h.records.records.count == 1)
+        #expect(h.saver.saved.count == 1)
+    }
+
+    @Test("A steady-state session records no rounds")
+    func steadyStateRecordsNoRounds() async throws {
+        let h = makeHarness(ConditioningLibrary.aerobicBase, modality: .run)
+        h.viewModel.start()
+        h.clock.advance(h.viewModel.timeline.totalDuration)
+        h.viewModel.refresh()
+        await settle()
+
+        let record = try #require(h.records.records.first)
+        #expect(record.isSteadyState == true)
+        #expect(record.roundsPlanned == 0)
+        #expect(record.roundsCompleted == 0)
+        #expect(record.workInterval == 0)
+    }
+
+    @Test("The beginner variant is recorded as the sub-maximal effort")
+    func subMaximalVariantIsRecorded() async throws {
+        let clock = TestClock()
+        let records = RecordingConditioningRecordRepository()
+        let definition = ConditioningLibrary.alacticPower
+        let viewModel = ConditioningRunViewModel(
+            plan: ConditioningSessionPlan(
+                definition: definition,
+                options: ConditioningSessionOptions(volume: 2, isSubMaximal: true),
+                modality: .rower
+            ),
+            cues: RecordingConditioningCues(),
+            workoutSaver: RecordingConditioningWorkoutSaver(),
+            healthSync: StubHealthSyncPreference(),
+            records: records,
+            now: { clock.now },
+            isTickingAutomatically: false
+        )
+        viewModel.start()
+        clock.advance(viewModel.timeline.totalDuration)
+        viewModel.refresh()
+        await settle()
+
+        let record = try #require(records.records.first)
+        #expect(record.effort == .subMaximal)
+        #expect(record.setsPlanned == 2)
+        #expect(record.roundsPlanned == 10)
     }
 
     @Test("Pause freezes the countdown and cancels background cues; resume reschedules")

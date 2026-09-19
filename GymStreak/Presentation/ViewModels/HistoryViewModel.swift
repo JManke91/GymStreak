@@ -56,7 +56,10 @@ final class HistoryViewModel {
     func reloadTraining(referenceDate: Date = Date()) async -> Bool {
         trainingGeneration += 1
         let generation = trainingGeneration
-        if snapshot.sessionCount == 0 {
+        // Conditioning counts here too: a user who only does conditioning has a non-empty
+        // list, and gating on strength sessions alone would flash the spinner over it on
+        // every rebuild.
+        if snapshot.sessionCount == 0, snapshot.conditioningCount == 0 {
             loadState = .loading
         }
 

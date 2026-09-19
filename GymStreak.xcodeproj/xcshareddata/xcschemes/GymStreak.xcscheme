@@ -72,7 +72,7 @@
       <CommandLineArguments>
          <CommandLineArgument
             argument = "-INITIALIZE_CLOUDKIT_SCHEMA"
-            isEnabled = "NO">
+            isEnabled = "YES">
          </CommandLineArgument>
          <CommandLineArgument
             argument = "-UI_TESTING"

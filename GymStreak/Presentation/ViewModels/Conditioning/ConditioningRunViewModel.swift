@@ -2,8 +2,8 @@
 //  ConditioningRunViewModel.swift
 //  GymStreak
 //
-//  Drives one conditioning session: wall-clock timing, transition cues and the
-//  Apple Health write at the end. Every displayed value is derived from
+//  Drives one conditioning session: wall-clock timing, transition cues, the
+//  History record and the Apple Health write at the end. Every displayed value is derived from
 //  `ConditioningClock` + `ConditioningTimeline`, never from a decrementing
 //  counter, so a locked phone resumes at the right place.
 //  See docs/fight-conditioning.md.
@@ -44,9 +44,13 @@ final class ConditioningRunViewModel {
     @ObservationIgnored private var lastLeadInSecond: Int?
     @ObservationIgnored private var tickTask: Task<Void, Never>?
 
+    /// The record this run wrote to History, once it has one.
+    private(set) var recordedSessionId: UUID?
+
     @ObservationIgnored private let cues: any ConditioningCueDelivering
     @ObservationIgnored private let workoutSaver: any ConditioningWorkoutSaving
     @ObservationIgnored private let healthSync: any HealthSyncPreferenceReading
+    @ObservationIgnored private let records: any ConditioningRecordRepository
     @ObservationIgnored private let now: () -> Date
     @ObservationIgnored private let isTickingAutomatically: Bool
 
@@ -55,6 +59,7 @@ final class ConditioningRunViewModel {
         cues: any ConditioningCueDelivering,
         workoutSaver: any ConditioningWorkoutSaving,
         healthSync: any HealthSyncPreferenceReading,
+        records: any ConditioningRecordRepository,
         now: @escaping () -> Date = Date.init,
         isTickingAutomatically: Bool = true
     ) {
@@ -63,6 +68,7 @@ final class ConditioningRunViewModel {
         self.cues = cues
         self.workoutSaver = workoutSaver
         self.healthSync = healthSync
+        self.records = records
         self.now = now
         self.isTickingAutomatically = isTickingAutomatically
         self.position = timeline.position(at: 0)
@@ -119,8 +125,8 @@ final class ConditioningRunViewModel {
         scheduleBackgroundCues()
     }
 
-    /// Ends before the timeline did. Saves only when the first effort phase
-    /// has begun — stopping during the warm-up leaves nothing in Health.
+    /// Ends before the timeline did. Records only when the first effort phase
+    /// has begun — stopping during the warm-up leaves nothing in History or Health.
     func end() {
         guard state == .running || state == .paused else { return }
         elapsed = clock.elapsed(at: now())
@@ -187,29 +193,64 @@ final class ConditioningRunViewModel {
         }
         position = nil
 
-        guard let startDate = clock.startDate,
-              timeline.hasBegunEffort(at: elapsed),
-              healthSync.isHealthSyncEnabled,
-              workoutSaver.isHealthKitAvailable
+        // Same threshold as the Health write: a session abandoned during the warm-up
+        // never began, so it leaves nothing behind anywhere.
+        guard let startDate = clock.startDate, timeline.hasBegunEffort(at: elapsed) else { return }
+
+        let record = log(startDate: startDate, endDate: endDate)
+        recordedSessionId = record?.id
+
+        guard let record, healthSync.isHealthSyncEnabled, workoutSaver.isHealthKitAvailable
         else { return }
 
         healthSaveOutcome = .saving
+        let externalUUID = record.id
         let plan = plan
         let title = sessionTitle
         Task {
             do {
                 try await workoutSaver.saveConditioningWorkout(
+                    externalUUID: externalUUID,
                     modality: plan.modality,
                     startDate: startDate,
                     endDate: endDate,
                     title: title
                 )
+                // Re-resolved rather than captured: the record is a main-context `@Model`
+                // and the user may have deleted it from History while the write was in flight.
+                records.find(id: externalUUID)?.healthKitWorkoutId = externalUUID
+                try? records.save()
                 healthSaveOutcome = .saved
             } catch {
                 print("Conditioning Health save failed: \(error)")
                 healthSaveOutcome = .failed
             }
         }
+    }
+
+    /// Writes the History record. It is created *before* the Apple Health write and never
+    /// depends on it: GymStreak is the source of truth, and a user with Health sync off
+    /// still gets their session logged (docs/fight-conditioning.md).
+    private func log(startDate: Date, endDate: Date) -> ConditioningRecord? {
+        let record = ConditioningRecord.make(
+            id: UUID(),
+            plan: plan,
+            timeline: timeline,
+            title: sessionTitle,
+            startDate: startDate,
+            endDate: endDate,
+            elapsed: elapsed,
+            endedEarly: endedEarly
+        )
+        records.insert(record)
+        do {
+            try records.save()
+        } catch {
+            print("Conditioning record save failed: \(error)")
+            return nil
+        }
+        NotificationCenter.default.post(name: .historySourceDataDidChange, object: nil)
+        return record
     }
 
     // MARK: - Ticking and background cues

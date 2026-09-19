@@ -23,16 +23,22 @@ struct HistorySnapshotBuilder {
     ///     precedent of normalising its own input.
     ///   - routines: live routines, for the dynamic weekly goal.
     ///   - prCountBySession: PR counts from `PersonalRecordService`, computed once by the caller.
+    ///   - conditioningRecords: finished conditioning sessions, in any order — sorted here for
+    ///     the same reason the workout sessions are. They are interleaved into `rows` by date
+    ///     and counted per month, but deliberately feed nothing else: `weekStats`, `weekDays`
+    ///     and `cardsByDay` stay strength-only (see docs/fight-conditioning.md).
     static func build(
         sessions incoming: [WorkoutSession],
         routines: [Routine],
         prCountBySession: [UUID: Int],
+        conditioningRecords: [ConditioningRecord] = [],
         referenceDate: Date = Date()
     ) -> HistorySnapshot {
         let calendar = HistoryStatsService.isoGermanCalendar()
         let sessions = incoming
             .filter { $0.endTime != nil }
             .sorted { $0.startTime > $1.startTime }
+        let conditioning = conditioningRecords.sorted { $0.startTime > $1.startTime }
 
         // `plannedWeek` walks routines × sessions and faults `session.routine?.id`; it used to be a
         // computed property read twice per render. Once, here.
@@ -49,7 +55,9 @@ struct HistorySnapshotBuilder {
         var countByMonth: [MonthKey: Int] = [:]
         var typesByMonth: [MonthKey: [WorkoutType]] = [:]
         var seenTypesByMonth: [MonthKey: Set<WorkoutType>] = [:]
-        var monthOrder: [MonthKey] = []
+        var monthOrder: Set<MonthKey> = []
+        var conditioningByMonth: [MonthKey: [ConditioningCardModel]] = [:]
+        var conditioningCountByMonth: [MonthKey: Int] = [:]
         var lastMonthCount = 0
         var lastMonthVolume = 0.0
         var lastMonthPRs = 0
@@ -72,7 +80,7 @@ struct HistorySnapshotBuilder {
             let components = calendar.dateComponents([.year, .month], from: session.startTime)
             if let year = components.year, let month = components.month {
                 let key = MonthKey(year: year, month: month)
-                if countByMonth[key] == nil { monthOrder.append(key) }
+                monthOrder.insert(key)
                 countByMonth[key, default: 0] += 1
                 volumeByMonth[key, default: 0] += totals.volume
                 cardsByMonth[key, default: []].append(card)
@@ -96,18 +104,50 @@ struct HistorySnapshotBuilder {
             }
         }
 
-        let monthSections = monthOrder.map { key in
-            MonthSectionModel(
-                year: key.year,
-                month: key.month,
-                label: HistoryStatsService.monthYearLabel(year: key.year, month: key.month),
-                sessionCount: countByMonth[key] ?? 0,
-                totalVolume: volumeByMonth[key] ?? 0
-            )
+        // A second, far smaller pass. Conditioning records are flat rows — no relationship to
+        // walk — so this costs one visit each and no faulting.
+        for record in conditioning {
+            let components = calendar.dateComponents([.year, .month], from: record.startTime)
+            guard let year = components.year, let month = components.month else { continue }
+            let key = MonthKey(year: year, month: month)
+            monthOrder.insert(key)
+            conditioningCountByMonth[key, default: 0] += 1
+            conditioningByMonth[key, default: []].append(ConditioningCardModel(
+                id: record.id,
+                startTime: record.startTime,
+                sessionType: record.sessionType,
+                titleSnapshot: record.titleSnapshot,
+                energySystem: record.energySystem,
+                modality: record.modality,
+                duration: record.duration,
+                roundsCompleted: record.roundsCompleted,
+                roundsPlanned: record.roundsPlanned,
+                endedEarly: record.endedEarly
+            ))
         }
 
+        // Sorted explicitly rather than taken from session insertion order: a month may now
+        // enter the list through conditioning alone, so "the order the strength pass saw them"
+        // is no longer the whole set.
+        let monthSections = monthOrder
+            .sorted { ($0.year, $0.month) > ($1.year, $1.month) }
+            .map { key in
+                MonthSectionModel(
+                    year: key.year,
+                    month: key.month,
+                    label: HistoryStatsService.monthYearLabel(year: key.year, month: key.month),
+                    sessionCount: countByMonth[key] ?? 0,
+                    totalVolume: volumeByMonth[key] ?? 0,
+                    conditioningCount: conditioningCountByMonth[key] ?? 0
+                )
+            }
+
         return HistorySnapshot(
-            rows: Self.flatten(monthSections: monthSections, cardsByMonth: cardsByMonth),
+            rows: Self.flatten(
+                monthSections: monthSections,
+                cardsByMonth: cardsByMonth,
+                conditioningByMonth: conditioningByMonth
+            ),
             weekStats: HistoryStatsService.weekStats(
                 sessions: sessions,
                 prExerciseCountBySession: prCountBySession,
@@ -130,7 +170,8 @@ struct HistorySnapshotBuilder {
             typesByMonth: Dictionary(uniqueKeysWithValues: typesByMonth.map { key, types in
                 (MonthSectionModel.id(year: key.year, month: key.month), types)
             }),
-            sessionCount: sessions.count
+            sessionCount: sessions.count,
+            conditioningCount: conditioning.count
         )
     }
 
@@ -143,7 +184,8 @@ struct HistorySnapshotBuilder {
     /// months and the cards within each month are already in the right order; no sorting here.
     private static func flatten(
         monthSections: [MonthSectionModel],
-        cardsByMonth: [MonthKey: [WorkoutCardModel]]
+        cardsByMonth: [MonthKey: [WorkoutCardModel]],
+        conditioningByMonth: [MonthKey: [ConditioningCardModel]]
     ) -> [HistoryListRow] {
         var rows: [HistoryListRow] = []
         for (index, section) in monthSections.enumerated() {
@@ -151,8 +193,41 @@ struct HistorySnapshotBuilder {
                 rows.append(.monthHeader(section))
             }
             let key = MonthKey(year: section.year, month: section.month)
-            rows.append(contentsOf: (cardsByMonth[key] ?? []).map { HistoryListRow.card($0) })
+            rows.append(contentsOf: merge(
+                workouts: cardsByMonth[key] ?? [],
+                conditioning: conditioningByMonth[key] ?? []
+            ))
         }
+        return rows
+    }
+
+    /// Interleaves one month's workout cards and conditioning cards, newest first.
+    ///
+    /// A linear merge, not a sort: both inputs were built from collections this type already
+    /// ordered newest-first. A tie (both started in the same second) puts the workout first —
+    /// arbitrary, but deterministic, which is what `ForEach` identity needs.
+    private static func merge(
+        workouts: [WorkoutCardModel],
+        conditioning: [ConditioningCardModel]
+    ) -> [HistoryListRow] {
+        if conditioning.isEmpty { return workouts.map { .card($0) } }
+        if workouts.isEmpty { return conditioning.map { .conditioning($0) } }
+
+        var rows: [HistoryListRow] = []
+        rows.reserveCapacity(workouts.count + conditioning.count)
+        var workoutIndex = 0
+        var conditioningIndex = 0
+        while workoutIndex < workouts.count, conditioningIndex < conditioning.count {
+            if conditioning[conditioningIndex].startTime > workouts[workoutIndex].startTime {
+                rows.append(.conditioning(conditioning[conditioningIndex]))
+                conditioningIndex += 1
+            } else {
+                rows.append(.card(workouts[workoutIndex]))
+                workoutIndex += 1
+            }
+        }
+        rows.append(contentsOf: workouts[workoutIndex...].map { HistoryListRow.card($0) })
+        rows.append(contentsOf: conditioning[conditioningIndex...].map { HistoryListRow.conditioning($0) })
         return rows
     }
 

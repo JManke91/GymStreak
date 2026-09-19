@@ -228,6 +228,16 @@ actor SwiftDataHistorySnapshotStore {
             descriptor.relationshipKeyPathsForPrefetching = [\.schedules]
             return try modelContext.fetch(descriptor)
         }
+        // Flat rows with no relationships, so there is nothing to prefetch and nothing to
+        // fault per card — the reason conditioning history is its own denormalized model
+        // rather than a `WorkoutSession` with no exercises (docs/fight-conditioning.md).
+        let conditioning = try measured("HistoryFetchConditioning") {
+            try modelContext.fetch(
+                FetchDescriptor<ConditioningRecord>(
+                    sortBy: [SortDescriptor(\.startTime, order: .reverse)]
+                )
+            )
+        }
 
         try Task.checkCancellation()
         let prs = measured("HistoryBuildPRs") {
@@ -240,6 +250,7 @@ actor SwiftDataHistorySnapshotStore {
                 sessions: sessions,
                 routines: routines,
                 prCountBySession: prs.prCountBySession,
+                conditioningRecords: conditioning,
                 referenceDate: referenceDate
             )
         }

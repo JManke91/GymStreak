@@ -215,6 +215,18 @@ Neither the local delete nor the HealthKit delete leaves a stale recovery-ledger
 - `TrainingsTabView`'s long-press `.contextMenu` delete — kept as a shortcut; the visible detail-screen menu is the discoverable route.
 - `WorkoutDetailView.loadHealthKitKcal()` still constructs its own `HKHealthStore()` inline to read calories — a pre-existing layer violation, deliberately worked *around* rather than expanded. The new delete goes through the gateway protocol. Fixing the older read is a separate cleanup.
 
+### Reused by conditioning history (2026-09-19)
+`ConditioningRecord` deletion reuses this flow unchanged: the same
+`.deleteWorkoutConfirmation(...)` modifier (both entry points — the History card's long-press and
+the detail screen's trash button), the same `HealthKitWorkoutServicing.deleteWorkout(externalUUID:)`
+(the metadata predicate is type-agnostic across `HKObjectType.workoutType()`), and the same
+`HealthKitDeleteFailure` banner. What differs is the owner: `ConditioningHistoryViewModel` rather
+than `WorkoutViewModel`, and it reaches History through `.historySourceDataDidChange` instead of
+bumping `historyVersion` directly. It takes `HistoryStoreGate.withExclusiveAccess` for the same
+reason this path does — the History model actor now fetches `ConditioningRecord` too. The
+localized keys still say "workout"; that copy reads correctly for both. See
+`docs/fight-conditioning.md`.
+
 ### Layer compliance
 Dependency direction holds: the new capability is declared in `Domain/Interfaces/`, implemented in `Data/HealthKit/`, and consumed by `Presentation/` through the injected protocol. No `ModelContext`/`FetchDescriptor` in views, no `.shared` access in the ViewModel, no ad-hoc service construction, no `@Model`/schema change.
 

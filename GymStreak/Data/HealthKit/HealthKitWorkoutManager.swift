@@ -101,15 +101,21 @@ class HealthKitWorkoutManager: ObservableObject, HealthKitWorkoutServicing {
 
     /// The single builder write shared by the strength and the conditioning
     /// save (`HealthKitWorkoutManager+Conditioning.swift`).
+    /// - Parameter externalUUID: the id to stamp as `HKMetadataKeyExternalUUID`. Pass one when
+    ///   the local record it correlates with already exists — conditioning creates its
+    ///   `ConditioningRecord` first, so that the record survives a refused or failed Health
+    ///   write and still points at the right workout when the write succeeds. `nil` keeps the
+    ///   original behaviour of minting one here.
     func writeWorkout(
         configuration: HKWorkoutConfiguration,
         startDate: Date,
         endDate: Date,
         totalEnergyBurned: Double?,
-        metadata: [String: Any]?
+        metadata: [String: Any]?,
+        externalUUID: UUID? = nil
     ) async throws -> (workout: HKWorkout?, healthKitWorkoutId: UUID) {
-        // Generate external UUID for deduplication and correlation with SwiftData
-        let healthKitWorkoutId = UUID()
+        // External UUID for deduplication and correlation with SwiftData
+        let healthKitWorkoutId = externalUUID ?? UUID()
 
         guard isAuthorized else {
             throw HealthKitError.notAuthorized

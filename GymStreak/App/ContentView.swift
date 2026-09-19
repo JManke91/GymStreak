@@ -27,6 +27,9 @@ struct ContentView: View {
 private struct ContentViewInternal: View {
     @StateObject private var workoutViewModel: WorkoutViewModel
     private let historySnapshotProvider: HistorySnapshotProviding
+    /// History's conditioning delete/detail side (docs/fight-conditioning.md). Built here,
+    /// like the snapshot provider, so `HistoryView` never constructs a dependency itself.
+    private let conditioningHistory: ConditioningHistoryViewModel
     private let aiCoachPreferences: AICoachPreferencesProviding
     private let aiCoachAvailability: AICoachAvailabilityProviding
     private let proactivePromptCoordinator: ProactivePromptCoordinating
@@ -68,6 +71,7 @@ private struct ContentViewInternal: View {
 
     init(dependencies: AppDependencies) {
         self.historySnapshotProvider = dependencies.historySnapshotProvider
+        self.conditioningHistory = dependencies.conditioningHistory
         self.aiCoachPreferences = dependencies.aiCoachPreferences
         self.aiCoachAvailability = dependencies.aiCoachAvailability
         self.proactivePromptCoordinator = dependencies.proactivePromptCoordinator
@@ -135,6 +139,7 @@ private struct ContentViewInternal: View {
             HistoryView(
                 viewModel: workoutViewModel,
                 historySnapshotProvider: historySnapshotProvider,
+                conditioningHistory: conditioningHistory,
                 aiCoachPreferences: aiCoachPreferences,
                 aiCoachAvailability: aiCoachAvailability,
                 proactivePromptCoordinator: proactivePromptCoordinator

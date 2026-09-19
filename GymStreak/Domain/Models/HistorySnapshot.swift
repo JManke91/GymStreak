@@ -37,7 +37,12 @@ struct HistorySnapshot: Sendable {
     /// a per-day view of the data can drop a type the month actually contains.
     var typesByMonth: [String: [WorkoutType]]
     /// Completed sessions the snapshot was built from. Drives empty-state and change detection.
+    ///
+    /// Strength sessions only. Conditioning is counted by `conditioningCount`, deliberately
+    /// separately: this number also gates the AI Coach recap cards, which analyse lifting.
     var sessionCount: Int
+    /// Conditioning sessions the snapshot was built from (docs/fight-conditioning.md).
+    var conditioningCount: Int = 0
 
     static let empty = HistorySnapshot(
         rows: [],
@@ -74,11 +79,14 @@ struct HistorySnapshot: Sendable {
 enum HistoryListRow: Identifiable, Hashable, Sendable {
     case monthHeader(MonthSectionModel)
     case card(WorkoutCardModel)
+    /// A finished conditioning session, interleaved with the workout cards by date.
+    case conditioning(ConditioningCardModel)
 
     var id: String {
         switch self {
         case .monthHeader(let month): return "month-\(month.id)"
         case .card(let card):         return "card-\(card.id.uuidString)"
+        case .conditioning(let card): return "conditioning-\(card.id.uuidString)"
         }
     }
 }
@@ -91,6 +99,28 @@ struct MonthSectionModel: Identifiable, Hashable, Sendable {
     let label: String
     let sessionCount: Int
     let totalVolume: Double
+    /// Conditioning sessions in the month. Separate from `sessionCount` so the calendar —
+    /// which shows strength workouts only — keeps summarising exactly what it displays,
+    /// while the list divider can name both.
+    let conditioningCount: Int
+
+    /// Written out rather than synthesized so `conditioningCount` can default: every
+    /// existing construction site means "no conditioning".
+    init(
+        year: Int,
+        month: Int,
+        label: String,
+        sessionCount: Int,
+        totalVolume: Double,
+        conditioningCount: Int = 0
+    ) {
+        self.year = year
+        self.month = month
+        self.label = label
+        self.sessionCount = sessionCount
+        self.totalVolume = totalVolume
+        self.conditioningCount = conditioningCount
+    }
 
     var id: String { Self.id(year: year, month: month) }
 
@@ -116,4 +146,31 @@ struct WorkoutCardModel: Identifiable, Hashable, Sendable {
     let prLifts: Int
 
     var isPR: Bool { prLifts > 0 }
+}
+
+/// Display-ready values for one conditioning card (docs/fight-conditioning.md).
+///
+/// Same contract as `WorkoutCardModel`: the row view takes this, never a `ConditioningRecord`.
+///
+/// It carries the Domain enums rather than finished strings because localized copy
+/// (`ConditioningCopy`) lives in Presentation and `Domain/` must not reach into it. They are
+/// optional for the same reason `titleSnapshot` exists — a record written by a build whose
+/// library named a session this one no longer defines still has to render.
+struct ConditioningCardModel: Identifiable, Hashable, Sendable {
+    let id: UUID
+    let startTime: Date
+    /// `nil` once the library no longer defines the session; the view falls back to `titleSnapshot`.
+    let sessionType: ConditioningSessionDefinition.ID?
+    let titleSnapshot: String
+    let energySystem: ConditioningEnergySystem?
+    let modality: ConditioningModality?
+    /// Not rounded to minutes like `WorkoutCardModel`: a session ended after two rounds is
+    /// legitimately short, and "0 min" would erase it.
+    let duration: TimeInterval
+    let roundsCompleted: Int
+    let roundsPlanned: Int
+    let endedEarly: Bool
+
+    /// Steady-state sessions have no rounds — the card shows duration alone.
+    var isSteadyState: Bool { roundsPlanned == 0 }
 }

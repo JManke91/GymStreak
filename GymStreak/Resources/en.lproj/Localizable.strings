@@ -1511,3 +1511,13 @@
 "conditioning.safety.rpe" = "Effort targets use RPE, a 1–10 scale of how hard it feels. Heart-rate targets are estimates and do not apply on beta-blockers — go by feel.";
 "conditioning.safety.weight_cut" = "No hard conditioning during a weight cut or while dehydrated.";
 "conditioning.safety.acknowledge" = "I understand";
+
+/* MARK: - Fight conditioning in History (docs/fight-conditioning.md) */
+"conditioning.history.rounds" = "%1$d/%2$d rounds";
+"conditioning.history.ended_early" = "Ended early";
+"conditioning.history.month.summary" = "%d × conditioning";
+"conditioning.history.detail.energy" = "Energy system";
+"conditioning.history.detail.rounds" = "Rounds";
+"conditioning.history.detail.interval" = "Interval";
+"conditioning.history.detail.effort" = "Effort";
+"conditioning.history.detail.in_health" = "Also saved in Apple Health";

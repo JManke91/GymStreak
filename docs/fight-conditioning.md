@@ -1,7 +1,8 @@
 # Fight Conditioning (add-on)
 
-**Status (2026-09-18): ticket 01 built — the iPhone runner (library, preview, runner, Apple Health
-write).** History logging, HR zones, the program and the watch are later tickets. This file holds
+**Status (2026-09-19): tickets 01–02 shipped and device-verified — the iPhone runner (library,
+preview, runner, Apple Health write) and History logging (own SwiftData record, interleaved cards,
+detail, delete).** HR zones, the program and the watch are later tickets. This file holds
 the pre-implementation research (so it is not re-done) and the feature doc (iOS + watch
 architecture, components, edge cases) as tickets land. Parent Things task: "Add fighting conditioning into workout routine"
 (`TFUtiRbLsX4VScjcnbdZbv`, Gym Streak project).
@@ -110,7 +111,10 @@ a weight cut or dehydrated.
 | Data | `HealthKit/HealthKitWorkoutManager+Conditioning.swift`, `Notifications/ConditioningCueDeliverer.swift`, `Preferences/ConditioningSafetyStore.swift`, `Preferences/UserDefaultsHealthSyncPreference.swift` | implementations |
 | Presentation | `ViewModels/Conditioning/ConditioningRunViewModel.swift` (`@Observable`), `ConditioningLibraryViewModel.swift`, `ConditioningCopy.swift` (localized vocabulary) | state + copy |
 | Presentation | `Views/Conditioning/ConditioningLibraryView`, `ConditioningPreviewView`, `ConditioningRunnerView`, `ConditioningSafetyView` | screens |
-| App | `AppDependencies`: `conditioningCues`, `conditioningSafety`, `makeConditioningRunViewModel(plan:)` | wiring |
+| Domain/Models | `Conditioning/ConditioningRecord.swift` (`@Model`), `ConditioningCardModel` in `HistorySnapshot.swift` | ticket 02 — the history row and its display struct |
+| Domain/Repositories · Data | `ConditioningRecordRepository.swift` · `SwiftDataConditioningRecordRepository.swift` | ticket 02 — persistence |
+| Presentation | `ViewModels/Conditioning/ConditioningHistoryViewModel.swift`, `Views/Conditioning/ConditioningHistoryCardView.swift`, `ConditioningRecordDetailView.swift` (+ `ConditioningRecordDestination`), `Views/History/Components/HistoryDateBlock.swift` | ticket 02 — History surfaces |
+| App | `AppDependencies`: `conditioningCues`, `conditioningSafety`, `conditioningRecordRepository`, `makeConditioningRunViewModel(plan:)`, `conditioningHistory` (lazy) | wiring |
 
 Strings: `conditioning.*` in `Resources/{en,de}.lproj/Localizable.strings`.
 
@@ -130,6 +134,128 @@ each transition and the countdown is correct on unlock without replayed cues; th
 plays; pause freezes the countdown; a finished session appears in Apple Health with the modality's
 activity type and the session title; ending during the warm-up saves nothing; the conditioning
 workout does not appear in the recovery banner.
+
+## iOS architecture (ticket 02 — History logging)
+
+**What the user gets.** A finished session is recorded in GymStreak, not only in Apple Health. It
+appears in the History tab's Trainings list as its own card, interleaved with the workout cards by
+date: the date tile, the session title, an energy-system chip, the elapsed time, `4/6 rounds` (only
+for interval sessions), an "Ended early" marker when it applies, and the modality glyph where a
+workout card carries its completion ring. Tapping it pushes a detail screen (date and time, total
+time, modality, energy system, rounds completed of planned, the work/rest interval, sets, the
+effort target, and a line saying it is also in Apple Health). Long-press on the card, or the trash
+button on the detail screen, opens the **same** delete confirmation the strength path uses
+(`docs/delete-workout.md`) — "GymStreak only" vs. "GymStreak and Apple Health" when a Health
+counterpart exists, one destructive button when it does not.
+
+**`ConditioningRecord` is its own `@Model`, not a `WorkoutSession` with zero exercises.** History
+cards, Fortschritt, the muscle map and `PersonalRecordService` all walk `workoutExercises → sets`,
+and every one of them would have had to special-case an empty session. A separate row also carries
+what conditioning actually has — rounds, work/rest intervals, effort — instead of empty strength
+fields. It is denormalized like `WorkoutSession`: it copies the session's numbers rather than
+pointing at a `ConditioningSessionDefinition`, so retuning or removing a session in
+`ConditioningLibrary` never rewrites what the user did. `titleSnapshot` is the one value read only
+as a fallback — while `sessionTypeRaw` still names a session in the library the title is
+re-localized, so History follows the user's language rather than freezing the language they
+trained in.
+
+**The record id *is* the Apple Health external UUID.** `writeWorkout` gained an optional
+`externalUUID:`, and `ConditioningWorkoutSaving.saveConditioningWorkout` now takes the id instead of
+returning one. The record is written **first** and never depends on the Health write: with Health
+sync off, Health unavailable, or a failed write, the session is still in History — only
+`healthKitWorkoutId` stays `nil`, which is exactly what the delete confirmation reads to decide
+whether to offer the Health option. Same threshold as ticket 01: ending before the first work
+interval records nothing anywhere. `ConditioningRunnerView.onDisappear` calls `end()`, which is a
+no-op once the state is `.finished`, so a completed session cannot produce a second row.
+
+**The History merge.** `HistoryListRow` gained `.conditioning(ConditioningCardModel)`;
+`HistorySnapshotBuilder.build` takes `conditioningRecords:` and, after its single session pass, runs
+a second, far smaller pass (the records are flat — no relationship to fault) that buckets cards by
+month. Month sections are now the **union** of both kinds, sorted explicitly, because a month can
+reach the list through conditioning alone; without that its rows would appear under the previous
+month's divider. Within a month the two are combined by a linear merge on `startTime` (both inputs
+are already newest-first), with a same-second tie resolved in the workout's favour so `ForEach`
+identity stays deterministic. Row ids are prefixed `conditioning-` so they cannot collide with
+`card-`.
+
+**Deliberately strength-only.** `weekStats`, `weekDays` (the week hero and its goal), `cardsByDay`
+and `typesByMonth` ignore conditioning, and so does `HistorySnapshot.sessionCount`, which gates the
+AI Coach recap cards — those analyse lifting. `MonthSectionModel` therefore carries a separate
+`conditioningCount`: the list divider names both ("3 Workouts · 12.4 t · 2 conditioning", assembled
+from the clauses that apply so a conditioning-only month never reads "0 Workouts · 0 kg"), while the
+calendar's month header keeps summarising exactly what its day cells show. `conditioningCount` was
+added to the snapshot too, so the loading spinner does not flash over a conditioning-only list.
+
+**Calendar mode is a deliberate omission.** `cardsByDay` is `[Date: WorkoutCardModel]`; holding both
+kinds would mean an enum threaded through `HistoryCalendarView`'s day cells, dots, legend and
+selected-day detail. A conditioning-only day therefore shows no dot in calendar mode. To restore it:
+widen `cardsByDay` to an enum (or a parallel `conditioningByDay`), teach the day cell a conditioning
+dot colour, and render the conditioning card in the selected-day section.
+
+**Delete.** `ConditioningHistoryViewModel` (`@Observable @MainActor`) owns record lookup and delete,
+deliberately separate from the 2,000-line `WorkoutViewModel`: conditioning shares none of its state.
+It takes `HistoryStoreGate.withExclusiveAccess` around the delete + save, because
+`fetchTrainingSnapshot` now fetches `ConditioningRecord` on the model actor too and a delete landing
+mid-walk is the same uncatchable trap (`docs/history-delete-race.md`). It then posts
+`.historySourceDataDidChange`, which `WorkoutViewModel` translates into the `historyVersion` token
+the Trainings `.task(id:)` is keyed on — no new refresh mechanism. Apple Health deletion reuses
+`HealthKitWorkoutServicing.deleteWorkout(externalUUID:)` unchanged (the predicate is type-agnostic
+across `HKObjectType.workoutType()`), and a failure raises the same non-blocking
+`HealthKitDeleteFailure` banner; `HistoryView` shows one banner for whichever path set it.
+
+**Navigation.** `HistoryView`'s stack already claims `UUID.self` for workout sessions, so a
+conditioning row pushes `ConditioningRecordDestination(id:)` — a conditioning id sent as a bare
+`UUID` would resolve to "no such workout" and render nothing.
+
+**Rendering.** `ConditioningHistoryCardView` takes a `ConditioningCardModel`, never the `@Model`
+(Performance rule 4), and is `Equatable` so SwiftUI can skip unchanged rows. The day/month tile was
+extracted from `WorkoutCardView` into `HistoryDateBlock` so both card kinds share it — including its
+hoisted `static` `DateFormatter`s, which are the dominant per-card cost the History work measured.
+
+**CloudKit.** `ConditioningRecord` is registered in `GymStreakSchema.modelTypes`
+(`SchemaRegistrationTests` fails otherwise) and every stored property is optional or has a default,
+because the app has no migration plan. **Its record type must be deployed to the CloudKit
+Production environment before this ships** — run once with `-INITIALIZE_CLOUDKIT_SCHEMA` in Debug
+while signed into iCloud, deploy in the CloudKit Console, then verify with
+`xcrun cktool export-schema`. Production has no just-in-time schema creation; without the deploy
+every device on the release stores conditioning history locally only. See
+`docs/cloudkit-schema-automation.md`.
+
+**Tests (ticket 02).** `SwiftDataConditioningRecordRepositoryTests` (newest-first ordering, the full
+denormalized round trip through the app schema, unknown-id lookup, delete, steady state);
+`HistorySnapshotBuilderTests` (interleaving by date within a month, a conditioning-only month
+getting its divider, no leak into the strength aggregates, caller-independent sorting, the card
+carrying recorded values including the unknown-session-type fallback);
+`SwiftDataHistorySnapshotStoreTests.conditioningRecordsReachTheTrainingSnapshot` (through the model
+actor); `ConditioningTimelineTests` (completed vs. started work intervals, sets, steady state);
+`ConditioningRunViewModelTests` (one record with the Health external UUID, nothing before the first
+effort, rounds actually finished when ended early, a record even with Health sync off, a record
+surviving a failed Health write, no double record from `onDisappear`, steady state, the sub-maximal
+beginner variant).
+
+**Monetization (ticket 02).** Free — §3 Rule 4: it reads and retains the user's own logged data.
+Also Rule 1 (the aha path: train it → see it logged). No cap, no placement, no badge.
+
+**CloudKit — deployed (2026-09-19).** The Development schema was diffed against Production in the
+CloudKit Console before deploying. The diff was **purely additive**: one new `CD_ConditioningRecord`
+record type with exactly the model's 15 stored properties (plus the framework's `CD_entityName`,
+`CD_moveReceipt` and `___` fields, and the `_ckAsset` overflow field each `String` gets), and not a
+single change to any existing record type. Deployed to Production the same day. Note for later
+tickets: a Production deploy cannot be undone — record types and fields can never be removed and
+these names are now frozen. Adding fields stays safe, so if ticket 03 (personal HR zones) or 06/07
+(the watch runner) want average HR or time-in-zone on this record, that is another additive deploy,
+not a problem.
+
+**Device verification — PASSED (physical iPhone, 2026-09-19).** All nine manual steps behaved as
+specified: ending during the warm-up records nothing in History (and nothing in Health); ending
+after the first work interval produces one card showing the elapsed time, the rounds actually
+completed and the "Ended early" marker; the card sits in date order among the strength workouts; the
+detail screen shows modality, energy system, rounds, the work/rest interval and the effort; the
+delete alert offers both "GymStreak only" and "GymStreak and Apple Health" when a Health counterpart
+exists, and deleting with the Health option removes it from both; and with Health sync **off** the
+session is still recorded in History, with a delete alert offering the single button — which is the
+property that matters most here, because it is what makes GymStreak rather than Apple Health the
+source of truth for conditioning history.
 
 ## Research findings — Apple Health / HealthKit (verified 2026-09-18)
 
