@@ -218,6 +218,12 @@ only `WatchWorkoutIngestionCoordinator` writes `WorkoutIngestReceipt`s. This is 
 accepted rather than guarded — the offer ("this workout is in Health but not in the app") is not
 wrong in itself, and the window is small.
 
+**Conditioning workouts are excluded (2026-09-18).** The fight-conditioning runner writes its own
+`HKWorkout` with an external UUID but no strength history, so the drain skips workouts whose
+`GymStreakSessionKind` metadata is `conditioning` — otherwise each one would be offered as a
+missing workout and imported as a placeholder strength session. See
+[fight-conditioning.md](./fight-conditioning.md).
+
 **Rejected guard: filtering the ledger on `fromWatch == false`.** It looks like the obvious fix and
 it would break recovery outright. `DiscoveredWorkoutFacts.fromWatch` is derived from
 `bundleId.hasSuffix(".watchkitapp")`, but a workout recorded by the watch app is saved with the
@@ -288,7 +294,9 @@ Sources: [HKWorkoutSession](https://developer.apple.com/documentation/healthkit/
 - `GymStreak/Domain/Interfaces/HealthKitWorkoutServicing.swift` — the gateway protocol
   (`@MainActor`), now authorization + save + delete + calorie estimate only.
 - `GymStreak/Data/HealthKit/HealthKitWorkoutManager.swift` — the only implementation; the sole
-  place that touches `HKHealthStore` for workout writes. 218 lines after the removal.
+  place that touches `HKHealthStore` for workout writes. The builder sequence lives in
+  `writeWorkout(configuration:…)`; `saveWorkoutDirectly` passes the strength configuration and the
+  conditioning save (`HealthKitWorkoutManager+Conditioning.swift`) passes the modality's.
 - `GymStreak/Presentation/ViewModels/WorkoutViewModel.swift` — `prepareHealthKitAuthorization()`
   and `saveWorkoutToHealthKit(session:)`.
 - `GymStreak/App/AppDependencies.swift` — `makeHealthKitWorkoutService()` returns a fresh

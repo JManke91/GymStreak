@@ -299,6 +299,21 @@ reach it, because folded string matching cannot bridge two different German comp
 is the correct behaviour for this ticket. **Being able to do something about it is ticket 02**, and
 round 2 is the evidence for how often it will matter: on a two-exercise description, once.
 
+#### Round 3 (2026-09-19) — ticket 02, passed
+
+The same German description on the same device, now with the row answerable. Confirmed end to end:
+**Schrägbankdrücken** came back as an unresolved row carrying *"3 Sätze • 10 Wdh. • 22 kg"* and the
+hint *"Nicht in deiner Bibliothek — zum Auswählen tippen"*, under the *"Noch nicht hinzugefügt"*
+note. Tapping it opened the picker titled *"Übung wählen"*, naming the drafted words in its subtitle;
+choosing **Schrägbank-Kurzhanteldrücken** resolved the row **in second position with its figures
+unchanged**, and the note disappeared. Create wrote *Push-Tag* with both exercises in the described
+order, the second at 3 × 10 @ 22 kg. The free-request counter dropped by exactly one for the whole
+session — answering the row cost nothing.
+
+That closes the loop opened by round 2: the one name in a two-exercise description that folded string
+matching could not bridge is now fixed by the person in two taps, and the figures the model
+transcribed correctly survive the correction.
+
 **Bound every number.** The figures are copied from a sentence a person typed, not entered in a
 stepper: unstated (`0`) falls back to `defaultSetCount` (3) / `defaultReps` (10); a stated value is
 capped at `maximumSetCount` (20) / `maximumReps` (100); a weight is converted with
@@ -507,8 +522,6 @@ it is handed is a device check, and nothing here stands in for one.
 - **One set scheme per exercise** — every set identical, no rep-range goals, no per-set rest.
   Ticket 05.
 - Device verification of the German path and of real model behaviour is a manual check; see §10.
-  Round 1 (2026-09-16) found the compound-word defect above; it is fixed and regression-locked, and
-  round 2 (2026-09-17) passed. Ticket 02's own device check — tapping the
-  "Schrägbankdrücken" row from round 2 and pointing it at the library's
-  "Schrägbank-Kurzhanteldrücken" — is outstanding: there is no on-device model in the simulator, so
-  nothing automated stands in for it.
+  There is no on-device model in the simulator, so nothing automated stands in for one. Round 1
+  (2026-09-16) found the compound-word defect above — fixed and regression-locked; rounds 2
+  (2026-09-17) and 3 (2026-09-19, ticket 02's resolution flow) passed.

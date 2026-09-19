@@ -438,12 +438,13 @@ class WorkoutViewModel: ObservableObject {
     // MARK: - HealthKit Preferences
 
     private func loadHealthKitPreferences() {
-        healthKitSyncEnabled = UserDefaults.standard.object(forKey: "healthKitSyncEnabled") as? Bool ?? true
+        healthKitSyncEnabled = UserDefaults.standard.object(forKey: UserDefaultsHealthSyncPreference.key) as? Bool
+            ?? UserDefaultsHealthSyncPreference.defaultValue
     }
 
     func setHealthKitSyncEnabled(_ enabled: Bool) {
         healthKitSyncEnabled = enabled
-        UserDefaults.standard.set(enabled, forKey: "healthKitSyncEnabled")
+        UserDefaults.standard.set(enabled, forKey: UserDefaultsHealthSyncPreference.key)
     }
 
     func requestHealthKitAuthorization() async {

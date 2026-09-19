@@ -87,16 +87,33 @@ class HealthKitWorkoutManager: ObservableObject, HealthKitWorkoutServicing {
         totalEnergyBurned: Double? = nil,
         metadata: [String: Any]? = nil
     ) async throws -> (workout: HKWorkout?, healthKitWorkoutId: UUID) {
+        let configuration = HKWorkoutConfiguration()
+        configuration.activityType = .traditionalStrengthTraining
+        configuration.locationType = .indoor
+        return try await writeWorkout(
+            configuration: configuration,
+            startDate: startDate,
+            endDate: endDate,
+            totalEnergyBurned: totalEnergyBurned,
+            metadata: metadata
+        )
+    }
+
+    /// The single builder write shared by the strength and the conditioning
+    /// save (`HealthKitWorkoutManager+Conditioning.swift`).
+    func writeWorkout(
+        configuration: HKWorkoutConfiguration,
+        startDate: Date,
+        endDate: Date,
+        totalEnergyBurned: Double?,
+        metadata: [String: Any]?
+    ) async throws -> (workout: HKWorkout?, healthKitWorkoutId: UUID) {
         // Generate external UUID for deduplication and correlation with SwiftData
         let healthKitWorkoutId = UUID()
 
         guard isAuthorized else {
             throw HealthKitError.notAuthorized
         }
-
-        let configuration = HKWorkoutConfiguration()
-        configuration.activityType = .traditionalStrengthTraining
-        configuration.locationType = .indoor
 
         let builder = HKWorkoutBuilder(healthStore: healthStore, configuration: configuration, device: .local())
 

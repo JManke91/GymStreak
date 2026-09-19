@@ -1,8 +1,9 @@
 # Fight Conditioning (add-on)
 
-**Status (2026-09-18): planned, not built.** This file records the pre-implementation research so
-it is not re-done. It becomes the feature doc (iOS + watch architecture, components, edge cases)
-as tickets land. Parent Things task: "Add fighting conditioning into workout routine"
+**Status (2026-09-18): ticket 01 built — the iPhone runner (library, preview, runner, Apple Health
+write).** History logging, HR zones, the program and the watch are later tickets. This file holds
+the pre-implementation research (so it is not re-done) and the feature doc (iOS + watch
+architecture, components, edge cases) as tickets land. Parent Things task: "Add fighting conditioning into workout routine"
 (`TFUtiRbLsX4VScjcnbdZbv`, Gym Streak project).
 
 ## What it is
@@ -23,6 +24,113 @@ blurred preview, `PaywallPlacement.conditioningProgram`).
 (needs an iOS 26 `HKWorkoutSession` on iPhone — the watch covers HR); a Live Activity for the
 interval timer; AI Coach integration; skill training (MMA/BJJ/Muay Thai) sessions.
 
+## iOS architecture (ticket 01 — the iPhone runner)
+
+**What the user gets.** Routines tab header → the boxing-figure button opens the Conditioning
+library (full screen). Five sessions of the corrected protocol, grouped Aerobic / Lactic /
+Alactic: *Aerobic base* (30/45/60 min steady, RPE 3–4), *Aerobic + bursts* (4–6 × 8 s at RPE 8,
+90 s rest), *Lactic 30/120* (6–8 rounds), *Lactic 45/180* (4–6 rounds), *Alactic power* (2–3 sets ×
+5 × 8 s, 90 s rest, 4 min set break, 15 min warm-up). A session opens a preview: modality chips,
+a volume segment (the lowest option is the default — beginners start low), the 85–90 %
+*beginner variant* toggle (alactic only), and the structure with its total time. *Start session*
+opens the runner. The heart-rate button in the library toolbar re-opens the safety screen
+read-only.
+
+**The runner** shows the phase (WARM-UP / WORK / REST / SET BREAK / COOL-DOWN / STEADY; effort
+phases on a tint capsule with `textOnTint`), a large countdown of the current phase, the
+round/set position, the effort cue, "Next: …", a session progress bar and elapsed time. Steady
+state additionally shows "elapsed of total". Pause / Resume / End (with a confirmation that says
+whether anything will be saved). The screen stays awake (`isIdleTimerDisabled`) while the runner
+is up. On finish: "Session complete" / "Session ended", elapsed time and the Health save outcome.
+
+**Timing never counts down.** `ConditioningClock` (Domain) holds the start date and paused
+intervals; `ConditioningTimeline` (Domain) expands a plan into phases with start offsets and maps
+an elapsed time to a `ConditioningPosition`. The view model re-derives everything from
+`clock.elapsed(at: now)` every 200 ms, so a locked or backgrounded phone resumes at the right
+place. On returning to the foreground (`scenePhase == .active`) it calls `resynchronize()`, which
+jumps to the current phase **without** replaying the cues that happened meanwhile (their
+notifications already fired). If the session ended while the app was suspended, the Health
+workout still ends at the timeline's end, not at wake-up.
+
+Expansion rules (unit-tested in `ConditioningTimelineTests`): warm-up → work/rest pairs with no
+trailing rest after the last work → cool-down; set-based sessions replace the last rest of each
+set with a set break and have none after the last set; steady state is one `.steady` block of the
+chosen minutes; the sub-maximal option only changes the work effort of sessions that support it.
+
+**Cues.** In the foreground: a system sound + haptic at every transition (effort start vs.
+recovery start differ) and a 3-2-1 lead-in tick before every effort phase that follows another
+phase. For the background: when the session starts or resumes, one local notification per
+upcoming phase start plus a "Session complete" one (title = phase, body = position + effort),
+cancelled on pause, end and finish. The app installs no `UNUserNotificationCenterDelegate`, so a
+notification firing while the app is in the foreground is not presented — no double cue.
+Capped at 48 pending requests (iOS allows 64 per app, shared with the rest timer and reminders;
+the longest session has ~35 transitions). Notification permission is asked on the first start;
+when denied, the runner shows "cues only play while the screen is on" and keeps running. Stale
+`conditioning.cue.*` requests from a killed process are swept on the next schedule — until then
+they can still fire (accepted edge).
+
+**Apple Health.** A separate `HKWorkout`, written after the fact through the same builder path as
+strength (`HealthKitWorkoutManager.writeWorkout(configuration:…)`, extracted from
+`saveWorkoutDirectly`). Configuration per modality (`HealthKitWorkoutManager+Conditioning.swift`):
+run `.running` / outdoor, assault bike `.cycling` / indoor, rower `.rowing` / indoor, swim
+`.swimming` with `swimmingLocationType = .unknown` and no lap length, sled/ropes/med ball
+`.highIntensityIntervalTraining` / indoor. Metadata: brand name = session title (the same choice as the strength path, which stores
+the routine name there — it is what Fitness shows as the workout's title),
+`HKMetadataKeyExternalUUID`, and `GymStreakSessionKind = "conditioning"`. No energy sample — the
+phone has no sensor and the strength path's flat 4.5 kcal/min estimate is meaningless for
+sprints. The workout's duration is wall clock start → end, pauses included. Rules: honors the
+strength path's `healthKitSyncEnabled` switch (read through `HealthSyncPreferenceReading`); ending
+before the first effort phase has begun saves nothing (steady state begins immediately); Health
+authorization is primed at session start. The external UUID is not stored anywhere yet — History
+logging (ticket 02) will keep it.
+
+**Recovery-ledger guard.** `HealthKitAnchoredWorkoutDrain.facts(from:)` admits every
+GymStreak-authored workout carrying an external UUID into the watch-workout recovery ledger
+(`docs/healthkit-ios-workout-save.md`). A conditioning workout has no strength-history
+counterpart, so without a guard it would be offered in the pending-sync banner as a "missing"
+workout and imported as a placeholder strength session. The drain therefore skips workouts whose
+`GymStreakSessionKind` is `conditioning`. Ticket 07 (watch → iPhone sync) must revisit this if it
+wants conditioning recovery.
+
+**First-use safety screen.** Shown inside the runner cover the first time a session is started
+(`ConditioningSafetyStore`, device-local `UserDefaults` flag `conditioning.safetyAcknowledged`,
+same reasoning as `OnboardingCompletionStore`); the session only starts after *I understand*.
+Content: physician/ACSM disclaimer, stop symptoms, beginner sprint caution + 85–90 % variant,
+warm-up and bike/rower for maximal efforts, RPE (HR estimates, beta-blockers), no hard work during
+a weight cut or dehydrated.
+
+**Components.**
+
+| Layer | File | Role |
+|---|---|---|
+| Domain/Models | `Conditioning/ConditioningSession.swift` | energy system, modality, effort, phase kind, volume, definition, options, plan, phase |
+| Domain/Services | `ConditioningLibrary.swift` | the five sessions (corrected protocol) |
+| Domain/Services | `ConditioningTimeline.swift` | phase expansion, position lookup, `ConditioningClock` |
+| Domain/Interfaces | `ConditioningCueDelivering.swift`, `ConditioningWorkoutSaving.swift` (+ `HealthSyncPreferenceReading`), `ConditioningSafetyAcknowledging.swift` | gateways |
+| Data | `HealthKit/HealthKitWorkoutManager+Conditioning.swift`, `Notifications/ConditioningCueDeliverer.swift`, `Preferences/ConditioningSafetyStore.swift`, `Preferences/UserDefaultsHealthSyncPreference.swift` | implementations |
+| Presentation | `ViewModels/Conditioning/ConditioningRunViewModel.swift` (`@Observable`), `ConditioningLibraryViewModel.swift`, `ConditioningCopy.swift` (localized vocabulary) | state + copy |
+| Presentation | `Views/Conditioning/ConditioningLibraryView`, `ConditioningPreviewView`, `ConditioningRunnerView`, `ConditioningSafetyView` | screens |
+| App | `AppDependencies`: `conditioningCues`, `conditioningSafety`, `makeConditioningRunViewModel(plan:)` | wiring |
+
+Strings: `conditioning.*` in `Resources/{en,de}.lproj/Localizable.strings`.
+
+**Tests.** `ConditioningTimelineTests` (intervals, sets with set breaks, steady state, sub-maximal,
+position lookup, first-effort rule, library completeness, pause-aware clock) and
+`ConditioningRunViewModelTests` (one save with the plan's modality and the timeline's end date,
+nothing saved when ended in the warm-up or with Health sync off, pause/resume rescheduling,
+resynchronize without cue replay, 3-2-1 lead-in). The drain filter is not unit-tested:
+`HKWorkout.sourceRevision` cannot be faked.
+
+**Monetization.** Free — Rule 3 (in-session). No Pro badge anywhere in the runner.
+
+**Watch target.** Unchanged by ticket 01; the watch runner with live HR is ticket 06.
+
+**Device verification — PASSED (physical iPhone, 2026-09-19).** Lock-screen notifications fire at
+each transition and the countdown is correct on unlock without replayed cues; the 3-2-1 lead-in
+plays; pause freezes the countdown; a finished session appears in Apple Health with the modality's
+activity type and the session title; ending during the warm-up saves nothing; the conditioning
+workout does not appear in the recovery banner.
+
 ## Research findings — Apple Health / HealthKit (verified 2026-09-18)
 
 - **Record conditioning as its own `HKWorkout`, separate from the strength workout.**
@@ -37,7 +145,11 @@ interval timer; AI Coach integration; skill training (MMA/BJJ/Muay Thai) session
   Sources: [beginNewActivity](https://developer.apple.com/documentation/healthkit/hkworkoutsession/beginnewactivity(configuration:date:metadata:)),
   [Dividing a HealthKit workout into activities](https://developer.apple.com/documentation/healthkit/dividing-a-healthkit-workout-into-activities).
 - **Activity types per modality:** run → `.running` (`.outdoor` gives GPS route, treadmill
-  `.indoor`); rower → `.rowing`; swim → `.swimming` (+ swimming location type); assault/air bike →
+  `.indoor`); rower → `.rowing`; swim → `.swimming` (+ swimming location type — `.unknown` when the
+  pool length is not known: `swimmingLocationType` and `lapLength` are optional, and `.pool`
+  without a lap length renders oddly in Health; [HKWorkoutSwimmingLocationType](https://developer.apple.com/documentation/healthkit/hkworkoutswimminglocationtype),
+  [lapLength](https://developer.apple.com/documentation/healthkit/hkworkoutconfiguration/laplength));
+  an `HKWorkoutBuilder` save with zero samples is valid ([finishWorkout](https://developer.apple.com/documentation/healthkit/hkworkoutbuilder/finishworkout(completion:))); assault/air bike →
   `.cycling` indoor; sled / battle ropes / med-ball / sprint intervals → `.highIntensityIntervalTraining`;
   `.mixedCardio` only for a non-interval multi-machine circuit.
 - **Live heart rate:** the watch is the reliable source (`HKLiveWorkoutBuilder` statistics in

@@ -37,6 +37,10 @@ final class AppDependencies: ObservableObject {
     /// rest-timer Live Activity, and identity-keyed calls keep the two
     /// `WorkoutViewModel`s from ending each other's countdown.
     let restTimerLiveActivity: RestTimerLiveActivityPresenting
+    /// Fight-conditioning runner cues (docs/fight-conditioning.md). One instance:
+    /// only one session runs at a time, and it owns the pending cue requests.
+    let conditioningCues: ConditioningCueDelivering = ConditioningCueDeliverer()
+    let conditioningSafety: ConditioningSafetyAcknowledging = ConditioningSafetyStore()
     /// Writes a session's performed values back onto its routine template
     /// ("Update routine"). Stateless domain logic over the shared main-context
     /// repositories, so one instance serves both `WorkoutViewModel`s.
@@ -525,6 +529,15 @@ final class AppDependencies: ObservableObject {
     /// History tab). A factory preserves that instead of collapsing them into one.
     func makeHealthKitWorkoutService() -> HealthKitWorkoutServicing {
         HealthKitWorkoutManager()
+    }
+
+    func makeConditioningRunViewModel(plan: ConditioningSessionPlan) -> ConditioningRunViewModel {
+        ConditioningRunViewModel(
+            plan: plan,
+            cues: conditioningCues,
+            workoutSaver: HealthKitWorkoutManager(),
+            healthSync: UserDefaultsHealthSyncPreference()
+        )
     }
 
     /// The app's one routines list ViewModel.

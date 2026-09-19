@@ -18,6 +18,7 @@ private struct RoutinesViewInternal: View {
     @State private var routinePendingDeletion: UUID?
     @State private var showingDeleteAlert = false
     @State private var showingActiveWorkout = false
+    @State private var showingConditioning = false
 #if DEBUG
     /// UI-test-only responsiveness measurement; inert without the launch argument.
     @StateObject private var stallProbe = MainThreadStallProbe()
@@ -88,6 +89,9 @@ private struct RoutinesViewInternal: View {
             }
             .fullScreenCover(isPresented: $showingActiveWorkout) {
                 ActiveWorkoutView(viewModel: workoutViewModel, exercisesViewModel: exercisesViewModel)
+            }
+            .fullScreenCover(isPresented: $showingConditioning) {
+                ConditioningLibraryView()
             }
             .alert("routine.delete".localized, isPresented: $showingDeleteAlert) {
                 Button("action.delete".localized, role: .destructive) {
@@ -236,23 +240,32 @@ private struct RoutinesViewInternal: View {
 
             Spacer()
 
-            Button {
-                HapticManager.shared.light()
-                viewModel.requestAddRoutine()
-            } label: {
-                Image(systemName: "plus")
-                    .font(.system(size: 16, weight: .bold))
-                    .foregroundStyle(DesignSystem.Colors.tint)
-                    .frame(width: 38, height: 38)
-                    .background(DesignSystem.Colors.tint.opacity(0.15))
-                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+            headerButton("figure.boxing", label: "conditioning.library.title".localized) {
+                showingConditioning = true
             }
-            .buttonStyle(.plain)
-            .accessibilityLabel("routines.add".localized)
+            headerButton("plus", label: "routines.add".localized) {
+                viewModel.requestAddRoutine()
+            }
         }
         .padding(.horizontal, 4)
         .padding(.top, 8)
         .padding(.bottom, 6)
+    }
+
+    private func headerButton(_ symbol: String, label: String, action: @escaping () -> Void) -> some View {
+        Button {
+            HapticManager.shared.light()
+            action()
+        } label: {
+            Image(systemName: symbol)
+                .font(.system(size: 16, weight: .bold))
+                .foregroundStyle(DesignSystem.Colors.tint)
+                .frame(width: 38, height: 38)
+                .background(DesignSystem.Colors.tint.opacity(0.15))
+                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(label)
     }
 
     private var headerSubtitle: String {

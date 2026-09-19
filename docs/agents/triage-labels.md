@@ -21,4 +21,6 @@ Write it as a bold Markdown field so it can be found mechanically:
 
 Use exactly one of the values above as the first word after `**Status:**`; free-text evidence follows after an em dash. Do not invent synonyms — `complete`, `completed`, and `implemented` are **not** status values (older tickets predate this rule and use them inconsistently).
 
+**Tick the acceptance criteria as part of every status change — never only the status line.** Moving a ticket to `ready-for-human`, tick (`- [x]`) each criterion the agent has itself verified (build, tests, docs, review); moving it to `done`, tick the rest that the user's verification covered. A criterion that is not met stays `- [ ]` with a one-line note why, and a ticket with an unticked criterion cannot be `done`.
+
 `ready-for-human` means the agent is finished and the change awaits the user's manual verification. `done` is the terminal state and means that verification passed; only the user's confirmation moves a ticket into it. Feature archival keys off every ticket in a set being `done` or `wontfix` — see `issue-tracker.md`.

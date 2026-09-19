@@ -77,6 +77,12 @@ final class HealthKitAnchoredWorkoutDrain {
             let externalUUID = UUID(uuidString: uuidString)
         else { return nil }
 
+        // Conditioning sessions have no strength-history counterpart; admitting
+        // them would offer each one as a "missing" workout to import.
+        guard metadata[HealthKitWorkoutManager.sessionKindMetadataKey] as? String
+                != HealthKitWorkoutManager.conditioningSessionKind
+        else { return nil }
+
         let energy = workout.statistics(for: HKQuantityType(.activeEnergyBurned))?
             .sumQuantity()?.doubleValue(for: .kilocalorie())
         let routineName = (metadata["RoutineName"] as? String)
