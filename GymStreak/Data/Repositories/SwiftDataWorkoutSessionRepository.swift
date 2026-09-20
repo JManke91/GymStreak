@@ -77,6 +77,21 @@ final class SwiftDataWorkoutSessionRepository: WorkoutSessionRepository {
         }
     }
 
+    func fetchCompletedSessions(since date: Date) -> [WorkoutSession] {
+        var descriptor = FetchDescriptor<WorkoutSession>(
+            predicate: #Predicate { $0.endTime != nil && $0.startTime >= date },
+            sortBy: [SortDescriptor(\.startTime, order: .reverse)]
+        )
+        // The caller reads each session's exercises (muscle groups), never its sets.
+        descriptor.relationshipKeyPathsForPrefetching = [\.workoutExercises]
+        do {
+            return try modelContext.fetch(descriptor)
+        } catch {
+            print("Error fetching recent workouts: \(error)")
+            return []
+        }
+    }
+
     func findSession(id: UUID, healthKitWorkoutId: UUID?) -> WorkoutSession? {
         let descriptor = FetchDescriptor<WorkoutSession>(
             predicate: #Predicate { session in

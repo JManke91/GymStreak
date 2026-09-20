@@ -18,6 +18,9 @@ protocol WorkoutSessionRepository: AnyObject {
     /// Start date of the most recent completed session of any routine — including
     /// sessions whose routine has since been deleted. One `LIMIT 1` query.
     func lastCompletedWorkoutStartDate() -> Date?
+    /// Completed sessions started on or after `date`, newest first — a bounded window
+    /// for the conditioning program's spacing rules, never a whole-history scan.
+    func fetchCompletedSessions(since date: Date) -> [WorkoutSession]
     /// Finds a session matching the watch-generated id, or (secondarily) the given
     /// HealthKit workout id. Used to detect duplicate/retried watch deliveries.
     func findSession(id: UUID, healthKitWorkoutId: UUID?) -> WorkoutSession?

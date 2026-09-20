@@ -3,8 +3,9 @@
 **Status (2026-09-19): tickets 01–02 shipped and device-verified — the iPhone runner (library,
 preview, runner, Apple Health write) and History logging (own SwiftData record, interleaved cards,
 detail, delete). Ticket 03 (personal heart-rate zones, incl. the Apple Health peak-HR suggestion) shipped and
-device-verified the same day.**
-The program and the watch are later tickets. This file holds
+device-verified the same day. Ticket 04 (the 12-week program — showcase, enrollment, weekly targets,
+today's suggestion) shipped and was device-verified 2026-09-20.**
+The post-workout add-on, the watch and the Pro gate are later tickets. This file holds
 the pre-implementation research (so it is not re-done) and the feature doc (iOS + watch
 architecture, components, edge cases) as tickets land. Parent Things task: "Add fighting conditioning into workout routine"
 (`TFUtiRbLsX4VScjcnbdZbv`, Gym Streak project).
@@ -352,6 +353,202 @@ exists only to feed it. No cap, no placement, no badge.
 
 **Watch target.** Unchanged by ticket 03. Ticket 06 syncs the profile/zones to the watch for the
 live zone indicator; RPE-only users must see no HR target there either.
+
+## iOS architecture (ticket 04 — the 12-week program)
+
+**What the user gets.** The Conditioning screen is the program — single sessions live one tap away
+(see "One screen, one subject" below). Not enrolled: an invitation card → the **showcase**
+("Conditioning for fighters" / "Kampfsport-Kondition"): a hero, the **week rail** (the twelve weeks
+as three labelled, tappable blocks carrying the week range and the phase's short name), the three
+**phase cards that expand in place**, four claims taken verbatim from the "Marketing claims" list
+below (no guaranteed outcomes), a safety footnote, and *Set up my program* → an enrollment sheet
+(start date ≥ today, beginner / experienced, "I spar hard at least twice a week").
+Enrolled: a status card (phase label in the phase's accent, "Week 3 of 12", phase name or "Taper
+week", and the same week rail — here filled up to the current week),
+**Today's conditioning** (the suggested session with its volume, cautions and *Set up session*, or a
+rest card saying why), **This week** (each target with dots and "1 of 2"; tapping one opens its
+preview), and — when the user taps a block of that rail — the matching phase card, opened
+**directly under the rail** with the user's own targets (the current phase wears a "Current" capsule,
+past phases are ticked). There is no separate phase section further down: the first device test
+showed that putting the explanation below "This week" broke the connection to the bar it explains. A menu offers Pause / Resume, Restart (the enrollment sheet again,
+pre-filled) and Leave (confirmation; logged sessions stay in History). Before the start day the
+screen shows "Starts Mon, Sep 21" and week 1's targets; after week 12, "Program complete" + Restart.
+Every session still runs through the ticket 01 runner: the target opens `ConditioningPreviewView`
+with `initialOptions` set to the target's volume, so the ticket 03 heart-rate card and the modality
+choice are unchanged.
+
+**One screen, one subject (revised after the first device test).** Ticket 01 built this screen as a
+session library; ticket 04 first put the program on top of it, which left two competing subjects.
+The library now lives behind one row at the bottom — *Single session* / *Einzelne Einheit* — pushing
+`ConditioningSessionListView`. Nothing is lost: a one-off session is one tap away and still counts
+toward the program week (the week's progress counts records by session type, not by how they were
+started).
+
+**Phases are one thing, shown twice — deliberately linked.** The first version had an unlabelled
+three-segment bar at the top and the phase descriptions detached at the bottom, so the reader had to
+connect them. Now the **week rail** (`ConditioningProgramWeekRail`) carries "Weeks 1–4 · Base" per
+block and selects the matching card, and each **phase card** (`ConditioningProgramPhaseCard`) carries
+its number on a connecting rail, its week range and energy system in the phase's own accent, a
+teaser while collapsed, and — expanded — the detail, "what a week looks like" (the plan's own
+targets) and the spacing rule that matters in that phase. The accents ramp with intensity: aerobic
+`tint` green, lactic `warning` amber, alactic a local coral (`destructive` red reads as an error).
+The showcase lists all three cards under the rail; the enrolled dashboard keeps the rail in its
+status card and opens one card underneath on tap — collapsed by default, so the screen leads with
+today's session until the user asks for the detail.
+The showcase renders a *beginner's* week there: it is the conservative promise and the default the
+enrollment sheet opens on. The same card, with the user's own targets, is the ticket-08 blurred
+preview.
+
+**The level choice explains itself.** Picking beginner or experienced (or flipping the sparring
+switch) rewrites a summary card in place: sessions a week, then one row per phase with that phase's
+emphasis at that level ("Weeks 5–8 · Build repeatable speed — 2 × 7 rounds"). It is derived from
+`ConditioningProgramContent` (`sessionsPerWeek`, `emphasisTarget(of:experience:sparsHard:)`), never
+written as prose, so it cannot drift from the plan the user will actually get.
+
+**Routines tab entry.** `ConditioningProgramRoutinesCardView` sits under the create button: an
+invitation with an × for users who are not enrolled (dismissal is device-local,
+`conditioning.program.routinesCardDismissed`; the boxing button in the header stays), and "Week 3
+of 12" for enrolled users. The invitation opens the Conditioning screen with the showcase already
+pushed (`ConditioningLibraryView(opensShowcase:)`). Leaving the program brings the invitation back
+only if it was never dismissed.
+
+**The program as data (`ConditioningProgramContent`).** Phases → weekly templates → sessions from
+`ConditioningLibrary`, never hard-coded in views. Beginners get the lowest volume option and fewer
+sessions, experienced users the middle option:
+
+| Weeks | Beginner | Experienced | Spars hard |
+|---|---|---|---|
+| 1–4 aerobic | 2 × aerobic base, 1 × bursts | 3 × aerobic base, 1 × bursts | same |
+| 5–8 lactic (30/120 in 5–6, 45/180 in 7–8) | 1 × lactic, 2 × aerobic base | 2 × lactic, 1 × aerobic base | 1 × lactic, 2 × aerobic base |
+| 9–11 alactic | 2 × alactic power, 1 × aerobic base | same, higher volume | same |
+| 12 taper | 1 × alactic (2 sets), 1 × aerobic base (30 min) | same | same |
+
+The protocol's "lactic optional in Phase 3 for non-sparrers" is **deliberately left out**: with two
+alactic sessions it would be a third hard session and break the two-hard-a-week rule. A unit test
+asserts no week, for any user, asks for more than two hard sessions.
+
+**Week/phase derivation (`ConditioningProgramSchedule`).** Everything counts in calendar days. The
+start is stored as `ConditioningProgramDay` (year/month/day), not an instant, so flying to another
+time zone never moves the start; day differences go through `Calendar.dateComponents([.day])`
+between local midnights, which counts a 23 h or 25 h DST day as one day. Program day = calendar days
+since the start minus days inside a pause; a pause (`from ..< until`, or open `pausedSince`) freezes
+the program on the day it began, and resuming picks up on that same day. `currentWeekStart` walks
+back to the week's first calendar day, so a pause inside a week stays inside its range for progress
+counting.
+
+**Today's conditioning (`ConditioningProgramCoach`, pure).** Progress: an exact session match
+counts first, then a session of the same energy system fills an open target (a 45/180 in a 30/120
+week is still lactic work). The suggestion, in order:
+
+1. Anything logged today → rest ("Done for today") — one conditioning session a day.
+2. Every target met → rest ("This week is done").
+3. Hard (lactic/alactic) targets first — the week's emphasis — unless blocked: two hard sessions
+   already logged this program week → blocked (`hardSessionCap`); a lactic target within 48 h of
+   the last lactic session's end → blocked (`lacticSpacing(until:)`, which can reach into the
+   previous week, so the 48 h window is fetched separately from the week).
+4. A heavy lower-body workout logged today → an open easy session is preferred; with none left the
+   hard session is suggested with the caution "start no earlier than <end + 6 h>".
+5. A user who spars hard gets a "not on a hard sparring day, or the day before one" caution on
+   every hard suggestion.
+6. Otherwise the open easy session; if nothing is suggestible, rest with the blocking reason.
+
+*Heavy lower body* = at least two exercises whose muscle groups include Quadriceps or Hamstrings
+(`StrengthLogEntry.isHeavyLowerBody`) — squats + RDLs count, one lunge on an upper-body day does not.
+*Hard sparring counted as lactic*: the app does not know which days the user spars, so the flag
+acts where it can — the lactic template drops to one session (sparring supplies the other) and the
+caution above. Rejected: asking for sparring weekdays at enrollment — not in the ticket, and a fixed
+weekday list goes stale.
+
+**Data flow.** `ConditioningProgramViewModel` (`@Observable @MainActor`, one lazy instance in
+`AppDependencies.conditioningProgram`, shared by the Conditioning screen and the Routines card)
+computes a `ConditioningProgramDashboard` value in `refresh()`: two bounded fetches through
+repositories — `ConditioningRecordRepository.fetch(since:)` (the earlier of the week start, 48 h ago
+and today) and `WorkoutSessionRepository.fetchCompletedSessions(since: startOfToday)` (prefetches
+`workoutExercises`; muscle groups are read in the view model, never in a view). It refreshes on
+appear, when a run ends (`activeRun` back to `nil`), and when the enrollment changes on another
+device. Views render the dashboard value only.
+
+**Persistence and sync (`ConditioningProgramStore`, `Data/Preferences`).** The enrollment is JSON
+in `UserDefaults` mirrored to iCloud key-value storage (`conditioning.program.enrollment`; the KVS
+entitlement already exists). Chosen over a SwiftData `@Model` because it is one small value per
+user: a CloudKit-synced model would need an irreversible Production schema deploy, and two devices
+enrolling offline would each insert a row to reconcile. **No new record type — no CloudKit deploy
+needed for this ticket.** The stored value carries `updatedAt`, and the later write wins; leaving
+writes a *tombstone* (`enrollment: nil` + timestamp), so a device holding an old local copy cannot
+resurrect a program the user left elsewhere. External changes arrive via
+`NSUbiquitousKeyValueStore.didChangeExternallyNotification` (a `@Sendable` closure that hops with
+`Task { @MainActor }`, observer removed in an `isolated deinit`).
+
+**Components (ticket 04).**
+
+| Layer | File | Role |
+|---|---|---|
+| Domain/Models | `Conditioning/ConditioningProgram.swift` | experience, calendar day, enrollment + pauses, phase, target, week |
+| Domain/Services | `ConditioningProgramContent.swift`, `ConditioningProgramSchedule.swift`, `ConditioningProgramCoach.swift` | content, week/phase derivation, progress + today's suggestion |
+| Domain/Interfaces · Repositories | `ConditioningProgramStoring.swift`; `fetch(since:)`, `fetchCompletedSessions(since:)` | gateways |
+| Data | `Preferences/ConditioningProgramStore.swift`; the two bounded SwiftData fetches | implementations |
+| Presentation | `ViewModels/Conditioning/ConditioningProgramViewModel.swift`, `ConditioningProgramCopy.swift` | state + copy |
+| Presentation | `Views/Conditioning/ConditioningProgramShowcaseView` (+ `ConditioningProgramEnrollSheet`, `ConditioningExperienceSummaryCard`), `ConditioningProgramSection`, `ConditioningProgramTodayCard` (+ `ConditioningTargetProgressRow`), `ConditioningProgramPhaseCard`, `ConditioningProgramWeekRail`, `ConditioningSessionListView`; `ConditioningRoute` in `ConditioningLibraryView`; `Views/Routines/ConditioningProgramRoutinesCardView` | screens |
+| App | `AppDependencies.conditioningProgramStore`, `conditioningProgram` (lazy) | wiring |
+
+Strings: `conditioning.program.*`, `conditioning.library.single.*`. The German copy was rewritten
+after the first device test ("Kampfbereite Kondition" and its subheadline did not read as natural
+German): the program is **Kampfsport-Kondition**, the phases are *Grundlage aufbauen* /
+*Tempohärte entwickeln* / *Explosivität schärfen*, and the English follows the same three nouns
+(base / repeatable speed / explosive power). A Claude design canvas was used to settle the layout
+before it was built.
+
+**Ticket 08 hook (blurred preview).** `ConditioningProgramPhaseCard` takes a phase and the user's
+own targets as values, and `ConditioningProgramDashboard.weeks` always carries all twelve weeks of
+the user's plan — so the Phase 2–3 preview is these cards under `.proLocked`, not a new view.
+**Ticket 05 hook.** The post-workout add-on calls the same `ConditioningProgramCoach.suggestion`
+with the just-finished strength workout in `strengthToday`.
+
+**Tests (ticket 04).** `ConditioningProgramScheduleTests` (weeks/days and completion, open pause
+freezes, closed pause shifts, spring-forward and fall-back DST in Europe/Berlin, time-zone travel,
+week start spanning a pause); `ConditioningProgramContentTests` (phase layout and taper, ≤ 2 hard
+sessions every week for every user, sparring halves lactic, volumes valid);
+`ConditioningProgramCoachTests` (progress matching, hard first, one a day, 48 h lactic spacing —
+easy meanwhile / rest until / clear after 48 h —, leg day prefers easy / flags hard ≥ 6 h, the
+heavy-lower-body threshold, the two-hard cap, sparring caution, week complete);
+`ConditioningProgramStoreTests` (round trip through iCloud, tombstone beats an older local copy,
+older cloud value never wins); `ConditioningProgramViewModelTests` (enroll → week 1 with a
+suggestion, pause freezes and resume shifts, a logged session counts, leave + dismiss).
+
+**Device verification — PASSED (physical iPhone, 2026-09-20).** The Routines card carries the
+program name; the week rail opens the matching phase card directly beneath the status card and
+closes it again; the showcase's three phase cards expand with their week example and spacing rule;
+the enrollment sheet's level card rewrites itself between Einsteiger and Erfahren and lines up with
+the form's other rows; a program session opens its preview at the program's volume (45 min for an
+experienced user, not the 30 min default), and finishing one moves the week's progress to 1 von 3 and
+turns today's card into "Für heute erledigt"; a session started from *Einzelne Einheit* counts the
+same; pausing freezes the week and resuming returns to it without advancing; leaving brings back the
+invitation card, which dismisses with its ×; re-enrolling opens with no phase expanded.
+
+**Not verified on device, and why.** Phases 2–3, the taper and the completed state — and with them
+all four spacing rules (48 h between lactic sessions, the "≥ 6 h after heavy legs" caution, the
+two-hard-sessions cap, the sparring caution) — first occur in week 5, and the start date cannot be
+set in the past, so reaching them means waiting five weeks. They rest on the eleven
+`ConditioningProgramCoachTests` cases. Cross-device iCloud sync of the enrollment is likewise
+untested: it needs a second device on the same account.
+
+**Follow-ups found but not applied (ticket 04).**
+
+- *Allow a start date in the past.* The picker is bounded to today (`in: startOfDay(for: Date())...`
+  in `ConditioningProgramEnrollSheet`). Allowing earlier dates would support a camp already under way
+  and, incidentally, make Phases 2–3 reachable for device testing. `ConditioningProgramSchedule`
+  already handles it — `programDay` simply returns a larger number; only the picker bound stops it.
+- *Change the level mid-program.* Einsteiger/Erfahren can only be changed by restarting, which resets
+  the weeks. The enrollment is a mutable value, so a "change level" action that keeps `startDay` and
+  `pauses` is small; it was left out because the ticket did not ask for it.
+- *The showcase hero scrolls under the transparent toolbar*, so the back button can overlap the
+  title mid-scroll. Cosmetic and consistent with the app's other full-screen covers; a scroll-edge
+  background on the showcase would fix it.
+
+**Monetization (ticket 04).** Free and ungated for now, as planned — ticket 08 adds the Phase 2–3
+depth gate at `PaywallPlacement.conditioningProgram`. Recorded in `docs/monetization-strategy.md` §4.
+
+**Watch target.** Unchanged by ticket 04.
 
 ## Research findings — Apple Health / HealthKit (verified 2026-09-18)
 

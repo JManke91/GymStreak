@@ -42,6 +42,19 @@ final class SwiftDataConditioningRecordRepository: ConditioningRecordRepository 
         }
     }
 
+    func fetch(since date: Date) -> [ConditioningRecord] {
+        let descriptor = FetchDescriptor<ConditioningRecord>(
+            predicate: #Predicate { $0.startTime >= date },
+            sortBy: [SortDescriptor(\.startTime, order: .reverse)]
+        )
+        do {
+            return try modelContext.fetch(descriptor)
+        } catch {
+            print("Error fetching recent conditioning history: \(error)")
+            return []
+        }
+    }
+
     func insert(_ record: ConditioningRecord) {
         modelContext.insert(record)
     }

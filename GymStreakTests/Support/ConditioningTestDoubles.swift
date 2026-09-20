@@ -67,6 +67,10 @@ final class RecordingConditioningRecordRepository: ConditioningRecordRepository 
         records.first { $0.id == id }
     }
 
+    func fetch(since date: Date) -> [ConditioningRecord] {
+        fetchAll().filter { $0.startTime >= date }
+    }
+
     func insert(_ record: ConditioningRecord) {
         records.append(record)
     }

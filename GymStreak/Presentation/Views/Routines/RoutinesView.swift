@@ -19,6 +19,9 @@ private struct RoutinesViewInternal: View {
     @State private var showingDeleteAlert = false
     @State private var showingActiveWorkout = false
     @State private var showingConditioning = false
+    /// The Routines-card invitation opens the Conditioning screen on the program showcase.
+    @State private var conditioningOpensShowcase = false
+    private let conditioningProgram: ConditioningProgramViewModel
 #if DEBUG
     /// UI-test-only responsiveness measurement; inert without the launch argument.
     @StateObject private var stallProbe = MainThreadStallProbe()
@@ -31,6 +34,7 @@ private struct RoutinesViewInternal: View {
         // routines through the same instance — a second one would register a second set
         // of notification observers and sync the watch twice.
         self._viewModel = StateObject(wrappedValue: dependencies.routinesViewModel)
+        self.conditioningProgram = dependencies.conditioningProgram
         self._exercisesViewModel = StateObject(wrappedValue: ExercisesViewModel(
             exerciseRepository: dependencies.exerciseRepository,
             routineRepository: dependencies.routineRepository,
@@ -91,7 +95,7 @@ private struct RoutinesViewInternal: View {
                 ActiveWorkoutView(viewModel: workoutViewModel, exercisesViewModel: exercisesViewModel)
             }
             .fullScreenCover(isPresented: $showingConditioning) {
-                ConditioningLibraryView()
+                ConditioningLibraryView(opensShowcase: conditioningOpensShowcase)
             }
             .alert("routine.delete".localized, isPresented: $showingDeleteAlert) {
                 Button("action.delete".localized, role: .destructive) {
@@ -184,6 +188,22 @@ private struct RoutinesViewInternal: View {
                 }
                 .padding(.top, 2)
 
+                if let card = conditioningProgram.routinesCard {
+                    ConditioningProgramRoutinesCardView(
+                        card: card,
+                        onOpen: {
+                            HapticManager.shared.light()
+                            conditioningOpensShowcase = card == .invitation
+                            showingConditioning = true
+                        },
+                        onDismiss: {
+                            HapticManager.shared.light()
+                            withAnimation(DesignSystem.Animation.snappy) { conditioningProgram.dismissRoutinesCard() }
+                        }
+                    )
+                    .padding(.top, 8)
+                }
+
                 Color.clear.frame(height: 60)
             }
             .padding(.horizontal, 16)
@@ -241,6 +261,7 @@ private struct RoutinesViewInternal: View {
             Spacer()
 
             headerButton("figure.boxing", label: "conditioning.library.title".localized) {
+                conditioningOpensShowcase = false
                 showingConditioning = true
             }
             headerButton("plus", label: "routines.add".localized) {

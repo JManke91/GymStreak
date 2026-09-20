@@ -47,6 +47,9 @@ final class AppDependencies: ObservableObject {
     /// The conditioning heart-rate profile (docs/fight-conditioning.md). One instance, so the
     /// Settings editor and an open session preview observe the same value.
     let heartRateProfileStore: HeartRateProfileStoring = HeartRateProfileStore()
+    /// The 12-week conditioning-program enrollment (docs/fight-conditioning.md), mirrored to
+    /// iCloud key-value storage.
+    let conditioningProgramStore: ConditioningProgramStoring = ConditioningProgramStore()
     /// Writes a session's performed values back onto its routine template
     /// ("Update routine"). Stateless domain logic over the shared main-context
     /// repositories, so one instance serves both `WorkoutViewModel`s.
@@ -569,6 +572,15 @@ final class AppDependencies: ObservableObject {
         records: conditioningRecordRepository,
         healthKitManager: makeHealthKitWorkoutService(),
         historyStoreGate: historyStoreGate
+    )
+
+    /// The conditioning program (docs/fight-conditioning.md). One instance so the Conditioning
+    /// screen and the Routines tab card show the same state; `lazy` because it reads the
+    /// repositories `init` assigns.
+    private(set) lazy var conditioningProgram: ConditioningProgramViewModel = ConditioningProgramViewModel(
+        store: conditioningProgramStore,
+        conditioningRecords: conditioningRecordRepository,
+        workoutSessions: workoutSessionRepository
     )
 
     /// The app's one routines list ViewModel.

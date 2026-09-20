@@ -19,11 +19,17 @@ struct ConditioningPreviewView: View {
     @State private var preview: ConditioningPreview?
     @State private var heartRateEditor: HeartRateProfileEditorViewModel?
 
-    init(definition: ConditioningSessionDefinition, viewModel: ConditioningLibraryViewModel) {
+    /// - Parameter initialOptions: a program target's volume; the lowest option otherwise.
+    init(
+        definition: ConditioningSessionDefinition,
+        viewModel: ConditioningLibraryViewModel,
+        initialOptions: ConditioningSessionOptions? = nil
+    ) {
         self.definition = definition
         self.viewModel = viewModel
         _modality = State(initialValue: definition.modalities.first ?? .run)
-        _volume = State(initialValue: definition.defaultVolume)
+        _volume = State(initialValue: initialOptions?.volume ?? definition.defaultVolume)
+        _isSubMaximal = State(initialValue: initialOptions?.isSubMaximal ?? false)
     }
 
     private var plan: ConditioningSessionPlan {
