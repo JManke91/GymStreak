@@ -6,7 +6,7 @@ Workout summary screens provide users with a quick review of their completed wor
 
 ## iOS: SaveWorkoutView
 
-**File**: `GymStreak/SaveWorkoutView.swift`
+**File**: `GymStreak/Presentation/Views/Workout/SaveWorkoutView.swift`
 
 ### What it shows
 - **Duration**: Formatted workout time
@@ -16,6 +16,13 @@ Workout summary screens provide users with a quick review of their completed wor
   - Volume increase: green arrow with percentage
   - Volume decrease: orange arrow with percentage
   - First time: tint-colored "New" badge
+- **Conditioning add-on**: for a user enrolled in the 12-week conditioning program, today's session
+  offered as a card — "Start now" for easy aerobic work, "Remind me later" (plus an explicit
+  override) for hard interval work, and an × that dismisses it in one tap. It never blocks or delays
+  the save; "Start now" commits the workout through the same `completeWorkout` call the Save button
+  uses, so the two sessions reach Apple Health as separate, non-overlapping workouts. The runner
+  itself is hosted by `ContentView`, not this sheet. See
+  [fight-conditioning.md](./fight-conditioning.md) (ticket 05).
 - **HealthKit toggle**: Option to sync to Apple Health
 - **Template update toggle**: Option to update routine template with actual values
 - **Notes**: Optional workout notes
@@ -101,7 +108,9 @@ Used by iOS `SaveWorkoutView` for exercise progress display. Contains `volumeDel
 
 | File | Target | Role |
 |------|--------|------|
-| `SaveWorkoutView.swift` | iOS | Post-workout save form with summary |
+| `Presentation/Views/Workout/SaveWorkoutView.swift` | iOS | Post-workout save form with summary |
+| `Presentation/Views/Conditioning/ConditioningAddOnCard.swift` | iOS | The conditioning add-on card (value input only) |
+| `Presentation/ViewModels/Conditioning/ConditioningAddOnViewModel.swift` | iOS | The add-on's offer, reminder and started session |
 | `Views/Components/DeltaBadge.swift` | iOS | Reusable delta indicator component |
 | `Data/Progress/ExerciseProgressService.swift` | iOS | The comparison seam: pure builders either side of one off-main history call |
 | `Domain/Services/ExerciseComparisonBuilder.swift` | iOS | Reduces the current workout to a lookup, then assembles the comparison rows (main actor) |

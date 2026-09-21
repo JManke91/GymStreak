@@ -1,11 +1,13 @@
 # Fight Conditioning (add-on)
 
-**Status (2026-09-19): tickets 01–02 shipped and device-verified — the iPhone runner (library,
+**Status (2026-09-21): tickets 01–02 shipped and device-verified — the iPhone runner (library,
 preview, runner, Apple Health write) and History logging (own SwiftData record, interleaved cards,
 detail, delete). Ticket 03 (personal heart-rate zones, incl. the Apple Health peak-HR suggestion) shipped and
 device-verified the same day. Ticket 04 (the 12-week program — showcase, enrollment, weekly targets,
-today's suggestion) shipped and was device-verified 2026-09-20.**
-The post-workout add-on, the watch and the Pro gate are later tickets. This file holds
+today's suggestion) shipped and was device-verified 2026-09-20. Ticket 05 (the post-workout add-on on
+the iPhone workout summary) shipped and was device-verified 2026-09-21 — its `.later` branch is not
+reachable before program week 5 and remains unit-tested only (see that section).**
+The watch and the Pro gate are later tickets. This file holds
 the pre-implementation research (so it is not re-done) and the feature doc (iOS + watch
 architecture, components, edge cases) as tickets land. Parent Things task: "Add fighting conditioning into workout routine"
 (`TFUtiRbLsX4VScjcnbdZbv`, Gym Streak project).
@@ -549,6 +551,184 @@ untested: it needs a second device on the same account.
 depth gate at `PaywallPlacement.conditioningProgram`. Recorded in `docs/monetization-strategy.md` §4.
 
 **Watch target.** Unchanged by ticket 04.
+
+## iOS architecture (ticket 05 — the post-workout add-on)
+
+**What the user gets.** An enrolled user who finishes a strength workout on iPhone is offered today's
+conditioning session on the **workout summary** (`SaveWorkoutView`), as one card between the
+exercise-progress section and the Apple Health toggle.
+
+| Offer | Card | Actions |
+|---|---|---|
+| `.startNow` — easy aerobic work | "Add conditioning?" · "Aerobic base · 45 min" · "Easy aerobic work fits right after lifting." | **Start now** |
+| `.later` — lactic or alactic work | "Better later today" · the session · "This is hard work. Keep at least 6 hours from lifting — ideally another day. Earliest from 01:00." | **Remind me later** (prominent) · *Start anyway* (the explicit override) |
+| `.none` | nothing renders | — |
+
+The × in the card header dismisses it in one tap. Nothing is persisted by a dismissal: the next
+workout asks again, because by then the answer may differ.
+
+**The prompt cannot block or delay the save**, and that is structural rather than careful: the card
+is a `Section` in the summary `Form`, so it is a passenger on a screen the user was already on. The
+Save button is untouched. *Start now* does commit the workout — through `completeWorkout`, the very
+same call Save makes, behind the same `isSaving` latch — because the two sessions have to reach
+Apple Health as separate workouts.
+
+**Two `HKWorkout`s, never overlapping.** `pauseForCompletion()` stamps `WorkoutSession.endTime` when
+the user taps Finish, i.e. before this screen appears; the conditioning session's timeline starts
+only after `completeWorkout` returns. The strength workout's range therefore ends strictly before the
+conditioning one begins, whatever the user does on the summary screen. This is the flow the ticket-01
+research demanded: `HKWorkoutSession.beginNewActivity` is hard-restricted to `.swimBikeRun`, so
+strength → cardio in one session is impossible anyway.
+
+**The decision is the ticket-04 Domain service.** `ConditioningProgramCoach.addOn(…)` is
+`suggestion(…)` plus exactly **one extra rule**: *right after lifting is stricter than the same day as
+lifting.* The coach's existing leg-day rule prefers easy work only when the day's lifting was heavy
+lower body — correct for "today", because hard conditioning in the evening after an upper-body morning
+is fine. Sharing a *session* is different: same-session concurrent training blunts explosive power
+most of all (Robineau 2016, Wilson 2012), so the add-on offers an open **easy** target first whatever
+the week's emphasis is, and offers a hard one for **later** rather than now. Everything else — the
+48 h lactic spacing, the two-hard-a-week cap, one session a day, the sparring caution — is inherited
+unchanged, which is why a rest verdict simply produces no card.
+
+`finishedAt` is passed in rather than read from the repository: the summary appears **before** the
+workout is committed, so the session the offer is about is not in the store yet. The caller appends it
+to today's committed workouts, so the coach's own rules do see it.
+
+**"Remind me later" reuses the reminders infrastructure, but not the planner.** It goes through the
+same `WorkoutReminderNotificationCenter` seam and the same Domain permission projection
+(`WorkoutReminderPermissionRequesting`) as `docs/workout-reminders.md`, and its fire time starts at
+`WorkoutReminderPlanner.reminderHour`. It is deliberately **not** a fourth reminder kind:
+
+- **Not in `WorkoutReminderPlanner`.** That scheduler *derives* a window of mornings from the user's
+  plans and rebuilds it from scratch on every pass. This is a single, user-requested, one-shot
+  reminder for a moment that exists nowhere in the plans — the first rebuild would silently drop it.
+- **Not under `ReminderFrequencyPolicy`.** That cap bounds how often the app speaks **unprompted**.
+  This reminder exists because the user asked for it one tap ago, the same reasoning under which the
+  rest timer and the ticket-01 conditioning cues sit outside the cap. Its cap is structural instead:
+  **one identifier** (`conditioning.reminder.session`), so a second request replaces the first and at
+  most one can ever be pending.
+- **The two features cannot delete each other's requests.**
+  `UserNotificationWorkoutReminderScheduler` retires only identifiers carrying the
+  `workoutReminder.` prefix, which this one deliberately does not.
+
+**The fire time** (`ConditioningProgramCoach.reminderFireDate`) is `notBefore` — the six-hour mark —
+pushed into waking hours: before 08:00 it waits for 08:00 the same day; at or after 21:00 it moves to
+08:00 the next morning. Built from date components, not by adding hours, so a reminder pushed across a
+DST transition still lands at 08:00 wall clock. Lifting that ends after 15:00 therefore produces a
+next-morning reminder, which is the "ideally another day" the protocol actually wants.
+
+**Permission.** The reminder asks for notification permission if it is still undetermined. That is a
+deliberate exception to `docs/workout-reminders.md`'s "the offer screen is the only place": the user
+has just tapped a button whose entire meaning is "send me a notification", which is the least careless
+possible moment to spend the one irreversible ask — and ticket 01's cue deliverer already established
+that this feature asks lazily at the point of use. When permission is absent the scheduler returns
+`false` and the card says so ("Turn on notifications in Settings to be reminded") rather than
+confirming a reminder that does not exist.
+
+**Where the runner is hosted, and why it is not the summary screen.** `SaveWorkoutView` is a sheet
+that dismisses itself as part of starting the session, so a runner presented from there would be torn
+down with it. `ConditioningAddOnViewModel` is therefore one app-lifetime instance in
+`AppDependencies`, and `ContentView` presents `ConditioningRunnerView` from it — hosted at the root
+for the same reason the paywall and the first-run covers are. It is **not** part of `FirstRunCoverOrder`:
+it is never raised at launch, only by a deliberate tap, by which time every first-run cover is gone.
+`activeRun` is read in `body` (like `pendingPaywall`) so this view is observing it before the sheet
+writes it. The cover's `onDismiss` calls `program.refresh()`, so the finished session counts toward the
+week on the Conditioning screen and the Routines card.
+
+**Deliberate simplification: `Start now` goes straight to the runner**, not through
+`ConditioningPreviewView`. The volume comes from the program target and the modality from the
+session's own default — which is exactly what the preview would have opened on. The cost is that the
+user cannot pick run vs. bike vs. rower for this one session without going to the Conditioning screen
+instead; the research note that maximal efforts prefer bike/rower is therefore not honoured on this
+path. To restore the choice, route `start()` to the preview with `initialOptions: target.options`, as
+the Routines-tab program card already does.
+
+**Watch-finished strength workouts are out of scope**, as the ticket states. This add-on lives on the
+iPhone summary screen only. A workout finished on the watch reaches the phone through
+`transferUserInfo` and is ingested by `WatchWorkoutIngestionService` with no summary screen and often
+with the phone app not even running, so there is no moment at which this prompt could be shown. The
+watch target is untouched by this ticket; a conditioning add-on on the watch belongs with tickets
+06/07, which build the watch runner and its sync.
+
+**Components (ticket 05).**
+
+| Layer | File | Role |
+|---|---|---|
+| Domain/Services | `ConditioningProgramCoach.swift` | `ConditioningAddOnOffer`, `addOn(…)`, `reminderFireDate(…)`, `hardAfterLifting` |
+| Domain/Interfaces | `ConditioningReminderScheduling.swift` | the one pending reminder, copy passed in already localized |
+| Data | `Notifications/UserNotificationConditioningReminderScheduler.swift` | over the existing `WorkoutReminderNotificationCenter` seam |
+| Presentation | `ViewModels/Conditioning/ConditioningAddOnViewModel.swift` | offer, reminder, the started run; `ConditioningProgramViewModel.addOn(finishedAt:isHeavyLowerBody:)` + the extracted `coachEntries` helper; `ConditioningProgramCopy.addOn*` |
+| Presentation | `Views/Conditioning/ConditioningAddOnCard.swift` (value input only), the section in `Views/Workout/SaveWorkoutView.swift` | the card |
+| App | `AppDependencies.conditioningAddOn` (lazy); the runner cover in `ContentView` | wiring and hosting |
+
+Strings: `conditioning.addon.*` in en + de.
+
+**Tests (ticket 05).** `ConditioningAddOnTests` — the decision (easy offered now; hard offered for
+later at exactly the six-hour mark; an open easy target beating the week's hard emphasis, asserted
+*against* what `suggestion` returns for the same inputs, so the extra rule cannot silently disappear;
+no offer on a rest verdict or after a session already logged today; a leg day still offering easy
+work now), the fire time (kept when it is inside waking hours, pushed to the next morning from a
+late one, waiting for 08:00 from an early one, and a spring-forward DST case), and the view model
+(no offer when not enrolled; dismissal clearing the card and persisting nothing; `start()` running
+the offered session at the program's volume and cancelling any pending reminder; `remindLater()`
+scheduling exactly one reminder at the computed time; a refused reminder reported rather than
+confirmed).
+
+**Monetization (ticket 05).**
+
+```
+Monetization verdict — post-workout conditioning add-on
+  Tier          Free
+  Derivation    §3 Rule 1 (the aha path: train it → see it logged) and Rule 3 (it starts an
+                in-session surface that is already free)
+  Mechanism     n/a — nothing is gated
+  Placement     none
+  Nudge         none
+  Free residue  the entire feature
+  Founder note  it converts nobody by design: it is a shortcut into a free session, and gating a
+                prompt whose whole job is to get the user to train again would work against §10's
+                retention guardrail.
+```
+
+Re-checked at completion: nothing added here reads `ProEntitlementProviding` and no `PaywallPlacement`
+was added. Ticket 08 still gates program Phases 2–3; this card shows whatever session the user's own
+plan asks for, so it inherits that gate rather than needing one.
+
+**Two things the architecture review changed** (verdict: PASS WITH WARNINGS, no critical findings):
+
+- *The view classifies nothing.* The first cut walked `session.workoutExercises` and called
+  `StrengthLogEntry.isHeavyLowerBody` inside `SaveWorkoutView` — a domain computation in a View
+  (Hard rule 3) that also duplicated `ConditioningProgramViewModel`'s own helper. The classification
+  now has **one definition**, `ConditioningProgramViewModel.strengthEntry(_:endTime:)`, used both for
+  committed workouts and, through `ConditioningAddOnViewModel.prepare(for:)`, for the uncommitted
+  one; the view passes the session and nothing else. `endTime` is a parameter precisely because the
+  add-on classifies a session the summary screen has not saved yet.
+- *One commit path.* `SaveWorkoutView.commitWorkout(then:)` is now the only place the workout is
+  completed; the Save button and *Start now* both call it, the latter with the runner start as its
+  `afterCommit`. Two copies of the guard / `isSaving` latch / dismissal order would have drifted.
+
+**Deliberate asymmetry worth knowing.** Unlike a training reminder, the conditioning reminder is
+**not** withdrawn while a workout is running. `UserNotificationWorkoutReminderScheduler` cancels its
+own requests on every pass to honour §3 Rule 3; this one is user-requested, one-shot and about the
+session the user is being reminded to do, so it stands. If it ever needs suppressing, the hook is
+`WorkoutViewModel.currentSession`'s `didSet`, which is where the training reminders do it.
+
+**Device verification — PASSED (physical iPhone, 2026-09-21).** In program week 1 the summary screen
+offers "Aerobic base · 30 min" with the easy-work line; the × removes the card without moving
+anything else on the form and without affecting Save; Save behaves normally. *Start now* commits the
+workout and opens the runner, History then lists both the strength workout and the conditioning card,
+and **Apple Health shows two separate workouts whose times do not overlap** — the criterion this
+ticket turned on. A third workout the same day is offered nothing, which is the coach's
+one-session-a-day rule reaching the summary screen correctly.
+
+**Not verified on device, and why.** The `.later` branch — and with it the six-hour explanation, the
+reminder and the *Start anyway* override — needs a lactic or alactic week, which first occurs in
+week 5. That is the same reachability limit ticket 04 recorded: `ConditioningProgramEnrollSheet`
+bounds the start-date picker at today (`ConditioningProgramShowcaseView.swift:179`), so reaching
+week 5 means waiting four weeks. It rests on eight `ConditioningAddOnTests` cases covering the
+deferral, the exact six-hour mark, the "easy beats the week's hard emphasis" rule, and the four
+fire-time cases including the late-evening push to the next morning and a spring-forward DST day.
+Lifting the picker bound — already a wanted ticket-04 follow-up — would make it testable immediately.
 
 ## Research findings — Apple Health / HealthKit (verified 2026-09-18)
 

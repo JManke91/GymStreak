@@ -30,6 +30,7 @@ struct SaveWorkoutView: View {
                 readyForMoreSection
                 aiRecapSection
                 exerciseProgressSection
+                conditioningAddOnSection
                 healthKitSection
                 templateUpdateSection
                 notesSection
@@ -53,24 +54,8 @@ struct SaveWorkoutView: View {
                 }
 
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("action.save".localized) {
-                        guard !isSaving else { return }
-                        isSaving = true
-                        // Dismiss only after the commit lands, mirroring
-                        // `EditWorkoutSessionView`: `completeWorkout` is `async` now
-                        // (it takes the History gate) and it is what clears
-                        // `currentSession`, so `onSave()` must not run against a
-                        // half-finished completion.
-                        Task {
-                            await viewModel.completeWorkout(
-                                updateTemplate: updateTemplate,
-                                notes: notes
-                            )
-                            dismiss()
-                            onSave()
-                        }
-                    }
-                    .disabled(isSaving)
+                    Button("action.save".localized) { commitWorkout() }
+                        .disabled(isSaving)
                 }
             }
             .interactiveDismissDisabled(isSaving)
@@ -96,6 +81,10 @@ struct SaveWorkoutView: View {
                         weightUnit: weightUnit,
                         modelContext: modelContext
                     )
+                    // After the comparison `await`, never on the first frame:
+                    // it makes the same two bounded reads the Conditioning
+                    // screen makes on appear, and nothing here waits for it.
+                    dependencies.conditioningAddOn.prepare(for: session)
                 }
             }
             // The recap is fire-and-forget now, so it outlives this sheet unless it is
@@ -264,6 +253,62 @@ struct SaveWorkoutView: View {
                     .frame(minWidth: 22, minHeight: 22)
                     .background(badgeColor.opacity(0.2), in: Capsule())
             }
+        }
+    }
+
+    // MARK: - Conditioning Add-On Section
+
+    /// Today's conditioning session, offered after the strength workout
+    /// (docs/fight-conditioning.md, ticket 05).
+    ///
+    /// A passenger on this form and nothing more: it renders only when the
+    /// program has something to offer, the × removes it in one tap, and neither
+    /// button is on the path of the Save button above. `Start now` does save the
+    /// workout — through the very same call Save makes — because the two
+    /// sessions must reach Apple Health as separate, non-overlapping workouts.
+    @ViewBuilder
+    private var conditioningAddOnSection: some View {
+        let addOn = dependencies.conditioningAddOn
+        if addOn.offer != .none {
+            Section {
+                ConditioningAddOnCard(
+                    offer: addOn.offer,
+                    remindedAt: addOn.remindedAt,
+                    isReminderUnavailable: addOn.isReminderUnavailable,
+                    // Committing first is the point: the strength `HKWorkout` is
+                    // written by the completion and the conditioning one starts
+                    // only afterwards, so their date ranges cannot overlap.
+                    // `start()` goes last so the runner's cover is presented by
+                    // the app root as this sheet and the active-workout screen
+                    // come down over it.
+                    onStart: { commitWorkout { dependencies.conditioningAddOn.start() } },
+                    onRemindLater: { Task { await addOn.remindLater() } },
+                    onDismiss: addOn.dismiss
+                )
+                .listRowBackground(Color.clear)
+                .listRowInsets(EdgeInsets(top: 6, leading: 0, bottom: 6, trailing: 0))
+                .listRowSeparator(.hidden)
+            }
+        }
+    }
+
+    /// **The one commit path.** Both the Save button and the add-on's "Start
+    /// now" go through it, so the guard, the `isSaving` latch and the dismissal
+    /// order cannot drift apart — a second path that reconciled the template
+    /// differently would be a bug factory.
+    ///
+    /// Dismisses only after the commit lands, mirroring `EditWorkoutSessionView`:
+    /// `completeWorkout` is `async` (it takes the History gate) and it is what
+    /// clears `currentSession`, so `onSave()` must not run against a
+    /// half-finished completion.
+    private func commitWorkout(then afterCommit: @escaping @MainActor () -> Void = {}) {
+        guard !isSaving else { return }
+        isSaving = true
+        Task {
+            await viewModel.completeWorkout(updateTemplate: updateTemplate, notes: notes)
+            dismiss()
+            onSave()
+            afterCommit()
         }
     }
 

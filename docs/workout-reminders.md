@@ -492,6 +492,23 @@ answer to "will this app spam me" is the thing that earns the yes.
 - **No missed-session nudges beyond the cap.** Users whose planned reminders fill the week get none,
   by the tiered admission. Retune the cap downwards, never the tiers, if nudges feel like too much.
 
+## One other feature borrows this plumbing
+
+The post-workout conditioning add-on's "Remind me later"
+(`ConditioningReminderScheduling`, `docs/fight-conditioning.md` ticket 05) uses the
+`WorkoutReminderNotificationCenter` seam, the `WorkoutReminderPermissionRequesting` projection and
+`reminderHour` — but is **not** a fourth reminder kind. It is a single user-requested one-shot for a
+moment that exists nowhere in the user's plans, so `WorkoutReminderPlanner` would drop it on its next
+rebuild, and it sits outside `ReminderFrequencyPolicy` for the reason the rest timer does: that cap
+bounds what the app says **unprompted**. Its own cap is one identifier, so at most one can be pending.
+The two never collide because `cancelPendingReminders()` filters on the `workoutReminder.` prefix,
+which the conditioning identifier deliberately lacks — **keep that filter** if either identifier
+scheme is ever changed.
+
+It is also the **second** place allowed to raise the system permission prompt (the ticket-01
+conditioning cues were the first). Both ask lazily, at a point of use the user chose; the rule this
+document sets — that no *scheduling pass* may ever ask — is unchanged.
+
 ## Verification
 
 `GymStreakTests/WorkoutReminderTests.swift` — 25 tests over the cap, the planner, the scheduler and

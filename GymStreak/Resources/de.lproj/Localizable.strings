@@ -1657,3 +1657,16 @@
 "conditioning.program.phase.current" = "Aktuell";
 "conditioning.program.week_example" = "So sieht eine Woche aus";
 "conditioning.program.phase.hint" = "Tippe eine Phase für Details";
+
+/* Konditions-Zusatz nach dem Training (docs/fight-conditioning.md, Ticket 05) */
+"conditioning.addon.now.title" = "Kondition dranhängen?";
+"conditioning.addon.now.detail" = "Lockere aerobe Arbeit passt direkt nach dem Krafttraining.";
+"conditioning.addon.start_now" = "Jetzt starten";
+"conditioning.addon.later.title" = "Besser später heute";
+"conditioning.addon.later.detail" = "Das ist harte Arbeit. Halte mindestens 6 Stunden Abstand zum Krafttraining – idealerweise einen Tag. Frühestens ab %@.";
+"conditioning.addon.remind_later" = "Später erinnern";
+"conditioning.addon.start_anyway" = "Trotzdem starten";
+"conditioning.addon.reminded" = "Wir erinnern dich %@.";
+"conditioning.addon.reminder_unavailable" = "Aktiviere Mitteilungen in den Einstellungen, um erinnert zu werden.";
+"conditioning.addon.reminder.title" = "Bereit für deine Kondition?";
+"conditioning.addon.reminder.body" = "%@ steht diese Woche noch offen.";

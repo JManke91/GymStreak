@@ -583,6 +583,22 @@ final class AppDependencies: ObservableObject {
         workoutSessions: workoutSessionRepository
     )
 
+    /// The post-workout conditioning add-on (docs/fight-conditioning.md, ticket 05).
+    ///
+    /// One app-lifetime instance, and `lazy` for the reason `conditioningProgram`
+    /// is: it reads the repositories `init` assigns. It is *not* owned by
+    /// `SaveWorkoutView`, because the session it starts has to outlive that
+    /// sheet — `ContentView` presents the runner from here.
+    private(set) lazy var conditioningAddOn: ConditioningAddOnViewModel = ConditioningAddOnViewModel(
+        program: conditioningProgram,
+        safety: conditioningSafety,
+        reminders: UserNotificationConditioningReminderScheduler(),
+        // The same Domain projection the reminder offer holds, so no ViewModel
+        // reaches `UNUserNotificationCenter` itself.
+        permission: UserNotificationReminderPermission(),
+        makeRun: makeConditioningRunViewModel(plan:)
+    )
+
     /// The app's one routines list ViewModel.
     ///
     /// Stored here, rather than created by the Routines tab alone, because a *second*

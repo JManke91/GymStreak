@@ -72,11 +72,34 @@ enum ConditioningTodaySuggestion: Equatable, Sendable {
     case rest(ConditioningRestReason)
 }
 
+/// What the post-workout add-on offers on the iPhone workout summary.
+enum ConditioningAddOnOffer: Equatable, Sendable {
+    /// Easy aerobic work: it fits right after lifting, so it can start now.
+    case startNow(ConditioningProgramTarget)
+    /// Lactic or alactic work: better at least six hours later, ideally another day.
+    case later(ConditioningProgramTarget, notBefore: Date)
+    /// Nothing is due, the week is done, or the program says rest.
+    case none
+}
+
 enum ConditioningProgramCoach {
 
     static let lacticSpacing: TimeInterval = 48 * 3600
     static let hardAfterLegWorkout: TimeInterval = 6 * 3600
     static let maxHardSessionsPerWeek = 2
+
+    /// "≥ 6 h after lifting, ideally another day" — the same six hours the leg-day
+    /// rule uses, because it comes from the same concurrent-training finding. The
+    /// leg-day rule is about sharing a *day*; the add-on is about sharing a
+    /// *session*, which is why it applies after any strength workout.
+    static var hardAfterLifting: TimeInterval { hardAfterLegWorkout }
+
+    /// The hours a "remind me later" notification may fire in. The earliest is the
+    /// training reminders' own morning hour, so the app never speaks at two
+    /// different "reasonable times"; the latest keeps a reminder from landing at
+    /// an hour the user would only read the next morning, out of context.
+    static var reminderEarliestHour: Int { WorkoutReminderPlanner.reminderHour }
+    static let reminderLatestHour = 21
 
     /// How many of each target this week's logged sessions cover. An exact
     /// session match counts first; a session of the same energy system fills a
@@ -158,5 +181,65 @@ enum ConditioningProgramCoach {
         }
         if let easy { return .session(easy, cautions: []) }
         return .rest(blockedReason ?? .weekComplete)
+    }
+
+    /// The post-workout add-on: what to offer on the iPhone workout summary of a
+    /// strength session that has just finished.
+    ///
+    /// It is `suggestion` with **one extra rule**: right after lifting is stricter
+    /// than the same day as lifting. Hard conditioning in the same session blunts
+    /// exactly the quality it trains, so an open easy target is offered first
+    /// whatever the week's emphasis is, and a hard one is offered for later rather
+    /// than now. The caller still decides whether to let the user override that.
+    ///
+    /// - Parameter finishedAt: when the strength workout ended. It is passed in
+    ///   rather than taken from `strengthToday` because the summary screen appears
+    ///   *before* the workout is committed, so it is not in the repository yet —
+    ///   the caller appends it to `strengthToday` itself.
+    static func addOn(
+        week: ConditioningProgramWeek,
+        weekEntries: [ConditioningLogEntry],
+        recentEntries: [ConditioningLogEntry],
+        strengthToday: [StrengthLogEntry],
+        sparsHard: Bool,
+        finishedAt: Date,
+        now: Date,
+        calendar: Calendar
+    ) -> ConditioningAddOnOffer {
+        let today = suggestion(
+            week: week,
+            weekEntries: weekEntries,
+            recentEntries: recentEntries,
+            strengthToday: strengthToday,
+            sparsHard: sparsHard,
+            now: now,
+            calendar: calendar
+        )
+        guard case .session(let target, _) = today else { return .none }
+        guard target.isHard else { return .startNow(target) }
+        let open = progress(for: week, weekEntries: weekEntries).filter { $0.remaining > 0 }
+        if let easy = open.first(where: { !$0.target.isHard })?.target {
+            return .startNow(easy)
+        }
+        return .later(target, notBefore: finishedAt.addingTimeInterval(hardAfterLifting))
+    }
+
+    /// When a "remind me later" notification should fire: never before
+    /// `notBefore`, and inside waking hours.
+    ///
+    /// Built from date components rather than by adding hours, so a reminder
+    /// pushed to the next morning lands at 08:00 wall clock across a DST
+    /// transition — the same reason `UserNotificationWorkoutReminderScheduler`
+    /// triggers on components.
+    static func reminderFireDate(notBefore: Date, calendar: Calendar) -> Date {
+        let hour = calendar.component(.hour, from: notBefore)
+        guard hour < reminderEarliestHour || hour >= reminderLatestHour else { return notBefore }
+        let day = hour >= reminderLatestHour
+            ? calendar.date(byAdding: .day, value: 1, to: calendar.startOfDay(for: notBefore)) ?? notBefore
+            : notBefore
+        var components = calendar.dateComponents([.year, .month, .day], from: day)
+        components.hour = reminderEarliestHour
+        components.minute = WorkoutReminderPlanner.reminderMinute
+        return calendar.date(from: components) ?? notBefore
     }
 }

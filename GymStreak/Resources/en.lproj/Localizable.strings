@@ -1666,3 +1666,16 @@
 "conditioning.program.phase.current" = "Current";
 "conditioning.program.week_example" = "What a week looks like";
 "conditioning.program.phase.hint" = "Tap a phase for details";
+
+/* Post-workout conditioning add-on (docs/fight-conditioning.md, ticket 05) */
+"conditioning.addon.now.title" = "Add conditioning?";
+"conditioning.addon.now.detail" = "Easy aerobic work fits right after lifting.";
+"conditioning.addon.start_now" = "Start now";
+"conditioning.addon.later.title" = "Better later today";
+"conditioning.addon.later.detail" = "This is hard work. Keep at least 6 hours from lifting — ideally another day. Earliest from %@.";
+"conditioning.addon.remind_later" = "Remind me later";
+"conditioning.addon.start_anyway" = "Start anyway";
+"conditioning.addon.reminded" = "We'll remind you %@.";
+"conditioning.addon.reminder_unavailable" = "Turn on notifications in Settings to be reminded.";
+"conditioning.addon.reminder.title" = "Ready for your conditioning?";
+"conditioning.addon.reminder.body" = "%@ is still open this week.";

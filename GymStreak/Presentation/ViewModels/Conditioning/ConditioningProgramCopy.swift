@@ -148,6 +148,35 @@ enum ConditioningProgramCopy {
     static func day(_ day: ConditioningProgramDay, calendar: Calendar = .current) -> String {
         day.startDate(in: calendar).formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day())
     }
+
+    // MARK: - Post-workout add-on (docs/fight-conditioning.md, ticket 05)
+
+    /// "Aerobic base · 45 min" — the session the add-on offers.
+    static func addOnSession(_ target: ConditioningProgramTarget) -> String {
+        "\(ConditioningCopy.title(target.session)) · \(volume(target))"
+    }
+
+    /// Why a hard session is better later, naming the earliest sensible time.
+    static func addOnLaterDetail(notBefore: Date) -> String {
+        "conditioning.addon.later.detail".localized(
+            notBefore.formatted(date: .omitted, time: .shortened)
+        )
+    }
+
+    /// "We'll remind you Thu, 18:30."
+    static func addOnReminded(at date: Date) -> String {
+        "conditioning.addon.reminded".localized(
+            date.formatted(.dateTime.weekday(.abbreviated).hour().minute())
+        )
+    }
+
+    static var addOnReminderTitle: String {
+        "conditioning.addon.reminder.title".localized
+    }
+
+    static func addOnReminderBody(_ target: ConditioningProgramTarget) -> String {
+        "conditioning.addon.reminder.body".localized(addOnSession(target))
+    }
 }
 
 /// What one experience level means, for the enrollment screen.

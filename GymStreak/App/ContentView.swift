@@ -60,6 +60,11 @@ private struct ContentViewInternal: View {
     /// thank-you — an ask belongs behind whatever teaches and whatever reassures
     /// (docs/workout-reminders.md).
     private let reminderOptIn: WorkoutReminderOptInViewModel
+    /// The post-workout conditioning add-on (docs/fight-conditioning.md).
+    /// Hosted here because the offer is made on `SaveWorkoutView`, a sheet that
+    /// dismisses itself before the session starts — a runner presented from
+    /// there would be torn down with it.
+    private let conditioningAddOn: ConditioningAddOnViewModel
 
     /// Observable singletons — @State so SwiftUI tracks their changes.
     @State private var preferences = AICoachPreferences.shared
@@ -81,6 +86,7 @@ private struct ContentViewInternal: View {
         self.founderCelebration = dependencies.founderCelebration
         self.onboarding = dependencies.onboarding
         self.reminderOptIn = dependencies.reminderOptIn
+        self.conditioningAddOn = dependencies.conditioningAddOn
         self.reviewPrompt = dependencies.reviewPrompt
         self._workoutViewModel = StateObject(wrappedValue: WorkoutViewModel(
             workoutSessionRepository: dependencies.workoutSessionRepository,
@@ -116,6 +122,10 @@ private struct ContentViewInternal: View {
         // And for the reminder offer, which the launch task raises while the
         // tour is still up and which becomes topmost the moment it ends.
         let isOfferingReminders = reminderOptIn.isPresenting
+        // Same again for the conditioning session the post-workout add-on
+        // starts: it is set from a sheet that is dismissing itself, so this
+        // view has to be observing the property before that happens.
+        let conditioningRun = conditioningAddOn.activeRun
         // The four covers that can claim a first launch resolve to exactly one
         // — or to none, which is the tab bar (docs/onboarding.md).
         let firstRunCover = FirstRunCoverOrder.topmost(
@@ -279,6 +289,20 @@ private struct ContentViewInternal: View {
         .fullScreenCover(isPresented: onboardingBinding(isPresenting: firstRunCover == .onboarding)) {
             OnboardingCoverView(viewModel: onboarding)
         }
+        // The conditioning session accepted from the post-workout add-on
+        // (docs/fight-conditioning.md). Not part of the first-run order: it is
+        // never raised at launch, only by a deliberate tap on a workout summary,
+        // and by then every first-run cover is long gone.
+        .fullScreenCover(
+            item: conditioningRunBinding(run: conditioningRun),
+            onDismiss: conditioningAddOn.runDidFinish
+        ) { run in
+            ConditioningRunnerView(
+                viewModel: run,
+                needsSafetyAcknowledgement: conditioningAddOn.needsSafetyAcknowledgement,
+                onAcknowledgeSafety: conditioningAddOn.acknowledgeSafety
+            )
+        }
         // The automatic App Store rating prompt. Attached at the root and
         // nowhere else — the coordinator decides, this only invokes
         // (docs/rating-prompt.md).
@@ -317,6 +341,17 @@ private struct ContentViewInternal: View {
         Binding(
             get: { isPresenting },
             set: { if !$0 { onboarding.flowWasDismissed() } }
+        )
+    }
+
+    /// The add-on's conditioning session, wrapped so the cover can clear it on
+    /// dismissal. `run` is the value already read in `body`, which is what makes
+    /// this view an observer of it — a `get` closure evaluated later runs
+    /// outside body's tracking scope and would leave the runner unnoticed.
+    private func conditioningRunBinding(run: ConditioningRunViewModel?) -> Binding<ConditioningRunViewModel?> {
+        Binding(
+            get: { run },
+            set: { conditioningAddOn.activeRun = $0 }
         )
     }
 

@@ -132,23 +132,16 @@ final class ConditioningProgramViewModel {
         var progress: [ConditioningTargetProgress] = []
         var suggestion: ConditioningTodaySuggestion?
         if let currentWeek, case .active(_, _, let isPaused) = status {
-            let startOfToday = calendar.startOfDay(for: now)
-            let weekStart = ConditioningProgramSchedule
-                .currentWeekStart(on: today, enrollment: enrollment, calendar: calendar)
-                .startDate(in: calendar)
-            let lacticWindowStart = now.addingTimeInterval(-ConditioningProgramCoach.lacticSpacing)
-            let entries = conditioningRecords
-                .fetch(since: min(weekStart, lacticWindowStart, startOfToday))
-                .compactMap(Self.logEntry)
-            let weekEntries = entries.filter { $0.startTime >= weekStart }
-            progress = ConditioningProgramCoach.progress(for: currentWeek, weekEntries: weekEntries)
+            let entries = coachEntries(enrollment: enrollment, today: today, now: now)
+            progress = ConditioningProgramCoach.progress(for: currentWeek, weekEntries: entries.week)
 
             if !isPaused {
+                let startOfToday = calendar.startOfDay(for: now)
                 let strengthToday = workoutSessions.fetchCompletedSessions(since: startOfToday).compactMap(Self.strengthEntry)
                 suggestion = ConditioningProgramCoach.suggestion(
                     week: currentWeek,
-                    weekEntries: weekEntries,
-                    recentEntries: entries.filter { $0.startTime >= min(lacticWindowStart, startOfToday) },
+                    weekEntries: entries.week,
+                    recentEntries: entries.recent,
                     strengthToday: strengthToday,
                     sparsHard: enrollment.sparsHard,
                     now: now,
@@ -167,6 +160,68 @@ final class ConditioningProgramViewModel {
         )
     }
 
+    /// The post-workout add-on offer for a strength workout that has **just**
+    /// finished on this phone (docs/fight-conditioning.md, ticket 05).
+    ///
+    /// The workout is handed in rather than fetched: the summary screen shows
+    /// this before the user taps Save, so the session the offer is about is not
+    /// in the repository yet. It is appended to today's committed workouts, so
+    /// the coach's own leg-day and spacing rules see it.
+    ///
+    /// Reads nothing this type does not already read in `refresh()`, and writes
+    /// nothing — the dashboard is untouched.
+    func addOn(finishedAt: Date, isHeavyLowerBody: Bool) -> ConditioningAddOnOffer {
+        guard let enrollment = store.enrollment else { return .none }
+        let now = now()
+        let today = ConditioningProgramDay(now, calendar: calendar)
+        guard case .active(let weekNumber, _, let isPaused) = ConditioningProgramSchedule
+            .status(on: today, enrollment: enrollment, calendar: calendar),
+              !isPaused else { return .none }
+
+        let weeks = ConditioningProgramContent.weeks(experience: enrollment.experience, sparsHard: enrollment.sparsHard)
+        guard weeks.indices.contains(weekNumber - 1) else { return .none }
+        let currentWeek = weeks[weekNumber - 1]
+
+        let entries = coachEntries(enrollment: enrollment, today: today, now: now)
+        var strengthToday = workoutSessions
+            .fetchCompletedSessions(since: calendar.startOfDay(for: now))
+            .compactMap(Self.strengthEntry)
+        strengthToday.append(StrengthLogEntry(endTime: finishedAt, isHeavyLowerBody: isHeavyLowerBody))
+
+        return ConditioningProgramCoach.addOn(
+            week: currentWeek,
+            weekEntries: entries.week,
+            recentEntries: entries.recent,
+            strengthToday: strengthToday,
+            sparsHard: enrollment.sparsHard,
+            finishedAt: finishedAt,
+            now: now,
+            calendar: calendar
+        )
+    }
+
+    /// The conditioning history the coach needs, in one bounded fetch: this
+    /// program week's entries, plus the last 48 h for the lactic-spacing rule —
+    /// which can reach back into the previous week.
+    private func coachEntries(
+        enrollment: ConditioningProgramEnrollment,
+        today: ConditioningProgramDay,
+        now: Date
+    ) -> (week: [ConditioningLogEntry], recent: [ConditioningLogEntry]) {
+        let startOfToday = calendar.startOfDay(for: now)
+        let weekStart = ConditioningProgramSchedule
+            .currentWeekStart(on: today, enrollment: enrollment, calendar: calendar)
+            .startDate(in: calendar)
+        let lacticWindowStart = now.addingTimeInterval(-ConditioningProgramCoach.lacticSpacing)
+        let entries = conditioningRecords
+            .fetch(since: min(weekStart, lacticWindowStart, startOfToday))
+            .compactMap(Self.logEntry)
+        return (
+            week: entries.filter { $0.startTime >= weekStart },
+            recent: entries.filter { $0.startTime >= min(lacticWindowStart, startOfToday) }
+        )
+    }
+
     private static func logEntry(_ record: ConditioningRecord) -> ConditioningLogEntry? {
         guard let energySystem = record.energySystem else { return nil }
         return ConditioningLogEntry(
@@ -179,10 +234,23 @@ final class ConditioningProgramViewModel {
 
     private static func strengthEntry(_ session: WorkoutSession) -> StrengthLogEntry? {
         guard let endTime = session.endTime else { return nil }
-        let muscleGroups = (session.workoutExercises ?? []).map(\.muscleGroups)
-        return StrengthLogEntry(
+        return strengthEntry(session, endTime: endTime)
+    }
+
+    /// Classifies one workout for the coach's spacing rules.
+    ///
+    /// **The single definition of "heavy lower body" for this feature**, so the
+    /// dashboard and the post-workout add-on can never disagree about a session.
+    /// `endTime` is supplied rather than read off the model because the add-on
+    /// classifies a workout the summary screen has not committed yet.
+    /// `WorkoutExercise.muscleGroups` is a stored `[String]`, so this walk faults
+    /// nothing.
+    static func strengthEntry(_ session: WorkoutSession, endTime: Date) -> StrengthLogEntry {
+        StrengthLogEntry(
             endTime: endTime,
-            isHeavyLowerBody: StrengthLogEntry.isHeavyLowerBody(exerciseMuscleGroups: muscleGroups)
+            isHeavyLowerBody: StrengthLogEntry.isHeavyLowerBody(
+                exerciseMuscleGroups: (session.workoutExercises ?? []).map(\.muscleGroups)
+            )
         )
     }
 }
