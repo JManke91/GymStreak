@@ -13,6 +13,8 @@ private struct WorkoutDestination: Identifiable {
 struct RoutineListView: View {
     @EnvironmentObject var routineStore: RoutineStore
     @EnvironmentObject var workoutViewModel: WatchWorkoutViewModel
+    @Environment(WatchConditioningStore.self) private var conditioningStore
+    @Environment(WatchConditioningRunViewModel.self) private var conditioningRun
 
     @State private var workoutDestination: WorkoutDestination?
 
@@ -20,7 +22,8 @@ struct RoutineListView: View {
         Group {
             if routineStore.isLoading {
                 loadingView
-            } else if routineStore.routines.isEmpty && routineStore.templateFailureNotices.isEmpty {
+            } else if routineStore.routines.isEmpty && routineStore.templateFailureNotices.isEmpty
+                        && conditioningStore.sessions.isEmpty {
                 emptyView
             } else {
                 // A failed template update still has to be told even when the
@@ -51,9 +54,13 @@ struct RoutineListView: View {
             } else if workoutViewModel.isWorkoutActive {
                 workoutViewModel.discardWorkout()
             }
+            // Conditioning chosen on the summary (ticket 06) starts only now.
+            Task { await conditioningRun.startQueued() }
         }) { destination in
             ActiveWorkoutView(routineID: destination.routineID)
                 .environmentObject(workoutViewModel)
+                .environment(conditioningStore)
+                .environment(conditioningRun)
                 .interactiveDismissDisabled()
         }
         // Ticket 08: a workout recovered after process termination re-presents
@@ -98,6 +105,15 @@ struct RoutineListView: View {
                 }
             }
 
+            if !conditioningStore.sessions.isEmpty {
+                Section {
+                    ConditioningEntryRow(
+                        today: conditioningStore.today,
+                        sessionCount: conditioningStore.sessions.count
+                    )
+                }
+            }
+
             if routineStore.routines.count > 1 {
                 Section {
                     ForEach(routineStore.routines.dropFirst()) { routine in
@@ -111,6 +127,9 @@ struct RoutineListView: View {
             }
         }
         .listStyle(.carousel)
+        .navigationDestination(for: ConditioningDestination.self) { _ in
+            ConditioningSessionListView()
+        }
         .navigationDestination(for: RoutineDestination.self) { destination in
             RoutineDetailDestination(routineID: destination.routineID) { latestRoutineID in
                 startWorkout(routineID: latestRoutineID)
@@ -218,6 +237,12 @@ struct RoutineRowView: View {
                 healthKitManager: WatchHealthKitManager(),
                 connectivityManager: WatchConnectivityManager.shared,
                 routineStore: RoutineStore(syncState: WatchSyncStateStore())
+            ))
+            .environment(WatchConditioningStore())
+            .environment(WatchConditioningRunViewModel(
+                workout: WatchConditioningWorkoutManager(),
+                checkpoints: nil,
+                isOtherWorkoutActive: { false }
             ))
     }
 }

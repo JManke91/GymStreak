@@ -290,6 +290,11 @@ struct GymStreakApp: App {
                         // claim the screen on the first activation and take the
                         // screenshot lane with it.
                         if !isUITesting {
+                            // "Today" and the program week roll over by the clock,
+                            // and this republishes the watch's conditioning offer
+                            // (docs/fight-conditioning.md, ticket 06). Two small
+                            // bounded fetches; an unchanged offer sends nothing.
+                            dependencies.conditioningProgram.refresh()
                             Task {
                                 await dependencies.reminderOptIn.presentIfDue()
                                 await dependencies.workoutReminders.refreshReminders()

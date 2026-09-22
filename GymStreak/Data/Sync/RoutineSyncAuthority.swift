@@ -107,6 +107,18 @@ final class RoutineSyncAuthority {
     /// it at launch from the persisted preference.
     private var weightUnitRawValue: String?
 
+    /// The conditioning offer (`WatchConditioningProgram`, JSON), merged the same way
+    /// and for the same reason as the weight unit (docs/fight-conditioning.md, ticket 06).
+    private var conditioningPayload: Data?
+
+    /// An extra (weight unit, conditioning offer) changed but no context carrying it
+    /// has reached WatchConnectivity yet — typically because it was recorded before
+    /// `WCSession` activated. While set, `sendOrdinary` bypasses its identical-payload
+    /// suppression, and activation triggers a routine sync to flush it. Without this
+    /// the value waited for a routine *edit*: the offer published at launch never
+    /// reached the watch (ticket 06 device test, 2026-09-22).
+    private(set) var hasUnsentExtras = false
+
     init(transport: RoutineContextTransporting, directory: URL? = nil) {
         self.transport = transport
         let base = directory ?? FileManager.default
@@ -209,12 +221,12 @@ final class RoutineSyncAuthority {
             WatchSyncDiagnostics.error("authority: failed to encode routines")
             return nil
         }
-        guard payload != lastSentRoutinesPayload else { return nil }
+        guard payload != lastSentRoutinesPayload || hasUnsentExtras else { return nil }
         guard resolvedChallenge() != nil else {
             // Mixed-version compatibility: an old watch never publishes the
             // ticket-05 challenge, but still understands the routines payload.
             do {
-                try transport.sendRoutineContext(context(for: payload))
+                try handToTransport(context(for: payload))
                 lastSentRoutinesPayload = payload
             } catch {
                 WatchSyncDiagnostics.error("authority: failed to send legacy routine context — \(error.localizedDescription)")
@@ -261,20 +273,42 @@ final class RoutineSyncAuthority {
     func updateWeightUnit(_ rawValue: String, push: @autoclosure () -> Bool) {
         guard weightUnitRawValue != rawValue else { return }
         weightUnitRawValue = rawValue
-        // `@autoclosure` so the caller's session gate — which logs when it
-        // refuses — is only evaluated once the unit has actually changed.
-        // Otherwise every launch printed "cannot sync routines — session not
-        // activated" from the composition root's seeding call, before
-        // `WCSession.activate()` could possibly have completed.
+        hasUnsentExtras = true
+        republishContextExtras(push: push, what: "weight-unit")
+    }
+
+    /// Records the conditioning offer and, when it actually changed, pushes it —
+    /// the same contract as `updateWeightUnit(_:push:)`. The payload is encoded
+    /// deterministically and carries a day rather than an instant, so the
+    /// refresh on every app activation does not burn an authority generation
+    /// unless the offer really changed.
+    func updateConditioningProgram(_ payload: Data, push: @autoclosure () -> Bool) {
+        guard conditioningPayload != payload else { return }
+        conditioningPayload = payload
+        hasUnsentExtras = true
+        republishContextExtras(push: push, what: "conditioning")
+    }
+
+    /// Re-sends the last routine payload so a changed extra reaches the watch.
+    ///
+    /// `push` is evaluated only once a value has actually changed. Otherwise every
+    /// launch printed "cannot sync routines — session not activated" from the
+    /// composition root's seeding call, before `WCSession.activate()` could
+    /// possibly have completed.
+    ///
+    /// Deliberately bypasses the identical-content suppression: the routines are
+    /// unchanged by definition here, so `sendOrdinary` would drop the context and
+    /// the watch would keep the old value until the next routine edit.
+    private func republishContextExtras(push: () -> Bool, what: String) {
         guard push() else { return }
-        // Nothing has been sent in this process yet — the unit will ride along
+        // Nothing has been sent in this process yet — the value will ride along
         // with the first routine sync, which has not happened.
         guard let payload = lastSentRoutinesPayload else { return }
         guard resolvedChallenge() != nil else {
             do {
-                try transport.sendRoutineContext(context(for: payload))
+                try handToTransport(context(for: payload))
             } catch {
-                WatchSyncDiagnostics.error("authority: failed to send legacy weight-unit context — \(error.localizedDescription)")
+                WatchSyncDiagnostics.error("authority: failed to send legacy \(what) context — \(error.localizedDescription)")
             }
             return
         }
@@ -283,12 +317,23 @@ final class RoutineSyncAuthority {
 
     // MARK: - Sending
 
+    /// Every context goes through here: all of them are built by `context(for:)`,
+    /// so once one is accepted the current extras are on their way.
+    private func handToTransport(_ context: [String: Any]) throws {
+        try transport.sendRoutineContext(context)
+        hasUnsentExtras = false
+    }
+
     /// The routine payload plus everything that always rides with it. Every
-    /// send path builds its context from here so no path can omit the unit.
+    /// send path builds its context from here so no path can omit the unit or
+    /// the conditioning offer.
     private func context(for payload: Data) -> [String: Any] {
         var context: [String: Any] = [WatchRoutineSync.contextRoutinesKey: payload]
         if let weightUnitRawValue {
             context[WatchRoutineSync.contextWeightUnitKey] = weightUnitRawValue
+        }
+        if let conditioningPayload {
+            context[WatchConditioningProgram.contextKey] = conditioningPayload
         }
         return context
     }
@@ -335,7 +380,7 @@ final class RoutineSyncAuthority {
             return nil
         }
         do {
-            try transport.sendRoutineContext(context)
+            try handToTransport(context)
         } catch {
             // The transport may have accepted the context before surfacing an
             // error. Keep the generation consumed so relaunch/retry can never
@@ -381,7 +426,7 @@ final class RoutineSyncAuthority {
             return nil
         }
         do {
-            try transport.sendRoutineContext(context)
+            try handToTransport(context)
         } catch {
             // Keep the challenge-bound proposal durable. Retrying the same
             // proposal/generation is idempotent; a changed challenge replaces

@@ -117,6 +117,18 @@ The resumed live workout re-presents the active-workout cover via
 workout for that routine is already live, so the cover's `.task` can't start a
 second HealthKit session.
 
+### Conditioning sessions take their own branch (fight-conditioning ticket 06)
+
+A watch conditioning session runs its own `HKWorkoutSession` and has no strength checkpoint and
+no queue entry, so the planner above would classify it as `constrainedOrphanSession`. The
+coordinator therefore recovers the active session **once** and first offers it to
+`resumeConditioning`: a conditioning checkpoint (`Conditioning/active-session-checkpoint.json`)
+plus a recovered session whose `workoutConfiguration.activityType` is not
+`.traditionalStrengthTraining` → `WatchConditioningWorkoutManager` adopts it and
+`WatchConditioningRunViewModel.resumeRecovered` continues on the wall clock without replaying
+cues. A conditioning checkpoint with no such session is discarded; a conditioning session with
+no checkpoint falls through to the orphan path unchanged. See `docs/fight-conditioning.md`.
+
 ## Crash boundaries (explicit outcomes)
 
 The documented HealthKit end sequence is `stopActivity → .stopped →

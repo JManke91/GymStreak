@@ -461,6 +461,26 @@ Weights themselves stay bare kilogram `Double`s on the wire. No unit field was a
 a display setting, not a property of a set, and tagging every set would allow a payload
 whose sets disagree with each other. See `docs/weight-unit-preference.md` §9a.
 
+### The conditioning offer rides in the routine context too (fight-conditioning ticket 06)
+
+Since 2026-09-21 a second unversioned value shares that dictionary: the enrolled user's
+open conditioning sessions for the program week, as sorted-key JSON `Data` under
+`WatchConditioningProgram.contextKey` (`"conditioningProgram"`). It follows the weight
+unit's contract to the letter — both now go through `RoutineSyncAuthority`'s one
+`republishContextExtras` (record the value, push only when it changed and
+`canSyncRoutines` allows, resend the last routine payload past duplicate suppression) and
+both are added by `context(for:)`. On the watch it is applied in `processApplicationContext`
+ahead of the routines guard into `WatchConditioningStore` (its own App Group file); an absent
+key keeps the last offer. The payload carries a *day* rather than an instant, so the iPhone's
+refresh on every activation spends an authority generation only when the offer changed. Full
+design: `docs/fight-conditioning.md` (ticket 06).
+
+**Extras recorded before activation (fixed 2026-09-22).** A unit or offer recorded while
+`canSyncRoutines` was false used to wait for the next routine *edit*: activation sent nothing,
+and an unchanged routine sync was suppressed. `hasUnsentExtras` now bypasses that suppression
+until a context carrying the extras is accepted, and activation posts `.watchAppBecameAvailable`
+to trigger the sync.
+
 ### Mixed-version payloads
 
 A requested-template payload without ordering identity (old watch build) may run the idempotent set-only reconciliation only while **no** sequenced outcome exists for its routine. Once one does, it can no longer prove it is newer: history is preserved and deduplicated, `didUpdateTemplate` is corrected to false, current routine state is staged, and the intent is answered with the plain acknowledgment its sender understands. Successful no-receipt legacy reconciliation similarly corrects the flag to true.

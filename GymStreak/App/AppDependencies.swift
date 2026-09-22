@@ -62,6 +62,9 @@ final class AppDependencies: ObservableObject {
     /// instance everywhere so its WCSession delegate (registered at app launch) is the
     /// one that receives deliveries.
     let watchSync: WatchSyncServicing
+    /// The same WatchConnectivity adapter, seen as the conditioning offer's
+    /// destination (docs/fight-conditioning.md, ticket 06).
+    private let conditioningWatch: ConditioningWatchPublishing
 
     /// Retained so model-actor-backed dependencies can be built lazily by factory
     /// (see `makeChatFactProvider`). Never handed to Presentation.
@@ -416,6 +419,7 @@ final class AppDependencies: ObservableObject {
         )
         let watchConnectivity = WatchConnectivityManager.shared
         self.watchSync = watchConnectivity
+        self.conditioningWatch = watchConnectivity
         // The watch cannot read the iPhone's UserDefaults — the App Group suite
         // is shared within a device's app family, not across the pairing — so
         // the unit is published over WatchConnectivity, merged into the routine
@@ -577,11 +581,20 @@ final class AppDependencies: ObservableObject {
     /// The conditioning program (docs/fight-conditioning.md). One instance so the Conditioning
     /// screen and the Routines tab card show the same state; `lazy` because it reads the
     /// repositories `init` assigns.
-    private(set) lazy var conditioningProgram: ConditioningProgramViewModel = ConditioningProgramViewModel(
-        store: conditioningProgramStore,
-        conditioningRecords: conditioningRecordRepository,
-        workoutSessions: workoutSessionRepository
-    )
+    ///
+    /// Every `refresh()` republishes the week's open sessions to the watch (ticket 06), and a
+    /// heart-rate profile edit refreshes it so the watch's zone follows the new profile.
+    private(set) lazy var conditioningProgram: ConditioningProgramViewModel = {
+        let program = ConditioningProgramViewModel(
+            store: conditioningProgramStore,
+            conditioningRecords: conditioningRecordRepository,
+            workoutSessions: workoutSessionRepository,
+            watch: conditioningWatch,
+            heartRateProfiles: heartRateProfileStore
+        )
+        heartRateProfileStore.onChange = { [weak program] in program?.refresh() }
+        return program
+    }()
 
     /// The post-workout conditioning add-on (docs/fight-conditioning.md, ticket 05).
     ///

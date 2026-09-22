@@ -41,6 +41,11 @@ final class WatchConnectivityManager: NSObject, ObservableObject {
         return store
     }()
 
+    /// The conditioning offer the iPhone last published (docs/fight-conditioning.md,
+    /// ticket 06). Owned here for the same reason as the catalogue store: the
+    /// context it rides in can arrive before any UI exists.
+    let conditioningStore = WatchConditioningStore()
+
     private override init() {
         super.init()
         // Interrupted-finalization handling moved to ticket 08 recovery: the
@@ -356,6 +361,14 @@ extension WatchConnectivityManager: WCSessionDelegate {
            let unit = WeightUnit(rawValue: rawUnit),
            syncState.applyWeightUnit(unit) {
             WatchSyncDiagnostics.info("watch: applied weight unit \(rawUnit) from iPhone")
+        }
+
+        // Same reasoning as the unit: an unversioned value merged into the routine
+        // context, applied whatever the authority decides about the routines.
+        // Absent (an older iPhone build, or no refresh yet this launch) keeps the last.
+        if let conditioning = context[WatchConditioningProgram.contextKey] as? Data,
+           conditioningStore.apply(conditioning) {
+            WatchSyncDiagnostics.info("watch: applied conditioning offer from iPhone")
         }
 
         guard let routineData = context[WatchRoutineSync.contextRoutinesKey] as? Data else {

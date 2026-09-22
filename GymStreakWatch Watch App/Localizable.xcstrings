@@ -7,6 +7,28 @@
     "·" : {
 
     },
+    "%@ · %@" : {
+      "comment" : "Conditioning (docs/fight-conditioning.md): session title and volume",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@ · %2$@"
+          }
+        }
+      }
+    },
+    "%@ · %@ elapsed" : {
+      "comment" : "Conditioning runner redesign: controls page; machine and elapsed time",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@ · %2$@ vergangen"
+          }
+        }
+      }
+    },
     "%@ · all sets" : {
       "comment" : "Mid-workout progressive-overload primary action; parameter is the signed weight step",
       "localizations" : {
@@ -47,6 +69,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%@ → neues Gewicht"
+          }
+        }
+      }
+    },
+    "%@ IN" : {
+      "comment" : "Conditioning runner redesign: lead-in pill, e.g. WORK IN; parameter is the next phase",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ IN"
           }
         }
       }
@@ -125,6 +158,28 @@
     },
     "%lld" : {
 
+    },
+    "%lld bpm above your zone" : {
+      "comment" : "Conditioning runner redesign: above the range",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld bpm über der Zone"
+          }
+        }
+      }
+    },
+    "%lld bpm to your zone" : {
+      "comment" : "Conditioning runner redesign: below the range",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "noch %lld bpm bis zur Zone"
+          }
+        }
+      }
     },
     "%lld cal" : {
       "localizations" : {
@@ -225,12 +280,94 @@
         }
       }
     },
+    "%lld rounds" : {
+      "comment" : "Conditioning (docs/fight-conditioning.md): interval volume",
+      "localizations" : {
+        "de" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld Runde"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld Runden"
+                }
+              }
+            }
+          }
+        },
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld round"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld rounds"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "%lld sec" : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "%lld Sek."
+          }
+        }
+      }
+    },
+    "%lld sessions this week" : {
+      "comment" : "Conditioning (docs/fight-conditioning.md): entry row",
+      "localizations" : {
+        "de" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld Einheit diese Woche"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld Einheiten diese Woche"
+                }
+              }
+            }
+          }
+        },
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld session this week"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld sessions this week"
+                }
+              }
+            }
           }
         }
       }
@@ -275,6 +412,17 @@
         }
       }
     },
+    "%lld–%lld bpm" : {
+      "comment" : "Conditioning (docs/fight-conditioning.md): personal heart-rate range",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$lld–%2$lld bpm"
+          }
+        }
+      }
+    },
     "%lld/%lld" : {
       "localizations" : {
         "en" : {
@@ -315,6 +463,39 @@
     "−%lld s" : {
 
     },
+    "85–90 %" : {
+      "comment" : "Conditioning (docs/fight-conditioning.md): effort cue",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "85–90 %"
+          }
+        }
+      }
+    },
+    "A bit easier" : {
+      "comment" : "Conditioning runner redesign: heart rate above the range",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Etwas ruhiger"
+          }
+        }
+      }
+    },
+    "A bit faster" : {
+      "comment" : "Conditioning runner redesign: heart rate below the range",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Etwas zügiger"
+          }
+        }
+      }
+    },
     "Abs" : {
       "localizations" : {
         "de" : {
@@ -351,6 +532,39 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Übung hinzufügen"
+          }
+        }
+      }
+    },
+    "Aerobic + bursts" : {
+      "comment" : "Conditioning (docs/fight-conditioning.md): session title",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Aerob + Sprints"
+          }
+        }
+      }
+    },
+    "Aerobic base" : {
+      "comment" : "Conditioning (docs/fight-conditioning.md): session title",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Aerobe Basis"
+          }
+        }
+      }
+    },
+    "Alactic power" : {
+      "comment" : "Conditioning (docs/fight-conditioning.md): session title",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Alaktazide Power"
           }
         }
       }
@@ -440,6 +654,17 @@
         }
       }
     },
+    "Another workout is still running on this watch. Try again in a moment." : {
+      "comment" : "Conditioning (docs/fight-conditioning.md)",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Auf dieser Watch läuft noch ein anderes Workout. Versuch es gleich noch einmal."
+          }
+        }
+      }
+    },
     "Applies from your next workout · starting at %lld reps" : {
       "comment" : "Progressive-overload confirmation detail; parameter is the rep-range minimum",
       "localizations" : {
@@ -458,6 +683,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Übernehmen"
+          }
+        }
+      }
+    },
+    "Assault bike" : {
+      "comment" : "Conditioning (docs/fight-conditioning.md): machine",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Assault Bike"
           }
         }
       }
@@ -582,6 +818,17 @@
         }
       }
     },
+    "Check the fit and Health access" : {
+      "comment" : "Conditioning runner: heart rate: why there is no reading",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sitz der Uhr und Health-Zugriff prüfen"
+          }
+        }
+      }
+    },
     "Chest" : {
       "localizations" : {
         "de" : {
@@ -653,6 +900,28 @@
         }
       }
     },
+    "Conditioning" : {
+      "comment" : "Conditioning (docs/fight-conditioning.md)",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kondition"
+          }
+        }
+      }
+    },
+    "Conditioning next" : {
+      "comment" : "Conditioning (docs/fight-conditioning.md): strength summary button",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Jetzt Kondition"
+          }
+        }
+      }
+    },
     "Configure" : {
       "localizations" : {
         "de" : {
@@ -683,6 +952,17 @@
         }
       }
     },
+    "COOL-DOWN" : {
+      "comment" : "Conditioning (docs/fight-conditioning.md): phase",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "AUSKLANG"
+          }
+        }
+      }
+    },
     "Could not save the weight increase. Please try again." : {
       "comment" : "Shown when the durable write for a mid-workout overload fails",
       "localizations" : {
@@ -690,6 +970,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Die Gewichtserhöhung konnte nicht gespeichert werden. Bitte erneut versuchen."
+          }
+        }
+      }
+    },
+    "Couldn't save to Apple Health" : {
+      "comment" : "Conditioning (docs/fight-conditioning.md)",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Konnte nicht in Apple Health gespeichert werden"
+          }
+        }
+      }
+    },
+    "Couldn't start the session" : {
+      "comment" : "Conditioning (docs/fight-conditioning.md)",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Einheit konnte nicht starten"
           }
         }
       }
@@ -855,12 +1157,56 @@
         }
       }
     },
+    "Easy" : {
+      "comment" : "Conditioning (docs/fight-conditioning.md): effort cue",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Locker"
+          }
+        }
+      }
+    },
     "Elapsed time %@" : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "Verstrichene Zeit %@"
+          }
+        }
+      }
+    },
+    "End" : {
+      "comment" : "Conditioning (docs/fight-conditioning.md): runner button",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Beenden"
+          }
+        }
+      }
+    },
+    "End session" : {
+      "comment" : "Conditioning (docs/fight-conditioning.md)",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Einheit beenden"
+          }
+        }
+      }
+    },
+    "End session early?" : {
+      "comment" : "Conditioning (docs/fight-conditioning.md)",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Einheit vorzeitig beenden?"
           }
         }
       }
@@ -987,6 +1333,17 @@
         }
       }
     },
+    "Finishing your workout…" : {
+      "comment" : "Conditioning (docs/fight-conditioning.md): waiting for the strength session to end",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dein Workout wird abgeschlossen …"
+          }
+        }
+      }
+    },
     "Forearms" : {
       "localizations" : {
         "de" : {
@@ -1013,6 +1370,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Allgemein"
+          }
+        }
+      }
+    },
+    "Get ready" : {
+      "comment" : "Conditioning runner redesign: lead-in",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bereit machen"
           }
         }
       }
@@ -1053,6 +1421,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Hüftbeuger"
+          }
+        }
+      }
+    },
+    "Hold this pace · %lld–%lld" : {
+      "comment" : "Conditioning runner redesign: in zone; the range",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tempo halten · %1$lld–%2$lld"
           }
         }
       }
@@ -1113,6 +1492,28 @@
     "kCal" : {
 
     },
+    "Keep a conversational pace" : {
+      "comment" : "Conditioning runner redesign: no heart-rate range (RPE only)",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gesprächstempo halten"
+          }
+        }
+      }
+    },
+    "Keep going" : {
+      "comment" : "Conditioning (docs/fight-conditioning.md)",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Weitermachen"
+          }
+        }
+      }
+    },
     "kg" : {
       "comment" : "Abbreviated kilograms unit shown next to a weight",
       "localizations" : {
@@ -1131,6 +1532,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Kilogramm"
+          }
+        }
+      }
+    },
+    "Lactic 30/120" : {
+      "comment" : "Conditioning (docs/fight-conditioning.md): session title",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Laktazid 30/120"
+          }
+        }
+      }
+    },
+    "Lactic 45/180" : {
+      "comment" : "Conditioning (docs/fight-conditioning.md): session title",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Laktazid 45/180"
           }
         }
       }
@@ -1163,6 +1586,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "lb"
+          }
+        }
+      }
+    },
+    "left of %@" : {
+      "comment" : "Conditioning runner redesign: under the remaining time; the total",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "übrig von %@"
           }
         }
       }
@@ -1207,6 +1641,28 @@
         }
       }
     },
+    "Max effort" : {
+      "comment" : "Conditioning (docs/fight-conditioning.md): effort cue",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Maximal"
+          }
+        }
+      }
+    },
+    "Measuring heart rate…" : {
+      "comment" : "Conditioning runner: heart rate: before the first reading",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Puls wird gemessen …"
+          }
+        }
+      }
+    },
     "Next" : {
       "comment" : "Rest timer: labels the upcoming set's target beside it, e.g. \"Next  ⬮ 80 kg × 8\". Kept short on purpose — it is a fixed cost against a variable value on a line with no width to spare. NOT a \"next\" button (that would be \"Weiter\"); do not reuse this key for one.",
       "localizations" : {
@@ -1239,6 +1695,17 @@
         }
       }
     },
+    "Next: %@ %@" : {
+      "comment" : "Conditioning runner redesign: next phase and its duration",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Als Nächstes: %1$@ %2$@"
+          }
+        }
+      }
+    },
     "No exercises in this workout" : {
       "localizations" : {
         "de" : {
@@ -1259,6 +1726,17 @@
         }
       }
     },
+    "No heart rate" : {
+      "comment" : "Conditioning runner: heart rate: no reading after 30 s",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kein Puls"
+          }
+        }
+      }
+    },
     "No rest" : {
       "localizations" : {
         "de" : {
@@ -1275,6 +1753,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Keine Routinen"
+          }
+        }
+      }
+    },
+    "No sessions" : {
+      "comment" : "Conditioning (docs/fight-conditioning.md)",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Keine Einheiten"
           }
         }
       }
@@ -1310,6 +1799,17 @@
         }
       }
     },
+    "Nothing saved — the first effort had not started" : {
+      "comment" : "Conditioning (docs/fight-conditioning.md)",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nichts gespeichert – die erste Belastung hatte noch nicht begonnen"
+          }
+        }
+      }
+    },
     "Now %@ next workout" : {
       "comment" : "Recap confirmation for an applied weight increase; parameter is the new weight",
       "localizations" : {
@@ -1337,6 +1837,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "OK"
+          }
+        }
+      }
+    },
+    "On target" : {
+      "comment" : "Conditioning runner redesign: heart rate inside the personal range",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Im Ziel"
           }
         }
       }
@@ -1382,7 +1893,25 @@
       }
     },
     "Pause" : {
-
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pausieren"
+          }
+        }
+      }
+    },
+    "PAUSED" : {
+      "comment" : "Conditioning runner redesign: phase caption while paused",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "PAUSIERT"
+          }
+        }
+      }
     },
     "pounds" : {
       "comment" : "Spoken pounds unit, for VoiceOver",
@@ -1587,6 +2116,17 @@
         }
       }
     },
+    "REST" : {
+      "comment" : "Conditioning (docs/fight-conditioning.md): phase",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "PAUSE"
+          }
+        }
+      }
+    },
     "Rest Complete" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -1628,6 +2168,17 @@
         }
       }
     },
+    "Round %lld/%lld" : {
+      "comment" : "Conditioning (docs/fight-conditioning.md): interval position",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Runde %1$lld/%2$lld"
+          }
+        }
+      }
+    },
     "Routine" : {
       "localizations" : {
         "de" : {
@@ -1644,6 +2195,72 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Routinen"
+          }
+        }
+      }
+    },
+    "Rower" : {
+      "comment" : "Conditioning (docs/fight-conditioning.md): machine",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Rudergerät"
+          }
+        }
+      }
+    },
+    "RPE 3–4" : {
+      "comment" : "Conditioning runner redesign: instruction when no heart-rate range applies",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "RPE 3–4"
+          }
+        }
+      }
+    },
+    "RPE 3–4 · talk pace" : {
+      "comment" : "Conditioning (docs/fight-conditioning.md): effort cue",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "RPE 3–4 · Gesprächstempo"
+          }
+        }
+      }
+    },
+    "RPE 8" : {
+      "comment" : "Conditioning (docs/fight-conditioning.md): effort cue",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "RPE 8"
+          }
+        }
+      }
+    },
+    "RPE 9" : {
+      "comment" : "Conditioning (docs/fight-conditioning.md): effort cue",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "RPE 9"
+          }
+        }
+      }
+    },
+    "Run" : {
+      "comment" : "Conditioning (docs/fight-conditioning.md): machine",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Laufen"
           }
         }
       }
@@ -1688,12 +2305,45 @@
         }
       }
     },
+    "Saved to Apple Health" : {
+      "comment" : "Conditioning (docs/fight-conditioning.md)",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "In Apple Health gespeichert"
+          }
+        }
+      }
+    },
     "Search exercises" : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "Übungen suchen"
+          }
+        }
+      }
+    },
+    "Session complete" : {
+      "comment" : "Conditioning (docs/fight-conditioning.md)",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Einheit abgeschlossen"
+          }
+        }
+      }
+    },
+    "Session ended" : {
+      "comment" : "Conditioning (docs/fight-conditioning.md)",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Einheit beendet"
           }
         }
       }
@@ -1731,6 +2381,39 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Satz %1$lld von %2$lld abgeschlossen"
+          }
+        }
+      }
+    },
+    "Set %lld/%lld · Rep %lld/%lld" : {
+      "comment" : "Conditioning (docs/fight-conditioning.md): set-based position",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Satz %1$lld/%2$lld · Wdh. %3$lld/%4$lld"
+          }
+        }
+      }
+    },
+    "Set %lld/%lld done" : {
+      "comment" : "Conditioning (docs/fight-conditioning.md): set break position",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Satz %1$lld/%2$lld geschafft"
+          }
+        }
+      }
+    },
+    "SET BREAK" : {
+      "comment" : "Conditioning (docs/fight-conditioning.md): phase",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "SATZPAUSE"
           }
         }
       }
@@ -1805,6 +2488,28 @@
         }
       }
     },
+    "Sled / ropes / med ball" : {
+      "comment" : "Conditioning (docs/fight-conditioning.md): machine",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Schlitten / Seile / Medizinball"
+          }
+        }
+      }
+    },
+    "Start" : {
+      "comment" : "Conditioning (docs/fight-conditioning.md): start button",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Starten"
+          }
+        }
+      }
+    },
     "Start Workout" : {
       "localizations" : {
         "de" : {
@@ -1821,6 +2526,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Workout %@ starten"
+          }
+        }
+      }
+    },
+    "STEADY" : {
+      "comment" : "Conditioning (docs/fight-conditioning.md): phase",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "GLEICHMÄSSIG"
+          }
+        }
+      }
+    },
+    "Stop on chest pain, dizziness or unusual breathlessness." : {
+      "comment" : "Conditioning (docs/fight-conditioning.md): safety line",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Brich ab bei Brustschmerzen, Schwindel oder ungewöhnlicher Atemnot."
           }
         }
       }
@@ -1892,6 +2619,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Tippen, um den Timer zu vergrößern. Lange drücken, um die Pause zu überspringen."
+          }
+        }
+      }
+    },
+    "Target" : {
+      "comment" : "Conditioning (docs/fight-conditioning.md): session detail, heart-rate range",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ziel"
+          }
+        }
+      }
+    },
+    "Target %lld–%lld bpm" : {
+      "comment" : "Conditioning runner: heart rate: the range while measuring",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ziel %1$lld–%2$lld bpm"
           }
         }
       }
@@ -1990,6 +2739,17 @@
         }
       }
     },
+    "This week" : {
+      "comment" : "Conditioning (docs/fight-conditioning.md): section",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Diese Woche"
+          }
+        }
+      }
+    },
     "Time to start your next set!" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -1997,6 +2757,39 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Zeit für deinen nächsten Satz!"
+          }
+        }
+      }
+    },
+    "Today" : {
+      "comment" : "Conditioning (docs/fight-conditioning.md): section",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Heute"
+          }
+        }
+      }
+    },
+    "Today: %@" : {
+      "comment" : "Conditioning (docs/fight-conditioning.md): entry row; parameter is the session title",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Heute: %@"
+          }
+        }
+      }
+    },
+    "Total" : {
+      "comment" : "Conditioning (docs/fight-conditioning.md): session detail, total time",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gesamt"
           }
         }
       }
@@ -2113,6 +2906,28 @@
         }
       }
     },
+    "Volume" : {
+      "comment" : "Conditioning (docs/fight-conditioning.md): session detail",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Umfang"
+          }
+        }
+      }
+    },
+    "WARM-UP" : {
+      "comment" : "Conditioning (docs/fight-conditioning.md): phase",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "AUFWÄRMEN"
+          }
+        }
+      }
+    },
     "Weight" : {
       "localizations" : {
         "de" : {
@@ -2140,6 +2955,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Gewichtserhöhung"
+          }
+        }
+      }
+    },
+    "What you have done so far is saved to Apple Health." : {
+      "comment" : "Conditioning (docs/fight-conditioning.md)",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Was du bisher gemacht hast, wird in Apple Health gespeichert."
+          }
+        }
+      }
+    },
+    "WORK" : {
+      "comment" : "Conditioning (docs/fight-conditioning.md): phase",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "BELASTUNG"
           }
         }
       }
@@ -2174,6 +3011,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Du hast die Pausenzeit geändert. Trainingsvorlage aktualisieren?"
+          }
+        }
+      }
+    },
+    "You have not started the first effort yet, so nothing will be saved." : {
+      "comment" : "Conditioning (docs/fight-conditioning.md)",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Du hast die erste Belastung noch nicht begonnen, daher wird nichts gespeichert."
           }
         }
       }

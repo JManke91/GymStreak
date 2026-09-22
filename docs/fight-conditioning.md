@@ -6,8 +6,8 @@ detail, delete). Ticket 03 (personal heart-rate zones, incl. the Apple Health pe
 device-verified the same day. Ticket 04 (the 12-week program — showcase, enrollment, weekly targets,
 today's suggestion) shipped and was device-verified 2026-09-20. Ticket 05 (the post-workout add-on on
 the iPhone workout summary) shipped and was device-verified 2026-09-21 — its `.later` branch is not
-reachable before program week 5 and remains unit-tested only (see that section).**
-The watch and the Pro gate are later tickets. This file holds
+reachable before program week 5 and remains unit-tested only (see that section). Ticket 06 (the watch runner with the live heart-rate zone) shipped and was device-verified 2026-09-22; its runner was then redesigned (heart-rate gauge, swipe-away controls — see "Watch runner redesign").**
+Watch → iPhone history sync (07) and the Pro gate (08) are later tickets. This file holds
 the pre-implementation research (so it is not re-done) and the feature doc (iOS + watch
 architecture, components, edge cases) as tickets land. Parent Things task: "Add fighting conditioning into workout routine"
 (`TFUtiRbLsX4VScjcnbdZbv`, Gym Streak project).
@@ -111,7 +111,8 @@ a weight cut or dehydrated.
 |---|---|---|
 | Domain/Models | `Conditioning/ConditioningSession.swift` | energy system, modality, effort, phase kind, volume, definition, options, plan, phase |
 | Domain/Services | `ConditioningLibrary.swift` | the five sessions (corrected protocol) |
-| Domain/Services | `ConditioningTimeline.swift` | phase expansion, position lookup, `ConditioningClock` |
+| Domain/Models | `Conditioning/ConditioningPhase.swift` | phase, phase kind, effort — split out in ticket 06, identical copy on the watch |
+| Domain/Services | `ConditioningTimeline.swift`, `ConditioningTimeline+Expansion.swift` | position lookup and `ConditioningClock` (identical copy on the watch since ticket 06); phase expansion (iOS only) |
 | Domain/Interfaces | `ConditioningCueDelivering.swift`, `ConditioningWorkoutSaving.swift` (+ `HealthSyncPreferenceReading`), `ConditioningSafetyAcknowledging.swift` | gateways |
 | Data | `HealthKit/HealthKitWorkoutManager+Conditioning.swift`, `Notifications/ConditioningCueDeliverer.swift`, `Preferences/ConditioningSafetyStore.swift`, `Preferences/UserDefaultsHealthSyncPreference.swift` | implementations |
 | Presentation | `ViewModels/Conditioning/ConditioningRunViewModel.swift` (`@Observable`), `ConditioningLibraryViewModel.swift`, `ConditioningCopy.swift` (localized vocabulary) | state + copy |
@@ -132,7 +133,7 @@ resynchronize without cue replay, 3-2-1 lead-in). The drain filter is not unit-t
 
 **Monetization.** Free — Rule 3 (in-session). No Pro badge anywhere in the runner.
 
-**Watch target.** Unchanged by ticket 01; the watch runner with live HR is ticket 06.
+**Watch target.** Unchanged by ticket 01; the watch runner with live HR is ticket 06 (below).
 
 **Device verification — PASSED (physical iPhone, 2026-09-19).** Lock-screen notifications fire at
 each transition and the countdown is correct on unlock without replayed cues; the 3-2-1 lead-in
@@ -302,8 +303,8 @@ profile as JSON under `conditioning.heartRateProfile` in `UserDefaults.standard`
 reach as the user's other settings (weight unit, calendar sync, reminders): it survives relaunches,
 not a reinstall, and does not travel between devices. One instance lives in `AppDependencies`, so
 an open preview observes a save from the sheet immediately. Deliberately not iCloud KVS: no other
-setting syncs that way, and the watch gets the zones over WatchConnectivity in ticket 06 (hook: an
-`onChange` callback like `WeightUnitPreference.onChange`, not added yet because nothing consumes it).
+setting syncs that way, and the watch gets the computed range over WatchConnectivity (ticket 06): the
+store's `onChange` refreshes the program view model, which republishes the watch offer.
 
 **Apple Health pre-fill.** `HealthKitHeartRateProfileReader` (`Data/HealthKit`, behind the Domain
 protocol `HeartRateProfileHealthReading`) requests **read-only** access to
@@ -353,8 +354,8 @@ profile). The HealthKit reader is not unit-tested — it needs a real Health sto
 **Monetization (ticket 03).** Free — §3 Rule 3: the target is in-session guidance, and the profile
 exists only to feed it. No cap, no placement, no badge.
 
-**Watch target.** Unchanged by ticket 03. Ticket 06 syncs the profile/zones to the watch for the
-live zone indicator; RPE-only users must see no HR target there either.
+**Watch target.** Unchanged by ticket 03. Ticket 06 syncs the computed range (not the profile) to
+the watch for the live zone indicator; RPE-only users get none there either.
 
 ## iOS architecture (ticket 04 — the 12-week program)
 
@@ -550,7 +551,8 @@ untested: it needs a second device on the same account.
 **Monetization (ticket 04).** Free and ungated for now, as planned — ticket 08 adds the Phase 2–3
 depth gate at `PaywallPlacement.conditioningProgram`. Recorded in `docs/monetization-strategy.md` §4.
 
-**Watch target.** Unchanged by ticket 04.
+**Watch target.** Unchanged by ticket 04 — but since ticket 06 every `refresh()` also republishes
+the week's open sessions to the watch (see below).
 
 ## iOS architecture (ticket 05 — the post-workout add-on)
 
@@ -730,6 +732,298 @@ deferral, the exact six-hour mark, the "easy beats the week's hard emphasis" rul
 fire-time cases including the late-evening push to the next morning and a spring-forward DST day.
 Lifting the picker bound — already a wanted ticket-04 follow-up — would make it testable immediately.
 
+## Watch architecture (ticket 06 — the watch runner with a live heart-rate zone)
+
+**What the user gets.** An enrolled user sees a **Conditioning** row on the watch's routine list
+("Today: Aerobic base", or "3 sessions this week"). It opens this program week's open sessions —
+*Today* (the coach's suggestion) and *This week* (the other open targets). A session shows its
+volume, total time, the personal heart-rate range when there is one, a machine picker (the session's
+own modalities, default first) and a one-line stop rule; **Start** opens the runner as a full-screen
+cover. After a strength workout on the watch, the summary offers **Conditioning next** with today's
+suggested session; tapping it closes the summary and starts that session as soon as the strength
+workout's HealthKit session has ended.
+
+The runner shows the phase (effort phases on a tint capsule with black text), the phase countdown,
+"Round 2/6" or "Set 1/3 · Rep 4/5", the RPE cue, live heart rate — with the range and a below / in
+zone / above glyph during conversational phases only — the next phase, and Pause/Resume and End
+(confirmation that says whether anything will be saved). At the end: "Session complete" / "Session
+ended", the time, and the Apple Health outcome.
+
+**No synced program → nothing.** Not enrolled, paused, not started or completed publishes an empty
+offer, and the watch then renders no conditioning row, no empty state and no paywall (Rule 3). The
+same happens once the program week the offer was computed for is over (`validUntil`), so a watch
+whose iPhone has not been opened for a week never offers stale targets.
+
+**What travels (iOS → watch).** The iPhone does all program logic; the watch only runs phases.
+`ConditioningProgramViewModel.watchOffer()` derives a Domain `ConditioningWatchOffer` from the
+dashboard it just computed — the week's targets with sessions still open, today's suggestion first,
+each at the program's volume with the session's default modality, plus
+`HeartRateZones.target(for: definition.effort, profile:)`, which is `nil` for every effort but the
+conversational one and for RPE-only users. `refresh()` publishes it through the Domain
+`ConditioningWatchPublishing` interface on every call (a `defer`, so leaving and pausing publish the
+empty offer too). `refresh()` now also runs on every app activation (`GymStreakApp`), because "today"
+and the program week roll over by the clock, and on every heart-rate profile save (the store's new
+`onChange`, wired in `AppDependencies`).
+
+`WatchConditioningMapper` (Data) turns the offer into the wire DTO `WatchConditioningProgram`
+(`Data/Sync/WatchConditioningModels.swift`, identical copy in the watch target): the session type,
+energy system, modalities, volume, "today", the **already expanded phases**, and the range as two
+integers. Enums travel as strings so a watch that does not know a newer value drops one session, not
+the whole offer. It rides as sorted-key JSON under `conditioningProgram` in **the same application
+context as the routines** — `updateApplicationContext` replaces the whole dictionary, so a context
+of its own would clobber them. `RoutineSyncAuthority.updateConditioningProgram(_:push:)` follows the
+weight unit's contract exactly; both now go through one `republishContextExtras`. The offer carries a
+*day*, not an instant, and is compared as bytes, so the refresh on every activation costs an authority
+generation only when the offer really changed. On the watch, `processApplicationContext` applies it
+ahead of (and independently of) the routine authority decision, like the unit; an absent key (older
+iPhone build, no refresh yet this launch) keeps the last offer.
+
+**Root cause of the first device test (2026-09-22): no Conditioning row on the watch.** The offer is
+published from `refresh()` on app activation — at launch that is *before* `WCSession` finishes
+activating, so `canSyncRoutines` refused the push and the value was only recorded. Nothing re-sent it:
+activation did not trigger a routine sync, and the next ordinary sync was dropped by the
+identical-routine-payload suppression, so the offer never left the phone in that process. The weight
+unit had the same latent gap. Fix: `RoutineSyncAuthority.hasUnsentExtras` is set whenever an extra
+changes and cleared only when a context is actually handed to WatchConnectivity (`handToTransport`);
+while it is set `sendOrdinary` bypasses the suppression, and `activationDidCompleteWith` posts
+`.watchAppBecameAvailable` so `RoutinesViewModel` syncs — that post is what fixes the device case
+(at launch no routine payload has gone out yet) and it needs a real `WCSession`, so it is verified on
+device only — confirmed 2026-09-22: after the fix, "Kondition · Heute: Aerobe Basis" appeared on the
+watch right after an iPhone launch. `ConditioningOfferBeforeActivationTests` covers the suppression bypass, the safety net
+for when routines already went out. Architecture review of the fix: PASS.
+
+**Swim is left out on the watch.** The mapper filters it from the modalities. A live watch session
+for `.swimming` wants a location type and, for a pool, a lap length the app does not have — the
+research could not confirm whether `.unknown` is accepted at session start — and a touchscreen
+runner is no use in the water anyway. Swimming stays an iPhone choice. No current session has swim
+as its default, so nothing disappears.
+
+**Why the phases are expanded on the iPhone.** The ticket asked for the timeline engine duplicated
+into the watch target and kept identical. The *timing* core is (`ConditioningTimeline.swift` —
+position lookup, first-effort rule, completed rounds — and `ConditioningClock`, plus
+`ConditioningPhase.swift`), byte for byte; the *expansion* (`init(plan:)`, `phases(for:options:)`)
+moved to the iOS-only `ConditioningTimeline+Expansion.swift`, because it needs `ConditioningLibrary`
+and the session definitions, which the watch would otherwise also have to duplicate. The watch never
+decides a structure; it runs what the iPhone sent. `WatchConditioningTimelineTests.sharedCopiesMatch`
+reads both copies of all three shared files through `#filePath` and fails the moment they differ.
+
+**The runner (`WatchConditioningRunViewModel`, `@Observable @MainActor`).** Same principle as the
+iPhone: it never counts down. A 250 ms task re-derives `position` from `ConditioningClock` (wall clock
+minus pauses) on every tick. Cues come from the pure `ConditioningCueEvaluator`: the effort cue
+(`.start`) or recovery cue (`.stop`) when a phase boundary is crossed, a `.click` 3-2-1 before every
+effort phase that follows another, `.success` at the end. A tick more than 2 s after the previous
+one is a catch-up and replays nothing — the iPhone's `resynchronize` rule. If the last phase ended
+while the process was not running, the workout ends at the timeline's end, not at wake-up.
+
+**The zone nudge (`ConditioningZoneMonitor`, pure).** Only during a conversational phase with a
+synced range. Out of zone for **30 s** → `.directionUp` (below: pick it up) or `.directionDown`
+(above: ease off), then at most once every **60 s** while the drift lasts; back in zone, a change of
+direction or a phase without a range restarts the count. Time is session time, so a paused session
+cannot nudge. Heart rate lags effort by tens of seconds, and a buzz on every sample would train the
+user to ignore it.
+
+**Apple Health (`WatchConditioningWorkoutManager`).** Its own `HKWorkoutSession` + `HKLiveWorkoutBuilder`
+with the modality's activity type — run `.running`/outdoor, bike `.cycling`/indoor, rower
+`.rowing`/indoor, sled/ropes/med ball `.highIntensityIntervalTraining`/indoor, the iPhone's mapping.
+Deliberately **not** `WatchHealthKitManager`: that manager's finalization is bound to the durable
+strength queue, which conditioning does not use (ticket 07 decides how watch sessions reach iPhone
+History). Metadata on save: `HKMetadataKeyExternalUUID`, brand name = session title,
+`GymStreakSessionKind = conditioning` — the key the iPhone's recovery drain already skips, so a watch
+conditioning workout never shows up in the strength recovery banner. Ending before the first effort
+discards the session (nothing saved), the iPhone rule. Live heart rate comes from
+`workoutBuilder(_:didCollectDataOf:)`; only the rounded `Int` crosses to the main actor. Pause/resume
+pause the HealthKit session too, so the saved workout's duration excludes pauses (unlike the iPhone
+path, which writes wall clock after the fact). If the system ends the session from outside (another
+workout started, which force-ends ours), `didFailWithError` reaches the runner through
+`onSessionFailed` and the run ends there instead of ticking on without background runtime; `finish`
+throws when there is no session to save, so the summary never claims "Saved to Apple Health" for
+nothing.
+
+**Strength → conditioning.** Only one workout session can run on the watch: starting a second one
+force-ends the first with `errorAnotherWorkoutSessionStarted`. The summary therefore only *queues*
+the session (`queueAfterWorkout`); `RoutineListView`'s strength-cover `onDismiss` starts it, and
+`start` waits (up to 15 s, polling `WatchHealthKitManager.isWorkoutActive`, which turns false when
+the strength session reaches `.ended`) before creating the conditioning session. Still busy → "Couldn't
+start the session". The runner cover lives on `RootView`, above the `NavigationStack`, because a
+session starts from a pushed detail screen and a cover cannot be raised from under the strength cover.
+
+**Crash recovery (`docs/watch-workout-recovery.md` patterns).** `WatchConditioningCheckpoint` — the
+synced session, modality, clock and external UUID — is one atomically-replaced App Group file
+(`Conditioning/active-session-checkpoint.json`), written on start, pause and resume only: the clock
+is wall-clock based, so nothing per tick needs saving. On relaunch `WatchWorkoutRecoveryCoordinator`
+recovers the active HealthKit session once and, before the strength planner sees it, calls
+`resumeConditioning`: a conditioning checkpoint **and** a recovered session whose activity type is not
+`.traditionalStrengthTraining` (HealthKit restores the original configuration) → the conditioning
+manager adopts it and the runner resumes where the wall clock says, with no cue replay. A checkpoint
+without such a session → the checkpoint is discarded (the workout was ended or never began). A
+recovered conditioning session **without** a checkpoint falls through to the strength planner's
+existing orphan path, which saves it to Apple Health as a plain "GymStreak" workout — acceptable,
+and it carries no external UUID, so the iPhone never offers it for recovery. The architecture review
+suggested guarding strength adoption on `.traditionalStrengthTraining` instead; rejected, because an
+un-adopted session is never ended and would keep running in the background, blocking the next
+workout.
+
+**Offer persistence on the watch (`WatchConditioningStore`).** The exact received bytes in an
+atomically-replaced App Group file (`Conditioning/program.json`), so the row is there before the
+first context of a launch; undecodable bytes are ignored and the last good offer stays. Owned by the
+watch `WatchConnectivityManager` like the catalogue store; `AppState` puts it and the runner into the
+environment. "Today" is shown only on the day the iPhone said it. The store publishes precomputed
+`sessions` / `today` / `others` (recomputed on apply and on every app activation, since the day and
+the week roll over by the clock), so no view body filters.
+
+**Components (ticket 06).**
+
+| Target | File | Role |
+|---|---|---|
+| iOS Domain | `Models/Conditioning/ConditioningWatchOffer.swift`, `Interfaces/ConditioningWatchPublishing.swift` | the offer and its gateway |
+| iOS Presentation | `ConditioningProgramViewModel+WatchOffer.swift`; publish in `refresh()` | derivation |
+| iOS Data | `Sync/WatchConditioningMapper.swift`, `Sync/WatchConditioningModels.swift` (shared), `WatchConnectivityManager.publishConditioningOffer`, `RoutineSyncAuthority.updateConditioningProgram` | wire + transport |
+| iOS App | `AppDependencies` (`conditioningWatch`, profile `onChange` → refresh), `GymStreakApp` (refresh on activation) | wiring |
+| Shared (identical) | `ConditioningPhase.swift`, `ConditioningTimeline.swift`, `WatchConditioningModels.swift` | timing engine + wire |
+| watch Models | `Conditioning/ConditioningRunCues.swift` (cue evaluator, zone status, zone monitor), `WatchConditioningCheckpoint.swift` (+ store), `WatchConditioningCopy.swift` | pure logic, crash boundary, en/de copy |
+| watch Managers | `WatchConditioningStore.swift`, `WatchConditioningWorkoutManager.swift`; hooks in `WatchConnectivityManager`, `WatchWorkoutRecoveryCoordinator` | sync, HealthKit, recovery |
+| watch ViewModels | `WatchConditioningRunViewModel.swift` | the runner |
+| watch Views | `Conditioning/ConditioningSessionListView` (+ `ConditioningEntryRow`), `ConditioningSessionDetailView`, `ConditioningRunnerView`, `ConditioningRunSummaryView`; row in `RoutineListView`, button in `WatchWorkoutSummaryView`, cover in `RootView` | screens |
+
+Strings: 58 new English-key entries with German in the watch `Localizable.xcstrings` (session titles,
+machines, phases, RPE cues, positions, runner and summary copy). The watch localizes the synced raw
+values itself, so it follows its own language.
+
+**Tests (ticket 06).** Watch: `WatchConditioningTimelineTests` (offsets and lookup, first effort and
+completed rounds, the pause-aware clock's checkpoint round trip, and the three shared files identical
+across targets); `WatchConditioningRunCuesTests` (3-2-1 and effort cue, recovery and finish cues, no
+replay on a catch-up or while paused, zone status, 30 s sustained drift then once a minute, resets);
+`WatchConditioningStoreTests` (survives a relaunch, garbage and duplicates ignored, stale week and no
+program show nothing, "today" only on its day and the rest under "this week"); `WatchConditioningRunViewModelTests` (warm-up end
+saves nothing and discards, an early end after the first effort saves once at that moment, pause
+freezes, a recovered session replays no cue and finishes at the timeline's end, the zone only where
+the iPhone put one and never for RPE-only, a sustained drift nudges). iOS:
+`ConditioningWatchOfferTests` (open sessions with the suggestion first and `validUntil` at the week's
+end at the program's volume, the range only for conversational sessions and never with the medication
+switch, empty offer when not enrolled / paused / left, the wire mapping drops swim and is
+deterministic, the offer rides the routine context, is resent only on change and survives a unit
+change). Suites: watch 104/104, iOS 1472/1472.
+
+**Monetization (ticket 06).**
+
+```
+Monetization verdict — watch conditioning runner
+  Tier          Free
+  Derivation    §3 Rule 3 (on the watch app and inside an active session)
+  Mechanism     n/a — nothing is gated
+  Placement     none
+  Nudge         none
+  Free residue  the entire feature
+  Founder note  n/a — nothing gated
+```
+
+Re-checked at completion: no watch file reads an entitlement, no `OnyxProBadge`, no placement. When
+ticket 08 gates program Phases 2–3 on the iPhone, the watch simply runs whatever the iPhone offers —
+the gate belongs in `watchOffer()`'s input, never on the watch.
+
+**Deliberate omissions.** No watch safety screen — the one-line stop rule on the detail screen
+stands in; the full first-use screen is on the iPhone. No "single session" library on the watch —
+only the program's open sessions, which is what the ticket asked for. No record in iPhone History yet
+— that is ticket 07; until then a watch session exists only in Apple Health (and the iPhone's week
+progress does not count it). The volume cannot be changed on the watch; it is the program's.
+
+**Device verification (physical iPhone + Apple Watch, 2026-09-22).** Passed: the Kondition row
+with "Heute: Aerobe Basis" after an iPhone launch (once the sync fix below was in); the personal
+range under "Ziel"; the runner with countdown, phase, heart rate and zone glyph; the countdown
+correct after wrist-down; pause freezing the countdown; haptics at WORK/PAUSE changes wrist-down;
+the workout in Apple Health / Fitness; crash recovery (force-quit mid-session → the runner reopens at
+the right point); strength → "Jetzt Kondition" opening the runner, with two separate,
+non-overlapping workouts in Apple Health.
+
+**Bug found on device: the end dialog came back on top of the summary.** Tapping *Einheit beenden*
+in the "Einheit vorzeitig beenden?" dialog showed the summary briefly, then the dialog again (closable
+with its ✕, which revealed the summary). Cause: the `confirmationDialog` sat on the view wrapping
+every runner state, and the confirm button called `run.end()` directly. The session switched the
+screen to the summary while the watchOS dialog was still animating out with its `isPresented`
+binding still `true`, so the re-render presented it a second time. Fix: the dialog is attached to the
+running screen only, and its button just sets `isEndConfirmed`; `.onChange(of: isConfirmingEnd)`
+calls `end()` once the dialog has closed. Re-checked on device 2026-09-22: fixed.
+
+**Architecture review: PASS WITH WARNINGS (2026-09-21), no critical findings.** Applied: `watchOffer()`
+moved to its own extension file (the view model had crossed 300 lines), the store's precomputed
+sessions (no filtering in `body`), `finish` throwing without a session, and `onSessionFailed`.
+Acknowledged, not changed: `AppDependencies`, `RoutineSyncAuthority` and the iOS
+`WatchConnectivityManager` were already over 300 lines and grew slightly; `refresh()` on every
+activation is main-actor work, bounded to two small fetches plus encoding one small offer.
+
+## Watch runner redesign (2026-09-22)
+
+**Why.** The ticket-06 runner worked but was a scrolling list: phase, countdown, position, effort,
+heart rate, range, arrow, next phase and the buttons did not fit even an Ultra 3, and the zone was
+"128 · 112–140 bpm · ↑" — correct, but it made the user do the arithmetic. The redesign was drawn in
+Claude design ("Watch Conditioning Runner Redesign", https://claude.ai/artifact/Chhz8TStY6r515mWYnhGcA),
+approved by the user, and built as drawn.
+
+**The layout.** Every page fits the screen without scrolling, on every size down to the 40 mm SE.
+
+- **One gauge, two uses.** A 240° arc open at the bottom follows the watch edge
+  (`ConditioningGaugeLayout`: centre at 47 % of the height, radius 43 % of the shorter side, from 150°
+  over the top to 390°). Everything is laid out on that geometry and scaled by
+  `width / 211 pt` (the canvas was drawn for the Ultra 3), so the SE shows the same composition.
+- **Steady state = the heart-rate gauge** (`ConditioningZonePage`). The gauge spans the personal
+  range ± 40 bpm (`ConditioningZoneGauge`, pure): the range is a bright green band in the middle
+  third with its bounds labelled, below it the arc is tinted blue, above it orange, and the live
+  heart rate is a glowing marker that moves along it (animated, no glow in Always-On). The centre
+  says what to *do*, in the state's colour: "Im Ziel" ✓, "Etwas zügiger" ⌃⌃ or "Etwas ruhiger" ⌄⌄,
+  with "noch 14 bpm bis zur Zone" / "12 bpm über der Zone" / "Tempo halten · 112–140" under it;
+  remaining time sits in the gauge's open bottom. RPE-only users (no range) get the same page with
+  the arc as session progress and "RPE 3–4 · Gesprächstempo halten" — never a target.
+- **Every other phase = the countdown ring** (`ConditioningIntervalPage`): the arc empties as the
+  phase runs (green for effort, grey for recovery), the phase in a pill (effort on the tint with
+  black text), the countdown, the RPE cue, a row of round dots, heart rate, and the next phase. In the
+  last three seconds before an effort the page turns into the lead-in: "BELASTUNG IN" and a large
+  green 3-2-1, matching the haptic `.click`s.
+- **Controls one swipe to the left** (`ConditioningControlsPage`), like Apple's Workout app: the
+  running state is a horizontal `TabView(.page)` with the controls page first and the runner selected
+  by default. Two big round buttons, Pause/Resume (amber) and End (red). Pausing jumps back to the
+  runner. Moving them off the main page is also what stops an accidental End mid-sprint. The end
+  confirmation stays attached to the running state with the end-after-dismissal pattern above.
+
+The view model derives what the pages draw (`WatchConditioningRunViewModel+Display`: which page,
+`leadInCount`, `phaseRemainingFraction`, `sessionFraction`, `roundProgress`); the pages take values
+only. New tokens: `OnyxWatch.Colors.zoneBelow` / `zoneAbove` / `gaugeTrack`. Strings: 14 new en/de
+keys ("On target" → "Im Ziel", …); five keys of the old runner were removed. Deliberate trade-off:
+the runner pages use fixed sizes scaled by screen width, not Dynamic Type, so the gauge composition
+never needs scrolling. Architecture review: PASS WITH WARNINGS (a missing "RPE 3–4" catalog entry and
+a doubled VoiceOver label on the controls page, both fixed).
+
+**Verified before handing over.** The pages were rendered to PNG at Ultra 3 (211 × 257 pt) and SE
+40 mm (162 × 197 pt) through a throwaway `ImageRenderer` test and checked against the canvas — that
+caught text without an explicit colour (black on black outside a dark environment), bound labels
+colliding with the phase caption, and the lead-in cue overlapping the round dots, all fixed. Tests:
+`WatchConditioningRunCuesTests.gaugePlacement` and `WatchConditioningRunViewModelTests.displayValues`.
+Watch suite 106/106 (three consecutive green runs); 108/108 with the heart-rate loading state.
+
+**Heart rate while it is loading (2026-09-22).** The first sample of a workout session takes a few
+seconds, and the runner used to show "--" meanwhile. Worse, with no reading there is no zone status,
+so the zone page fell back to the RPE-only copy and told a user *with* a range "RPE 3–4 ·
+Gesprächstempo halten". Now `ConditioningHeartRateReading` (in `WatchConditioningRunViewModel+Display`)
+has three states: **measuring** — a spinner sized to the number it stands in for (so nothing shifts
+when the value arrives), a pulsing heart, "Puls wird gemessen …" and "Ziel 112–140 bpm"; **missing**
+— after 30 s without a sample, counted from when delivery (re)started (a crash-recovered session
+measures again rather than claiming "no heart rate" at once) (loose fit, or Health read access to heart rate denied)
+a dimmed "--", "Kein Puls" and "Sitz der Uhr und Health-Zugriff prüfen", so the spinner never spins
+forever; **bpm** — the gauge as designed. RPE-only users keep their copy in every state; the
+interval page uses the same spinner in its footer. `ImageRenderer` cannot draw the system spinner,
+so its look was checked on device — confirmed by the user 2026-09-22, together with the redesign. Tests: `WatchConditioningRunViewModelTests.heartRateReading`,
+`recoveredSessionMeasuresAgain`. Architecture review: PASS WITH WARNINGS (the recovery window and a
+missing VoiceOver label on "--", both fixed).
+
+**Bug found while testing the redesign: a double finish.** `WatchConditioningRunViewModelTests`'s
+recovered-session test began failing every run: the fake recorder saw **two** finishes. When the
+timeline is over, two ticks — the 250 ms loop and a manual one (or `end()`'s own tick) — could both
+see `position == nil` before the finish they spawned had run. The guard lived inside the async
+`finish`, which reset `isFinishing` when it completed, so the second spawned finish then saved a
+second Apple Health workout. On a watch that is most likely after a crash resume, whose first tick
+already lies past the end. Fix: `claimFinish()` takes the one finish synchronously, before any
+suspension point (in `tick()` and in `end()`, after `end()`'s own tick), and only `resetRunState()`
+on the next start releases it. The test had passed before only by timing luck.
+
 ## Research findings — Apple Health / HealthKit (verified 2026-09-18)
 
 - **Record conditioning as its own `HKWorkout`, separate from the strength workout.**
@@ -774,9 +1068,21 @@ Lifting the picker bound — already a wanted ticket-04 follow-up — would make
   dedup. `WorkoutScheduler` also had reported sync breakage ([forum](https://developer.apple.com/forums/thread/767737)).
   Custom in-app timers it is. Reconsider only for "Workout-app-only" scheduling later.
 - **Watch haptics for work/rest cues** fire in the background because an active `HKWorkoutSession`
-  grants runtime (no `WKExtendedRuntimeSession` needed), but 2025 forum reports describe
-  haptics/sounds not firing in wrist-down Always-On ([forum](https://developer.apple.com/forums/thread/772780))
-  — verify on device.
+  grants runtime (no `WKExtendedRuntimeSession` needed). In the 2025 forum thread about haptics not
+  firing wrist-down in Always-On, Apple DTS called the restriction as-designed *for apps without* an
+  active workout session — wrist-down counts as background, and a workout session is the exception
+  ([forum](https://developer.apple.com/forums/thread/772780)) — verify on device. For Always-On UI
+  refresh Apple documents `TimelineView` + `isLuminanceReduced` (≤ 1 Hz with an ongoing workout);
+  the runner is view-model driven like the existing rest timer.
+- **One workout session at a time (ticket 06, 2026-09-21).** Starting a second `HKWorkoutSession`
+  while one is active force-ends the first (its delegate gets `HKError.errorAnotherWorkoutSessionStarted`);
+  it is safe once the first has reached `.ended`
+  ([errorAnotherWorkoutSessionStarted](https://developer.apple.com/documentation/healthkit/hkerror/code/erroranotherworkoutsessionstarted)).
+  `recoverActiveWorkoutSession()` returns the session with its original `workoutConfiguration`, so
+  the activity type tells strength from conditioning on relaunch. `HKLiveWorkoutBuilder.elapsedTime`
+  and the saved duration exclude paused intervals. For `.swimming`, `swimmingLocationType` and
+  `lapLength` are optional properties, but whether `.unknown` is accepted at session start could not
+  be confirmed from the docs — swim is therefore not offered on the watch.
 
 ## Research findings — sports-science fact-check of the source protocol (2026-09-18)
 

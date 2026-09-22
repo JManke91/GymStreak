@@ -73,7 +73,6 @@
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "A6FBC5CB2ECCED0F0095483C"
             BuildableName = "GymStreakWatch Watch App.app"
-            BlueprintName = "GymStreakWatch Watch App"
             ReferencedContainer = "container:GymStreak.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
@@ -90,7 +89,6 @@
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "A6FBC5CB2ECCED0F0095483C"
             BuildableName = "GymStreakWatch Watch App.app"
-            BlueprintName = "GymStreakWatch Watch App"
             ReferencedContainer = "container:GymStreak.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>

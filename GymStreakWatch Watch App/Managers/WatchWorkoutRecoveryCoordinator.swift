@@ -29,6 +29,9 @@ final class WatchWorkoutRecoveryCoordinator {
 
     private weak var viewModel: WatchWorkoutViewModel?
     private weak var healthKitManager: WatchHealthKitManager?
+    private weak var conditioningRun: WatchConditioningRunViewModel?
+    private weak var conditioningWorkout: WatchConditioningWorkoutManager?
+    private let conditioningCheckpoints = WatchConditioningCheckpointStore()
     private let checkpointStore = WatchActiveWorkoutCheckpointStore()
     private var syncState: WatchSyncStateStore { WatchConnectivityManager.shared.syncState }
 
@@ -40,9 +43,16 @@ final class WatchWorkoutRecoveryCoordinator {
 
     /// Called by `AppState` once the live components exist. Runs any buffered
     /// recovery request.
-    func register(viewModel: WatchWorkoutViewModel, healthKitManager: WatchHealthKitManager) {
+    func register(
+        viewModel: WatchWorkoutViewModel,
+        healthKitManager: WatchHealthKitManager,
+        conditioningRun: WatchConditioningRunViewModel,
+        conditioningWorkout: WatchConditioningWorkoutManager
+    ) {
         self.viewModel = viewModel
         self.healthKitManager = healthKitManager
+        self.conditioningRun = conditioningRun
+        self.conditioningWorkout = conditioningWorkout
         if pendingRequest { recoverIfNeeded() }
     }
 
@@ -66,6 +76,28 @@ final class WatchWorkoutRecoveryCoordinator {
         }
     }
 
+    /// Resumes a conditioning session left running by a previous process, or
+    /// discards its stale checkpoint cleanly. Returns whether `recovered` was taken.
+    ///
+    /// Told apart from strength by the recovered session's activity type — the
+    /// strength session is always `.traditionalStrengthTraining` and HealthKit
+    /// restores the original configuration. No live session means the workout was
+    /// ended or never began; its checkpoint has nothing left to resume.
+    private func resumeConditioning(_ recovered: HKWorkoutSession?) -> Bool {
+        guard let checkpoint = conditioningCheckpoints.load() else { return false }
+        guard let recovered,
+              recovered.workoutConfiguration.activityType != .traditionalStrengthTraining,
+              let conditioningRun, let conditioningWorkout else {
+            conditioningCheckpoints.clear()
+            print("WatchWorkoutRecovery: stale conditioning checkpoint discarded")
+            return false
+        }
+        conditioningWorkout.adopt(recovered)
+        conditioningRun.resumeRecovered(from: checkpoint)
+        print("WatchWorkoutRecovery: conditioning session resumed")
+        return true
+    }
+
     private func performRecovery(
         viewModel: WatchWorkoutViewModel,
         healthKit: WatchHealthKitManager
@@ -78,8 +110,14 @@ final class WatchWorkoutRecoveryCoordinator {
         let frozenPhase = workoutID.flatMap { syncState.entry(id: $0)?.phase }
 
         // Reconnect the live HealthKit session if one is still active.
+        var recovered = await healthKit.recoverActiveSession()
+        // A conditioning session (ticket 06) is recovered first and entirely on its
+        // own path: it has no strength checkpoint and no queue entry, so the planner
+        // below would otherwise finish it as an orphan.
+        if resumeConditioning(recovered) { recovered = nil }
+
         var didRecoverLive = false
-        if let session = await healthKit.recoverActiveSession() {
+        if let session = recovered {
             let start = checkpoint?.startTime ?? session.startDate ?? Date()
             didRecoverLive = healthKit.adoptRecoveredSession(session, startDate: start)
         }

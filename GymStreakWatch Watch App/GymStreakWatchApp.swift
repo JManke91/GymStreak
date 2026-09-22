@@ -28,6 +28,8 @@ struct GymStreakWatchApp: App {
                 .environmentObject(appState.routineStore)
                 .environmentObject(appState.workoutViewModel)
                 .environmentObject(appState.exerciseCatalogStore)
+                .environment(appState.conditioningStore)
+                .environment(appState.conditioningRun)
                 .task {
                     appState.connectServices()
                 }
@@ -55,10 +57,21 @@ struct GymStreakWatchApp: App {
 /// next unrelated re-render.
 private struct RootView: View {
     @ObservedObject var weightUnitStore: WatchWeightUnitStore
+    @Environment(WatchConditioningRunViewModel.self) private var conditioningRun
 
     var body: some View {
         NavigationStack {
             RoutineListView()
+        }
+        // The conditioning runner (docs/fight-conditioning.md, ticket 06), above the
+        // stack because a session starts from a pushed detail screen. Not
+        // swipe-dismissable: it closes through its own Done once the session is over.
+        .fullScreenCover(
+            isPresented: Bindable(conditioningRun).isRunnerPresented,
+            onDismiss: { conditioningRun.runnerDidDismiss() }
+        ) {
+            ConditioningRunnerView()
+                .interactiveDismissDisabled()
         }
         // One injection point for the surfaces that render a weight. Modelled
         // on the iOS root: views read `\.weightUnit` directly rather than every
@@ -81,6 +94,12 @@ final class AppState: ObservableObject {
     /// background wakes, before any UI exists); referenced here at init time
     /// so it is created — and its inbox drained — before views appear.
     let exerciseCatalogStore: ExerciseCatalogStore
+    /// The conditioning offer synced from the iPhone and the one runner that plays it
+    /// (docs/fight-conditioning.md, ticket 06). The store is owned by the connectivity
+    /// manager, like the catalogue.
+    let conditioningStore: WatchConditioningStore
+    let conditioningWorkout: WatchConditioningWorkoutManager
+    let conditioningRun: WatchConditioningRunViewModel
 
     init() {
         let connectivity = WatchConnectivityManager.shared
@@ -93,6 +112,15 @@ final class AppState: ObservableObject {
         self.weightUnitStore = WatchWeightUnitStore(syncState: connectivity.syncState)
         self.healthKitManager = healthKit
         self.exerciseCatalogStore = connectivity.exerciseCatalogStore
+        self.conditioningStore = connectivity.conditioningStore
+        let conditioningWorkout = WatchConditioningWorkoutManager()
+        self.conditioningWorkout = conditioningWorkout
+        self.conditioningRun = WatchConditioningRunViewModel(
+            workout: conditioningWorkout,
+            checkpoints: WatchConditioningCheckpointStore(),
+            // `isWorkoutActive` turns false once the strength session reaches `.ended`.
+            isOtherWorkoutActive: { [weak healthKit] in healthKit?.isWorkoutActive ?? false }
+        )
         self.workoutViewModel = WatchWorkoutViewModel(
             healthKitManager: healthKit,
             connectivityManager: connectivity,
@@ -111,7 +139,9 @@ final class AppState: ObservableObject {
         // delegate) and attempt active-workout recovery on this launch.
         WatchWorkoutRecoveryCoordinator.shared.register(
             viewModel: workoutViewModel,
-            healthKitManager: healthKitManager
+            healthKitManager: healthKitManager,
+            conditioningRun: conditioningRun,
+            conditioningWorkout: conditioningWorkout
         )
         WatchWorkoutRecoveryCoordinator.shared.recoverIfNeeded()
         applicationDidBecomeActive()
@@ -119,5 +149,7 @@ final class AppState: ObservableObject {
 
     func applicationDidBecomeActive() {
         WatchConnectivityManager.shared.transportEligibleWorkouts()
+        // "Today" and the program week roll over by the clock (ticket 06).
+        conditioningStore.refresh()
     }
 }

@@ -3,7 +3,7 @@ import WatchConnectivity
 
 @MainActor
 final class WatchConnectivityManager: NSObject, ObservableObject, WatchSyncServicing,
-    WatchRoutineSnapshotTransporting {
+    WatchRoutineSnapshotTransporting, ConditioningWatchPublishing {
     static let shared = WatchConnectivityManager()
 
     @Published var isReachable = false
@@ -180,6 +180,16 @@ final class WatchConnectivityManager: NSObject, ObservableObject, WatchSyncServi
         routineAuthority.updateWeightUnit(unit.rawValue, push: canSyncRoutines)
     }
 
+    /// Publishes the conditioning offer (docs/fight-conditioning.md, ticket 06),
+    /// merged into the routine `applicationContext` exactly like the weight unit.
+    func publishConditioningOffer(_ offer: ConditioningWatchOffer) {
+        guard let payload = WatchConditioningWire.encode(WatchConditioningMapper.program(from: offer)) else {
+            WatchSyncDiagnostics.error("phone: failed to encode the conditioning offer")
+            return
+        }
+        routineAuthority.updateConditioningProgram(payload, push: canSyncRoutines)
+    }
+
     private var canSyncRoutines: Bool {
         guard let session = session, session.activationState == .activated else {
             WatchSyncDiagnostics.notice("phone: cannot sync routines — session not activated")
@@ -351,6 +361,14 @@ extension WatchConnectivityManager: WCSessionDelegate {
                 self.catalogSender.updateChallenge(fromApplicationContext: receivedContext)
                 self.routineAuthority.updateChallenge(fromApplicationContext: receivedContext)
                 self.onRoutineChallengeUpdated?()
+            }
+
+            // A weight unit or conditioning offer recorded before activation has
+            // not left the phone (`canSyncRoutines` refused it). Activation is the
+            // first moment it can: ask for a routine sync, which carries the extras
+            // and bypasses duplicate suppression while they are pending.
+            if self.routineAuthority.hasUnsentExtras {
+                NotificationCenter.default.post(name: .watchAppBecameAvailable, object: nil)
             }
 
             // Drain the durable inbox (e.g. entries left by a previous launch

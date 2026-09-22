@@ -25,6 +25,10 @@ struct OnyxWatch {
         static let success = Color(red: 48/255, green: 209/255, blue: 88/255) // Vibrant Green
         static let destructive = Color(red: 255/255, green: 69/255, blue: 58/255) // Red
         static let warning = Color(red: 255/255, green: 159/255, blue: 10/255) // Orange
+        // Conditioning heart-rate gauge: below the personal range (pick it up) and above it (ease off).
+        static let zoneBelow = Color(red: 90/255, green: 200/255, blue: 250/255) // #5AC8FA
+        static let zoneAbove = Color(red: 255/255, green: 122/255, blue: 69/255) // #FF7A45
+        static let gaugeTrack = Color(red: 31/255, green: 31/255, blue: 34/255) // #1F1F22
 
         // Text
         static let textPrimary = Color.white

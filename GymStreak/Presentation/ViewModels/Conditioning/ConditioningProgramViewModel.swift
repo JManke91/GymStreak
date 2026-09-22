@@ -41,6 +41,10 @@ final class ConditioningProgramViewModel {
     @ObservationIgnored private let store: any ConditioningProgramStoring
     @ObservationIgnored private let conditioningRecords: any ConditioningRecordRepository
     @ObservationIgnored private let workoutSessions: any WorkoutSessionRepository
+    /// Receives the week's open sessions after every `refresh()` (ticket 06). `nil` in
+    /// tests that do not care about the watch.
+    @ObservationIgnored private let watch: (any ConditioningWatchPublishing)?
+    @ObservationIgnored private let heartRateProfiles: (any HeartRateProfileStoring)?
     @ObservationIgnored private let calendar: Calendar
     @ObservationIgnored private let now: () -> Date
 
@@ -48,12 +52,16 @@ final class ConditioningProgramViewModel {
         store: any ConditioningProgramStoring,
         conditioningRecords: any ConditioningRecordRepository,
         workoutSessions: any WorkoutSessionRepository,
+        watch: (any ConditioningWatchPublishing)? = nil,
+        heartRateProfiles: (any HeartRateProfileStoring)? = nil,
         calendar: Calendar = .current,
         now: @escaping () -> Date = Date.init
     ) {
         self.store = store
         self.conditioningRecords = conditioningRecords
         self.workoutSessions = workoutSessions
+        self.watch = watch
+        self.heartRateProfiles = heartRateProfiles
         self.calendar = calendar
         self.now = now
     }
@@ -112,7 +120,9 @@ final class ConditioningProgramViewModel {
 
     /// Bounded: at most two small fetches — conditioning since the week began (or
     /// the last few days, for the 48 h rule) and the strength workouts of today.
+    /// Also republishes the watch offer, which is idempotent when nothing changed.
     func refresh() {
+        defer { watch?.publishConditioningOffer(watchOffer()) }
         guard let enrollment = store.enrollment else {
             dashboard = nil
             return
@@ -157,6 +167,18 @@ final class ConditioningProgramViewModel {
             currentWeek: currentWeek,
             progress: progress,
             suggestion: suggestion
+        )
+    }
+
+    /// The sessions the watch offers (ticket 06), derived from `dashboard` so the watch
+    /// never disagrees with the Conditioning screen. See `ConditioningProgramViewModel+WatchOffer`.
+    func watchOffer() -> ConditioningWatchOffer {
+        Self.watchOffer(
+            dashboard: dashboard,
+            today: today,
+            profile: heartRateProfiles?.heartRateProfile,
+            calendar: calendar,
+            now: now()
         )
     }
 

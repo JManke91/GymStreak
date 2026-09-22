@@ -6,6 +6,8 @@ struct WatchWorkoutSummaryView: View {
     let onDismiss: () -> Void
 
     @EnvironmentObject private var viewModel: WatchWorkoutViewModel
+    @Environment(WatchConditioningStore.self) private var conditioningStore
+    @Environment(WatchConditioningRunViewModel.self) private var conditioningRun
 
     var body: some View {
         ScrollView {
@@ -18,6 +20,9 @@ struct WatchWorkoutSummaryView: View {
 
                 statsCard
                 exercisesCard
+                if let today = conditioningStore.today {
+                    conditioningButton(today)
+                }
                 doneButton
             }
             .padding(.horizontal, OnyxWatch.Spacing.md)
@@ -195,6 +200,26 @@ struct WatchWorkoutSummaryView: View {
         }
     }
 
+    // MARK: - Conditioning Next (docs/fight-conditioning.md, ticket 06)
+
+    /// Today's conditioning, right after lifting. It dismisses like Done; the
+    /// session starts once this cover is gone and the strength session has ended.
+    private func conditioningButton(_ session: WatchConditioningSession) -> some View {
+        Button {
+            conditioningRun.queueAfterWorkout(session)
+            onDismiss()
+        } label: {
+            VStack(spacing: OnyxWatch.Spacing.xs) {
+                Label("Conditioning next", systemImage: "figure.boxing")
+                    .font(.watchSubheadline)
+                Text("\(WatchConditioningCopy.title(session.sessionType)) · \(WatchConditioningCopy.volume(session))")
+                    .font(.watchCaption2)
+                    .foregroundStyle(OnyxWatch.Colors.textSecondary)
+            }
+            .frame(maxWidth: .infinity)
+        }
+    }
+
     // MARK: - Done Button
 
     private var doneButton: some View {
@@ -230,5 +255,11 @@ struct WatchWorkoutSummaryView: View {
         healthKitManager: WatchHealthKitManager(),
         connectivityManager: WatchConnectivityManager.shared,
         routineStore: RoutineStore(syncState: WatchSyncStateStore())
+    ))
+    .environment(WatchConditioningStore())
+    .environment(WatchConditioningRunViewModel(
+        workout: WatchConditioningWorkoutManager(),
+        checkpoints: nil,
+        isOtherWorkoutActive: { false }
     ))
 }

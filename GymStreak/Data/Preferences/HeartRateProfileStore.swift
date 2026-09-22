@@ -17,6 +17,7 @@ final class HeartRateProfileStore: HeartRateProfileStoring {
     private static let key = "conditioning.heartRateProfile"
 
     @ObservationIgnored private let defaults: UserDefaults
+    @ObservationIgnored var onChange: (() -> Void)?
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
@@ -31,6 +32,7 @@ final class HeartRateProfileStore: HeartRateProfileStoring {
             } else {
                 defaults.removeObject(forKey: Self.key)
             }
+            onChange?()
         }
     }
 }
