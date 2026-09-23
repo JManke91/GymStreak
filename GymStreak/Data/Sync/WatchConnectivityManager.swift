@@ -23,6 +23,10 @@ final class WatchConnectivityManager: NSObject, ObservableObject, WatchSyncServi
     /// so the coordinator drains on receipt, launch, and activation.
     var onWorkoutInboxUpdated: (() -> Void)?
     var onRoutineChallengeUpdated: (() -> Void)?
+    /// Set by the composition root: records a conditioning session finished on the
+    /// watch (docs/fight-conditioning.md, ticket 07). Returns whether it is now in
+    /// History (inserted or already there) — only then is it acknowledged.
+    var onConditioningSessionReceived: ((WatchCompletedConditioningSession) -> Bool)?
 
     /// State machine for the exercise-catalogue file sync. Lazy so `self` can
     /// be its transport; this manager is an app-lifetime singleton.
@@ -113,6 +117,15 @@ final class WatchConnectivityManager: NSObject, ObservableObject, WatchSyncServi
         }
         session.transferUserInfo(payload)
         WatchSyncDiagnostics.info("phone: sent \(description)")
+    }
+
+    /// Tells the watch a finished conditioning session is in History, so it can drop
+    /// it from its outbox. Same two paths as the workout ack; re-sent for duplicates.
+    private func acknowledgeConditioningSession(id: UUID) {
+        sendAck(
+            [WatchConditioningWire.ackKey: id.uuidString],
+            description: "ack for conditioning session \(WatchSyncDiagnostics.shortID(id))"
+        )
     }
 
     var watchRoutineChallenge: (epoch: UUID?, generation: UInt64)? {
@@ -494,6 +507,16 @@ extension WatchConnectivityManager: WCSessionDelegate {
 
     @MainActor
     private func handleIncomingPayload(_ payload: [String: Any], source: String) {
+        if payload[WatchConditioningWire.completedSessionKey] != nil {
+            guard let completed = WatchConditioningWire.completedSession(from: payload) else {
+                WatchSyncDiagnostics.error("phone: undecodable conditioning session via \(source) — ignored")
+                return
+            }
+            if onConditioningSessionReceived?(completed) == true {
+                acknowledgeConditioningSession(id: completed.id)
+            }
+            return
+        }
         if let transactionData = payload[WatchWorkoutWire.templateTransactionKey] as? Data,
            let idString = payload[WatchWorkoutWire.transactionIdKey] as? String,
            let transactionID = UUID(uuidString: idString) {

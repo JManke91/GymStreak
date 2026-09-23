@@ -1,8 +1,9 @@
 //
 //  WatchConditioningModels.swift
 //
-//  iOS → watch wire format for the conditioning offer (ticket 06,
-//  docs/fight-conditioning.md). Rides as JSON `Data` under
+//  Wire formats between iPhone and watch for fight conditioning
+//  (docs/fight-conditioning.md): the iOS → watch offer (ticket 06) and the
+//  watch → iOS finished session (ticket 07). The offer rides as JSON `Data` under
 //  `WatchConditioningProgram.contextKey` in the SAME application context as the
 //  routines — `updateApplicationContext` replaces the whole dictionary, so a
 //  context of its own would clobber them (see the weight unit, which does the same).
@@ -48,7 +49,39 @@ struct WatchHeartRateZone: Codable, Equatable {
     var upperBPM: Int
 }
 
+/// Watch → iOS: one conditioning session finished on the watch (ticket 07). Carries
+/// everything the iPhone's `ConditioningRecord` stores, so the iPhone copies it
+/// rather than re-deriving it from a library that may have changed since.
+struct WatchCompletedConditioningSession: Codable, Equatable, Identifiable {
+    /// Also the `HKMetadataKeyExternalUUID` of the watch's Apple Health workout —
+    /// the one key the iPhone dedupes on.
+    var id: UUID
+    var startTime: Date
+    var endTime: Date
+    var sessionType: String
+    /// Localized on the watch; the iPhone uses it only as `titleSnapshot`.
+    var title: String
+    var energySystem: String
+    var modality: String
+    /// Effort of the work (or steady) phases.
+    var effort: String
+    var roundsCompleted: Int
+    var roundsPlanned: Int
+    var setsPlanned: Int
+    var workInterval: TimeInterval
+    var restInterval: TimeInterval
+    var endedEarly: Bool
+    /// Whether the watch saved the Apple Health workout — the iPhone never writes one.
+    var isSavedToHealth: Bool
+}
+
 enum WatchConditioningWire {
+    /// `transferUserInfo` keys for a finished session and the iPhone's acknowledgment.
+    /// Distinct from the strength workout keys, so neither path mistakes the other's payload.
+    nonisolated static let completedSessionKey = "conditioningSession"
+    nonisolated static let completedSessionIdKey = "conditioningSessionId"
+    nonisolated static let ackKey = "conditioningAck"
+
     /// Sorted keys, so an unchanged offer produces identical bytes and is not resent.
     static func encode(_ program: WatchConditioningProgram) -> Data? {
         let encoder = JSONEncoder()
@@ -58,5 +91,16 @@ enum WatchConditioningWire {
 
     static func decode(_ data: Data) -> WatchConditioningProgram? {
         try? JSONDecoder().decode(WatchConditioningProgram.self, from: data)
+    }
+
+    static func userInfo(for session: WatchCompletedConditioningSession) -> [String: Any]? {
+        guard let data = try? JSONEncoder().encode(session) else { return nil }
+        return [completedSessionKey: data, completedSessionIdKey: session.id.uuidString]
+    }
+
+    /// `nil` when the payload is not a finished conditioning session.
+    static func completedSession(from payload: [String: Any]) -> WatchCompletedConditioningSession? {
+        guard let data = payload[completedSessionKey] as? Data else { return nil }
+        return try? JSONDecoder().decode(WatchCompletedConditioningSession.self, from: data)
     }
 }

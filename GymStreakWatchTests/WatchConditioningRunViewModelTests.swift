@@ -62,6 +62,7 @@ struct WatchConditioningRunViewModelTests {
 
     private func makeRunner(
         clock: Clock,
+        outbox: WatchConditioningOutbox? = nil,
         haptics: @escaping (WKHapticType) -> Void = { _ in }
     ) -> (WatchConditioningRunViewModel, FakeWorkoutRecorder) {
         let recorder = FakeWorkoutRecorder()
@@ -70,6 +71,7 @@ struct WatchConditioningRunViewModelTests {
             checkpoints: WatchConditioningCheckpointStore(
                 directory: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
             ),
+            outbox: outbox,
             isOtherWorkoutActive: { false },
             play: haptics,
             now: { clock.now }
@@ -167,7 +169,7 @@ struct WatchConditioningRunViewModelTests {
         var played: [WKHapticType] = []
         let recorder = FakeWorkoutRecorder()
         let runner = WatchConditioningRunViewModel(
-            workout: recorder, checkpoints: nil, isOtherWorkoutActive: { false },
+            workout: recorder, checkpoints: nil, outbox: nil, isOtherWorkoutActive: { false },
             play: { played.append($0) }, now: { clock.now }
         )
         await runner.start(steadySession(zone: WatchHeartRateZone(lowerBPM: 120, upperBPM: 145)), modality: "run")

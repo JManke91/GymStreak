@@ -516,6 +516,18 @@ final class AppDependencies: ObservableObject {
                 recovery?.reconcile()
             }
         }
+        // A conditioning session finished on the watch (ticket 07): History and the
+        // program's progress follow it exactly like one run on the phone. The refresh
+        // also republishes the offer, so the watch stops offering what was just done.
+        let conditioningIngestor = WatchConditioningIngestor(records: conditioningRecordRepository)
+        watchConnectivity.onConditioningSessionReceived = { [weak self] completed in
+            let outcome = conditioningIngestor.ingest(completed)
+            if outcome == .inserted {
+                NotificationCenter.default.post(name: .historySourceDataDidChange, object: nil)
+                self?.conditioningProgram.refresh()
+            }
+            return outcome != .failed
+        }
         watchConnectivity.onRoutineChallengeUpdated = { [weak coordinator = watchWorkoutIngestion] in
             Task { @MainActor in await coordinator?.routineAuthorityDidChange() }
         }

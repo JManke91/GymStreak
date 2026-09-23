@@ -118,6 +118,7 @@ final class AppState: ObservableObject {
         self.conditioningRun = WatchConditioningRunViewModel(
             workout: conditioningWorkout,
             checkpoints: WatchConditioningCheckpointStore(),
+            outbox: connectivity.conditioningOutbox,
             // `isWorkoutActive` turns false once the strength session reaches `.ended`.
             isOtherWorkoutActive: { [weak healthKit] in healthKit?.isWorkoutActive ?? false }
         )

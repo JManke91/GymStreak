@@ -242,6 +242,7 @@ struct RoutineRowView: View {
             .environment(WatchConditioningRunViewModel(
                 workout: WatchConditioningWorkoutManager(),
                 checkpoints: nil,
+                outbox: nil,
                 isOtherWorkoutActive: { false }
             ))
     }

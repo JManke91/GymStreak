@@ -49,6 +49,7 @@ final class WatchConditioningRunViewModel {
 
     @ObservationIgnored private let workout: any ConditioningWorkoutRecording
     @ObservationIgnored private let checkpoints: WatchConditioningCheckpointStore?
+    @ObservationIgnored private let outbox: WatchConditioningOutbox?
     @ObservationIgnored private let isOtherWorkoutActive: () -> Bool
     @ObservationIgnored private let play: (WKHapticType) -> Void
     @ObservationIgnored private let now: () -> Date
@@ -65,12 +66,14 @@ final class WatchConditioningRunViewModel {
     init(
         workout: any ConditioningWorkoutRecording,
         checkpoints: WatchConditioningCheckpointStore?,
+        outbox: WatchConditioningOutbox?,
         isOtherWorkoutActive: @escaping () -> Bool,
         play: @escaping (WKHapticType) -> Void = { WKInterfaceDevice.current().play($0) },
         now: @escaping () -> Date = Date.init
     ) {
         self.workout = workout
         self.checkpoints = checkpoints
+        self.outbox = outbox
         self.isOtherWorkoutActive = isOtherWorkoutActive
         self.play = play
         self.now = now
@@ -262,6 +265,10 @@ final class WatchConditioningRunViewModel {
     }
 
     /// Callers claim the finish first (`claimFinish()`).
+    ///
+    /// The session goes to the outbox for the iPhone's History (ticket 07) whether or
+    /// not Apple Health saved it — History never depends on Health — and before the
+    /// checkpoint is cleared.
     private func finish(at end: Date, isComplete: Bool) async {
         stopTicking()
         let title = WatchConditioningCopy.title(session?.sessionType ?? "")
@@ -271,6 +278,20 @@ final class WatchConditioningRunViewModel {
             health = .saved
         } catch {
             health = .failed
+        }
+        if let session, let startDate = clock.startDate {
+            outbox?.enqueue(.make(
+                id: externalUUID,
+                session: session,
+                modality: modality,
+                title: title,
+                timeline: timeline,
+                startDate: startDate,
+                endDate: end,
+                elapsed: elapsed,
+                endedEarly: !isComplete,
+                isSavedToHealth: health == .saved
+            ))
         }
         checkpoints?.clear()
         state = .finished(Summary(isComplete: isComplete, elapsed: elapsed, health: health))

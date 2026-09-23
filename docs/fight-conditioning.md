@@ -1,13 +1,13 @@
 # Fight Conditioning (add-on)
 
-**Status (2026-09-21): tickets 01–02 shipped and device-verified — the iPhone runner (library,
+**Status (2026-09-23): tickets 01–02 shipped and device-verified — the iPhone runner (library,
 preview, runner, Apple Health write) and History logging (own SwiftData record, interleaved cards,
 detail, delete). Ticket 03 (personal heart-rate zones, incl. the Apple Health peak-HR suggestion) shipped and
 device-verified the same day. Ticket 04 (the 12-week program — showcase, enrollment, weekly targets,
 today's suggestion) shipped and was device-verified 2026-09-20. Ticket 05 (the post-workout add-on on
 the iPhone workout summary) shipped and was device-verified 2026-09-21 — its `.later` branch is not
-reachable before program week 5 and remains unit-tested only (see that section). Ticket 06 (the watch runner with the live heart-rate zone) shipped and was device-verified 2026-09-22; its runner was then redesigned (heart-rate gauge, swipe-away controls — see "Watch runner redesign").**
-Watch → iPhone history sync (07) and the Pro gate (08) are later tickets. This file holds
+reachable before program week 5 and remains unit-tested only (see that section). Ticket 06 (the watch runner with the live heart-rate zone) shipped and was device-verified 2026-09-22; its runner was then redesigned (heart-rate gauge, swipe-away controls — see "Watch runner redesign"). Ticket 07 (watch sessions sync to iPhone History and the program week) shipped and was device-verified 2026-09-23.**
+The Pro gate (08) is the one remaining ticket. This file holds
 the pre-implementation research (so it is not re-done) and the feature doc (iOS + watch
 architecture, components, edge cases) as tickets land. Parent Things task: "Add fighting conditioning into workout routine"
 (`TFUtiRbLsX4VScjcnbdZbv`, Gym Streak project).
@@ -95,8 +95,9 @@ GymStreak-authored workout carrying an external UUID into the watch-workout reco
 (`docs/healthkit-ios-workout-save.md`). A conditioning workout has no strength-history
 counterpart, so without a guard it would be offered in the pending-sync banner as a "missing"
 workout and imported as a placeholder strength session. The drain therefore skips workouts whose
-`GymStreakSessionKind` is `conditioning`. Ticket 07 (watch → iPhone sync) must revisit this if it
-wants conditioning recovery.
+`GymStreakSessionKind` is `conditioning`. Ticket 07 kept the skip: a watch session reaches History
+through the watch's own outbox, which stays until the iPhone acknowledges, so no HealthKit-based
+recovery is needed for conditioning.
 
 **First-use safety screen.** Shown inside the runner cover the first time a session is started
 (`ConditioningSafetyStore`, device-local `UserDefaults` flag `conditioning.safetyAcknowledged`,
@@ -826,8 +827,8 @@ user to ignore it.
 with the modality's activity type — run `.running`/outdoor, bike `.cycling`/indoor, rower
 `.rowing`/indoor, sled/ropes/med ball `.highIntensityIntervalTraining`/indoor, the iPhone's mapping.
 Deliberately **not** `WatchHealthKitManager`: that manager's finalization is bound to the durable
-strength queue, which conditioning does not use (ticket 07 decides how watch sessions reach iPhone
-History). Metadata on save: `HKMetadataKeyExternalUUID`, brand name = session title,
+strength queue, which conditioning does not use (watch sessions reach iPhone History through their
+own outbox — ticket 07 below). Metadata on save: `HKMetadataKeyExternalUUID`, brand name = session title,
 `GymStreakSessionKind = conditioning` — the key the iPhone's recovery drain already skips, so a watch
 conditioning workout never shows up in the strength recovery banner. Ending before the first effort
 discards the session (nothing saved), the iPhone rule. Live heart rate comes from
@@ -923,9 +924,8 @@ the gate belongs in `watchOffer()`'s input, never on the watch.
 
 **Deliberate omissions.** No watch safety screen — the one-line stop rule on the detail screen
 stands in; the full first-use screen is on the iPhone. No "single session" library on the watch —
-only the program's open sessions, which is what the ticket asked for. No record in iPhone History yet
-— that is ticket 07; until then a watch session exists only in Apple Health (and the iPhone's week
-progress does not count it). The volume cannot be changed on the watch; it is the program's.
+only the program's open sessions, which is what the ticket asked for. The volume cannot be changed
+on the watch; it is the program's. (Watch sessions reaching iPhone History is ticket 07, below.)
 
 **Device verification (physical iPhone + Apple Watch, 2026-09-22).** Passed: the Kondition row
 with "Heute: Aerobe Basis" after an iPhone launch (once the sync fix below was in); the personal
@@ -1023,6 +1023,111 @@ second Apple Health workout. On a watch that is most likely after a crash resume
 already lies past the end. Fix: `claimFinish()` takes the one finish synchronously, before any
 suspension point (in `tick()` and in `end()`, after `end()`'s own tick), and only `resetRunState()`
 on the next start releases it. The test had passed before only by timing luck.
+
+## Watch → iPhone History (ticket 07)
+
+**What the user gets.** A conditioning session finished on the watch appears in the iPhone's History
+as the same card and detail screen as one run on the phone, counts towards the program week
+("This week" dots, *Today's conditioning*), and the watch stops offering it — once, even if
+WatchConnectivity delivers it twice or the phone was off or out of range at the time (it arrives on
+reconnect). Deleting it on the iPhone offers "GymStreak and Apple Health" when the watch saved the
+workout: the phone may delete a watch-recorded workout (verified for strength, `docs/delete-workout.md`).
+
+**Flow.**
+
+```
+watch  WatchConditioningRunViewModel.finish
+         Apple Health save (watch) → outbox.enqueue(WatchCompletedConditioningSession) → clear checkpoint
+       WatchConditioningOutbox (App Group Conditioning/outbox.json, atomic)
+         → WatchConnectivityManager.transportConditioningSessions: transferUserInfo per pending entry
+  ↓    ["conditioningSession": JSON, "conditioningSessionId": uuid]
+iPhone WatchConnectivityManager.handleIncomingPayload → onConditioningSessionReceived (AppDependencies)
+         WatchConditioningIngestor.ingest → ConditioningRecord (main context, one save)
+         inserted → .historySourceDataDidChange + conditioningProgram.refresh() (republishes the offer)
+         inserted or duplicate → ack ["conditioningAck": uuid] (sendMessage if reachable + transferUserInfo)
+  ↑
+watch  handleIncoming → outbox.acknowledge(id) — the only thing that removes an entry
+```
+
+**The id is the key.** The session id is the watch's `HKMetadataKeyExternalUUID`, exactly as on the
+phone (ticket 02), so record, Health workout and wire payload share one UUID. `healthKitWorkoutId` is
+that id only when the watch reported the Health save as successful; a failed save still reaches History
+(History never depends on Health). The iPhone **never** writes an `HKWorkout` for a watch session — the
+ingest path has no HealthKit dependency at all — and its recovery drain already skips conditioning by
+the `GymStreakSessionKind` metadata.
+
+**Idempotency (`WatchConditioningIngestor`, `Data/Sync`).** Dedupes on a receipt list of ingested ids
+(`UserDefaults`, `conditioning.watchSessionReceipts`) **and** `ConditioningRecordRepository.find(id:)`.
+The record alone is not enough: the watch may resend between the iPhone's save and the ack arriving
+(a delivered transfer leaves `outstandingUserInfoTransfers`, and any trigger then queues it again), and
+if the user deleted the session in that window the redelivery would resurrect it. A record already
+present without a receipt (e.g. arrived via iCloud from another phone) is answered as a duplicate and
+gets its receipt. Receipts are a few dozen bytes per session and are never pruned — the same "no proven
+bound on stale delivery" reasoning as the strength receipts (`docs/watch-sync.md`). A failed save
+removes the inserted object again and is not acknowledged, so the watch resends.
+
+**Why not the strength pipeline.** `docs/watch-sync.md`'s inbox / isolated-context ingestion /
+per-file receipts / finalizer state machine exists for template transactions, per-routine sequencing
+and HealthKit finalization phases. A conditioning session has none of those: it is one flat,
+self-contained value. The two properties that matter carry over — durable on the watch until an
+app-level ack (a finished transfer is not proof the iPhone persisted it), and idempotent on the iPhone
+— with a JSON file and a receipt list. Differences accepted on purpose: no iPhone-side inbox (a crash
+between receipt and save just means no ack, and the watch's outbox resends), no `sendMessage` fast
+path from the watch (`transferUserInfo` delivers promptly when reachable, and each extra path is one
+more duplicate), and the insert goes through the main context like the iPhone runner's own record.
+
+**What the payload carries (`WatchCompletedConditioningSession`, in the shared
+`WatchConditioningModels.swift`).** Everything `ConditioningRecord` stores, computed on the watch from
+the timeline it actually ran (`WatchCompletedConditioningSession.make`, mirroring
+`ConditioningRecord.make`): rounds completed (fully finished work intervals) and planned, sets
+(`totalSets` of the work phases), work and rest interval (first `.work` / `.rest` phase), the
+work-phase effort (records the beginner variant), `endedEarly`, the watch-localized title as
+`titleSnapshot`. The iPhone copies it rather than re-deriving it from its library, so a later library
+change cannot alter what the watch recorded. One small divergence: a one-round interval session has no
+rest phase, so the watch records `restInterval` 0 where the phone would record the definition's rest.
+
+**Triggers (watch).** `transportConditioningSessions()` runs on enqueue, and inside
+`transportEligibleWorkouts()` — WCSession activation, reachability change, app activation, the
+WatchConnectivity background wake — plus on the iPhone's workout queue-drain request, which the phone
+sends on its own activation and reachability changes. A transfer failure schedules the manager's one
+five-second retry — except a terminal WCError (`payloadTooLarge`, `payloadUnsupportedTypes`,
+`invalidParameter`), which is only logged and waits for the next lifecycle trigger, so a doomed payload
+is never hot-looped. Entries already in the system queue are not queued again. Two cases never
+converge and are accepted: an iPhone build without ticket 07 and an iPhone whose save keeps failing —
+the watch then resends on every trigger (bounded by trigger frequency; the apps ship together).
+
+**Crash window.** Health save → enqueue → clear checkpoint. A crash after the Health save but before
+the enqueue leaves the workout in Apple Health without a History record: with no live session left to
+recover, `WatchWorkoutRecoveryCoordinator` discards the stale checkpoint. The window is milliseconds
+wide and was accepted rather than adding a pre-save outbox phase.
+
+**Components (ticket 07).**
+
+| Target | File | Role |
+|---|---|---|
+| Shared (identical) | `WatchConditioningModels.swift` — `WatchCompletedConditioningSession`, wire keys, `userInfo(for:)` / `completedSession(from:)` | wire |
+| watch Models | `Conditioning/WatchCompletedConditioningSession+Run.swift` | timeline → payload |
+| watch Managers | `WatchConditioningOutbox.swift`; `WatchConnectivityManager.transportConditioningSessions`, ack in `handleIncoming` | durable queue + transport |
+| watch ViewModels | `WatchConditioningRunViewModel.finish` (enqueue), `outbox:` init parameter | hand-off |
+| iOS Data | `Sync/WatchConditioningIngestor.swift`, `WatchConditioningMapper.record(from:)`, `WatchConnectivityManager` (`onConditioningSessionReceived`, `acknowledgeConditioningSession`) | ingest + ack |
+| iOS App | `AppDependencies` — ingestor, History notification, program refresh | wiring |
+
+**Tests (ticket 07).** iOS `WatchConditioningIngestorTests`: duplicate deliveries → one record; a
+redelivery after delete does not resurrect; a record already present is a duplicate; field mapping and
+the Health id only when saved; a watch-logged session counts towards the program week. Watch
+`WatchConditioningOutboxTests`: survives a relaunch and leaves only on its ack; idempotent enqueue;
+wire round trip; a completed run queues one entry with the timeline's numbers and the Health id; ended
+early counts only finished rounds; a failed Health save is still queued as not-in-Health; a warm-up end
+queues nothing; set-based payload. Suites: iOS 1478/1478, watch 116/116 (2026-09-22).
+
+**Monetization (ticket 07).** Free — §3 Rule 4 (retains the user's own logged data) and Rule 3 (watch).
+
+**Device verification — PASSED (physical iPhone + Apple Watch, 2026-09-23).** A session finished on the
+watch appeared in History with the right rounds and the "Ended early" marker, raised the weekly count on
+the Conditioning screen, and disappeared from the watch's offer. With the iPhone powered off during a
+second session, it arrived exactly once after the phone was switched on and unlocked. Deleting it with
+"GymStreak and Apple Health" removed the watch-recorded workout from the Health app, and it did not come
+back after a force-quit and relaunch — the receipt list holds.
 
 ## Research findings — Apple Health / HealthKit (verified 2026-09-18)
 

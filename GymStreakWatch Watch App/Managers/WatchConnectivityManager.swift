@@ -45,6 +45,9 @@ final class WatchConnectivityManager: NSObject, ObservableObject {
     /// ticket 06). Owned here for the same reason as the catalogue store: the
     /// context it rides in can arrive before any UI exists.
     let conditioningStore = WatchConditioningStore()
+    /// Conditioning sessions finished here that the iPhone has not acknowledged yet
+    /// (ticket 07). Sent from every trigger the workout queue is sent from.
+    let conditioningOutbox = WatchConditioningOutbox()
 
     private override init() {
         super.init()
@@ -58,6 +61,9 @@ final class WatchConnectivityManager: NSObject, ObservableObject {
         // still reaches iOS.
         syncState.onChallengeStateChanged = { [weak self] in
             self?.publishChallengeContext()
+        }
+        conditioningOutbox.onEnqueued = { [weak self] in
+            self?.transportConditioningSessions()
         }
         if WCSession.isSupported() {
             session = WCSession.default
@@ -148,6 +154,24 @@ final class WatchConnectivityManager: NSObject, ObservableObject {
     /// duplicate acknowledgment-only.
     func transportEligibleWorkouts() {
         workoutTransport.reconcile()
+        transportConditioningSessions()
+    }
+
+    /// Sends every unacknowledged conditioning session (ticket 07) with
+    /// `transferUserInfo`, which WatchConnectivity queues while the iPhone is away.
+    /// One already in the system queue is not queued again; one delivered but not
+    /// yet acknowledged may be, and the iPhone answers that duplicate with an ack.
+    func transportConditioningSessions() {
+        guard let session, session.activationState == .activated,
+              !conditioningOutbox.pending.isEmpty else { return }
+        let outstanding = Set(session.outstandingUserInfoTransfers.compactMap {
+            $0.userInfo[WatchConditioningWire.completedSessionIdKey] as? String
+        })
+        for completed in conditioningOutbox.pending where !outstanding.contains(completed.id.uuidString) {
+            guard let payload = WatchConditioningWire.userInfo(for: completed) else { continue }
+            session.transferUserInfo(payload)
+            WatchSyncDiagnostics.info("watch: sent conditioning session \(WatchSyncDiagnostics.shortID(completed.id)) to iPhone")
+        }
     }
 
     private func scheduleWorkoutTransportRetry() {
@@ -298,11 +322,18 @@ extension WatchConnectivityManager: WCSessionDelegate {
     nonisolated func session(_ session: WCSession, didFinish userInfoTransfer: WCSessionUserInfoTransfer, error: Error?) {
         let semanticIdString = userInfoTransfer.userInfo[WatchWorkoutWire.transactionIdKey] as? String
             ?? userInfoTransfer.userInfo[WatchWorkoutWire.workoutIdKey] as? String
+        let conditioningIdString = userInfoTransfer.userInfo[WatchConditioningWire.completedSessionIdKey] as? String
         delegateWorkTracker.beginWork()
         Task { @MainActor in
             defer { self.delegateWorkTracker.endWork() }
             guard let error = error else {
                 WatchSyncDiagnostics.info("transport: transferUserInfo delivered to system — awaiting iPhone save ack before retiring")
+                return
+            }
+            // A conditioning session has no quarantine: a doomed payload is logged and left
+            // for the next lifecycle trigger rather than retried every five seconds.
+            if let conditioningIdString, Self.isTerminalTransportError(error) {
+                WatchSyncDiagnostics.error("transport: conditioning session \(conditioningIdString) failed permanently — \(error.localizedDescription)")
                 return
             }
             if let semanticIdString, let semanticID = UUID(uuidString: semanticIdString),
@@ -330,6 +361,12 @@ extension WatchConnectivityManager: WCSessionDelegate {
     private func handleIncoming(_ payload: [String: Any]) {
         if workoutTransport.handleIncoming(payload) {
             WatchSyncDiagnostics.info("watch: received workout queue-drain request from iPhone")
+            transportConditioningSessions()
+            return
+        }
+        if let ackString = payload[WatchConditioningWire.ackKey] as? String, let id = UUID(uuidString: ackString) {
+            conditioningOutbox.acknowledge(id: id)
+            WatchSyncDiagnostics.info("watch: conditioning session \(WatchSyncDiagnostics.shortID(id)) acknowledged by iPhone")
             return
         }
         if let record = TemplateAckRecord.from(payload: payload) {

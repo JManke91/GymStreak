@@ -481,6 +481,17 @@ and an unchanged routine sync was suppressed. `hasUnsentExtras` now bypasses tha
 until a context carrying the extras is accepted, and activation posts `.watchAppBecameAvailable`
 to trigger the sync.
 
+### Finished conditioning sessions travel watch → iOS on their own path (fight-conditioning ticket 07)
+
+A conditioning session finished on the watch does **not** use the strength queue above. The watch
+keeps it in `WatchConditioningOutbox` (App Group `Conditioning/outbox.json`), sends it with
+`transferUserInfo` under `"conditioningSession"` / `"conditioningSessionId"` from every trigger
+`transportEligibleWorkouts()` covers (plus the iPhone's queue-drain request), and removes it only on
+the iPhone's `"conditioningAck"`. The iPhone routes it in `handleIncomingPayload` ahead of the workout
+keys to `WatchConditioningIngestor` (idempotent by the Health external UUID, with a receipt list so a
+deleted session is not resurrected) and acks inserted and duplicate deliveries alike. It never writes
+an `HKWorkout`. Why the lighter design is sufficient: `docs/fight-conditioning.md` (ticket 07).
+
 ### Mixed-version payloads
 
 A requested-template payload without ordering identity (old watch build) may run the idempotent set-only reconciliation only while **no** sequenced outcome exists for its routine. Once one does, it can no longer prove it is newer: history is preserved and deduplicated, `didUpdateTemplate` is corrected to false, current routine state is staged, and the intent is answered with the plain acknowledgment its sender understands. Successful no-receipt legacy reconciliation similarly corrects the flag to true.

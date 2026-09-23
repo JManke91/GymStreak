@@ -3,7 +3,8 @@
 //  GymStreak
 //
 //  Domain conditioning offer → the watch wire DTO (docs/fight-conditioning.md,
-//  ticket 06). The watch runs the phases as sent, so expansion happens here.
+//  ticket 06; the watch runs the phases as sent, so expansion happens here), and
+//  a session finished on the watch → the History record (ticket 07).
 //
 
 import Foundation
@@ -34,6 +35,29 @@ enum WatchConditioningMapper {
                     }
                 )
             }
+        )
+    }
+
+    /// A session finished on the watch → its History record. A straight copy: the
+    /// watch derived the numbers from the timeline it actually ran. The Health id is
+    /// the record id only when the watch saved that workout.
+    static func record(from completed: WatchCompletedConditioningSession) -> ConditioningRecord {
+        ConditioningRecord(
+            id: completed.id,
+            startTime: completed.startTime,
+            endTime: completed.endTime,
+            sessionTypeRaw: completed.sessionType,
+            titleSnapshot: completed.title,
+            energySystemRaw: completed.energySystem,
+            modalityRaw: completed.modality,
+            effortRaw: completed.effort,
+            roundsCompleted: completed.roundsCompleted,
+            roundsPlanned: completed.roundsPlanned,
+            setsPlanned: completed.setsPlanned,
+            workInterval: completed.workInterval,
+            restInterval: completed.restInterval,
+            endedEarly: completed.endedEarly,
+            healthKitWorkoutId: completed.isSavedToHealth ? completed.id : nil
         )
     }
 }
