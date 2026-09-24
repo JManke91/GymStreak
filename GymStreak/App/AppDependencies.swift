@@ -602,7 +602,10 @@ final class AppDependencies: ObservableObject {
             conditioningRecords: conditioningRecordRepository,
             workoutSessions: workoutSessionRepository,
             watch: conditioningWatch,
-            heartRateProfiles: heartRateProfileStore
+            heartRateProfiles: heartRateProfileStore,
+            // The P12 depth gate (ticket 08). Wired here and nowhere else — left
+            // out the program is ungated, which is only ever what a test wants.
+            gate: ConditioningProgramGate(entitlements: proEntitlements, paywalls: paywalls)
         )
         heartRateProfileStore.onChange = { [weak program] in program?.refresh() }
         return program

@@ -17,12 +17,12 @@ struct PaywallPlacementTests {
 
     @Test("Every §8 trigger has a placement, and each carries a headline key")
     func placementsCoverStrategy() {
-        // Nine §8 triggers, plus `settingsUpgrade`, which is not a §8 trigger at
+        // Ten §8 triggers, plus `settingsUpgrade`, which is not a §8 trigger at
         // all: it is the Settings purchase entry point added after App Review
         // could find no way to buy (appstore-rejection-1.1.9.md §3.9). The
         // first-run tour has no placement — the ask was retired
         // (docs/acquisition-strategy.md §4.12).
-        #expect(PaywallPlacement.allCases.count == 10)
+        #expect(PaywallPlacement.allCases.count == 11)
 
         for placement in PaywallPlacement.allCases {
             #expect(placement.identifier == placement.rawValue)

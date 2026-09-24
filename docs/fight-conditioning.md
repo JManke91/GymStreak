@@ -6,10 +6,10 @@ detail, delete). Ticket 03 (personal heart-rate zones, incl. the Apple Health pe
 device-verified the same day. Ticket 04 (the 12-week program — showcase, enrollment, weekly targets,
 today's suggestion) shipped and was device-verified 2026-09-20. Ticket 05 (the post-workout add-on on
 the iPhone workout summary) shipped and was device-verified 2026-09-21 — its `.later` branch is not
-reachable before program week 5 and remains unit-tested only (see that section). Ticket 06 (the watch runner with the live heart-rate zone) shipped and was device-verified 2026-09-22; its runner was then redesigned (heart-rate gauge, swipe-away controls — see "Watch runner redesign"). Ticket 07 (watch sessions sync to iPhone History and the program week) shipped and was device-verified 2026-09-23.**
-The Pro gate (08) is the one remaining ticket. This file holds
+reachable before program week 5 and remains unit-tested only (see that section). Ticket 06 (the watch runner with the live heart-rate zone) shipped and was device-verified 2026-09-22; its runner was then redesigned (heart-rate gauge, swipe-away controls — see "Watch runner redesign"). Ticket 07 (watch sessions sync to iPhone History and the program week) shipped and was device-verified 2026-09-23. Ticket 08 (the Pro depth gate on program Phases 2–3) shipped 2026-09-23 — the last ticket of the set.**
+The feature is complete. This file holds
 the pre-implementation research (so it is not re-done) and the feature doc (iOS + watch
-architecture, components, edge cases) as tickets land. Parent Things task: "Add fighting conditioning into workout routine"
+architecture, components, edge cases). Parent Things task: "Add fighting conditioning into workout routine"
 (`TFUtiRbLsX4VScjcnbdZbv`, Gym Streak project).
 
 ## What it is
@@ -549,8 +549,9 @@ untested: it needs a second device on the same account.
   title mid-scroll. Cosmetic and consistent with the app's other full-screen covers; a scroll-edge
   background on the showcase would fix it.
 
-**Monetization (ticket 04).** Free and ungated for now, as planned — ticket 08 adds the Phase 2–3
-depth gate at `PaywallPlacement.conditioningProgram`. Recorded in `docs/monetization-strategy.md` §4.
+**Monetization (ticket 04).** Phase 1 (weeks 1–4) is free; Phases 2–3 are behind the P12 depth gate
+at `PaywallPlacement.conditioningProgram` — see "The Pro depth gate (ticket 08)" below,
+`docs/monetization-strategy.md` §4.2a P12 and `docs/pro-subscription.md` §5l.
 
 **Watch target.** Unchanged by ticket 04 — but since ticket 06 every `refresh()` also republishes
 the week's open sessions to the watch (see below).
@@ -694,8 +695,9 @@ Monetization verdict — post-workout conditioning add-on
 ```
 
 Re-checked at completion: nothing added here reads `ProEntitlementProviding` and no `PaywallPlacement`
-was added. Ticket 08 still gates program Phases 2–3; this card shows whatever session the user's own
-plan asks for, so it inherits that gate rather than needing one.
+was added. Ticket 08 gates program Phases 2–3; this card shows whatever session the user's own
+plan asks for, so it inherits that gate rather than needing one — `addOn(finishedAt:)` returns
+`.none` for a locked week, so no card renders at all.
 
 **Two things the architecture review changed** (verdict: PASS WITH WARNINGS, no critical findings):
 
@@ -723,6 +725,17 @@ workout and opens the runner, History then lists both the strength workout and t
 and **Apple Health shows two separate workouts whose times do not overlap** — the criterion this
 ticket turned on. A third workout the same day is offered nothing, which is the coach's
 one-session-a-day rule reaching the summary screen correctly.
+
+**Two capabilities deliberately left out of the add-on** (harvested from ticket 05 at archive):
+
+- *The modality cannot be chosen from the add-on.* **Start now** goes straight to the runner with the
+  session's default modality, as the ticket specified. The research finding that maximal efforts
+  prefer a bike or rower is therefore not honoured on this path. To restore the choice, route
+  `ConditioningAddOnViewModel.start()` through `ConditioningPreviewView` with
+  `initialOptions: target.options` — it costs the user one extra tap.
+- *A dismissal is not remembered within a workout.* Dismissing the card and reopening the summary
+  (cancel → finish again) offers it afresh. Deliberate: nothing is persisted for a dismissal. If it
+  ever reads as nagging, key the dismissal on the session id.
 
 **Not verified on device, and why.** The `.later` branch — and with it the six-hour explanation, the
 reminder and the *Start anyway* override — needs a lactic or alactic week, which first occurs in
@@ -920,7 +933,8 @@ Monetization verdict — watch conditioning runner
 
 Re-checked at completion: no watch file reads an entitlement, no `OnyxProBadge`, no placement. When
 ticket 08 gates program Phases 2–3 on the iPhone, the watch simply runs whatever the iPhone offers —
-the gate belongs in `watchOffer()`'s input, never on the watch.
+the gate belongs in `watchOffer()`'s input, never on the watch. That is exactly where it landed: a
+locked week publishes an empty offer and no watch file changed.
 
 **Deliberate omissions.** No watch safety screen — the one-line stop rule on the detail screen
 stands in; the full first-use screen is on the iPhone. No "single session" library on the watch —
@@ -1128,6 +1142,156 @@ the Conditioning screen, and disappeared from the watch's offer. With the iPhone
 second session, it arrived exactly once after the phone was switched on and unlocked. Deleting it with
 "GymStreak and Apple Health" removed the watch-recorded workout from the Health app, and it did not come
 back after a force-quit and relaunch — the receipt list holds.
+
+## The Pro depth gate (ticket 08)
+
+**What the user gets.** A free user trains the whole of **Phase 1 — weeks 1 to 4, the aerobic base**,
+with nothing locked, nudged or badged. In **week 4** an `OnyxCapNudge` under the weekly targets says
+*"Week 4 of 4 free · Phase 2 starts next week"* — a hint with no call to action, so the wall is
+announced before it is hit. From **week 5** the Conditioning screen still shows the user's own status
+card (phase, "Week 5 of 12", the phase rail) and their own weekly targets, but the targets card is
+**blurred behind `OnyxProLockOverlay`** with the headline *"Repeatable speed and explosive power"* and
+an **Unlock** button that raises `PaywallPlacement.conditioningProgram`. A caption under it names the
+free residue: every logged session stays theirs, and single sessions stay free. A Pro, trial,
+lifetime or Founder user sees none of this and crosses week 5 without noticing anything.
+
+```
+Monetization verdict — Fight Conditioning (shipped)
+  Tier          Free with a Pro depth gate
+  Derivation    §3 Rule 2 (the gate fires after four weeks of investment)
+  Mechanism     depth/window gate + blurred preview of the user's own Phase 2–3 plan
+  Placement     PaywallPlacement.conditioningProgram (new; headline en+de, RevenueCat placement)
+  Nudge         OnyxCapNudge in week 4 — "Phase 2 starts next week"
+  Free residue  Phase 1 in full · every logged session · the single-session library ·
+                the runner and the watch, always
+  Founder note  The existing base is lifters, who are grandfathered anyway; fighters are a new
+                audience arriving after the cutoff, so this gate has real upside (§7).
+```
+
+**Where the decision lives.** `ConditioningProgramGatingPolicy` (`Domain/Services/`, pure,
+isolation-agnostic, no localization keys) answers three questions off a week number and two flags:
+`isWeekLocked`, `isPhaseLocked` and `isLastFreeWeek`. The free depth is
+`ProFeatureCaps.freeConditioningProgramWeeks = 4`, a number rather than "phase 1" so it stays
+retunable in a one-line diff (§4.4's argument). Because a number *can* land mid-phase,
+`freeConditioningWeeksCoverPhaseOne` pins it against `ConditioningProgramContent.phases` — retuning
+the cap to a value that cuts a block in half fails a test instead of shipping.
+
+**One gate, evaluated once, read in two places.** `ConditioningProgramViewModel.refresh()` asks the
+policy once and carries the answer on `ConditioningProgramDashboard.isLocked`. Everything that could
+*hand out* a session reads that one field rather than asking the entitlement itself:
+
+| Consumer | Behaviour on a locked week |
+|---|---|
+| `dashboard.suggestion` | `nil` — there is nothing to start today |
+| `watchOffer()` | `.none(on:)` — the watch receives no sessions at all |
+| `addOn(finishedAt:isHeavyLowerBody:)` | `.none` — no post-workout card renders |
+| `dashboard.progress` | **unchanged and fully populated** — the view needs the real targets to blur |
+
+That last row is the whole of §3 Rule 2 in one line: the lock blurs the user's own plan, it does not
+hide it, because the loss the unlock is measured against has to be *their* numbers.
+
+**The watch never learns a gate exists.** The only path from the program to the watch is
+`watchOffer()`, and that is the single place the gate touches — a locked week publishes an empty
+offer, which the watch already knows how to render as "no conditioning" (it is the same state as not
+enrolled, paused or completed). No watch file changed in this ticket, and the watch shows no lock, no
+badge and no paywall. Rule 3 holds structurally rather than by convention.
+
+**Nothing in the runner, the history or the library is gated** (Rules 3 and 4). A session already
+running is untouched; the single-session library is complete for everyone; logged records are never
+filtered, hidden or deleted by entitlement.
+
+**The blur is read live, the nudge is not.** `ConditioningProgramSection` reads
+`viewModel.isProgramLocked` — which reads `entitlements.state` inside the call — so a purchase made
+on the paywall this very card raised unblurs it on the spot (`docs/pro-subscription.md` §3c). The
+week-4 hint reads the frozen `dashboard.isLastFreeWeek` instead, because a hint one render late costs
+nothing. Both converge anyway: the ViewModel holds an `EntitlementChangeObserver` that calls
+`refresh()`, which is also what re-publishes the watch offer on a purchase, a restore or a lapse.
+
+**Lapse behaviour (§7 Rule 4).** A lapsed subscriber loses no data and no position. The enrollment is
+a value in `ConditioningProgramStore` that no gate writes, `ConditioningProgramSchedule` keeps
+advancing the week, and every `ConditioningRecord` stays. The program simply falls back to the locked
+Phase 2–3 view, and resubscribing restores it with no migration in either direction —
+`lapseKeepsProgressAndLogs` drives `.subscription → .free → .lifetime` and asserts the enrollment,
+the week and the logged record survive both transitions.
+
+**A third paywall host, and why.** The Conditioning screen is a **full-screen cover** presented from
+the Routines tab, and a sheet raised at the app root never reaches the screen while a cover is up —
+it would surface later, after the user had left the screen the gate is on. `ConditioningLibraryView`
+therefore hosts its own `ProPaywallView` filtered to `.conditioningProgram`, exactly as the coach-chat
+cover hosts `.coachChat` (§5e), and `ContentView` excludes that one placement from the root host
+permanently rather than behind a flag — it can only ever be raised from inside that cover. Any *other*
+placement that becomes pending while the cover is up stays pending and arrives at the root host when
+the user returns, which is the correct deferral.
+
+**Restarting the program is free, deliberately.** A free user who finishes or leaves and re-enrols
+gets Phase 1 again. Blocking that would take away the free tier's own capability to make the gate
+harder to avoid, and §10's guardrails (free-user retention and the App Store rating outrank revenue)
+settle it the other way. Phase 1 on repeat is a legitimate free product.
+
+**Components (ticket 08).**
+
+| Layer | File | Role |
+|---|---|---|
+| Domain/Services | `ConditioningProgramGatingPolicy.swift` | the whole decision, pure |
+| Domain/Models/Pro | `ProFeatureCaps.freeConditioningProgramWeeks`, `PaywallPlacement.conditioningProgram` | the cap and the placement |
+| Presentation/ViewModels | `ConditioningProgramGate.swift` (entitlement + paywall + kill switch, `AICoachAllowanceGate`'s shape); `ConditioningProgramViewModel` — `isProgramLocked`, `requestProgramUnlock()`, `dashboard.isLocked` / `.isLastFreeWeek`; `+WatchOffer` guard | evaluation and wiring |
+| Presentation/Views | `ConditioningProgramSection.lockedWeek(_:)` (blur + residue caption + week-4 nudge), `ConditioningLibraryView` (the third paywall host) | the surface |
+| App | `AppDependencies` (entitlements + paywalls into the program VM), `ContentView` (root host exclusion) | composition |
+| Resources | `paywall.headline.conditioning_program`, `conditioning.program.gate.nudge`, `conditioning.program.gate.free_residue` (en + de) | copy |
+
+**Tests (ticket 08).** `ConditioningProgramGatingPolicyTests`: the lock depends on the entitlement
+across all four `ProEntitlementState` cases and is off with the kill switch; weeks 1–4 free and 5–12
+not; the cap covers Phase 1 exactly; the week-4 cue never fires for an entitled user.
+`ConditioningProgramGateTests`: Phase 1 untouched; week 4 nudges and raises nothing; week 5 locks the
+plan while keeping `progress` populated, nulls the suggestion, empties the watch offer and the add-on;
+the CTA raises `.conditioningProgram` and nothing else; trial, subscriber, lifetime and Founder all
+continue seamlessly; the kill switch off locks nothing; the lapse round trip; single sessions stay
+available to a locked user. Suites: iOS 1490/1490, watch 116/116 (2026-09-23).
+
+**Device verification (simulator, 2026-09-24) — PASSED, in two rounds.** The functional pass came
+first; the lock's visuals failed it and were redesigned, then re-verified on device the same day.
+
+**Round 2 (after the redesign) — PASSED.** The weekly card no longer overflows at any content
+height, the headline wraps, the CTA and the free-residue line sit inside the card, and the gate
+behaves as in round 1. One tuning pass followed on the blur: see `docs/pro-subscription.md` §5b —
+the subject was still nearly invisible because the scrim's height equalled the content's minimum, so
+the gradient covered all of it. `scrimHeight` (76) is now shorter than `contentMinHeight` (96), the
+extra `0.85` content opacity is gone, and the radius is 5.
+
+**Round 1 (the original overlay) — functionally PASSED, visually NOT.** Driven by
+temporarily lowering `ProFeatureCaps.freeConditioningProgramWeeks` (1 → the week-4 nudge appears;
+0 → week 1 locks), with the Settings debug entitlement picker on **Free**. Confirmed working: the
+placement-D nudge, the locked week card, today's suggestion disappearing, the Unlock CTA raising the
+paywall **over** the Conditioning cover (the third-host fix doing its job), dismissal returning to
+the screen, the single-session library staying free, the watch offering nothing, and switching the
+picker to **Founder** unblurring the card without a relaunch.
+
+**The lock's visuals failed, and the fault is in the shared `OnyxProLockOverlay`, not in this
+gate.** The overlay was built against a *tall* subject — the exercise-progress chart — and centres a
+fixed-size lock card over it. The conditioning weekly card is short (two target rows), so the lock
+card is taller than what it covers and overflows it: the lock glyph floats above the card's top
+edge, the headline truncates mid-word instead of wrapping (no `fixedSize(horizontal:false,
+vertical:true)` on a `.onyxHeader` line), the Unlock button hangs below the bottom edge, and the
+free-residue caption collides with it. The blur is also ineffective on near-black content — the
+0.55 background scrim over it reads as flat black, so *the user's own plan is not visible at all*
+and the §3 Rule 2 loss-aversion the blur exists to create is absent.
+
+This was a **shared-component defect**: every §8 C gate whose subject is short rendered the same
+way, so fixing it improved `.chartMetric`, `.chartWindow` and `.exerciseDeepDive` too. The redesign
+(approved from a design canvas, https://claude.ai/artifact/8hKM7GkYTcEFhpH42kWUvk, and implemented
+2026-09-24) replaces the centred overlay with a **panel that is a stack sibling of the content**, so
+the container is content-plus-panel tall by construction and overflow cannot occur at any content
+height. The blur dropped 14 → 7 over a clear→`card` gradient so the plan stays legible as shapes,
+the headline wraps, the CTA is full width, and the free-residue line moved inside the panel. The
+subtitle and that line are passed through the new `subtitle:` / `footnote:` parameters on
+`.proLocked`, which default to the previous behaviour for the other gates. The mechanism is
+documented in `docs/pro-subscription.md` §5b.
+
+**Manual step for the RevenueCat dashboard.** The placement identifier `conditioning-program` must be
+created as a **Placement** in the RevenueCat dashboard and pointed at an offering, or
+`currentOffering(forPlacement:)` falls back to the default offering — which still sells, but with
+generic copy instead of the fight-camp one. It cannot be created from here (see §9.4d for the
+per-store `default` offering trap this shares).
 
 ## Research findings — Apple Health / HealthKit (verified 2026-09-18)
 

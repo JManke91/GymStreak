@@ -26,12 +26,14 @@ protocol PaywallPresenting: AnyObject {
 
     /// The placement currently asking to be shown, or `nil`.
     ///
-    /// Read only by a **paywall host**, of which there are two and no more: the
-    /// app root's sheet and the coach-chat cover's own (`.coachChat`). That
-    /// cover-local host exists because a sheet raised while a full-screen cover
-    /// is up never reaches the screen; it filters to its own placement and the
-    /// root suppresses itself while any first-run cover is up. Nothing that is
-    /// not a host should read this.
+    /// Read only by a **paywall host**, of which there are three: the app root's
+    /// sheet, the coach-chat cover's own (`.coachChat`), and the Conditioning
+    /// cover's own (`.conditioningProgram`). The two cover-local hosts exist
+    /// because a sheet raised while a full-screen cover is up never reaches the
+    /// screen; each filters to its own placement, and the root suppresses itself
+    /// while any first-run or chat cover is up and excludes
+    /// `.conditioningProgram` outright — that placement has only one origin, the
+    /// gate inside its cover. Nothing that is not a host should read this.
     var pendingPlacement: PaywallPlacement? { get }
 
     /// Requests the paywall for `placement`. Silently does nothing when the

@@ -60,6 +60,13 @@ enum PaywallPlacement: String, CaseIterable, Identifiable, Sendable {
     case exerciseDeepDive = "exercise-deep-dive"
     case weekdaySchedule = "weekday-schedule"
 
+    /// The 12-week fight-conditioning program beyond Phase 1 (P12).
+    ///
+    /// Raised only from inside the Conditioning screen, which is a full-screen
+    /// cover — so it is hosted by that cover's own paywall sheet, exactly as
+    /// `.coachChat` is. See `ContentView` and docs/pro-subscription.md §5l.
+    case conditioningProgram = "conditioning-program"
+
     // MARK: Not a gate — the one place the user asks for the paywall
 
     /// Settings → Subscription → "Get Gym Streak Pro".
@@ -98,7 +105,7 @@ enum PaywallPlacement: String, CaseIterable, Identifiable, Sendable {
         case .valueMoment: .valueMoment
         case .routineCap, .chartMetric, .chartWindow, .coachChat,
              .periodRecap, .exerciseDeepDive, .weekdaySchedule,
-             .settingsUpgrade: .contextualGate
+             .conditioningProgram, .settingsUpgrade: .contextualGate
         }
     }
 
@@ -124,6 +131,7 @@ enum PaywallPlacement: String, CaseIterable, Identifiable, Sendable {
         case .periodRecap: "paywall.headline.period_recap"
         case .exerciseDeepDive: "paywall.headline.exercise_deep_dive"
         case .weekdaySchedule: "paywall.headline.weekday_schedule"
+        case .conditioningProgram: "paywall.headline.conditioning_program"
         case .settingsUpgrade: "paywall.headline.settings_upgrade"
         }
     }

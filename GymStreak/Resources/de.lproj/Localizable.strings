@@ -1266,6 +1266,7 @@
 "paywall.headline.period_recap" = "Unbegrenzte Rückblicke";
 "paywall.headline.exercise_deep_dive" = "Unbegrenzte Übungs-Analysen";
 "paywall.headline.weekday_schedule" = "Wochentag-Zeitpläne";
+"paywall.headline.conditioning_program" = "Wiederholbares Tempo und explosive Kraft";
 "paywall.headline.settings_upgrade" = "Gym Streak Pro";
 // Shown when no offering could be resolved (offline, or the placement is not
 // configured in the dashboard). It never unlocks the gated capability.
@@ -1609,6 +1610,11 @@
 "conditioning.program.today" = "Kondition heute";
 "conditioning.program.today.open" = "Einheit einrichten";
 "conditioning.program.this_week" = "Diese Woche";
+// P12 — die Tiefen-Sperre des Konditionsprogramms (docs/monetization-strategy.md §4.2a).
+// Der Hinweis ist Placement D: ein Hinweis in der letzten kostenlosen Woche, keine Paywall.
+"conditioning.program.gate.subtitle" = "Deine Wochen 5–12 sind geplant und warten.";
+"conditioning.program.gate.nudge" = "Woche %1$d von %2$d kostenlos · Phase 2 startet nächste Woche";
+"conditioning.program.gate.free_residue" = "Alle protokollierten Einheiten bleiben deine, und Einzeleinheiten bleiben kostenlos.";
 "conditioning.program.first_week" = "Woche 1";
 "conditioning.program.target.progress" = "%1$d von %2$d";
 "conditioning.program.caution.legs" = "Heute schwere Beine – frühestens ab %@ starten.";

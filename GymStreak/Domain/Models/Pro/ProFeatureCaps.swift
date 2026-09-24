@@ -38,4 +38,15 @@ enum ProFeatureCaps {
     /// windows (`.year`, `.all`) are Pro; no data is ever deleted, so the gate
     /// is fully reversible.
     static let freeChartTimeframes: [ChartTimeframe] = [.week, .month, .threeMonths]
+
+    /// Weeks of the 12-week fight-conditioning program a free user gets (P12) —
+    /// all of Phase 1, the aerobic base.
+    ///
+    /// A number rather than "phase 1", because the gate reasons in program weeks
+    /// and the depth has to be retunable without touching the program content.
+    /// `freeConditioningWeeksCoverPhaseOne` pins it against
+    /// `ConditioningProgramContent`, so a change to either side that separates
+    /// the cap from the phase boundary fails a test rather than shipping a gate
+    /// that cuts a phase in half.
+    static let freeConditioningProgramWeeks = 4
 }

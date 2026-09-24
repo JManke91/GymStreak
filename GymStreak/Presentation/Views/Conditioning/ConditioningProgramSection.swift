@@ -110,13 +110,48 @@ struct ConditioningProgramSection: View {
 
             if !dashboard.progress.isEmpty {
                 sectionLabel("conditioning.program.this_week".localized)
-                weekCard(dashboard.progress)
+                // Read live, not off `dashboard.isLocked`, so a purchase made on
+                // the paywall this very card raised unblurs it immediately
+                // (docs/pro-subscription.md §3c).
+                if viewModel.isProgramLocked {
+                    lockedWeek(dashboard.progress)
+                } else {
+                    weekCard(dashboard.progress)
+                }
             } else if case .notStarted = dashboard.status, let week = dashboard.currentWeek {
                 sectionLabel("conditioning.program.first_week".localized)
                 weekCard(week.targets.map { ConditioningTargetProgress(target: $0, completed: 0) })
             }
 
+            if dashboard.isLastFreeWeek {
+                OnyxCapNudge(
+                    text: "conditioning.program.gate.nudge".localized(
+                        viewModel.freeProgramWeeks,
+                        viewModel.freeProgramWeeks
+                    ),
+                    used: viewModel.freeProgramWeeks,
+                    limit: viewModel.freeProgramWeeks
+                )
+            }
         }
+    }
+
+    /// The user's **own** Phase 2–3 week, blurred rather than hidden (§3 Rule 2):
+    /// the loss the unlock is measured against has to be their real plan.
+    ///
+    /// The subtitle and the free-residue line are handed to the lock rather than
+    /// stacked around it: as siblings of the card they collided with a lock that
+    /// overflowed, and the reassurance only does its §10 job inside the gate.
+    private func lockedWeek(_ progress: [ConditioningTargetProgress]) -> some View {
+        weekCard(progress)
+            .proLocked(
+                true,
+                placement: .conditioningProgram,
+                subtitle: "conditioning.program.gate.subtitle".localized,
+                footnote: "conditioning.program.gate.free_residue".localized
+            ) {
+                viewModel.requestProgramUnlock()
+            }
     }
 
     private func optionsMenu(_ dashboard: ConditioningProgramDashboard) -> some View {

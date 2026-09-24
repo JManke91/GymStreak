@@ -36,9 +36,17 @@ private struct ConditioningLibraryContent: View {
     @State private var path: [ConditioningRoute]
     @State private var showingSafetyInfo = false
     private let program: ConditioningProgramViewModel
+    /// The third paywall host (ticket 08). This screen is a full-screen cover,
+    /// so the app root's sheet cannot reach the screen while it is up — the
+    /// same reason the coach-chat cover hosts its own (docs/pro-subscription.md
+    /// §5e and §5l). The root suppresses `.conditioningProgram` accordingly.
+    private let paywalls: any PaywallPresenting
+    private let entitlements: any ProEntitlementProviding
 
     init(dependencies: AppDependencies, opensShowcase: Bool) {
         program = dependencies.conditioningProgram
+        paywalls = dependencies.paywalls
+        entitlements = dependencies.proEntitlements
         _path = State(initialValue: opensShowcase ? [.programShowcase] : [])
         _viewModel = State(initialValue: ConditioningLibraryViewModel(
             safety: dependencies.conditioningSafety,
@@ -49,7 +57,11 @@ private struct ConditioningLibraryContent: View {
     }
 
     var body: some View {
-        NavigationStack(path: $path) {
+        // Read here, in `body`, so this view observes the presenter — the same
+        // reason `ContentView` reads it here rather than inside the binding.
+        let pendingPaywall = paywalls.pendingPlacement
+
+        return NavigationStack(path: $path) {
             ScrollView {
                 VStack(alignment: .leading, spacing: DesignSystem.Spacing.xl) {
                     ConditioningProgramSection(
@@ -112,7 +124,29 @@ private struct ConditioningLibraryContent: View {
                     onAcknowledgeSafety: viewModel.acknowledgeSafety
                 )
             }
+            // Filtered to this screen's own placement, exactly as the coach-chat
+            // host is: any other placement that becomes pending while the cover
+            // is up belongs to the screen the user came from and stays pending
+            // until they return to it.
+            .sheet(item: paywallBinding(for: pendingPaywall == .conditioningProgram ? pendingPaywall : nil)) { placement in
+                ProPaywallView(
+                    placement: placement,
+                    entitlements: entitlements,
+                    onPaywallShown: { paywalls.didPresent(placement) }
+                )
+                .onAppear { paywalls.sheetDidAppear() }
+            }
         }
+    }
+
+    /// Wraps the placement `body` already read into a binding `sheet(item:)` can
+    /// clear. Only a dismissal is written back — nothing but the presenter
+    /// raises a paywall.
+    private func paywallBinding(for placement: PaywallPlacement?) -> Binding<PaywallPlacement?> {
+        Binding(
+            get: { placement },
+            set: { if $0 == nil { paywalls.dismiss() } }
+        )
     }
 
     /// The library, one tap away: the program owns this screen, but a user who

@@ -222,7 +222,17 @@ private struct ContentViewInternal: View {
         // asks for nothing (docs/onboarding.md); any placement that somehow
         // becomes pending while it runs stays pending and arrives here once the
         // tour ends.
-        .sheet(item: paywallBinding(for: showingCoachChat || isOnboarding ? nil : pendingPaywall)) { placement in
+        // `.conditioningProgram` is excluded for the reason `.coachChat` is
+        // suppressed above, and permanently rather than while a flag is set: it
+        // can only be raised from inside the Conditioning screen, which is a
+        // full-screen cover presented by the Routines tab and hosts its own
+        // paywall (`ConditioningLibraryView`). Hosting it here as well would put
+        // a second non-nil binding on the same request, and the sheet this one
+        // raised would surface only once the user left the screen the gate is
+        // on — a paywall arriving out of nowhere.
+        .sheet(item: paywallBinding(
+            for: showingCoachChat || isOnboarding || pendingPaywall == .conditioningProgram ? nil : pendingPaywall
+        )) { placement in
             ProPaywallView(
                 placement: placement,
                 entitlements: entitlements,

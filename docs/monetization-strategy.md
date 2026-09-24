@@ -158,8 +158,8 @@ raw history never does. Raw CSV export stays free (see §5) precisely because th
 
 ### 4.2a Pro — shippable in the monetization release (gate-only work)
 
-These six exist and need nothing but an entitlement check. **This is the Pro tier you can
-launch with.**
+These exist and need nothing but an entitlement check. **This is the Pro tier you can
+launch with.** (P12 joined after launch, with the fight-conditioning program it gates.)
 
 | # | Pro feature | Free equivalent | Why this converts |
 |---|---|---|---|
@@ -169,8 +169,9 @@ launch with.**
 | P4 | 🔒 **AI Period Recap** (week / month / quarter / year) | 1 per month | Cross-session scope (§4.3). |
 | P5 | 🔒 **AI Exercise Deep-Dive** | 1 per month | Cross-session scope. |
 | P9 | 🔒 **Fixed-weekday schedules** | Simple every-N-days cadence | Programming depth signals a committed lifter. |
+| P12 | 🔒 **Fight-conditioning program, Phases 2–3** (weeks 5–12: repeatable speed, explosive power) | **Phase 1 in full** — four weeks of aerobic base, plus the whole single-session library, the runner, the watch and every logged session, forever | The gate fires after a *month* of the user's own training, against their own plan, and it is announced a week ahead. The audience is new (fighters), so §7's grandfathered base does not blunt it. |
 
-*(P9 keeps its number for cross-reference stability; it is shipped, not future.)*
+*(P9 and P12 keep their numbers for cross-reference stability; both are shipped, not future.)*
 
 **P1 counting rule (2026-08-27).** The free three are three routines the user *made*. The built-in
 example routine (`docs/example-starter-routine.md`, `Routine.seedKey` non-empty) is outside the
@@ -201,6 +202,17 @@ generous, on the only acquisition channel this app has.
 The nudge copy says "**free** routines" for this reason: the header subline counts all four and the
 nudge counts the three that are the user's, so naming the allowance is what keeps the two lines from
 contradicting each other (`docs/pro-subscription.md` §5c).
+
+**P12 shipped 2026-09-23** with ticket 08 of the fight-conditioning feature. The free depth is
+`ProFeatureCaps.freeConditioningProgramWeeks = 4`, chosen to end exactly on the Phase 1 boundary — a
+user cut off mid-block would experience the gate as the program breaking rather than as a chapter
+ending, and a test pins the two together. The mechanism is §2's *depth gate* plus a blurred preview,
+not a hard lock: what is behind the blur is the user's own week, computed for their level and their
+sparring answer. **Nothing in the runner, the watch or the history is touched** — Rules 3 and 4 make
+those permanently free, and the gate reaches the watch only by publishing an empty offer, so the watch
+never renders a lock. Restarting the program after it ends is deliberately free: Phase 1 on repeat is
+a legitimate free product, and §10's guardrails settle the alternative against us. The shipped
+mechanism is `docs/pro-subscription.md` §5l; the feature doc is `docs/fight-conditioning.md`.
 
 **P9 scope correction (2026-08-15).** An earlier draft described P9 as "fixed-weekday schedules,
 multiple routines per day, plan preview". Only the first is a real gateable surface. The

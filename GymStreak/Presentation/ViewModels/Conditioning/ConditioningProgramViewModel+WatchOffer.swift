@@ -21,6 +21,12 @@ extension ConditioningProgramViewModel {
         let startOfToday = calendar.startOfDay(for: now)
         guard let dashboard,
               case .active(_, _, let isPaused) = dashboard.status, !isPaused,
+              // The P12 gate reaches the watch here and **only** here (ticket
+              // 08). A locked week publishes an empty offer, so the watch simply
+              // has no conditioning to show — it never learns that a gate
+              // exists, never renders a lock and never renders a paywall, which
+              // is what §3 Rule 3 requires of it.
+              !dashboard.isLocked,
               let weekEnd = calendar.date(
                 byAdding: .day,
                 value: 7,

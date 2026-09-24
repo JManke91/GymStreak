@@ -70,6 +70,8 @@ in §9.
 | P3/P4/P5 — the §8 D hint as a value | `AIAllowanceNudge` | `Presentation/ViewModels/Pro/` |
 | P4 — the free-tier offer / gate card | `PeriodRecapAllowanceCard` | `Presentation/Views/AICoach/PeriodRecap/` |
 | P9 — weekday-schedule gate rules | `ScheduleGatingPolicy` | `Domain/Services/` |
+| P12 — conditioning-program depth gate rules | `ConditioningProgramGatingPolicy` | `Domain/Services/` |
+| P12 — the gate itself (entitlement + paywall + kill switch) | `ConditioningProgramGate` | `Presentation/ViewModels/Conditioning/` |
 | §8 A/B — the two proactive triggers | `ProactivePaywallTrigger` | `Domain/Models/Pro/` |
 | §8 A/B — the armed record | `ProactivePaywallTracking` / `ProactivePaywallTriggerStore` | `Domain/Interfaces/`, `Data/Purchases/` |
 | §8 A/B — when a trigger has arrived, and when it is safe to say so | `ProactivePaywallCoordinator` | `Presentation/ViewModels/Pro/` |
@@ -83,7 +85,7 @@ in §9.
 | Restore / manage / cancel / refund | `CustomerCenterSettingsRow` | `Presentation/Views/Pro/` |
 | What happened inside the Customer Center | `CustomerCenterEvent` | `Presentation/ViewModels/Pro/` |
 | Privacy manifests | `PrivacyInfo.xcprivacy` | `GymStreak/`, `GymStreakWatch Watch App/` |
-| Tests | `ProEntitlementTests`, `FounderStatusTests`, `PaywallPlacementTests`, `PaywallPresentationTests`, `RoutineCapTests`, `ChartGatingTests`, `CoachChatAllowanceTests`, `RecapDeepDiveAllowanceTests`, `ExerciseDeepDiveAllowanceTests`, `PeriodRecapAllowanceTests`, `ScheduleGatingTests`, `ProactivePaywallTests`, `FounderCelebrationTests`, `SubscriptionStatusTests`, `PaywallOfferingSourceTests`, `CustomerCenterEventTests`, `EntitlementRefreshTests` | `GymStreakTests/` |
+| Tests | `ProEntitlementTests`, `FounderStatusTests`, `PaywallPlacementTests`, `PaywallPresentationTests`, `RoutineCapTests`, `ChartGatingTests`, `CoachChatAllowanceTests`, `RecapDeepDiveAllowanceTests`, `ExerciseDeepDiveAllowanceTests`, `PeriodRecapAllowanceTests`, `ScheduleGatingTests`, `ConditioningProgramGateTests`, `ProactivePaywallTests`, `FounderCelebrationTests`, `SubscriptionStatusTests`, `PaywallOfferingSourceTests`, `CustomerCenterEventTests`, `EntitlementRefreshTests` | `GymStreakTests/` |
 
 Wiring: `AppDependencies` builds one `ProEntitlementProvider`, hands it a `FounderStatusService`
 and a `RevenueCatPurchaseGateway`, and exposes it as `proEntitlements` (and, in DEBUG only, the
@@ -96,7 +98,9 @@ must not queue behind that wait).
 
 **The watch target is entirely unaware of entitlements**, and stays that way: per
 `monetization-strategy.md` §4.1 the whole watch app is free, so there is no watch-side gate and
-nothing to mirror across WatchConnectivity.
+nothing to mirror across WatchConnectivity. P12 (§5l) is the first gate whose subject matter reaches
+the watch at all, and it does not change this: the iPhone simply publishes an empty conditioning
+offer for a locked week, which is a state the watch already renders as "no conditioning".
 
 ## 2. Entitlement state carries its source
 
@@ -817,14 +821,49 @@ they take values and a callback, never a ViewModel, never `ProEntitlementProvidi
 `PaywallPresenting`. The caller decides *whether* to lock and what unlocking does — in practice
 `{ paywalls.present(.chartMetric) }`.
 
-**`OnyxProLockOverlay` / `.proLocked(_:placement:onUnlock:)` — the blurred preview.** The real
-content keeps rendering behind a blur, a scrim and a lock card. **Blur rather than hide** is the
-point, not a style choice: §3 Rule 2's engine is loss aversion against data the user generated
-themselves, and a hidden feature produces no loss while a blurred chart of *your own numbers*
-does. Blurred content is `allowsHitTesting(false)` and `accessibilityHidden(true)`; the card takes
-its headline from `placement.headlineKey`, so §8 C's "name the specific capability" rule is
-honoured by construction rather than re-decided per gate. The CTA uses `.onyxProminent`
-(tint background, `textOnTint` label — never white on tint).
+**`OnyxProLockOverlay` / `.proLocked(_:placement:subtitle:footnote:onUnlock:)` — the blurred
+preview.** The real content keeps rendering behind a blur, under a gradient scrim, with an opaque
+lock panel beneath it. **Blur rather than hide** is the point, not a style choice: §3 Rule 2's
+engine is loss aversion against data the user generated themselves, and a hidden feature produces
+no loss while a blurred chart of *your own numbers* does. Blurred content is
+`allowsHitTesting(false)` and `accessibilityHidden(true)`; the panel takes its headline from
+`placement.headlineKey`, so §8 C's "name the specific capability" rule is honoured by construction
+rather than re-decided per gate. The CTA uses `.onyxProminent` (tint background, `textOnTint`
+label — never white on tint) at full width.
+
+`subtitle:` overrides the generic `pro.lock.subtitle` line where a gate has something specific to
+say; `footnote:` is what the user keeps regardless, and it renders **inside** the panel. Both
+default to the previous behaviour, so the gates that pass neither are unchanged.
+
+**The panel is a sibling of the content, not an overlay on it — and that is the fix for a shipped
+bug.** The first version centred a fixed-size lock card over the content with `.overlay`, which
+holds only while the content is taller than the card. It is not always: the conditioning program's
+weekly card is two rows, and on device the lock overflowed it in every direction — lock glyph above
+the card's top edge, Unlock button hanging below its bottom, headline truncated mid-word, and the
+free-residue caption colliding with the button (2026-09-24, `docs/fight-conditioning.md`). The
+composition is now `VStack(spacing: 0) { content; lockPanel }`, so the container is content-plus-panel
+tall **by construction** and there is no arrangement in which the panel can overflow. A
+bottom-aligned `ZStack` was rejected for the opposite failure: it would park short content *behind*
+the opaque panel, hiding the very plan the gate exists to show.
+
+**The blur must leave the plan visible — and three values decide that, not one.** The original
+`blur(14)` plus a `background.opacity(0.55)` scrim over this app's near-black cards produced flat
+black: the user's own numbers were not visible at all, so the gate had a blur but no loss aversion,
+which is the whole mechanism. The first fix (`blur(7)`, content at 0.85, `scrimHeight` 120) was
+still nearly opaque on device, and the radius was the *smallest* of the three reasons:
+
+- `scrimHeight` equalled the content's `minHeight`, and the conditioning weekly card is ~112pt
+  tall — so the gradient covered **every pixel** of the subject and nothing was ever seen
+  un-scrimmed. The two are now separate constants, `scrimHeight` (76) deliberately **shorter** than
+  `contentMinHeight` (96), and the difference between them is the clear strip at the top.
+- The content carried a further `.opacity(0.85)`, dimming an already-dark subject for no gain. Removed;
+  the blur and the scrim do the obscuring.
+- The radius is now 5 — shapes, row rhythm and the tint of a session chip shimmer through, no word or
+  number resolves.
+
+**The content gets `minHeight: 96` and `.clipped()`.** The floor guarantees a one-row subject still
+has a clear strip above the fade rather than starting mid-gradient; the clip keeps the blur, which
+bleeds past its own bounds, inside the card.
 
 **Locked content must be cheap to render — this is a contract, not a preference.** Because the
 content keeps rendering, its `body` is still evaluated on every invalidation, now with an
@@ -836,26 +875,48 @@ showing nothing.
 
 Four behaviours worth knowing before reusing it:
 
-- **The scrim is an `overlay`, not a `ZStack` sibling.** A bare `Color` is infinitely greedy, so
-  as a stack sibling it sizes the lock to the *proposal* rather than to the content, and the
-  locked branch would occupy more space than the unlocked one inside an `HStack`, a grid cell or
-  any `maxHeight: .infinity` parent. As an overlay the scrim inherits the content's geometry and
-  `.proLocked(true)` / `.proLocked(false)` stay layout-identical.
+- **The scrim is an `overlay` on the content, not a `ZStack` sibling.** A bare `Color` or gradient
+  is infinitely greedy, so as a stack sibling it would size itself to the *proposal* rather than to
+  the content. As an overlay it inherits the content's geometry. Note that since the panel became a
+  stack sibling, `.proLocked(true)` is deliberately **taller** than `.proLocked(false)` — the
+  earlier "layout-identical" property was what forced the fixed-size card that overflowed. Over-tall
+  beats clipped.
 - **The blurred content is `disabled(true)` as well as `allowsHitTesting(false)`.**
   `allowsHitTesting` silences only that subtree's own hit testing; it does nothing about an
   *enclosing* `NavigationLink` or `Button` — which is exactly the shape the chart-tab and
   Deep-Dive gates will have — so without `disabled` a tap on the blur would carry through to the
   gated screen, and Full Keyboard Access would still reach the hidden controls.
-  **Modifier order is load-bearing here, and it was measured, not assumed** (throwaway
+  **Modifier order used to be load-bearing here, and was measured, not assumed** (throwaway
   `UIHostingController` probe reading `@Environment(\.isEnabled)`, 2026-08-15): an overlay
   attached *after* `.disabled(true)` reports `isEnabled == true`, one attached *before* it
-  reports `false`. So the lock card's CTA works precisely because both `.overlay`s come after
-  the `.disabled`. Moving `.disabled` below them would dim the CTA to 50 % (that is
-  `OnyxProminentButtonStyle`'s disabled opacity) and make it untappable.
+  reports `false`, so the CTA worked only because the overlay came after. **That hazard is gone**:
+  the panel is now a stack sibling, so `.disabled(true)` applies to the content branch alone and
+  cannot reach the CTA however the content's own modifiers are reordered. Worth keeping on record,
+  because the failure it produced — a CTA dimmed to `OnyxProminentButtonStyle`'s 50 % and
+  untappable — looks like a styling bug rather than a modifier-order one.
 
-- **Reduce Transparency replaces the blur with an opaque scrim** (`accessibilityReduceTransparency`
-  is read in the overlay). A blur is a legibility hazard for exactly the users who turn that
-  setting on, and the lock card sits on top of it.
+- **Reduce Transparency replaces the blur with an opaque wash** (`accessibilityReduceTransparency`
+  is read in the overlay): a `card` fill at 94 % covers the subject, so it becomes unreadable by
+  coverage rather than by softening — a blur is a legibility hazard for exactly the users who turn
+  that setting on.
+- **The composition is clipped but not filled.** The panel paints its own `card` background and the
+  scrim's tail is opaque `card`, so a container fill would be invisible behind an `OnyxCard` caller
+  and would paint an unwanted opaque block behind one that is not a card — `ExerciseProgressChartView`'s
+  chart subtree, whose surrounding card uses a different colour and radius. The `clipShape` stays:
+  without it the panel's square bottom corners would cut the corners off a rounded caller.
+  **A locked chart is nonetheless visibly different from before** — it grows by the panel height and
+  pushes the range selector down — which is the accepted cost of one lock serving both shapes.
+- **Motion is one-shot and opt-out.** The lock settles in on first appearance — blur 0 → 7, scrim and
+  panel 0 → 1 over 0.45 s `easeOut` — so the user sees their own plan for a beat before it locks,
+  which is the loss §3 Rule 2 trades on. A latched `@State` flag makes it fire once per view
+  *instance*, and `accessibilityReduceMotion` skips straight to the settled state. Both current
+  callers sit in a plain `VStack` inside a `ScrollView`, so it genuinely fires once; a future caller
+  inside a `LazyVStack` or `List` row would have the state discarded on recycle and replay the
+  lock-in on every scroll-back, which is the one container to check before reusing it there.
+- **The PRO chip is deliberately not `OnyxProBadge`.** That badge marks an *entry point* leading
+  somewhere gated; at the lock the user has already arrived, and its filled tint capsule directly
+  above a full-width tint CTA puts two solid tint blocks in a row, competing with the one thing that
+  should be tapped. The chip is the outlined variant: tint text and border on a 14 %-tint fill.
 - **The lock card is a single VoiceOver element** (`children: .ignore`, label "Locked: <headline>",
   hint "Unlock with Gym Streak Pro", `.isButton`, plus an `accessibilityAction`). A blur conveys
   nothing to a VoiceOver user, and the content behind it is deliberately out of the tree — so
@@ -1216,17 +1277,22 @@ AI-coach settings screen is popped back to the chat, and returning from settings
 "opened Coach Chat at 0 remaining" intent §8 C gates on. The ViewModel is `@State` inside the
 cover's content, so the once-flag resets the next time the chat is opened.
 
-**Two paywall hosts, and why.** §5a predicted this: a sheet raised from the root cannot reach the
+**A second paywall host, and why.** §5a predicted this: a sheet raised from the root cannot reach the
 screen while a full-screen cover is up, and `.coachChat` is by definition raised from *inside* the
 coach-chat cover. Left alone, the paywall would have appeared only after the user left the chat —
 a paywall arriving out of nowhere. So the cover hosts its own `.sheet(item:)` reading the **same**
 `pendingPlacement`, exactly as §5a's follow-up sanctioned, and the root host is suppressed while
 `showingCoachChat` is true so the two never both attempt a presentation. **The presenter is
-unchanged** — one source of truth, two hosts, and whichever shows the placement clears it for the
-other. Second-order effect, accepted: while the chat cover is up, *any* placement raised from
-elsewhere now surfaces inside the chat, where previously it could not appear at all. Nothing but
-the chat raises one from in there today, and the §8 A/B one-shots are recorded on `didPresent`
-either way.
+unchanged** — one source of truth, several hosts, and whichever shows the placement clears it for
+the others. The cover's host is *filtered to `.coachChat`*: any other placement raised while the
+chat is open belongs to the screen the user came from, so it stays pending and surfaces at the root
+host once the cover closes.
+
+**There are three hosts as of ticket 08**, not two: `ConditioningLibraryView` hosts
+`.conditioningProgram` on the same pattern, because the Conditioning screen is a full-screen cover
+too (§5l). The difference is that the root excludes that placement *permanently* rather than behind
+a flag — it has exactly one possible origin, the gate inside that cover, whereas `.coachChat` is
+suppressed only while the chat is actually up.
 
 **With the kill switch off nothing changes** — no nudge, no meter, no paywall, and `send` behaves
 exactly as it did before monetization — which is its own test (`killSwitchOffBehavesAsBefore`)
@@ -2240,6 +2306,105 @@ field. The in-app links alone do not satisfy 3.1.2(c); this was half of what 1.1
 of an app that offers subscriptions, not of the user currently looking at it — and unlike
 `SubscriptionSettingsSectionView`, it is not conditioned on the kill switch, because a build with
 gating off still ships the products.
+
+## 5l. P12 — the fight-conditioning program's Phases 2–3
+
+The 12-week conditioning program (`docs/fight-conditioning.md`) runs in three phases: weeks 1–4
+aerobic base, 5–8 lactic, 9–12 alactic. **Phase 1 is free in full; weeks 5–12 are Pro.** That is the
+whole of P12.
+
+**The gate fires after a month of the user's own training**, which is what makes it a §3 Rule 2 gate
+rather than a wall. By week 5 a free user has logged around a dozen sessions against a plan the app
+built for their level and their sparring answer; what locks is the continuation of *that* plan, shown
+blurred rather than hidden, so the loss is against their own numbers. Week 4 carries an `OnyxCapNudge`
+("Week 4 of 4 free · Phase 2 starts next week") — placement D, no CTA, no refusal — so the wall is
+announced a week before it arrives.
+
+**The gate is a type, not five methods on the ViewModel.** `ConditioningProgramGate`
+(`Presentation/ViewModels/Conditioning/`) holds the entitlement, the paywall seam and the kill
+switch, and is the only thing that reads any of them — `AICoachAllowanceGate`'s shape, for the same
+reason: the program's ViewModel is already the dashboard, the watch offer and the post-workout
+add-on, and a third dependency set inside it made it the place two unrelated questions were
+answered. It is built in `AppDependencies` and injected; left `nil` the program is simply ungated,
+which is what every non-gating test wants.
+
+**`ConditioningProgramGatingPolicy` answers three questions**, all pure and all off a week number
+plus two flags: `isWeekLocked`, `isPhaseLocked` and `isLastFreeWeek`. The depth is
+`ProFeatureCaps.freeConditioningProgramWeeks = 4`. It is a *number* so §4.4's "retunable in one line"
+rule applies here too — and because a number can land mid-phase where "phase 1" could not,
+`freeConditioningWeeksCoverPhaseOne` pins it against `ConditioningProgramContent.phases`. A retune
+that would cut a training block in half fails a test.
+
+**The decision is made once per refresh and carried, not re-asked.**
+`ConditioningProgramViewModel.refresh()` evaluates the policy and stores the answer on
+`ConditioningProgramDashboard.isLocked`. Every consumer that could hand out a session reads that
+field rather than the entitlement:
+
+| Consumer | Locked week |
+|---|---|
+| `dashboard.suggestion` | `nil` |
+| `watchOffer()` | `.none(on:)` — an empty offer |
+| `addOn(finishedAt:isHeavyLowerBody:)` | `.none` |
+| `dashboard.progress` | **untouched** — the view blurs the real targets |
+
+Carrying one answer is what makes "a locked week hands out nothing" true by construction rather than
+by three call sites each remembering to ask. The last row is the deliberate exception: the lock is a
+blurred preview (§5b), so the content behind it has to be real.
+
+**The watch is reached through the offer and nowhere else.** A locked week publishes an empty
+`ConditioningWatchOffer`, which the watch already renders as "no conditioning" — the same state as not
+enrolled, paused or completed. It shows no lock, no `OnyxProBadge` and no paywall, and no watch file
+changed when this gate shipped. §3 Rule 3 is therefore structural here, not a convention someone has
+to uphold.
+
+**Nothing else about conditioning is gated.** The runner, a session already in progress, the
+single-session library, every logged `ConditioningRecord` and the History surfaces are free for
+everyone (Rules 3 and 4). Restarting the program after finishing or leaving it is free too: Phase 1 on
+repeat is a legitimate free product, and §10's guardrails decide against making the gate harder to
+avoid at the cost of taking something away.
+
+**Lapse is a view narrowing, exactly like P2.** No gate writes the enrollment,
+`ConditioningProgramSchedule` keeps advancing the week from the stored start day and pauses, and no
+record is filtered or deleted. A lapsed subscriber's program falls back to the locked Phase 2–3 view
+with their week number intact; resubscribing restores everything with no migration in either
+direction. `lapseKeepsProgressAndLogs` drives `.subscription → .free → .lifetime` and asserts the
+enrollment, the current week and the logged record survive both moves.
+
+**Live for the blur, frozen for the hint.** `ConditioningProgramSection` reads
+`viewModel.isProgramLocked`, which reads `entitlements.state` inside the call — so a purchase made on
+the paywall that card raised unblurs it immediately, for the reason §3c gives. The week-4 hint reads
+the frozen `dashboard.isLastFreeWeek`, because a hint that is one render late costs nothing. The gate
+also owns an `EntitlementChangeObserver`, which the ViewModel points at `refresh()` — that is what
+moves the things the blur cannot: the suggestion, the watch offer and the add-on.
+
+**A third paywall host.** The Conditioning screen is a full-screen cover presented by the Routines
+tab, and a sheet raised at the app root cannot reach the screen while a cover is up — it would appear
+later, after the user had left the screen the gate is on. `ConditioningLibraryView` hosts its own
+`ProPaywallView` filtered to `.conditioningProgram`, exactly as the coach-chat cover hosts
+`.coachChat` (§5e). `ContentView` excludes `.conditioningProgram` from the root host **permanently**
+rather than behind a presentation flag, because unlike `.coachChat` it has exactly one possible
+origin: the gate inside that cover. Any other placement that becomes pending while the cover is up
+stays pending and surfaces at the root once the user returns.
+
+**Two presentation constraints this screen now carries.** Both are safe as shipped and both would
+break under a plausible future edit, so they are written down rather than rediscovered:
+
+1. The Conditioning cover stacks three presentations on the same content — the safety `.sheet`, the
+   runner `.fullScreenCover` and the paywall `.sheet`. They are mutually unreachable today (the
+   safety sheet is raised from a toolbar button that sits behind the paywall, and a run cannot start
+   while the paywall is up), but this is exactly the stacked-presenter configuration §5a warns
+   about. A change that lets two of them be raised at once needs to serialize them first.
+2. `PaywallPresenter.show()` refuses every placement while `isPresented` is `true`, and only
+   `dismiss()` — called from a host's binding — clears it. If the Conditioning cover is ever
+   dismissed **programmatically** while its paywall sheet is up, the seam would stay wedged for the
+   rest of the session. Today the screen's only dismissal is its Close button, which is behind the
+   sheet, so this cannot happen.
+
+**Dashboard step, and what happens without it.** The placement identifier is `conditioning-program`.
+It must exist as a **Placement** in the RevenueCat dashboard, pointed at an offering with fight-camp
+copy. Without it `currentOffering(forPlacement:)` falls back to the default offering — the paywall
+still sells, but with generic copy, and `PaywallOfferingSource` is what tells you which one you got
+(§9.4d).
 
 ## 6. The debug surfaces
 

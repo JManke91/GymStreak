@@ -1266,6 +1266,7 @@
 "paywall.headline.period_recap" = "Unlimited recaps";
 "paywall.headline.exercise_deep_dive" = "Unlimited exercise analyses";
 "paywall.headline.weekday_schedule" = "Weekday schedules";
+"paywall.headline.conditioning_program" = "Repeatable speed and explosive power";
 "paywall.headline.settings_upgrade" = "Gym Streak Pro";
 // Shown when no offering could be resolved (offline, or the placement is not
 // configured in the dashboard). It never unlocks the gated capability.
@@ -1618,6 +1619,11 @@
 "conditioning.program.today" = "Today's conditioning";
 "conditioning.program.today.open" = "Set up session";
 "conditioning.program.this_week" = "This week";
+// P12 — the conditioning program depth gate (docs/monetization-strategy.md §4.2a).
+// The nudge is placement D: a hint in the last free week, never a paywall.
+"conditioning.program.gate.subtitle" = "Your weeks 5–12 are planned and waiting.";
+"conditioning.program.gate.nudge" = "Week %1$d of %2$d free · Phase 2 starts next week";
+"conditioning.program.gate.free_residue" = "Every session you logged stays yours, and single sessions stay free.";
 "conditioning.program.first_week" = "Week 1";
 "conditioning.program.target.progress" = "%1$d of %2$d";
 "conditioning.program.caution.legs" = "Heavy legs today — start no earlier than %@.";

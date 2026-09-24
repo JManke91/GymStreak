@@ -22,7 +22,21 @@ struct ConditioningProgramDashboard: Equatable {
     let currentWeek: ConditioningProgramWeek?
     let progress: [ConditioningTargetProgress]
     /// `nil` unless the program is running (not before the start, not paused, not completed).
+    /// Also `nil` while `isLocked` — a locked week hands out nothing to start.
     let suggestion: ConditioningTodaySuggestion?
+    /// The P12 depth gate's answer for the week in progress, as it stood when
+    /// this dashboard was built (ticket 08).
+    ///
+    /// `progress` stays **fully populated** while locked, deliberately: the gate
+    /// blurs the user's own plan rather than hiding it (§3 Rule 2), so the view
+    /// needs the real targets to render behind the lock. What the lock withholds
+    /// is everything actionable — today's suggestion, the watch offer and the
+    /// post-workout add-on all go silent, which is why each of them consults
+    /// this rather than the entitlement.
+    let isLocked: Bool
+    /// `true` in the last free week: §8 placement D's non-blocking "Phase 2
+    /// starts next week" hint, shown *before* the wall rather than at it.
+    let isLastFreeWeek: Bool
 }
 
 /// What the Routines tab shows for the program.
@@ -45,6 +59,10 @@ final class ConditioningProgramViewModel {
     /// tests that do not care about the watch.
     @ObservationIgnored private let watch: (any ConditioningWatchPublishing)?
     @ObservationIgnored private let heartRateProfiles: (any HeartRateProfileStoring)?
+    /// The P12 depth gate (ticket 08). `nil` in tests that are not about
+    /// gating — the program then behaves exactly as it did before the gate,
+    /// which is also what `ProGating.isEnabled == false` produces.
+    @ObservationIgnored private let gate: ConditioningProgramGate?
     @ObservationIgnored private let calendar: Calendar
     @ObservationIgnored private let now: () -> Date
 
@@ -54,6 +72,7 @@ final class ConditioningProgramViewModel {
         workoutSessions: any WorkoutSessionRepository,
         watch: (any ConditioningWatchPublishing)? = nil,
         heartRateProfiles: (any HeartRateProfileStoring)? = nil,
+        gate: ConditioningProgramGate? = nil,
         calendar: Calendar = .current,
         now: @escaping () -> Date = Date.init
     ) {
@@ -62,8 +81,13 @@ final class ConditioningProgramViewModel {
         self.workoutSessions = workoutSessions
         self.watch = watch
         self.heartRateProfiles = heartRateProfiles
+        self.gate = gate
         self.calendar = calendar
         self.now = now
+        // A purchase, a lapse or a restore has to move more than the blur: the
+        // suggestion, the watch offer and the add-on are all computed in
+        // `refresh()` from the entitlement as it stood then.
+        gate?.observeEntitlementChanges { [weak self] in self?.refresh() }
     }
 
     /// Read through the observable store, so a view that reads it re-renders when
@@ -78,6 +102,25 @@ final class ConditioningProgramViewModel {
     }
 
     private var today: ConditioningProgramDay { ConditioningProgramDay(now(), calendar: calendar) }
+
+    // MARK: - P12 depth gate (ticket 08)
+
+    /// Whether the week in progress is behind the Pro gate, answered **live**.
+    ///
+    /// Read from `body`, not from `dashboard.isLocked`, on purpose: the gate
+    /// reads the entitlement inside this call and SwiftUI tracks that read
+    /// transitively, so a completed purchase unblurs the plan on the spot
+    /// instead of at the next `refresh()`. `dashboard.isLocked` is the same
+    /// answer frozen at refresh time, for the consumers that have no `body`.
+    var isProgramLocked: Bool { gate?.isLocked(week: dashboard?.currentWeek?.number) ?? false }
+
+    /// The gate's one intent point. Nothing auto-presents — §8 requires a tap.
+    func requestProgramUnlock() {
+        gate?.requestUnlock()
+    }
+
+    /// How many program weeks a free user gets — the nudge's denominator.
+    var freeProgramWeeks: Int { gate?.freeWeeks ?? ProFeatureCaps.freeConditioningProgramWeeks }
 
     // MARK: - Actions
 
@@ -139,13 +182,19 @@ final class ConditioningProgramViewModel {
         case .completed: currentWeek = nil
         }
 
+        // The gate is evaluated once here and carried on the dashboard, so the
+        // watch offer and the add-on read one answer rather than each asking the
+        // entitlement — and so a locked week cannot hand out a session through a
+        // path somebody forgot to gate.
+        let isLocked = gate?.isLocked(week: currentWeek?.number) ?? false
+
         var progress: [ConditioningTargetProgress] = []
         var suggestion: ConditioningTodaySuggestion?
         if let currentWeek, case .active(_, _, let isPaused) = status {
             let entries = coachEntries(enrollment: enrollment, today: today, now: now)
             progress = ConditioningProgramCoach.progress(for: currentWeek, weekEntries: entries.week)
 
-            if !isPaused {
+            if !isPaused, !isLocked {
                 let startOfToday = calendar.startOfDay(for: now)
                 let strengthToday = workoutSessions.fetchCompletedSessions(since: startOfToday).compactMap(Self.strengthEntry)
                 suggestion = ConditioningProgramCoach.suggestion(
@@ -166,8 +215,18 @@ final class ConditioningProgramViewModel {
             weeks: weeks,
             currentWeek: currentWeek,
             progress: progress,
-            suggestion: suggestion
+            suggestion: suggestion,
+            isLocked: isLocked,
+            isLastFreeWeek: isLastFreeWeek(status: status)
         )
+    }
+
+    /// §8 placement D's cue. Unlike the blur it is not read live in `body` — the
+    /// entitlement observer refreshes on a purchase, and a hint that is one
+    /// render late costs nothing.
+    private func isLastFreeWeek(status: ConditioningProgramStatus) -> Bool {
+        guard case .active(let week, _, _) = status else { return false }
+        return gate?.isLastFreeWeek(week: week) ?? false
     }
 
     /// The sessions the watch offers (ticket 06), derived from `dashboard` so the watch
@@ -198,7 +257,10 @@ final class ConditioningProgramViewModel {
         let today = ConditioningProgramDay(now, calendar: calendar)
         guard case .active(let weekNumber, _, let isPaused) = ConditioningProgramSchedule
             .status(on: today, enrollment: enrollment, calendar: calendar),
-              !isPaused else { return .none }
+              !isPaused,
+              // A locked week prescribes nothing, so there is nothing to add on
+              // after a workout either (ticket 08).
+              gate?.isLocked(week: weekNumber) != true else { return .none }
 
         let weeks = ConditioningProgramContent.weeks(experience: enrollment.experience, sparsHard: enrollment.sparsHard)
         guard weeks.indices.contains(weekNumber - 1) else { return .none }
