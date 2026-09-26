@@ -100,33 +100,95 @@ final class RoutineDraftGrounder {
     /// - Parameter weightUnit: the unit `snapshot`'s weights are written in. Converted to
     ///   canonical kilograms here, exactly once — the app never stores a converted value
     ///   that has been converted twice.
+    /// - Parameter personWords: everything the person typed in this drafting
+    ///   conversation. When given, **a drafted name must come from it** — see
+    ///   `isInPersonWords`. `nil` skips that check; only tests of the other passes use it.
     func ground(
         _ snapshot: RoutineDraftSnapshot,
         library: [Exercise],
-        weightUnit: WeightUnit
+        weightUnit: WeightUnit,
+        personWords: String? = nil
     ) -> GroundedRoutineDraft {
         var exercises: [GroundedDraftExercise] = []
+        var dropped: [String] = []
+        let source = personWords.map { Set(words(of: resolver.fold($0))) }
+        let routineName = snapshot.name.trimmingCharacters(in: .whitespacesAndNewlines)
 
         for (index, entry) in snapshot.exercises.enumerated() {
             let name = entry.name.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !name.isEmpty else { continue }
 
+            // The model was told to copy names from the person's words. A name that is
+            // not in them was invented — measured on device: "eine push routine" came
+            // back as twelve made-up rows (Push, Pull, Squat, Legs, Chest, …), one of which
+            // ("Pull") the library confidently resolved to Face Pulls.
+            if let source, !isInPersonWords(name, source: source) {
+                if !dropped.contains(name) { dropped.append(name) }
+                continue
+            }
+
+            let libraryMatch = match(for: name, in: library)
+            // "Push" in "a push routine" *is* in the person's words — as the kind of
+            // workout, which the model also wrote as the routine's name. A name the library
+            // cannot place that merely repeats the routine name is not an exercise. Not
+            // reported as dropped: it was never meant as one.
+            if case .unmatched = libraryMatch, isPartOfRoutineName(name, routineName) { continue }
+
             exercises.append(
                 GroundedDraftExercise(
                     id: identity(at: index),
                     draftedName: name,
-                    match: match(for: name, in: library),
+                    match: libraryMatch,
                     setCount: boundedSetCount(entry.setCount),
+                    isSetCountStated: entry.setCount > Self.unstatedNumber,
                     reps: boundedReps(entry.reps),
                     weightKilograms: kilograms(entry.weight, in: weightUnit)
                 )
             )
         }
 
-        return GroundedRoutineDraft(
-            name: snapshot.name.trimmingCharacters(in: .whitespacesAndNewlines),
-            exercises: exercises
-        )
+        return GroundedRoutineDraft(name: routineName, exercises: exercises, droppedNames: dropped)
+    }
+
+    // MARK: - Provenance
+
+    /// Whether every word of a drafted name is a word the person used.
+    ///
+    /// **Whole words, not substrings.** A substring test let "Rücken" through because
+    /// `fold("Bankdrücken")` contains `"ruecken"` — measured on device, 2026-09-24, as the
+    /// one invented row that survived. A drafted word matches a word the person typed when
+    /// the two are equal or differ only by a short ending ("Squat"/"squats",
+    /// "Kniebeuge"/"Kniebeugen"): a false *drop* loses something the person said, so
+    /// inflection is forgiven, but a word hidden inside a longer one is not theirs. This is
+    /// a provenance check, not a matcher: the library is never consulted here.
+    private func isInPersonWords(_ name: String, source: Set<String>) -> Bool {
+        let drafted = words(of: resolver.fold(name))
+        guard !drafted.isEmpty else { return false }
+        return drafted.allSatisfy { word in
+            source.contains(word) || source.contains { Self.differsOnlyByEnding(word, $0) }
+        }
+    }
+
+    /// The longest ending that still counts as the same word — a plural or a German
+    /// inflection, never a second word compounded on.
+    private static let maximumEndingLength = 2
+
+    private static func differsOnlyByEnding(_ lhs: String, _ rhs: String) -> Bool {
+        let (short, long) = lhs.count <= rhs.count ? (lhs, rhs) : (rhs, lhs)
+        return short.count >= 3
+            && long.hasPrefix(short)
+            && long.count - short.count <= maximumEndingLength
+    }
+
+    private func isPartOfRoutineName(_ name: String, _ routineName: String) -> Bool {
+        guard !routineName.isEmpty else { return false }
+        let routineWords = Set(words(of: resolver.fold(routineName)))
+        let nameWords = words(of: resolver.fold(name))
+        return !nameWords.isEmpty && nameWords.allSatisfy(routineWords.contains)
+    }
+
+    private func words(of folded: String) -> [String] {
+        folded.split { !$0.isLetter && !$0.isNumber }.map(String.init)
     }
 
     /// How the library answers `name`. Memoized — see `matches`.

@@ -79,7 +79,7 @@ struct AISurface<Content: View>: View {
         .clipShape(RoundedRectangle(cornerRadius: AICoachTheme.surfaceCorner, style: .continuous))
         .onAppear(perform: startShimmer)
         .onChange(of: isStreaming) { _, streaming in
-            if streaming { startShimmer() }
+            if streaming { startShimmer() } else { stopShimmer() }
         }
     }
 
@@ -218,6 +218,17 @@ struct AISurface<Content: View>: View {
         withAnimation(.linear(duration: 2.4).repeatForever(autoreverses: false)) {
             shimmerPhase = 1.0
         }
+    }
+
+    /// Ends the shimmer when streaming stops. A `repeatForever` animation is not ended by
+    /// the flag flipping — it keeps running until its value is reset in a transaction
+    /// with animations disabled. Without this, a surface that stays on screen after its
+    /// answer lands (the routine draft sheet) went on shimmering as if the Coach were
+    /// still working.
+    private func stopShimmer() {
+        var transaction = Transaction(animation: nil)
+        transaction.disablesAnimations = true
+        withTransaction(transaction) { shimmerPhase = 0 }
     }
 }
 

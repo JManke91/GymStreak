@@ -260,7 +260,7 @@ struct RoutineDraftTests {
 
         // A second message inside the same session — what ticket 04 adds — reserves
         // nothing further.
-        harness.viewModel.descriptionText = "make it four sets"
+        harness.viewModel.descriptionText = "bench press four sets"
         harness.viewModel.submit()
         await harness.settle()
 
@@ -274,7 +274,7 @@ struct RoutineDraftTests {
         harness.drafting.failure = RoutineDraftTestFailure()
         harness.viewModel.onAppear(weightUnit: .kilograms)
 
-        harness.viewModel.descriptionText = "Push day"
+        harness.viewModel.descriptionText = "Push day: bench press"
         harness.viewModel.submit()
         await harness.settle()
 
@@ -311,7 +311,7 @@ struct RoutineDraftTests {
         harness.drafting.snapshots = [routineDraftSnapshot([routineDraftEntry("Bench Press")])]
         harness.viewModel.onAppear(weightUnit: .kilograms)
 
-        harness.viewModel.descriptionText = "Push day"
+        harness.viewModel.descriptionText = "Push day: bench press"
         harness.viewModel.submit()
         harness.viewModel.cancelDrafting()
 
@@ -365,7 +365,49 @@ struct RoutineDraftTests {
         #expect(harness.viewModel.didCreateRoutine)
     }
 
-    @Test("A draft with no name of its own is created under the fallback name")
+    @Test("Create hands the confirmation what was written: name, totals, numbered exercises")
+    func createProducesTheConfirmationSummary() async throws {
+        let harness = RoutineDraftHarness.make()
+        harness.drafting.snapshots = [routineDraftSnapshot(name: "Push Day", [
+            routineDraftEntry("Bench Press", sets: 3, reps: 8, weight: 60),
+            routineDraftEntry("Flurbelblatz"),
+            routineDraftEntry("Squat", sets: 4, reps: 5, weight: 100),
+        ])]
+        harness.viewModel.onAppear(weightUnit: .kilograms)
+        harness.viewModel.descriptionText = "Push day: bench press, Flurbelblatz, squat"
+        harness.viewModel.submit()
+        await harness.settle()
+
+        #expect(harness.viewModel.createdRoutine == nil)
+        harness.viewModel.createRoutine()
+
+        let created = try #require(harness.viewModel.createdRoutine)
+        #expect(created.name == "Push Day")
+        // The unresolved row was left out of the write, so it is left out here too, and
+        // the numbering closes the gap exactly as `order` does.
+        #expect(created.exercises.map(\.name) == ["Bench Press", "Squat"])
+        #expect(created.exercises.map(\.number) == [1, 2])
+        #expect(created.exercises.map(\.isLast) == [false, true])
+        #expect(created.totals == [
+            "ai_coach.routine_draft.created.exercises.other".localized(2),
+            "routine.sets_count".localized(7),
+        ].joined(separator: " • "))
+
+        // The next drafting session starts without it.
+        harness.viewModel.sheetWasDismissed()
+        #expect(harness.viewModel.createdRoutine == nil)
+    }
+
+    @Test("A one-exercise, one-set routine reads in the singular")
+    func confirmationTotalsUseTheSingular() {
+        let summary = CreatedRoutineSummary(name: "Solo", exerciseCount: 1, setCount: 1, rows: [])
+        #expect(summary.totals == [
+            "ai_coach.routine_draft.created.exercises.one".localized,
+            "ai_coach.routine_draft.created.sets.one".localized,
+        ].joined(separator: " • "))
+    }
+
+    @Test("A draft reviewed without a name of its own is created under the fallback name")
     func namelessDraftGetsTheFallbackName() async {
         let harness = RoutineDraftHarness.make()
         harness.drafting.snapshots = [routineDraftSnapshot(name: "   ", [routineDraftEntry("Bench Press")])]
@@ -374,6 +416,10 @@ struct RoutineDraftTests {
         harness.viewModel.descriptionText = "bench press"
         harness.viewModel.submit()
         await harness.settle()
+        // Since ticket 04 a nameless draft asks for a name; skipping the question is what
+        // leaves the fallback to Create.
+        #expect(harness.viewModel.question == "ai_coach.routine_draft.question.name".localized)
+        harness.viewModel.reviewNow()
         harness.viewModel.createRoutine()
 
         #expect(harness.routines.createdNames == ["ai_coach.routine_draft.default_name".localized])
@@ -385,7 +431,7 @@ struct RoutineDraftTests {
         harness.drafting.snapshots = [routineDraftSnapshot([routineDraftEntry("Bench Press")])]
         harness.viewModel.onAppear(weightUnit: .kilograms)
 
-        harness.viewModel.descriptionText = "Push day"
+        harness.viewModel.descriptionText = "Push day: bench press"
         harness.viewModel.submit()
         await harness.settle()
 
@@ -405,7 +451,7 @@ struct RoutineDraftTests {
         harness.drafting.snapshots = [routineDraftSnapshot([routineDraftEntry("Bench Press")])]
         harness.viewModel.onAppear(weightUnit: .pounds)
 
-        harness.viewModel.descriptionText = "Push day"
+        harness.viewModel.descriptionText = "Push day: bench press"
         harness.viewModel.submit()
         await harness.settle()
 

@@ -113,12 +113,12 @@ struct AISparkleView: View {
                     pulsing = true
                 }
             } else {
-                pulsing = false
+                stopPulsing()
             }
         }
         .onChange(of: reduceMotion) { _, reduced in
             if reduced {
-                pulsing = false
+                stopPulsing()
             } else if pulse {
                 withAnimation(.easeInOut(duration: 0.7).repeatForever(autoreverses: true)) {
                     pulsing = true
@@ -126,6 +126,14 @@ struct AISparkleView: View {
             }
         }
         .accessibilityHidden(true)
+    }
+
+    /// A `repeatForever` pulse only ends when its value is reset with animations
+    /// disabled; a plain `pulsing = false` leaves it running.
+    private func stopPulsing() {
+        var transaction = Transaction(animation: nil)
+        transaction.disablesAnimations = true
+        withTransaction(transaction) { pulsing = false }
     }
 }
 

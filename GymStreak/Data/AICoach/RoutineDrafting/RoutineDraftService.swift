@@ -2,7 +2,7 @@
 //  RoutineDraftService.swift
 //  GymStreak
 //
-//  The routine-drafting session: one `LanguageModelSession` per drafting session, its
+//  The routine-drafting service: a fresh `LanguageModelSession` per model turn, its
 //  instructions, and the mapping from a guided-generation snapshot to the plain values
 //  the rest of the app works in. See docs/ai-coach-routine-drafting.md.
 //
@@ -11,6 +11,14 @@
 //  `CoachChatMessage` is a persisted `{id, role, text, phase}` that a structured draft
 //  payload does not fit. A separate session also keeps this feature's generation
 //  independent of the chat's per-message meter.
+//
+//  **A guided draft is not one continuing session** (ticket 04). Every turn — the
+//  description, then each answer to a question Swift decided to ask — is sent to a fresh
+//  session as the person's words alone. On device (2026-09-24) a continued session
+//  answered "Bankdrücken und Kniebeugen" with a new list of invented categories: with its
+//  own earlier invented reply in the transcript, the model reproduced that shape instead
+//  of transcribing. A fresh session never sees anything the model wrote, and it cannot
+//  overflow the context window, so no condense policy is needed.
 //
 //  Verified shape (same SDK as `CoachChatService`): guided generation via
 //  `streamResponse(to:generating:options:)`, snapshots are cumulative, and the stream
@@ -35,12 +43,17 @@ final class RoutineDraftService: RoutineDrafting {
     private let logger = Logger(subsystem: "app.gymstreak.aicoach", category: "RoutineDraft")
     private let availability: AICoachAvailabilityProviding
 
-    /// Retained across turns so ticket 04's follow-up questions land in the same
-    /// conversation. Rebuilt when the reader's unit changes, because the instructions
-    /// state the unit as a rule the model drafts by and a live session carries the
-    /// instructions it was born with (the same reason `CoachChatService` re-seeds).
-    private var session: LanguageModelSession?
-    private var sessionUnit: WeightUnit?
+    /// A session `prewarm()` warmed and no turn has used yet, with the unit its
+    /// instructions state. The next turn takes it; every later turn builds its own.
+    /// **Registers no `Tool`s** — structured generation only.
+    private var warmSession: LanguageModelSession?
+    private var warmUnit: WeightUnit?
+    /// What the person has said in this drafting conversation, oldest first: the
+    /// description, then each answer framed with the question it answers. A line joins
+    /// once its turn has finished, so a thrown or cancelled turn is not repeated. An answer
+    /// whose finished draft the ViewModel refuses (no exercise survived) *does* stay — it
+    /// is still the person's own words, and a retry is sent alongside it.
+    private var turns: [String] = []
 
     init(availability: AICoachAvailabilityProviding? = nil) {
         self.availability = availability ?? AICoachAvailability.shared
@@ -49,20 +62,46 @@ final class RoutineDraftService: RoutineDrafting {
     // MARK: - RoutineDrafting
 
     func prewarm() {
-        guard availability.isAvailable else { return }
-        activeSession(for: sessionUnit ?? .kilograms).prewarm()
+        guard availability.isAvailable, warmSession == nil else { return }
+        let unit = warmUnit ?? .kilograms
+        let session = Self.makeSession(unit: unit)
+        warmSession = session
+        warmUnit = unit
+        session.prewarm()
     }
 
     func draft(
         from description: String,
         weightUnit: WeightUnit
     ) -> AsyncThrowingStream<RoutineDraftSnapshot, Error> {
-        AsyncThrowingStream { continuation in
+        turns = []
+        return respond(adding: description, weightUnit: weightUnit)
+    }
+
+    func answer(
+        _ answer: String,
+        to gap: RoutineDraftGap,
+        weightUnit: WeightUnit
+    ) -> AsyncThrowingStream<RoutineDraftSnapshot, Error> {
+        respond(adding: RoutineDraftInstructions.answer(answer, to: gap), weightUnit: weightUnit)
+    }
+
+    // MARK: - Turn
+
+    /// Streams one turn: every line the person has said so far plus `line`, sent to a
+    /// session of its own.
+    private func respond(
+        adding line: String,
+        weightUnit: WeightUnit
+    ) -> AsyncThrowingStream<RoutineDraftSnapshot, Error> {
+        let prompt = RoutineDraftInstructions.prompt(from: turns + [line])
+        let session = takeSession(unit: weightUnit)
+        return AsyncThrowingStream { continuation in
             let task = Task { @MainActor in
                 let start = ContinuousClock.now
                 do {
-                    let stream = self.activeSession(for: weightUnit).streamResponse(
-                        to: description,
+                    let stream = session.streamResponse(
+                        to: prompt,
                         generating: RoutineDraftOutput.self,
                         options: GenerationOptions(maximumResponseTokens: Self.maximumResponseTokens)
                     )
@@ -70,12 +109,16 @@ final class RoutineDraftService: RoutineDrafting {
                         try Task.checkCancellation()
                         continuation.yield(Self.snapshot(from: snapshot.content))
                     }
+                    try Task.checkCancellation()
+                    self.turns.append(line)
                     let elapsed = ContinuousClock.now - start
-                    self.logger.notice("routine draft finished in \(Int(elapsed.components.seconds)) s")
+                    self.logger.notice("routine draft turn \(self.turns.count) finished in \(Int(elapsed.components.seconds)) s")
                     continuation.finish()
                 } catch {
                     self.log(error)
-                    continuation.finish(throwing: error)
+                    continuation.finish(
+                        throwing: Self.isDeclinedByModel(error) ? RoutineDraftingError.declinedByModel : error
+                    )
                 }
             }
             // Cancelling the consuming task terminates the stream, which has to reach
@@ -87,14 +130,18 @@ final class RoutineDraftService: RoutineDrafting {
 
     // MARK: - Session
 
-    private func activeSession(for unit: WeightUnit) -> LanguageModelSession {
-        if let session, sessionUnit == unit { return session }
-        let built = LanguageModelSession(
-            instructions: Instructions(RoutineDraftInstructions.build(unit: unit))
-        )
-        session = built
-        sessionUnit = unit
-        return built
+    /// The prewarmed session when it states the right unit, else a new one. Never
+    /// prewarms here: a respond call follows immediately, and `prewarm()` needs ≥1 s
+    /// before one to help (the chat's post-condense failures came from exactly that).
+    private func takeSession(unit: WeightUnit) -> LanguageModelSession {
+        defer { warmSession = nil }
+        if let warmSession, warmUnit == unit { return warmSession }
+        warmUnit = unit
+        return Self.makeSession(unit: unit)
+    }
+
+    private static func makeSession(unit: WeightUnit) -> LanguageModelSession {
+        LanguageModelSession(instructions: Instructions(RoutineDraftInstructions.build(unit: unit)))
     }
 
     // MARK: - Snapshot mapping
@@ -122,13 +169,60 @@ final class RoutineDraftService: RoutineDrafting {
         return RoutineDraftEntry(name: name, setCount: setCount, reps: reps, weight: weight)
     }
 
+    // MARK: - Errors
+
+    /// Whether the model declined the words themselves — its guardrail fired or it refused.
+    ///
+    /// Matched **by case, never by `NSError.code`**: on iOS 27 these arrive as
+    /// `LanguageModelError`, whose web-documented case order disagrees with the shipped
+    /// SDK's (`guardrailViolation` is third in the 27.0 SDK), and a guess from the code
+    /// number was wrong on device (2026-09-25). iOS 26 throws the older `GenerationError`.
+    private static func isDeclinedByModel(_ error: Error) -> Bool {
+        if #available(iOS 27.0, *), let modelError = error as? LanguageModelError {
+            switch modelError {
+            case .guardrailViolation, .refusal: return true
+            default: return false
+            }
+        }
+        if let generation = error as? LanguageModelSession.GenerationError {
+            switch generation {
+            case .guardrailViolation, .refusal: return true
+            default: return false
+            }
+        }
+        return false
+    }
+
     // MARK: - Logging
+
+    /// The iOS 27 error's case name, for a public log line — never its payload.
+    private static func caseLabel(_ error: Error) -> String {
+        guard #available(iOS 27.0, *), let modelError = error as? LanguageModelError else {
+            return "other"
+        }
+        switch modelError {
+        case .contextSizeExceeded: return "contextSizeExceeded"
+        case .rateLimited: return "rateLimited"
+        case .guardrailViolation: return "guardrailViolation"
+        case .refusal: return "refusal"
+        case .unsupportedCapability: return "unsupportedCapability"
+        case .unsupportedTranscriptContent: return "unsupportedTranscriptContent"
+        case .unsupportedGenerationGuide: return "unsupportedGenerationGuide"
+        case .unsupportedLanguageOrLocale: return "unsupportedLanguageOrLocale"
+        case .timeout: return "timeout"
+        @unknown default: return "unknown"
+        }
+    }
 
     private func log(_ error: Error) {
         if error is CancellationError { return }
         guard let generation = error as? LanguageModelSession.GenerationError else {
+            // A bare NSError code is only the case's position in an enum whose documented
+            // order disagrees with the shipped SDK (device, 2026-09-25: code 3 said nothing),
+            // so the case is named. The description stays private: a refusal or guardrail
+            // payload can carry the person's own words. Xcode shows it with a debugger attached.
             let ns = error as NSError
-            logger.error("routine draft failed: domain=\(ns.domain, privacy: .public) code=\(ns.code)")
+            logger.error("routine draft failed: \(Self.caseLabel(error), privacy: .public) domain=\(ns.domain, privacy: .public) code=\(ns.code) error=\(String(describing: error), privacy: .private)")
             return
         }
         switch generation {

@@ -64,6 +64,17 @@ struct RoutineDraftSnapshot: Equatable, Sendable {
 
 // MARK: - What Swift decided
 
+/// One thing a draft lacks before it is worth reviewing — asked about one at a time, and
+/// decided by `GroundedRoutineDraft.gaps`, never by the model.
+enum RoutineDraftGap: Equatable, Sendable {
+    /// The draft names no exercise at all.
+    case exercises
+    /// These exercises, by their drafted names, have no stated set count.
+    case setCounts(exerciseNames: [String])
+    /// The description gave the workout no name.
+    case name
+}
+
 /// One drafted exercise after grounding: the name the person used, how the live library
 /// answered it, and figures inside the app's own bounds.
 ///
@@ -95,7 +106,13 @@ struct GroundedDraftExercise: Identifiable {
     /// the picker names them.
     let draftedName: String
     let match: Match
+    /// The set count Create writes — the stated one, or the Swift default when the
+    /// description gave none (`isSetCountStated` says which).
     let setCount: Int
+    /// Whether the person actually said how many sets. `false` means `setCount` is the
+    /// Swift default, which is a gap to ask about before review rather than a value the
+    /// person chose.
+    let isSetCountStated: Bool
     let reps: Int
     /// Canonical kilograms, like every other stored weight in the app. Zero means the
     /// exercise is drafted without a load, not that a load is missing.
@@ -106,6 +123,7 @@ struct GroundedDraftExercise: Identifiable {
         draftedName: String,
         match: Match,
         setCount: Int,
+        isSetCountStated: Bool = true,
         reps: Int,
         weightKilograms: Double
     ) {
@@ -113,6 +131,7 @@ struct GroundedDraftExercise: Identifiable {
         self.draftedName = draftedName
         self.match = match
         self.setCount = setCount
+        self.isSetCountStated = isSetCountStated
         self.reps = reps
         self.weightKilograms = weightKilograms
     }
@@ -141,6 +160,7 @@ struct GroundedDraftExercise: Identifiable {
             draftedName: draftedName,
             match: .resolved(exercise),
             setCount: setCount,
+            isSetCountStated: isSetCountStated,
             reps: reps,
             weightKilograms: weightKilograms
         )
@@ -157,13 +177,19 @@ struct GroundedDraftExercise: Identifiable {
 /// described order the routine's order.
 struct GroundedRoutineDraft {
 
-    let name: String
+    /// Empty when the description gave the workout no name. Settable because a name the
+    /// person gives in answer to the question is applied here, in Swift.
+    var name: String
     /// Everything drafted, resolved or not, in the order the description gave.
     private(set) var exercises: [GroundedDraftExercise]
+    /// Names the model wrote that the person never said — dropped by the grounding pass,
+    /// and listed so the sheet can say so rather than lose them silently.
+    let droppedNames: [String]
 
-    init(name: String, exercises: [GroundedDraftExercise]) {
+    init(name: String, exercises: [GroundedDraftExercise], droppedNames: [String] = []) {
         self.name = name
         self.exercises = exercises
+        self.droppedNames = droppedNames
     }
 
     /// The exercises a Create may actually write. **This is the only list that reaches
@@ -184,12 +210,31 @@ struct GroundedRoutineDraft {
     /// removed. What the sheet turns into the "these are left out" note.
     var hasUnresolvedExercises: Bool { exercises.contains { !$0.isResolved } }
 
+    /// What the draft still lacks before it is worth reviewing, in the order to ask about
+    /// it — empty when it is complete. **This is the completeness predicate, and it is
+    /// Swift's, never the model's:** a prompt rule asking the model whether it has enough
+    /// is a request, this is a guarantee.
+    ///
+    /// No exercises makes every other gap moot, so it is then the only one. The order
+    /// after it puts the most useful answer first, so a person who stops answering early
+    /// is left with the most useful draft.
+    var gaps: [RoutineDraftGap] {
+        guard !exercises.isEmpty else { return [.exercises] }
+        var gaps: [RoutineDraftGap] = []
+        let unstated = exercises.filter { !$0.isSetCountStated }.map(\.draftedName)
+        if !unstated.isEmpty { gaps.append(.setCounts(exerciseNames: unstated)) }
+        if name.isEmpty { gaps.append(.name) }
+        return gaps
+    }
+
+    var isComplete: Bool { gaps.isEmpty }
+
     /// Points one still-unresolved row at a library exercise, keeping its position and
     /// its drafted figures.
     ///
     /// Deliberately a no-op on an already-resolved row: swapping an exercise the library
-    /// *did* place is editing the draft, which is ticket 03, not correcting a name the
-    /// library could not read.
+    /// *did* place would be re-drafting it, not correcting a name the library could not
+    /// read.
     mutating func resolve(_ id: UUID, to exercise: Exercise) {
         guard let index = exercises.firstIndex(where: { $0.id == id }),
               !exercises[index].isResolved
@@ -197,8 +242,18 @@ struct GroundedRoutineDraft {
         exercises[index] = exercises[index].pointed(at: exercise)
     }
 
-    /// Drops one still-unresolved row. Removing a *resolved* exercise is ticket 03.
-    mutating func removeUnresolved(_ id: UUID) {
-        exercises.removeAll { $0.id == id && !$0.isResolved }
+    /// Drops one row, resolved or not.
+    mutating func remove(_ id: UUID) {
+        exercises.removeAll { $0.id == id }
+    }
+
+    /// Moves one row `offset` places up (negative) or down (positive), clamped to the
+    /// list. Position in this array is what `pendingExercises()` turns into
+    /// `RoutineExercise.order`, so moving here is what reorders the saved routine.
+    mutating func move(_ id: UUID, by offset: Int) {
+        guard let index = exercises.firstIndex(where: { $0.id == id }) else { return }
+        let target = min(max(index + offset, 0), exercises.count - 1)
+        guard target != index else { return }
+        exercises.insert(exercises.remove(at: index), at: target)
     }
 }

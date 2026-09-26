@@ -79,11 +79,21 @@ struct RoutineDraftFooter: View {
 
     // MARK: - Describing
 
+    /// Answering a question while one is on screen (ticket 04), describing otherwise —
+    /// one field, so the conversation reads as one conversation.
+    private var isAnswering: Bool { viewModel.question != nil }
+
+    private var canSend: Bool {
+        isAnswering ? viewModel.canSubmitAnswer : viewModel.canSubmit
+    }
+
     private var descriptionField: some View {
         HStack(spacing: 10) {
             TextField(
-                "ai_coach.routine_draft.input.placeholder".localized,
-                text: $viewModel.descriptionText,
+                isAnswering
+                    ? "ai_coach.routine_draft.question.placeholder".localized
+                    : "ai_coach.routine_draft.input.placeholder".localized,
+                text: isAnswering ? $viewModel.answerText : $viewModel.descriptionText,
                 axis: .vertical
             )
             .textFieldStyle(.plain)
@@ -110,6 +120,8 @@ struct RoutineDraftFooter: View {
         Button {
             if viewModel.isDrafting {
                 viewModel.cancelDrafting()
+            } else if isAnswering {
+                viewModel.submitAnswer()
             } else {
                 viewModel.submit()
             }
@@ -120,18 +132,20 @@ struct RoutineDraftFooter: View {
                 .frame(width: 34, height: 34)
                 .background(
                     Circle().fill(
-                        viewModel.isDrafting || viewModel.canSubmit
+                        viewModel.isDrafting || canSend
                             ? AICoachTheme.accent
                             : AICoachTheme.accent.opacity(0.3)
                     )
                 )
         }
         .buttonStyle(.plain)
-        .disabled(!viewModel.isDrafting && !viewModel.canSubmit)
+        .disabled(!viewModel.isDrafting && !canSend)
         .accessibilityLabel(
             viewModel.isDrafting
                 ? "ai_coach.routine_draft.stop".localized
-                : "ai_coach.routine_draft.submit".localized
+                : isAnswering
+                    ? "ai_coach.routine_draft.question.send".localized
+                    : "ai_coach.routine_draft.submit".localized
         )
     }
 }

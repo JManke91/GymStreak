@@ -30,12 +30,15 @@ import FoundationModels
 @Generable
 struct RoutineDraftOutput {
 
-    @Guide(description: "A short name for this routine, written in the same language as the description. When the description names the workout, use that name; otherwise name it after what it trains. Never a sentence, never advice.")
+    @Guide(description: "A short name for this routine, in the same language as the description, taken from the description's own words for the workout. When the description gives the workout no name and does not say what kind of workout it is, write no name at all. Never make a name up, never a sentence, never advice.")
     let routineName: String
 
+    /// No minimum count, deliberately. A `.minimumCount(1)` here forced the model to
+    /// produce an exercise for "a push routine" — guided generation cannot emit fewer
+    /// than the schema demands — which is exactly the invention this surface exists to
+    /// prevent. An empty list is Swift's cue to ask (`GroundedRoutineDraft.gaps`).
     @Guide(
-        description: "Every exercise the description names, in the order the description names them. Never add an exercise the description does not name, and never leave one out.",
-        .minimumCount(1),
+        description: "Every exercise the description names, in the order the description names them. Never add an exercise the description does not name, and never leave one out. When the description names no exercise, write no exercises.",
         .maximumCount(12)
     )
     let exercises: [RoutineDraftExercise]

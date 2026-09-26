@@ -55,6 +55,12 @@ struct CoachPromptGroundingTests {
             prompts.append(("routine draft · \(unit.rawValue)",
                             RoutineDraftInstructions.build(unit: unit)))
         }
+        // The answer prompts of a guided draft (ticket 04), around a neutral answer: the
+        // person's own words are input, the frame around them is what could leak.
+        for (gap, gapName) in Self.routineDraftGaps {
+            prompts.append(("routine draft · answer · \(gapName)",
+                            RoutineDraftInstructions.answer("the answer", to: gap)))
+        }
         return prompts
     }
 
@@ -125,6 +131,42 @@ struct CoachPromptGroundingTests {
             ("PerformancePoint", String(describing: PerformancePoint.generationSchema)),
             ("ProgressionSegment", String(describing: ProgressionSegment.generationSchema))
         ]
+    }
+
+    private static let routineDraftGaps: [(RoutineDraftGap, String)] = [
+        (.exercises, "exercises"),
+        (.setCounts(exerciseNames: ["the exercise"]), "set counts"),
+        (.name, "name")
+    ]
+
+    // MARK: - The routine draft names no default
+
+    /// Ticket 04's single largest risk: told to produce a shape the input did not support,
+    /// the model fills it with a plausible default. So the drafting prompt and every
+    /// answer prompt carry **no figure at all** and no exercise, in either unit — any
+    /// default is applied in Swift after generation.
+    @Test("The routine-draft prompts name no set count, rep count, weight or exercise")
+    func routineDraftPromptsNameNoDefault() throws {
+        // "one" is left out: the prompt uses it as a pronoun ("never leave one out").
+        let numberWords = #"\b(two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)\b"#
+        let exerciseWords = #"\b(bench|press|squat|squats|deadlift|curl|curls|row|rows|lunge|pull-?up|push-?up|dip)\b"#
+        let prompts = WeightUnit.allCases.map { RoutineDraftInstructions.build(unit: $0) }
+            + Self.routineDraftGaps.map { RoutineDraftInstructions.answer("the answer", to: $0.0) }
+        // The schemas render their `.maximumCount` constraint as a digit, so they get the
+        // word scans only; `noGenerationSchemaCarriesADataShapedLiteral` covers their
+        // literals.
+        let schemas = [
+            String(describing: RoutineDraftOutput.generationSchema),
+            String(describing: RoutineDraftExercise.generationSchema)
+        ]
+
+        for prompt in prompts {
+            #expect(prompt.rangeOfCharacter(from: .decimalDigits) == nil, "carries a digit: \(prompt)")
+        }
+        for text in prompts + schemas {
+            #expect(text.range(of: numberWords, options: [.regularExpression, .caseInsensitive]) == nil)
+            #expect(text.range(of: exerciseWords, options: [.regularExpression, .caseInsensitive]) == nil)
+        }
     }
 
     // MARK: - The literal scan

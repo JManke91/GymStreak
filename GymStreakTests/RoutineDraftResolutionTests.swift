@@ -80,7 +80,7 @@ struct RoutineDraftResolutionTests {
             routineDraftEntry("Schrägbank Kurzhantel", sets: 4, reps: 12, weight: 22),
         ])]
         harness.viewModel.onAppear(weightUnit: .kilograms)
-        harness.viewModel.descriptionText = "Push day"
+        harness.viewModel.descriptionText = "Push day: bench press, Schrägbank Kurzhantel"
         harness.viewModel.submit()
         await harness.settle()
 
@@ -103,7 +103,7 @@ struct RoutineDraftResolutionTests {
             routineDraftEntry("Bench Press", sets: 3, reps: 8, weight: 60),
         ])]
         harness.viewModel.onAppear(weightUnit: .kilograms)
-        harness.viewModel.descriptionText = "Push day"
+        harness.viewModel.descriptionText = "Push day: Schrägbank Kurzhantel, bench press"
         harness.viewModel.submit()
         await harness.settle()
 
@@ -129,7 +129,7 @@ struct RoutineDraftResolutionTests {
         let harness = RoutineDraftHarness.make(libraryNames: ["Bench Press", "Squat"])
         harness.drafting.snapshots = [routineDraftSnapshot([routineDraftEntry("Bench Press")])]
         harness.viewModel.onAppear(weightUnit: .kilograms)
-        harness.viewModel.descriptionText = "Push day"
+        harness.viewModel.descriptionText = "Push day: bench press"
         harness.viewModel.submit()
         await harness.settle()
 
@@ -150,7 +150,7 @@ struct RoutineDraftResolutionTests {
             routineDraftEntry("Flurbelblatz"),
         ])]
         harness.viewModel.onAppear(weightUnit: .kilograms)
-        harness.viewModel.descriptionText = "Push day"
+        harness.viewModel.descriptionText = "Push day: bench press, Flurbelblatz"
         harness.viewModel.submit()
         await harness.settle()
 
@@ -173,7 +173,7 @@ struct RoutineDraftResolutionTests {
             routineDraftEntry("Flurbelblatz", sets: 4, reps: 12, weight: 22),
         ])]
         harness.viewModel.onAppear(weightUnit: .kilograms)
-        harness.viewModel.descriptionText = "Push day"
+        harness.viewModel.descriptionText = "Push day: bench press, Flurbelblatz"
         harness.viewModel.submit()
         await harness.settle()
 
@@ -214,7 +214,7 @@ struct RoutineDraftResolutionTests {
             routineDraftEntry("Flurbelblatz"),
         ])]
         harness.viewModel.onAppear(weightUnit: .kilograms)
-        harness.viewModel.descriptionText = "Push day"
+        harness.viewModel.descriptionText = "Push day: press, Flurbelblatz"
         harness.viewModel.submit()
         await harness.settle()
 

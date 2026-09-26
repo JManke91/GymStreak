@@ -33,7 +33,8 @@ protocol RoutineDrafting: AnyObject {
     /// than once.
     func prewarm()
 
-    /// Streams a draft of the routine `description` asks for.
+    /// Streams a draft of the routine `description` asks for. **Starts a new drafting
+    /// conversation** — nothing from an earlier one carries over.
     ///
     /// Each element is a cumulative snapshot: the routine name so far plus every
     /// exercise that is fully generated. The stream finishes by throwing when
@@ -47,4 +48,25 @@ protocol RoutineDrafting: AnyObject {
         from description: String,
         weightUnit: WeightUnit
     ) -> AsyncThrowingStream<RoutineDraftSnapshot, Error>
+
+    /// Streams the whole draft again with the person's `answer` to the question about
+    /// `gap` added — the next turn of the conversation `draft(from:weightUnit:)` started.
+    ///
+    /// Costs nothing extra by construction: the allowance belongs to the drafting
+    /// session, and metering is the caller's, not this boundary's. Each turn runs in a fresh
+    /// session over the person's own lines, so no overflow handling is needed.
+    func answer(
+        _ answer: String,
+        to gap: RoutineDraftGap,
+        weightUnit: WeightUnit
+    ) -> AsyncThrowingStream<RoutineDraftSnapshot, Error>
+}
+
+/// The one drafting failure the sheet words differently: the on-device model declined the
+/// person's words — its safety guardrail fired, or it refused. **Retrying the same words
+/// never helps** (device, 2026-09-25: a harmless German description was blocked every time
+/// as "May contain sensitive content", while the same routine worded differently went
+/// through), so the sheet asks for different wording instead of "try again".
+enum RoutineDraftingError: Error, Equatable {
+    case declinedByModel
 }

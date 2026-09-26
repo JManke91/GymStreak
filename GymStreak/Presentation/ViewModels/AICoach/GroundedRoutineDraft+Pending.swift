@@ -20,31 +20,51 @@ extension GroundedRoutineDraft {
     /// library exercise has no library exercise to write, and this app does not invent
     /// one — it is left out, and the sheet says so before Create is tapped.
     ///
-    /// `order` is assigned from position among the resolved exercises, not from anything
-    /// the model produced: the schema asks for the exercises in the order the description
-    /// lists them, and this is where that ordering becomes the routine's ordering — with
-    /// the gaps left by unresolved rows closed up. The sets are identical by construction
-    /// — a drafted exercise carries one set scheme, repeated — and ticket 05 is what makes
-    /// them differ.
+    /// `order` is assigned from position among the resolved exercises, never carried over
+    /// from an edit: the draft's array order is what the sheet showed — after any move —
+    /// and this is where it becomes the routine's stored `order`, with the gaps left by
+    /// unresolved rows closed up.
     ///
-    /// Alternatives and rep-range goals are deliberately left empty. Nothing in a typed
-    /// description expresses them, and inventing either would be the app guessing on the
-    /// person's behalf at the exact moment it writes to their store.
-    func pendingExercises() -> [PendingRoutineExercise] {
+    /// - Parameter edits: exercises the person reopened in `ConfigureExerciseSetsView`,
+    ///   keyed by drafted-row id. An edited row writes exactly what that screen returned;
+    ///   every other row writes its drafted scheme.
+    func pendingExercises(
+        applying edits: [UUID: PendingRoutineExercise] = [:]
+    ) -> [PendingRoutineExercise] {
         resolvedExercises.enumerated().compactMap { index, drafted in
-            guard let exercise = drafted.exercise else { return nil }
-            return PendingRoutineExercise(
-                exercise: exercise,
-                sets: (0..<drafted.setCount).map { order in
-                    ExerciseSet(
-                        reps: drafted.reps,
-                        weight: drafted.weightKilograms,
-                        restTime: RoutineDraftGrounder.defaultRestTime,
-                        order: order
-                    )
-                },
-                order: index
-            )
+            guard var pending = edits[drafted.id] ?? drafted.pendingExercise(order: index) else {
+                return nil
+            }
+            pending.order = index
+            return pending
         }
+    }
+}
+
+extension GroundedDraftExercise {
+
+    /// This drafted exercise's own scheme as a pending exercise, or `nil` while it is
+    /// unresolved. Also what `ConfigureExerciseSetsView` is seeded with the first time the
+    /// row is opened.
+    ///
+    /// The sets are identical by construction — a drafted exercise carries one set scheme,
+    /// repeated. Alternatives and rep-range goals are deliberately left empty: nothing in a
+    /// typed description expresses them, and inventing either would be the app guessing on
+    /// the person's behalf at the exact moment it writes to their store. The person can
+    /// add both by opening the row.
+    func pendingExercise(order: Int) -> PendingRoutineExercise? {
+        guard let exercise else { return nil }
+        return PendingRoutineExercise(
+            exercise: exercise,
+            sets: (0..<setCount).map { setOrder in
+                ExerciseSet(
+                    reps: reps,
+                    weight: weightKilograms,
+                    restTime: RoutineDraftGrounder.defaultRestTime,
+                    order: setOrder
+                )
+            },
+            order: order
+        )
     }
 }

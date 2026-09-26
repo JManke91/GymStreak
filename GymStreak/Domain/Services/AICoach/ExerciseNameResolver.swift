@@ -94,7 +94,10 @@ struct ExerciseNameResolver {
     /// their digraph form so "Bankdrücken" and "Bankdruecken" unify, folds other
     /// diacritics, lowercases, and trims. Bridges same-language spelling variants
     /// only — cross-language equivalents are the model's job.
-    private func fold(_ text: String) -> String {
+    ///
+    /// Internal rather than private so the routine draft's provenance check folds the
+    /// person's words exactly the way names are folded here — one fold, not two.
+    func fold(_ text: String) -> String {
         let digraphs: [Character: String] = [
             "ä": "ae", "ö": "oe", "ü": "ue", "ß": "ss",
             "Ä": "ae", "Ö": "oe", "Ü": "ue",

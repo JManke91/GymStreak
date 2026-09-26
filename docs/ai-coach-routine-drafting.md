@@ -9,10 +9,10 @@ from one they built by hand. They tap **Discard** and nothing was ever written.
 **Target:** iOS only. FoundationModels does not exist on watchOS; the watch receives the finished
 routine through the ordinary sync path with no change of its own.
 
-**Status:** tickets 01–02 of `.scratch/ai-coach-create-routine/`. 01 was the tracer bullet; 02 made
-an exercise name the library could not place into a row the person can answer — see §6a and §9.
-Ticket 03 makes the draft editable, 04 lets the conversation ask questions back, 05 makes the sets
-richer.
+**Status:** tickets 01–04 of `.scratch/ai-coach-create-routine/`. 01 was the tracer bullet; 02 made
+an exercise name the library could not place into a row the person can answer — see §6a and §9; 03
+made the draft editable before Create — see §9a; 04 asks for what a thin description is missing
+instead of inventing it — see §9c. 05 makes the sets richer.
 
 ---
 
@@ -53,9 +53,11 @@ Two consequences that are load-bearing rather than stylistic:
 | Presentation | `ViewModels/RoutineCreating.swift` | a *name* for the existing creation seam |
 | Presentation | `ViewModels/AICoach/RoutineDraftViewModel.swift` | preflight, stream, ground, resolve, persist |
 | Presentation | `ViewModels/AICoach/RoutineDraftRows.swift` | `RoutineDraftRow` + the composer that builds the review list |
+| Presentation | `ViewModels/AICoach/RoutineDraftConversation.swift` | which gap the sheet is asking about + the question text (ticket 04) |
 | Presentation | `ViewModels/AICoach/GroundedRoutineDraft+Pending.swift` | draft → `[PendingRoutineExercise]` |
 | Presentation | `Views/AICoach/RoutineDrafting/RoutineDraftSheet.swift` | the sheet |
 | Presentation | `Views/AICoach/RoutineDrafting/RoutineDraftRowView.swift` | one review row, resolved or not |
+| Presentation | `Views/AICoach/RoutineDrafting/RoutineDraftQuestionCard.swift` | the one open question (Review draft / Discard), and `RoutineDraftLeftOutNote` |
 | Presentation | `Views/AICoach/RoutineDrafting/RoutineDraftExercisePickerView.swift` | "which exercise did you mean?" |
 | Presentation | `Views/Exercises/ExercisePickerRowView.swift` | the library row both pickers use |
 | App | `AppDependencies.swift` | `routinesViewModel`, `exercisesViewModel`, `makeRoutineDraftService()`, `makeRoutineDraftViewModel()` |
@@ -69,7 +71,9 @@ Every other AI-coach protocol (`AICoachServicing`) hands the ViewModel a
 `LanguageModelSession.ResponseStream<Output>` directly. `RoutineDrafting` deliberately does not:
 
 ```swift
-func draft(from description: String, weightUnit: WeightUnit)
+func draft(from description: String, weightUnit: WeightUnit)          // starts a conversation
+    -> AsyncThrowingStream<RoutineDraftSnapshot, Error>
+func answer(_ answer: String, to gap: RoutineDraftGap, weightUnit: WeightUnit)  // continues it
     -> AsyncThrowingStream<RoutineDraftSnapshot, Error>
 ```
 
@@ -90,8 +94,8 @@ the model running for an answer nobody will see.
 
 ```swift
 @Generable struct RoutineDraftOutput {
-    let routineName: String
-    let exercises: [RoutineDraftExercise]     // .minimumCount(1), .maximumCount(12)
+    let routineName: String                   // empty when the person gave no name (ticket 04)
+    let exercises: [RoutineDraftExercise]     // .maximumCount(12) — no minimum, see below
 }
 @Generable struct RoutineDraftExercise {
     let name: String        // copied from the description, in the description's language
@@ -108,6 +112,12 @@ decided in Swift. Zero is the sentinel because it is the one value the model can
 plain language without naming a programming construct, and because a real set count, rep count or
 load of zero is meaningless anyway, so nothing legitimate is shadowed. Ticket 05 revisits this
 deliberately when rep goals and rest times arrive.
+
+**No minimum exercise count (since ticket 04).** Ticket 01 had `.minimumCount(1)`. Guided generation
+cannot emit fewer elements than the schema demands, so for *"a push routine"* that constraint
+*forced* an exercise out of the model. An empty list is now a legitimate answer, and Swift's cue to
+ask (§9c). **Removing the minimum was necessary but not sufficient** — the device check showed the
+model fills the list anyway (§6b), which is why the guarantee is the provenance check, not the schema.
 
 **The exercise library is not in the schema.** A dynamic `@Guide(.anyOf:)` over all ~96 catalog names
 was considered and rejected on per-request token cost: every value would ride in the prompt on every
@@ -136,6 +146,38 @@ request. The model emits a free-text name; Swift resolves it.
   Apple's docs mark the whole `GenerationError` enum deprecated in favour of a newer
   `LanguageModelError`, but several of that type's cases are tagged iOS 27.0+ Beta and
   `GenerationError` is what actually throws on 26.x — so 26.x code catches `GenerationError`.
+- **On an iOS 27 device the errors are `LanguageModelError`, not `GenerationError`** (researched
+  2026-09-25). `LanguageModelError` is 27.0+, `@nonexhaustive`, and replaces the deprecated
+  `GenerationError` together with `LanguageModelSession.Error` and `SystemLanguageModel.Error`. Its
+  case order **in the shipped iOS 27.0 SDK** (`FoundationModels.swiftinterface`) is
+  `contextSizeExceeded`, `rateLimited`, `guardrailViolation`, `refusal`, `unsupportedCapability`,
+  `unsupportedTranscriptContent`, `unsupportedGenerationGuide`, `unsupportedLanguageOrLocale`,
+  `timeout` — Apple's web docs list a different order. There is **no** `decodingFailure` equivalent. A bridged `NSError.code` is only the case's position, which is not a documented contract
+  and can shift; so `RoutineDraftService.log(_:)` logs the **case name** publicly (`caseLabel`) and the
+  error's description only as `.private` — a refusal or guardrail payload can carry the person's own
+  words (architecture review, 2026-09-25). Device, 2026-09-25: *"Push-Tag-Test: Bankdrücken 3 Sätze jeweils 8
+  Wiederholungen mit 80kg"* failed every time with `LanguageModelError` code 3, which that order
+  reads as `.timeout` — **wrong**: logged by name it was *"May contain sensitive content"*, Apple's
+  safety guardrail. The documented order and the shipped code disagree, which is exactly why the log
+  names the error rather than trusting its number.
+- **A declined description is its own message** (`RoutineDraftingError.declinedByModel`).
+  `RoutineDraftService.isDeclinedByModel` matches `guardrailViolation` / `refusal` by case on both
+  `LanguageModelError` (iOS 27, behind `#available`) and `GenerationError` (iOS 26), and the sheet
+  says the wording was declined and to phrase it differently — never "try again", since the same
+  words are declined every time. The unit is refunded like any failed draft; a declined answer stays
+  on its question. **Loosening the filter is not an option** (researched 2026-09-25):
+  `SystemLanguageModel(guardrails: .permissiveContentTransformations)` (iOS 26.0+) is documented as
+  "only applicable for generating string values"; for non-String (`@Generable`) generation it
+  "behaves identically to the default guardrail mode". Guardrails check input and output. Apple's
+  guidance for a user-originated prompt is to tell the person it is not supported and let them try
+  different wording — which is what the sheet does. Sources:
+  https://developer.apple.com/documentation/foundationmodels/systemlanguagemodel/guardrails/permissivecontenttransformations ,
+  https://developer.apple.com/documentation/foundationmodels/improving-the-safety-of-generative-model-output .
+  The same routine as *"Bankdrücken 3 Sätze à 8 mit 80 kg"* went through, so the
+  filter reacts to wording, not content. Sources:
+  https://developer.apple.com/documentation/foundationmodels/languagemodelerror ,
+  https://developer.apple.com/documentation/foundationmodels/languagemodelerror/timeout(_:) ,
+  WWDC26 session 339.
 - `LanguageModelSession` conforms to `Sendable` (per its reference page's Conforms-To list). Whether
   it is *intended* to be driven off the main actor is still undocumented, so this service stays
   `@MainActor` like `CoachChatService`. `LanguageModelSession.Error.concurrentRequests` documents
@@ -163,6 +205,18 @@ The reader's unit is named in the prompt (`AICoachUnitVocabulary.englishName`) s
 that come back can be converted to canonical kilograms exactly once, in the grounder. The routine
 name is asked for in the description's own language, which is what makes a German description produce
 a German routine name.
+
+**Since ticket 04 the name is taken from the person's own words or left empty.** Ticket 01 told the
+model to "name it after what it trains" when the description gave no name — a plausible default the
+model made up. Now *"a push routine"* still yields *Push* (the person said what kind of workout it
+is), but *"bench press three by eight"* yields no name, and Swift asks for one (§9c). The prompt also
+says outright that a description naming no exercise gets no exercises, and it explains a message of
+several lines: the first is the description, each later one an answer that names the question it
+answers; draft from all of them as one description and fill nothing no line covers.
+`RoutineDraftInstructions.answer(_:to:)` frames an answer ("Answer about which exercises the routine
+should include — …") in English; the answer itself stays in the person's language.
+`prompt(from:)` joins the lines, flattening line breaks inside one so a description typed over several
+lines stays the first line.
 
 ## 6. The grounding pass
 
@@ -206,9 +260,9 @@ all three of which the model has been measured doing in this app.
 
 **Answering keeps everything the description gave.** `GroundedRoutineDraft.resolve(_:to:)` replaces
 only the `Match`: same row identity, same position, same set count, reps and weight. That is what
-makes the described order still the routine's order after an answer. `removeUnresolved(_:)` drops the
-row outright. Both are deliberate no-ops on an already-*resolved* row — swapping or deleting an
-exercise the library did place is editing the draft, which is ticket 03.
+makes the described order still the routine's order after an answer. `resolve` is a deliberate no-op
+on an already-*resolved* row — swapping an exercise the library did place would be re-drafting it.
+Removing a row is `remove(_:)`, which since ticket 03 drops any row, resolved or not (§9a).
 
 **Create can never write an unresolved row**, by construction rather than by a check at the button:
 `pendingExercises()` maps `resolvedExercises`, and `canCreate` is false when that list is empty. An
@@ -244,6 +298,70 @@ per drafted *position* and reuses it on every later snapshot. Each streamed snap
 the entry at a given index is the same entry throughout; minting a fresh id per snapshot gave every
 row a new identity on every token burst, which makes SwiftUI rebuild the list rather than diff it
 (rendering rule 8) and would leave a picker opened on a row pointing at an id that no longer exists.
+
+### 6b. Provenance — every name must come from the person's words (ticket 04)
+
+**Device round 5 (2026-09-24, German, iPhone) failed ticket 04's first criterion.** *"eine push
+routine"* came back named *Eine Push Routine* with **twelve invented rows** — Push, Pull, Squat, Legs,
+Chest, Shoulders, Back, Arms, Abs, Core, Legs, Back: its own word for the workout, then training
+categories, repeating until `.maximumCount(12)` stopped it. The prompt said "when they name no
+exercise, write no exercises"; a ~3B model handed an array field fills it. Eleven rows were caught by
+the library (unmatched), but **"Pull" resolved confidently to *Face Pulls*** (the resolver's
+word-boundary step: `pull` starts the word `pulls`) — an invented exercise presented as the person's
+own, one tap from being saved. The question then asked for set counts of all twelve.
+
+**Fix — a Swift guarantee, not a better prompt.** `RoutineDraftGrounder.ground(…, personWords:)`
+receives everything the person typed in the conversation (the description plus every answer sent to
+the model, collected by `RoutineDraftViewModel.personWords`) and applies two rules before a name meets
+the library:
+
+1. **Provenance.** Every word of the drafted name must be **a word the person used**, both folded
+   with `ExerciseNameResolver.fold` (made internal for this — one fold in the app, not two). Equal,
+   or differing only by an ending of up to two letters ("Squat"/"squats", "Kniebeuge"/"Kniebeugen"),
+   because a false *drop* loses something the person said. **Not a substring:** the first version
+   was, and device round 6 let "Rücken" through because `fold("Bankdrücken")` contains `ruecken` —
+   a word hidden inside a longer one is not the person's. It never consults the library, so it is a
+   provenance filter, not a second matcher.
+2. **The workout's own name is not an exercise.** "Push" *is* in "eine push routine" — as the kind of
+   workout, which the model also put in the routine name. An **unmatched** name whose words are all
+   in the routine name is dropped. A name the library resolves is kept even so ("Squat Day: squat
+   5×5").
+
+Names dropped by rule 1 are kept in `GroundedRoutineDraft.droppedNames` and shown under the list
+("Nicht aus deiner Beschreibung — … wurde weggelassen") so a real exercise the model rewrote is never
+lost silently — **except while the draft has no exercises at all**, when the honest thing to show is
+the "which exercises?" question, not a list of things the model made up. Rule-2 drops are not listed.
+
+Replayed verbatim in `RoutineDraftQuestionTests.deviceReplayAsksInsteadOfInventing` /
+`deviceReplayThroughTheViewModel`: the twelve rows ground to an empty draft whose only gap is
+`.exercises`.
+
+**Device round 7 (2026-09-25/26, German, iPhone, iOS 27) — passed; ticket 04 closed.** *"eine
+push routine"* asked for exercises with no rows and no dropped-names note; *"Bankdrücken und
+Kniebeugen"* either drafted both or stayed on the question, never with an invented row; *"je vier"*
+reviewed at 4 sets each; a nameless description asked for a name. *"Push-Tag-Test: Bankdrücken 3 Sätze
+jeweils 8 Wiederholungen mit 80kg"* was blocked by Apple's guardrail every time and now shows the
+"reword it" message with the text kept (§4, logged as `guardrailViolation`); the same routine as
+*"… 3 Sätze à 8 mit 80 kg"* drafted correctly. The streaming border and sparkle stop once the draft
+lands (§9).
+
+**Device round 6 (2026-09-24) — the answer turn invented too.** Rounds 1–3 of this surface passed
+with the provenance check; answering *"Bankdrücken und Kniebeugen"* then came back with neither
+exercise, but a fresh list of eleven categories and moves (Liegestütze, Bizeps, … Rücken). The
+answer went to **the same session**, whose transcript held the model's own invented twelve-row reply;
+the model reproduced that shape instead of transcribing. (The single most plausible reading; every
+full description in rounds 1–4 was transcribed exactly from a fresh session.) Three fixes: the
+whole-word rule above; **every turn in a fresh session** carrying the person's lines only (§9c); and
+an answer that yields no exercise stays on its question (§9c) instead of falling through to an empty
+review. Pinned by `answerThatYieldsNothingStaysOnTheQuestion` and `wordInsideACompoundIsNotProvenance`.
+
+**Known trade-off:** a model that paraphrases a real name ("db press" → "dumbbell press") now has it
+dropped, and the note says so. Rounds 1–4 measured the model copying names exactly, so this should be
+rare; if a device round shows otherwise, loosen `isInPersonWords` rather than removing it.
+
+**Follow-up, not applied:** the resolver's word-boundary step lets `pull` resolve to *Face Pulls* for
+any caller, Coach Chat included — the same family as the round-1 compound defect. Provenance removes
+it here; the shared leniency is untouched.
 
 ### Device rounds
 
@@ -314,6 +432,14 @@ That closes the loop opened by round 2: the one name in a two-exercise descripti
 matching could not bridge is now fixed by the person in two taps, and the figures the model
 transcribed correctly survive the correction.
 
+#### Round 4 (2026-09-24) — ticket 03, passed
+
+Editing the draft before Create, on iPhone. A three-exercise push day (bench 3×8 @ 60 kg, rows 3×10
+@ 50 kg, squat 4×5 @ 100 kg) was renamed to *Upper A*, Squat moved to the top with two Move ups, Row
+removed, and Bench Press reopened in the set editor and cut to 2 sets — its row summary updated on
+return. The free-request hint did not move while editing. Create wrote *Upper A* as Squat → Bench
+Press with Bench at 2 sets: every edit reached the store, in the order the sheet showed.
+
 **Bound every number.** The figures are copied from a sentence a person typed, not entered in a
 stepper: unstated (`0`) falls back to `defaultSetCount` (3) / `defaultReps` (10); a stated value is
 capped at `maximumSetCount` (20) / `maximumReps` (100); a weight is converted with
@@ -352,12 +478,17 @@ materializes routine + exercises + sets + alternatives in one transaction, calls
 `fetchRoutines()` — and that re-fetch is what pushes the new routine to the watch. **There is no
 extra sync call and no parallel write path.**
 
-`GroundedRoutineDraft.pendingExercises()` is the whole mapping, over `resolvedExercises` alone:
-`order` comes from position among those (which is how the described order becomes the routine's
-order, with the gaps left by unresolved rows closed up), and each drafted exercise becomes `setCount`
-identical `ExerciseSet`s at `RoutineDraftGrounder.defaultRestTime`. Alternatives
-and rep-range goals are left empty — nothing in a typed description expresses them, and inventing
-either would be the app guessing on the person's behalf at the exact moment it writes to their store.
+`GroundedRoutineDraft.pendingExercises(applying:)` is the whole mapping, over `resolvedExercises`
+alone: `order` comes from position among those (which is how the order the sheet shows — described,
+then possibly moved — becomes the routine's order, with the gaps left by unresolved rows closed up).
+It is **always reassigned there**, never carried over from an edited `PendingRoutineExercise`, so a
+row edited and then moved still lands where the sheet showed it. A row the person reopened in the set
+editor writes exactly what that screen returned (the `edits` map, §9a); every other row becomes
+`setCount` identical `ExerciseSet`s at `RoutineDraftGrounder.defaultRestTime` via
+`GroundedDraftExercise.pendingExercise(order:)`. The drafted scheme leaves alternatives and rep-range
+goals empty — nothing in a typed description expresses them, and inventing either would be the app
+guessing on the person's behalf at the exact moment it writes to their store. The person can add
+both by opening the row.
 
 ### `RoutineCreating`, and why `AppDependencies` owns the routines ViewModel
 
@@ -412,14 +543,23 @@ Free residue  the whole feature, 5 drafting sessions a month, and every routine 
 Founder note  n/a — no new gate, so nothing new to convert against §7's permanent grant
 ```
 
+**Re-checked for ticket 04 (2026-09-24): unchanged.** Follow-up answers ride the session's single
+unit and reserve nothing; Review draft and Discard are free; no new placement or cap. §3 Rule 1 —
+this is the aha path made reachable from a one-line idea.
+
+**Re-checked for ticket 03 (2026-09-24): unchanged.** Renaming, reordering, removing and re-configuring
+rows are Swift-side edits of a draft the unit already paid for — no gate, no unit, no model call, no
+new placement. §3 Rule 1.
+
 **Re-checked for ticket 02 (2026-09-17): unchanged.** Resolving or removing an unresolved row raises
 no gate, reserves no unit and adds no `PaywallPlacement`. It makes the free tier's routine draft work
 in more cases, which is §3 Rule 1 territory, not a gating opportunity.
 
 **One unit per drafting *session*, not per message.** The counting unit for `.coachChat` is
 documented as "a sent message"; a drafting session is one unit however many turns it takes, because a
-guided conversation (ticket 04) must never cost a free user their whole month for one routine. The
-ViewModel holds the ticket for the life of the session and reserves nothing further.
+guided conversation (ticket 04, §9c) must never cost a free user their whole month for one routine.
+The ViewModel holds the ticket for the life of the session and reserves nothing further — pinned by
+`RoutineDraftQuestionTests.wholeConversationCostsOneUnit`.
 
 **It is refunded when the session gave the person nothing:**
 
@@ -441,6 +581,13 @@ reachable from an empty chat and from a full one. Present only while `isAvailabl
 reviews, so the list the person reads while it fills is the list they confirm. `AISurface` provides
 the streaming chrome; `AISkeletonBar` fills the name and the first rows before anything has landed.
 
+**The streaming chrome stops when the Coach does.** This sheet is the one place an `AISurface`
+stays on screen after its answer lands, and it revealed that the border shimmer and the sparkle
+pulse never stopped: both are `repeatForever` animations, which do not end when the flag flips —
+only when their value is reset inside a `Transaction` with animations disabled
+(`AISurface.stopShimmer()`, `AISparkleView.stopPulsing()`). Found on device 2026-09-25; the fix is in
+the shared components, so every Coach surface that stops streaming in place benefits.
+
 **A row is either an answer or a question.** `RoutineDraftRowView` renders a resolved row as the
 library exercise's name and its set summary, and an unresolved one on a warning-tinted card: the words
 the person used, the same set summary (the figures survive being answered, and showing them says so),
@@ -454,11 +601,170 @@ Its results are recomputed in `onChange(of: searchText)` into `@State` rather th
 and the list is a `LazyVStack` — it is the one view here whose content scales with the person's own
 library (rendering rules 1 and 3).
 
+### 9a. Editing the draft before Create (ticket 03)
+
+Once the draft is final (`.review`) it is a starting point, not take-it-or-leave-it:
+
+- **Rename** — the name becomes a `TextField` bound to `RoutineDraftViewModel.routineName`. The
+  stream writes that property only while `.drafting` (`republish()`), so an edit elsewhere in the list
+  never puts the drafted name back. Create trims it and falls back to the default name when empty.
+- **Reorder / remove** — a resolved row carries an ellipsis `Menu` (Move up, Move down, Remove);
+  `RoutineDraftRow.canMoveUp/canMoveDown` are composed in `RoutineDraftRowComposer` so the menu
+  disables the impossible direction without knowing the list. `GroundedRoutineDraft.move(_:by:)`
+  (clamped) and `remove(_:)` mutate the draft's array; array position is only turned into the stored
+  `RoutineExercise.order` at Create (§7). Chosen over a `List` with `onMove` because the rows sit in
+  the `AISurface` card inside the sheet's scroll view — a `List` would have meant rebuilding the sheet.
+- **Adjust sets** — tapping a resolved row pushes the app's existing `ConfigureExerciseSetsView`
+  (edit mode: `configure_exercise.edit_title`, saves on back too) through the sheet's
+  `NavigationStack`, seeded by `configuration(for:)` with the row's last edit or its drafted scheme.
+  Its `onSave` lands in `updateConfiguration(_:sets:alternatives:targetRepMin:targetRepMax:)`, which
+  stores a `PendingRoutineExercise` in the view model's `edits: [UUID: PendingRoutineExercise]`,
+  keyed by drafted-row id. That also means the person can add alternatives and a rep goal here. No
+  second set editor exists in the drafting sheet.
+- **Value graph until Create** — nothing above touches a `ModelContext`; the `ExerciseSet`s the
+  editor returns are uninserted `@Model` instances, exactly as in `CreateRoutineView`.
+- **Free** — none of these reserve or refund a unit or call `RoutineDrafting`; asserted in
+  `RoutineDraftEditingTests.editingIsFree`.
+
+Removing a row also drops its edit; `clearDraft()` resets the map with the draft. Unresolved rows
+keep their ticket 02 controls (picker + ✕); once answered they get the same menu and set editor.
+
+### 9c. Asking for what is missing (ticket 04)
+
+A person types *"a push routine"* or *"chest day"* rather than a specification. The sheet does not
+fabricate a routine from it; it asks — one short question at a time — and each answer narrows the
+draft until it is complete, then hands off to the same review (§9, §9a) with no separate
+confirmation.
+
+**What is missing is decided in Swift, never by the model.** `GroundedRoutineDraft.gaps` is the
+completeness predicate, over the grounded draft:
+
+| Gap | When | Question (en) |
+|---|---|---|
+| `.exercises` | the draft has no exercise — then it is the *only* gap | "Which exercises should this routine include?" |
+| `.setCounts(exerciseNames:)` | any exercise has no **stated** set count (`GroundedDraftExercise.isSetCountStated`) | "How many sets for Bench Press, Squat?" |
+| `.name` | the name is empty | "What should this routine be called?" |
+
+Ordered most-useful-first, so a person who stops early is left with the most useful draft. Unstated
+reps and load are *not* gaps — the ticket names exercises, set counts and name, and those keep their
+ticket-01 Swift defaults.
+
+**The questions are Swift's strings, not the model's.** `RoutineDraftQuestion` localizes them
+(`ai_coach.routine_draft.question.*`), so they follow the app language, while everything the model
+writes (the routine name, the transcribed exercise names) follows the language the person writes in
+— without a locale directive, as in the chat. A model-phrased question was deliberately not built:
+the predicate already knows exactly what to ask, and a question the model phrased is one more place a
+"three is typical" default could slip in, the very thing this ticket forbids.
+
+**How an answer flows.**
+
+- Exercises and set counts go back to the model (`RoutineDrafting.answer(_:to:weightUnit:)`) as a
+  **fresh session** whose message is every line the person has said — the description, then each
+  answer framed with its question — and which drafts the whole routine from them. Only the
+  **finished** re-draft replaces the one on screen: streaming a whole re-draft into the list would
+  empty it and refill it under the person's eyes.
+- **An answer that yields no exercise never replaces the draft.** When the question was which
+  exercises, the sheet stays on it with "Aus der Antwort ließ sich keine Übung übernehmen…"
+  (`question.no_exercises`) and the typed answer kept; a re-draft that lost everything the draft had
+  gets the generic retry message.
+- A **name** is applied in Swift with no model turn — the answer *is* the name.
+- A name the draft already had survives a turn that does not restate it
+  (`RoutineDraftViewModel.apply`).
+- A gap that comes back **unchanged** after its answer is not asked again (`RoutineDraftConversation`
+  remembers every gap asked): the answer did not fill it, and repeating the question is a loop. The
+  review takes over, with Swift's default as a value the person can change.
+- **Until the review, an unstated set count reads "Sets?"**, not "3 sets" — showing the default while
+  asking how many would present a guess as data. `RoutineDraftRowComposer(showsDefaults:)`.
+
+**Stopping early.** The question card offers **Review draft** (only when something a Create could
+write exists — it moves to `.review` with the defaults) and **Discard** (writes nothing; refunds the
+unit if nothing usable was drafted). Closing the sheet is the same as Discard. The stop button during
+an answer's turn returns to the same question with the draft intact; a failed answer does the same
+and says so under the question (`answerError`), keeping the typed answer. `createRoutine()` refuses
+outside `.review`, and rows are not editable while a question is open.
+
+**One allowance unit for the whole conversation.** The unit reserved at `submit()` covers every
+answer; `submitAnswer()` never touches the gate. Charging per message would let one routine consume a
+free user's month (§3 Rule 1). The refund rules are ticket 01's: the unit stays refundable until
+something a Create could write is on screen; a follow-up failure does *not* refund (the session goes
+on), and dismissing a session that never produced anything usable does.
+
+**A fresh session per turn — and why there is no overflow handling.** The ticket settled on one
+continuing session guarded by the chat's condense-and-retry policy (`ChatOverflowPolicy`, a
+Swift-side digest, no prewarm before a respond call). **Device round 6 reversed that** (§6b): a
+continuing session kept the model's own invented reply in the transcript, and the next answer
+reproduced it. Now `RoutineDraftService` sends each turn to a new `LanguageModelSession` whose only
+message is `RoutineDraftInstructions.prompt(from:)` over the person's lines (`turns`, which a line
+joins only once its turn has finished, so a thrown or cancelled turn is not repeated; an answer the
+ViewModel refuses stays, since it is still the person's own words). Consequences:
+
+- the model never reads anything it wrote, so it cannot copy its own invention forward;
+- a turn's context is instructions + schema + a few short lines of the person's, so it cannot
+  overflow, and the condense/digest/token-count machinery was removed rather than kept as dead code
+  (restore from this ticket's history if turns ever carry model output again);
+- no two turns share a session, so the stale-turn and concurrent-request races the first review
+  found cannot occur;
+- `prewarm()` warms one session that the next turn takes; every later turn builds its own and never
+  prewarms it (`prewarm()` needs ≥1 s before a respond call to help — the chat's post-condense
+  failures came from exactly that).
+
+**No tools.** Each session registers no `Tool`: structured generation only.
+
+**Deliberately not built:** the person cannot type free-form corrections outside a question ("actually
+make it four sets") — edits after the questions are the review's (§9a). A question per exercise for
+set counts — one question names all of them and the answer can cover them at once ("four each").
+
+### 9b. The "routine created" confirmation
+
+Create used to close the sheet silently — the routine landed in a tab the person could not see from
+the Coach's full-screen cover, with no sign anything had happened. Now the sheet **swaps to a success
+face** (`RoutineDraftCreatedView`) and stays until the person taps **Done**:
+
+- **Hero** — a checkmark that draws itself on (SF Symbols 7 *Draw On*, iOS 26:
+  `.transition(.symbolEffect(.drawOn))` on a view inserted when the screen reveals — the insertion is
+  the trigger), inside an accent disc that springs in, a soft radial glow, two rings rippling out
+  once, and an `AISparkleView` popping in at the corner as the Coach's signature.
+- **Headline** — `ROUTINE CREATED` eyebrow, the name as written, and a totals line
+  ("3 exercises • 10 sets").
+- **The exercises**, numbered in saved order with their (possibly edited) summaries, each arriving
+  0.07 s after the previous one; then a line saying it is waiting in Routines.
+- **A success haptic** — `.sensoryFeedback(.success, trigger:)` on the reveal flag.
+
+Everything is driven by one `@State isRevealed` flipped in `onAppear`; each element carries its own
+delayed `.animation(_:value:)`, so the stagger needs no timer. Under Reduce Motion the ripples are
+dropped and every element only fades (no offsets, no scale, no delay chain); symbol effects simplify
+themselves.
+
+The data is a `CreatedRoutineSummary` value struct built once in `createRoutine()` from exactly what
+was written — the resolved rows, numbered, and totals counted from the `PendingRoutineExercise`s —
+so the view formats, counts and enumerates nothing (rendering rules 2–4). Plurals use separate
+`.one` keys because the app has no stringsdict. `didCreateRoutine` is now derived from
+`createdRoutine != nil`; `sheetWasDismissed()` clears it.
+
+**Deliberately omitted: "Show in Routines".** The Coach is a full-screen cover over a `TabView`
+with no selection binding, so jumping to the new routine would need app-wide tab-selection and
+deep-link plumbing. Done returns to the chat. Restore by adding a tab selection to `ContentView` and
+a routine-id deep link if it is wanted.
+
+Research (2026-09-24, via ios-api-researcher): Draw On is iOS 26+ and per-symbol opt-in; plain
+`checkmark` / `checkmark.circle` carry draw data, `.fill` variants are unconfirmed — hence the plain
+`checkmark` over a drawn disc. Sources: WWDC25 session 337 "What's new in SF Symbols 7"
+(https://developer.apple.com/videos/play/wwdc2025/337/),
+https://www.hackingwithswift.com/quick-start/swiftui/how-to-make-sf-symbols-draw-themselves,
+https://nilcoalescing.com/blog/AnimatingSFSymbolsInSwiftUI/. The success face cannot be reached in
+the simulator (no on-device model); the file's `#Preview` is where its motion is checked.
+
+**Verified on iPhone (2026-09-24, user confirmed):** checkmark draw-on, one-shot ripples and success
+haptic; name, totals and numbered exercises in the draft's order; no ✕ on the success face; Done
+returns to the chat and the routine is in the Routines tab; with Reduce Motion on, the screen only
+fades in.
+
 **The "left out" note is now an explanation, not a list.** The names are in the rows above it; the
 note says what Create will do with them and that a tap fixes it.
 
-The footer lives in its own `RoutineDraftFooter.swift` — the sheet and its bottom bar are each under
-the project's 300-line convention rather than one file over it.
+The footer lives in its own `RoutineDraftFooter.swift`, and the "left out" note and the question
+card in `RoutineDraftQuestionCard.swift`, so the sheet and its parts each stay under the project's
+300-line convention rather than one file being over it.
 
 Rendering rules held deliberately: rows are `RoutineDraftViewModel.Row` **value structs** with a
 finished `name` and `summary` — no `@Model` read and no `WeightFormatting` call in a row `body`. The
@@ -467,9 +773,9 @@ summary is composed once per snapshot in the ViewModel, reusing the existing `ro
 own set summary. The "left out" line is likewise joined in the ViewModel
 (`unmatchedSummary`), not in the `body`. The scroll content is a `LazyVStack`.
 
-The one `ForEach` that is *not* in a lazy container is the drafted-exercise list inside `AISurface`.
-That is deliberate and bounded: `RoutineDraftOutput.exercises` is capped at `.maximumCount(12)`, so it
-does not scale with user data. **If ticket 05 raises that cap, this needs a lazy container.**
+The drafted-exercise list inside `AISurface` is a `LazyVStack` too (since ticket 03), although
+`RoutineDraftOutput.exercises` is capped at `.maximumCount(12)` — the rows are the user-scaled part of
+the screen, and the `ForEach` is keyed by the stable drafted-row `UUID`.
 
 Every user-facing string is in `en.lproj` and `de.lproj` under `ai_coach.routine_draft.*`; there are
 no literal strings in the views.
@@ -489,6 +795,9 @@ no literal strings in the views.
   all-unmatched draft, refund on cancel, `.coachChat` paywall on exhaustion with the typed text kept.
 - **Creating** — one write through the shared transaction under the drafted name, the fallback name
   for a nameless draft, and discard/dismiss writing nothing.
+- **Confirmation** — Create yields a `CreatedRoutineSummary` with the written name, the resolved
+  exercises numbered in saved order (an unresolved row left out closes the gap), the totals line, and
+  the singular keys for one exercise / one set; dismissing clears it.
 
 `GymStreakTests/RoutineDraftResolutionTests.swift` covers ticket 02 on the same harness
 (`RoutineDraftHarness` in `Support/RoutineDraftTestDoubles.swift`, shared by both files):
@@ -503,6 +812,46 @@ no literal strings in the views.
   draft of nothing but unresolved rows offers no Create at all.
 - **Allowance** — resolving and removing consume no further unit.
 
+`GymStreakTests/RoutineDraftQuestionTests.swift` covers ticket 04 on the same harness (the fake's
+`answerSnapshots` scripts one stream per answer turn):
+
+- **Provenance** — the device replay (twelve invented rows → empty draft, `.exercises` gap, no list
+  shown); folded, plural and German names the person wrote survive; a resolved exercise inside the
+  routine name is kept; an invented extra beside real exercises is dropped, noted and never written;
+  answer words count as the person's words.
+- **Predicate** — no exercises is the only gap; only unstated set counts are named, before the name;
+  a named draft with every set count stated is complete; the default is kept but marked unstated;
+  resolving a row keeps the flag.
+- **Asking** — a thin description asks instead of drafting; answers advance the draft one question at
+  a time straight into the review; the answer reaches the model tagged with its gap; unstated sets
+  read "Sets?"; a name is applied without a model turn; an existing name survives a turn; an unfilled
+  gap is not asked twice.
+- **Cost** — a description plus two answers is three model turns and exactly one unit, with no
+  prewarm in between.
+- **Stopping** — Review draft uses the default; Create is refused while asking; Discard and dismiss
+  write nothing and refund a session that gave nothing.
+- **Failures** — a failed answer, a re-draft that dropped everything, and an exercises answer from
+  which no exercise survives (device round 6 replayed) keep the draft, the question and the typed
+  answer; stopping an answer's turn returns to the question.
+
+`turnPromptIsThePersonsLines` pins the turn message (description first, framed answers after, line
+breaks inside a line flattened). `CoachPromptGroundingTests` also scans
+the three answer prompts, and `routineDraftPromptsNameNoDefault` pins that the drafting prompt (both
+units), the answer prompts and both schemas contain no digit, no number word and no exercise name.
+
+`GymStreakTests/RoutineDraftEditingTests.swift` covers ticket 03 on the same harness:
+
+- **Rename** — reaches Create trimmed, and survives later row edits.
+- **Reorder** — moves (clamped at the ends) renumber `order` to 0…n in the order the sheet shows.
+- **Remove** — a resolved row is left out and the gap in `order` is closed; removing everything
+  disables Create.
+- **Edit sets** — the editor is seeded with the drafted scheme; a saved edit updates the row summary,
+  reopens as edited, follows a later move and reaches Create with its sets and rep goal; untouched
+  rows keep the drafted scheme; an unresolved row has nothing to configure.
+- **Cost** — rename, move, edit and remove consume no unit and make no second model call.
+- **SwiftData round trip** — a real `RoutinesViewModel` over an in-memory container: an edited set
+  count, a move and a rename all land in the persisted `Routine`.
+
 `CoachPromptGroundingTests` now also scans `RoutineDraftInstructions` (both units) and the
 `RoutineDraftOutput` / `RoutineDraftExercise` generation schemas for data-shaped literals and
 programming-construct words.
@@ -515,10 +864,10 @@ it is handed is a device check, and nothing here stands in for one.
 - An unresolved name can be pointed at an existing library exercise or removed, but **not created** —
   there is no "add this to my library" from the picker. A movement genuinely absent from the library
   still has to be added on the Exercises tab first.
-- The draft is otherwise **read-only**: no editing a set count, reordering, or removing a *resolved*
-  exercise before Create. Ticket 03.
-- **One turn.** The session is retained and the allowance already treats a session as one unit, but
-  there is no UI for a follow-up message. Ticket 04.
+- **No adding exercises** to a draft — the sheet edits what was drafted; a missing exercise is
+  added after Create on the routine itself, or described in a fresh draft.
+- **Follow-ups only answer questions.** There is no free-form "change this" message; a draft is
+  changed in the review (§9a).
 - **One set scheme per exercise** — every set identical, no rep-range goals, no per-set rest.
   Ticket 05.
 - Device verification of the German path and of real model behaviour is a manual check; see §10.

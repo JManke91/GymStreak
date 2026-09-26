@@ -69,8 +69,9 @@ Follow all steps from the **merge-testflight-to-store** command:
 
    > **This step is load-bearing and must never be skipped.** The Founder grant (`docs/pro-subscription.md`, `docs/monetization-strategy.md` §7.1) grants Pro permanently and free to every install whose `AppTransaction.originalAppVersion` is below `FounderStatusService.cutoffBuild` (`1000`). Before the monetization release every shipped build was `1`, which is what makes the grant work for existing users. If a release ever ships with a build number below the cutoff again, **every new paying user is silently granted Founder forever** — the app looks fine and the bug only surfaces as missing revenue. If the current value is somehow below `1000`, stop and tell the user rather than guessing.
 7. **Generate App Store release notes** for `<old-version>` — do this **before** clearing the WhatToTest files, while they still hold this version's notes. See [App Store release notes](#app-store-release-notes) below for how to distill and where to write them.
+7b. **Refresh the marketing copy (Werbetexte)** for `<old-version>` — also **before** the WhatToTest files are cleared, since they are the input. See [Marketing copy (Werbetexte)](#marketing-copy-werbetexte) below. This step always produces `AppStore/Marketing.<old-version>.md`; it may also edit files under `docs/marketing/`.
 8. Archive `TestFlight/WhatToTest.en-US.txt` into `CHANGELOG.md` under a new `## [<old-version>] - <YYYY-MM-DD>` heading with `### Added / Improved / Fixed` subsections (categorize each bullet by content). If `CHANGELOG.md` does not exist, create it with a `# Changelog` header. Clear both WhatToTest files afterward.
-9. `git add GymStreak.xcodeproj/project.pbxproj CHANGELOG.md TestFlight/WhatToTest.en-US.txt TestFlight/WhatToTest.de-DE.txt AppStore/ReleaseNotes.<old-version>.md`
+9. `git add GymStreak.xcodeproj/project.pbxproj CHANGELOG.md TestFlight/WhatToTest.en-US.txt TestFlight/WhatToTest.de-DE.txt AppStore/ReleaseNotes.<old-version>.md AppStore/Marketing.<old-version>.md` — plus any file under `docs/marketing/` that step 7b actually modified (`git add docs/marketing/` is fine; it is a no-op when nothing changed).
 10. `git commit -m "Bump version to <new-version> for next release cycle"`
 11. `git push origin main`
 
@@ -126,6 +127,126 @@ The WhatToTest files are the developer/tester-facing long form — detailed, exh
 
 ---
 
+## Marketing copy (Werbetexte)
+
+The App Store listing has four copy assets, all maintained in `docs/marketing/`. They do **not** all
+get rewritten every release — they differ in how expensive a mistake is and in what is allowed to
+trigger a change:
+
+| Asset | Doc | Per release |
+|---|---|---|
+| **Promotional Text** (170 chars, en-US + de-DE) | `app-store-promotional-text.md`, superseded set in `app-store-subtitle-keywords.md` §4.3 / §5.3 | **Regenerate.** Editable without a build, so a refresh costs nothing and a stale line is the most likely thing to be pasted back by mistake. |
+| **Description** (4,000 chars, en-US + de-DE) | `app-store-description.md` | **Diff only.** Propose a targeted edit when this release changes what the app may claim; never rewrite wholesale. |
+| **Subtitle** (30 chars) | `app-store-subtitle-keywords.md` §4.1 / §5.1 | **Flag only.** The subtitle drove a measured +110% page-view→download conversion (§8) — do not experiment with it inside a release pipeline. |
+| **Keyword Field** (100 chars ×4 storefronts) | `app-store-subtitle-keywords.md` §4.2 / §5.2 / §6.2 / §6.3 | **Flag only.** Rotation is driven by the search-term report and by App Name changes (§8), not by release cadence. |
+
+**The generated copy is a proposal, not a publication.** Nothing here reaches App Store Connect
+automatically; the user pastes it. Never edit `docs/marketing/` beyond what the rules below
+authorize, and never silently overwrite a live string.
+
+### Inputs
+
+1. `TestFlight/WhatToTest.en-US.txt` and `.de-DE.txt` — what shipped in `<old-version>`.
+2. `docs/marketing/app-store-subtitle-keywords.md` §3 ("Feature basis — what the copy is allowed to
+   claim"), §4, §5 — the current live strings and their character counts.
+3. `docs/marketing/app-store-description.md` and `app-store-promotional-text.md` — current copy plus
+   their hold-gates and Pro-claim notes.
+4. `Domain/Models/Pro/ProFeatureCaps.swift` and `docs/pro-subscription.md` — the free-vs-Pro
+   boundary. A cap change can silently make a live claim like "Track unlimited, free" **false**;
+   that is a correctness bug in the listing, not a copy preference.
+
+### Step 1 — Resolve hold-gates (always, even when WhatToTest is empty)
+
+Several variants in the marketing docs are written but held behind "paste only once the feature is
+live on the App Store" (e.g. the Apple Calendar sync copy in `app-store-description.md` and the
+calendar variant in `app-store-promotional-text.md`). `<old-version>` is the build going to the
+store **now**, so a hold whose feature is in this build is satisfied by this release.
+
+For each hold-gate found: state whether this release releases it, and if so, say the held copy is
+now the one to paste and update the note in the doc from "hold until live" to "live as of
+v`<old-version>`". If a hold is *not* released, leave it and say why.
+
+### Step 2 — Promotional Text (regenerate)
+
+Write a fresh recommended line per locale, leading with this release's strongest user-visible
+feature where one exists, otherwise restating the strongest standing differentiator.
+
+- **Hard limit 170 characters.** Verify each with `printf '%s' '<text>' | wc -m` and report the count
+  as `N/170` — a rejected paste is the one failure mode this step exists to prevent.
+- German is a genuine translation in the app's German voice, not a machine echo (same rule as the
+  release notes).
+- No emoji. No claim that §3's feature basis does not support.
+- Keep the no-**account** promise if used; never reintroduce a no-**subscription** claim (removed at
+  the Pro launch — `app-store-promotional-text.md`).
+- Carry the previously live line through as "current" so the user can see what is being replaced.
+
+### Step 3 — Description (diff only)
+
+Decide whether `<old-version>` changed what the description may claim: a new user-facing capability
+worth a section, a hold-gate released by step 1, or a claim that a cap/pricing change made false.
+
+- **No → say "no change needed" in one line and move on.** Do not restate the description.
+- **Yes → propose the smallest edit that works**: quote the exact paragraph to replace or the
+  insertion point, give the new text per locale, and state the reason.
+- **Re-measure both locales** with the method in `app-store-description.md`
+  (`sed -n '<block>p' | wc -m`) and report `N/4000` each. **German had only 16 characters of
+  headroom at the last measurement** — if a proposed German edit does not fit, say so and propose
+  the sentence to trim rather than shipping an over-length block.
+- Note that a description change **rides a version submission**, so it lands with `<new-version>`'s
+  binary, not today's.
+
+### Step 4 — Subtitle & Keyword Field (flag only)
+
+Do not rewrite these. Report one of:
+
+- **"No action"** — the App Name, subtitle and feature basis are unchanged and no search-term report
+  is due.
+- **A flag with the reason**, when a trigger from §8 fired: the App Name changed (which invalidates
+  **all three** English keyword fields at once, not just en-US), a cap change made a claim in §3
+  stale, or the first search-term report is now available (~4 weeks after 1.1.16 went live) and is
+  the input to the next rotation.
+
+A flag ends with "rotate deliberately in a separate pass, against the swap benches in §4.2 / §5.2 /
+§6.5" — never with generated replacement strings.
+
+### Step 5 — Write the per-version record
+
+Write everything to `AppStore/Marketing.<old-version>.md` (same folder and lifecycle as
+`ReleaseNotes.<old-version>.md`), using this structure:
+
+```markdown
+# App Store Marketing Copy — v<old-version>
+
+## Hold-gates resolved
+<one line per gate, or "none">
+
+## Promotional Text (paste now — no build required)
+
+### English (en-US) — N/170
+<text>
+
+### German (de-DE) — N/170
+<text>
+
+Previously live: <old line per locale>
+
+## Description — <no change needed | proposed edit>
+<targeted diff per locale with char counts, or the one-line no-op>
+
+## Subtitle & Keyword Field — <no action | flag>
+<reason>
+```
+
+Then update the source docs in `docs/marketing/` **only** where this release made them factually
+wrong: a resolved hold-gate's note, a claim invalidated by a cap change, and the new promotional
+text recorded as the current recommendation with its date and version. Leave the rationale,
+evidence and swap-bench sections alone — they are the reasoning history, not release state.
+
+If both WhatToTest files were empty, skip steps 2–4, still run step 1, and note in the final report
+that marketing copy was skipped because nothing shipped.
+
+---
+
 ## Final report
 
 Summarize the entire pipeline:
@@ -135,6 +256,13 @@ Summarize the entire pipeline:
 - Old version → new version
 - **Old build number → new build number** (`CURRENT_PROJECT_VERSION`), stated explicitly — this is the Founder-grant cutoff guard from Phase 3 Part B step 6b
 - Confirmation that WhatToTest files were archived and cleared
-- Confirmation that `AppStore/ReleaseNotes.<old-version>.md` was written (or that it was skipped because WhatToTest was empty)
+- Confirmation that `AppStore/ReleaseNotes.<old-version>.md` and `AppStore/Marketing.<old-version>.md` were written (or that they were skipped because WhatToTest was empty)
+- Any `docs/marketing/` files updated, and why
 - Confirmation that `<source-branch>` was deleted locally and on origin (or why deletion was skipped)
 - **Print the full generated App Store notes (English and German) inline in the chat**, clearly labeled per language, so they can be copy/pasted straight into App Store Connect.
+- **Print the generated Promotional Text (English and German) inline too**, each with its `N/170`
+  character count, under a heading that says it can be pasted **without a new build**. Follow it
+  with the description verdict (one line if unchanged, the proposed diff if not) and the
+  subtitle/keyword verdict (one line). Keep this block visually separate from the What's New block
+  above it — they go into different App Store Connect fields, and one of them is live immediately
+  while the other waits for the binary.

@@ -35,14 +35,50 @@ enum RoutineDraftInstructions {
         - Weights in the description are written in \(AICoachUnitVocabulary.englishName(unit)) (\(AICoachUnitVocabulary.unitWord(unit))).
 
         How to draft:
-        - Use ONLY what the description says. Never add an exercise the description does not name, never leave out one it does name, and never replace an exercise with a similar one.
-        - Keep the exercises in the order the description lists them.
-        - Copy each exercise name exactly as the description writes it, letter for letter, in the same language. Never translate it, never shorten or expand it, and never correct its spelling.
-        - Copy every set count, repetition count and weight from the description digit for digit. Never do arithmetic, never round a figure, and never invent one.
-        - When the description gives no set count, no repetition count or no weight for an exercise, write the number zero for that value. Zero means the description did not say. It is never a guess of your own, and a guess is never wanted.
+        - Use ONLY what the person says. Never add an exercise they do not name, never leave out one they do name, and never replace an exercise with a similar one.
+        - When they name no exercise, write no exercises. The app asks them which ones they want; a guess of yours is never wanted.
+        - Keep the exercises in the order the person lists them.
+        - Copy each exercise name exactly as the person writes it, letter for letter, in the same language. Never translate it, never shorten or expand it, and never correct its spelling.
+        - Copy every set count, repetition count and weight from the person's words digit for digit. Never do arithmetic, never round a figure, and never invent one.
+        - When the person gives no set count, no repetition count or no weight for an exercise, write the number zero for that value. Zero means they did not say. It is never a guess of your own, and a guess is never wanted.
         - Write each weight as a plain number in the unit named above, with no unit word beside it and never as a range.
-        - Name the routine in the same language the description is written in. Use the name the description gives the workout when it gives one; otherwise name it after what it trains, in a few words.
+        - Name the routine in the same language the person writes in, using their own words for the workout. When they give it no name and do not say what kind of workout it is, write no name. Never make a name up.
         - Write no advice, no encouragement and no commentary. Fill the fields and nothing else.
+
+        When the message has several lines:
+        - The first line is the person's description. Each later line is their answer to a question the app asked about something the description left out, and says which question it answers.
+        - Draft from all lines together, as one description. An answer that covers every exercise at once applies to every exercise it covers.
+        - Never fill anything that no line covers.
         """
+    }
+
+    /// The message for one turn: every line the person has said, oldest first — the
+    /// description, then each framed answer. Each turn goes to a fresh session with this
+    /// alone, so the model never reads anything it wrote earlier.
+    ///
+    /// Line breaks *inside* a line become spaces: the instructions say the first line is
+    /// the description, so a description typed over several lines must stay one line.
+    static func prompt(from lines: [String]) -> String {
+        lines
+            .map { $0.split(whereSeparator: \.isNewline).joined(separator: " ") }
+            .joined(separator: "\n")
+    }
+
+    /// One answer, framed with the question it answers, in words the model reads; the
+    /// answer itself verbatim. English like the instructions; the answer
+    /// stays in whatever language the person wrote it in.
+    static func answer(_ answer: String, to gap: RoutineDraftGap) -> String {
+        "Answer about \(question(for: gap)) — \(answer)"
+    }
+
+    private static func question(for gap: RoutineDraftGap) -> String {
+        switch gap {
+        case .exercises:
+            "which exercises the routine should include"
+        case .setCounts(let names):
+            "how many sets to do of \(names.joined(separator: ", "))"
+        case .name:
+            "what the routine should be called"
+        }
     }
 }

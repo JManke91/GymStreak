@@ -18,15 +18,19 @@ final class RoutineDraftViewModel {
 
     // MARK: - Nested types
 
-    /// Where the sheet is. Deliberately four states and not a state machine over the
+    /// Where the sheet is. Deliberately five states and not a state machine over the
     /// draft itself: the draft is a separate `private(set)` payload because it keeps
     /// growing *during* `.drafting`, and a phase that carried it would change identity on
     /// every snapshot.
     enum Phase: Equatable {
         /// Typing the description. Also where a cancelled or discarded draft returns to.
         case describing
-        /// A generation is running; `rows` fills as exercises complete.
+        /// A generation is running; `rows` fills as exercises complete. Also a follow-up
+        /// turn, during which the draft on screen stands until the new one is finished.
         case drafting
+        /// The draft lacks something `GroundedRoutineDraft.gaps` can name, and the sheet
+        /// is asking about it — one question at a time.
+        case asking
         /// The draft is final and on screen — including the case where nothing in it
         /// could be resolved, which the sheet explains rather than hides.
         case review
@@ -40,12 +44,16 @@ final class RoutineDraftViewModel {
     // MARK: - Input state
 
     var descriptionText: String = ""
+    /// The routine's name as drafted, or empty until the model has written one. Settable
+    /// so the review sheet can rename it: the stream stops writing it once the draft is
+    /// final, and Create writes whatever it holds then.
+    var routineName: String = ""
+    /// The person's answer to the current question.
+    var answerText: String = ""
 
     // MARK: - Observable state
 
     private(set) var phase: Phase = .describing
-    /// The routine's name as drafted, or empty until the model has written one.
-    private(set) var routineName: String = ""
     /// Every drafted exercise in the order it was described, resolved or not. An
     /// unresolved one stays in the list rather than being reported away from it — that is
     /// what makes it something the person can point at a library exercise.
@@ -57,8 +65,15 @@ final class RoutineDraftViewModel {
     /// could actually write. Stored rather than derived in the sheet's `body`: filtering a
     /// collection is filtering a collection, however short it is.
     private(set) var hasCreatableExercises = false
-    /// Flips once, when a routine has actually been written. The sheet dismisses on it.
-    private(set) var didCreateRoutine = false
+    /// What the confirmation shows, set once a routine has actually been written — the
+    /// sheet swaps to its success face on it rather than closing silently.
+    private(set) var createdRoutine: CreatedRoutineSummary?
+    /// Set when a follow-up turn failed: the draft before it stands, and the person can
+    /// answer again.
+    private(set) var answerError: String?
+    /// The names the grounding pass dropped because the person never said them, joined for
+    /// the note under the list — or `nil`. Composed here, not in `body`.
+    private(set) var droppedSummary: String?
 
     // MARK: - Dependencies
 
@@ -82,7 +97,16 @@ final class RoutineDraftViewModel {
     private var library: [Exercise] = []
     private var weightUnit: WeightUnit = .kilograms
     private var draft: GroundedRoutineDraft?
+    /// Rows the person reopened in `ConfigureExerciseSetsView`, keyed by drafted-row id —
+    /// the value graph Create writes for them instead of the drafted scheme. Nothing here
+    /// touches a `ModelContext` until `createRoutine()`.
+    private var edits: [UUID: PendingRoutineExercise] = [:]
     private var streamTask: Task<Void, Never>?
+    /// Which question the sheet is on, and which it already asked.
+    private var conversation = RoutineDraftConversation()
+    /// Everything the person typed in this conversation — the description and each answer
+    /// sent to the model. A drafted exercise name must come from these words.
+    private var personWords: [String] = []
 
     /// The allowance unit this **drafting session** reserved — one, for the session, not
     /// one per message. A guided conversation (ticket 04) must never cost a free user
@@ -123,6 +147,21 @@ final class RoutineDraftViewModel {
     var isAvailable: Bool { availability.isAvailable }
 
     var isDrafting: Bool { phase == .drafting }
+
+    var isAsking: Bool { phase == .asking }
+
+    /// The question on screen while `.asking`.
+    var question: String? { conversation.question }
+
+    var canSubmitAnswer: Bool {
+        isAsking && !answerText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    /// Whether the person may stop answering and review what is there — only when a
+    /// Create could write something.
+    var canReviewNow: Bool { isAsking && hasCreatableExercises }
+
+    var didCreateRoutine: Bool { createdRoutine != nil }
 
     var canSubmit: Bool {
         !descriptionText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !isDrafting
@@ -202,39 +241,160 @@ final class RoutineDraftViewModel {
         guard reserveAllowanceUnit() else { return }
 
         clearDraft()
+        personWords = [text]
         phase = .drafting
         let unit = weightUnit
+        let stream = drafting.draft(from: text, weightUnit: unit)
         streamTask = Task { [weak self] in
-            await self?.runDraft(text, weightUnit: unit)
+            await self?.runDraft(stream)
         }
     }
 
-    /// Stops an in-flight draft and gives the unit back. Writes nothing, by construction:
-    /// nothing is written anywhere until `createRoutine()`.
+    /// Stops an in-flight turn. The first turn gives the unit back and returns to the
+    /// description; an answer's turn returns to its question with the draft before it
+    /// intact. Writes nothing either way, by construction: nothing is written anywhere
+    /// until `createRoutine()`.
     func cancelDrafting() {
         streamTask?.cancel()
         streamTask = nil
+        if conversation.isAsking, draft != nil {
+            phase = .asking
+            return
+        }
         refundReservedUnit()
         clearDraft()
         phase = .describing
     }
 
-    private func runDraft(_ text: String, weightUnit unit: WeightUnit) async {
+    private func runDraft(_ stream: AsyncThrowingStream<RoutineDraftSnapshot, Error>) async {
         do {
-            for try await snapshot in drafting.draft(from: text, weightUnit: unit) {
+            for try await snapshot in stream {
                 if Task.isCancelled { return }
                 apply(snapshot)
             }
             if Task.isCancelled { return }
-            finishDrafting()
+            advance()
         } catch {
             // A cancelled stream is reported by `cancelDrafting()`, which has already
             // refunded and reset — it must not also land here as a failure the person
             // sees.
             if Task.isCancelled || error is CancellationError { return }
             refundReservedUnit()
-            phase = .failed("ai_coach.routine_draft.error".localized)
+            phase = .failed(Self.declinedMessage(for: error) ?? "ai_coach.routine_draft.error".localized)
         }
+    }
+
+    // MARK: - Asking for what is missing
+
+    /// Sends the answer to the current question. **Consumes no allowance** — the unit
+    /// belongs to the drafting session, which already holds it; charging per message would
+    /// let one routine consume a free user's month.
+    ///
+    /// A name is applied here, in Swift, without a model turn: the answer *is* the name,
+    /// and a turn could only get it wrong.
+    func submitAnswer() {
+        let text = answerText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard isAsking, !text.isEmpty, let gap = conversation.pendingGap, draft != nil else { return }
+        answerError = nil
+
+        if gap == .name {
+            draft?.name = text
+            routineName = text
+            answerText = ""
+            advance()
+            return
+        }
+
+        personWords.append(text)
+        phase = .drafting
+        let stream = drafting.answer(text, to: gap, weightUnit: weightUnit)
+        streamTask = Task { [weak self] in
+            await self?.runAnswer(stream)
+        }
+    }
+
+    /// Stops answering and reviews what is there. Anything still unstated takes its Swift
+    /// default, shown in the review as a value the person can change.
+    func reviewNow() {
+        guard canReviewNow else { return }
+        conversation.stopAsking()
+        phase = .review
+        republish()
+    }
+
+    /// One answer's turn. Only the **finished** draft replaces the one on screen: the model
+    /// writes the whole draft again, and streaming that into the list would empty it and
+    /// refill it under the person's eyes.
+    private func runAnswer(_ stream: AsyncThrowingStream<RoutineDraftSnapshot, Error>) async {
+        var latest: RoutineDraftSnapshot?
+        do {
+            for try await snapshot in stream {
+                if Task.isCancelled { return }
+                latest = snapshot
+            }
+            if Task.isCancelled { return }
+            guard let latest else {
+                failAnswer()
+                return
+            }
+            // An answer that yields no exercise never replaces the draft. Either the
+            // person was asked which exercises and nothing usable came of the answer —
+            // the model invented instead, and provenance dropped it all — or a re-draft
+            // lost everything the draft already had. Both stay on the question, answerable
+            // again, instead of falling through to an empty review.
+            let next = groundedDraft(from: latest)
+            guard !next.exercises.isEmpty else {
+                failAnswer(message: draft?.exercises.isEmpty == false
+                    ? nil
+                    : "ai_coach.routine_draft.question.no_exercises".localized)
+                return
+            }
+            answerText = ""
+            draft = next
+            republish()
+            advance()
+        } catch {
+            if Task.isCancelled || error is CancellationError { return }
+            failAnswer(message: Self.declinedMessage(for: error))
+        }
+    }
+
+    /// A follow-up that failed leaves the conversation where it was: same draft, same
+    /// question, the answer still in the field. The session's unit is not refunded here —
+    /// the session is still running; dismissing it refunds if nothing usable came of it.
+    private func failAnswer(message: String? = nil) {
+        streamTask = nil
+        answerError = message ?? "ai_coach.routine_draft.question.error".localized
+        phase = .asking
+    }
+
+    /// The message for words the model declined, or `nil` for any other failure. "Try
+    /// again" would be wrong there: the same words are declined every time.
+    private static func declinedMessage(for error: Error) -> String? {
+        (error as? RoutineDraftingError) == .declinedByModel
+            ? "ai_coach.routine_draft.error.declined".localized
+            : nil
+    }
+
+    /// After a turn or an answer: ask about the next gap the draft still has, or hand off
+    /// to the review — with no separate confirmation step.
+    private func advance() {
+        streamTask = nil
+        guard let draft else { return }
+        // Something a Create could write is on screen: the unit bought what it paid for,
+        // whether or not the person answers another question.
+        if !draft.hasNothingToCreate { isTicketRefundable = false }
+
+        if conversation.askNext(of: draft.gaps) {
+            phase = .asking
+        } else {
+            phase = .review
+            // A draft the app may not write is a drafting session that gave the person
+            // nothing — the generation succeeded, the outcome did not. The unit goes back
+            // and the sheet says what was left out.
+            if draft.hasNothingToCreate { refundReservedUnit() }
+        }
+        republish()
     }
 
     /// Grounds one snapshot and republishes the review list.
@@ -243,8 +403,22 @@ final class RoutineDraftViewModel {
     /// **library's** names as exercises complete, instead of with the model's spelling of
     /// them corrected afterwards.
     private func apply(_ snapshot: RoutineDraftSnapshot) {
-        draft = grounder.ground(snapshot, library: library, weightUnit: weightUnit)
+        draft = groundedDraft(from: snapshot)
         republish()
+    }
+
+    private func groundedDraft(from snapshot: RoutineDraftSnapshot) -> GroundedRoutineDraft {
+        var grounded = grounder.ground(
+            snapshot,
+            library: library,
+            weightUnit: weightUnit,
+            personWords: personWords.joined(separator: "\n")
+        )
+        // A name the conversation already has — drafted earlier or answered — survives a
+        // turn that does not restate it. The model writes the whole draft each turn and
+        // the name is the field it is most likely to leave out once nobody repeats it.
+        if grounded.name.isEmpty, let previous = draft?.name { grounded.name = previous }
+        return grounded
     }
 
     /// Rebuilds everything the sheet reads from `draft`. Called after a streamed snapshot
@@ -252,23 +426,20 @@ final class RoutineDraftViewModel {
     /// same way.
     private func republish() {
         guard let draft else { return }
-        routineName = draft.name
+        // Only while streaming: once the draft is final the name is the person's to edit,
+        // and an edit elsewhere in the list must not put the drafted one back.
+        if phase == .drafting { routineName = draft.name }
         hasUnresolvedRows = draft.hasUnresolvedExercises
         hasCreatableExercises = !draft.hasNothingToCreate
-        rows = RoutineDraftRowComposer(weightUnit: weightUnit).rows(for: draft)
-    }
-
-    private func finishDrafting() {
-        streamTask = nil
-        phase = .review
-        // A draft the app may not write is a drafting session that gave the person
-        // nothing — the generation succeeded, the outcome did not. The unit goes back and
-        // the sheet says what was left out.
-        guard let draft, !draft.hasNothingToCreate else {
-            refundReservedUnit()
-            return
-        }
-        isTicketRefundable = false
+        // Not while the draft is empty: then the only honest thing to say is the question
+        // "which exercises?", not a list of things the model made up.
+        droppedSummary = draft.droppedNames.isEmpty || draft.exercises.isEmpty
+            ? nil
+            : "ai_coach.routine_draft.dropped.body".localized(draft.droppedNames.joined(separator: ", "))
+        // Until the review, an unstated set count reads as a question, not as the Swift
+        // default: showing "3 sets" while asking how many would present a guess as data.
+        rows = RoutineDraftRowComposer(weightUnit: weightUnit)
+            .rows(for: draft, edits: edits, showsDefaults: phase == .review)
     }
 
     // MARK: - Resolving an unresolved row
@@ -293,11 +464,50 @@ final class RoutineDraftViewModel {
         republish()
     }
 
-    /// Drops one unresolved row. Writes nothing — nothing is written anywhere until
-    /// `createRoutine()` — and costs no allowance, for the same reason.
+    // MARK: - Editing the draft
+
+    // Everything below is a Swift-side mutation of a draft the person already spent a
+    // unit on: none of it touches the allowance gate or the drafting session, and none of
+    // it writes — nothing is written anywhere until `createRoutine()`.
+
+    /// Drops one row, resolved or not, along with any edit made to it.
     func removeRow(_ rowID: UUID) {
         guard phase == .review else { return }
-        draft?.removeUnresolved(rowID)
+        draft?.remove(rowID)
+        edits[rowID] = nil
+        republish()
+    }
+
+    /// Moves one row up (`-1`) or down (`+1`). The new position becomes the saved
+    /// routine's `order` in `createRoutine()`.
+    func moveRow(_ rowID: UUID, by offset: Int) {
+        guard phase == .review else { return }
+        draft?.move(rowID, by: offset)
+        republish()
+    }
+
+    /// What `ConfigureExerciseSetsView` opens on for one resolved row: the person's last
+    /// edit of it, or else its drafted scheme. `nil` for an unresolved row, which has no
+    /// library exercise to configure yet.
+    func configuration(for rowID: UUID) -> PendingRoutineExercise? {
+        edits[rowID] ?? draft?.exercises.first { $0.id == rowID }?.pendingExercise(order: 0)
+    }
+
+    /// Takes back what `ConfigureExerciseSetsView` returned for one resolved row. The row
+    /// keeps its place; `order` is assigned at Create from wherever it then stands.
+    func updateConfiguration(
+        _ rowID: UUID,
+        sets: [ExerciseSet],
+        alternatives: [PendingAlternative],
+        targetRepMin: Int?,
+        targetRepMax: Int?
+    ) {
+        guard phase == .review, var pending = configuration(for: rowID) else { return }
+        pending.sets = sets
+        pending.alternatives = alternatives
+        pending.targetRepMin = targetRepMin
+        pending.targetRepMax = targetRepMax
+        edits[rowID] = pending
         republish()
     }
 
@@ -310,17 +520,31 @@ final class RoutineDraftViewModel {
     /// what syncs the new routine to the watch. There is no extra call to make here, and
     /// no second write path to maintain.
     func createRoutine() {
-        guard let draft, !draft.hasNothingToCreate else { return }
-        let name = draft.name.isEmpty
+        guard phase == .review, let draft, !draft.hasNothingToCreate else { return }
+        let trimmedName = routineName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let name = trimmedName.isEmpty
             ? "ai_coach.routine_draft.default_name".localized
-            : draft.name
-        routines.createRoutine(name: name, pendingExercises: draft.pendingExercises())
-        didCreateRoutine = true
+            : trimmedName
+        let pendingExercises = draft.pendingExercises(applying: edits)
+        routines.createRoutine(name: name, pendingExercises: pendingExercises)
+        // Composed here, once, from what was just written: the rows already carry any
+        // edited summaries, and only resolved ones reached the store.
+        createdRoutine = CreatedRoutineSummary(
+            name: name,
+            exerciseCount: pendingExercises.count,
+            setCount: pendingExercises.reduce(0) { $0 + $1.sets.count },
+            rows: rows.filter(\.isResolved)
+        )
     }
 
-    /// Throws the draft away. Nothing was ever written, so there is nothing to undo.
+    /// Throws the draft away — from the review, or mid-conversation. Nothing was ever
+    /// written, so there is nothing to undo.
     func discard() {
-        cancelDrafting()
+        streamTask?.cancel()
+        streamTask = nil
+        refundReservedUnit()
+        clearDraft()
+        phase = .describing
     }
 
     /// Ends the drafting session, whatever ended it — Create, Discard, or the sheet being
@@ -332,7 +556,7 @@ final class RoutineDraftViewModel {
         refundReservedUnit()
         ticket = nil
         descriptionText = ""
-        didCreateRoutine = false
+        createdRoutine = nil
         clearDraft()
         phase = .describing
         // Dropped so the next drafting session grounds against a freshly fetched library
@@ -366,6 +590,12 @@ final class RoutineDraftViewModel {
 
     private func clearDraft() {
         draft = nil
+        edits = [:]
+        conversation = RoutineDraftConversation()
+        personWords = []
+        droppedSummary = nil
+        answerText = ""
+        answerError = nil
         routineName = ""
         rows = []
         hasUnresolvedRows = false

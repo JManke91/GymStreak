@@ -22,12 +22,20 @@ import Testing
 @MainActor
 final class FakeRoutineDrafting: RoutineDrafting {
 
+    /// What every turn streams, unless `answerSnapshots` scripts the answer turns.
     var snapshots: [RoutineDraftSnapshot] = []
+    /// One scripted stream per answer turn, consumed in order. When it runs out, an
+    /// answer turn streams `snapshots`.
+    var answerSnapshots: [[RoutineDraftSnapshot]] = []
     var failure: Error?
 
     private(set) var prewarmCount = 0
     private(set) var requestedDescriptions: [String] = []
     private(set) var requestedUnits: [WeightUnit] = []
+    private(set) var answers: [(text: String, gap: RoutineDraftGap)] = []
+
+    /// Every model turn this double was asked for: descriptions plus answers.
+    var turnCount: Int { requestedDescriptions.count + answers.count }
 
     func prewarm() { prewarmCount += 1 }
 
@@ -37,7 +45,21 @@ final class FakeRoutineDrafting: RoutineDrafting {
     ) -> AsyncThrowingStream<RoutineDraftSnapshot, Error> {
         requestedDescriptions.append(description)
         requestedUnits.append(weightUnit)
-        let scripted = snapshots
+        return stream(snapshots)
+    }
+
+    func answer(
+        _ answer: String,
+        to gap: RoutineDraftGap,
+        weightUnit: WeightUnit
+    ) -> AsyncThrowingStream<RoutineDraftSnapshot, Error> {
+        answers.append((answer, gap))
+        requestedUnits.append(weightUnit)
+        let scripted = answerSnapshots.isEmpty ? snapshots : answerSnapshots.removeFirst()
+        return stream(scripted)
+    }
+
+    private func stream(_ scripted: [RoutineDraftSnapshot]) -> AsyncThrowingStream<RoutineDraftSnapshot, Error> {
         let thrown = failure
         return AsyncThrowingStream { continuation in
             for snapshot in scripted { continuation.yield(snapshot) }
