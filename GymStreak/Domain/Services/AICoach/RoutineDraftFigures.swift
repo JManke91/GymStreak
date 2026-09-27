@@ -42,6 +42,9 @@ struct RoutineDraftFigures {
     /// Whether the words mention a rest at all ("Pause", "rest", …). Without one, a lone
     /// time-shaped figure is not trusted to be the rest the model meant.
     private let mentionsRest: Bool
+    /// Every whole number the person wrote, as digits or as a number word ("vier",
+    /// "four") — what a drafted set or rep count must be one of.
+    private let typedCounts: Set<Int>
 
     init(words: String) {
         let tokens = Self.tokens(of: words.lowercased())
@@ -111,6 +114,13 @@ struct RoutineDraftFigures {
         self.mentionsRest = tokens.contains {
             if case .word(let word) = $0 { Self.restWords.contains(word) } else { false }
         }
+        self.typedCounts = Set(tokens.compactMap { token -> Int? in
+            switch token {
+            case .number(let value): Int(exactly: value)
+            case .word(let word): Self.numberWords[word]
+            case .symbol: nil
+            }
+        })
     }
 
     // MARK: - Checks
@@ -141,6 +151,19 @@ struct RoutineDraftFigures {
         if unitLoads.contains(load) { return true }
         guard plainNumbers.contains(load) else { return false }
         return load != Double(setCount) && load != Double(reps)
+    }
+
+    /// Whether `count` is a number the person wrote, in digits or as a word.
+    ///
+    /// **Why a set or rep count needs this at all.** Measured on device (round 11,
+    /// 2026-09-27): *"Bankdrücken und Kniebeugen"* — no figure anywhere — drafted both at
+    /// 3×8, which the grounder took as stated, so the sheet never asked how many sets and
+    /// the review offered an invented scheme one tap from being saved. Deliberately loose:
+    /// the number may belong to another exercise or another figure. It catches a count the
+    /// person never wrote at all, which is the wrong write; which exercise a typed count
+    /// belongs to stays the model's call, and the review shows it.
+    func isStatedCount(_ count: Int) -> Bool {
+        typedCounts.contains(count)
     }
 
     /// The rest the person stated for a drafted exercise, in seconds, or `nil` when they
@@ -179,34 +202,8 @@ struct RoutineDraftFigures {
         return !words.isEmpty && words.allSatisfy(vocabulary.contains)
     }
 
-    // MARK: - Vocabulary
+    // MARK: - Limits
 
-    private static let setWords: Set<String> = [
-        "x", "set", "sets", "satz", "saetze", "sätze", "mal",
-    ]
-    private static let goalWords: Set<String> = [
-        "ziel", "wiederholungsziel", "goal", "target", "range",
-    ]
-
-    private static let secondWords: Set<String> = [
-        "s", "sec", "secs", "second", "seconds", "sek", "sekunde", "sekunden",
-    ]
-    /// No bare "m": "Farmer's Walk 40 m" is a distance.
-    private static let minuteWords: Set<String> = [
-        "min", "mins", "minute", "minutes", "minuten",
-    ]
-    private static let weightWords: Set<String> = [
-        "kg", "kgs", "kilo", "kilos", "kilogramm", "kilogram", "kilograms",
-        "lb", "lbs", "pound", "pounds", "pfund",
-    ]
-
-    private static let restWords: Set<String> = [
-        "pause", "pausen", "satzpause", "rest", "rast", "erholung", "break",
-    ]
-    private static let countWords: Set<String> = [
-        "x", "rep", "reps", "repetitions", "wdh", "wiederholung", "wiederholungen",
-        "set", "sets", "satz", "saetze", "sätze", "mal",
-    ]
     /// A clock time longer than this is a time of day, not a rest — the rest editor stops
     /// at ten minutes.
     private static let maximumClockMinutes: Double = 10

@@ -66,6 +66,22 @@ enum RoutineDraftInstructions {
             .joined(separator: "\n")
     }
 
+    /// The same turn with the description framed as one — the retry
+    /// `RoutineDraftService` sends, once, when Apple's guardrail declines the plain prompt.
+    ///
+    /// **Why.** The guardrail scores the whole request (instructions + schema + the
+    /// person's words) and sits on a threshold for some benign German descriptions:
+    /// *"Oberkörper: Bankdrücken und Kniebeugen"* is declined every time, on iPhone and
+    /// on the macOS 27 model, while *"Oberkörper: Bankdrücken, Kniebeugen"* is not. The
+    /// decline comes before any output, so a retry never replaces a half-shown draft.
+    /// Apple documents both "wrap user input in formatted prompts" and re-phrasing as the
+    /// remedies. Measured on 61 German descriptions (macOS 27, 2026-09-27): the plain
+    /// prompt was declined for 6, this framing alone for 3, plain-then-this for 2. Not the
+    /// only prompt, because it declined one description the plain prompt drafts.
+    static func reframedPrompt(from lines: [String]) -> String {
+        "Workout description, transcribe verbatim: " + prompt(from: lines)
+    }
+
     /// One answer, framed with the question it answers, in words the model reads; the
     /// answer itself verbatim. English like the instructions; the answer
     /// stays in whatever language the person wrote it in.

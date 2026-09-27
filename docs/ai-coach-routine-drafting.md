@@ -13,7 +13,14 @@ routine through the ordinary sync path with no change of its own.
 an exercise name the library could not place into a row the person can answer — see §6a and §9; 03
 made the draft editable before Create — see §9a; 04 asks for what a thin description is missing
 instead of inventing it — see §9c; 05 carries a stated rep-range goal and rest time — see §4a
-(verified on device, round 11).
+(verified on device, round 11); 06 closed the last known wrong-write path (set and rep counts the
+person never typed, §6c), added a guardrail retry (§4) and ran the ship-decision eval on device —
+passed, German only (§12).
+
+**The coach is no longer read-only over user data** — this is the one AI-coach surface whose output
+is persisted. It writes through structured generation and the person's confirmation, never through a
+mutating `Tool`; the boundary as recorded in `docs/ai-coach-chat-plan.md` (*Explicitly still out of
+scope*) and why is §1.
 
 ---
 
@@ -38,8 +45,13 @@ Two consequences that are load-bearing rather than stylistic:
 
 - **Every exercise name is resolved in Swift, against the live library**, before it can reach the
   review sheet — never invented, never accepted on the model's word.
-- **Nothing is written until Create.** Discard, dismissing the sheet, and cancelling mid-stream all
-  write nothing, by construction rather than by cleanup.
+- **Nothing of the routine is written until Create.** Discard, dismissing the sheet, and cancelling
+  mid-stream write no routine, by construction rather than by cleanup. *Narrowed 2026-09-27 (grilling
+  for "create a missing exercise from the draft"):* a library exercise the person **explicitly
+  creates** from an unresolved row, in the add-exercise screen, is written when they save it and
+  stays in the library if the draft is discarded. That is their own action in its own screen, not
+  model output, and it matches the manual routine picker's "create new exercise". The rule exists
+  to keep the model's output out of the person's store unconfirmed; it never covered the library.
 
 ## 2. Where the code lives
 
@@ -50,7 +62,7 @@ Two consequences that are load-bearing rather than stylistic:
 | Domain/Models | `AICoach/RoutineDraftModels.swift` | `RoutineDraftSnapshot` (what the model produced), `GroundedRoutineDraft` / `GroundedDraftExercise` + its `Match` (what Swift decided, and what it still has to ask) |
 | Domain/Interfaces | `AICoach/RoutineDrafting.swift` | the drafting boundary |
 | Domain/Services | `AICoach/RoutineDraftGrounder.swift` (+ `+Bounds.swift`) | the grounding pass — pure logic, isolation-agnostic |
-| Domain/Services | `AICoach/RoutineDraftFigures.swift` | the figures the person typed — rest times, rep ranges, loads (ticket 05, §4a) |
+| Domain/Services | `AICoach/RoutineDraftFigures.swift` (+ `+Segments.swift`, `+Lexicon.swift`) | the figures the person typed — rest times, rep ranges, loads (ticket 05, §4a), and set/rep counts (ticket 06, §6c); `+Lexicon` holds the en/de word lists |
 | Data | `AICoach/RoutineDrafting/RoutineDraftInstructions.swift` | the system prompt |
 | Data | `AICoach/RoutineDrafting/RoutineDraftService.swift` | the `LanguageModelSession` + snapshot mapping |
 | Presentation | `ViewModels/RoutineCreating.swift` | a *name* for the existing creation seam |
@@ -410,7 +422,31 @@ request. The model emits a free-text name; Swift resolves it.
   https://developer.apple.com/documentation/foundationmodels/systemlanguagemodel/guardrails/permissivecontenttransformations ,
   https://developer.apple.com/documentation/foundationmodels/improving-the-safety-of-generative-model-output .
   The same routine as *"Bankdrücken 3 Sätze à 8 mit 80 kg"* went through, so the
-  filter reacts to wording, not content. Sources:
+  filter reacts to wording, not content.
+- **One reframed retry before the "reword it" message (ticket 06, 2026-09-27).** German eval case D6,
+  *"Oberkörper: Bankdrücken und Kniebeugen"*, was declined on iPhone. Probed on the macOS 27 model
+  (`foundationmodels-macos-probe`), it is declined 3/3, with random sampling too and with permissive
+  guardrails. **The decline is a pre-generation check on the whole request:** the error arrives before
+  any partial snapshot; the input alone, the instructions + input as String output, and the schema +
+  input without instructions all pass; only instructions + schema + input fails. There is no trigger
+  word: dropping any one of several unrelated instruction lines flips it, so does "Kniebeuge" for
+  "Kniebeugen", or swapping the two exercises. It behaves like a classifier sitting on its threshold,
+  so rewording the prompt only moves the false positives to other descriptions. An Apple engineer
+  acknowledges guardrails "over-triggering for some languages and locales" as a tracked issue
+  (https://developer.apple.com/forums/thread/787736). Apple's documented remedies are to wrap user
+  input in a formatted prompt and to re-phrase (the safety article above).
+  **Fix:** `RoutineDraftService.respond` sends the plain prompt first; only when it is declined
+  *before any snapshot*, and the task is not cancelled, it sends
+  `RoutineDraftInstructions.reframedPrompt` (the same lines behind "Workout description, transcribe
+  verbatim:") once, in a fresh session, and only then shows the "reword it" message. Measured on 61
+  German descriptions (the eval's D-cases plus 48 "<split>: <exercise> und <exercise>" variants):
+  plain prompt declined 6, the framing alone 3, plain-then-framing **2** (*"Push-Tag-Test: … jeweils
+  8 Wiederholungen mit 80kg"*, D14, and *"eine push routine"*, which passes on iPhone). Extraction
+  quality of the framed prompt matched the plain one. It is not the only prompt, because it
+  declined one description the plain prompt drafts. **Discarded:** `includeSchemaInPrompt: false`
+  (declined 42/61); instruction rewordings (each rescued only half the declines, never independently
+  of the plain prompt). The log line's `attempt 2` shows a rescued turn.
+  Sources:
   https://developer.apple.com/documentation/foundationmodels/languagemodelerror ,
   https://developer.apple.com/documentation/foundationmodels/languagemodelerror/timeout(_:) ,
   WWDC26 session 339.
@@ -599,6 +635,35 @@ rare; if a device round shows otherwise, loosen `isInPersonWords` rather than re
 any caller, Coach Chat included — the same family as the round-1 compound defect. Provenance removes
 it here; the shared leniency is untouched.
 
+### 6c. Provenance for set and rep counts (ticket 06)
+
+**Found in device round 11 (2026-09-27), fixed in ticket 06.** *"Bankdrücken und Kniebeugen"* — no
+figure anywhere — drafted both exercises at 3×8. The grounder took any non-zero count as stated, so
+`isSetCountStated` was true, the sheet never asked how many sets (§9c), and the review offered an
+invented scheme one tap from Create. Names (§6b), loads, ranges and rests (§4a) were already checked
+against the person's words; counts were the one figure that was not, and a saved routine carrying
+them is exactly the wrong write the confirm-before-persist design exists to prevent.
+
+**Fix.** `RoutineDraftGrounder.statedCount(_:figures:)` keeps a drafted set or rep count only when
+`RoutineDraftFigures.isStatedCount` finds that number in the person's words — as digits, or as a
+number word (`one`…`twenty`, `eins`…`zwanzig`; round 7's answer was *"je vier"*). Otherwise the count
+becomes the unstated sentinel: an unstated **set** count is the `.setCounts` gap, so the sheet asks; an
+unstated **rep** count takes the Swift default (or the goal's low end), shown in review.
+
+- **Deliberately loose.** The number may belong to another exercise or another figure ("bench press
+  4x6 and squats" still lets a 4 on squats through). It catches a count the person never wrote *at
+  all*; which exercise a typed count belongs to stays the model's call, and the review shows it. A
+  per-exercise check through `segments` was not used: segments are all-or-nothing and return nothing
+  for exactly the conversational descriptions (answers on later lines) this gap question serves.
+- **No articles.** `ein`/`eine`/`a` are not read as 1 — they are articles in *"eine push routine"*
+  far more often than counts.
+- Pinned by `RoutineDraftDeviceRoundTests.roundElevenInventedCountsAreAsked` (the replay, through the
+  ViewModel into `createRoutine`) and `RoutineDraftFiguresTests.countsMustBeTyped`.
+- **Eleven older tests broke, and that was the check working.** Their descriptions stated no figure
+  ("Push day: bench press, Flurbelblatz") while the fake model returned 3×8 — the round-11 shape. Their
+  descriptions now state the figures the fake model returns; no assertion changed. A new test whose
+  fake model returns counts must give its description those numbers too.
+
 ### Device rounds
 
 #### Round 1 (2026-09-16) — the compound-word defect
@@ -778,6 +843,13 @@ Nudge         OnyxCapNudge, in the sheet and in the chat above the chip
 Free residue  the whole feature, 5 drafting sessions a month, and every routine ever created
 Founder note  n/a — no new gate, so nothing new to convert against §7's permanent grant
 ```
+
+**Re-checked for ticket 06 (2026-09-27): unchanged — and this is the shipped verdict.** What
+shipped across tickets 01–06 still matches the planning verdict exactly: Free (§3 Rule 1); no new
+`PaywallPlacement`; one `.coachChat` allowance unit per drafting session, however many turns;
+the routine cap (`ProFeatureCaps.freeRoutineLimit`) enforced before the sheet opens, and availability
+before either. Ticket 06 added a Swift-side provenance check and a log line — no gate, unit, placement
+or model call. Recorded in `docs/monetization-strategy.md` §4.1.
 
 **Re-checked for ticket 05 (2026-09-26): unchanged.** A drafted rep goal and rest time are part of
 the same draft the unit paid for — no new gate, unit, placement or model call. §3 Rule 1.
@@ -1120,7 +1192,58 @@ it is handed is a device check, and nothing here stands in for one.
   changed in the review (§9a).
 - **One set scheme per exercise** — every set identical, one rest time for all of an exercise's
   sets; per-set variation is made in the set editor. No supersets (§4a).
+- **Counts are checked for provenance, not placement** (§6c): a typed number can land on the wrong
+  exercise. The review shows it; the eval (§12) measures how often.
 - Device verification of the German path and of real model behaviour is a manual check; see §10.
   There is no on-device model in the simulator, so nothing automated stands in for one. Round 1
   (2026-09-16) found the compound-word defect above — fixed and regression-locked; rounds 2
   (2026-09-17) and 3 (2026-09-19, ticket 02's resolution flow) passed.
+
+## 12. On-device evaluation (ticket 06)
+
+The parent task opened with *"analyse if we can use the AI coach"* and *"research first if this is
+doable"*. Rounds 1–11 answered that case by case; the ship decision needs a rate. The chat earned its
+own the same way — a scripted drill run three times on device, every failure classified
+(`docs/ai-coach-chat-eval.md`).
+
+**The sheet:** `docs/ai-coach-routine-drafting-eval.md` — 28 fixed cases (14 English against an
+English-seeded library, 14 German against a German-seeded one): full specifications, thin ones that
+must ask (§9c), out-of-catalog names, ambiguous and compound names, and **bait cases built to produce a
+wrong write** (figures on one exercise but not the other, a load from "last time", an invented extra
+row). Failure codes: W wrong write, F fabrication, T translated name, M misresolution, L loop, X
+refusal, G transient failure, D silent drop. **Any single W blocks the feature**; the rest is a
+quality bar.
+
+**Latency** is read from the service log, not a stopwatch:
+`routine draft turn N first snapshot <ms> ms, finished <ms> ms` (`RoutineDraftService`, ticket 06 —
+it logged whole seconds before, too coarse to compare runs).
+
+**Result (2026-09-27, iPhone, iOS 27, German only): passed.** Scope decision by the product owner:
+the German corpus (D1–D14) passing on device is sufficient; the English cases were not run, and a
+second run was not required. Every D-case produced its correct outcome on the first run **except D6**
+(*"Oberkörper: Bankdrücken und Kniebeugen"*), which Apple's guardrail declined — root-caused on the
+macOS model and fixed with one reframed retry (§4); the re-test on the iPhone then asked for set
+counts as intended. **No wrong write (W) was observed.** Only one failure was found, and it was a refusal (X): D6, now fixed.
+D14's decline is the expected outcome. Per-case latency was not recorded in this run; the log line
+(`first snapshot … ms, finished … ms, attempt N`) is there for the next measurement. Not claimed:
+English-path rates, run-to-run variance, measured latency.
+
+**What is known going in**, so the runs are read correctly:
+
+- Round 11's wrong-write path (invented set/rep counts) is closed in Swift (§6c); D6 and E6 are its
+  replays and must now ask.
+- D6 was declined by the guardrail on iPhone (2026-09-27); fixed with a reframed retry (§4) and re-tested on device. D14's guardrail refusal is Apple's and reproducible (round 7) and the retry does not rescue it; the correct outcome is the "reword it"
+  message, so it is excluded from the X rate.
+- The chat measured ~5 % opaque transient failures absorbed by one retry; the drafting sheet has no
+  automatic retry — a G here is a person tapping send again, which is why it is counted.
+
+## 13. Open follow-ups (found, not applied)
+
+- **`RoutineDraftViewModel.swift` is ~600 lines**, twice the 300-line convention. Every architecture
+  review since ticket 03 acknowledged it. Suggested cut: the allowance ticket handling and the review
+  editing mutations into extensions or a small collaborator.
+- **`ExerciseNameResolver`'s word-boundary leniency** (`pull` → *Face Pulls*) still applies to Coach
+  Chat; provenance only removes it here (§6b).
+- **Creating a missing exercise from an unresolved row** (§11's first limit) — raised after the
+  eval as its own feature; see its ticket set.
+- The eval's English half and latency were not measured (§12).

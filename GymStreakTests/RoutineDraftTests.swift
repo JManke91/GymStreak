@@ -290,7 +290,7 @@ struct RoutineDraftTests {
         harness.drafting.snapshots = [routineDraftSnapshot([routineDraftEntry("Flurbelblatz")])]
         harness.viewModel.onAppear(weightUnit: .kilograms)
 
-        harness.viewModel.descriptionText = "Flurbelblatz day"
+        harness.viewModel.descriptionText = "Flurbelblatz day: Flurbelblatz 3x8 at 60 kg"
         harness.viewModel.submit()
         await harness.settle()
 
@@ -374,7 +374,7 @@ struct RoutineDraftTests {
             routineDraftEntry("Squat", sets: 4, reps: 5, weight: 100),
         ])]
         harness.viewModel.onAppear(weightUnit: .kilograms)
-        harness.viewModel.descriptionText = "Push day: bench press, Flurbelblatz, squat"
+        harness.viewModel.descriptionText = "Push day: bench press 3x8 at 60 kg, Flurbelblatz 3x8, squat 4x5 at 100 kg"
         harness.viewModel.submit()
         await harness.settle()
 
@@ -413,7 +413,7 @@ struct RoutineDraftTests {
         harness.drafting.snapshots = [routineDraftSnapshot(name: "   ", [routineDraftEntry("Bench Press")])]
         harness.viewModel.onAppear(weightUnit: .kilograms)
 
-        harness.viewModel.descriptionText = "bench press"
+        harness.viewModel.descriptionText = "bench press 3x8 at 60 kg"
         harness.viewModel.submit()
         await harness.settle()
         // Since ticket 04 a nameless draft asks for a name; skipping the question is what

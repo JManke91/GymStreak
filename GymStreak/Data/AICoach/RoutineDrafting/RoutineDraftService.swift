@@ -97,37 +97,60 @@ final class RoutineDraftService: RoutineDrafting {
 
     // MARK: - Turn
 
+    private static func milliseconds(_ duration: Duration) -> Int {
+        Int(duration.components.seconds * 1000 + duration.components.attoseconds / 1_000_000_000_000_000)
+    }
+
     /// Streams one turn: every line the person has said so far plus `line`, sent to a
     /// session of its own.
     private func respond(
         adding line: String,
         weightUnit: WeightUnit
     ) -> AsyncThrowingStream<RoutineDraftSnapshot, Error> {
-        let prompt = RoutineDraftInstructions.prompt(from: turns + [line])
-        let session = takeSession(unit: weightUnit)
+        let lines = turns + [line]
+        let firstSession = takeSession(unit: weightUnit)
         return AsyncThrowingStream { continuation in
             let task = Task { @MainActor in
                 let start = ContinuousClock.now
-                do {
-                    let stream = session.streamResponse(
-                        to: prompt,
-                        generating: RoutineDraftOutput.self,
-                        options: Self.generationOptions
-                    )
-                    for try await snapshot in stream {
+                // Time to the first snapshot and to the finished draft, in milliseconds —
+                // what docs/ai-coach-routine-drafting-eval.md records as latency.
+                var firstSnapshot: Duration?
+                // The plain prompt first, then — only when Apple's guardrail declines it
+                // before anything was generated — the same words reframed, once, in a
+                // session of its own. See `RoutineDraftInstructions.reframedPrompt`.
+                let prompts = [
+                    RoutineDraftInstructions.prompt(from: lines),
+                    RoutineDraftInstructions.reframedPrompt(from: lines),
+                ]
+                for (attempt, prompt) in prompts.enumerated() {
+                    let session = attempt == 0 ? firstSession : Self.makeSession(unit: weightUnit)
+                    do {
+                        let stream = session.streamResponse(
+                            to: prompt,
+                            generating: RoutineDraftOutput.self,
+                            options: Self.generationOptions
+                        )
+                        for try await snapshot in stream {
+                            try Task.checkCancellation()
+                            if firstSnapshot == nil { firstSnapshot = ContinuousClock.now - start }
+                            continuation.yield(Self.snapshot(from: snapshot.content))
+                        }
                         try Task.checkCancellation()
-                        continuation.yield(Self.snapshot(from: snapshot.content))
+                        self.turns.append(line)
+                        let first = Self.milliseconds(firstSnapshot ?? .zero)
+                        let total = Self.milliseconds(ContinuousClock.now - start)
+                        self.logger.notice("routine draft turn \(self.turns.count) first snapshot \(first) ms, finished \(total) ms, attempt \(attempt + 1)")
+                        continuation.finish()
+                        return
+                    } catch {
+                        self.log(error)
+                        let isDeclined = Self.isDeclinedByModel(error)
+                        if isDeclined, firstSnapshot == nil, attempt + 1 < prompts.count, !Task.isCancelled {
+                            continue
+                        }
+                        continuation.finish(throwing: isDeclined ? RoutineDraftingError.declinedByModel : error)
+                        return
                     }
-                    try Task.checkCancellation()
-                    self.turns.append(line)
-                    let elapsed = ContinuousClock.now - start
-                    self.logger.notice("routine draft turn \(self.turns.count) finished in \(Int(elapsed.components.seconds)) s")
-                    continuation.finish()
-                } catch {
-                    self.log(error)
-                    continuation.finish(
-                        throwing: Self.isDeclinedByModel(error) ? RoutineDraftingError.declinedByModel : error
-                    )
                 }
             }
             // Cancelling the consuming task terminates the stream, which has to reach

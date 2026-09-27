@@ -62,7 +62,7 @@ Validate the two risks research could not resolve — **tool-invocation reliabil
 
 **In:** one retained multi-turn session, 3 tools over existing domain services, streaming chat UI, fully automatic context-overflow handling (proactive + reactive), EN + DE, availability gating, scripted evaluation protocol.
 
-**Out (deliberately, for the spike):** transcript persistence across app launches *(since built — Phase 1 of `docs/ai-coach-chat-plan.md`, July 2026: conversation persists as local-only JSON via `ChatConversationStore`; the transcript itself is still never persisted)*, multiple conversations / chat history browsing, proactive suggestions, watch target (no FoundationModels on watchOS), writing/mutating tools (chat is read-only over user data), Siri/App Intents integration.
+**Out (deliberately, for the spike):** transcript persistence across app launches *(since built — Phase 1 of `docs/ai-coach-chat-plan.md`, July 2026: conversation persists as local-only JSON via `ChatConversationStore`; the transcript itself is still never persisted)*, multiple conversations / chat history browsing, proactive suggestions, watch target (no FoundationModels on watchOS), writing/mutating tools (the chat is still read-only and still has no mutating tool — but since September 2026 the coach as a whole is not read-only over user data: routine drafting writes a routine after the person confirms, through structured generation rather than a tool; see `docs/ai-coach-chat-plan.md` *Explicitly still out of scope* and `docs/ai-coach-routine-drafting.md` §1), Siri/App Intents integration.
 
 ## Step 0 — SDK verification checklist (DONE, July 2026)
 

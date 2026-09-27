@@ -80,7 +80,7 @@ struct RoutineDraftResolutionTests {
             routineDraftEntry("Schrägbank Kurzhantel", sets: 4, reps: 12, weight: 22),
         ])]
         harness.viewModel.onAppear(weightUnit: .kilograms)
-        harness.viewModel.descriptionText = "Push day: bench press, Schrägbank Kurzhantel"
+        harness.viewModel.descriptionText = "Push day: bench press 3x8 at 60 kg, Schrägbank Kurzhantel 4x12 mit 22 kg"
         harness.viewModel.submit()
         await harness.settle()
 
@@ -150,7 +150,7 @@ struct RoutineDraftResolutionTests {
             routineDraftEntry("Flurbelblatz"),
         ])]
         harness.viewModel.onAppear(weightUnit: .kilograms)
-        harness.viewModel.descriptionText = "Push day: bench press, Flurbelblatz"
+        harness.viewModel.descriptionText = "Push day: bench press 3x8 at 60 kg, Flurbelblatz 4x12 at 22 kg"
         harness.viewModel.submit()
         await harness.settle()
 
@@ -173,7 +173,7 @@ struct RoutineDraftResolutionTests {
             routineDraftEntry("Flurbelblatz", sets: 4, reps: 12, weight: 22),
         ])]
         harness.viewModel.onAppear(weightUnit: .kilograms)
-        harness.viewModel.descriptionText = "Push day: bench press, Flurbelblatz"
+        harness.viewModel.descriptionText = "Push day: bench press 3x8 at 60 kg, Flurbelblatz 4x12 at 22 kg"
         harness.viewModel.submit()
         await harness.settle()
 

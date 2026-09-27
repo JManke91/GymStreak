@@ -16,7 +16,7 @@ A working, architecture-clean, tested foundation on `Data/AICoach/Chat/` + `Doma
 - **No `ToolCallingMode` on iOS 26.x** → tool invocation is instructions-driven; keep tool descriptions terse and disambiguating.
 - **3B phrasing slips** (e.g. "last weekend" for "last week") occur even when grounding is correct — acceptable for chat; do not over-engineer.
 - **4,096-token context** shared by instructions + tool schemas + transcript → every added tool costs budget on every turn; curate the tool set.
-- **On-device only** (no watchOS FoundationModels); chat is read-only over user data.
+- **On-device only** (no watchOS FoundationModels); chat is read-only over user data. (The coach as a whole no longer is — routine drafting writes a routine after the person confirms; see *Explicitly still out of scope* below.)
 
 ---
 
@@ -151,6 +151,19 @@ Today fact lines are canonical English translated on-device (a DE glossary is in
 ## Explicitly still out of scope
 
 watchOS chat (no FoundationModels), writing/mutating tools (chat stays read-only), Siri/App Intents integration. Record here if any is later pulled in.
+
+**Pulled in (partly), September 2026 — the coach writing user data.** Routine drafting
+(`docs/ai-coach-routine-drafting.md`) ends the coach's read-only posture: the person describes a
+routine in Coach Chat, the model drafts it, and a routine is written to their store when they tap
+Create. **What was not pulled in is the mutating *tool*.** The chat itself still registers only its
+three read tools and writes nothing. The write goes through structured generation (`@Generable`
+draft → Swift grounding → review → the ordinary `RoutinesViewModel` create path), because a tool call
+cannot be forced on iOS 26.x (`GenerationOptions.ToolCallingMode` is iOS 27.0+) and this chat's own
+eval measured the model silently skipping a registered tool and mangling its arguments. A skipped
+*read* tool is a wrong sentence; a skipped *write* tool would be a routine the person believes exists
+and does not. So the boundary that still holds is: **the model never writes; Swift writes, and only
+after the person confirms.** Anyone adding a second write surface should follow the same shape rather
+than add a `Tool` — see the drafting doc §1.
 
 ## Suggested sequencing
 

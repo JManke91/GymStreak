@@ -110,4 +110,15 @@ struct RoutineDraftFiguresTests {
         #expect(figures.onlyRange == nil)
         #expect(RoutineDraftFigures(words: "Bankdrücken 3x8-12 mit 60kg").onlyRange.map { [$0.low, $0.high] } == [8, 12])
     }
+
+    @Test("A count is stated only when the person wrote that number, in digits or as a word")
+    func countsMustBeTyped() {
+        #expect(!RoutineDraftFigures(words: "Bankdrücken und Kniebeugen").isStatedCount(3))
+        #expect(RoutineDraftFigures(words: "Bankdrücken 3x8-12").isStatedCount(3))
+        #expect(RoutineDraftFigures(words: "Bankdrücken 3x8-12").isStatedCount(12))
+        #expect(RoutineDraftFigures(words: "je vier").isStatedCount(4))
+        #expect(RoutineDraftFigures(words: "four each").isStatedCount(4))
+        // An article is not a count.
+        #expect(!RoutineDraftFigures(words: "eine Push-Routine").isStatedCount(1))
+    }
 }

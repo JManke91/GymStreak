@@ -152,6 +152,7 @@ struct CoachPromptGroundingTests {
         let exerciseWords = #"\b(bench|press|squat|squats|deadlift|curl|curls|row|rows|lunge|pull-?up|push-?up|dip)\b"#
         let prompts = WeightUnit.allCases.map { RoutineDraftInstructions.build(unit: $0) }
             + Self.routineDraftGaps.map { RoutineDraftInstructions.answer("the answer", to: $0.0) }
+            + [RoutineDraftInstructions.reframedPrompt(from: [])]
         // The schemas render their `.maximumCount` constraint as a digit, so they get the
         // word scans only; `noGenerationSchemaCarriesADataShapedLiteral` covers their
         // literals.

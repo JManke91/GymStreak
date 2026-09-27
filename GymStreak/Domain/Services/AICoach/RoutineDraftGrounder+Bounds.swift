@@ -11,6 +11,14 @@ import Foundation
 
 extension RoutineDraftGrounder {
 
+    /// A drafted set or rep count, or `unstatedNumber` when the person never wrote that
+    /// number — so an invented count is asked about (set counts) or defaulted in Swift
+    /// (reps) instead of reviewed as the person's own. `nil` figures skip the check.
+    func statedCount(_ drafted: Int, figures: RoutineDraftFigures?) -> Int {
+        guard drafted > Self.unstatedNumber, let figures else { return drafted }
+        return figures.isStatedCount(drafted) ? drafted : Self.unstatedNumber
+    }
+
     /// The stated set count, the Swift default when none was stated, bounded either way.
     func boundedSetCount(_ stated: Int) -> Int {
         guard stated > Self.unstatedNumber else { return Self.defaultSetCount }

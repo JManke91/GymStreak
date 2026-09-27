@@ -235,7 +235,7 @@ struct RoutineDraftEditingTests {
             availability: availability
         )
         viewModel.onAppear(weightUnit: .kilograms)
-        viewModel.descriptionText = "Legs: bench press and squat"
+        viewModel.descriptionText = "Legs: bench press 4x8 at 60 kg and squat 3x5 at 100 kg"
         viewModel.submit()
         for _ in 0..<500 where viewModel.isDrafting { await Task.yield() }
 

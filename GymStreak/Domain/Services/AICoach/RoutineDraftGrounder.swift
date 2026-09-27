@@ -106,7 +106,8 @@ final class RoutineDraftGrounder {
     ///   that has been converted twice.
     /// - Parameter personWords: everything the person typed in this drafting
     ///   conversation. When given, **a drafted name must come from it** — see
-    ///   `isInPersonWords` — and **so must its rest time, rep range and load**, checked by
+    ///   `isInPersonWords` — and **so must its set and rep counts, rest time, rep range and
+    ///   load**, checked by
     ///   `RoutineDraftFigures`. `nil` skips both checks; only tests of the other passes
     ///   use it.
     func ground(
@@ -158,14 +159,15 @@ final class RoutineDraftGrounder {
                 .map(RoutineDraftFigures.init(words:))
                 .flatMap { $0.setGroupCount <= 1 ? $0 : nil }
             let goal = repRangeGoal(span: entry.repRange, figures: figures, segment: segment)
+            let setCount = statedCount(entry.setCount, figures: figures)
             exercises.append(
                 GroundedDraftExercise(
                     id: identity(at: index),
                     draftedName: name,
                     match: libraryMatch,
-                    setCount: boundedSetCount(entry.setCount),
-                    isSetCountStated: entry.setCount > Self.unstatedNumber,
-                    reps: reps(entry.reps, within: goal),
+                    setCount: boundedSetCount(setCount),
+                    isSetCountStated: setCount > Self.unstatedNumber,
+                    reps: reps(statedCount(entry.reps, figures: figures), within: goal),
                     weightKilograms: kilograms(load(of: entry, figures: figures, segment: segment), in: weightUnit),
                     targetRepMin: goal?.min,
                     targetRepMax: goal?.max,

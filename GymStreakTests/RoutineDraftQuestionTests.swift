@@ -226,6 +226,19 @@ struct RoutineDraftQuestionTests {
         #expect(lines[1].hasSuffix("Bankdrücken und Kniebeugen"))
     }
 
+    @Test("The guardrail retry frames the same lines, keeping the description first and verbatim")
+    func reframedPromptKeepsTheLines() {
+        let turns = ["Oberkörper: Bankdrücken und Kniebeugen", RoutineDraftInstructions.answer("je drei", to: .setCounts(exerciseNames: ["Bankdrücken"]))]
+        let plain = RoutineDraftInstructions.prompt(from: turns)
+        let reframed = RoutineDraftInstructions.reframedPrompt(from: turns)
+
+        #expect(reframed != plain)
+        #expect(reframed.hasSuffix(plain))
+        #expect(reframed.split(separator: "\n").count == 2)
+        // The framing itself carries no figure a model could copy.
+        #expect(reframed.dropLast(plain.count).rangeOfCharacter(from: .decimalDigits) == nil)
+    }
+
     // MARK: - Asking instead of inventing
 
     /// "a push routine" — a name and nothing else.

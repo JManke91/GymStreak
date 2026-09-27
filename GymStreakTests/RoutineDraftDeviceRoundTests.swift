@@ -78,4 +78,39 @@ struct RoutineDraftDeviceRoundTests {
         #expect(written.allSatisfy { $0.targetRepMin == nil })
         #expect(written.allSatisfy { $0.sets.allSatisfy { $0.weight == 0 } })
     }
+
+    /// Device round 11 (iPhone): "Bankdrücken und Kniebeugen" — no figure anywhere —
+    /// drafted both at 3×8, taken as stated, so the sheet never asked for set counts and
+    /// the review offered the invented scheme one tap from Create.
+    @Test("Round 11 replay: counts the person never typed are asked about, not reviewed as theirs")
+    func roundElevenInventedCountsAreAsked() async throws {
+        let harness = RoutineDraftHarness.make(libraryNames: ["Bankdrücken", "Kniebeugen"])
+        harness.drafting.snapshots = [routineDraftSnapshot(name: "Push", [
+            routineDraftEntry("Bankdrücken", sets: 3, reps: 8, weight: 0),
+            routineDraftEntry("Kniebeugen", sets: 3, reps: 8, weight: 0),
+        ])]
+        harness.drafting.answerSnapshots = [[routineDraftSnapshot(name: "Push", [
+            routineDraftEntry("Bankdrücken", sets: 4, reps: 8, weight: 0),
+            routineDraftEntry("Kniebeugen", sets: 4, reps: 8, weight: 0),
+        ])]]
+        harness.viewModel.onAppear(weightUnit: .kilograms)
+        harness.viewModel.descriptionText = "Push: Bankdrücken und Kniebeugen"
+        harness.viewModel.submit()
+        await harness.settle()
+
+        #expect(harness.viewModel.phase == .asking)
+        #expect(harness.viewModel.question
+            == "ai_coach.routine_draft.question.sets".localized("Bankdrücken, Kniebeugen"))
+
+        harness.viewModel.answerText = "je vier"
+        harness.viewModel.submitAnswer()
+        await harness.settle()
+
+        #expect(harness.viewModel.phase == .review)
+        harness.viewModel.createRoutine()
+        let written = try #require(harness.routines.createdExercises.first)
+        #expect(written.map(\.sets.count) == [4, 4])
+        // "vier" was typed; the 8 reps never were, so they are Swift's default.
+        #expect(written.allSatisfy { $0.sets.allSatisfy { $0.reps == RoutineDraftGrounder.defaultReps } })
+    }
 }
