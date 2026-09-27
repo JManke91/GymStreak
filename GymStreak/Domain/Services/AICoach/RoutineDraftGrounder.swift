@@ -44,14 +44,18 @@ final class RoutineDraftGrounder {
     /// Applied in Swift when the description stated no rep count, for the same reason.
     static let defaultReps = 10
 
-    /// The rest between sets on every drafted set. The description has no way to say it
-    /// yet — ticket 05 gives it one.
+    /// The rest between sets when the description stated none — the `ExerciseSet`
+    /// model's own default, applied here in Swift and never written into the prompt.
     static let defaultRestTime: TimeInterval = 60
 
     /// Bounds on what a drafted exercise may carry into the store. A person typing a
     /// sentence is not typing inside a stepper, and the model copies what they wrote.
     static let maximumSetCount = 20
     static let maximumReps = 100
+    /// The same ceilings `ConfigureExerciseSetsView`'s rep-goal and rest steppers use, so a
+    /// drafted value always opens in the editor as something the editor could have set.
+    static let maximumRepGoal = 99
+    static let maximumRestTime: TimeInterval = 600
 
     // MARK: - Dependencies
 
@@ -102,7 +106,9 @@ final class RoutineDraftGrounder {
     ///   that has been converted twice.
     /// - Parameter personWords: everything the person typed in this drafting
     ///   conversation. When given, **a drafted name must come from it** — see
-    ///   `isInPersonWords`. `nil` skips that check; only tests of the other passes use it.
+    ///   `isInPersonWords` — and **so must its rest time, rep range and load**, checked by
+    ///   `RoutineDraftFigures`. `nil` skips both checks; only tests of the other passes
+    ///   use it.
     func ground(
         _ snapshot: RoutineDraftSnapshot,
         library: [Exercise],
@@ -113,6 +119,14 @@ final class RoutineDraftGrounder {
         var dropped: [String] = []
         let source = personWords.map { Set(words(of: resolver.fold($0))) }
         let routineName = snapshot.name.trimmingCharacters(in: .whitespacesAndNewlines)
+        let figures = personWords.map(RoutineDraftFigures.init(words:))
+        let segments = personWords.map {
+            // A figure word the loop below skips ("Pause") is no exercise to segment by.
+            RoutineDraftFigures.segments(
+                for: snapshot.exercises.map { RoutineDraftFigures.isFigureVocabulary($0.name) ? "" : $0.name },
+                in: $0
+            )
+        }
 
         for (index, entry) in snapshot.exercises.enumerated() {
             let name = entry.name.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -127,6 +141,10 @@ final class RoutineDraftGrounder {
                 continue
             }
 
+            // "Pause", "Sätze", "kg": a figure's word written out as an exercise. Not
+            // reported as dropped — it was never meant as one.
+            if RoutineDraftFigures.isFigureVocabulary(name) { continue }
+
             let libraryMatch = match(for: name, in: library)
             // "Push" in "a push routine" *is* in the person's words — as the kind of
             // workout, which the model also wrote as the routine's name. A name the library
@@ -134,6 +152,12 @@ final class RoutineDraftGrounder {
             // reported as dropped: it was never meant as one.
             if case .unmatched = libraryMatch, isPartOfRoutineName(name, routineName) { continue }
 
+            // A stretch holding more than one set group also holds an exercise the model
+            // left out — its figures are not this exercise's to recover.
+            let segment = segments?[index]
+                .map(RoutineDraftFigures.init(words:))
+                .flatMap { $0.setGroupCount <= 1 ? $0 : nil }
+            let goal = repRangeGoal(span: entry.repRange, figures: figures, segment: segment)
             exercises.append(
                 GroundedDraftExercise(
                     id: identity(at: index),
@@ -141,8 +165,11 @@ final class RoutineDraftGrounder {
                     match: libraryMatch,
                     setCount: boundedSetCount(entry.setCount),
                     isSetCountStated: entry.setCount > Self.unstatedNumber,
-                    reps: boundedReps(entry.reps),
-                    weightKilograms: kilograms(entry.weight, in: weightUnit)
+                    reps: reps(entry.reps, within: goal),
+                    weightKilograms: kilograms(load(of: entry, figures: figures, segment: segment), in: weightUnit),
+                    targetRepMin: goal?.min,
+                    targetRepMax: goal?.max,
+                    restTime: restTime(entry.restUnit, amount: entry.restAmount, figures: figures)
                 )
             )
         }
@@ -226,27 +253,5 @@ final class RoutineDraftGrounder {
     private func identity(at index: Int) -> UUID {
         while entryIDs.count <= index { entryIDs.append(UUID()) }
         return entryIDs[index]
-    }
-
-    // MARK: - Bounds
-
-    /// The stated set count, the Swift default when none was stated, bounded either way.
-    func boundedSetCount(_ stated: Int) -> Int {
-        guard stated > Self.unstatedNumber else { return Self.defaultSetCount }
-        return min(stated, Self.maximumSetCount)
-    }
-
-    /// The stated rep count, the Swift default when none was stated, bounded either way.
-    func boundedReps(_ stated: Int) -> Int {
-        guard stated > Self.unstatedNumber else { return Self.defaultReps }
-        return min(stated, Self.maximumReps)
-    }
-
-    /// A stated display-unit load as canonical kilograms, clamped to the same ceiling
-    /// every typed weight in the app is clamped to. An unstated or negative load is a
-    /// drafted exercise without a load, which is what a bodyweight movement needs.
-    func kilograms(_ stated: Double, in unit: WeightUnit) -> Double {
-        guard stated > 0 else { return 0 }
-        return unit.clampedKilograms(fromDisplay: stated)
     }
 }

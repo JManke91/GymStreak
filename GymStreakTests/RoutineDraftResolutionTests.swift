@@ -103,7 +103,7 @@ struct RoutineDraftResolutionTests {
             routineDraftEntry("Bench Press", sets: 3, reps: 8, weight: 60),
         ])]
         harness.viewModel.onAppear(weightUnit: .kilograms)
-        harness.viewModel.descriptionText = "Push day: Schrägbank Kurzhantel, bench press"
+        harness.viewModel.descriptionText = "Push day: Schrägbank Kurzhantel 4x12 mit 22 kg, bench press 3x8 at 60 kg"
         harness.viewModel.submit()
         await harness.settle()
 

@@ -1127,6 +1127,10 @@
 "ai_coach.routine_draft.question.error" = "Die Antwort konnte nicht übernommen werden. Bitte versuch es noch einmal.";
 "ai_coach.routine_draft.question.no_exercises" = "Aus der Antwort ließ sich keine Übung übernehmen. Nenn die Übungen bitte noch einmal.";
 "ai_coach.routine_draft.sets_unstated" = "Sätze?";
+"ai_coach.routine_draft.rep_goal" = "Ziel %d–%d Wdh.";
+"ai_coach.routine_draft.no_rep_goal" = "Kein Wdh.-Ziel";
+"ai_coach.routine_draft.rest" = "Pause %@";
+"ai_coach.routine_draft.rest_off" = "Kein Pausentimer";
 "ai_coach.routine_draft.allowance.nudge" = "%1$d von %2$d freien Coach-Anfragen diesen Monat übrig";
 "ai_coach.routine_draft.allowance.nudge.exhausted" = "Diesen Monat keine freien Coach-Anfragen mehr. Mit Gym Streak Pro nutzt du den Coach unbegrenzt.";
 

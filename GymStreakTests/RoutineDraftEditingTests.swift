@@ -29,7 +29,7 @@ struct RoutineDraftEditingTests {
             routineDraftEntry("Squat", sets: 4, reps: 5, weight: 100),
         ])]
         harness.viewModel.onAppear(weightUnit: .kilograms)
-        harness.viewModel.descriptionText = "Push day: bench press, row, squat"
+        harness.viewModel.descriptionText = "Push day: bench press 3x8 at 60 kg, row 3x10 at 50 kg, squat 4x5 at 100 kg"
         harness.viewModel.submit()
         await harness.settle()
         return harness

@@ -142,9 +142,20 @@ func routineDraftEntry(
     _ name: String,
     sets: Int = 3,
     reps: Int = 8,
-    weight: Double = 60
+    weight: Double = 60,
+    repRange: (low: Int, high: Int) = (0, 0),
+    rest: (unit: RoutineDraftEntry.RestUnit, amount: Double) = (.unstated, 0)
 ) -> RoutineDraftEntry {
-    RoutineDraftEntry(name: name, setCount: sets, reps: reps, weight: weight)
+    RoutineDraftEntry(
+        name: name,
+        setCount: sets,
+        reps: reps,
+        weight: weight,
+        // The span the model copies; a zero end means it copied nothing.
+        repRange: repRange.low > 0 && repRange.high > 0 ? "\(repRange.low)-\(repRange.high)" : "",
+        restUnit: rest.unit,
+        restAmount: rest.amount
+    )
 }
 
 func routineDraftSnapshot(

@@ -48,10 +48,11 @@ extension GroundedDraftExercise {
     /// row is opened.
     ///
     /// The sets are identical by construction — a drafted exercise carries one set scheme,
-    /// repeated. Alternatives and rep-range goals are deliberately left empty: nothing in a
-    /// typed description expresses them, and inventing either would be the app guessing on
-    /// the person's behalf at the exact moment it writes to their store. The person can
-    /// add both by opening the row.
+    /// repeated, with one rest time on every set (as `ConfigureExerciseSetsView` applies
+    /// it). The rep-range goal is whatever the description stated, which is usually none.
+    /// Alternatives are deliberately left empty: nothing in a typed description expresses
+    /// them, and inventing one would be the app guessing on the person's behalf at the
+    /// exact moment it writes to their store. The person can add them by opening the row.
     func pendingExercise(order: Int) -> PendingRoutineExercise? {
         guard let exercise else { return nil }
         return PendingRoutineExercise(
@@ -60,11 +61,13 @@ extension GroundedDraftExercise {
                 ExerciseSet(
                     reps: reps,
                     weight: weightKilograms,
-                    restTime: RoutineDraftGrounder.defaultRestTime,
+                    restTime: restTime,
                     order: setOrder
                 )
             },
-            order: order
+            order: order,
+            targetRepMin: targetRepMin,
+            targetRepMax: targetRepMax
         )
     }
 }

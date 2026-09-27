@@ -16,34 +16,6 @@ import Foundation
 
 // MARK: - What the model produced
 
-/// One exercise as the model wrote it: a free-text name plus three raw numbers.
-///
-/// Nothing here is trusted. The name is the model's spelling of whatever the person
-/// typed and has not met the exercise library yet; the numbers are still in the
-/// **reader's display unit** and still carry the "the description did not say" sentinel.
-/// `RoutineDraftGrounder` is what turns this into something the app may write.
-struct RoutineDraftEntry: Equatable, Sendable {
-
-    let name: String
-    /// How many sets, or `RoutineDraftGrounder.unstatedNumber` when the description
-    /// gave none. There is no optional here on purpose: a `@Generable` optional has
-    /// already produced the literal string "nil" in rendered output in this app, so
-    /// absence is carried by a sentinel and decided in Swift (docs/ai-coach.md).
-    let setCount: Int
-    /// Repetitions per set, with the same sentinel.
-    let reps: Int
-    /// The load for one set **in the reader's display unit**, with the same sentinel.
-    /// Converted to canonical kilograms by the grounding pass, never before.
-    let weight: Double
-
-    init(name: String, setCount: Int, reps: Int, weight: Double) {
-        self.name = name
-        self.setCount = setCount
-        self.reps = reps
-        self.weight = weight
-    }
-}
-
 /// One streaming snapshot of a routine draft: the name so far, and the exercises that
 /// are **fully generated**.
 ///
@@ -117,6 +89,14 @@ struct GroundedDraftExercise: Identifiable {
     /// Canonical kilograms, like every other stored weight in the app. Zero means the
     /// exercise is drafted without a load, not that a load is missing.
     let weightKilograms: Double
+    /// The rep-range goal the person stated, or `nil`/`nil` — **no goal is the ordinary
+    /// case**, never something to fill in. Both set or both nil, like
+    /// `RoutineExercise.hasRepRangeGoal` expects.
+    let targetRepMin: Int?
+    let targetRepMax: Int?
+    /// The rest between sets for every set of this exercise — the stated one, or the
+    /// Swift default.
+    let restTime: TimeInterval
 
     init(
         id: UUID = UUID(),
@@ -125,7 +105,10 @@ struct GroundedDraftExercise: Identifiable {
         setCount: Int,
         isSetCountStated: Bool = true,
         reps: Int,
-        weightKilograms: Double
+        weightKilograms: Double,
+        targetRepMin: Int? = nil,
+        targetRepMax: Int? = nil,
+        restTime: TimeInterval = RoutineDraftGrounder.defaultRestTime
     ) {
         self.id = id
         self.draftedName = draftedName
@@ -134,6 +117,9 @@ struct GroundedDraftExercise: Identifiable {
         self.isSetCountStated = isSetCountStated
         self.reps = reps
         self.weightKilograms = weightKilograms
+        self.targetRepMin = targetRepMin
+        self.targetRepMax = targetRepMax
+        self.restTime = restTime
     }
 
     /// The library exercise this draft may write, or `nil` while it is still unresolved.
@@ -162,7 +148,10 @@ struct GroundedDraftExercise: Identifiable {
             setCount: setCount,
             isSetCountStated: isSetCountStated,
             reps: reps,
-            weightKilograms: weightKilograms
+            weightKilograms: weightKilograms,
+            targetRepMin: targetRepMin,
+            targetRepMax: targetRepMax,
+            restTime: restTime
         )
     }
 }

@@ -1127,6 +1127,10 @@
 "ai_coach.routine_draft.question.error" = "That answer could not be added. Please try again.";
 "ai_coach.routine_draft.question.no_exercises" = "No exercise could be taken from that answer. Please name the exercises again.";
 "ai_coach.routine_draft.sets_unstated" = "Sets?";
+"ai_coach.routine_draft.rep_goal" = "Goal %d–%d reps";
+"ai_coach.routine_draft.no_rep_goal" = "No rep goal";
+"ai_coach.routine_draft.rest" = "Rest %@";
+"ai_coach.routine_draft.rest_off" = "No rest timer";
 "ai_coach.routine_draft.allowance.nudge" = "%1$d of %2$d free Coach requests left this month";
 "ai_coach.routine_draft.allowance.nudge.exhausted" = "No free Coach requests left this month. Gym Streak Pro unlocks unlimited Coach.";
 

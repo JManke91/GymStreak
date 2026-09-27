@@ -38,6 +38,15 @@ final class RoutineDraftService: RoutineDrafting {
     /// short records, so this bounds a runaway generation without bounding a real one.
     private static let maximumResponseTokens = 700
 
+    /// Greedy: this is transcription, not writing, so the most likely token is the right
+    /// one — and the same description then drafts the same routine every time, which makes
+    /// a device round reproducible. Measured on the macOS 27 on-device model (2026-09-27):
+    /// equal or better than default sampling on every probed description, and the routine
+    /// name stopped flipping between runs. Apple recommends greedy "for consistent output".
+    private static var generationOptions: GenerationOptions {
+        GenerationOptions(samplingMode: .greedy, maximumResponseTokens: maximumResponseTokens)
+    }
+
     // MARK: - Private
 
     private let logger = Logger(subsystem: "app.gymstreak.aicoach", category: "RoutineDraft")
@@ -103,7 +112,7 @@ final class RoutineDraftService: RoutineDrafting {
                     let stream = session.streamResponse(
                         to: prompt,
                         generating: RoutineDraftOutput.self,
-                        options: GenerationOptions(maximumResponseTokens: Self.maximumResponseTokens)
+                        options: Self.generationOptions
                     )
                     for try await snapshot in stream {
                         try Task.checkCancellation()
@@ -152,7 +161,7 @@ final class RoutineDraftService: RoutineDrafting {
     /// property is Optional, and an exercise name arrives token by token — grounding a
     /// half-written name would resolve it against the library on every snapshot and walk
     /// the row through whatever the prefixes happen to match before it settles. An entry
-    /// joins the draft once all four of its fields are present.
+    /// joins the draft once every one of its fields is present.
     private static func snapshot(from partial: RoutineDraftOutput.PartiallyGenerated) -> RoutineDraftSnapshot {
         RoutineDraftSnapshot(
             name: partial.routineName ?? "",
@@ -164,9 +173,20 @@ final class RoutineDraftService: RoutineDrafting {
         guard let name = partial.name,
               let setCount = partial.setCount,
               let reps = partial.reps,
-              let weight = partial.weight
+              let weight = partial.weight,
+              let repRange = partial.repRange,
+              let restUnit = partial.restUnit,
+              let restAmount = partial.restAmount
         else { return nil }
-        return RoutineDraftEntry(name: name, setCount: setCount, reps: reps, weight: weight)
+        return RoutineDraftEntry(
+            name: name,
+            setCount: setCount,
+            reps: reps,
+            weight: weight,
+            repRange: repRange,
+            restUnit: restUnit.entryUnit,
+            restAmount: restAmount
+        )
     }
 
     // MARK: - Errors
@@ -242,6 +262,16 @@ final class RoutineDraftService: RoutineDrafting {
             logger.error("routine draft unsupported locale")
         default:
             logger.error("routine draft error: \(String(describing: generation), privacy: .public)")
+        }
+    }
+}
+
+private extension RoutineDraftRestUnit {
+    var entryUnit: RoutineDraftEntry.RestUnit {
+        switch self {
+        case .unstated: .unstated
+        case .seconds: .seconds
+        case .minutes: .minutes
         }
     }
 }

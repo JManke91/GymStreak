@@ -52,6 +52,11 @@ struct RoutineDraftRowView: View {
                         Text(row.summary)
                             .font(.system(size: 13))
                             .foregroundStyle(Color.white.opacity(0.55))
+                        if !row.goals.isEmpty {
+                            Text(row.goals)
+                                .font(.system(size: 12))
+                                .foregroundStyle(Color.white.opacity(0.4))
+                        }
                     }
 
                     Spacer(minLength: 8)
@@ -127,6 +132,11 @@ struct RoutineDraftRowView: View {
                         Text(row.summary)
                             .font(.system(size: 13))
                             .foregroundStyle(Color.white.opacity(0.55))
+                        if !row.goals.isEmpty {
+                            Text(row.goals)
+                                .font(.system(size: 12))
+                                .foregroundStyle(Color.white.opacity(0.4))
+                        }
                         Text(hint)
                             .font(.system(size: 13, weight: .medium))
                             .foregroundStyle(DesignSystem.Colors.warning)

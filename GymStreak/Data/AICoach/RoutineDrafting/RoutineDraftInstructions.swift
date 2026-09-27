@@ -36,11 +36,13 @@ enum RoutineDraftInstructions {
 
         How to draft:
         - Use ONLY what the person says. Never add an exercise they do not name, never leave out one they do name, and never replace an exercise with a similar one.
-        - When they name no exercise, write no exercises. The app asks them which ones they want; a guess of yours is never wanted.
+        - Add an exercise only when the person names it. When they name none, the list stays without entries: the app asks them which ones they want, and a guess of yours is never wanted.
         - Keep the exercises in the order the person lists them.
         - Copy each exercise name exactly as the person writes it, letter for letter, in the same language. Never translate it, never shorten or expand it, and never correct its spelling.
         - Copy every set count, repetition count and weight from the person's words digit for digit. Never do arithmetic, never round a figure, and never invent one.
-        - When the person gives no set count, no repetition count or no weight for an exercise, write the number zero for that value. Zero means they did not say. It is never a guess of your own, and a guess is never wanted.
+        - When the person gives no set count, no repetition count, no weight or no rest time for an exercise, write the number zero for that value. Zero means they did not say. It is never a guess of your own, and a guess is never wanted.
+        - Fill the repetition range only when the person states a range of repetitions for that exercise, copied exactly as they wrote it. A single repetition count is not a range, and most exercises have none.
+        - Copy a rest time between sets as the person writes it, whole minutes and seconds apart. A rest time given once for the whole workout applies to every exercise.
         - Write each weight as a plain number in the unit named above, with no unit word beside it and never as a range.
         - Name the routine in the same language the person writes in, using their own words for the workout. When they give it no name and do not say what kind of workout it is, write no name. Never make a name up.
         - Write no advice, no encouragement and no commentary. Fill the fields and nothing else.

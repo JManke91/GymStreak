@@ -9,10 +9,11 @@ from one they built by hand. They tap **Discard** and nothing was ever written.
 **Target:** iOS only. FoundationModels does not exist on watchOS; the watch receives the finished
 routine through the ordinary sync path with no change of its own.
 
-**Status:** tickets 01–04 of `.scratch/ai-coach-create-routine/`. 01 was the tracer bullet; 02 made
+**Status:** tickets 01–05 of `.scratch/ai-coach-create-routine/`. 01 was the tracer bullet; 02 made
 an exercise name the library could not place into a row the person can answer — see §6a and §9; 03
 made the draft editable before Create — see §9a; 04 asks for what a thin description is missing
-instead of inventing it — see §9c. 05 makes the sets richer.
+instead of inventing it — see §9c; 05 carries a stated rep-range goal and rest time — see §4a
+(verified on device, round 11).
 
 ---
 
@@ -45,9 +46,11 @@ Two consequences that are load-bearing rather than stylistic:
 | Layer | File | What it owns |
 |---|---|---|
 | Domain/Models | `AICoach/RoutineDraftOutput.swift` | the `@Generable` schema + its `@Guide`s |
-| Domain/Models | `AICoach/RoutineDraftModels.swift` | `RoutineDraftSnapshot` / `RoutineDraftEntry` (what the model produced), `GroundedRoutineDraft` / `GroundedDraftExercise` + its `Match` (what Swift decided, and what it still has to ask) |
+| Domain/Models | `AICoach/RoutineDraftEntry.swift` | `RoutineDraftEntry` — one exercise as the model wrote it (ticket 05 split it out) |
+| Domain/Models | `AICoach/RoutineDraftModels.swift` | `RoutineDraftSnapshot` (what the model produced), `GroundedRoutineDraft` / `GroundedDraftExercise` + its `Match` (what Swift decided, and what it still has to ask) |
 | Domain/Interfaces | `AICoach/RoutineDrafting.swift` | the drafting boundary |
-| Domain/Services | `AICoach/RoutineDraftGrounder.swift` | the grounding pass — pure logic, isolation-agnostic |
+| Domain/Services | `AICoach/RoutineDraftGrounder.swift` (+ `+Bounds.swift`) | the grounding pass — pure logic, isolation-agnostic |
+| Domain/Services | `AICoach/RoutineDraftFigures.swift` | the figures the person typed — rest times, rep ranges, loads (ticket 05, §4a) |
 | Data | `AICoach/RoutineDrafting/RoutineDraftInstructions.swift` | the system prompt |
 | Data | `AICoach/RoutineDrafting/RoutineDraftService.swift` | the `LanguageModelSession` + snapshot mapping |
 | Presentation | `ViewModels/RoutineCreating.swift` | a *name* for the existing creation seam |
@@ -102,6 +105,9 @@ the model running for an answer nobody will see.
     let setCount: Int       // 0 == "the description did not say"
     let reps: Int           // 0 == "the description did not say"
     let weight: Double      // in the reader's display unit; 0 == no load / bodyweight
+    let repRange: String    // the range as typed ("8 bis 12"), .pattern-guided; "" == none (ticket 05)
+    let restUnit: RoutineDraftRestUnit  // .unstated / .seconds / .minutes — the word beside the number
+    let restAmount: Double  // copied as written; 0 == none stated. Swift converts.
 }
 ```
 
@@ -110,8 +116,238 @@ the model running for an answer nobody will see.
 2026-08-30). Absence is carried by a sentinel number — `RoutineDraftGrounder.unstatedNumber` — and
 decided in Swift. Zero is the sentinel because it is the one value the model can be asked for in
 plain language without naming a programming construct, and because a real set count, rep count or
-load of zero is meaningless anyway, so nothing legitimate is shadowed. Ticket 05 revisits this
-deliberately when rep goals and rest times arrive.
+load of zero is meaningless anyway, so nothing legitimate is shadowed. Ticket 05 faced this again for
+the rep goal and rest time — both genuinely absent most of the time — and kept the sentinel (§4a).
+
+### 4a. Rep-range goal and rest time (ticket 05)
+
+Both map onto fields that already exist — `RoutineExercise.targetRepMin`/`targetRepMax` (`Int?`, both
+nil = no goal) and `ExerciseSet.restTime` (applied to every set of the exercise, as
+`ConfigureExerciseSetsView`'s rest control does). **No schema change, no CloudKit deploy.**
+
+**Still no optional in the generated type.** `@Generable(representNilExplicitlyInGeneratedContent:)`
+exists, but its default *omits* an absent field — the shape that produced the literal `nil` — and a
+prompt may not name `nil`/`null`/"empty" anyway. The goal is a `String` span — the words the person
+used for the range — constrained by `@Guide(.pattern(/(\d+ ?(-|–|bis|to) ?\d+)?/))` so decoding can
+only produce "number, separator, number" or nothing, with the empty string as "did not say" (§4a,
+round 9); the rest is a `@Generable enum RoutineDraftRestUnit { unstated, seconds, minutes }` plus a
+`restAmount: Double`, where `unstated` is a case rather than an optional. `Data/` maps the enum onto
+the plain `RoutineDraftEntry.RestUnit`, so nothing past it sees a `@Generable` type.
+
+**The model's figures are checked against the person's words** (`RoutineDraftFigures`, in
+`Domain/Services/AICoach`). The model still decides *which exercise* a figure belongs to; Swift
+decides whether the figure is one the person typed. It reads the words once per grounding into rest
+times (a number followed by a seconds or minutes word — never a bare "m", which is metres — or a
+clock time of at most ten minutes, so "um 18:30" is not a rest), rep ranges
+("8-12", "8 – 12", "8 bis 12", "8 to 12") and loads.
+
+- **Rep goal** (`repRangeGoal(span:figures:)`): the copied span is parsed in Swift
+  (`RoutineDraftFigures.firstRange`); both ends stated, low < high, upper capped at 99 (the rep-goal
+  stepper's ceiling), **and the exact pair typed**. Otherwise nil. No goal is the
+  ordinary case, never something Swift fills in. With a goal, the sets' reps start at its low end
+  when no rep count was stated, and a stated count is clamped into it (the seeded routines'
+  convention; where progressive overload expects a set to begin).
+- **Rest** (`restTime(_:amount:figures:)`): Swift converts the copied number by the named unit, and
+  treats the unit as a hint — over ten "minutes" is seconds, five "seconds" or fewer is minutes. The
+  result must be a typed rest time: matched exactly, then by the bare number (so "90" with the wrong
+  unit is still the typed "90 Sekunden"), then — when the words hold exactly one rest time *and* say "Pause"/"rest" — that one
+  (so "1:30 Pause" copied as 180 s is read back as 90 s). Unstated, or several rest times with no match,
+  falls back to `defaultRestTime` (60 s). Capped at 600 s, the rest editor's ceiling. A rest time
+  given once for the whole workout applies to every exercise (a prompt line and the guides say so).
+- **Load** (`isStatedLoad`): kept when its number is typed with a weight unit ("60 kg", "135lbs"), or
+  bare ("mit 60") unless it is a count — a range end, next to "x"/"×", after "à"/"of"/"je", before a set or rep
+  word — or
+  equals the drafted set or rep count. A number typed only as a time
+  ("2 Minuten") or not typed at all is dropped to no load. **This fixes a defect older than ticket
+  05**: the ticket-04 schema also drafted *"Bankdrücken 3 Sätze à 8, 2 Minuten Pause"* at 2 kg on
+  every run.
+
+**Typed text is a system boundary.** Range ends use `Int(exactly:)` and must be under 1000 — the
+architecture review found that `Int(_:)` on a typed "100000000000000000000-5" traps and would take the
+app down. Pinned by `hugeTypedNumberDoesNotCrash`.
+
+**The trade-off is deliberate:** numbers written as words ("acht bis zwölf", "sechzig Kilo") are not
+read, so their figure is dropped — no goal, the default rest, no load — which the review shows and
+the set editor fixes. A figure the check wrongly accepted would be an invented one written to the
+person's store.
+
+**On screen:** each row gets a second line (`RoutineDraftRow.goals`), e.g. *"No rep goal • Rest 1m"*
+or *"Goal 8–12 reps • Rest 1m 30s"*. "No rep goal" is spelled out rather than blank. An edited row
+reads the line from what `ConfigureExerciseSetsView` returned, whose rest can be switched off
+("No rest timer"). The editor opens seeded with the drafted goal and rest, so both are corrected
+there — no new control.
+
+**The figure bounds live in `RoutineDraftGrounder+Bounds.swift`**, split out of the grounder so both
+stay under the 300-line convention.
+
+#### Device round 8 (2026-09-27) — the first schema failed, and why
+
+The first ticket-05 schema split rest into `restMinutes: Double` + `restSeconds: Int` so the model
+would copy rather than convert. On iPhone, *"… 90 Sekunden Pause"* reviewed as **"Pause 10m"**: the
+model wrote 90 into the *minutes* field (5400 s, capped at 600). The rep goal read "Kein Wdh.-Ziel".
+
+**Reproduced off-device.** macOS 27 on Apple Silicon has the same on-device model
+(`SystemLanguageModel.default.availability == .available`), so a command-line probe compiling the
+app's own `RoutineDraftOutput.swift`, the prompt text and `RoutineDraftFigures.swift` measured each
+variant five times per description — far faster than a device round. Findings:
+
+- `restMinutes`/`restSeconds`: "90 Sekunden" → 90 minutes on every run. **Discarded.**
+- Unit enum + amount: "90 Sekunden" → 90 seconds and "2 Minuten" → 2 minutes on every run, but
+  "1:30" came back as 180 s, 30 s or 1.5 s.
+- An extra `clock` enum case for "1:30": made it worse ("2 Minuten" → clock, "90 seconds" → minutes).
+  **Discarded.**
+- Declaring the load *after* the rest fields (to stop "2 Minuten" leaking into it): the range then
+  grabbed the load (60–60) and the load became 20. **Discarded.**
+- Guide wording "a number followed by a time word is not a weight": no effect. **Discarded.**
+- Rep ranges typed in a sentence ("8 bis 12", "8-12", "8 to 12") come back right every time; the
+  terse "3x8-12 60kg" comes back as 60–60 or 6–12.
+
+Conclusion: no guide wording made the figures reliable, so the guarantee is Swift's
+(`RoutineDraftFigures`). End to end through it, every probe description produced the right goal, rest
+and load on every run, except the terse "3x8-12 60kg", which yields no goal on most runs — dropped,
+never wrong. Replayed in `RoutineDraftGoalsTests` (the "Device probe replays" section); the figure reader's own
+edge cases — huge typed numbers, counts from other exercises, distances, times of day — are in
+`RoutineDraftFiguresTests`.
+
+The probe is a throwaway, not in the repo: a `main.swift` that runs
+`LanguageModelSession(instructions:).respond(to:generating: RoutineDraftOutput.self)` over a list of
+descriptions, compiled with `swiftc -parse-as-library` together with copies of the schema, the figure
+reader and the prompt literal. Worth rebuilding for any future schema change on this surface.
+
+#### Device round 9 (2026-09-27) — rest fixed, rep goal still missing; the span schema
+
+Round 9 on iPhone: *"… 90 Sekunden Pause"* now reviewed as "Pause 1m 30s", but the rep goal read
+"Kein Wdh.-Ziel", and a dropped-names note listed **"no exercises"** — the model had written an
+exercise literally named after the prompt's own sentence *"When they name no exercise, write no
+exercises."* (dropped by provenance, §6b, but shown in the note). The iPhone model echoing a phrase
+the Mac probe never produced is itself evidence that **the Mac probe is representative of the model
+family, not identical to the device** — so the fix had to stop depending on the model getting two
+integers right, rather than be tuned until the Mac passed.
+
+**Research (2026-09-27, via ios-api-researcher):**
+
+- `GenerationGuide.pattern(_:)` — `static func pattern<Output>(_ regex: Regex<Output>) ->
+  GenerationGuide<String>`, iOS/macOS 26.0+ like `@Generable` — constrains a `String` field's
+  decoding to a regex. It turns "compose a number" into "point at existing tokens".
+  https://developer.apple.com/documentation/foundationmodels/generationguide/pattern(_:) ,
+  WWDC25 session 301 "Deep dive into the Foundation Models framework".
+- Properties generate in declaration order; nested `@Generable` structs and enums with associated
+  values are supported.
+  https://developer.apple.com/documentation/foundationmodels/generating-swift-data-structures-with-guided-generation
+- `.range`/`.minimum` on an `Int` whose floor excludes 0 forces the model to invent a value when the
+  field must be present — none of this schema's numeric fields carries one, deliberately.
+  https://developer.apple.com/documentation/foundationmodels/generationguide/range(_:)
+- `@Generable(representNilExplicitlyInGeneratedContent: true)` emits nil as `GeneratedContent.Kind.null`
+  instead of omitting it. Not adopted: the no-optional rule (§4) stands, and the span needs no
+  optional.
+- `GenerationOptions(sampling: .greedy, …)` is Apple's suggestion "for consistent output".
+  https://developer.apple.com/documentation/foundationmodels/adding-intelligent-app-features-with-generative-models
+- One ~3B on-device model family ships across iOS/macOS per OS generation; Apple guarantees no
+  identical sampling between a Mac and an iPhone build.
+  https://machinelearning.apple.com/research/apple-foundation-models-2025-updates
+- Filler array elements echo instruction phrasing; phrase the empty case without a quotable phrase.
+
+**Probe results (macOS 27, 6–8 runs per description):**
+
+- **Span + `.pattern` (adopted):** every stated range copied verbatim on every run — "8 bis 12",
+  "8-12 Wiederholungen", "8 to 12", and the terse "3x8-12" / "3x10-12" that the Int pair drafted as
+  6–12 on 6 of 8 runs. On a description *without* a range the span is junk ("8-60", "60-60", "8-2",
+  once even "8-12") — none of it typed, so none survives `repRangeGoal(span:figures:)`. In a
+  two-exercise description only the exercise that carries the range gets it.
+- **Greedy sampling on the Int pair:** deterministic, but "3x8-12" was 6–12 on every run — greedy
+  does not fix a schema that asks the model to compose numbers. (Greedy was adopted in round 10, on
+  top of the span schema, for reproducibility.)
+- **Nested goal struct / enum with associated values:** not pursued — the span fixed the measured
+  failure with a smaller change.
+
+**"no exercises":** the prompt and the `exercises` guide now say *"Add an exercise … only when the
+description names it"* instead of *"write no exercises"*. On the Mac, *"eine push routine"* drafts no
+rows. The iPhone behaviour is the device check.
+
+The span's regex sits in the generation schema and so is read by the model; it carries no digit, no
+number word and no example, so `CoachPromptGroundingTests` still passes over it.
+
+#### Device round 10 (2026-09-27) — terse notation on iPhone; per-exercise figures and greedy
+
+Round 10 passed *"Push-Test: Bankdrücken 3 Sätze à 8 bis 12 mit 60 kg, 90 Sekunden Pause"* end to end
+(review, Create, routine detail: 8–12 goal, 1m 30s rest). The terse *"… Bankdrücken 3x8-12 mit
+60kg, 90 Sekunden Pause"* failed on iPhone in two ways the macOS probe never reproduced (8 of 8 runs
+correct there):
+
+1. **The 60 kg was lost** — the iPhone model wrote no load, or one Swift correctly refused.
+2. **"Pause" became a second exercise** — it passed provenance (§6b) because the person typed it, and
+   the sheet asked "Wie viele Sätze für Pause?".
+
+**Fixes, all Swift-side because the device model is the variable:**
+
+- **Figure words are not exercises** (`RoutineDraftFigures.isFigureVocabulary`): a name made only of
+  rest, count, unit or goal words ("Pause", "Sätze", "kg", "Wiederholungsziel") is skipped before it
+  meets the library, and not listed as dropped. "Rest-Pause Bench" is kept.
+- **Each exercise's own words, only to recover a missing figure**
+  (`RoutineDraftFigures.segments(for:in:)`): the text from a drafted name up to the next one, or the
+  end of its line. The model's load and range are still confirmed against the **whole** description
+  first; only when they cannot be confirmed is the single load-with-unit / single range typed in that
+  exercise's stretch used (`RoutineDraftGrounder.load(of:figures:segment:)`,
+  `repRangeGoal(span:figures:segment:)`). That recovers the round-10 60 kg and corrects a drafted
+  6–12 to the typed 8–12. **Segments are all-or-nothing:** they are used only when every drafted
+  name occurs in the words exactly once, in order, before its figures — otherwise there is no
+  fallback and the figure stays empty. The first version confirmed against the segment alone and
+  used it unconditionally; the architecture review reproduced it moving loads and goals between
+  exercises for an inflected neighbour ("Kniebeuge" for "Kniebeugen"), figures written before their
+  names, and names repeated in a follow-up answer — all pinned in `RoutineDraftFiguresTests`. A stretch holding
+  more than one set group ("3x8 … 5x5") is not used either: it means the model left an exercise out
+  and the stretch ran over it (`omittedExerciseLendsNoFigures`). Known limit: mixed ordering such as
+  *"Kniebeugen 5x5, 60kg Bankdrücken 3x8"* is read name-first, giving the squat the 60 kg — ambiguous
+  to a human reader too. The
+  fallback does **not** make cross-exercise attribution impossible: a model value confirmed by the
+  whole text is kept even if it belongs to a neighbour, as before round 10. A load or rest span
+  ("60-80 kg", "60-90 Sekunden") is never read as a rep range.
+- **Greedy sampling** — `GenerationOptions(samplingMode: .greedy, maximumResponseTokens:)` (the
+  `sampling:` label is deprecated in the iOS 27 SDK). Probe, 5 runs each, over the round-10 input,
+  *"eine push routine"*, *"Bankdrücken und Kniebeugen"*, the round-1 Push-Tag, *"bench press three by
+  eight"* and a two-exercise English legs day: greedy equal or better on every one, the terse input
+  right 5/5, and the routine name stopped flipping between "Push-Test" and "Bankdrücken". A device
+  round is now reproducible: the same words draft the same routine.
+
+**Research (2026-09-27, via ios-api-researcher)** — besides greedy
+(https://developer.apple.com/documentation/foundationmodels/generationoptions/samplingmode-swift.struct/greedy):
+
+- There is **no "substring of the prompt" constraint** for a `String` field. `.pattern` shapes format
+  only; `GenerationGuide.anyOf(_:)` takes a runtime `[String]`
+  (https://developer.apple.com/documentation/foundationmodels/generationguide). **Not adopted:**
+  constraining `name` to candidate substrings would need a `DynamicGenerationSchema` rewrite of the
+  schema and its mapping, and the one failure it targets ("Pause") is closed deterministically above.
+- Few-shot examples belong in the *prompt*, never the instructions, and instructions must not carry
+  untrusted (user) content (https://developer.apple.com/documentation/foundationmodels/instructions,
+  WWDC25 session 248). Consistent with this surface, which uses neither.
+- Declaring a routine-level rest field before `exercises` was suggested as a weak lever. **Not
+  adopted:** rest is per exercise here, and the vocabulary rule already handles "Pause".
+- Normalising "60kg" to "60 kg" before the prompt is undocumented. **Not adopted:** the per-exercise
+  load recovery makes it unnecessary.
+- WWDC26 session 241 ("What's new in the Foundation Models framework") adds nothing aimed at span
+  extraction. https://developer.apple.com/videos/play/wwdc2026/241/
+
+**Found, not fixed (ticket 04 territory):** on *"Bankdrücken und Kniebeugen"* (no figures) the model
+still drafts set and rep counts (3×8, 3×12). The figure check now drops the invented loads, ranges
+and rests, but set/rep counts are not checked against the words, so the sheet does not ask "how many
+sets?". The fix would be a count-provenance pass (`setCount`/`reps` must be typed in the exercise's
+segment, else unstated), which would change ticket 04's shipped behaviour and belongs in its own
+ticket.
+
+Replayed in `RoutineDraftDeviceRoundTests`; the figure-reader cases in `RoutineDraftFiguresTests`.
+
+#### Device round 11 (2026-09-27) — passed; ticket 05 closed
+
+iPhone, German, the user confirmed all four checks: *"Push-Test: Bankdrücken 3x8-12 mit 60kg, 90
+Sekunden Pause"* reviewed as one row, "3 Sätze • 8 Wdh. • 60 kg / Ziel 8–12 Wdh. • Pause 1m 30s",
+with no "Pause" row and no question; the sentence form *"… à 8 bis 12 mit 60 kg …"* unchanged under
+greedy sampling; *"… à 8 mit 60 kg …"* reviewed as "Kein Wdh.-Ziel • Pause 1m 30s"; *"eine push
+routine"* asked which exercises, with no rows.
+
+**Supersets are out of scope** (parent task doesn't ask; the manual creation flow can't create one
+either; `SupersetOrderingService`'s contiguity invariant isn't called by `createRoutine`). If wanted:
+a `supersetId`/`supersetOrder` pass over the pending graph plus a `normalizeOrdering` call, as its own
+ticket.
 
 **No minimum exercise count (since ticket 04).** Ticket 01 had `.minimumCount(1)`. Guided generation
 cannot emit fewer elements than the schema demands, so for *"a push routine"* that constraint
@@ -484,11 +720,11 @@ then possibly moved — becomes the routine's order, with the gaps left by unres
 It is **always reassigned there**, never carried over from an edited `PendingRoutineExercise`, so a
 row edited and then moved still lands where the sheet showed it. A row the person reopened in the set
 editor writes exactly what that screen returned (the `edits` map, §9a); every other row becomes
-`setCount` identical `ExerciseSet`s at `RoutineDraftGrounder.defaultRestTime` via
-`GroundedDraftExercise.pendingExercise(order:)`. The drafted scheme leaves alternatives and rep-range
-goals empty — nothing in a typed description expresses them, and inventing either would be the app
-guessing on the person's behalf at the exact moment it writes to their store. The person can add
-both by opening the row.
+`setCount` identical `ExerciseSet`s at the drafted rest time (stated, or 60 s) via
+`GroundedDraftExercise.pendingExercise(order:)`, with the stated rep-range goal or none (§4a). The
+drafted scheme leaves alternatives empty — nothing in a typed description expresses them, and
+inventing one would be the app guessing on the person's behalf at the exact moment it writes to their
+store. The person can add them by opening the row.
 
 ### `RoutineCreating`, and why `AppDependencies` owns the routines ViewModel
 
@@ -542,6 +778,9 @@ Nudge         OnyxCapNudge, in the sheet and in the chat above the chip
 Free residue  the whole feature, 5 drafting sessions a month, and every routine ever created
 Founder note  n/a — no new gate, so nothing new to convert against §7's permanent grant
 ```
+
+**Re-checked for ticket 05 (2026-09-26): unchanged.** A drafted rep goal and rest time are part of
+the same draft the unit paid for — no new gate, unit, placement or model call. §3 Rule 1.
 
 **Re-checked for ticket 04 (2026-09-24): unchanged.** Follow-up answers ride the session's single
 unit and reserve nothing; Review draft and Discard are free; no new placement or cap. §3 Rule 1 —
@@ -788,7 +1027,18 @@ no literal strings in the views.
   no-match (left out and named), unmatched-name de-duplication, Swift-side defaults for unstated
   figures, bounds on absurd ones, pounds→kilograms conversion, order preservation.
 - **Mapping** — sequential `order`, one `ExerciseSet` per set count with sequential set order, no
-  invented alternatives or rep-range goals, unmatched exercises never reaching the transaction.
+  invented alternatives, rep-range goals only when stated (see `RoutineDraftGoalsTests`), unmatched
+  exercises never reaching the transaction.
+
+`GymStreakTests/RoutineDraftGoalsTests.swift` covers ticket 05, each case through a real
+`RoutinesViewModel` over an in-memory SwiftData store: a stated range persists as the goal with sets
+starting at its low end; a stated rep count is clamped into the range; **no stated range persists
+nil/nil and the row reads "No rep goal", never "nil"**; one count copied into both ends is not a
+range; one end alone or a reversed pair is no goal; a stated rest lands on every set; the unit is
+converted in Swift and corrected when implausible; unstated rest is 60 s; the set editor opens on the
+drafted goal and rest and an edit replaces both. The **device probe replays** pin round 8: 90 seconds
+drafted as 90 minutes, "1:30" drafted as 180 s, a 6–12 range for a typed 8–12, a "2 Minuten" rest
+copied into the load, and loads the person never typed.
 - **Preflight ordering** — an ineligible device is never paywalled *even while at the routine cap*;
   a capped free user gets `.routineCap` and spends no allowance; a clean preflight meters nothing.
 - **Allowance** — one unit per session across two submits, refund on failure, refund on an
@@ -868,8 +1118,8 @@ it is handed is a device check, and nothing here stands in for one.
   added after Create on the routine itself, or described in a fresh draft.
 - **Follow-ups only answer questions.** There is no free-form "change this" message; a draft is
   changed in the review (§9a).
-- **One set scheme per exercise** — every set identical, no rep-range goals, no per-set rest.
-  Ticket 05.
+- **One set scheme per exercise** — every set identical, one rest time for all of an exercise's
+  sets; per-set variation is made in the set editor. No supersets (§4a).
 - Device verification of the German path and of real model behaviour is a manual check; see §10.
   There is no on-device model in the simulator, so nothing automated stands in for one. Round 1
   (2026-09-16) found the compound-word defect above — fixed and regression-locked; rounds 2

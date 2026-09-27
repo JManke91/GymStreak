@@ -23,6 +23,10 @@ struct RoutineDraftRow: Identifiable, Equatable, Hashable {
     let id: UUID
     let name: String
     let summary: String
+    /// The rep-range goal and rest time, e.g. "No rep goal • Rest 1m". "No rep goal" is
+    /// spelled out rather than left blank: it is the usual, legitimate state of a drafted
+    /// exercise, and a blank would read as something that failed to load.
+    var goals: String = ""
     /// Why this row still needs the person — several library exercises match, or none
     /// does — or `nil` once it names a real library exercise.
     let hint: String?
@@ -64,6 +68,9 @@ struct RoutineDraftRowComposer {
                 id: drafted.id,
                 name: drafted.exercise?.name ?? drafted.draftedName,
                 summary: edits[drafted.id]?.setSummary(in: weightUnit) ?? summary(for: drafted, showsDefaults: showsDefaults),
+                goals: edits[drafted.id].map {
+                    goals(repMin: $0.targetRepMin, repMax: $0.targetRepMax, restTime: $0.sets.first?.restTime ?? 0)
+                } ?? goals(repMin: drafted.targetRepMin, repMax: drafted.targetRepMax, restTime: drafted.restTime),
                 hint: hint(for: drafted.match),
                 canMoveUp: index > 0,
                 canMoveDown: index < lastIndex
@@ -88,6 +95,20 @@ struct RoutineDraftRowComposer {
             parts.append(WeightFormatting.label(drafted.weightKilograms, in: weightUnit))
         }
         return parts.joined(separator: " • ")
+    }
+
+    /// The row's goal line. An edited row reads from what the set editor returned, whose
+    /// rest can be switched off entirely.
+    private func goals(repMin: Int?, repMax: Int?, restTime: TimeInterval) -> String {
+        let goal = if let repMin, let repMax {
+            "ai_coach.routine_draft.rep_goal".localized(repMin, repMax)
+        } else {
+            "ai_coach.routine_draft.no_rep_goal".localized
+        }
+        let rest = restTime > 0
+            ? "ai_coach.routine_draft.rest".localized(TimeFormatting.formatRestTime(restTime))
+            : "ai_coach.routine_draft.rest_off".localized
+        return [goal, rest].joined(separator: " • ")
     }
 
     /// What an unresolved row says about itself, or `nil` when it is resolved.
