@@ -106,9 +106,7 @@ final class ExampleRoutineSeeder {
             // `routine == nil`). It *is* visible; SwiftData maintains both sides
             // in memory. `keepsATrainedExampleRoutineWhenTheTrainingLandedOnTheOtherCopy`
             // pins it, and is the test to look at if this order is ever changed.
-            let (survivors, didCollapseDuplicates) = deduplicate(seededRoutines)
-            let kept = removeSupersededExampleRoutines(survivors)
-            let didRemoveSuperseded = kept.count < survivors.count
+            let didCleanUp = cleanUp(seededRoutines)
             let didSeed = try seedIfNeeded()
             if modelContext.hasChanges {
                 try modelContext.save()
@@ -119,12 +117,44 @@ final class ExampleRoutineSeeder {
             // until the next launch, and a removed or collapsed one would linger
             // on screen after it stopped existing. Also what carries any of the
             // three to the watch, through the ordinary sync path.
-            if didSeed || didRemoveSuperseded || didCollapseDuplicates {
+            if didSeed || didCleanUp {
                 NotificationCenter.default.post(name: .cloudKitDataDidChange, object: nil)
             }
         } catch {
             print("ExampleRoutineSeeder failed: \(error)")
         }
+    }
+
+    /// Runs the dedup and superseded-example cleanup — never the seed — once a
+    /// CloudKit import has settled **during** this session.
+    ///
+    /// `run()` only cleans up at launch, which on a reinstall or a new device is
+    /// before mirroring delivered anything: the launch seeds an example routine
+    /// into the empty store, the import then restores the user's routines, and
+    /// without this pass the extra copy stays on screen and on the watch until
+    /// the next cold launch. Deliberately does not seed: mid-session the routine
+    /// list can be empty only because routines have not arrived yet.
+    func cleanUpAfterImport() async {
+        await historyStoreGate.withExclusiveAccess {
+            do {
+                let seededRoutines = try modelContext.fetch(
+                    FetchDescriptor<Routine>(predicate: #Predicate { $0.seedKey != "" })
+                )
+                guard cleanUp(seededRoutines) else { return }
+                try modelContext.save()
+                NotificationCenter.default.post(name: .cloudKitDataDidChange, object: nil)
+            } catch {
+                print("ExampleRoutineSeeder post-import cleanup failed: \(error)")
+            }
+        }
+    }
+
+    /// Dedup, then the superseded cleanup — in that order; see `runLocked()` for
+    /// why the order is load-bearing. Returns `true` when anything was deleted.
+    private func cleanUp(_ seededRoutines: [Routine]) -> Bool {
+        let (survivors, didCollapseDuplicates) = deduplicate(seededRoutines)
+        let kept = removeSupersededExampleRoutines(survivors)
+        return didCollapseDuplicates || kept.count < survivors.count
     }
 
     // MARK: - Seeding

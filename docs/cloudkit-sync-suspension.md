@@ -29,11 +29,20 @@ xcrun devicectl device copy from --device <UDID> --domain-type systemCrashLogs \
 
 Apple documents `0xDEAD10CC` as: *"The operating system terminated the app
 because it held on to a file lock or SQLite database lock during suspension."*
-The wording is **not** scoped to App Group containers, and our store is not in
-one — `GymStreakApp.store` builds its `ModelConfiguration` without
-`groupContainer:`, so the store is the app's own private
-`Application Support/default.store`. Moving the store out of an App Group is
-therefore not an available fix; it was never in one.
+The quoted wording is not scoped to App Group containers. **The store is in
+one, though.** `GymStreakApp.store` builds its `ModelConfiguration` without
+`groupContainer:`, and SwiftData then places the store in the app's App Group
+automatically. On device (checked 2026-09-27 with `devicectl`, see
+`docs/ui-test-data-isolation.md`) it is
+`group.com.gymstreak.shared/Library/Application Support/default.store`; the app's
+private `Application Support` holds no store. An earlier version of this section
+claimed the opposite and used that to rule out moving the store. That reasoning
+was wrong, so moving the store out of the App Group is an **open, unevaluated**
+option, not an excluded one (see §4).
+
+Unverified: whether iOS enforces `0xDEAD10CC` specifically, or more strictly, for
+locks on files in shared containers. Research it (`ios-api-researcher`) before
+treating a move as a fix.
 
 ## 2. Root cause — two SQLite connections, one of them Apple's
 
@@ -204,7 +213,14 @@ suspension, revisit — that is the case the API is for.
 - **Pausing or scheduling the exporter.** Not possible from outside; it reacts to
   local saves and remote pushes. The only indirect lever is the size and
   frequency of local saves that feed it.
-- **Moving the store into/out of an App Group.** Irrelevant — see §1.
+- **Moving the store out of the App Group.** *Reopened 2026-09-27.* This was
+  rejected as irrelevant on the false premise that the store was never in one
+  (see §1). It has not been evaluated since. Only worth pursuing if
+  `0xDEAD10CC` recurs in the field (Xcode Organizer → Crashes). It is a
+  data-migration project in its own right: every user's CloudKit-mirrored store
+  file (plus its `_SUPPORT` / `_ckAssets` siblings) has to move intact. A
+  wrong move leaves an empty store that re-imports everything from CloudKit
+  and loses any not-yet-exported local changes.
 
 Residual risk is Apple's. If it recurs in Release, file Feedback citing the two
 forum threads in §2.

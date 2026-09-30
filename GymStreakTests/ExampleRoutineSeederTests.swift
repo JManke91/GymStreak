@@ -538,4 +538,44 @@ struct ExampleRoutineSeederTests {
         let seeded = try #require(try routines(fixture.context).first)
         #expect(seeded.routineExercisesList.count == Self.row.exercises.count)
     }
+
+    // MARK: - Post-import cleanup
+
+    /// The reinstall case: the launch seeded into an empty store, then the
+    /// import restored the user's older routine *and* their original example
+    /// copy. The cleanup must run inside the session, not wait for a relaunch.
+    @Test
+    func cleansUpAReinstallSeedOnceTheImportLands() async throws {
+        let fixture = makeFixture()
+        await fixture.seeder.run()
+        let seeded = try #require(try routines(fixture.context).first)
+
+        let original = Routine(name: Self.row.seedKey.localized)
+        original.seedKey = Self.row.seedKey
+        original.createdAt = seeded.createdAt.addingTimeInterval(-90 * 24 * 3600)
+        original.updatedAt = original.createdAt
+        let own = Routine(name: "Push Day")
+        // Created after meeting the original example routine, as in practice.
+        own.createdAt = original.createdAt.addingTimeInterval(24 * 3600)
+        own.updatedAt = own.createdAt
+        fixture.context.insert(original)
+        fixture.context.insert(own)
+        try fixture.context.save()
+
+        await fixture.seeder.cleanUpAfterImport()
+
+        let ids = Set(try routines(fixture.context).map(\.id))
+        #expect(ids == [original.id, own.id])
+    }
+
+    /// Mid-session an empty routine list only means the routines have not
+    /// arrived yet — the post-import pass must never seed into it.
+    @Test
+    func postImportCleanupNeverSeeds() async throws {
+        let fixture = makeFixture()
+
+        await fixture.seeder.cleanUpAfterImport()
+
+        #expect(try routines(fixture.context).isEmpty)
+    }
 }

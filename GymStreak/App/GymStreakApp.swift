@@ -49,9 +49,15 @@ struct GymStreakApp: App {
 
     let store: Store = {
         let schema = Schema(GymStreakSchema.modelTypes)
-        let isEphemeralUITest = ProcessInfo.processInfo.arguments.contains(
-            "-UI_TEST_EPHEMERAL_STORE"
-        )
+        // `-UI_TESTING` implies the ephemeral store. `TestDataSeeder` inserts a
+        // fresh fixture set on every launch, and against the CloudKit store each
+        // set was exported to the developer's real iCloud account — while its
+        // "clear" step is a batch delete, which mirroring never exports. Every
+        // Xcode run left one more copy in CloudKit, and a reinstall imported
+        // them all as duplicates (docs/ui-test-data-isolation.md).
+        let arguments = ProcessInfo.processInfo.arguments
+        let isEphemeralUITest = arguments.contains("-UI_TEST_EPHEMERAL_STORE")
+            || arguments.contains("-UI_TESTING")
         if isEphemeralUITest {
             let configuration = ModelConfiguration(
                 schema: schema,
@@ -164,6 +170,25 @@ struct GymStreakApp: App {
                     // before re-seeding a library the version flag stranded, so
                     // it never fires while a new device is still importing.
                     await dependencies.defaultContentSeeder.recoverStrandedLibraryIfNeeded()
+                }
+                .task {
+                    guard !isUITesting else { return }
+                    // The launch passes above dedup before mirroring has
+                    // delivered anything, so on a reinstall or a new device the
+                    // catalog and example routine they seed into the empty store
+                    // sit next to the user's restored copies once the import
+                    // lands. Re-run the cleanup — never the seed — each time a
+                    // transfer settles after an import, so the duplicates are
+                    // gone within the session instead of on the next cold launch
+                    // (docs/starter-exercise-library.md).
+                    var wasSyncing = false
+                    for await status in dependencies.cloudSyncStatus.statusUpdates() {
+                        let didSettle = wasSyncing && status.state != .syncing
+                        wasSyncing = status.state == .syncing
+                        guard didSettle, status.hasCompletedImportThisSession else { continue }
+                        await dependencies.defaultContentSeeder.deduplicateAfterImport()
+                        await dependencies.exampleRoutineSeeder.cleanUpAfterImport()
+                    }
                 }
                 .task {
                     guard !isUITesting else { return }

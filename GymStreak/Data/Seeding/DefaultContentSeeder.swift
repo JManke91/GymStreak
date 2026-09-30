@@ -84,7 +84,7 @@ final class DefaultContentSeeder {
     private func runLocked() {
         do {
             let exercises = try modelContext.fetch(FetchDescriptor<Exercise>())
-            let survivors = deduplicate(exercises)
+            let (survivors, _) = deduplicate(exercises)
             reconcileSeedMetadata(in: survivors)
             seedIfNeeded(existing: survivors)
             reconcileRecordedLoadBehavior(using: survivors)
@@ -93,6 +93,30 @@ final class DefaultContentSeeder {
             }
         } catch {
             print("DefaultContentSeeder failed: \(error)")
+        }
+    }
+
+    /// Collapses duplicate seeded exercises that a CloudKit import brought in
+    /// **during** this session, without seeding anything.
+    ///
+    /// `run()` dedups only at launch, which is before mirroring has delivered
+    /// anything on a reinstall or a new device. That launch seeds the catalog
+    /// (the version flag has not downloaded yet), the import then restores the
+    /// user's own copies, and without this pass both sets stay on screen — and
+    /// on the watch — until the next cold launch. Called once an import has
+    /// settled; see `GymStreakApp`.
+    func deduplicateAfterImport() async {
+        await historyStoreGate.withExclusiveAccess {
+            do {
+                let exercises = try modelContext.fetch(
+                    FetchDescriptor<Exercise>(predicate: #Predicate { $0.seedKey != "" })
+                )
+                guard deduplicate(exercises).didDelete else { return }
+                try modelContext.save()
+                NotificationCenter.default.post(name: .cloudKitDataDidChange, object: nil)
+            } catch {
+                print("DefaultContentSeeder post-import dedup failed: \(error)")
+            }
         }
     }
 
@@ -278,9 +302,11 @@ final class DefaultContentSeeder {
     /// Collapses duplicate seeded exercises (same non-empty `seedKey`) into one
     /// survivor, re-pointing routine references before deleting the copies.
     /// The survivor choice (createdAt, then id) is deterministic so every
-    /// device keeps the same record. Returns the surviving exercises.
-    private func deduplicate(_ exercises: [Exercise]) -> [Exercise] {
+    /// device keeps the same record. Returns the surviving exercises and
+    /// whether a duplicate was deleted.
+    private func deduplicate(_ exercises: [Exercise]) -> (survivors: [Exercise], didDelete: Bool) {
         var survivors = exercises.filter { $0.seedKey.isEmpty }
+        var didDelete = false
         let seeded = Dictionary(grouping: exercises.filter { !$0.seedKey.isEmpty }, by: \.seedKey)
 
         for (_, copies) in seeded {
@@ -298,9 +324,10 @@ final class DefaultContentSeeder {
                     alternative.exercise = survivor
                 }
                 modelContext.delete(duplicate)
+                didDelete = true
             }
         }
-        return survivors
+        return (survivors, didDelete)
     }
 
     /// - Parameter ignoringStoredVersion: set by the stranded-library recovery,

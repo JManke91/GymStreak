@@ -72,11 +72,11 @@
       <CommandLineArguments>
          <CommandLineArgument
             argument = "-INITIALIZE_CLOUDKIT_SCHEMA"
-            isEnabled = "YES">
+            isEnabled = "NO">
          </CommandLineArgument>
          <CommandLineArgument
             argument = "-UI_TESTING"
-            isEnabled = "YES">
+            isEnabled = "NO">
          </CommandLineArgument>
          <CommandLineArgument
             argument = "-FOUNDER_SIMULATE_PRECUTOFF"

@@ -331,4 +331,45 @@ struct DefaultContentSeederRecoveryTests {
         await seeder.run()
         #expect(try exerciseCount(context) == SeedExerciseCatalog.entries.count)
     }
+
+    // MARK: - Post-import dedup
+
+    /// The reinstall case: the launch seeded the catalog into an empty store
+    /// (the version flag had not downloaded yet), then the import restored the
+    /// user's older copies. Both sets must collapse inside the session, with the
+    /// imported originals surviving.
+    @Test
+    func collapsesTheReinstallSeedOnceTheImportLands() async throws {
+        let status = StubCloudSyncStatus(initial: CloudSyncStatus(state: .upToDate, lastSuccessfulSync: nil))
+        let (context, seeder, _) = makeSeeder(storedVersion: nil, status: status)
+        await seeder.run()
+
+        let longAgo = Date().addingTimeInterval(-90 * 24 * 3600)
+        var originalIds: Set<UUID> = []
+        for row in SeedExerciseCatalog.entries {
+            let original = Exercise(name: row.seedKey.localized)
+            original.seedKey = row.seedKey
+            original.createdAt = longAgo
+            context.insert(original)
+            originalIds.insert(original.id)
+        }
+        try context.save()
+        #expect(try exerciseCount(context) == 2 * SeedExerciseCatalog.entries.count)
+
+        await seeder.deduplicateAfterImport()
+
+        let survivors = try context.fetch(FetchDescriptor<Exercise>())
+        #expect(Set(survivors.map(\.id)) == originalIds)
+    }
+
+    /// Mid-session an empty library only means nothing has arrived yet — the
+    /// post-import pass must never seed into it.
+    @Test
+    func postImportDedupNeverSeeds() async throws {
+        let (context, seeder, _) = makeSeeder(storedVersion: nil, status: StubCloudSyncStatus())
+
+        await seeder.deduplicateAfterImport()
+
+        #expect(try exerciseCount(context) == 0)
+    }
 }

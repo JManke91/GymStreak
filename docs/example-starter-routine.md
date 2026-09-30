@@ -146,6 +146,16 @@ rows (cascading to `RoutineExercise`) that the History model actor may be walkin
    (so a second device inherits it) with a `UserDefaults` mirror for accounts without iCloud; reads
    take the max of both. It is stamped when the routine is seeded **and** when the store already
    holds routines — but deliberately *not* when the seed was deferred for a thin library.
+7. **Post-import cleanup (fixed 2026-09-27).** Steps 1–2 run at launch, which after a reinstall or
+   on a new device is before mirroring has delivered anything — so the spurious example routine
+   (and its duplicated exercises) stayed on screen and on the watch for the whole first session.
+   `cleanUpAfterImport()` runs steps 1–2 again, under the History gate and **never step 3**, each
+   time CloudKit settles after an import this session (`GymStreakApp` launch `.task` over
+   `cloudSyncStatus.statusUpdates()`, right after `DefaultContentSeeder.deduplicateAfterImport()`,
+   so exercise references are already re-pointed). It posts `.cloudKitDataDidChange` only when it
+   deleted something. Never seeding here matters: mid-session an empty routine list only means the
+   routines have not arrived yet. Tests: `cleansUpAReinstallSeedOnceTheImportLands`,
+   `postImportCleanupNeverSeeds`. See `docs/starter-exercise-library.md` → "Post-import dedup".
 
 ### Why dedup runs before cleanup
 
