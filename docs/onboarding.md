@@ -32,6 +32,60 @@ slide's CTA ("Start training", `OnboardingStep.finishCTAKey`) opens the app.
 Every step is skippable. "Skip" and finishing the last step are the same exit:
 both end the flow and both record it.
 
+## Navigating between steps: buttons and swipe
+
+Two ways to move, one state change. Back / Next (the CTA) and a horizontal swipe
+on the slide area all write the view model's `currentStep`, so the progress bar,
+the counter, the CTA label and Back's dimmed state follow whichever was used.
+The buttons animate the same horizontal slide a swipe makes.
+
+- **The swipe never ends the tour.** A left swipe on the coach slide and a right
+  swipe on the welcome slide just rubber-band. Ending the tour spends the
+  once-ever `onboarding.flowCompleted` record, so it stays an explicit tap on
+  "Start training" (or "Skip"). Decided with the user at planning, 2026-09-27.
+- **Two entry points on the view model, on purpose.** `advance()` is the CTA path
+  and ends the flow on the last step. `go(to:)` is the swipe path. The pager's
+  selection binding writes through it, and it only ever moves between steps.
+  `OnboardingFlowTests` covers both ("Swiping between steps").
+- **Mechanism: a paging `TabView`.** `TabView(selection:)` with
+  `.tabViewStyle(.page(indexDisplayMode: .never))`, one page per `OnboardingStep`,
+  tagged by step. It gives finger-following paging, edge rubber-banding and no
+  wrap-around with no gesture code. The dots are hidden because the segmented
+  progress bar already carries the position, including its accessibility label.
+  The slides' previews are `allowsHitTesting(false)` (`OnboardingInertPreview`),
+  so nothing inside a page competes for the horizontal drag. Each page's vertical
+  `ScrollView` and the pager each lock to one axis per gesture.
+- **Reduce Motion.** A swipe is driven by the user's finger and needs nothing.
+  Back / Next animate with `withAnimation(reduceMotion ? nil : …)`, so with Reduce
+  Motion on the page is swapped in place. The pager does not honour the setting
+  for programmatic changes by itself.
+
+Research (2026-09-27, `ios-api-researcher`). Apple's docs say nothing about how
+the page style behaves with VoiceOver or Reduce Motion. The researcher's
+expectation is that VoiceOver's three-finger swipe turns pages, and that Back /
+Next stay reachable as ordinary buttons either way. The user confirmed both by hand on 2026-09-27
+(see "Verification").
+
+- The alternative was a horizontal `ScrollView` with `.scrollTargetBehavior(.paging)`,
+  `LazyHStack`, `.containerRelativeFrame` and `.scrollPosition(id:)`. That is more
+  code for the same behaviour, so it was kept only as the fallback in case the
+  `TabView` bugs below showed up.
+- Known iOS 26 page-`TabView` issues:
+  - `.edgesIgnoringSafeArea(.vertical)` on the pager pushes content out of
+    bounds ([forum 815574](https://developer.apple.com/forums/thread/815574)).
+    The cover's background is on the outer `VStack`, never on the `TabView`.
+  - The pager is offset by about 14 pt inside a `NavigationStack`
+    ([815580](https://developer.apple.com/forums/thread/815580)). This doesn't
+    apply here: the cover has no navigation stack.
+  - An older bug: programmatic moves to a lower page fail under a `NavigationView`
+    ([723232](https://developer.apple.com/forums/thread/723232)). This doesn't
+    apply here either, and Back was verified on the simulator.
+- A `GeometryReader` *inside* each page can report an unresolved size on the
+  first frame, so the reader sits outside the pager and hands `minHeight` in
+  (see "Scroll position across steps").
+- Docs: [`page(indexDisplayMode:)`](https://developer.apple.com/documentation/swiftui/tabviewstyle/page%28indexdisplaymode%3A%29),
+  [`ScrollPosition.scrollTo(edge:)`](https://developer.apple.com/documentation/swiftui/scrollposition/scrollto%28edge%3A%29) (iOS 18+).
+
 ## Architecture
 
 ```
@@ -40,7 +94,7 @@ Data/Preferences/OnboardingCompletionStore.swift       UserDefaults.standard beh
 Presentation/ViewModels/Onboarding/OnboardingStep.swift          the step list + per-step CTA key
 Presentation/ViewModels/Onboarding/OnboardingFlowViewModel.swift presented? which step?
 Presentation/ViewModels/Onboarding/FirstRunCoverOrder.swift      which first-run cover wins
-Presentation/Views/Onboarding/OnboardingCoverView.swift          the chrome
+Presentation/Views/Onboarding/OnboardingCoverView.swift          the chrome + the paging slide area
 Presentation/Views/Onboarding/OnboardingCheckBullet.swift        the shared bullet
 Presentation/Views/Onboarding/OnboardingWelcomeSlideView.swift   step 1
 Presentation/Views/Onboarding/OnboardingPlate.swift              the preview panel
@@ -769,15 +823,26 @@ omission".
 
 ## Scroll position across steps
 
-The slide's `ScrollView` content carries `.id(currentStep)`. Scroll offset
-belongs to the `ScrollView`, so re-identifying it on a step change is what puts
-the new slide at the top — going back as well as forward. The design does the
-same thing imperatively (`scrollTop = 0` on index change).
+Every slide is entered at the top of its scroll, going back as well as forward.
+The design does the same thing imperatively (`scrollTop = 0` on index change).
 
-The `ScrollView` sits inside a `GeometryReader` and its content is given a
+The pager keeps neighbouring pages mounted, so a page's offset would survive
+leaving it. Each page (`OnboardingSlidePage`, private to `OnboardingCoverView`)
+therefore owns a `ScrollPosition(edge: .top)` and calls `scrollTo(edge: .top)`
+when it stops being the selected page. The reset happens while the page is
+off-screen, so it is never seen.
+
+**Discarded: re-identifying the `ScrollView` with `.id(currentStep)`.** This was
+the reset before the swipe. It worked while one `ScrollView` showed the current
+step. With pages it would rebuild a view that can be on screen mid-swipe.
+
+The `GeometryReader` wraps the whole pager, and each page's content gets a
 `minHeight` of one viewport. That is what lets the welcome poster sit centred
 while a slide that outgrows the screen still scrolls: the content box is never
-shorter than the visible area, and never capped.
+shorter than the visible area, and never capped. The reader must stay *outside*
+the pager, and it must never be re-identified. A reader that is rebuilt, or one
+nested inside a page, leaves `proxy.size` unresolved for one layout pass and
+flashes the centred content top-aligned.
 
 ## Monetization
 
@@ -977,3 +1042,26 @@ than over it), not a clipped layout. And the CLI walkthrough is driven by
 at the window origin **+27, +80** at scale 3.0 on this machine, the window frame
 alone misses, and the target window must be matched **by name** — another
 agent's simulator is frequently window 1 and silently eats every click.
+
+**Swipe walkthrough (iPhone 17 Pro, iOS 26.5, German, 2026-09-27).** This was
+driven by a throwaway XCUITest, which was deleted after the run, on a freshly
+installed container:
+
+| What was walked | Result |
+| --------------- | ------ |
+| Right swipe on step 1 | Stays on 1 (rubber-band) |
+| Left swipes 1 → 6 | Each lands on the next step; the progress label follows |
+| Left swipe on step 6 | Stays on 6; the tour is still up, "Training starten" is shown |
+| Scroll the history slide down, swipe to 4, swipe back to 5 | Step 5 re-entered at the top of its scroll |
+| Right swipes back to 1 | The welcome slide is centred, with no top-aligned flash |
+| "Los geht's", then "Zurück" | 1 → 2 → 1; the buttons still drive the pager |
+| CTA walk to 6, then "Training starten" | The tour ends; the reminders offer arrives by itself |
+
+The rest was checked by hand by the user (2026-09-27), and it all passed:
+
+- VoiceOver: the Back / Next buttons walk all six slides. A three-finger swipe
+  turns pages, with no duplicated announcements.
+- Reduce Motion: Back / Next swap the slide in place, without sliding.
+- AX5 in German: the history slide, scrolled halfway down, is re-entered at the
+  top after swiping away and back.
+- A left swipe on step 6 leaves the tour open and records nothing.

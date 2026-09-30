@@ -98,6 +98,16 @@ final class OnboardingFlowViewModel {
         currentStep = steps[index - 1]
     }
 
+    /// Moves straight to `step` — the path a swipe between slides takes.
+    ///
+    /// Unlike `advance()`, this never ends the flow: a swipe past the last slide
+    /// just rubber-bands, so finishing (which spends the once-ever record) stays
+    /// an explicit tap on "Start training". A step outside `steps` is ignored.
+    func go(to step: OnboardingStep) {
+        guard steps.contains(step) else { return }
+        currentStep = step
+    }
+
     /// Ends the flow from the "Skip" button. Records the flag exactly like
     /// finishing does: a user who skipped has decided, and re-offering the tour
     /// on the next launch would be nagging.

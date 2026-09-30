@@ -23,6 +23,15 @@ struct OnboardingCoverView: View {
 
     let viewModel: OnboardingFlowViewModel
 
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    /// The animation Back and Next change the step with — the same horizontal
+    /// slide a swipe makes. With Reduce Motion on, the page is swapped in place:
+    /// the pager does not honour the setting for programmatic changes itself.
+    private var stepAnimation: Animation? {
+        reduceMotion ? nil : DesignSystem.Animation.easeOut
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             header
@@ -41,7 +50,7 @@ struct OnboardingCoverView: View {
         HStack(spacing: DesignSystem.Spacing.lg) {
             Button {
                 HapticManager.shared.light()
-                withAnimation(DesignSystem.Animation.easeOut) { viewModel.goBack() }
+                withAnimation(stepAnimation) { viewModel.goBack() }
             } label: {
                 Image(systemName: "chevron.left")
                     .font(.system(size: 15, weight: .semibold))
@@ -89,52 +98,34 @@ struct OnboardingCoverView: View {
 
     // MARK: - Slide
 
-    /// The step's own content, scrollable so German copy at accessibility type
-    /// sizes overflows downwards instead of being truncated — the same trade
-    /// `FounderCelebrationView` makes, with the CTA pinned below.
+    /// The slides as native pages: the finger drags the current one aside and
+    /// the neighbour follows, and both ends rubber-band — nothing wraps, and a
+    /// swipe past the coach slide does not finish the tour (see `go(to:)`).
+    ///
+    /// The selection is the view model's step, so a swipe and the Back / Next
+    /// buttons are the same state change and the chrome follows either one.
+    ///
+    /// The geometry is read *outside* the pager, once, to give every page's
+    /// scrolled content a minimum height of one viewport — what lets the welcome
+    /// poster sit centred while a taller slide still scrolls. A reader inside
+    /// each page can report an unresolved size on its first frame, which shows
+    /// as the centred content flashing top-aligned.
     private var slide: some View {
-        // The geometry is read to give the scrolled content a *minimum* height
-        // of one viewport. That is what lets a short slide sit centred — the
-        // welcome poster does — while a slide that outgrows the screen still
-        // scrolls normally. Reading the size costs nothing here: it is one
-        // container, not a per-row measurement.
         GeometryReader { proxy in
-            ScrollView {
-                Group {
-                    switch viewModel.currentStep {
-                    case .welcome:
-                        OnboardingWelcomeSlideView()
-                    case .routines:
-                        OnboardingRoutinesSlideView()
-                    case .supersets:
-                        OnboardingSupersetsSlideView()
-                    case .progressiveOverload:
-                        OnboardingProgressiveOverloadSlideView()
-                    case .history:
-                        OnboardingHistorySlideView()
-                    case .aiCoach:
-                        OnboardingAICoachSlideView()
-                    }
+            TabView(selection: Binding(
+                get: { viewModel.currentStep },
+                set: { viewModel.go(to: $0) }
+            )) {
+                ForEach(viewModel.steps, id: \.self) { step in
+                    OnboardingSlidePage(
+                        step: step,
+                        isSelected: step == viewModel.currentStep,
+                        minHeight: proxy.size.height
+                    )
+                    .tag(step)
                 }
-                .padding(.horizontal, DesignSystem.Spacing.xl)
-                .padding(.vertical, DesignSystem.Spacing.lg)
-                .frame(
-                    maxWidth: .infinity,
-                    minHeight: proxy.size.height,
-                    alignment: viewModel.currentStep.isContentCentred ? .leading : .topLeading
-                )
             }
-            .scrollBounceBehavior(.basedOnSize)
-            .scrollIndicators(.hidden)
-            // A fresh identity per step, which is what puts the new slide at the
-            // top of its scroll: the offset belongs to the `ScrollView`, so
-            // re-identifying it is the reset — going back as well as forward.
-            //
-            // On the `ScrollView` and *not* on the `GeometryReader` around it:
-            // re-identifying the reader too would rebuild it every step, leaving
-            // `proxy.size` unresolved for one layout pass and flashing the
-            // centred content top-aligned before it settles.
-            .id(viewModel.currentStep)
+            .tabViewStyle(.page(indexDisplayMode: .never))
         }
     }
 
@@ -146,7 +137,7 @@ struct OnboardingCoverView: View {
             // clips a wrapped label at accessibility type sizes.
             Button {
                 HapticManager.shared.light()
-                withAnimation(DesignSystem.Animation.easeOut) { viewModel.advance() }
+                withAnimation(stepAnimation) { viewModel.advance() }
             } label: {
                 Text(viewModel.ctaKey.localized)
                     .frame(maxWidth: .infinity)
@@ -162,6 +153,60 @@ struct OnboardingCoverView: View {
         .padding(.horizontal, DesignSystem.Spacing.xl)
         .padding(.top, DesignSystem.Spacing.md)
         .padding(.bottom, DesignSystem.Spacing.lg)
+    }
+}
+
+// MARK: - Slide page
+
+/// One step's content, scrollable so German copy at accessibility type sizes
+/// overflows downwards instead of being truncated — the same trade
+/// `FounderCelebrationView` makes, with the CTA pinned below.
+///
+/// The pager keeps neighbouring pages mounted, so a page's scroll offset would
+/// survive leaving it. Each page therefore owns its position and returns it to
+/// the top the moment it stops being the selected page — while it is off
+/// screen, so the reset is never seen, and so the page is entered at the top
+/// going back as well as forward.
+private struct OnboardingSlidePage: View {
+
+    let step: OnboardingStep
+    let isSelected: Bool
+    let minHeight: CGFloat
+
+    @State private var position = ScrollPosition(edge: .top)
+
+    var body: some View {
+        ScrollView {
+            Group {
+                switch step {
+                case .welcome:
+                    OnboardingWelcomeSlideView()
+                case .routines:
+                    OnboardingRoutinesSlideView()
+                case .supersets:
+                    OnboardingSupersetsSlideView()
+                case .progressiveOverload:
+                    OnboardingProgressiveOverloadSlideView()
+                case .history:
+                    OnboardingHistorySlideView()
+                case .aiCoach:
+                    OnboardingAICoachSlideView()
+                }
+            }
+            .padding(.horizontal, DesignSystem.Spacing.xl)
+            .padding(.vertical, DesignSystem.Spacing.lg)
+            .frame(
+                maxWidth: .infinity,
+                minHeight: minHeight,
+                alignment: step.isContentCentred ? .leading : .topLeading
+            )
+        }
+        .scrollPosition($position)
+        .scrollBounceBehavior(.basedOnSize)
+        .scrollIndicators(.hidden)
+        .onChange(of: isSelected) { _, isSelected in
+            if !isSelected { position.scrollTo(edge: .top) }
+        }
     }
 }
 

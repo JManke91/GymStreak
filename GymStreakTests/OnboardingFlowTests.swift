@@ -181,6 +181,62 @@ struct OnboardingFlowTests {
         #expect(!viewModel.canGoBack)
     }
 
+    // MARK: - Swiping between steps
+
+    @Test("Swiping moves forward and back and keeps the chrome in step")
+    func swipingMovesBetweenSteps() {
+        let viewModel = makeViewModel()
+
+        viewModel.go(to: .routines)
+
+        #expect(viewModel.currentStep == .routines)
+        #expect(viewModel.stepNumber == 2)
+        #expect(viewModel.canGoBack)
+        #expect(viewModel.ctaKey == OnboardingStep.routines.ctaKey)
+
+        viewModel.go(to: .welcome)
+
+        #expect(viewModel.currentStep == .welcome)
+        #expect(!viewModel.canGoBack)
+        #expect(viewModel.ctaKey == OnboardingStep.welcome.ctaKey)
+    }
+
+    @Test("Swiping at either end stays put and never ends the tour")
+    func swipingClampsAtBothEnds() {
+        let defaults = makeDefaults()
+        let viewModel = makeViewModel(defaults: defaults)
+
+        // A right swipe on the welcome slide rubber-bands back to it.
+        viewModel.go(to: .welcome)
+        #expect(viewModel.currentStep == .welcome)
+        #expect(viewModel.isPresenting)
+
+        // Reaching the coach slide by swipe, then swiping left off it: the
+        // paging view settles on the same page. Only the CTA finishes.
+        viewModel.go(to: .aiCoach)
+        viewModel.go(to: .aiCoach)
+
+        #expect(viewModel.currentStep == .aiCoach)
+        #expect(viewModel.ctaKey == OnboardingStep.finishCTAKey)
+        #expect(viewModel.isPresenting)
+        // Nothing was recorded: the next launch still shows the tour.
+        #expect(makeViewModel(defaults: defaults).isPresenting)
+    }
+
+    @Test("A walk through every step by swipe never ends the tour")
+    func swipingThroughEveryStepNeverEndsTheTour() {
+        let defaults = makeDefaults()
+        let viewModel = makeViewModel(defaults: defaults)
+
+        for step in viewModel.steps + viewModel.steps.reversed() {
+            viewModel.go(to: step)
+            #expect(viewModel.currentStep == step)
+        }
+
+        #expect(viewModel.isPresenting)
+        #expect(makeViewModel(defaults: defaults).isPresenting)
+    }
+
     // MARK: - Localization
 
     @Test("Every string in the shell is localized")
