@@ -304,8 +304,8 @@ to the new localization, and paste it unchanged.** It is one of only two fields 
 prefill, so it has to be entered for both locales.
 
 ⚠️ **Do not paste from `app-store-description.md`.** That document deliberately stages copy that is
-**not yet published** — the Apple Calendar sync paragraph must only go live in the release that ships
-the feature (see its header note). Pasting the document into a new localization would advertise a
+**not yet published** (the Apple Calendar sync hold that motivated this warning is resolved — live as
+of v1.1.14 — but the doc can stage the next held paragraph at any time). Pasting the document into a new localization would advertise a
 feature the installed app does not have. App Store Connect's own en-US field is the live truth; the
 document is the staging area.
 

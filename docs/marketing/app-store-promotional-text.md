@@ -11,6 +11,12 @@ keyword field from that doc are live; the variants below predate them.
 
 **Updated 2026-08-17 for the Pro launch (ticket 15 / `docs/pro-subscription.md` §9.6).** Every option previously ended on "no account, no subscription" / "ohne Konto, ohne Abo". The no-**subscription** half is no longer true and had to go from every variant — including the ones not currently live, because this field is edited without a build and a stale variant can be pasted back months later. The no-**account** promise stays: it is still true.
 
+**Current recommendation (2026-09-30, v1.1.17)** — paste once 1.1.17 is live; it leads with the
+conditioning feature that build ships (`AppStore/Marketing.1.1.17.md` has the reasoning):
+
+- en-US (164/170): `New: conditioning for fighters. Interval and aerobic sessions paced to your own heart-rate zones on iPhone and Apple Watch, planned around your lifting. No account.`
+- de-DE (161/170): `Neu: Kondition für Kampfsportler. Intervall- und Ausdauereinheiten nach deinen Herzfrequenzzonen auf iPhone & Apple Watch, passend zum Krafttraining. Ohne Konto.`
+
 ---
 
 ## English (en-US)
@@ -29,7 +35,7 @@ Train harder with a private AI Coach, automatic progressive overload, and full s
 Your routines, supersets, and rest timers — with a private on-device AI Coach and Apple Watch that tracks every set. Track unlimited workouts free.
 ```
 
-Calendar-sync variant — **hold until the feature is live on the App Store** (see below):
+Calendar-sync variant — **live as of v1.1.14**, safe to paste:
 ```
 Your training plan, right in Apple Calendar. Native tracker for iPhone & Apple Watch with a private on-device AI Coach. Unlimited workouts free, no account.
 ```
@@ -52,19 +58,16 @@ Trainiere smarter mit privatem KI-Coach, automatischer Progression und vollstän
 Deine Routinen, Supersätze und Pausentimer – mit privatem KI-Coach auf dem Gerät und Apple Watch, die jeden Satz trackt. Unbegrenzt tracken, kostenlos.
 ```
 
-Kalender-Variante – **erst verwenden, wenn das Feature im App Store live ist** (siehe unten):
+Kalender-Variante – **live seit v1.1.14**, kann verwendet werden:
 ```
 Dein Trainingsplan direkt im Apple-Kalender. Nativer Tracker für iPhone & Apple Watch mit privatem KI-Coach. Unbegrenzt tracken, kostenlos, ohne Konto.
 ```
 
 ---
 
-**⚠️ The two calendar variants are not live-ready yet.** All four slices are built and
-device-verified (`docs/calendar-sync.md` §13) — the earlier hold on ticket 04 is satisfied — but the
-feature is **not on the App Store**. This field is edited without a build, which is exactly why the
-variants are marked: pasting one before the binary ships would promote a feature the installed app
-does not have, and a stale variant can be pasted back months later by someone who does not know
-that.
+**The two calendar variants are live-ready as of v1.1.14** (on the App Store 2026-09-04; hold resolved
+in the v1.1.17 release pass). They were held because this field is edited without a build: pasting
+one before the binary shipped would have promoted a feature the installed app did not have.
 
 **Why they are worth holding for.** No competitor writes planned workouts to the system calendar
 (researched 2026-09-03: Strong, Hevy, Fitbod, Jefit, Boostcamp and Alpha Progression all stop at an
