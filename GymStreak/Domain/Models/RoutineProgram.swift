@@ -22,6 +22,9 @@ struct RoutineProgramExercise: Sendable, Equatable {
     let supersetGroup: String?
     /// Swap-in exercises, already set up with the primary's scheme.
     let alternativeSeedKeys: [String]
+    /// Localization key of the one-line role shown on the detail screen
+    /// ("Vertical pull"). Alternatives and superset notes take precedence.
+    let noteKey: String?
 
     init(
         _ exerciseSeedKey: String,
@@ -29,7 +32,8 @@ struct RoutineProgramExercise: Sendable, Equatable {
         reps: ClosedRange<Int>,
         rest restTime: TimeInterval,
         superset supersetGroup: String? = nil,
-        alternatives alternativeSeedKeys: [String] = []
+        alternatives alternativeSeedKeys: [String] = [],
+        note noteKey: String? = nil
     ) {
         self.exerciseSeedKey = exerciseSeedKey
         self.setCount = setCount
@@ -38,11 +42,13 @@ struct RoutineProgramExercise: Sendable, Equatable {
         self.restTime = restTime
         self.supersetGroup = supersetGroup
         self.alternativeSeedKeys = alternativeSeedKeys
+        self.noteKey = noteKey
     }
 }
 
 /// One routine a program installs. `seedKey` is both the installed routine's
-/// stable identity (`Routine.seedKey`) and its display-name localization key.
+/// stable identity (`Routine.seedKey`) and its display-name localization key;
+/// `<seedKey>.short` is its letter on the detail screen's timeline ("A").
 struct RoutineProgramRoutine: Sendable, Equatable, Identifiable {
     let seedKey: String
     /// Days after the program's first workout that this routine is first due.
@@ -60,4 +66,12 @@ struct RoutineProgram: Sendable, Equatable, Identifiable {
     /// recovery time. Never a weekday plan (docs/monetization-strategy.md P9).
     let cadenceDays: Int
     let routines: [RoutineProgramRoutine]
+    /// Key of the barbell → alternative hint on the detail screen; nil omits it.
+    let alternativeHintKey: String?
+    /// Stems of the "How to train it" rules, in order:
+    /// `routine_programs.<id>.rule.<stem>.title|detail`.
+    let guidanceRuleKeys: [String]
+    /// Stems of the "Based on" sources, in order:
+    /// `routine_programs.<id>.source.<stem>.name|role`.
+    let sourceKeys: [String]
 }

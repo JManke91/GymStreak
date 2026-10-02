@@ -37,6 +37,39 @@ final class ProgramLibraryViewModel {
         var id: String { label }
     }
 
+    /// One "How to train it" rule.
+    struct GuidanceRule: Identifiable, Equatable {
+        let id: String
+        let number: String
+        let title: String
+        let detail: String
+    }
+
+    /// One "Based on" line: the source and its role in the program.
+    struct SourceLine: Identifiable, Equatable {
+        let id: String
+        let name: String
+        let role: String
+    }
+
+    /// One cell of the detail screen's 14-day timeline.
+    struct TimelineDay: Identifiable, Equatable {
+        let id: Int
+        /// "Mo".
+        let weekday: String
+        /// The routine's letter ("A"), nil on a rest day.
+        let label: String?
+        let isToday: Bool
+    }
+
+    /// What the detail screen's "Add program" buttons do.
+    enum AddState: Equatable {
+        case add
+        /// Some routines were deleted; the sheet re-adds only those.
+        case restore(count: Int)
+        case added
+    }
+
     /// Everything the library card and the detail screen show, built once —
     /// the catalog is static, so nothing here is recomputed in a `body`.
     struct ProgramSummary: Identifiable, Equatable {
@@ -50,6 +83,13 @@ final class ProgramLibraryViewModel {
         let detailStats: [Stat]
         let routines: [RoutineSummary]
         let cadenceDays: Int
+        /// The "Scheduled by recovery time" explanation.
+        let scheduleDetail: String
+        /// "A = Full Body A", …, "outlined = today".
+        let timelineLegend: [String]
+        let alternativeHint: String?
+        let guidanceRules: [GuidanceRule]
+        let basedOn: [SourceLine]
     }
 
     struct PreviewLine: Identifiable, Equatable {
@@ -66,6 +106,14 @@ final class ProgramLibraryViewModel {
         formatter.setLocalizedDateFormatFromTemplate("EEEdMMM")
         return formatter
     }()
+
+    private static let weekdayFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.setLocalizedDateFormatFromTemplate("EEEEEE")
+        return formatter
+    }()
+
+    static let timelineDayCount = 14
 
     let summaries: [ProgramSummary]
     /// Per program id, the routines an install would add right now.
@@ -109,6 +157,36 @@ final class ProgramLibraryViewModel {
 
     func isFullyInstalled(_ programId: String) -> Bool {
         routinesToAdd[programId]?.isEmpty ?? false
+    }
+
+    func addState(for programId: String) -> AddState {
+        guard let program = RoutineProgramCatalog.program(withId: programId),
+              let missing = routinesToAdd[programId] else { return .add }
+        if missing.isEmpty { return .added }
+        return missing.count == program.routines.count ? .add : .restore(count: missing.count)
+    }
+
+    /// The next 14 days from today as if the whole program started today.
+    /// Depends on the date, so the detail screen asks for it on appear rather
+    /// than reading it from the static summary.
+    func timeline(for programId: String) -> [TimelineDay] {
+        guard let program = RoutineProgramCatalog.program(withId: programId) else { return [] }
+        let today = now()
+        return RoutineProgramSchedule.timeline(
+            for: program,
+            from: today,
+            dayCount: Self.timelineDayCount,
+            calendar: calendar
+        )
+        .enumerated()
+        .map { index, day in
+            TimelineDay(
+                id: index,
+                weekday: Self.weekdayFormatter.string(from: day.date),
+                label: day.routineSeedKey.map { "\($0).short".localized },
+                isToday: index == 0
+            )
+        }
     }
 
     /// The routines the add sheet lists, as summaries.
@@ -158,61 +236,5 @@ final class ProgramLibraryViewModel {
         if calendar.isDateInToday(date) { return "date.today".localized }
         if calendar.isDateInTomorrow(date) { return "schedule.due.tomorrow".localized }
         return Self.dayFormatter.string(from: date)
-    }
-
-    private static func summary(for program: RoutineProgram) -> ProgramSummary {
-        let key = "routine_programs.\(program.id)"
-        return ProgramSummary(
-            id: program.id,
-            level: "\(key).level".localized,
-            name: "\(key).name".localized,
-            shortPitch: "\(key).pitch_short".localized,
-            pitch: "\(key).pitch".localized,
-            sources: "\(key).sources".localized,
-            libraryStats: [
-                Stat(value: "\(program.routines.count)", label: "routine_programs.stat.routines".localized),
-                Stat(value: "\(key).stat.frequency".localized, label: "routine_programs.stat.per_week".localized),
-                Stat(value: "\(key).stat.duration".localized, label: "routine_programs.stat.per_session".localized),
-            ],
-            detailStats: [
-                Stat(value: "\(program.routines.count)", label: "routine_programs.stat.routines".localized),
-                Stat(value: "\(key).stat.frequency".localized, label: "routine_programs.stat.per_week".localized),
-                Stat(value: "\(key).stat.length".localized, label: "\(key).stat.length_label".localized),
-            ],
-            routines: program.routines.map { routineSummary(for: $0) },
-            cadenceDays: program.cadenceDays
-        )
-    }
-
-    private static func routineSummary(for routine: RoutineProgramRoutine) -> RoutineSummary {
-        let exercises = routine.exercises
-        let rows = exercises.enumerated().map { index, slot in
-            ExerciseRow(
-                id: index,
-                name: slot.exerciseSeedKey.localized,
-                note: note(for: slot, in: exercises),
-                scheme: "\(slot.setCount) × \(slot.repMin)–\(slot.repMax)"
-            )
-        }
-        let setCount = exercises.reduce(0) { $0 + $1.setCount }
-        return RoutineSummary(
-            id: routine.seedKey,
-            name: routine.seedKey.localized,
-            exerciseCount: String(format: "routine_programs.exercise_count".localized, exercises.count),
-            meta: String(format: "routine_programs.routine_meta".localized, exercises.count, setCount),
-            exercises: rows
-        )
-    }
-
-    private static func note(for slot: RoutineProgramExercise, in exercises: [RoutineProgramExercise]) -> String? {
-        if !slot.alternativeSeedKeys.isEmpty {
-            let names = slot.alternativeSeedKeys.map(\.localized).formatted(.list(type: .and))
-            return String(format: "routine_programs.alternatives".localized, names)
-        }
-        if let group = slot.supersetGroup,
-           let partner = exercises.first(where: { $0.supersetGroup == group && $0.exerciseSeedKey != slot.exerciseSeedKey }) {
-            return String(format: "routine_programs.superset_with".localized, partner.exerciseSeedKey.localized)
-        }
-        return nil
     }
 }

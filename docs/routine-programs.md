@@ -4,18 +4,19 @@ Ready-made, researched training programs that a user adds from a **Program libra
 creates **ordinary routines**: they are startable, editable and deletable, and they reach the watch
 like any other routine. There is no program model in the store.
 
-**Status (2026-10-02):** ticket 02 shipped **Beginner Full Body**, end to end: library → basic
-detail → add sheet → routines + optional cadence plan. Still to come: the full detail content
-(timeline, guidance, sources, ticket 03), the Routines-tab shelf and empty state (04), grouping
-installed routines per program (05), Push/Pull/Legs (06), the ballistic seeds (07) and Fighter
-Strength (08). Tickets: `.scratch/routine-programs/issues/`.
+**Status (2026-10-02):** ticket 02 shipped **Beginner Full Body**, end to end: library → detail →
+add sheet → routines + optional cadence plan. Ticket 03 completed the detail screen (timeline,
+alternative hint, "How to train it", "Based on", repeated CTA with an add / restore / added state).
+Still to come: the Routines-tab shelf and empty state (04), grouping installed routines per program
+(05), Push/Pull/Legs (06), the ballistic seeds (07) and Fighter Strength (08). Tickets:
+`.scratch/routine-programs/issues/`.
 
 **Inputs:** content is in `docs/research/routine-programs-hypertrophy.md` §3 (the source of truth for
 the exact tables, signed off 2026-09-27). The delivery model is
 `docs/research/routine-programs-delivery-model.md`, the tier verdict
 `.scratch/routine-programs/wayfinder/04-grilling-monetization-verdict.md`, and the design the
 [Routine Programs Design](https://claude.ai/artifact/3ruyyATKwk7WX4EKmAi62D) canvas (artboards 2–4
-are built).
+are built; artboard 3's rule and source copy is the en source of truth).
 
 ## What the user sees (iOS)
 
@@ -25,10 +26,22 @@ are built).
 2. **Library** (`ProgramLibraryView`, pushed): the intro, then one card per program with eyebrow,
    name, short pitch, three stat tiles and "Based on …". A fully installed program shows
    "✓ Added". The footer ("All programs are free…") appears only for users the routine cap applies to.
-3. **Detail** (`ProgramDetailView`, pushed): a hero with eyebrow, name, pitch, three stat tiles and
-   "Add program" ("In your routines" once everything is installed). Below it, the two routines,
-   each with "N exercises · M sets" and one row per exercise: sets × rep range, plus
-   "Alternatives: …" or "Superset with …". Last comes the barbell/alternative tip.
+3. **Detail** (`ProgramDetailView`, pushed), in the design's order:
+   - **Hero**: eyebrow, name, pitch, three stat tiles and the CTA.
+   - **"Scheduled by recovery time"**: the program's explanation line, a 7 × 2 grid of the next
+     14 days starting today (short weekday, the routine's letter on its days, today outlined) and
+     a legend ("A = Full Body A · B = Full Body B · outlined = today"). The legend falls back to a
+     column when it does not fit on one line (German, large text).
+   - **The routines**: "N exercises · M sets" and one row per exercise: sets × rep range, plus
+     "Alternatives: …", "Superset with …", or else the slot's one-line role ("Vertical pull").
+   - **Alternative hint** (only for programs that set `alternativeHintKey`).
+   - **"How to train it"**: numbered rules. Full Body: effort 1–3 RIR, start weight, top of range →
+     smallest step (2.5 kg lower / 1.25–2.5 kg upper), stuck twice → −10 %, after ~12 weeks → PPL.
+   - **"Based on"**: each source with its one-line role.
+   - **The CTA again.** Both CTAs share one state: nothing installed → "Add program"; some routines
+     deleted → "Restore N routine(s)" (opens the same sheet, which lists only the missing ones —
+     the gap-fill install); everything installed → "✓ Added".
+   Sections a program doesn't use (no hint, no rules, no sources) are omitted.
 4. **Add sheet** (`ProgramInstallSheet`): lists **the routines that would be added** (the missing
    ones only), a "Plan by recovery time" toggle that is **on by default**, the first-workout
    picker (Today / Tomorrow / Pick a day), a per-routine preview ("Full Body A — Today, then
@@ -58,13 +71,14 @@ A-rest-B-rest alternation.
 
 ```
 Presentation  ProgramLibraryViewModel (@Observable @MainActor)
-              Views/Programs/{ProgramLibraryView, ProgramDetailView, ProgramInstallSheet, ProgramComponents,
-                              ProgramsEntryRow (temporary, deleted by ticket 04)}
+              ProgramLibraryViewModel+Summaries (static display-model builders)
+              Views/Programs/{ProgramLibraryView, ProgramDetailView, ProgramDetailSections, ProgramInstallSheet,
+                              ProgramComponents, ProgramsEntryRow (temporary, deleted by ticket 04)}
               RoutinesView: entry row + navigationDestination(isPresented:)
       │  RoutineProgramInstalling (Domain protocol)
 Domain        Models/RoutineProgram.swift          value types (program → routines → exercise slots)
               Services/RoutineProgramCatalog.swift  the static content
-              Services/RoutineProgramSchedule.swift first-due-date math (pure, isolation-agnostic)
+              Services/RoutineProgramSchedule.swift first-due dates + detail timeline (pure, isolation-agnostic)
               Interfaces/RoutineProgramInstalling.swift
       ▲
 Data          Seeding/RoutineProgramInstaller.swift conforms; the only place touching ModelContext
@@ -79,15 +93,36 @@ App           AppDependencies.routineProgramInstaller + lazy programLibrary (one
   (`routine_programs.<id>.name|level|pitch|pitch_short|sources|stat.*`), and routine names are keyed
   by their `seedKey`, the same convention seeded exercises use.
 - **Display models are built once.** The catalog is static, so `ProgramLibraryViewModel` builds every
-  `ProgramSummary` (stats, routine meta, exercise rows and notes) in `init`. The views only read
-  them. The sheet keeps its preview lines in `@State` and recomputes them on `onAppear` and on change
-  of the start choice. The day formatter is a `static let`.
+  `ProgramSummary` (stats, routine meta, exercise rows and notes, legend, rules, sources) in `init`
+  (`ProgramLibraryViewModel+Summaries.swift`). The views only read them. The two date-dependent
+  lists live in `@State`: the sheet's preview lines (recomputed on `onAppear` and on change of the
+  start choice) and the detail's timeline (fetched on `onAppear`). The day and weekday formatters
+  are `static let`.
+- **Program copy is catalog data.** `RoutineProgram` carries `alternativeHintKey`,
+  `guidanceRuleKeys` (stems of `routine_programs.<id>.rule.<stem>.title|detail`) and `sourceKeys`
+  (`routine_programs.<id>.source.<stem>.name|role`); a slot carries an optional `noteKey`
+  (`routine_programs.note.*`, shared across programs); the timeline explanation is
+  `routine_programs.<id>.schedule_detail` and a routine's timeline letter is `<seedKey>.short`.
+  A new program (06, 08) therefore only adds catalog entries and strings — no view changes.
+- **The timeline is derived, not drawn.** `RoutineProgramSchedule.timeline(for:from:dayCount:calendar:)`
+  marks day *i* with the routine whose `(i − offset) % cadenceDays == 0`, offsets relative to the
+  earliest routine (the same convention as `firstDueDates`). It shows the program as if started
+  today; it does not read the user's real schedules.
 - **One function feeds both the preview and the written plan.** That function is
   `RoutineProgramSchedule.firstDueDates`. The sheet's preview and the installer both call it with
   the same "routines still to add", so the dates shown are the dates written.
 - **Refresh after install.** The installer saves and posts `.cloudKitDataDidChange`.
   `RoutinesViewModel` refetches on that notice, and the refetch also syncs the watch and reconciles
   the calendar and reminders. The routines list and the watch update without a relaunch.
+- **Status-bar strip.** The program screens hide the navigation bar, so nothing covers the status
+  bar and scrolled content was legible under the clock. `programStatusBarBackground()`
+  (`ProgramComponents.swift`) overlays a zero-height `Color.clear` whose **`background`** is the
+  screen colour with `.ignoresSafeArea(edges: .top)`. Dead end: `color.frame(height: 0).ignoresSafeArea(edges: .top)`
+  paints nothing, because a view with a fixed size only gets its alignment resolved when safe areas
+  expand ([`ignoresSafeArea` docs](https://developer.apple.com/documentation/swiftui/view/ignoressafearea%28_%3Aedges%3A%29)).
+  Not relied on: `.scrollEdgeEffectStyle(.hard, for: .top)` (iOS 26). The docs only describe it
+  where pinned content overlaps scrolling content, and do not say it renders with no nav bar.
+  `.safeAreaInset(edge: .top)` is for real inset content, not for painting the safe area.
 - **Watch target: no changes.** Program routines are ordinary `WatchRoutine`s in the existing
   routine sync. Schedules and program membership are iOS-only by design. A program header on the
   watch would need a DTO field on both `WatchModels` copies.
@@ -172,19 +207,24 @@ Mechanism note: `docs/pro-subscription.md` §5c.
     `cleanUpAfterImport()`);
   - every catalog key exists in `SeedExerciseCatalog`.
 - `GymStreakTests/RoutineProgramScheduleTests.swift` covers the start choice → first day
-  (past-day clamp) and offsets relative to the earliest routine being added.
+  (past-day clamp), offsets relative to the earliest routine being added, Full Body's 14-day
+  A · – · B · – timeline, and a synthetic program proving the timeline follows cadence and offsets.
 - `GymStreakTests/ProgramLibraryViewModelTests.swift` covers the free-only note across
   free/founder/subscription/lifetime and gating off, a preview limited to missing routines, and the
-  chosen day being passed only when planning.
+  chosen day being passed only when planning, the add / restore / added CTA state, and the
+  timeline starting today with only today outlined.
 
 ## Deliberate omissions (v1)
 
-- **Per-exercise descriptive notes** from the design ("Vertical pull", "Hip hinge"), the 14-day
-  timeline, "How to train it" and "Based on" all belong to ticket 03. The basic detail shows only
-  the alternatives and superset notes, which are derived from the catalog.
+- **The design's coloured exercise thumbnails** (32 pt squares per row) are not built: the app has
+  no per-exercise colour or image mapping, and the squares were placeholders in the mockup.
+- **Fixed font sizes.** Like the rest of the program screens, the detail uses the design's fixed
+  point sizes, so Dynamic Type does not grow them; the stat tiles and the timeline's weekday and
+  routine letters additionally shrink-to-fit rather than clip. Moving the program screens to
+  scaled text would be one pass over all four files.
 - No "reset to original" action. If it is ever wanted, it must overwrite the existing routine in
   place, never insert a fresh copy (contract 2).
 - No program-level rotation or "next routine". The every-N-days cadence plus the existing up-next
   logic cover alternation (delivery memo §5).
-- Effort, deload, increments, start weights and graduation are program text only (ticket 03). There
-  is no app feature for them.
+- Effort, deload, increments, start weights and graduation are program text only ("How to train
+  it"). There is no app feature for them.

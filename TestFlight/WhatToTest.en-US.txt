@@ -2,3 +2,4 @@
 - When adding an exercise to a routine, the quick set options are now 3×6, 3×12 and 3×15.
 - AI Coach: when a routine draft names an exercise that is not in your library yet, you can now create it right from the "Choose exercise" screen — the name is already filled in and the drafted sets, reps and weight are kept.
 - New: Programs. From the Routines tab, open "Programs" and add Beginner Full Body: two ready-made full-body routines (with machine and dumbbell alternatives) join your list, optionally planned by recovery time so A and B take turns every other day. Programs are free and don't use your routine slots.
+- The program page now shows the next two weeks of workouts, how to train the program (effort, start weight, when to add weight or back off) and the research it is based on. If you delete one of its routines, you can restore it from the same page.

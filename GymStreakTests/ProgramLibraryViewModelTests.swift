@@ -96,4 +96,29 @@ struct ProgramLibraryViewModelTests {
         #expect(viewModel.isFullyInstalled("full_body"))
         #expect(viewModel.previewLines(for: "full_body", choice: .today).isEmpty)
     }
+
+    // MARK: - Detail
+
+    @Test
+    func theAddButtonReflectsHowMuchOfTheProgramIsInstalled() {
+        let installer = RecordingInstaller()
+        let viewModel = makeViewModel(installer: installer)
+        #expect(viewModel.addState(for: "full_body") == .add)
+
+        installer.installedKeys = ["seed.program.full_body.a"]
+        viewModel.refresh()
+        #expect(viewModel.addState(for: "full_body") == .restore(count: 1))
+
+        installer.installedKeys = ["seed.program.full_body.a", "seed.program.full_body.b"]
+        viewModel.refresh()
+        #expect(viewModel.addState(for: "full_body") == .added)
+    }
+
+    @Test
+    func theTimelineStartsTodayWithAAndOutlinesOnlyToday() {
+        let timeline = makeViewModel().timeline(for: "full_body")
+        #expect(timeline.count == 14)
+        #expect(timeline.map(\.isToday) == [true] + Array(repeating: false, count: 13))
+        #expect(timeline.map { $0.label != nil } == (0..<14).map { $0 % 2 == 0 })
+    }
 }

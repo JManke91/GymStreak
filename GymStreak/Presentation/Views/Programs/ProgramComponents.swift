@@ -111,3 +111,18 @@ struct ProgramPrimaryButton: View {
         .buttonStyle(.plain)
     }
 }
+
+extension View {
+    /// The program screens hide the navigation bar, so nothing covers the
+    /// status bar and scrolled content shows through under the clock. Paints
+    /// the background behind the top safe area only. The colour must sit in a
+    /// `background` of the zero-height view: `.ignoresSafeArea` cannot grow a
+    /// view with a fixed `.frame(height: 0)`, so that version paints nothing.
+    func programStatusBarBackground() -> some View {
+        overlay(alignment: .top) {
+            Color.clear
+                .frame(height: 0)
+                .background(DesignSystem.Colors.background.ignoresSafeArea(edges: .top))
+        }
+    }
+}

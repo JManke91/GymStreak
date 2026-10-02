@@ -72,4 +72,41 @@ struct RoutineProgramScheduleTests {
     func noRoutinesMeansNoDates() {
         #expect(RoutineProgramSchedule.firstDueDates(for: [], firstWorkoutDay: Self.day(27), calendar: Self.calendar).isEmpty)
     }
+
+    // MARK: - Detail timeline
+
+    /// Full Body: A every 4 days from day 0, B every 4 days from day 2 →
+    /// A · – · B · – · A … across the 14 days.
+    @Test
+    func fullBodyTimelineAlternatesAAndBWithARestDayBetween() {
+        let days = RoutineProgramSchedule.timeline(
+            for: RoutineProgramCatalog.beginnerFullBody,
+            from: Self.now,
+            dayCount: 14,
+            calendar: Self.calendar
+        )
+        let a = "seed.program.full_body.a", b = "seed.program.full_body.b"
+        #expect(days.map(\.routineSeedKey) == [a, nil, b, nil, a, nil, b, nil, a, nil, b, nil, a, nil])
+        #expect(days.first?.date == Self.day(27))
+        #expect(days.last?.date == Self.calendar.date(byAdding: .day, value: 13, to: Self.day(27)))
+    }
+
+    /// Cadence and offsets come from the program, not a hard-coded pattern.
+    @Test
+    func timelineFollowsTheProgramsCadenceAndOffsets() {
+        let routines = Self.routines
+        let program = RoutineProgram(
+            id: "test",
+            cadenceDays: 3,
+            routines: [
+                RoutineProgramRoutine(seedKey: "x", startOffsetDays: 1, exercises: routines[0].exercises),
+                RoutineProgramRoutine(seedKey: "y", startOffsetDays: 2, exercises: routines[1].exercises),
+            ],
+            alternativeHintKey: nil,
+            guidanceRuleKeys: [],
+            sourceKeys: []
+        )
+        let days = RoutineProgramSchedule.timeline(for: program, from: Self.now, dayCount: 6, calendar: Self.calendar)
+        #expect(days.map(\.routineSeedKey) == ["x", "y", nil, "x", "y", nil])
+    }
 }

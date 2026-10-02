@@ -2,8 +2,9 @@
 //  ProgramDetailView.swift
 //  GymStreak
 //
-//  Basic program detail (design artboard 3): hero, the routines and the
-//  alternative tip. Timeline, guidance and sources arrive with ticket 03.
+//  Program detail (design artboard 3): hero, recovery-time timeline, the
+//  routines, the alternative hint, "How to train it", "Based on" and the
+//  repeated CTA. Sections a program doesn't use are omitted.
 //  See docs/routine-programs.md.
 //
 
@@ -15,29 +16,50 @@ struct ProgramDetailView: View {
     let onInstalled: () -> Void
 
     @State private var showingInstallSheet = false
+    /// Depends on today's date, so it is fetched on appear — never built in `body`.
+    @State private var timeline: [ProgramLibraryViewModel.TimelineDay] = []
 
     var body: some View {
         ZStack {
             DesignSystem.Colors.background.ignoresSafeArea()
 
             ScrollView {
-                VStack(alignment: .leading, spacing: 14) {
+                LazyVStack(alignment: .leading, spacing: 14) {
                     ProgramBackLink(title: "routine_programs.library.title".localized)
                     hero
+
+                    ProgramScheduleCard(detail: summary.scheduleDetail, timeline: timeline, legend: summary.timelineLegend)
 
                     ProgramSectionLabel(text: "routine_programs.detail.routines".localized)
                     ForEach(summary.routines) { routine in
                         routineCard(routine)
                     }
 
-                    alternativeTip
+                    if let hint = summary.alternativeHint {
+                        alternativeTip(hint)
+                    }
+
+                    if !summary.guidanceRules.isEmpty {
+                        ProgramSectionLabel(text: "routine_programs.detail.how_to_train".localized)
+                        ProgramGuidanceCard(rules: summary.guidanceRules)
+                    }
+
+                    if !summary.basedOn.isEmpty {
+                        ProgramSectionLabel(text: "routine_programs.detail.based_on".localized)
+                        ProgramSourcesCard(sources: summary.basedOn)
+                    }
+
+                    addButton
+                        .padding(.top, 6)
                 }
                 .padding(.horizontal, 16)
                 .padding(.bottom, 40)
             }
         }
+        .programStatusBarBackground()
         .toolbar(.hidden, for: .navigationBar)
         .swipeBackEnabled()
+        .onAppear { timeline = viewModel.timeline(for: summary.id) }
         .sheet(isPresented: $showingInstallSheet) {
             ProgramInstallSheet(viewModel: viewModel, summary: summary) {
                 showingInstallSheet = false
@@ -83,21 +105,34 @@ struct ProgramDetailView: View {
         )
     }
 
+    /// Shown in the hero and repeated at the bottom.
     @ViewBuilder
     private var addButton: some View {
-        if viewModel.isFullyInstalled(summary.id) {
-            Label("routine_programs.detail.added".localized, systemImage: "checkmark")
+        switch viewModel.addState(for: summary.id) {
+        case .added:
+            Label("routine_programs.added".localized, systemImage: "checkmark")
                 .font(.system(size: 15, weight: .bold))
                 .foregroundStyle(DesignSystem.Colors.tint)
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 14)
                 .background(DesignSystem.Colors.tint.opacity(0.12), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-        } else {
+        case .add:
             ProgramPrimaryButton(title: "routine_programs.detail.add".localized, systemImage: "plus") {
-                HapticManager.shared.light()
-                showingInstallSheet = true
+                openInstallSheet()
+            }
+        case .restore(let count):
+            let title = count == 1
+                ? "routine_programs.detail.restore.one".localized
+                : String(format: "routine_programs.detail.restore.other".localized, count)
+            ProgramPrimaryButton(title: title, systemImage: "arrow.uturn.backward") {
+                openInstallSheet()
             }
         }
+    }
+
+    private func openInstallSheet() {
+        HapticManager.shared.light()
+        showingInstallSheet = true
     }
 
     // MARK: - Routines
@@ -146,13 +181,13 @@ struct ProgramDetailView: View {
         )
     }
 
-    private var alternativeTip: some View {
+    private func alternativeTip(_ hint: String) -> some View {
         HStack(alignment: .top, spacing: 10) {
             Image(systemName: "arrow.triangle.2.circlepath")
                 .font(.system(size: 14, weight: .semibold))
                 .foregroundStyle(DesignSystem.Colors.tint)
                 .padding(.top, 1)
-            Text("routine_programs.detail.alternative_tip".localized)
+            Text(hint)
                 .font(.system(size: 13))
                 .foregroundStyle(Color.white.opacity(0.78))
                 .fixedSize(horizontal: false, vertical: true)

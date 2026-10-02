@@ -58,6 +58,7 @@ struct ProgramLibraryView: View {
                 .padding(.bottom, 32)
             }
         }
+        .programStatusBarBackground()
         .toolbar(.hidden, for: .navigationBar)
         .swipeBackEnabled()
         .onAppear { viewModel.refresh() }
