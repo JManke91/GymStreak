@@ -293,7 +293,9 @@ final class ExampleRoutineSeeder {
     /// matters.
     ///
     /// Only an **untouched** copy is removed — never trained, never edited — so
-    /// a user who started using it in the meantime keeps it.
+    /// a user who started using it in the meantime keeps it. And only an
+    /// **example** routine (a `SeedRoutineCatalog` key) is ever a candidate:
+    /// the dedup pass above is generic over every seeded routine, this is not.
     ///
     /// One case it deliberately cannot catch: an existing user with **zero**
     /// routines of their own. There is no older user routine to compare against,
@@ -323,7 +325,14 @@ final class ExampleRoutineSeeder {
 
         var kept: [Routine] = []
         for routine in seededRoutines {
-            let isSuperseded = oldest.createdAt < routine.createdAt
+            // Example routines only. Program routines share the `seedKey`
+            // mechanism and look exactly like a superseded example when the user
+            // installs one after creating their own and has not touched it yet —
+            // and on a second device CloudKit's millisecond rounding makes
+            // `createdAt == updatedAt` hold for real, so that device would delete
+            // the program and propagate the delete everywhere.
+            let isSuperseded = SeedRoutineCatalog.seedKeys.contains(routine.seedKey)
+                && oldest.createdAt < routine.createdAt
                 && routine.updatedAt == routine.createdAt
                 && (routine.workoutSessions ?? []).isEmpty
             if isSuperseded {

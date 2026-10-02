@@ -70,6 +70,11 @@ struct SeedRoutine {
 enum SeedRoutineCatalog {
     static let currentVersion = 1
 
+    /// The keys of the example routines — and only those. Other seeded routines
+    /// (programs) share the `seedKey` mechanism, so the superseded-example cleanup
+    /// asks this set rather than "has a `seedKey`".
+    static let seedKeys: Set<String> = Set(entries.map(\.seedKey))
+
     /// One full-body session, picked so that the three features a new user
     /// cannot otherwise discover — rep-range goals, supersets, per-exercise
     /// rest — each show up at least once.

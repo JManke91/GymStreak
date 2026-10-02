@@ -127,7 +127,15 @@ rows (cascading to `RoutineExercise`) that the History model actor may be walkin
    and `ExerciseSet`s go with it via the cascade rule, so nothing is left dangling.
 2. **Cleanup pass.** Removes an untouched example routine that a *new device of an existing user*
    seeded into a store CloudKit had not filled yet — see "The one case 'zero routines' gets wrong"
-   above.
+   above. **Scoped to example routines only** (`SeedRoutineCatalog.seedKeys`, a catalog lookup —
+   not "has a `seedKey`", and not prefix parsing). Routine programs share the `seedKey` mechanism, and
+   a program the user installs *after* creating their own routines and has not yet edited or trained
+   matches every other clause of the superseded test. On the installing device only nanosecond
+   timestamp gaps would save it; on a second device CloudKit's millisecond rounding makes
+   `createdAt == updatedAt` exact, so that device would delete the program and the delete would
+   propagate everywhere (`docs/research/routine-programs-delivery-model.md` §4, "The cleanup trap").
+   The dedup pass (step 1) stays generic over every seed key — that is exactly what programs need.
+   Pinned by `keepsAnUntouchedProgramRoutineInstalledAfterTheUsersOwn`.
 3. **Seed pass (version-gated).** Runs only when the stored routine version <
    `SeedRoutineCatalog.currentVersion`, and only into a store holding zero routines.
 4. **Exercise resolution.** Each slot points at a `SeedExerciseCatalog` row by `seedKey` and is
@@ -266,7 +274,7 @@ deletion, never multiplied by duplication — and every way of closing it is wor
 
 ## Testing
 
-`GymStreakTests/ExampleRoutineSeederTests.swift` (18 tests, iOS suite). The iCloud KV half of the
+`GymStreakTests/ExampleRoutineSeederTests.swift` (21 tests, iOS suite). The iCloud KV half of the
 version flag is injected through `SeedCatalogVersionStore` — the real
 `NSUbiquitousKeyValueStore` is a single process-wide instance whose contents outlive the app, so a
 test that wrote it would stamp the developer's simulator permanently.
@@ -279,7 +287,8 @@ that lost a partner; defers rather than stamping on a thin library and seeds on 
 routine from the strings table rather than a literal; deletes a superseded example routine once
 CloudKit proves the store was not empty, while keeping one the user created routines *after*, and
 keeping one they trained or edited; keeps a trained routine whose training landed on the copy dedup
-discarded; announces seeds, removals and collapses to the already-loaded list.
+discarded; never removes a non-example seeded routine (a program) under the superseded test;
+announces seeds, removals and collapses to the already-loaded list.
 
 The cap exclusion is covered in `GymStreakTests/RoutineCapTests.swift`: the example routine leaves
 all three free slots intact, the nudge counts only the user's own routines, editing/renaming and

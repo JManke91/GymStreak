@@ -353,6 +353,32 @@ struct ExampleRoutineSeederTests {
         #expect(all.first?.id == imported.id)
     }
 
+    /// Program routines share the `seedKey` mechanism. One installed after the
+    /// user's own routines and not yet touched matches every other part of the
+    /// superseded test — on a second device CloudKit's millisecond rounding makes
+    /// `createdAt == updatedAt` exact — so only the catalog-key scoping keeps it.
+    @Test
+    func keepsAnUntouchedProgramRoutineInstalledAfterTheUsersOwn() async throws {
+        let fixture = makeFixture(storedVersion: SeedRoutineCatalog.currentVersion)
+
+        let own = Routine(name: "Push Day")
+        own.createdAt = Date().addingTimeInterval(-90 * 24 * 3600)
+        own.updatedAt = own.createdAt
+        fixture.context.insert(own)
+
+        let program = Routine(name: "Full Body A")
+        program.seedKey = "seed.program.full_body.a"
+        program.updatedAt = program.createdAt
+        fixture.context.insert(program)
+        try fixture.context.save()
+
+        await fixture.seeder.run()
+        await fixture.seeder.cleanUpAfterImport()
+
+        let ids = Set(try routines(fixture.context).map(\.id))
+        #expect(ids == [own.id, program.id])
+    }
+
     /// The removal has to announce itself for the same reason the seed does —
     /// otherwise the already-loaded list keeps showing a routine that no longer
     /// exists, and the watch keeps its copy.
