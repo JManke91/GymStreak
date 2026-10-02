@@ -7,22 +7,33 @@ like any other routine. There is no program model in the store.
 **Status (2026-10-02):** ticket 02 shipped **Beginner Full Body**, end to end: library → detail →
 add sheet → routines + optional cadence plan. Ticket 03 completed the detail screen (timeline,
 alternative hint, "How to train it", "Based on", repeated CTA with an add / restore / added state).
-Still to come: the Routines-tab shelf and empty state (04), grouping installed routines per program
-(05), Push/Pull/Legs (06), the ballistic seeds (07) and Fighter Strength (08). Tickets:
+Ticket 04 (done 2026-10-02) replaced the temporary entry row with the Programs shelf and rebuilt the zero-routine empty
+state around programs. Still to come: grouping installed routines per program (05), Push/Pull/Legs (06), the ballistic seeds (07) and Fighter Strength (08). Tickets:
 `.scratch/routine-programs/issues/`.
 
 **Inputs:** content is in `docs/research/routine-programs-hypertrophy.md` §3 (the source of truth for
 the exact tables, signed off 2026-09-27). The delivery model is
 `docs/research/routine-programs-delivery-model.md`, the tier verdict
 `.scratch/routine-programs/wayfinder/04-grilling-monetization-verdict.md`, and the design the
-[Routine Programs Design](https://claude.ai/artifact/3ruyyATKwk7WX4EKmAi62D) canvas (artboards 2–4
-are built; artboard 3's rule and source copy is the en source of truth).
+[Routine Programs Design](https://claude.ai/artifact/3ruyyATKwk7WX4EKmAi62D) canvas (artboards 1–4 and 6
+are built, plus artboard 5's "Added" shelf card; artboard 3's rule and source copy is the en source of truth).
 
 ## What the user sees (iOS)
 
-1. **Entry point (temporary).** A "Programs" row under the dashed "New routine" tile on the
-   Routines tab, plus a secondary "Programs" button in the zero-routine empty state. Ticket 04
-   replaces both with the Programs shelf.
+1. **Programs shelf** (`ProgramShelf`, artboard 1) on the Routines tab, below the dashed "New
+   routine" tile and above the conditioning card: the "PROGRAMS" label, "Ready-made plans, built
+   from the research" and "See all" (→ library). A horizontal row holds one 248 pt card per
+   catalog program: level eyebrow and routine count, name, a short shelf pitch, a 7-day pattern
+   (the routine's letter on its days) and a cadence line. Tapping a card pushes that program's
+   detail; its back link then reads "Routines". A program with **any** of its routines in the list
+   shows "✓ ADDED" in the eyebrow's place (artboard 5). It reverts only once all of them are
+   deleted; with some deleted, the detail offers the restore.
+   **Empty state** (`ProgramsEmptyStateView`, artboard 6), shown with zero routines: the title,
+   "Start with a program", one line, one row per program (monogram, name, "Beginner · 2 routines
+   · 3–4× a week") and a bottom-pinned, outlined "Build your own routine" that goes through
+   `RoutinesViewModel.requestAddRoutine()` like every other create affordance. The header buttons
+   are not shown there, as in the design. The example routine is unchanged, so a fresh install
+   usually sees the list with the shelf rather than this state.
 2. **Library** (`ProgramLibraryView`, pushed): the intro, then one card per program with eyebrow,
    name, short pitch, three stat tiles and "Based on …". A fully installed program shows
    "✓ Added". The footer ("All programs are free…") appears only for users the routine cap applies to.
@@ -72,9 +83,11 @@ A-rest-B-rest alternation.
 ```
 Presentation  ProgramLibraryViewModel (@Observable @MainActor)
               ProgramLibraryViewModel+Summaries (static display-model builders)
+              ProgramLibraryViewModel+Shelf (ShelfCard / PatternDay builders)
               Views/Programs/{ProgramLibraryView, ProgramDetailView, ProgramDetailSections, ProgramInstallSheet,
-                              ProgramComponents, ProgramsEntryRow (temporary, deleted by ticket 04)}
-              RoutinesView: entry row + navigationDestination(isPresented:)
+                              ProgramComponents, ProgramShelf, ProgramsEmptyStateView}
+              RoutinesView: shelf + empty state; navigationDestination(isPresented:) → library,
+                            navigationDestination(item: shelfProgramId) → detail
       │  RoutineProgramInstalling (Domain protocol)
 Domain        Models/RoutineProgram.swift          value types (program → routines → exercise slots)
               Services/RoutineProgramCatalog.swift  the static content
@@ -111,12 +124,22 @@ App           AppDependencies.routineProgramInstaller + lazy programLibrary (one
 - **One function feeds both the preview and the written plan.** That function is
   `RoutineProgramSchedule.firstDueDates`. The sheet's preview and the installer both call it with
   the same "routines still to add", so the dates shown are the dates written.
+- **The shelf is display models too.** `ShelfCard` (level, name, shelf pitch, routine count, the
+  7-day pattern, cadence line, the empty state's monogram and meta line) is built once per catalog
+  program in `init`; the pattern is `RoutineProgramSchedule.timeline` over 7 days from a fixed
+  reference date, since it does not depend on today. Only `isAdded` moves: `refresh()` sets it from
+  `installedRoutineKeys()`. The shelf copy is catalog-keyed like the rest
+  (`routine_programs.<id>.pitch_shelf|cadence|mark`), so a new program needs strings only.
+- **"Added" follows the Routines list.** `RoutinesView` calls `programLibrary.refresh()` from
+  `.onReceive(viewModel.$routines)`, so every refetch (install, delete, CloudKit import) also
+  re-derives the shelf state. It costs one `seedKey != ""` fetch per refetch, outside `body`.
 - **Refresh after install.** The installer saves and posts `.cloudKitDataDidChange`.
   `RoutinesViewModel` refetches on that notice, and the refetch also syncs the watch and reconciles
   the calendar and reminders. The routines list and the watch update without a relaunch.
-- **Status-bar strip.** The program screens hide the navigation bar, so nothing covers the status
-  bar and scrolled content was legible under the clock. `programStatusBarBackground()`
-  (`ProgramComponents.swift`) overlays a zero-height `Color.clear` whose **`background`** is the
+- **Status-bar strip.** The program screens and the Routines tab hide the navigation bar, so
+  nothing covers the status bar and scrolled content was legible under the clock (on the Routines
+  tab it became visible once the shelf made the list long enough to scroll). `statusBarBackground()`
+  (`Presentation/Views/DesignSystem/StatusBarBackground.swift`) overlays a zero-height `Color.clear` whose **`background`** is the
   screen colour with `.ignoresSafeArea(edges: .top)`. Dead end: `color.frame(height: 0).ignoresSafeArea(edges: .top)`
   paints nothing, because a view with a fixed size only gets its alignment resolved when safe areas
   expand ([`ignoresSafeArea` docs](https://developer.apple.com/documentation/swiftui/view/ignoressafearea%28_%3Aedges%3A%29)).
@@ -210,7 +233,9 @@ Mechanism note: `docs/pro-subscription.md` §5c.
   (past-day clamp), offsets relative to the earliest routine being added, Full Body's 14-day
   A · – · B · – timeline, and a synthetic program proving the timeline follows cadence and offsets.
 - `GymStreakTests/ProgramLibraryViewModelTests.swift` covers the free-only note across
-  free/founder/subscription/lifetime and gating off, a preview limited to missing routines, and the
+  free/founder/subscription/lifetime and gating off, the shelf's "Added" state (set on install, kept
+  while one routine remains, cleared once none does), Full Body's A · – · B · – · A · – · B shelf
+  pattern, a preview limited to missing routines, and the
   chosen day being passed only when planning, the add / restore / added CTA state, and the
   timeline starting today with only today outlined.
 

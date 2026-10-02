@@ -116,6 +116,8 @@ final class ProgramLibraryViewModel {
     static let timelineDayCount = 14
 
     let summaries: [ProgramSummary]
+    /// The Routines tab's shelf and empty-state rows, with their added state.
+    private(set) var shelfCards: [ShelfCard]
     /// Per program id, the routines an install would add right now.
     private(set) var routinesToAdd: [String: [RoutineProgramRoutine]] = [:]
     var didFailToInstall = false
@@ -139,6 +141,7 @@ final class ProgramLibraryViewModel {
         self.calendar = calendar
         self.now = now
         self.summaries = RoutineProgramCatalog.programs.map { Self.summary(for: $0) }
+        self.shelfCards = RoutineProgramCatalog.programs.map { Self.shelfCard(for: $0) }
         refresh()
     }
 
@@ -153,6 +156,22 @@ final class ProgramLibraryViewModel {
         routinesToAdd = Dictionary(uniqueKeysWithValues: RoutineProgramCatalog.programs.map { program in
             (program.id, program.routines.filter { !installed.contains($0.seedKey) })
         })
+        // "Added" while any of the program's routines is in the list; it reverts
+        // only once all of them are deleted (the detail then offers a restore).
+        let added = Set(RoutineProgramCatalog.programs.filter { program in
+            program.routines.contains { installed.contains($0.seedKey) }
+        }.map(\.id))
+        let cards = shelfCards.map { card in
+            var card = card
+            card.isAdded = added.contains(card.id)
+            return card
+        }
+        // Runs on every Routines refetch; `@Observable` invalidates on any set.
+        if cards != shelfCards { shelfCards = cards }
+    }
+
+    func summary(withId programId: String) -> ProgramSummary? {
+        summaries.first { $0.id == programId }
     }
 
     func isFullyInstalled(_ programId: String) -> Bool {

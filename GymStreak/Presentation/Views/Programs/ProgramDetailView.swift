@@ -13,6 +13,9 @@ import SwiftUI
 struct ProgramDetailView: View {
     let viewModel: ProgramLibraryViewModel
     let summary: ProgramLibraryViewModel.ProgramSummary
+    /// The screen the back link returns to: the library, or the Routines tab
+    /// when the program was opened from its shelf.
+    var backTitle = "routine_programs.library.title".localized
     let onInstalled: () -> Void
 
     @State private var showingInstallSheet = false
@@ -25,7 +28,7 @@ struct ProgramDetailView: View {
 
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 14) {
-                    ProgramBackLink(title: "routine_programs.library.title".localized)
+                    ProgramBackLink(title: backTitle)
                     hero
 
                     ProgramScheduleCard(detail: summary.scheduleDetail, timeline: timeline, legend: summary.timelineLegend)
@@ -56,7 +59,7 @@ struct ProgramDetailView: View {
                 .padding(.bottom, 40)
             }
         }
-        .programStatusBarBackground()
+        .statusBarBackground()
         .toolbar(.hidden, for: .navigationBar)
         .swipeBackEnabled()
         .onAppear { timeline = viewModel.timeline(for: summary.id) }

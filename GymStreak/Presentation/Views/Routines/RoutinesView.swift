@@ -24,6 +24,8 @@ private struct RoutinesViewInternal: View {
     private let conditioningProgram: ConditioningProgramViewModel
     private let programLibrary: ProgramLibraryViewModel
     @State private var showingPrograms = false
+    /// A program opened straight from the shelf or the empty state, by id.
+    @State private var shelfProgramId: String?
 #if DEBUG
     /// UI-test-only responsiveness measurement; inert without the launch argument.
     @StateObject private var stallProbe = MainThreadStallProbe()
@@ -76,6 +78,7 @@ private struct RoutinesViewInternal: View {
                 }
             }
             .toolbar(.hidden, for: .navigationBar)
+            .statusBarBackground()
             .navigationDestination(for: UUID.self) { routineId in
                 if let routine = viewModel.routines.first(where: { $0.id == routineId }) {
                     RoutineDetailView(
@@ -90,6 +93,15 @@ private struct RoutinesViewInternal: View {
                 // Popping on install lands the user on the list their new
                 // routines just joined.
                 ProgramLibraryView(viewModel: programLibrary) { showingPrograms = false }
+            }
+            .navigationDestination(item: $shelfProgramId) { programId in
+                if let summary = programLibrary.summary(withId: programId) {
+                    ProgramDetailView(
+                        viewModel: programLibrary,
+                        summary: summary,
+                        backTitle: "routines.title".localized
+                    ) { shelfProgramId = nil }
+                }
             }
             .fullScreenCover(isPresented: $viewModel.showingAddRoutine) {
                 NavigationStack {
@@ -124,6 +136,8 @@ private struct RoutinesViewInternal: View {
         // is not reliably presented once a destination is pushed over it, and
         // `RoutineDetailView` is where most edits are made.
         .routineSaveFailureAlert(viewModel)
+        // Keeps the shelf's "Added" state in step with installs and deletions.
+        .onReceive(viewModel.$routines) { _ in programLibrary.refresh() }
         .onAppear {
             viewModel.fetchRoutines()
 #if DEBUG
@@ -196,9 +210,12 @@ private struct RoutinesViewInternal: View {
                 }
                 .padding(.top, 2)
 
-                // Temporary entry point until the Programs shelf (ticket 04).
-                ProgramsEntryRow { showingPrograms = true }
-                    .padding(.top, 8)
+                ProgramShelf(
+                    cards: programLibrary.shelfCards,
+                    onOpen: { shelfProgramId = $0 },
+                    onSeeAll: { showingPrograms = true }
+                )
+                .padding(.top, 8)
 
                 if let card = conditioningProgram.routinesCard {
                     ConditioningProgramRoutinesCardView(
@@ -312,22 +329,13 @@ private struct RoutinesViewInternal: View {
     // MARK: - Empty state
 
     private var emptyState: some View {
-        ContentUnavailableView {
-            Label("routines.empty.title".localized, systemImage: "list.bullet.clipboard")
-        } description: {
-            Text("routines.empty.description".localized)
-        } actions: {
+        ProgramsEmptyStateView(
+            cards: programLibrary.shelfCards,
+            onOpen: { shelfProgramId = $0 },
             // Unreachable at the cap (the empty state means zero routines), but
             // routed through the same entry point so there is exactly one.
-            Button("routines.add".localized) {
-                viewModel.requestAddRoutine()
-            }
-            .buttonStyle(.onyxProminent)
-            Button("routine_programs.entry.title".localized) {
-                showingPrograms = true
-            }
-            .tint(DesignSystem.Colors.tint)
-        }
+            onBuildOwn: { viewModel.requestAddRoutine() }
+        )
     }
 
     // MARK: - Actions

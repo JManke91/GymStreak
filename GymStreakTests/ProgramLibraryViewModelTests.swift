@@ -121,4 +121,32 @@ struct ProgramLibraryViewModelTests {
         #expect(timeline.map(\.isToday) == [true] + Array(repeating: false, count: 13))
         #expect(timeline.map { $0.label != nil } == (0..<14).map { $0 % 2 == 0 })
     }
+
+    // MARK: - Shelf
+
+    @Test
+    func theShelfCardIsAddedWhileAnyRoutineIsInstalledAndRevertsWhenAllAreDeleted() {
+        let installer = RecordingInstaller()
+        let viewModel = makeViewModel(installer: installer)
+        #expect(viewModel.shelfCards.map(\.id) == RoutineProgramCatalog.programs.map(\.id))
+        #expect(viewModel.shelfCards.allSatisfy { !$0.isAdded })
+
+        #expect(viewModel.install("full_body", planByRecoveryTime: false, choice: .today))
+        #expect(viewModel.shelfCards.first { $0.id == "full_body" }?.isAdded == true)
+
+        installer.installedKeys = ["seed.program.full_body.b"]
+        viewModel.refresh()
+        #expect(viewModel.shelfCards.first { $0.id == "full_body" }?.isAdded == true)
+
+        installer.installedKeys = []
+        viewModel.refresh()
+        #expect(viewModel.shelfCards.first { $0.id == "full_body" }?.isAdded == false)
+    }
+
+    @Test
+    func theShelfPatternFollowsTheCatalogCadence() {
+        let card = makeViewModel().shelfCards.first { $0.id == "full_body" }
+        // A · – · B · – · A · – · B: every 4 days, B two days after A.
+        #expect(card?.pattern.map { $0.label != nil } == [true, false, true, false, true, false, true])
+    }
 }

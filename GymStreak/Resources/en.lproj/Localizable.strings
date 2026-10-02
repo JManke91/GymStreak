@@ -79,8 +79,9 @@
 
 // MARK: - Routines View
 "routines.title" = "Routines";
-"routines.empty.title" = "No Routines Yet";
-"routines.empty.description" = "Create your first routine to get started";
+"routines.empty.programs.title" = "Start with a program";
+"routines.empty.programs.description" = "Pick a researched plan and train today, or build your own routine from scratch.";
+"routines.empty.build_own" = "Build your own routine";
 "routines.add" = "Add Routine";
 "routines.exercise_count" = "%d exercises";
 // Redesign (Routinen & Übungen)
@@ -1718,9 +1719,11 @@
 // MARK: - Routine Programs (docs/routine-programs.md)
 "seed.program.full_body.a" = "Full Body A";
 "seed.program.full_body.b" = "Full Body B";
-"routine_programs.entry.title" = "Programs";
-"routine_programs.entry.subtitle" = "Ready-made plans from training research";
 "routine_programs.back" = "Back to %@";
+"routine_programs.shelf.subtitle" = "Ready-made plans, built from the research";
+"routine_programs.shelf.see_all" = "See all";
+"routine_programs.shelf.routine_count" = "%d routines";
+"routine_programs.empty.meta" = "%1$@ · %2$d routines · %3$@ a week";
 "routine_programs.library.title" = "Programs";
 "routine_programs.library.intro" = "Plans built from training research and proven community programs. Adding one creates normal routines you can edit like your own.";
 "routine_programs.library.free_note" = "All programs are free. Program routines don't count toward your routine limit.";
@@ -1770,6 +1773,9 @@
 "routine_programs.full_body.name" = "Beginner Full Body";
 "routine_programs.full_body.pitch_short" = "Two full-body workouts you alternate with a rest day between. Learn the big lifts and build a base in about 12 weeks.";
 "routine_programs.full_body.pitch" = "Two full-body workouts you alternate, with a rest day between. Every session trains legs, push and pull, so you practise the big lifts often while you're learning them.";
+"routine_programs.full_body.pitch_shelf" = "Two full-body workouts, alternated. Learn the big lifts.";
+"routine_programs.full_body.cadence" = "~3–4 sessions a week";
+"routine_programs.full_body.mark" = "FB";
 "routine_programs.full_body.sources" = "r/Fitness Basic Beginner Routine · ACSM guidelines";
 "routine_programs.full_body.stat.frequency" = "3–4×";
 "routine_programs.full_body.stat.duration" = "~50 min";
