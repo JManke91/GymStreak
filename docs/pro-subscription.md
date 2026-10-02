@@ -971,6 +971,13 @@ routine changes nothing about the user's own allowance, and *duplicating* it pro
 user routine (`seedKey` empty) that counts like any other. The rule is one place —
 `RoutineCapPolicy.countsTowardCap(_:)` / `countableRoutineCount(in:)`.
 
+**Program routines are outside the count too** (`docs/routine-programs.md`, 2026-10-02). The
+rule above is "non-empty `seedKey`", not "the example routine", so routines installed from the
+program library (`seed.program.*`) are excluded with no code change; the install sheet says so to
+capped users only ("Free · doesn't use your routine slots", hidden for Pro and Founders via
+`RoutineCapPolicy.isSubjectToCap`). Ceiling and reasoning: `docs/monetization-strategy.md` §4.2a,
+P1 addendum.
+
 **Lapse behaviour is the load-bearing rule** (§7's table, Rule 4). A user who built six routines
 as a subscriber and then lapsed keeps all six, fully usable, editable and trainable. Nothing is
 auto-deleted, hidden, made read-only, or reordered. `isRoutineCapReached` is

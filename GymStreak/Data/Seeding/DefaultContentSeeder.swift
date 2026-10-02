@@ -338,7 +338,7 @@ final class DefaultContentSeeder {
         guard lastSeededVersion < SeedExerciseCatalog.currentVersion else { return }
 
         let existingSeedKeys = Set(existing.map(\.seedKey))
-        let existingNames = Set(existing.map { Self.normalizedName($0.name) })
+        let existingNames = Set(existing.map { SeedExercise.normalizedName($0.name) })
 
         for row in SeedExerciseCatalog.entries {
             // Version-scoped insertion: only rows introduced after the last
@@ -353,16 +353,9 @@ final class DefaultContentSeeder {
 
             // Skip rows the user has effectively created themselves — an
             // existing "bankdrücken" blocks the catalog's "Bankdrücken".
-            guard !existingNames.contains(Self.normalizedName(name)) else { continue }
+            guard !existingNames.contains(SeedExercise.normalizedName(name)) else { continue }
 
-            let exercise = Exercise(
-                name: name,
-                muscleGroups: row.muscleGroups,
-                equipmentType: row.equipmentType,
-                loadBehavior: row.loadBehavior
-            )
-            exercise.seedKey = row.seedKey
-            modelContext.insert(exercise)
+            modelContext.insert(row.makeExercise())
         }
         storeCatalogVersion(SeedExerciseCatalog.currentVersion)
     }
@@ -395,13 +388,6 @@ final class DefaultContentSeeder {
                   assistanceExerciseIds.contains(exerciseId) else { continue }
             workoutExercise.loadBehavior = .counterweightAssistance
         }
-    }
-
-    /// Case-, diacritic-, and whitespace-insensitive form used to detect that a
-    /// user-created exercise already covers a catalog row.
-    private static func normalizedName(_ name: String) -> String {
-        name.trimmingCharacters(in: .whitespacesAndNewlines)
-            .folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current)
     }
 
     // MARK: - Catalog version storage

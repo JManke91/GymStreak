@@ -255,16 +255,25 @@ is still zero.
 
 | Order | # | Lever | Tier | Effort | Moves | Status |
 |---|---|---|---|---|---|---|
-| 1 | 5 | In-app sharing of a workout | **P1** | 2–3 days | Web-Referrer, virality | ⬜ not started — **un-gated from #4**, see §4.5 |
-| 2 | 15 | **Decide the app name** (rename or commit) | **P1 / decision** | ~1 day to decide | Brand-query traffic, word-of-mouth | ⬜ **not decided — gates #4 and #6** |
-| 3 | 4 | Landing page + custom domain | **P1** | 1–2 weeks | Unlocks every off-store channel | ⬜ not started — blocked on #15 |
-| 4 | 6 | Community presence (Reddit et al.) | **P1** | Ongoing | Downloads → velocity → ranking | ⬜ not started — blocked on #15 |
-| 5 | 14 | **Lifetime / one-time purchase option** | **P1 / decision** | ~1 day to build | Revenue per converting user | ⬜ **needs a Monetization Gate discussion first** |
-| 6 | 2 | Storefront metadata localization, steps 2–3 | **P2** | 1–2 days/locale | Keyword surface | ⬜ gated on the first search-term report |
-| 7 | 7 | In-App Events | **P2** | ~1 day/event | Browse + Search surfaces | ⬜ not started |
-| 8 | 8 | Custom Product Pages | **P2** | ~1 day | Conversion on off-store traffic | ⬜ not started — follows #4 and #6 |
-| 9 | 9 | Full app localization, 2–3 markets | **P3** | 1–2 weeks/language | Keyword surface + market fit | ⬜ blocked on `.scratch/i18n-foundation/` |
-| 10 | 10 | Apple Search Ads | **P3 / deferred** | Money | Impressions, and keyword data | ⬜ **deferred until #13 moves the return rate** — see §4.10 |
+| 1 | 16 | **Strong + Hevy history import** | **P1** | ~1 week (2 tickets) | Switching from Strong/Hevy at all | 🎫 ticket cut — `.scratch/positioning-usp/issues/01–02`, see §4.16 |
+| 2 | 17 | **Visible watch sync reliability** ("Saved on iPhone ✓") | **P1** | 1–2 days | The switching message, made experienceable | 🎫 ticket cut — `.scratch/positioning-usp/issues/03`, see §4.17 |
+| 3 | 18 | **Fighter positioning** (mat sessions, watch recording, lift-or-fight onboarding, round timer) | **P1** | ~3 weeks (4 tickets) | The one unowned market position | 🎫 ticket cut — `.scratch/positioning-usp/issues/04–07`, see §4.18 |
+| 4 | 5 | In-app sharing of a workout | **P1** | 2–3 days | Web-Referrer, virality | ⬜ not started — **un-gated from #4**, see §4.5 |
+| 5 | 15 | **Decide the app name** (rename or commit) | **P1 / decision** | ~1 day to decide | Brand-query traffic, word-of-mouth | ⬜ **not decided — gates #4 and #6**; #18 adds an argument, §4.18 |
+| 6 | 4 | Landing page + custom domain | **P1** | 1–2 weeks | Unlocks every off-store channel | ⬜ not started — blocked on #15 |
+| 7 | 6 | Community presence (Reddit et al.) | **P1** | Ongoing | Downloads → velocity → ranking | ⬜ not started — blocked on #15 |
+| 8 | 14 | **Lifetime / one-time purchase option** | **P1 / decision** | ~1 day to build | Revenue per converting user | ⬜ **needs a Monetization Gate discussion first** |
+| 9 | 2 | Storefront metadata localization, steps 2–3 | **P2** | 1–2 days/locale | Keyword surface | ⬜ gated on the first search-term report |
+| 10 | 7 | In-App Events | **P2** | ~1 day/event | Browse + Search surfaces | ⬜ not started |
+| 11 | 8 | Custom Product Pages | **P2** | ~1 day | Conversion on off-store traffic | ⬜ not started — follows #4 and #6 |
+| 12 | 9 | Full app localization, 2–3 markets | **P3** | 1–2 weeks/language | Keyword surface + market fit | ⬜ blocked on `.scratch/i18n-foundation/` |
+| 13 | 10 | Apple Search Ads | **P3 / deferred** | Money | Impressions, and keyword data | ⬜ **deferred until #13 moves the return rate** — see §4.10 |
+
+**Why #16–#18 went to the top on 2026-10-02.** `docs/research/positioning-usp-2026-10.md` asked
+what this document never had: *why would a lifter who finds the app choose it?* The answer was
+"today, no compelling reason". "Native + private + Watch" is Liftin's position and "generous free
+tier" is Hevy's. Every reach lever below sends people to a product with no reason to switch, so the
+reason comes first.
 
 ### Shipped
 
@@ -561,6 +570,42 @@ decision here**; an undecided name is what blocks #4 and #6.
 
 **Not urgent this week** — #11–#13 come first and none of them touch the name. But it must not stay
 unrecommended, because every acquisition euro spent under this name partly funds the incumbent.
+
+### 16. Strong + Hevy history import (P1)
+
+**🎫 Ticket cut 2026-10-02**: `.scratch/positioning-usp/issues/01` (Strong) and `02` (Hevy).
+**Why:** the users most ready to leave Strong are the ones with years of history, and "I'm locked
+in because my history is here" is the recurring blocker in competitor reviews. Hevy, Liftin' and
+others already import Strong's CSV, so this is table stakes for any switching message and the
+prerequisite for both #17's and #18's audiences. Evidence:
+`research/positioning-usp-2026-10.md` §3.2. **Free** (monetization §3 Rule 4). Feature doc once
+built: `docs/history-import.md`.
+
+### 17. Visible watch sync reliability (P1)
+
+**🎫 Ticket cut 2026-10-02**: `.scratch/positioning-usp/issues/03`. **Why:** since 2025, 45% of
+Strong's negative reviews are about the Apple Watch losing or mangling workouts, and Hevy has the
+same failure on a smaller scale. GymStreak's sync already guarantees a finished workout is never lost
+(`docs/watch-sync.md`), but the guarantee is invisible, and nobody chooses an app for "reliable"
+until they have been burned. Showing the iPhone's terminal acknowledgment on the watch summary turns
+the property into an experience. This is the **switching message**, not the identity
+(`research/positioning-usp-2026-10.md` §3.1, §5 B). **Free** (Rule 3).
+
+### 18. Fighter positioning (P1)
+
+**🎫 Ticket cut 2026-10-02**: `.scratch/positioning-usp/issues/04–07`, plus the already-cut
+Fighter Strength program (`.scratch/routine-programs/issues/08`), which ticket 06 depends on.
+**Why:** "lifting + fight conditioning in one log" is the only position on the market map with no
+owner, and the conditioning half has already shipped (`docs/fight-conditioning.md`). It can **not**
+be reached through App Store search ("mma strength", "bjj workout" and "fight conditioning" all
+return nothing), only through gyms and word of mouth, which is the channel this app already depends
+on. **The one searchable entry point is the round timer (ticket 07):** "bjj timer", "jiu-jitsu round
+timer" and "kampfsport timer" are live queries, so the timer is how fighters find the app through
+search. **Built without the validation step the research recommended**, by product decision on
+2026-10-02. The first evidence is therefore the `trainingProfile` funnel attribute (ticket 06): the
+share of `fight` installs, and their `workoutsCompleted` against `lift` installs.
+It also adds an argument to #15: the current name says nothing about fighting. All three tickets
+are **Free** (Rules 1, 3, 4).
 
 ### 1. Rating prompt (P0)
 
@@ -935,6 +980,8 @@ against us — and the rating feeds back into ranking, so damaging it defeats th
 
 ## 7. Cross-references
 
+- **`docs/research/positioning-usp-2026-10.md`** — the positioning research behind levers #16–#18:
+  the competitor market map, the themed review evidence and the search-demand probes.
 - **`docs/monetization-strategy.md` §13** — the evidence base: measured numbers, the RevenueCat
   counting trap (§13.2 — **extended by §1.1 here**), why the paywall is not the problem
   (§13.3–13.4), the source split (§13.5). **§13.4's "engagement is unmeasured" claim is superseded

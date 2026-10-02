@@ -1,0 +1,99 @@
+//
+//  ProgramLibraryViewModelTests.swift
+//  GymStreakTests
+//
+//  The program library's free-only copy and the add sheet's preview
+//  (docs/routine-programs.md).
+//
+
+import Testing
+import Foundation
+@testable import GymStreak
+
+@MainActor
+private final class RecordingInstaller: RoutineProgramInstalling {
+    var installedKeys: Set<String> = []
+    private(set) var firstWorkoutDays: [Date?] = []
+
+    func installedRoutineKeys() -> Set<String> { installedKeys }
+
+    func install(_ program: RoutineProgram, firstWorkoutDay: Date?) throws -> Int {
+        firstWorkoutDays.append(firstWorkoutDay)
+        let missing = program.routines.filter { !installedKeys.contains($0.seedKey) }
+        installedKeys.formUnion(missing.map(\.seedKey))
+        return missing.count
+    }
+}
+
+@MainActor
+struct ProgramLibraryViewModelTests {
+
+    private static var calendar: Calendar {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "Europe/Berlin")!
+        return calendar
+    }
+
+    private static let now = calendar.date(from: DateComponents(year: 2026, month: 9, day: 27, hour: 15))!
+
+    private func makeViewModel(
+        state: ProEntitlementState = .free,
+        isGatingEnabled: Bool = true,
+        installer: RecordingInstaller = RecordingInstaller()
+    ) -> ProgramLibraryViewModel {
+        ProgramLibraryViewModel(
+            installer: installer,
+            proEntitlements: StubProEntitlements(state: state),
+            isGatingEnabled: isGatingEnabled,
+            calendar: Self.calendar,
+            now: { Self.now }
+        )
+    }
+
+    @Test(arguments: [
+        (ProEntitlementState.free, true, true),
+        (ProEntitlementState.founder, true, false),
+        (ProEntitlementState.subscription, true, false),
+        (ProEntitlementState.lifetime, true, false),
+        (ProEntitlementState.free, false, false),
+    ])
+    func theFreeAllowanceNoteShowsOnlyForCappedUsers(state: ProEntitlementState, gating: Bool, expected: Bool) {
+        #expect(makeViewModel(state: state, isGatingEnabled: gating).showsFreeAllowanceNote == expected)
+    }
+
+    @Test
+    func previewListsOnlyTheRoutinesStillToAdd() {
+        let installer = RecordingInstaller()
+        installer.installedKeys = ["seed.program.full_body.a"]
+        let viewModel = makeViewModel(installer: installer)
+
+        let lines = viewModel.previewLines(for: "full_body", choice: .tomorrow)
+
+        #expect(lines.map(\.id) == ["seed.program.full_body.b"])
+        #expect(!viewModel.isFullyInstalled("full_body"))
+    }
+
+    @Test
+    func installPassesTheChosenDayOnlyWhenPlanning() {
+        let installer = RecordingInstaller()
+        let viewModel = makeViewModel(installer: installer)
+
+        #expect(viewModel.install("full_body", planByRecoveryTime: false, choice: .today))
+        installer.installedKeys = []
+        #expect(viewModel.install("full_body", planByRecoveryTime: true, choice: .tomorrow))
+
+        let tomorrow = Self.calendar.date(byAdding: .day, value: 1, to: Self.calendar.startOfDay(for: Self.now))
+        #expect(installer.firstWorkoutDays == [nil, tomorrow])
+    }
+
+    @Test
+    func aFullyInstalledProgramReportsSo() {
+        let installer = RecordingInstaller()
+        let viewModel = makeViewModel(installer: installer)
+
+        _ = viewModel.install("full_body", planByRecoveryTime: true, choice: .today)
+
+        #expect(viewModel.isFullyInstalled("full_body"))
+        #expect(viewModel.previewLines(for: "full_body", choice: .today).isEmpty)
+    }
+}

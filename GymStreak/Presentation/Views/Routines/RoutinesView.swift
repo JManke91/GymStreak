@@ -22,6 +22,8 @@ private struct RoutinesViewInternal: View {
     /// The Routines-card invitation opens the Conditioning screen on the program showcase.
     @State private var conditioningOpensShowcase = false
     private let conditioningProgram: ConditioningProgramViewModel
+    private let programLibrary: ProgramLibraryViewModel
+    @State private var showingPrograms = false
 #if DEBUG
     /// UI-test-only responsiveness measurement; inert without the launch argument.
     @StateObject private var stallProbe = MainThreadStallProbe()
@@ -35,6 +37,7 @@ private struct RoutinesViewInternal: View {
         // of notification observers and sync the watch twice.
         self._viewModel = StateObject(wrappedValue: dependencies.routinesViewModel)
         self.conditioningProgram = dependencies.conditioningProgram
+        self.programLibrary = dependencies.programLibrary
         self._exercisesViewModel = StateObject(wrappedValue: ExercisesViewModel(
             exerciseRepository: dependencies.exerciseRepository,
             routineRepository: dependencies.routineRepository,
@@ -82,6 +85,11 @@ private struct RoutinesViewInternal: View {
                         workoutViewModel: workoutViewModel
                     )
                 }
+            }
+            .navigationDestination(isPresented: $showingPrograms) {
+                // Popping on install lands the user on the list their new
+                // routines just joined.
+                ProgramLibraryView(viewModel: programLibrary) { showingPrograms = false }
             }
             .fullScreenCover(isPresented: $viewModel.showingAddRoutine) {
                 NavigationStack {
@@ -187,6 +195,10 @@ private struct RoutinesViewInternal: View {
                     }
                 }
                 .padding(.top, 2)
+
+                // Temporary entry point until the Programs shelf (ticket 04).
+                ProgramsEntryRow { showingPrograms = true }
+                    .padding(.top, 8)
 
                 if let card = conditioningProgram.routinesCard {
                     ConditioningProgramRoutinesCardView(
@@ -311,6 +323,10 @@ private struct RoutinesViewInternal: View {
                 viewModel.requestAddRoutine()
             }
             .buttonStyle(.onyxProminent)
+            Button("routine_programs.entry.title".localized) {
+                showingPrograms = true
+            }
+            .tint(DesignSystem.Colors.tint)
         }
     }
 

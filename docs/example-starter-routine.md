@@ -103,7 +103,8 @@ pins them equal at seed time to make the test meaningful.
 |---|---|
 | `Routine.seedKey` property | `GymStreak/Domain/Models/Models.swift` |
 | Catalog (`SeedRoutine`, `SeedRoutineExercise`, `currentVersion`) | `GymStreak/Data/Seeding/SeedRoutineCatalog.swift` |
-| Seeder (cleanup + dedup + version-gated seed + exercise resolution) | `GymStreak/Data/Seeding/ExampleRoutineSeeder.swift` |
+| Seeder (cleanup + dedup + version-gated seed) | `GymStreak/Data/Seeding/ExampleRoutineSeeder.swift` |
+| Exercise resolution + routine construction, **shared with the program installer** (`docs/routine-programs.md`) | `GymStreak/Data/Seeding/SeedRoutineBuilder.swift` |
 | Version-flag seam (shared with the exercise catalog) | `GymStreak/Data/Seeding/SeedCatalogVersionStore.swift` |
 | Wiring | `App/AppDependencies.swift` (constructs it), `App/GymStreakApp.swift` (`.onAppear`, awaited in one `Task` right after `defaultContentSeeder.run()`) |
 | Tests | `GymStreakTests/ExampleRoutineSeederTests.swift` |
@@ -140,7 +141,11 @@ rows (cascading to `RoutineExercise`) that the History model actor may be walkin
    `SeedRoutineCatalog.currentVersion`, and only into a store holding zero routines.
 4. **Exercise resolution.** Each slot points at a `SeedExerciseCatalog` row by `seedKey` and is
    resolved against the live library. A slot whose exercise the user deleted is **dropped, never
-   resurrected**, and the remaining slots are renumbered contiguously.
+   resurrected**, and the remaining slots are renumbered contiguously. Resolution and the routine
+   graph itself (`updatedAt` pinned to `createdAt`, superset collapse, 0 kg sets) live in
+   `SeedRoutineBuilder` since 2026-10-02, shared with the program installer — which differs only in
+   **re-creating** a deleted exercise instead of dropping its slot, because a program is chosen on
+   purpose.
 5. **Announcement.** When a routine was actually inserted, removed, or collapsed, the seeder posts
    `.cloudKitDataDidChange`. This is load-bearing rather than defensive: `RoutinesView` is the
    **first tab**, so its `@StateObject` view model is constructed — and has already fetched an empty

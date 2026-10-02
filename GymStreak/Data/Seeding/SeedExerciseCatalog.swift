@@ -145,3 +145,25 @@ enum SeedExerciseCatalog {
         SeedExercise(seedKey: "seed.exercise.leg_press_calf_raise", muscleGroups: ["Calves"], equipmentType: .machine, introducedInVersion: 2),
     ]
 }
+
+extension SeedExercise {
+    /// A fresh library exercise for this row. The localized name is resolved once
+    /// (device language) and stays user-editable; `seedKey` is the stable identity.
+    func makeExercise() -> Exercise {
+        let exercise = Exercise(
+            name: seedKey.localized,
+            muscleGroups: muscleGroups,
+            equipmentType: equipmentType,
+            loadBehavior: loadBehavior
+        )
+        exercise.seedKey = seedKey
+        return exercise
+    }
+
+    /// Case-, diacritic-, and whitespace-insensitive form used to detect that a
+    /// user-created exercise already covers a catalog row.
+    static func normalizedName(_ name: String) -> String {
+        name.trimmingCharacters(in: .whitespacesAndNewlines)
+            .folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current)
+    }
+}

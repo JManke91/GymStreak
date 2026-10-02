@@ -44,9 +44,6 @@ import SwiftData
 @MainActor
 final class ExampleRoutineSeeder {
     private static let routineVersionKey = "seedRoutineVersion"
-    /// The user's own loads are unknowable, and a fake starting number would
-    /// poison their first progress chart.
-    private static let seededWeight = 0.0
 
     private let modelContext: ModelContext
     private let defaults: UserDefaults
@@ -195,73 +192,19 @@ final class ExampleRoutineSeeder {
     ///   defers the whole seed rather than producing a stump.
     private func seed(_ row: SeedRoutine, exercisesBySeedKey: [String: Exercise]) -> Bool {
         // Slots whose exercise the user deleted are dropped, never resurrected.
-        let resolved = row.exercises.compactMap { slot in
-            exercisesBySeedKey[slot.exerciseSeedKey].map { (slot: slot, exercise: $0) }
-        }
-        guard resolved.count >= row.minimumResolvedExercises else { return false }
-
-        // A superset needs two partners; one survivor is just an exercise.
-        var membersPerGroup: [String: Int] = [:]
-        for entry in resolved {
-            guard let group = entry.slot.supersetGroup else { continue }
-            membersPerGroup[group, default: 0] += 1
-        }
-
-        // The localized name is resolved once at seed time (device language)
-        // into the mutable `name`, exactly as seeded exercises do; `seedKey`
-        // stays the stable identity.
-        let routine = Routine(name: row.seedKey.localized)
-        routine.seedKey = row.seedKey
-        // `Routine.init` stamps the two with separate `Date()` calls, which
-        // differ by microseconds. Pinning them equal is what lets the cleanup
-        // pass below recognise a routine the user has never edited.
-        routine.updatedAt = routine.createdAt
-        modelContext.insert(routine)
-
-        var supersetIds: [String: UUID] = [:]
-        var supersetOrders: [String: Int] = [:]
-
-        for (order, entry) in resolved.enumerated() {
-            let routineExercise = RoutineExercise(exercise: entry.exercise, order: order)
-            routineExercise.routine = routine
-            routineExercise.targetRepMin = entry.slot.targetRepMin
-            routineExercise.targetRepMax = entry.slot.targetRepMax
-
-            if let group = entry.slot.supersetGroup, membersPerGroup[group, default: 0] >= 2 {
-                let supersetId = supersetIds[group] ?? UUID()
-                supersetIds[group] = supersetId
-                routineExercise.supersetId = supersetId
-                routineExercise.supersetOrder = supersetOrders[group, default: 0]
-                supersetOrders[group, default: 0] += 1
+        let slots = row.exercises.compactMap { template in
+            exercisesBySeedKey[template.exerciseSeedKey].map {
+                SeedRoutineBuilder.Slot(template: template, exercise: $0, alternatives: [])
             }
-
-            for setOrder in 0..<entry.slot.setCount {
-                let set = ExerciseSet(
-                    reps: entry.slot.reps,
-                    weight: Self.seededWeight,
-                    restTime: entry.slot.restTime,
-                    order: setOrder
-                )
-                set.routineExercise = routineExercise
-                routineExercise.sets?.append(set)
-            }
-
-            routine.routineExercises?.append(routineExercise)
         }
+        guard slots.count >= row.minimumResolvedExercises else { return false }
+        SeedRoutineBuilder.insertRoutine(seedKey: row.seedKey, slots: slots, into: modelContext)
         return true
     }
 
     private func seededExercisesBySeedKey() throws -> [String: Exercise] {
         let wanted = Set(SeedRoutineCatalog.entries.flatMap { $0.exercises.map(\.exerciseSeedKey) })
-        let exercises = try modelContext.fetch(
-            FetchDescriptor<Exercise>(predicate: #Predicate { $0.seedKey != "" })
-        )
-        // Last writer wins on a duplicated key; `DefaultContentSeeder` has
-        // already collapsed those by the time this runs.
-        return Dictionary(
-            exercises.filter { wanted.contains($0.seedKey) }.map { ($0.seedKey, $0) },
-            uniquingKeysWith: { first, _ in first }
-        )
+        return try SeedRoutineBuilder.seededExercisesBySeedKey(wanted, in: modelContext)
     }
 
     // MARK: - Superseded-example cleanup

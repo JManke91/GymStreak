@@ -95,6 +95,11 @@ final class AppDependencies: ObservableObject {
     /// docs/workout-planning.md). Invoked once from GymStreakApp at launch.
     let routinePlanLinkRepair: RoutinePlanLinkRepair
 
+    /// Installs ready-made programs as ordinary seeded routines when the user
+    /// asks for one (docs/routine-programs.md). Shares the example seeder's
+    /// exercise resolution; never runs at launch.
+    let routineProgramInstaller: RoutineProgramInstalling
+
     /// App-lifetime owner of the exercise-catalogue → watch sync triggers
     /// (post-seed, committed library mutations, CloudKit changes). ViewModels
     /// receive it as `ExerciseCatalogSyncRequesting` — never the concrete type.
@@ -440,6 +445,7 @@ final class AppDependencies: ObservableObject {
             modelContext: modelContext,
             historyStoreGate: historyStoreGate
         )
+        self.routineProgramInstaller = RoutineProgramInstaller(modelContext: modelContext)
         self.routinePlanLinkRepair = RoutinePlanLinkRepair(
             modelContext: modelContext,
             cloudSyncStatus: cloudSyncStatus,
@@ -625,6 +631,14 @@ final class AppDependencies: ObservableObject {
         // reaches `UNUserNotificationCenter` itself.
         permission: UserNotificationReminderPermission(),
         makeRun: makeConditioningRunViewModel(plan:)
+    )
+
+    /// The program library's view model (docs/routine-programs.md). One instance,
+    /// `lazy` like `conditioningProgram`, so a re-init of the Routines tab never
+    /// rebuilds the catalog summaries or refetches the installed keys.
+    private(set) lazy var programLibrary: ProgramLibraryViewModel = ProgramLibraryViewModel(
+        installer: routineProgramInstaller,
+        proEntitlements: proEntitlements
     )
 
     /// The app's one routines list ViewModel.
