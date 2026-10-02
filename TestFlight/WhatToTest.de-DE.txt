@@ -1,0 +1,1 @@
+- Beim Erstellen einer Routine kannst du jetzt direkt Supersätze bauen: Tippe zwischen zwei Übungen auf „Supersatz“, trenne einen Supersatz mit der Schere und verschiebe ihn über „Sortieren“ als Block. Der Bildschirm für neue Routinen sieht jetzt genauso aus wie die Routinenansicht.

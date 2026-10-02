@@ -7,103 +7,33 @@
 
 import SwiftUI
 
+/// Builds a new routine before it exists. The exercise list deliberately
+/// mirrors the routine detail screen — the same cards, superset connector,
+/// link/unlink controls and "Sort" mode (see CreateRoutineView+Exercises) — so
+/// a routine looks the same while drafting as it does once saved. The draft's
+/// edit rules live in `PendingExerciseList`, not here.
 struct CreateRoutineView: View {
     @Environment(\.dismiss) private var dismiss
-    @Environment(\.weightUnit) private var weightUnit
+    @Environment(\.weightUnit) var weightUnit
 
     @State private var routineName: String = ""
-    @State private var pendingExercises: [PendingRoutineExercise] = []
+    @State var draft = PendingExerciseList()
+    @State var editingExerciseId: UUID?
+    @State var isSorting = false
+    @State var showingExercisePicker = false
     @State private var showingCancelAlert = false
-    @State private var showingExercisePicker = false
 
     let routinesViewModel: RoutinesViewModel
     let exercisesViewModel: ExercisesViewModel
 
     var body: some View {
-        Form {
-            Section {
-                TextField("create_routine.name_placeholder".localized, text: $routineName)
-                    .font(.title3)
-            } header: {
-                Text("create_routine.name".localized.uppercased())
-            }
+        ZStack {
+            DesignSystem.Colors.background.ignoresSafeArea()
 
-            Section {
-                if pendingExercises.isEmpty {
-                    // Empty state
-                    VStack(spacing: 16) {
-                        Image(systemName: "figure.strengthtraining.traditional")
-                            .font(.system(size: 48))
-                            .foregroundColor(.secondary)
-
-                        VStack(spacing: 4) {
-                            Text("create_routine.empty.title".localized)
-                                .font(.headline)
-
-                            Text("create_routine.empty.description".localized)
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                                .multilineTextAlignment(.center)
-                        }
-                    }
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 32)
-                } else {
-                    // Exercise list
-                    ForEach(pendingExercises) { pending in
-                        // Same screen as adding an exercise, opened on this
-                        // draft entry's configuration — see ConfigureExerciseSetsView.
-                        NavigationLink(destination: ConfigureExerciseSetsView(
-                            exercise: pending.exercise,
-                            navigationTitleKey: "configure_exercise.edit_title",
-                            saveButtonKey: "configure_exercise.save_changes",
-                            existingConfiguration: .init(
-                                sets: pending.sets,
-                                alternatives: pending.alternatives,
-                                targetRepMin: pending.targetRepMin,
-                                targetRepMax: pending.targetRepMax
-                            ),
-                            onSave: { _, sets, alternatives, repMin, repMax in
-                                updateExercise(
-                                    pendingExercise: pending,
-                                    withSets: sets,
-                                    alternatives: alternatives,
-                                    targetRepMin: repMin,
-                                    targetRepMax: repMax
-                                )
-                            }
-                        )) {
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text(pending.exercise.name)
-                                    .font(.headline)
-
-                                Text(pending.setSummary(in: weightUnit))
-                                    .font(.caption)
-                                    .foregroundColor(.secondary)
-                            }
-                            .padding(.vertical, 4)
-                        }
-                        .swipeActions(edge: .trailing, allowsFullSwipe: true) {
-                            Button(role: .destructive) {
-                                deleteExercise(pending)
-                            } label: {
-                                Label("action.delete".localized, systemImage: "trash")
-                            }
-                        }
-                    }
-                    .onMove { source, destination in
-                        pendingExercises.move(fromOffsets: source, toOffset: destination)
-                        updateOrder()
-                    }
-                }
-
-                Button {
-                    showingExercisePicker = true
-                } label: {
-                    Text("routine.add_exercise".localized)
-                }
-            } header: {
-                Text("exercises.title".localized.uppercased())
+            if isSorting {
+                sortingContent
+            } else {
+                browsingContent
             }
         }
         .navigationTitle("create_routine.new_title".localized)
@@ -128,11 +58,11 @@ struct CreateRoutineView: View {
         }
         .sheet(isPresented: $showingExercisePicker) {
             RoutineExercisePickerView(
-                alreadyAddedExercises: pendingExercises.map { $0.exercise },
+                alreadyAddedExercises: draft.exercises.map { $0.exercise },
                 exercisesViewModel: exercisesViewModel,
                 routineName: trimmedRoutineName.isEmpty ? nil : trimmedRoutineName,
                 onExerciseConfigured: { exercise, sets, alternatives, repMin, repMax in
-                    addExercise(
+                    draft.append(
                         exercise: exercise,
                         sets: sets,
                         alternatives: alternatives,
@@ -142,6 +72,32 @@ struct CreateRoutineView: View {
                 }
             )
         }
+        .navigationDestination(item: $editingExerciseId) { id in
+            if let pending = draft.exercise(withId: id) {
+                // Same screen as adding an exercise, opened on this
+                // draft entry's configuration — see ConfigureExerciseSetsView.
+                ConfigureExerciseSetsView(
+                    exercise: pending.exercise,
+                    navigationTitleKey: "configure_exercise.edit_title",
+                    saveButtonKey: "configure_exercise.save_changes",
+                    existingConfiguration: .init(
+                        sets: pending.sets,
+                        alternatives: pending.alternatives,
+                        targetRepMin: pending.targetRepMin,
+                        targetRepMax: pending.targetRepMax
+                    ),
+                    onSave: { _, sets, alternatives, repMin, repMax in
+                        draft.update(
+                            id: id,
+                            sets: sets,
+                            alternatives: alternatives,
+                            targetRepMin: repMin,
+                            targetRepMax: repMax
+                        )
+                    }
+                )
+            }
+        }
         .alert("create_routine.discard.title".localized, isPresented: $showingCancelAlert) {
             Button("create_routine.keep_editing".localized, role: .cancel) { }
             Button("create_routine.discard".localized, role: .destructive) {
@@ -150,6 +106,20 @@ struct CreateRoutineView: View {
         } message: {
             Text("create_routine.discard.message".localized)
         }
+    }
+
+    // MARK: - Name
+
+    var nameField: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            SetsSectionLabel(text: "create_routine.name".localized)
+
+            TextField("create_routine.name_placeholder".localized, text: $routineName)
+                .font(.system(size: 20, weight: .bold, design: .rounded))
+                .foregroundStyle(.white)
+                .routineExerciseCardChassis()
+        }
+        .padding(.top, 12)
     }
 
     // MARK: - Computed Properties
@@ -163,58 +133,13 @@ struct CreateRoutineView: View {
     }
 
     private var hasUnsavedChanges: Bool {
-        !routineName.isEmpty || !pendingExercises.isEmpty
+        !routineName.isEmpty || !draft.isEmpty
     }
 
-    // MARK: - Helper Methods
-
-    private func addExercise(
-        exercise: Exercise,
-        sets: [ExerciseSet],
-        alternatives: [PendingAlternative],
-        targetRepMin: Int?,
-        targetRepMax: Int?
-    ) {
-        let order = pendingExercises.count
-        let pending = PendingRoutineExercise(
-            exercise: exercise,
-            sets: sets,
-            order: order,
-            alternatives: alternatives,
-            targetRepMin: targetRepMin,
-            targetRepMax: targetRepMax
-        )
-        pendingExercises.append(pending)
-    }
-
-    private func updateExercise(
-        pendingExercise: PendingRoutineExercise,
-        withSets sets: [ExerciseSet],
-        alternatives: [PendingAlternative],
-        targetRepMin: Int?,
-        targetRepMax: Int?
-    ) {
-        if let index = pendingExercises.firstIndex(where: { $0.id == pendingExercise.id }) {
-            pendingExercises[index].sets = sets
-            pendingExercises[index].alternatives = alternatives
-            pendingExercises[index].targetRepMin = targetRepMin
-            pendingExercises[index].targetRepMax = targetRepMax
-        }
-    }
-
-    private func deleteExercise(_ pending: PendingRoutineExercise) {
-        pendingExercises.removeAll { $0.id == pending.id }
-        updateOrder()
-    }
-
-    private func updateOrder() {
-        for (index, _) in pendingExercises.enumerated() {
-            pendingExercises[index].order = index
-        }
-    }
+    // MARK: - Actions
 
     private func saveRoutine() {
-        routinesViewModel.createRoutine(name: routineName, pendingExercises: pendingExercises)
+        routinesViewModel.createRoutine(name: routineName, pendingExercises: draft.exercises)
         dismiss()
     }
 }

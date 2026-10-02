@@ -135,6 +135,50 @@ All superset management is in `RoutinesViewModel` (~lines 155-230):
 
 ---
 
+## Creating supersets while building a routine (2026-09)
+
+Supersets can be linked, unlinked and reordered on the Create-Routine screen (`CreateRoutineView`) before the routine exists, so a superset routine no longer has to be saved first and then edited on the detail screen. This is iOS only: the watch has no routine-creation UI and receives the finished routine through the ordinary routine sync.
+
+**Draft model.** The screen holds a `PendingExerciseList` (`Presentation/ViewModels/PendingExerciseList.swift`), a SwiftUI-free value type. It owns the draft's exercises in order and every edit rule: append, update, delete, reorder by unit, link and unlink. Each `PendingRoutineExercise` has an optional `supersetId` and conforms to `SupersetGroupable`, so `SupersetLabelProvider` assigns the draft's letters exactly as it will after saving. Whenever the exercises change, the list recomputes `supersetLabels` and `units` (standalone exercise or whole superset — the draft counterpart of `SupersetOrderingService.OrderingUnit`), so no view body aggregates.
+
+The draft keeps the saved routine's invariant at all times: a superset is one contiguous block of at least two members. Every edit preserves it. Linking only joins neighbours, moves go by whole units, and a lone survivor is unlinked.
+
+| Edit | Rule (mirrors the detail screen) |
+|------|----------------------------------|
+| `link(after:)` | standalone + standalone → new superset; standalone joins the neighbouring superset (above or below); two adjacent supersets merge into the upper one |
+| `unlink(after:)` | split at the seam, as in `RoutinesViewModel.splitSuperset(after:in:)`: the upper side keeps the group, the lower side gets a new id, and a one-exercise side becomes standalone (a pair dissolves) |
+| `delete(id:)` | lone-survivor rule of `removeExerciseFromSuperset`: a superset left with one member dissolves |
+| `moveUnits(fromOffsets:toOffset:)` | `List.onMove` offsets over `units`: a superset moves as one block, and nothing can land between members |
+
+**UI — deliberately the detail screen's components** (a first version used a `Form` and was rejected as looking foreign; see "Dead end" below):
+- **Browsing:** `ScrollView` + `LazyVStack`, like `RoutineDetailView`'s browsing mode.
+  - Each exercise is an `ExerciseHeaderView` on `routineExerciseCardChassis(color:)`, built from `RoutineExerciseCardDisplay(_ pending:in:)`.
+  - A superset is one `SupersetGroupContainer` with the tinted cards, the `SupersetBadge` 1/2, the connector line and the scissors unlink.
+  - `SupersetLinkButton` sits in the gap between two units.
+  - The "Add exercise" button is the detail screen's `DashedCreateButton`.
+  - Tapping a card opens `ConfigureExerciseSetsView` through `navigationDestination(item:)`; long press offers delete.
+- **Sorting:** a "Sort / Done" pill next to the Exercises label. This screen's navigation bar holds Cancel/Save, so the pill can't sit in a top bar as on the detail screen. It switches to a `List` + `.onMove` of `RoutineSortingRow` / `RoutineSortingGroupRow` with the shared `RoutineSortingHint` (extracted from the detail screen's sorting mode for this).
+- **Strings:** no new ones; all reused keys (`superset.*`, `routine.sort`, `routine.sort_hint`, `exercise.delete`) already exist in en + de.
+- **VoiceOver:** each card announces its group ("Superset A") as its value. The link control reads "Create superset", and each unlink node reads `superset.unlink_between` with both names.
+
+**Dead end — `Form` rows.** The first version kept the inset-grouped `Form` and put the link control inside the upper row. The Form's row separator then drew a second line directly under the link's dashed line, and the group showed only as coloured text. Swipe-to-delete and per-row `.onMove` also cannot express "a superset moves as one block". Don't go back to a Form for this list.
+
+**Save path.** `RoutinesViewModel.createRoutine(name:pendingExercises:)` copies each draft row's `supersetId` onto its `RoutineExercise`. It then runs `SupersetOrderingService.normalizeOrdering(in:)` before the single save, so positions are never trusted from the draft. The rest-timer rule (the last member's sets carry the round's rest) applies unchanged. Each draft exercise keeps its own configured rest time. A shared per-superset rest time in the draft is out of scope; it is tracked as the separate "only one break timer" issue.
+
+**AI-draft compatibility.** `RoutineDraftViewModel` creates routines through the same `RoutineCreating.createRoutine` seam. Its rows never set `supersetId`, so `normalizeOrdering` only confirms the already-sequential order and the routine saves unchanged (pinned by `RoutinesViewModelTests.createRoutineWithoutSupersetsSavesDraftOrderUnchanged`).
+
+**Not in the draft:** an undo toast after delete. The detail screen offers one. In the draft, a delete is one long-press menu action and the exercise can be re-added from the picker.
+
+**Known minor follow-up (not applied):** `canLink(after:)` does a linear `firstIndex` once per unit per render. That is O(n²), trivial at routine sizes. If it ever matters, cache a `linkableSeams: Set<UUID>` in `rebuildDerivedState` next to `units`.
+
+**Verification (2026-10-02):** `GymStreakTests` passed (1583 tests), and the architecture review passed. The user confirmed the feature works and is tested on device, including the detail-screen look after saving and the watch sync.
+
+**Tests:** `GymStreakTests/PendingExerciseListTests.swift` covers create / extend / merge, `canLink`, the A/B labels, split, the lone-survivor delete and the block reorder. The two `createRoutine` tests are in `RoutinesViewModelTests`.
+
+**Monetization:** Free — §3 Rule 1 (the aha path: build a routine). Supersets are free per §4.1.
+
+---
+
 ## Workout Execution
 
 ### Interleaved Navigation Pattern
@@ -530,6 +574,7 @@ that activating it does anything.
 | File | Contains |
 |------|----------|
 | `GymStreak/RoutinesViewModel.swift` | Superset CRUD operations: create / add / remove / dissolve / `splitSuperset(after:in:)` (unlink at a seam) |
+| `GymStreak/Presentation/ViewModels/PendingExerciseList.swift` | Create-Routine draft list: link / unlink / delete / unit-reorder rules |
 | `GymStreak/WorkoutViewModel.swift` | iOS workout superset navigation & rest timers (~lines 470-958) |
 | `GymStreakWatch Watch App/ViewModels/WatchWorkoutViewModel.swift` | Watch workout superset logic (~lines 280-718) |
 
@@ -547,6 +592,7 @@ that activating it does anything.
 | `GymStreak/Presentation/Views/Routines/SupersetGroupContainer.swift` | `SupersetMemberAnchorKey` (dot + seam anchors), `supersetConnectorAnchor(id:isActive:)`, `supersetSeamAnchor(below:)`, `SupersetSeamSpacer`, `SupersetGroupContainer` + its continuous connector line and the `SupersetUnlinkButton` nodes on it |
 | `GymStreak/Presentation/Views/Routines/RoutineDetailView+Supersets.swift` | `SupersetCardStyling`, `RoutineExerciseGroup`, `supersetStyling(for:)`, `supersetRowGroups(for:)`, `linkExercises`, `unlinkSuperset(after:)`, edit mode, context menu |
 | `GymStreak/Presentation/Views/Routines/RoutineDetailView+Sorting.swift` | Sorting mode: unit-based `List` + `.onMove`, `sortingRow(for:labels:)` |
+| `GymStreak/Presentation/Views/Routines/CreateRoutineFlow/CreateRoutineView.swift` + `CreateRoutineView+Exercises.swift` | Create-Routine screen: detail-style cards, `SupersetGroupContainer`, `SupersetLinkButton`, sorting mode |
 | `GymStreak/Presentation/Views/Routines/RoutineSortingRows.swift` | `RoutineSortingRow` (standalone) and `RoutineSortingGroupRow` (superset as one framed block) |
 | `GymStreak/Presentation/Views/Workout/ActiveWorkoutView.swift` | `SupersetWorkoutGroupView` with letter/color; `WorkoutExerciseCardView` / `WorkoutExerciseCollapsedRow` with position/total badges |
 

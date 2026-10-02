@@ -80,6 +80,52 @@ struct RoutinesViewModelTests {
     }
 
     @Test
+    func createRoutineWithoutSupersetsSavesDraftOrderUnchanged() throws {
+        // The AI-draft shape: sequential order, no superset on any row.
+        let (viewModel, _, _) = makeViewModel()
+        let pending = (0..<3).map { index in
+            PendingRoutineExercise(
+                exercise: Exercise(name: "Exercise \(index)"),
+                sets: [ExerciseSet(reps: 8, weight: 50, restTime: 90, order: 0)],
+                order: index
+            )
+        }
+
+        viewModel.createRoutine(name: "Plain Day", pendingExercises: pending)
+
+        let routine = try #require(viewModel.routines.first)
+        let saved = routine.routineExercisesList.sorted { $0.order < $1.order }
+        #expect(saved.map { $0.exercise?.name } == ["Exercise 0", "Exercise 1", "Exercise 2"])
+        #expect(saved.map(\.order) == [0, 1, 2])
+        #expect(saved.allSatisfy { $0.supersetId == nil && $0.supersetOrder == 0 })
+    }
+
+    @Test
+    func createRoutineWithDraftSupersetSavesItContiguous() throws {
+        let (viewModel, _, _) = makeViewModel()
+        let supersetId = UUID()
+        // Members deliberately scattered: the save must not trust the draft.
+        let names = ["A", "Solo", "B"]
+        let pending = names.enumerated().map { index, name in
+            PendingRoutineExercise(
+                exercise: Exercise(name: name),
+                sets: [ExerciseSet(reps: 8, weight: 50, restTime: 90, order: 0)],
+                order: index,
+                supersetId: name == "Solo" ? nil : supersetId
+            )
+        }
+
+        viewModel.createRoutine(name: "Superset Day", pendingExercises: pending)
+
+        let routine = try #require(viewModel.routines.first)
+        let saved = routine.routineExercisesList.sorted { $0.order < $1.order }
+        #expect(saved.map { $0.exercise?.name } == ["A", "B", "Solo"])
+        #expect(saved.map(\.order) == [0, 1, 2])
+        #expect(saved.map(\.supersetId) == [supersetId, supersetId, nil])
+        #expect(saved.prefix(2).map(\.supersetOrder) == [0, 1])
+    }
+
+    @Test
     func createRoutineIgnoresBlankName() {
         let (viewModel, _, _) = makeViewModel()
         viewModel.createRoutine(name: "   ", pendingExercises: [])

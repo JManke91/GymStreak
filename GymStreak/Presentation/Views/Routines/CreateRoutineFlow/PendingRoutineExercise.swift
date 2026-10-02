@@ -8,7 +8,7 @@
 import Foundation
 
 /// Temporary model to hold exercise data during routine creation before persisting to SwiftData
-struct PendingRoutineExercise: Identifiable {
+struct PendingRoutineExercise: Identifiable, SupersetGroupable {
     let id = UUID()
     let exercise: Exercise
     var sets: [ExerciseSet]
@@ -20,6 +20,11 @@ struct PendingRoutineExercise: Identifiable {
     /// at routine save. Nil/nil means no goal.
     var targetRepMin: Int?
     var targetRepMax: Int?
+    /// The draft superset this exercise belongs to, linked on the Create-Routine
+    /// screen (`PendingExerciseList`). Copied onto the RoutineExercise at save,
+    /// where `SupersetOrderingService.normalizeOrdering` fixes the positions.
+    /// Nil for a standalone exercise — and for every AI-drafted row.
+    var supersetId: UUID?
 
     init(
         exercise: Exercise,
@@ -27,7 +32,8 @@ struct PendingRoutineExercise: Identifiable {
         order: Int,
         alternatives: [PendingAlternative] = [],
         targetRepMin: Int? = nil,
-        targetRepMax: Int? = nil
+        targetRepMax: Int? = nil,
+        supersetId: UUID? = nil
     ) {
         self.exercise = exercise
         self.sets = sets
@@ -35,6 +41,7 @@ struct PendingRoutineExercise: Identifiable {
         self.alternatives = alternatives
         self.targetRepMin = targetRepMin
         self.targetRepMax = targetRepMax
+        self.supersetId = supersetId
     }
 
     /// Summary of sets for display, e.g. "3 sets • 8-12 reps • 45 kg".

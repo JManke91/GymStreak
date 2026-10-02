@@ -488,6 +488,7 @@ class RoutinesViewModel: ObservableObject {
             routineExercise.routine = routine
             routineExercise.targetRepMin = pending.targetRepMin
             routineExercise.targetRepMax = pending.targetRepMax
+            routineExercise.supersetId = pending.supersetId
 
             for (index, set) in pending.sets.enumerated() {
                 let newSet = ExerciseSet(
@@ -522,6 +523,10 @@ class RoutinesViewModel: ObservableObject {
                 routineExercise.alternatives?.append(alternative)
             }
         }
+
+        // Draft supersets arrive as membership only; positions are the
+        // invariant's job, exactly as for a superset made on the detail screen.
+        SupersetOrderingService.normalizeOrdering(in: routine)
 
         save()
         fetchRoutines()

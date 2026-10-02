@@ -112,6 +112,26 @@ struct RoutineSortingGroupRow: View {
 
 // MARK: - Shared pieces
 
+/// Persistent while sorting — it explains both affordances of the mode. Shared
+/// by the routine detail and the Create-Routine screen's sorting mode.
+struct RoutineSortingHint: View {
+    var body: some View {
+        Text("routine.sort_hint".localized)
+            .font(.system(size: 11.5, weight: .semibold))
+            .foregroundStyle(DesignSystem.Colors.tint.opacity(0.9))
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 9)
+            .background(DesignSystem.Colors.tint.opacity(0.08))
+            .overlay(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .stroke(DesignSystem.Colors.tint.opacity(0.18), lineWidth: 1)
+            )
+            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .padding(.bottom, 10)
+    }
+}
+
 /// The long-press-to-drag hint. Purely decorative: `List.onMove` owns the drag.
 private struct SortingDragHandle: View {
     var body: some View {

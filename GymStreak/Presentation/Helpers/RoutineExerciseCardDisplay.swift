@@ -73,3 +73,29 @@ struct RoutineExerciseCardDisplay {
         isInSuperset = routineExercise.isInSuperset
     }
 }
+
+extension RoutineExerciseCardDisplay {
+    /// A Create-Routine draft row, drawn by the same card as a saved exercise.
+    /// The draft is a value type, so there is no relationship walk to hoist —
+    /// only the set-summary formatting, same as the model initializer.
+    init(_ pending: PendingRoutineExercise, in unit: WeightUnit) {
+        self.init(
+            id: pending.id,
+            name: pending.exercise.name,
+            avatar: AvatarValues(
+                muscleGroups: pending.exercise.muscleGroups,
+                equipmentType: pending.exercise.equipmentType
+            ),
+            setSummary: SetSummaryFormatting.text(
+                reps: pending.sets.map(\.reps),
+                weights: pending.sets.map(\.weight),
+                in: unit
+            ),
+            alternativeAvatars: pending.alternatives.map {
+                AvatarValues(muscleGroups: $0.exercise.muscleGroups, equipmentType: $0.exercise.equipmentType)
+            },
+            isInSuperset: pending.supersetId != nil,
+            alternativesCount: pending.alternatives.count
+        )
+    }
+}

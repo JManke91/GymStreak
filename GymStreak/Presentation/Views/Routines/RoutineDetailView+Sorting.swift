@@ -33,7 +33,7 @@ extension RoutineDetailView {
             topBar
             titleBlock
                 .frame(maxWidth: .infinity, alignment: .leading)
-            sortingHint
+            RoutineSortingHint()
 
             List {
                 ForEach(units) { unit in
@@ -75,23 +75,6 @@ extension RoutineDetailView {
                 onRemove: { removeExercise(routineExercise) }
             )
         }
-    }
-
-    /// Persistent while sorting — it explains both affordances of the mode.
-    var sortingHint: some View {
-        Text("routine.sort_hint".localized)
-            .font(.system(size: 11.5, weight: .semibold))
-            .foregroundStyle(DesignSystem.Colors.tint.opacity(0.9))
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal, 12)
-            .padding(.vertical, 9)
-            .background(DesignSystem.Colors.tint.opacity(0.08))
-            .overlay(
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .stroke(DesignSystem.Colors.tint.opacity(0.18), lineWidth: 1)
-            )
-            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-            .padding(.bottom, 10)
     }
 
     /// `List.onMove` hands back offsets into the row set — units, not single

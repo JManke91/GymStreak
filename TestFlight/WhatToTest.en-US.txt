@@ -1,0 +1,1 @@
+- While creating a routine, you can now build supersets right away: tap "Superset" between two exercises, cut a superset apart with the scissors, and use "Sort" to move a superset as one block. The new-routine screen now looks just like the routine screen.
