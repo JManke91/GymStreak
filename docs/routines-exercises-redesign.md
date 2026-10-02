@@ -99,7 +99,7 @@ The screen reached after picking an exercise ("Übung hinzufügen" → tap an ex
 Layout, top to bottom:
 - **Exercise identity header** — 56 pt `ExerciseAvatarView`, 26 pt rounded name, `MuscleChipView` + `EquipmentTagView`. Replaces the old "Exercise Info" name/muscle-group rows.
 - **Live summary strip** — Sätze · Volumen · Pause in a tint-washed capsule, recomputed as the sets are edited. Volume is Σ(reps × weight), shown as "—" while every set is bodyweight.
-- **Sätze** — `RoutineSetsEditor` (the same editor as the routine detail and the alternatives), or an **empty state** with three quick schemes (3×8, 3×10, 4×12) and a dashed "single set" button. The screen starts with zero sets, so the empty state is the normal entry point.
+- **Sätze** — `RoutineSetsEditor` (the same editor as the routine detail and the alternatives), or an **empty state** with three quick schemes (3×6, 3×12, 3×15) and a dashed "single set" button. The screen starts with zero sets, so the empty state is the normal entry point.
 - **Wiederholungsziel** — `RepRangeInlineEditor` (see below; new on this screen).
 - **Pausentimer** — `RestTimeInlineEditor`, replacing the old 0–300 s `Slider`. Changing it writes through to every set immediately, so the summary strip stays truthful.
 - **Alternativübungen** — the restyled `PendingAlternativesSection` (only when `includesAlternatives`).

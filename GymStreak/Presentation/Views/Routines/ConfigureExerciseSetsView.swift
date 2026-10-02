@@ -46,9 +46,9 @@ struct ConfigureExerciseSetsView: View {
 
     /// Set schemes offered on the empty state — the fastest way out of "no sets".
     private static let quickSchemes = [
-        QuickSetScheme(sets: 3, reps: 8),
-        QuickSetScheme(sets: 3, reps: 10),
-        QuickSetScheme(sets: 4, reps: 12)
+        QuickSetScheme(sets: 3, reps: 6),
+        QuickSetScheme(sets: 3, reps: 12),
+        QuickSetScheme(sets: 3, reps: 15)
     ]
 
     @Environment(\.dismiss) private var dismiss
