@@ -19,6 +19,8 @@ struct AddExerciseView: View {
 
     var presentationMode: ExerciseFormPresentationMode = .sheet
     var exerciseToEdit: Exercise? = nil
+    /// Pre-fills the name field when creating; ignored when `exerciseToEdit` is set.
+    var initialName: String? = nil
     var onExerciseCreated: ((Exercise) -> Void)?
 
     private var isEditing: Bool { exerciseToEdit != nil }
@@ -67,6 +69,8 @@ struct AddExerciseView: View {
                 muscleGroups = exercise.muscleGroups
                 equipmentType = exercise.equipmentType
                 loadBehavior = exercise.loadBehavior
+            } else if let initialName {
+                exerciseName = initialName
             }
         }
     }
@@ -170,12 +174,8 @@ struct AddExerciseView: View {
 
                 // Equipment
                 formLabel("exercises.equipment_type".localized)
-                HStack(spacing: 8) {
-                    ForEach(EquipmentType.allCases, id: \.self) { type in
-                        equipmentTile(type)
-                    }
-                }
-                .padding(.bottom, 22)
+                ExerciseEquipmentPicker(selection: $equipmentType)
+                    .padding(.bottom, 22)
 
                 // Live preview
                 if canSave {
@@ -197,36 +197,6 @@ struct AddExerciseView: View {
             .kerning(0.7)
             .foregroundStyle(Color.white.opacity(0.45))
             .padding(.bottom, 10)
-    }
-
-    private func equipmentTile(_ type: EquipmentType) -> some View {
-        let isActive = equipmentType == type
-        return Button {
-            HapticManager.shared.selection()
-            equipmentType = type
-        } label: {
-            VStack(spacing: 7) {
-                Image(systemName: type.icon)
-                    .font(.system(size: 20, weight: .medium))
-                Text(type.displayName)
-                    .font(.system(size: 12, weight: isActive ? .bold : .medium))
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.8)
-            }
-            .foregroundStyle(isActive ? DesignSystem.Colors.tint : Color.white.opacity(0.6))
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 14)
-            .background(isActive ? DesignSystem.Colors.tint.opacity(0.14) : Color.white.opacity(0.04))
-            .overlay(
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .stroke(
-                        isActive ? DesignSystem.Colors.tint.opacity(0.45) : Color.white.opacity(0.06),
-                        lineWidth: 1.5
-                    )
-            )
-            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-        }
-        .buttonStyle(.plain)
     }
 
     private var previewRow: some View {

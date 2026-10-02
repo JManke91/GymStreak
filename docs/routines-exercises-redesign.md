@@ -83,6 +83,8 @@ Rewritten from a `List(.insetGrouped)` with a nav-bar Edit button into a **`Scro
 ### Add / edit exercise (`AddExerciseView`)
 - One component now handles both create and edit (`exerciseToEdit:` optional). Sheet header (Abbrechen / Speichern) or nav-toolbar save depending on `presentationMode`.
 - Name card, muscle-group pills grouped by category (multi-select, `FlowLayout` wrapping), equipment tiles, and a **live preview row** of the resulting library entry.
+- **Starting name (2026-10-02, ai-coach-create-exercise-from-draft ticket 01):** optional `initialName: String? = nil` pre-fills the name field (still editable) when *creating*; it is ignored when `exerciseToEdit` is set, so an edit always opens with the exercise's own name. All existing callers (Exercises tab, routine picker, in-workout picker, edit from `ExerciseDetailView`) omit it and behave as before. Added so the AI-coach routine draft can open the form with the name of an exercise it could not match in the library.
+- The equipment tiles live in their own view, `ExerciseEquipmentPicker` (`Views/Exercises/ExerciseEquipmentPicker.swift`, `@Binding var selection: EquipmentType`), extracted to keep `AddExerciseView` under the 300-line convention.
 
 ### Exercise picker (`RoutineExercisePickerView`)
 - Restyled to the dark canvas: `RedesignSearchBar`, muscle-category filter pill row, "Verfügbar" section (tap → `ConfigureExerciseSetsView`), "Bereits in Routine" section, dashed "Neue Übung erstellen" button.
@@ -162,7 +164,8 @@ RoutinesView.swift            Rewritten (hero + card list)
 RoutineDetailView.swift       Rewritten body; superset/rep-range/alternatives logic preserved
 ExercisesView.swift           Rewritten (filters + grouped library)
 ExerciseDetailView.swift      Rewritten (hero + info card + used-in); edits via AddExerciseView
-AddExerciseView.swift         Rewritten; now also handles editing (exerciseToEdit:)
+AddExerciseView.swift         Rewritten; now also handles editing (exerciseToEdit:) and an optional starting name (initialName:)
+ExerciseEquipmentPicker.swift Equipment tiles extracted from AddExerciseView (2026-10-02)
 RoutineExercisePickerView.swift  (ex AddExerciseToRoutineView.swift) Picker restyled + muscle-category filter pills; filtering via ExercisesViewModel.sections; ConfigureExerciseSetsView unchanged
 RoutinesViewModel.swift       + lastPerformedByRoutine, upNextRoutine, refreshLastPerformedDates, duplicateRoutine; v2: removeRoutineExercise returns a snapshot, + restoreRoutineExercise, updateRestTime(_:for:), applyToAllSets(from:field:in:)
 ExerciseVisuals.swift         v2: + ExerciseAvatarStack (overlapping avatars + "+N")
