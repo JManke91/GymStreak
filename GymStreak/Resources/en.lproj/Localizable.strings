@@ -1115,6 +1115,7 @@
 "ai_coach.routine_draft.picker.search" = "Search exercises";
 "ai_coach.routine_draft.picker.candidates" = "Did you mean";
 "ai_coach.routine_draft.picker.all" = "All exercises";
+"ai_coach.routine_draft.picker.create" = "Create “%@”";
 "ai_coach.routine_draft.error" = "The routine could not be drafted. Please try again.";
 "ai_coach.routine_draft.error.declined" = "Apple's on-device model declined this wording. Trying again won't change that — please describe the routine a little differently.";
 "ai_coach.routine_draft.default_name" = "New routine";

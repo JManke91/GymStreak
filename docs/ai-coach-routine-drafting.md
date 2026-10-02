@@ -15,7 +15,8 @@ made the draft editable before Create — see §9a; 04 asks for what a thin desc
 instead of inventing it — see §9c; 05 carries a stated rep-range goal and rest time — see §4a
 (verified on device, round 11); 06 closed the last known wrong-write path (set and rep counts the
 person never typed, §6c), added a guardrail retry (§4) and ran the ship-decision eval on device —
-passed, German only (§12).
+passed, German only (§12). Since `.scratch/ai-coach-create-exercise-from-draft/` an unresolved row can
+also be **created** as a new library exercise from its picker — see §6a.
 
 **The coach is no longer read-only over user data** — this is the one AI-coach surface whose output
 is persisted. It writes through structured generation and the person's confirmation, never through a
@@ -73,7 +74,8 @@ Two consequences that are load-bearing rather than stylistic:
 | Presentation | `Views/AICoach/RoutineDrafting/RoutineDraftSheet.swift` | the sheet |
 | Presentation | `Views/AICoach/RoutineDrafting/RoutineDraftRowView.swift` | one review row, resolved or not |
 | Presentation | `Views/AICoach/RoutineDrafting/RoutineDraftQuestionCard.swift` | the one open question (Review draft / Discard), and `RoutineDraftLeftOutNote` |
-| Presentation | `Views/AICoach/RoutineDrafting/RoutineDraftExercisePickerView.swift` | "which exercise did you mean?" |
+| Presentation | `Views/AICoach/RoutineDrafting/RoutineDraftExercisePickerView.swift` | "which exercise did you mean?", and its "Create „…“" row into `AddExerciseView` |
+| Presentation | `Views/Exercises/AddExerciseView.swift` | the app's add-exercise screen, opened from the picker with the drafted name (`initialName`) |
 | Presentation | `Views/Exercises/ExercisePickerRowView.swift` | the library row both pickers use |
 | App | `AppDependencies.swift` | `routinesViewModel`, `exercisesViewModel`, `makeRoutineDraftService()`, `makeRoutineDraftViewModel()` |
 
@@ -542,6 +544,29 @@ unresolved row is excluded and the sheet's note says so *before* Create is tappe
 being disabled — a person whose exercise genuinely is not in their library would otherwise be stuck
 with a button that never lights up.
 
+**A name absent from the library can be created, not only matched.** The picker's
+**"Create „<drafted name>“"** row (`ai_coach.routine_draft.picker.create`) pushes the app's own
+`AddExerciseView` (`presentationMode: .navigation`, `initialName: draftedName`) — the same screen and
+the same `ExercisesViewModel.addExercise` write as the manual routine picker's "create new exercise",
+so there is no second exercise form. Settled in grilling (2026-09-27):
+
+- **Placement** — on an unmatched row it is first, above the library list; on an ambiguous row it
+  sits after the "Did you mean" matches. It stays visible while searching, and always carries the
+  *drafted* name: the search text never replaces it.
+- **Name only** — the drafted name is prefilled and editable; muscle groups and equipment keep the
+  screen's normal defaults. No model guess and no Swift heuristic for them.
+- **Save resolves exactly the tapped row** through the picker's ordinary `onSelect` →
+  `resolveRow(_:to:)`, so the drafted sets, reps, weight, rep goal and rest survive exactly as when
+  picking an existing exercise; the sheet's `pickingRow = nil` pops picker and form together. Other
+  rows with the same drafted name are **not** changed silently — their picker re-fetches the library
+  on open, so the new exercise is one tap away.
+- **Written on save, survives Discard** — the narrowed §1 rule. Cancelling the form pops back to the
+  picker with nothing written and the row still unresolved.
+- **Free, no model call, no unit** — it is a review correction like any other. Monetization verdict:
+  Free, §3 Rule 1 (building a routine is the aha path). A future P7 custom-exercise cap would live in
+  `AddExerciseView`/`addExercise`, which this path already goes through rather than around.
+- **iOS only** — the watch receives the exercise with the routine through ordinary sync.
+
 **Answering costs no allowance.** The unit was consumed by the drafting session; correcting the
 machine's reading of a name is not a second use of the coach. Nothing in `resolveRow`/`removeRow`
 touches the gate. (The ticket-01 rule that an *all*-unmatched draft refunds its unit is unchanged: a
@@ -908,6 +933,9 @@ no-op while the draft is still streaming, when the list under the finger is stil
 
 **The picker is a push, not a second modal**, through the sheet's own `NavigationStack`
 (`navigationDestination(item:)` keyed on the row). Choosing an exercise resolves the row and pops.
+Its dashed **"Create „<drafted name>“"** row pushes `AddExerciseView` one level deeper on the same
+stack (`navigationDestination(isPresented:)`); saving resolves the row and pops both screens,
+cancelling pops back to the picker (§6a).
 Its results are recomputed in `onChange(of: searchText)` into `@State` rather than filtered in `body`,
 and the list is a `LazyVStack` — it is the one view here whose content scales with the person's own
 library (rendering rules 1 and 3).
@@ -1134,6 +1162,12 @@ copied into the load, and loads the person never typed.
   draft of nothing but unresolved rows offers no Create at all.
 - **Allowance** — resolving and removing consume no further unit.
 
+`GymStreakTests/RoutineDraftCreateExerciseTests.swift` covers creating a missing exercise: a created
+exercise resolves only the tapped row (a second row with the same drafted name stays unresolved),
+keeps its drafted figures, and spends no unit and no model turn; a SwiftData round trip through
+`ExercisesViewModel.addExercise` and `createRoutine` puts it in the saved routine at the row's
+position; after Discard it remains in the library and no routine exists.
+
 `GymStreakTests/RoutineDraftQuestionTests.swift` covers ticket 04 on the same harness (the fake's
 `answerSnapshots` scripts one stream per answer turn):
 
@@ -1183,9 +1217,8 @@ it is handed is a device check, and nothing here stands in for one.
 
 ## 11. Known limits (by design)
 
-- An unresolved name can be pointed at an existing library exercise or removed, but **not created** —
-  there is no "add this to my library" from the picker. A movement genuinely absent from the library
-  still has to be added on the Exercises tab first.
+- **Creating from an unresolved row is name-only** (§6a): muscle groups and equipment are the
+  add-exercise screen's defaults, never guessed, and only the tapped row resolves.
 - **No adding exercises** to a draft — the sheet edits what was drafted; a missing exercise is
   added after Create on the routine itself, or described in a fresh draft.
 - **Follow-ups only answer questions.** There is no free-form "change this" message; a draft is
@@ -1244,6 +1277,4 @@ English-path rates, run-to-run variance, measured latency.
   editing mutations into extensions or a small collaborator.
 - **`ExerciseNameResolver`'s word-boundary leniency** (`pull` → *Face Pulls*) still applies to Coach
   Chat; provenance only removes it here (§6b).
-- **Creating a missing exercise from an unresolved row** (§11's first limit) — raised after the
-  eval as its own feature; see its ticket set.
 - The eval's English half and latency were not measured (§12).

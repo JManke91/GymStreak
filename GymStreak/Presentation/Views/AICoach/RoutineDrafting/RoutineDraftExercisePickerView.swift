@@ -12,6 +12,11 @@
 //  The search and filtering are `ExercisesViewModel.sections(…)`, the same implementation
 //  the add-to-routine picker uses; there is no third one.
 //
+//  A name genuinely absent from the library can also be **created** here: the create row
+//  pushes the app's `AddExerciseView` with the drafted name filled in, and saving resolves
+//  the row to the new exercise through the same `onSelect` as picking one. The exercise is
+//  written on save and stays in the library if the draft is discarded (doc §1).
+//
 
 import SwiftUI
 
@@ -36,6 +41,7 @@ struct RoutineDraftExercisePickerView: View {
     /// (CLAUDE.md rendering rule 3).
     @State private var results: [Exercise] = []
     @FocusState private var isSearchFocused: Bool
+    @State private var isCreatingExercise = false
 
     /// Candidates are a **suggestion about the drafted name**, so they stop being relevant
     /// the moment the person searches for something of their own.
@@ -69,6 +75,9 @@ struct RoutineDraftExercisePickerView: View {
                         }
                     }
 
+                    // First on an unmatched row, after the suggestions on an ambiguous one.
+                    createRow
+
                     sectionLabel("ai_coach.routine_draft.picker.all".localized)
                     ForEach(results) { exercise in
                         row(exercise)
@@ -86,6 +95,16 @@ struct RoutineDraftExercisePickerView: View {
         // SwiftData fetch and `onAppear` runs while the push animates (rendering rule 7).
         .onAppear { refreshResults() }
         .onChange(of: searchText) { _, _ in refreshResults() }
+        .navigationDestination(isPresented: $isCreatingExercise) {
+            // The drafted name, never the search text. Cancelling pops back here with
+            // nothing written; saving resolves only this row — the sheet pops both screens.
+            AddExerciseView(
+                viewModel: exercisesViewModel,
+                presentationMode: .navigation,
+                initialName: draftedName,
+                onExerciseCreated: { onSelect($0) }
+            )
+        }
     }
 
     // MARK: - Pieces
@@ -100,6 +119,34 @@ struct RoutineDraftExercisePickerView: View {
         .padding(.horizontal, 18)
         .padding(.bottom, 7)
         .accessibilityLabel("\(exercise.name), \(MuscleGroups.displayString(for: exercise.muscleGroups))")
+    }
+
+    private var createRow: some View {
+        Button {
+            isCreatingExercise = true
+        } label: {
+            HStack(spacing: 8) {
+                Image(systemName: "plus")
+                    .font(.system(size: 13, weight: .bold))
+                Text("ai_coach.routine_draft.picker.create".localized(draftedName))
+                    .font(.system(size: 13.5, weight: .bold))
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+            }
+            .foregroundStyle(DesignSystem.Colors.tint)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 14)
+            .padding(.horizontal, 12)
+            .overlay(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .stroke(style: StrokeStyle(lineWidth: 1.5, dash: [6, 5]))
+                    .foregroundStyle(DesignSystem.Colors.tint.opacity(0.5))
+            )
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .padding(.horizontal, 18)
+        .padding(.top, 18)
     }
 
     private func sectionLabel(_ text: String) -> some View {

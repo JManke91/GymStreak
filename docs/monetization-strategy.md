@@ -906,6 +906,10 @@ directional.
 - **P7 already ships.** `AddExerciseView.swift` provides full creation and editing, and
   `Exercise.seedKey` is empty for user-created exercises — the same discriminator
   `RoutineCapPolicy.countsTowardCap` already uses for routines. P7 is gate-only, ~1 day.
+  Every creation path goes through it: the Exercises tab, the manual routine picker, the in-workout
+  picker and — since 2026-10-02 — the AI routine draft's "Create „…“" row
+  (`docs/ai-coach-routine-drafting.md` §6a, shipped Free under §3 Rule 1). A P7 gate must sit in
+  `AddExerciseView`/`ExercisesViewModel.addExercise` so the draft path goes through it, not around it.
 - **P8's detection engine already ships.** `PersonalRecordService` computes PRs across all history
   via Epley 1RM; they already flow through `HistorySnapshot` (`prLifts`, `LastMonthStats.prs`) and
   render in `WorkoutDetailView` / `PRRecordStrip`. Only a timeline view is missing.

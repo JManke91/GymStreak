@@ -1,2 +1,3 @@
 - Beim Erstellen einer Routine kannst du jetzt direkt Supersätze bauen: Tippe zwischen zwei Übungen auf „Supersatz“, trenne einen Supersatz mit der Schere und verschiebe ihn über „Sortieren“ als Block. Der Bildschirm für neue Routinen sieht jetzt genauso aus wie die Routinenansicht.
 - Beim Hinzufügen einer Übung zu einer Routine stehen jetzt die Schnellauswahlen 3×6, 3×12 und 3×15 zur Verfügung.
+- KI-Coach: Nennt ein Routinenentwurf eine Übung, die noch nicht in deiner Bibliothek ist, kannst du sie jetzt direkt auf dem Bildschirm „Übung wählen“ erstellen – der Name ist schon eingetragen, und die entworfenen Sätze, Wiederholungen und Gewichte bleiben erhalten.
