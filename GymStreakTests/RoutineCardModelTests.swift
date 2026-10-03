@@ -142,9 +142,9 @@ struct RoutineCardModelTests {
 
         // Least-recently-trained wins when nothing is planned.
         #expect(viewModel.heroCard?.id == trainedLongAgo.id)
-        #expect(viewModel.otherCards.map(\.id) == [trainedRecently.id])
+        #expect(viewModel.cardGroups.flatMap(\.cards).map(\.id) == [trainedRecently.id])
         #expect(viewModel.heroCard?.lastPerformed == old.startTime)
-        #expect(viewModel.otherCards.first?.lastPerformed == recent.startTime)
+        #expect(viewModel.cardGroups.first?.cards.first?.lastPerformed == recent.startTime)
         #expect(viewModel.mostRecentTraining == recent.startTime)
     }
 

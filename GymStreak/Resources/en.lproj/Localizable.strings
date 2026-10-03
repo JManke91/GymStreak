@@ -87,6 +87,8 @@
 // Redesign (Routinen & Übungen)
 "routines.up_next" = "Up Next";
 "routines.all" = "All Routines";
+"routines.own" = "Your Routines";
+"routines.program_guide" = "Program guide";
 "routines.new" = "New Routine";
 "routines.card_meta" = "%d exercises · %d sets · ~%d min";
 "routines.header_meta" = "%d routines · last %@";

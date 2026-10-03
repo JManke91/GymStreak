@@ -21,9 +21,12 @@ class RoutinesViewModel: ObservableObject {
     @Published var lastPerformedByRoutine: [UUID: Date] = [:]
     /// The "Als Nächstes" hero card, precomputed. Nil only when there are no routines.
     @Published private(set) var heroCard: RoutineCardModel?
-    /// Every other routine's card, in fetch order — the hero is already excluded, so the
-    /// list does not `filter` in its `body`.
-    @Published private(set) var otherCards: [RoutineCardModel] = []
+    /// The hero's program name for its eyebrow, nil for a routine outside every program.
+    @Published private(set) var heroProgramName: String?
+    /// Every other routine's card, grouped per installed program and then the user's own
+    /// (`RoutinesViewModel+Groups.swift`) — the hero is already excluded, so the list does
+    /// not `filter` or group in its `body`.
+    @Published private(set) var cardGroups: [RoutineCardGroup] = []
     /// Routines that count against the free cap — the user's own, excluding any
     /// built-in seeded routine. Stored rather than computed because the cap and
     /// the §8 D nudge are read during the list's `body`, and counting there is
@@ -311,9 +314,8 @@ class RoutinesViewModel: ObservableObject {
     private func rebuildCardModels() {
         let hero = upNextRoutine
         heroCard = hero.map(makeCardModel)
-        otherCards = routines
-            .filter { $0.id != hero?.id }
-            .map(makeCardModel)
+        heroProgramName = Self.heroProgramName(for: hero)
+        cardGroups = Self.makeCardGroups(routines: routines, heroId: hero?.id, makeCard: makeCardModel)
         mostRecentTraining = lastPerformedByRoutine.values.max()
         countableRoutineCount = RoutineCapPolicy.countableRoutineCount(in: routines)
     }

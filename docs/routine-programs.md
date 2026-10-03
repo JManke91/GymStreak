@@ -8,15 +8,15 @@ like any other routine. There is no program model in the store.
 add sheet → routines + optional cadence plan. Ticket 03 completed the detail screen (timeline,
 alternative hint, "How to train it", "Based on", repeated CTA with an add / restore / added state).
 Ticket 04 (done 2026-10-02) replaced the temporary entry row with the Programs shelf and rebuilt the zero-routine empty
-state around programs. Still to come: grouping installed routines per program (05), Push/Pull/Legs (06), the ballistic seeds (07) and Fighter Strength (08). Tickets:
+state around programs. Ticket 05 (done 2026-10-03) groups installed routines per program on the Routines tab. Still to come: Push/Pull/Legs (06), the ballistic seeds (07) and Fighter Strength (08). Tickets:
 `.scratch/routine-programs/issues/`.
 
 **Inputs:** content is in `docs/research/routine-programs-hypertrophy.md` §3 (the source of truth for
 the exact tables, signed off 2026-09-27). The delivery model is
 `docs/research/routine-programs-delivery-model.md`, the tier verdict
 `.scratch/routine-programs/wayfinder/04-grilling-monetization-verdict.md`, and the design the
-[Routine Programs Design](https://claude.ai/artifact/3ruyyATKwk7WX4EKmAi62D) canvas (artboards 1–4 and 6
-are built, plus artboard 5's "Added" shelf card; artboard 3's rule and source copy is the en source of truth).
+[Routine Programs Design](https://claude.ai/artifact/3ruyyATKwk7WX4EKmAi62D) canvas (artboards 1–6
+are built; artboard 3's rule and source copy is the en source of truth).
 
 ## What the user sees (iOS)
 
@@ -60,6 +60,12 @@ are built, plus artboard 5's "Added" shelf card; artboard 3's rule and source co
    slots" appears for capped users only. Pro users and Founders never see it.
 5. On success the sheet closes and the navigation pops to the Routines list, where the new
    routines already appear.
+6. **Grouped list** (artboard 5). Below the "Up next" hero, each installed program's routines sit
+   under a section labelled with the program's name, with a **"Program guide"** link to its detail
+   (back link "Routines"). The user's own routines, the example routine and any duplicate follow
+   under **"Your routines"**. That label stays "All routines" while no program routine exists. When
+   "Up next" picks a program routine, its eyebrow shows the program name on the trailing side;
+   the due pill is unchanged. Context menus (duplicate, delete) work as before.
 
 ## Beginner Full Body content
 
@@ -133,6 +139,17 @@ App           AppDependencies.routineProgramInstaller + lazy programLibrary (one
 - **"Added" follows the Routines list.** `RoutinesView` calls `programLibrary.refresh()` from
   `.onReceive(viewModel.$routines)`, so every refetch (install, delete, CloudKit import) also
   re-derives the shelf state. It costs one `seedKey != ""` fetch per refetch, outside `body`.
+- **Grouping on the Routines tab.** `RoutinesViewModel.rebuildCardModels()` publishes
+  `cardGroups: [RoutineCardGroup]` and `heroProgramName`, built by
+  `RoutinesViewModel.makeCardGroups(routines:heroId:makeCard:)` (`RoutinesViewModel+Groups.swift`).
+  Membership is `RoutineProgramCatalog.program(forRoutineSeedKey:)`, a static dictionary over the
+  catalog. That is a lookup, never a parse of the key format. Program sections come in catalog
+  order, then the own section. The hero is excluded from every group, and a group left empty is
+  dropped, so a program whose only remaining routine is the hero shows no section. The label switch to
+  "Your routines" counts the hero, though. `RoutinesView` renders `ForEach(cardGroups)` → header +
+  `ForEach(group.cards)` inside the existing `LazyVStack`, so the rows stay lazy, value-struct and
+  `.equatable()`. `RoutineCardView.programName` is part of its `==`. Titles are localized in the
+  view model; the view only uppercases them.
 - **Refresh after install.** The installer saves and posts `.cloudKitDataDidChange`.
   `RoutinesViewModel` refetches on that notice, and the refetch also syncs the watch and reconciles
   the calendar and reminders. The routines list and the watch update without a relaunch.
@@ -232,6 +249,11 @@ Mechanism note: `docs/pro-subscription.md` §5c.
 - `GymStreakTests/RoutineProgramScheduleTests.swift` covers the start choice → first day
   (past-day clamp), offsets relative to the earliest routine being added, Full Body's 14-day
   A · – · B · – timeline, and a synthetic program proving the timeline follows cadence and offsets.
+- `GymStreakTests/RoutineCardGroupTests.swift` covers the grouping through a real `RoutinesViewModel`:
+  program routines go into their program's section, while own, example and duplicated routines go
+  into "Your routines". A partly installed program still gets its section, a program hero names its
+  program and leaves the rest of the program in the section, and with no program there is the single
+  "All routines" section.
 - `GymStreakTests/ProgramLibraryViewModelTests.swift` covers the free-only note across
   free/founder/subscription/lifetime and gating off, the shelf's "Added" state (set on install, kept
   while one routine remains, cleared once none does), Full Body's A · – · B · – · A · – · B shelf

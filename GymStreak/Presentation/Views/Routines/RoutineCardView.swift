@@ -20,13 +20,15 @@ import SwiftUI
 struct RoutineCardView: View, Equatable {
     let card: RoutineCardModel
     var isHero: Bool = false
+    /// The hero's eyebrow names the program its routine belongs to; nil otherwise.
+    var programName: String?
     let onStart: () -> Void
 
     /// The rendered output depends only on the model and the variant; `onStart` captures
     /// nothing that can change what is drawn (it forwards `card.id` to the ViewModel), so it
     /// is deliberately excluded rather than making the whole card non-`Equatable`.
     static func == (lhs: RoutineCardView, rhs: RoutineCardView) -> Bool {
-        lhs.card == rhs.card && lhs.isHero == rhs.isHero
+        lhs.card == rhs.card && lhs.isHero == rhs.isHero && lhs.programName == rhs.programName
     }
 
     var body: some View {
@@ -38,6 +40,14 @@ struct RoutineCardView: View, Equatable {
                     Text("routines.up_next".localized.uppercased())
                         .font(.system(size: 10.5, weight: .bold))
                         .kerning(0.8)
+                    if let programName {
+                        Spacer(minLength: 8)
+                        Text(programName.uppercased())
+                            .font(.system(size: 10.5, weight: .bold))
+                            .kerning(0.4)
+                            .foregroundStyle(Color.white.opacity(0.55))
+                            .lineLimit(1)
+                    }
                 }
                 .foregroundStyle(DesignSystem.Colors.tint)
             }

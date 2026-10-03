@@ -17,6 +17,18 @@ enum RoutineProgramCatalog {
         programs.first { $0.id == id }
     }
 
+    /// The program an installed routine belongs to, by its `Routine.seedKey`.
+    /// Nil for the user's own routines (`""`) and the example routine.
+    static func program(forRoutineSeedKey seedKey: String) -> RoutineProgram? {
+        programsByRoutineSeedKey[seedKey]
+    }
+
+    private static let programsByRoutineSeedKey: [String: RoutineProgram] = Dictionary(
+        uniqueKeysWithValues: programs.flatMap { program in
+            program.routines.map { ($0.seedKey, program) }
+        }
+    )
+
     /// r/Fitness Basic Beginner Routine + ACSM novice rep ranges. A and B each
     /// every 4 days, B two days after A → strict A-rest-B-rest alternation.
     static let beginnerFullBody = RoutineProgram(

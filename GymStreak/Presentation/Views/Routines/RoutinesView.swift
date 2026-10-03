@@ -171,18 +171,14 @@ private struct RoutinesViewInternal: View {
                 header
 
                 if let hero = viewModel.heroCard {
-                    routineCard(hero, isHero: true)
+                    routineCard(hero, isHero: true, programName: viewModel.heroProgramName)
                 }
 
-                if !viewModel.otherCards.isEmpty {
-                    Text("routines.all".localized.uppercased())
-                        .font(.system(size: 12, weight: .semibold))
-                        .kerning(0.7)
-                        .foregroundStyle(Color.white.opacity(0.45))
-                        .padding(.horizontal, 4)
-                        .padding(.top, 10)
+                // Precomputed per program, then the user's own (RoutinesViewModel+Groups).
+                ForEach(viewModel.cardGroups) { group in
+                    groupHeader(group)
 
-                    ForEach(viewModel.otherCards) { card in
+                    ForEach(group.cards) { card in
                         routineCard(card, isHero: false)
                     }
                 }
@@ -241,15 +237,43 @@ private struct RoutinesViewInternal: View {
 
     /// The row holds a value struct and an id; the destructive and duplicating actions resolve
     /// that id back to the `@Model` in their closure, off the render path.
-    private func routineCard(_ card: RoutineCardModel, isHero: Bool) -> some View {
+    /// The section label; a program section also links to its guide (the detail screen).
+    private func groupHeader(_ group: RoutineCardGroup) -> some View {
+        HStack(alignment: .firstTextBaseline) {
+            Text(group.title.uppercased())
+                .font(.system(size: 12, weight: .semibold))
+                .kerning(0.7)
+                .foregroundStyle(Color.white.opacity(0.45))
+                .lineLimit(1)
+
+            Spacer(minLength: 8)
+
+            if let programId = group.programId {
+                Button {
+                    HapticManager.shared.light()
+                    shelfProgramId = programId
+                } label: {
+                    Text("routines.program_guide".localized)
+                        .font(.system(size: 13, weight: .bold))
+                        .foregroundStyle(DesignSystem.Colors.tint)
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(.horizontal, 4)
+        .padding(.top, 10)
+    }
+
+    private func routineCard(_ card: RoutineCardModel, isHero: Bool, programName: String? = nil) -> some View {
         NavigationLink(value: card.id) {
             // `.equatable()` is what actually engages `RoutineCardView`'s `==`: SwiftUI
             // only consults a custom one through `EquatableView`, and the stored
             // `onStart` closure blocks the default structural comparison. Without it
-            // every visible card re-evaluates its body on any republish of `otherCards`.
+            // every visible card re-evaluates its body on any republish of `cardGroups`.
             RoutineCardView(
                 card: card,
                 isHero: isHero,
+                programName: programName,
                 onStart: { startWorkout(card.id) }
             )
             .equatable()
