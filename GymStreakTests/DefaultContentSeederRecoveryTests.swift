@@ -332,6 +332,70 @@ struct DefaultContentSeederRecoveryTests {
         #expect(try exerciseCount(context) == SeedExerciseCatalog.entries.count)
     }
 
+    // MARK: - Catalog upgrade (v2 → v3)
+
+    /// An existing user on catalog v2 gets the v3 rows on the next launch, and a
+    /// v2 seed they deleted stays deleted.
+    @Test
+    func catalogUpgradeAddsOnlyTheNewRows() async throws {
+        let status = StubCloudSyncStatus(initial: .off)
+        let (context, seeder, versionStore) = makeSeeder(storedVersion: 2, status: status)
+        let deletedKey = "seed.exercise.barbell_shrug"
+        for row in SeedExerciseCatalog.entries where row.introducedInVersion <= 2 && row.seedKey != deletedKey {
+            context.insert(row.makeExercise())
+        }
+        try context.save()
+
+        await seeder.run()
+
+        let seedKeys = try context.fetch(FetchDescriptor<Exercise>()).map(\.seedKey)
+        let v3Keys = SeedExerciseCatalog.entries.filter { $0.introducedInVersion == 3 }.map(\.seedKey)
+        #expect(v3Keys.count == 5)
+        #expect(Set(v3Keys).isSubset(of: Set(seedKeys)))
+        #expect(!seedKeys.contains(deletedKey))
+        #expect(seedKeys.count == SeedExerciseCatalog.entries.count - 1)
+        #expect(versionStore.version(forKey: "seedCatalogVersion") == 3)
+    }
+
+    /// The flag lags the catalog over an empty store (flag says v2, nothing is
+    /// here): `run()` must not insert just the v3 rows — that would make the
+    /// store non-empty and lock the recovery out — so the recovery seeds all.
+    @Test
+    func recoversAStrandedLibraryWhoseFlagLagsTheCatalog() async throws {
+        let status = StubCloudSyncStatus(initial: .off)
+        let (context, seeder, versionStore) = makeSeeder(
+            storedVersion: 2,
+            status: status,
+            settleWindow: Self.longSettleWindow
+        )
+
+        await seeder.run()
+        #expect(try exerciseCount(context) == 0)
+
+        let didSeed = await seeder.recoverStrandedLibraryIfNeeded()
+
+        #expect(didSeed)
+        #expect(try exerciseCount(context) == SeedExerciseCatalog.entries.count)
+        #expect(versionStore.version(forKey: "seedCatalogVersion") == SeedExerciseCatalog.currentVersion)
+    }
+
+    /// Two devices upgrading independently both upload the v3 rows; the dedup
+    /// pass collapses them.
+    @Test
+    func catalogUpgradeOnTwoDevicesLeavesNoDuplicates() async throws {
+        let status = StubCloudSyncStatus(initial: .off)
+        let (context, seeder, _) = makeSeeder(storedVersion: 3, status: status)
+        let boxJump = try #require(SeedExerciseCatalog.entries.first { $0.seedKey == "seed.exercise.box_jump" })
+        context.insert(boxJump.makeExercise())
+        context.insert(boxJump.makeExercise())
+        try context.save()
+
+        await seeder.run()
+
+        let boxJumps = try context.fetch(FetchDescriptor<Exercise>()).filter { $0.seedKey == boxJump.seedKey }
+        #expect(boxJumps.count == 1)
+    }
+
     // MARK: - Post-import dedup
 
     /// The reinstall case: the launch seeded the catalog into an empty store

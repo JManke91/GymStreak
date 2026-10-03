@@ -1261,6 +1261,11 @@
 "seed.exercise.standing_calf_raise" = "Standing Calf Raise";
 "seed.exercise.seated_calf_raise" = "Seated Calf Raise";
 "seed.exercise.leg_press_calf_raise" = "Leg Press Calf Raise";
+"seed.exercise.box_jump" = "Box Jump";
+"seed.exercise.jump_shrug" = "Jump Shrug";
+"seed.exercise.hang_power_clean" = "Hang Power Clean";
+"seed.exercise.medicine_ball_chest_pass" = "Medicine Ball Chest Pass";
+"seed.exercise.medicine_ball_rotational_throw" = "Medicine Ball Rotational Throw";
 
 // MARK: - Active Workout Redesign (2026-07-31)
 "workout.sets_progress" = "%d of %d sets";

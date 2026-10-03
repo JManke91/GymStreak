@@ -194,8 +194,10 @@ final class DefaultContentSeeder {
     /// - Returns: `true` when the catalog was actually re-seeded.
     @discardableResult
     func recoverStrandedLibraryIfNeeded() async -> Bool {
-        // A library the normal seed pass can still fill needs no recovery.
-        guard storedCatalogVersion >= SeedExerciseCatalog.currentVersion else { return false }
+        // No flag at all: the normal seed pass fills the library. Any stored
+        // version — including one behind the catalog, which `seedIfNeeded`
+        // defers on an empty store — claims a seed this store may not hold.
+        guard storedCatalogVersion > 0 else { return false }
 
         var latest = cloudSyncStatus.currentStatus
         var hasSettled = false
@@ -336,6 +338,11 @@ final class DefaultContentSeeder {
     private func seedIfNeeded(existing: [Exercise], ignoringStoredVersion: Bool = false) {
         let lastSeededVersion = ignoringStoredVersion ? 0 : storedCatalogVersion
         guard lastSeededVersion < SeedExerciseCatalog.currentVersion else { return }
+        // A version lag over a completely empty store is the stranded case (or a
+        // new device mid-import): inserting only the newer rows would make the
+        // store non-empty and lock the recovery out for good, leaving a library
+        // of just those rows. Leave it to `recoverStrandedLibraryIfNeeded()`.
+        if !ignoringStoredVersion, lastSeededVersion > 0, isStoreEmpty { return }
 
         let existingSeedKeys = Set(existing.map(\.seedKey))
         let existingNames = Set(existing.map { SeedExercise.normalizedName($0.name) })

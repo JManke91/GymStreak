@@ -226,7 +226,7 @@ logged exercises list Quadriceps or Hamstrings. Routine A qualifies (squat + spl
 seeded with Quadriceps). Routine B qualifies only through `deadlift`/`trap_bar_deadlift` **plus** a
 second leg-muscle exercise — the new `jump_shrug` / `hang_power_clean` seeds should list Hamstrings
 and Quadriceps (they are triple-extension lifts) so the coach steers hard conditioning ≥ 6 h away from
-Routine B too. Decide in the seeding ticket.
+Routine B too. **Decided (ticket 07, 2026-10-03):** both list Hamstrings + Quadriceps; Routine B is heavy lower body (see `docs/starter-exercise-library.md`, "Catalog v3").
 
 **Aligning the two 12-week arcs** (proposed; phase potentiation [5][18], taper [2][30]):
 
@@ -341,6 +341,9 @@ trap-bar, anti-rotation or neck exercise):
 
 Each new seed needs localization (en + de), muscle groups (see the coach finding in §4), an
 `EquipmentType` decision (§6) and a catalog version bump (`currentVersion` → 3, append-only).
+**Shipped (ticket 07, 2026-10-03):** the five required seeds are catalog v3; equipment maps to existing
+types (box jump and both medicine-ball throws `.bodyweight`, jump shrug and hang power clean `.barbell`) —
+reasoning in `docs/starter-exercise-library.md`, "Catalog v3".
 
 ---
 

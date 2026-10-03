@@ -1261,6 +1261,11 @@
 "seed.exercise.standing_calf_raise" = "Wadenheben stehend";
 "seed.exercise.seated_calf_raise" = "Wadenheben sitzend";
 "seed.exercise.leg_press_calf_raise" = "Wadenheben an der Beinpresse";
+"seed.exercise.box_jump" = "Box Jump";
+"seed.exercise.jump_shrug" = "Jump Shrug";
+"seed.exercise.hang_power_clean" = "Power Clean aus dem Hang";
+"seed.exercise.medicine_ball_chest_pass" = "Medizinball-Brustpass";
+"seed.exercise.medicine_ball_rotational_throw" = "Medizinball-Rotationswurf";
 
 // MARK: - Aktives Workout Redesign (2026-07-31)
 "workout.sets_progress" = "%d von %d Sätzen";

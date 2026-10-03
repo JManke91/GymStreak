@@ -116,6 +116,14 @@ struct ConditioningProgramCoachTests {
         #expect(StrengthLogEntry.isHeavyLowerBody(exerciseMuscleGroups: [["Quadriceps", "Glutes"], ["Lower Back", "Hamstrings", "Glutes"]]))
     }
 
+    @Test("Fighter Strength Routine B (deadlift + jump shrug) is a heavy lower-body workout")
+    func fighterStrengthRoutineBIsHeavyLowerBody() {
+        let routineB = ["seed.exercise.deadlift", "seed.exercise.jump_shrug", "seed.exercise.overhead_press"]
+        let muscleGroups = routineB.compactMap { key in SeedExerciseCatalog.entries.first { $0.seedKey == key }?.muscleGroups }
+        #expect(muscleGroups.count == routineB.count)
+        #expect(StrengthLogEntry.isHeavyLowerBody(exerciseMuscleGroups: muscleGroups))
+    }
+
     @Test("At most two hard sessions a week")
     func hardCap() {
         // Two alactic sessions done, aerobic open → aerobic; aerobic done too → the week is complete.

@@ -8,7 +8,7 @@ history gain the correct interpretation without matching localized display names
 
 ## What it does
 
-The app seeds a built-in catalog of **96 common gym exercises** (Big-6 compounds + the standard machine/cable/dumbbell/barbell/bodyweight staples, grouped by body area) into the normal exercise library — for new users on first launch AND as a backfill for existing users' libraries. Catalog rows whose name matches an exercise the user already created (case-, diacritic-, and whitespace-insensitive exact match) are skipped; near-miss names ("Bench Press" vs. "Barbell Bench Press") deliberately coexist — accepted product decision. Seeded exercises behave exactly like user-created ones — editable, deletable, usable in routines (Strong/Hevy model of one flat library).
+The app seeds a built-in catalog of **101 exercises** — 96 common gym exercises (Big-6 compounds + the standard machine/cable/dumbbell/barbell/bodyweight staples, grouped by body area) plus 5 ballistic exercises for the Fighter Strength program into the normal exercise library — for new users on first launch AND as a backfill for existing users' libraries. Catalog rows whose name matches an exercise the user already created (case-, diacritic-, and whitespace-insensitive exact match) are skipped; near-miss names ("Bench Press" vs. "Barbell Bench Press") deliberately coexist — accepted product decision. Seeded exercises behave exactly like user-created ones — editable, deletable, usable in routines (Strong/Hevy model of one flat library).
 
 Decision record (research 2026-07-11): **local bundle, no backend.** A backend (Supabase etc.) for a ~100-row, rarely-changing catalog adds an offline-empty-first-launch failure mode, privacy-label disclosure, and ops cost for zero benefit; every comparable app ships its library locally. Content structure derived from the public-domain [yuhonas/free-exercise-db](https://github.com/yuhonas/free-exercise-db); German names hand-written (wger, the only open German dataset, is CC-BY-SA share-alike). ExerciseDB/RapidAPI rejected (license forbids redistribution). Text-only, no images. Escalation path if remote updates are ever needed: static versioned JSON on a CDN with the bundle as fallback — still no backend.
 
@@ -18,7 +18,7 @@ Decision record (research 2026-07-11): **local bundle, no backend.** A backend (
 |---|---|
 | `Exercise.seedKey` property | `GymStreak/Domain/Models/Models.swift` |
 | `EquipmentType` + `cable`, `bodyweight` cases | `GymStreak/Domain/Models/EquipmentType.swift` |
-| Catalog (96 `SeedExercise` rows, `currentVersion`) | `GymStreak/Data/Seeding/SeedExerciseCatalog.swift` |
+| Catalog (101 `SeedExercise` rows, `currentVersion`) | `GymStreak/Data/Seeding/SeedExerciseCatalog.swift` |
 | Seeder (dedup + version-gated seed + stranded-library recovery) | `GymStreak/Data/Seeding/DefaultContentSeeder.swift` |
 | Version-flag seam (`SeedCatalogVersionStore`, `UbiquitousSeedCatalogVersionStore`) | `GymStreak/Data/Seeding/DefaultContentSeeder.swift` |
 | Wiring | `App/AppDependencies.swift` (constructs seeder with `cloudSyncStatus`), `App/GymStreakApp.swift` (`.onAppear` runs the seeder, `.task` runs the recovery — both non-`-UI_TESTING`) |
@@ -31,7 +31,7 @@ Decision record (research 2026-07-11): **local bundle, no backend.** A backend (
 - Every catalog row has a stable `seedKey` (`"seed.exercise.<name>"`) that is **both** the cross-device identity of the exercise and its `Localizable.strings` key. `Exercise.seedKey` is empty for user-created exercises — `!seedKey.isEmpty` is the built-in marker.
 - `DefaultContentSeeder.run()` is `async` and executes at every launch (except UI-testing runs, which use `TestDataSeeder` instead), awaited from `GymStreakApp`'s `.onAppear` task. It holds the History gate for the whole pass, because the dedup step below deletes duplicate `Exercise` rows and the History model actor fetches the entire `Exercise` table — see `docs/history-delete-race.md`. (`recoverStrandedLibraryIfNeeded()` needs no gate; it only inserts.)
   1. **Dedup pass (every launch):** groups exercises by non-empty `seedKey`; duplicates are collapsed into a deterministic survivor (sorted by `createdAt`, then `id.uuidString` — deterministic so concurrent devices keep the SAME record and never delete both copies). Routine references (`RoutineExercise.exercise`, `RoutineExerciseAlternative.exercise`) are re-pointed to the survivor before deletion.
-  2. **Seed pass (version-gated):** runs only when the stored catalog version < `SeedExerciseCatalog.currentVersion`, and inserts only rows with `introducedInVersion > lastSeededVersion` whose `seedKey` isn't present, so **deleted seeds are never resurrected**. Rows whose localized name normalizes (case/diacritic/whitespace-folded) to an existing exercise's name are skipped — existing users get the catalog backfilled without lookalikes of exercises they created themselves. Version history: **v1 = unreleased interim policy** (seed only empty libraries; some dev devices stamped it) — **v2 = first shipped catalog** (all 96 rows carry `introducedInVersion: 2` so v1-stamped devices get backfilled).
+  2. **Seed pass (version-gated):** runs only when the stored catalog version < `SeedExerciseCatalog.currentVersion`, and inserts only rows with `introducedInVersion > lastSeededVersion` whose `seedKey` isn't present, so **deleted seeds are never resurrected**. Rows whose localized name normalizes (case/diacritic/whitespace-folded) to an existing exercise's name are skipped — existing users get the catalog backfilled without lookalikes of exercises they created themselves. Version history: **v1 = unreleased interim policy** (seed only empty libraries; some dev devices stamped it) — **v2 = first shipped catalog** (all 96 rows carry `introducedInVersion: 2` so v1-stamped devices get backfilled) — **v3 = Fighter Strength power exercises** (5 rows, `introducedInVersion: 3`; see "Catalog v3" below).
   3. Version flag lives in `NSUbiquitousKeyValueStore` (propagates across the user's devices) with a `UserDefaults` mirror for no-iCloud accounts; reads take the max of both. Both halves go through `SeedCatalogVersionStore` so tests can drive them — the real KV store is a single process-wide instance whose contents outlive the app, so a test that wrote it would stamp the developer's simulator permanently.
 
 ### Stranded-library recovery (`recoverStrandedLibraryIfNeeded()`)
@@ -43,7 +43,7 @@ How it happens: the KV record lives outside the app container and survives delet
 The recovery runs once per launch from `GymStreakApp`'s `.task` and re-seeds only when both hold:
 
 - **The store is completely empty** — no exercises, no routines, no history. Deliberately stricter than "no seeded exercises": a user who deleted the built-ins but kept their own content made a choice, and the append-only rule ("deleted seeds are never resurrected") still governs that case. The cost is that a partially-populated stranded store is not recovered; erasing/reinstalling is the way back for those.
-- **CloudKit has proved it cannot explain the emptiness** — see the gate below. Waiting for that signal is what keeps the recovery off a new device of an existing user, which starts empty and fills in from CloudKit moments later; seeding into that window would upload 96 rows only for the next dedup pass to delete them.
+- **CloudKit has proved it cannot explain the emptiness** — see the gate below. Waiting for that signal is what keeps the recovery off a new device of an existing user, which starts empty and fills in from CloudKit moments later; seeding into that window would upload the whole catalog only for the next dedup pass to delete them.
 
 #### The gate (fixed 2026-08-26)
 
@@ -74,7 +74,7 @@ The whole cost of both timers is one launch's delay on a device that is about to
 #### Two gates that look right and are not (both tried, both reverted)
 
 - **`lastSuccessfulSync != nil`** (shipped 2026-08-13, defect found 2026-08-18, fixed 2026-08-26). It cannot mean "this session's transfer finished": `CloudKitSyncStatusMonitor` restores it from `UserDefaults.standard` in `init`, so it describes some past session of this *install*. It was wrong in **both** directions — it never fired on a device that had never completed a transfer (the exact dead end the recovery exists to escape) and it passed mid-import on a device whose defaults survived a store rebuild.
-- **Bare `state == .upToDate`**, matching `RoutinePlanLinkRepair`. Reverted 2026-08-26. `makeState()` returns `.upToDate` whenever no mirroring event is in flight, and `statusUpdates()` yields the current status synchronously on subscribe — so at cold launch, with no events opened yet, the *first* status of every session is `.upToDate`. Since the recovery's trigger is an empty store, it would seed all 96 rows on loop iteration one, straight into an existing user's import window; the `guard isStoreEmpty` at the top of the loop cannot save it because there is no second iteration. **`RoutinePlanLinkRepair` is not a precedent**: it tolerates an optimistic `.upToDate` only because it *no-ops* on an empty store (`guard !schedules.isEmpty`), whereas this recovery's action is *conditioned* on emptiness — the same gate means the opposite thing here.
+- **Bare `state == .upToDate`**, matching `RoutinePlanLinkRepair`. Reverted 2026-08-26. `makeState()` returns `.upToDate` whenever no mirroring event is in flight, and `statusUpdates()` yields the current status synchronously on subscribe — so at cold launch, with no events opened yet, the *first* status of every session is `.upToDate`. Since the recovery's trigger is an empty store, it would seed the whole catalog on loop iteration one, straight into an existing user's import window; the `guard isStoreEmpty` at the top of the loop cannot save it because there is no second iteration. **`RoutinePlanLinkRepair` is not a precedent**: it tolerates an optimistic `.upToDate` only because it *no-ops* on an empty store (`guard !schedules.isEmpty`), whereas this recovery's action is *conditioned* on emptiness — the same gate means the opposite thing here.
 - Also rejected: a **fixed settle delay alone**, with no real signal behind it. It closes the iteration-one hole, but it never becomes more certain no matter how long it waits. It survives only as the backstop.
 
 #### What is documented fact and what is community measurement
@@ -126,6 +126,52 @@ After a successful recovery the seeder posts `.cloudKitDataDidChange`, which is 
 - **Post-import dedup (fixed 2026-09-27).** Until then, the only dedup pass ran in `run()` at launch — i.e. *before* mirroring had delivered anything — so after a reinstall the user saw every starter exercise (and the example routine, see `docs/example-starter-routine.md`) twice for the whole first session, on the phone and on the watch, until the next cold launch. (Found while chasing a reinstall-duplication report whose actual cause was UI-test fixture data leaking into iCloud — see `docs/ui-test-data-isolation.md`; this race is real but was not that report.) Fix: `DefaultContentSeeder.deduplicateAfterImport()` (and `ExampleRoutineSeeder.cleanUpAfterImport()`) run the same deterministic dedup — **never the seed** — from a launch `.task` in `GymStreakApp` that watches `cloudSyncStatus.statusUpdates()` and fires each time the state leaves `.syncing` while `hasCompletedImportThisSession` is true. Both take the `HistoryStoreGate` and post `.cloudKitDataDidChange` only when they deleted something, so the lists and the watch refresh at once. Deliberately not seeding there: mid-session an empty store means "not arrived yet", not "never seeded". Tests: `collapsesTheReinstallSeedOnceTheImportLands`, `postImportDedupNeverSeeds`.
 - Known gap, pre-existing and unchanged: a *user-created* exercise (empty `seedKey`) whose name matches a catalog row is not a dedup candidate, so a reinstall seed next to an imported same-name user exercise leaves a lookalike pair. The seed-time name-collision skip cannot help because the store is empty at seed time.
 - **Localization decision:** the localized name is resolved **once at seed time** (device language) into the mutable `Exercise.name`; `seedKey` stays as stable identity. Switching the phone language later does not re-localize names. The display-time alternative (store key, resolve in views) was deliberately rejected — it would touch every view reading `.name`, the AI coach's `ExerciseNameResolver`, and watch sync.
+
+## Catalog v3 — ballistic exercises (Fighter Strength, 2026-10-03)
+
+Five rows, all `introducedInVersion: 3`, added for the Fighter Strength program
+(`docs/research/routine-programs-fighter-strength.md` §8). Existing users get them on the next
+launch through the normal version-gated seed pass (stored version 2 < 3); a v2 seed the user deleted
+is not resurrected. Two devices upgrading independently both upload them; the seedKey dedup pass
+collapses the pair (tests `catalogUpgradeAddsOnlyTheNewRows`,
+`catalogUpgradeOnTwoDevicesLeavesNoDuplicates`). The watch sees them like every other seed: the
+name is resolved into `Exercise.name` at seed time and reaches the watch through the exercise
+catalog sync — no watch code involved.
+
+| seedKey | en | de | Muscle groups (primary first) | Equipment |
+|---|---|---|---|---|
+| `box_jump` | Box Jump | Box Jump | Quadriceps, Glutes, Calves | `.bodyweight` |
+| `jump_shrug` | Jump Shrug | Jump Shrug | Hamstrings, Quadriceps, Glutes, Upper Back | `.barbell` |
+| `hang_power_clean` | Hang Power Clean | Power Clean aus dem Hang | Hamstrings, Quadriceps, Glutes, Upper Back | `.barbell` |
+| `medicine_ball_chest_pass` | Medicine Ball Chest Pass | Medizinball-Brustpass | Chest, Triceps, Front Delts | `.bodyweight` |
+| `medicine_ball_rotational_throw` | Medicine Ball Rotational Throw | Medizinball-Rotationswurf | Obliques, Abs, Shoulders | `.bodyweight` |
+
+**Version lag over an empty store (found in review, fixed with v3).** v3 is the first catalog bump
+after the stranded-library recovery shipped, and it exposed a hole: on a fresh install whose iCloud
+flag says `2`, `run()`'s version-scoped pass used to insert just the 5 v3 rows and stamp `3` — the
+store was no longer empty and the flag was current, so the recovery could never fire and the device
+kept a 5-exercise library for good. Now `seedIfNeeded` defers when `0 < stored version < current` and
+the store is completely empty (same `isStoreEmpty` as the recovery), and the recovery's entry guard is
+`storedCatalogVersion > 0` instead of `>= currentVersion`. The recovery then either sees CloudKit fill
+the store (a new device of an existing user — the next launch's `run()` adds the v3 rows) or seeds the
+whole catalog itself. Test: `recoversAStrandedLibraryWhoseFlagLagsTheCatalog`. Any future bump relies
+on this; every older recovery test stores `currentVersion` and would not have caught it.
+
+**Equipment decision: map to existing types, no new `EquipmentType` cases.** `EquipmentType` is
+display-only — a label, an icon and the search/filter text; no logic branches on it (weight entry
+follows `ExerciseLoadBehavior`, which stays `.resistance`, so the ball weight can be logged). A new
+case would cost far more than it gives: the value is stored as `equipmentTypeRaw` and synced through
+CloudKit, and an older install on another device decodes an unknown raw value as `.dumbbell`
+(`Exercise.equipmentType`'s fallback); the watch would also need its own equipment-string copy.
+`.bodyweight` is the closest existing type for a plyo box and a medicine ball (no rack, bar or
+machine). Restore path if a "Medicine ball" / "Plyo box" label is ever wanted: add the cases plus
+`equipment.*` strings on both targets, and accept that pre-upgrade installs show "Dumbbell".
+
+**Muscle-group decision: jump shrug and hang power clean list Quadriceps + Hamstrings** (triple
+extension). `ConditioningProgramCoach` counts a day as heavy lower body when ≥ 2 exercises list
+either, so Fighter Strength Routine B (deadlift + jump shrug) now steers hard conditioning ≥ 6 h
+away, as Routine A (squat + split squat + box jump) already did. Pinned by
+`fighterStrengthRoutineBIsHeavyLowerBody` in `ConditioningProgramCoachTests`.
 
 ## Catalog maintenance rules
 

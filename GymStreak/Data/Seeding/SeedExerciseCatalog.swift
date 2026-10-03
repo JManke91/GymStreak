@@ -33,7 +33,8 @@ enum SeedExerciseCatalog {
     // Version 2 is the first shipped catalog: version 1 was an unreleased
     // interim policy (seed only empty libraries) — re-releasing the rows as
     // v2 backfills devices that already stamped v1 during development.
-    static let currentVersion = 2
+    // Version 3 adds the five ballistic exercises of the Fighter Strength program.
+    static let currentVersion = 3
 
     static let entries: [SeedExercise] = [
         // MARK: - Chest
@@ -143,6 +144,19 @@ enum SeedExerciseCatalog {
         SeedExercise(seedKey: "seed.exercise.standing_calf_raise", muscleGroups: ["Calves"], equipmentType: .machine, introducedInVersion: 2),
         SeedExercise(seedKey: "seed.exercise.seated_calf_raise", muscleGroups: ["Calves"], equipmentType: .machine, introducedInVersion: 2),
         SeedExercise(seedKey: "seed.exercise.leg_press_calf_raise", muscleGroups: ["Calves"], equipmentType: .machine, introducedInVersion: 2),
+
+        // MARK: - Power (v3, Fighter Strength)
+        // No medicine-ball / plyo-box equipment case on purpose: EquipmentType is
+        // display-only, and a new raw value would read as `.dumbbell` on older
+        // installs syncing the same store (docs/starter-exercise-library.md).
+        // Jump shrug and hang power clean list Quadriceps + Hamstrings (triple
+        // extension) so a deadlift + jump shrug day is heavy lower body for the
+        // conditioning coach.
+        SeedExercise(seedKey: "seed.exercise.box_jump", muscleGroups: ["Quadriceps", "Glutes", "Calves"], equipmentType: .bodyweight, introducedInVersion: 3),
+        SeedExercise(seedKey: "seed.exercise.jump_shrug", muscleGroups: ["Hamstrings", "Quadriceps", "Glutes", "Upper Back"], equipmentType: .barbell, introducedInVersion: 3),
+        SeedExercise(seedKey: "seed.exercise.hang_power_clean", muscleGroups: ["Hamstrings", "Quadriceps", "Glutes", "Upper Back"], equipmentType: .barbell, introducedInVersion: 3),
+        SeedExercise(seedKey: "seed.exercise.medicine_ball_chest_pass", muscleGroups: ["Chest", "Triceps", "Front Delts"], equipmentType: .bodyweight, introducedInVersion: 3),
+        SeedExercise(seedKey: "seed.exercise.medicine_ball_rotational_throw", muscleGroups: ["Obliques", "Abs", "Shoulders"], equipmentType: .bodyweight, introducedInVersion: 3),
     ]
 }
 
