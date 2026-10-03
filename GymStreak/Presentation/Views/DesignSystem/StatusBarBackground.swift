@@ -8,8 +8,8 @@
 import SwiftUI
 
 extension View {
-    /// For screens that hide the navigation bar (the Routines tab and the
-    /// program screens): nothing else covers the status bar, so scrolled
+    /// For every screen that hides the navigation bar (the tab roots, the
+    /// routine, exercise, chart and recap details, and the program screens): nothing else covers the status bar, so scrolled
     /// content shows through under the clock. Paints
     /// the background behind the top safe area only. The colour must sit in a
     /// `background` of the zero-height view: `.ignoresSafeArea` cannot grow a

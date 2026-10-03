@@ -169,6 +169,7 @@ struct HistoryView: View {
             // Keep the tab root free of navigation chrome without passing that
             // preference to its pushed destinations.
             .toolbar(.hidden, for: .navigationBar)
+            .statusBarBackground()
             .navigationDestination(for: UUID.self) { sessionId in
                 if let session = viewModel.workoutSession(id: sessionId) {
                     WorkoutDetailView(workout: session, viewModel: viewModel)

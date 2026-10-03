@@ -93,6 +93,7 @@ private struct PeriodRecapViewInternal: View {
             }
             .safeAreaPadding(.bottom, 24)
         }
+        .statusBarBackground()
         .toolbar(.hidden, for: .navigationBar)
         .swipeBackEnabled()
         // Keyed, not bare: `.gated` and `.offer` are stored states, so a purchase

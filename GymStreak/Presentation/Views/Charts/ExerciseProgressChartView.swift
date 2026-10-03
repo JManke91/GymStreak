@@ -158,6 +158,7 @@ private struct ExerciseProgressChartViewInternal: View {
                 }
             }
         }
+        .statusBarBackground()
         .toolbar(.hidden, for: .navigationBar)
         .swipeBackEnabled()
         // Anchor for the floating coach bar's contextual suggestion chip.

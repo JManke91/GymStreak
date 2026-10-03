@@ -45,6 +45,7 @@ private struct ExercisesViewInternal: View {
             // On the ZStack, not exerciseList's ScrollView — safeAreaInset misbehaves
             // during interactive keyboard dismissal when on the same view (FB13296535).
             .keyboardDoneBar(isFocused: $isSearchFocused)
+            .statusBarBackground()
             .toolbar(.hidden, for: .navigationBar)
             .navigationDestination(for: UUID.self) { exerciseId in
                 if let exercise = viewModel.exercises.first(where: { $0.id == exerciseId }) {

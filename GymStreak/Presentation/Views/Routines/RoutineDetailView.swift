@@ -169,6 +169,7 @@ struct RoutineDetailView: View {
                 browsingModeContent
             }
         }
+        .statusBarBackground()
         .toolbar(.hidden, for: .navigationBar)
         .swipeBackEnabled()
         // ToolbarItemGroup(placement: .keyboard) does not render on iOS 26

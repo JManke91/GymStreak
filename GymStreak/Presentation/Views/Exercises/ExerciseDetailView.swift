@@ -28,6 +28,7 @@ struct ExerciseDetailView: View {
                 }
             }
         }
+        .statusBarBackground()
         .toolbar(.hidden, for: .navigationBar)
         .swipeBackEnabled()
         .sheet(isPresented: $showingEdit) {
