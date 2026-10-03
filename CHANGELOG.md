@@ -4,6 +4,28 @@ All notable changes to GymStreak are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.1.18] - 2026-10-03
+
+### Added
+
+- While creating a routine, you can now build supersets right away: tap "Superset" between two exercises, cut a superset apart with the scissors, and use "Sort" to move a superset as one block. The new-routine screen now looks just like the routine screen.
+- AI Coach: when a routine draft names an exercise that is not in your library yet, you can now create it right from the "Choose exercise" screen — the name is already filled in and the drafted sets, reps and weight are kept.
+- New: Programs. From the Routines tab, open "Programs" and add Beginner Full Body: two ready-made full-body routines (with machine and dumbbell alternatives) join your list, optionally planned by recovery time so A and B take turns every other day. Programs are free and don't use your routine slots.
+- The program page now shows the next two weeks of workouts, how to train the program (effort, start weight, when to add weight or back off) and the research it is based on. If you delete one of its routines, you can restore it from the same page.
+- The Routines tab now has a Programs shelf: swipe through ready-made plans, see each one's weekly pattern at a glance and tap a card to open it ("Added" once it's in your list). With no routines yet, the tab now starts with "Start with a program", or build your own routine.
+- Once you add a program, the Routines tab groups its routines under the program name with a "Program guide" link, and your own routines move under "Your routines". When "Up next" is a program workout, it shows which program it belongs to.
+- New program: Push / Pull / Legs. Three routines (Push, Pull, Legs) with rest days built in: planned by recovery time, they come up as Push, Pull, rest, Legs, rest, about four sessions a week. Beginner Full Body now links to it when it is time to move on.
+- Five new exercises in your library for power training: Box Jump, Jump Shrug, Hang Power Clean, Medicine Ball Chest Pass and Medicine Ball Rotational Throw. They are added automatically if you already use the app.
+- New program: Fighter Strength. Two lifting sessions for combat athletes (Squat & Press, Hinge & Pull), each every 7 days, three days apart: heavy lifts paired with box jumps, jump shrugs and medicine-ball throws. Jumps and throws have no rep goal, so the app never suggests more weight for them. The program page explains how to fit it around sparring, how to adjust it during fight camp, and links to Fight conditioning.
+
+### Improved
+
+- When adding an exercise to a routine, the quick set options are now 3×6, 3×12 and 3×15.
+
+### Fixed
+
+- Fixed: on screens without a top bar (Routines, History, Exercises, Settings, a routine, an exercise, its progress chart and the coach recap), content no longer scrolls visibly under the clock.
+
 ## [1.1.17] - 2026-09-30
 
 ### Added

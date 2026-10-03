@@ -11,8 +11,13 @@ keyword field from that doc are live; the variants below predate them.
 
 **Updated 2026-08-17 for the Pro launch (ticket 15 / `docs/pro-subscription.md` §9.6).** Every option previously ended on "no account, no subscription" / "ohne Konto, ohne Abo". The no-**subscription** half is no longer true and had to go from every variant — including the ones not currently live, because this field is edited without a build and a stale variant can be pasted back months later. The no-**account** promise stays: it is still true.
 
-**Current recommendation (2026-09-30, v1.1.17)** — paste once 1.1.17 is live; it leads with the
-conditioning feature that build ships (`AppStore/Marketing.1.1.17.md` has the reasoning):
+**Current recommendation (2026-10-03, v1.1.18)**: paste once 1.1.18 is live. It leads with the
+free training programs that build ships (`AppStore/Marketing.1.1.18.md` has the reasoning):
+
+- en-US (145/170): `New: free training programs. Add Beginner Full Body, Push / Pull / Legs or Fighter Strength in one tap, planned around your recovery. No account.`
+- de-DE (167/170): `Neu: kostenlose Trainingsprogramme. Füge Ganzkörper für Einsteiger, Push / Pull / Legs oder Fighter Strength per Tipp hinzu – nach deiner Erholung geplant. Ohne Konto.`
+
+Until 1.1.18 is live, the v1.1.17 conditioning line stays correct (`AppStore/Marketing.1.1.17.md`):
 
 - en-US (164/170): `New: conditioning for fighters. Interval and aerobic sessions paced to your own heart-rate zones on iPhone and Apple Watch, planned around your lifting. No account.`
 - de-DE (161/170): `Neu: Kondition für Kampfsportler. Intervall- und Ausdauereinheiten nach deinen Herzfrequenzzonen auf iPhone & Apple Watch, passend zum Krafttraining. Ohne Konto.`
