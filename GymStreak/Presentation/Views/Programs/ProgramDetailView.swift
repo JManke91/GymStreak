@@ -2,9 +2,10 @@
 //  ProgramDetailView.swift
 //  GymStreak
 //
-//  Program detail (design artboard 3): hero, recovery-time timeline, the
-//  routines, the alternative hint, "How to train it", "Based on" and the
-//  repeated CTA. Sections a program doesn't use are omitted.
+//  Program detail (design artboards 3 and 7): hero, recovery-time timeline,
+//  the routines, the alternative hint, "How to train it", "Fight camp", the
+//  fight-conditioning pairing, "Based on" and the repeated CTA. Sections a
+//  program doesn't use are omitted.
 //  See docs/routine-programs.md.
 //
 
@@ -19,6 +20,7 @@ struct ProgramDetailView: View {
     let onInstalled: () -> Void
 
     @State private var showingInstallSheet = false
+    @State private var showingConditioning = false
     /// Depends on today's date, so it is fetched on appear — never built in `body`.
     @State private var timeline: [ProgramLibraryViewModel.TimelineDay] = []
 
@@ -43,7 +45,7 @@ struct ProgramDetailView: View {
                     }
 
                     if !summary.guidanceRules.isEmpty {
-                        ProgramSectionLabel(text: "routine_programs.detail.how_to_train".localized)
+                        ProgramSectionLabel(text: summary.guidanceTitle)
                         ProgramGuidanceCard(rules: summary.guidanceRules) { programId in
                             if let target = viewModel.summary(withId: programId) {
                                 ProgramDetailView(
@@ -53,6 +55,18 @@ struct ProgramDetailView: View {
                                     onInstalled: onInstalled
                                 )
                             }
+                        }
+                    }
+
+                    if let campIntro = summary.campIntro {
+                        ProgramSectionLabel(text: "routine_programs.detail.fight_camp".localized)
+                        ProgramCampCard(intro: campIntro, phases: summary.campPhases)
+                    }
+
+                    if summary.pairsWithConditioning {
+                        ProgramConditioningPairingRow {
+                            HapticManager.shared.light()
+                            showingConditioning = true
                         }
                     }
 
@@ -77,6 +91,9 @@ struct ProgramDetailView: View {
                 showingInstallSheet = false
                 onInstalled()
             }
+        }
+        .fullScreenCover(isPresented: $showingConditioning) {
+            ConditioningLibraryView()
         }
     }
 

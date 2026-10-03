@@ -85,8 +85,9 @@ struct ProgramScheduleCard: View {
     }
 }
 
-/// "How to train it": numbered rules. A rule that points to another program
-/// (Full Body's graduation → Push / Pull / Legs) links to its detail.
+/// "How to train it": numbered rules; a warning rule takes "!" in the warning
+/// colour. A rule that points to another program (Full Body's graduation →
+/// Push / Pull / Legs) links to its detail.
 struct ProgramGuidanceCard<Destination: View>: View {
     let rules: [ProgramLibraryViewModel.GuidanceRule]
     @ViewBuilder let destination: (_ programId: String) -> Destination
@@ -96,11 +97,12 @@ struct ProgramGuidanceCard<Destination: View>: View {
             ForEach(rules) { rule in
                 VStack(alignment: .leading, spacing: 8) {
                     HStack(alignment: .top, spacing: 12) {
+                        let accent = rule.isWarning ? DesignSystem.Colors.warning : DesignSystem.Colors.tint
                         Text(rule.number)
                             .font(.system(size: 12, weight: .heavy))
-                            .foregroundStyle(DesignSystem.Colors.tint)
+                            .foregroundStyle(accent)
                             .frame(width: 28, height: 28)
-                            .background(DesignSystem.Colors.tint.opacity(0.13), in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+                            .background(accent.opacity(rule.isWarning ? 0.16 : 0.13), in: RoundedRectangle(cornerRadius: 9, style: .continuous))
                         VStack(alignment: .leading, spacing: 3) {
                             Text(rule.title)
                                 .font(.system(size: 14, weight: .heavy))
@@ -163,5 +165,78 @@ struct ProgramSourcesCard: View {
         .padding(.vertical, 14)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(DesignSystem.Colors.card, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+    }
+}
+
+/// "Fight camp": how to adjust the routines by camp week. Text only.
+struct ProgramCampCard: View {
+    let intro: String
+    let phases: [ProgramLibraryViewModel.CampPhase]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text(intro)
+                .font(.system(size: 12.5))
+                .foregroundStyle(Color.white.opacity(0.6))
+                .fixedSize(horizontal: false, vertical: true)
+            ForEach(phases) { phase in
+                HStack(alignment: .top, spacing: 12) {
+                    Text(phase.weeks)
+                        .font(.system(size: 12, weight: .heavy))
+                        .monospacedDigit()
+                        .foregroundStyle(DesignSystem.Colors.tint)
+                        .frame(width: 62, alignment: .leading)
+                        .padding(.top, 1)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(phase.title)
+                            .font(.system(size: 13.5, weight: .heavy))
+                            .foregroundStyle(.white)
+                        Text(phase.detail)
+                            .font(.system(size: 12))
+                            .foregroundStyle(Color.white.opacity(0.55))
+                    }
+                    .fixedSize(horizontal: false, vertical: true)
+                    Spacer(minLength: 0)
+                }
+                .accessibilityElement(children: .combine)
+            }
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(DesignSystem.Colors.card, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+    }
+}
+
+/// "Pairs with Fight conditioning": opens the conditioning screen.
+struct ProgramConditioningPairingRow: View {
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 12) {
+                Image(systemName: "figure.boxing")
+                    .font(.system(size: 17, weight: .semibold))
+                    .foregroundStyle(DesignSystem.Colors.tint)
+                    .frame(width: 40, height: 40)
+                    .background(DesignSystem.Colors.tint.opacity(0.15), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("routine_programs.detail.pairs_conditioning.title".localized)
+                        .font(.system(size: 14.5, weight: .bold))
+                        .foregroundStyle(.white)
+                    Text("routine_programs.detail.pairs_conditioning.detail".localized)
+                        .font(.system(size: 12.5))
+                        .foregroundStyle(Color.white.opacity(0.55))
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Spacer(minLength: 8)
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundStyle(Color.white.opacity(0.35))
+            }
+            .padding(14)
+            .background(DesignSystem.Colors.card, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
     }
 }

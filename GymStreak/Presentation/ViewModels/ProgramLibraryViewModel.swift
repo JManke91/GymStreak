@@ -40,9 +40,12 @@ final class ProgramLibraryViewModel {
     /// One "How to train it" rule.
     struct GuidanceRule: Identifiable, Equatable {
         let id: String
+        /// "1", or "!" for a warning.
         let number: String
         let title: String
         let detail: String
+        /// Drawn in the warning colour ("Not before hard sparring").
+        var isWarning = false
         /// The program this rule sends the user to, with its link title.
         var link: RuleLink?
     }
@@ -51,6 +54,14 @@ final class ProgramLibraryViewModel {
         let programId: String
         /// "See Push / Pull / Legs".
         let title: String
+    }
+
+    /// One "Fight camp" phase: "Wk 5–8 · Maintain · …".
+    struct CampPhase: Identifiable, Equatable {
+        let id: String
+        let weeks: String
+        let title: String
+        let detail: String
     }
 
     /// One "Based on" line: the source and its role in the program.
@@ -96,7 +107,14 @@ final class ProgramLibraryViewModel {
         /// "A = Full Body A", …, "outlined = today".
         let timelineLegend: [String]
         let alternativeHint: String?
+        /// "How to train it", or the program's own heading.
+        let guidanceTitle: String
         let guidanceRules: [GuidanceRule]
+        /// The "Fight camp" intro; nil omits the section.
+        let campIntro: String?
+        let campPhases: [CampPhase]
+        /// Shows the "Pairs with Fight conditioning" row.
+        let pairsWithConditioning: Bool
         let basedOn: [SourceLine]
     }
 

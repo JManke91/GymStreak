@@ -19,6 +19,16 @@ the app guides the energy-system conditioning around them — interval sessions 
 countdowns, steady-state aerobic sessions with a duration and a live heart-rate target zone.
 Skill training (MMA, BJJ, Muay Thai) is explicitly out of scope; only the conditioning is modeled.
 
+**Lifting companion: Fighter Strength.** The routine-programs library ships a lifting-only plan for
+the same audience (`docs/routine-programs.md`, "Fighter Strength content"). It obeys this add-on's
+concurrent-training rules from the lifting side (lift first, hard work ≥ 6 h later, nothing heavy on
+or before hard sparring) and its "Fight camp" phases line up with this program's 12 weeks
+(strength ↔ aerobic base, maintain ↔ lactic, power ↔ alactic, taper ↔ taper). Its detail screen has
+a "Pairs with Fight conditioning" row that opens this add-on's Conditioning screen full screen. The
+two are not linked in data: neither reads the other's week or schedule. Its Routine B lists jump
+shrug / hang power clean with Hamstrings + Quadriceps, so `ConditioningProgramCoach` treats both
+Fighter Strength sessions as heavy lower body.
+
 ## Plan (approved 2026-09-18)
 
 Tickets: `.scratch/fight-conditioning/issues/01–08` — iPhone runner → History logging → HR zones →

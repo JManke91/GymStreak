@@ -41,23 +41,18 @@ extension ProgramLibraryViewModel {
                 )
             } + ["routine_programs.detail.schedule.legend_today".localized],
             alternativeHint: program.alternativeHintKey?.localized,
-            guidanceRules: program.guidanceRuleKeys.enumerated().map { index, stem in
-                GuidanceRule(
+            guidanceTitle: program.guidanceTitleKey.localized,
+            guidanceRules: guidanceRules(for: program),
+            campIntro: program.phaseKeys.isEmpty ? nil : "\(key).phases_intro".localized,
+            campPhases: program.phaseKeys.map { stem in
+                CampPhase(
                     id: stem,
-                    number: "\(index + 1)",
-                    title: "\(key).rule.\(stem).title".localized,
-                    detail: "\(key).rule.\(stem).detail".localized,
-                    link: program.ruleLinks[stem].map { target in
-                        RuleLink(
-                            programId: target,
-                            title: String(
-                                format: "routine_programs.detail.rule_link".localized,
-                                "routine_programs.\(target).name".localized
-                            )
-                        )
-                    }
+                    weeks: "\(key).phase.\(stem).weeks".localized,
+                    title: "\(key).phase.\(stem).title".localized,
+                    detail: "\(key).phase.\(stem).detail".localized
                 )
             },
+            pairsWithConditioning: program.pairsWithConditioning,
             basedOn: program.sourceKeys.map { stem in
                 SourceLine(
                     id: stem,
@@ -68,6 +63,32 @@ extension ProgramLibraryViewModel {
         )
     }
 
+    /// Warnings show "!" and don't take a number, so the numbered rules stay 1, 2, 3.
+    private static func guidanceRules(for program: RoutineProgram) -> [GuidanceRule] {
+        let key = "routine_programs.\(program.id)"
+        var number = 0
+        return program.guidanceRuleKeys.map { stem in
+            let isWarning = program.warningRuleKeys.contains(stem)
+            if !isWarning { number += 1 }
+            return GuidanceRule(
+                id: stem,
+                number: isWarning ? "!" : "\(number)",
+                title: "\(key).rule.\(stem).title".localized,
+                detail: "\(key).rule.\(stem).detail".localized,
+                isWarning: isWarning,
+                link: program.ruleLinks[stem].map { target in
+                    RuleLink(
+                        programId: target,
+                        title: String(
+                            format: "routine_programs.detail.rule_link".localized,
+                            "routine_programs.\(target).name".localized
+                        )
+                    )
+                }
+            )
+        }
+    }
+
     private static func routineSummary(for routine: RoutineProgramRoutine) -> RoutineSummary {
         let exercises = routine.exercises
         let rows = exercises.enumerated().map { index, slot in
@@ -75,7 +96,7 @@ extension ProgramLibraryViewModel {
                 id: index,
                 name: slot.exerciseSeedKey.localized,
                 note: note(for: slot, in: exercises),
-                scheme: "\(slot.setCount) × \(slot.repMin)–\(slot.repMax)"
+                scheme: scheme(for: slot)
             )
         }
         let setCount = exercises.reduce(0) { $0 + $1.setCount }
@@ -88,10 +109,19 @@ extension ProgramLibraryViewModel {
         )
     }
 
+    /// "3 × 8–12", or "3 × 3" for a slot without a rep-range goal.
+    private static func scheme(for slot: RoutineProgramExercise) -> String {
+        guard let repMin = slot.repMin, let repMax = slot.repMax else {
+            return "\(slot.setCount) × \(slot.startReps)"
+        }
+        return "\(slot.setCount) × \(repMin)–\(repMax)"
+    }
+
     private static func note(for slot: RoutineProgramExercise, in exercises: [RoutineProgramExercise]) -> String? {
         if !slot.alternativeSeedKeys.isEmpty {
             let names = slot.alternativeSeedKeys.map(\.localized).formatted(.list(type: .and))
-            return String(format: "routine_programs.alternatives".localized, names)
+            let alternatives = String(format: "routine_programs.alternatives".localized, names)
+            return slot.noteKey.map { "\($0.localized) · \(alternatives)" } ?? alternatives
         }
         if let group = slot.supersetGroup,
            let partner = exercises.first(where: { $0.supersetGroup == group && $0.exerciseSeedKey != slot.exerciseSeedKey }) {

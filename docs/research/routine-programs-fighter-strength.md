@@ -1,7 +1,7 @@
 # Research: Ready-made strength program — Fighter Strength
 
 **Status:** research only, no code changed. Researched 2026-09-27 (wayfinder ticket
-`.scratch/routine-programs/wayfinder/02-research-fighter-strength.md`).
+`.scratch/_done/routine-programs/wayfinder/02-research-fighter-strength.md`).
 **Bar set by the product owner:** every program must be scientifically supported **and** community
 accepted. Nothing below is invented: the structure traces to peer-reviewed combat-sport S&C
 literature, meta-analyses and NSCA guidance [numbered sources], and to the one published,

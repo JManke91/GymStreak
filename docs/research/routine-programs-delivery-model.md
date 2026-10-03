@@ -1,6 +1,6 @@
 # Routine programs — delivery model (options memo)
 
-**Wayfinder ticket:** `.scratch/routine-programs/wayfinder/03-research-program-delivery-model.md`
+**Wayfinder ticket:** `.scratch/_done/routine-programs/wayfinder/03-research-program-delivery-model.md`
 **Date:** 2026-09-27 · **Type:** codebase research, no code changes
 **Inputs:** `docs/research/routine-programs-hypertrophy.md` (01), `docs/research/routine-programs-fighter-strength.md` (02)
 

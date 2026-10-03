@@ -594,7 +594,7 @@ the property into an experience. This is the **switching message**, not the iden
 ### 18. Fighter positioning (P1)
 
 **🎫 Ticket cut 2026-10-02**: `.scratch/positioning-usp/issues/04–07`, plus the already-cut
-Fighter Strength program (`.scratch/routine-programs/issues/08`), which ticket 06 depends on.
+Fighter Strength program (`.scratch/_done/routine-programs/issues/08`), which ticket 06 depends on.
 **Why:** "lifting + fight conditioning in one log" is the only position on the market map with no
 owner, and the conditioning half has already shipped (`docs/fight-conditioning.md`). It can **not**
 be reached through App Store search ("mma strength", "bjj workout" and "fight conditioning" all

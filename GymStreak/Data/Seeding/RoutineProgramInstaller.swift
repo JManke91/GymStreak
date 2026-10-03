@@ -77,7 +77,7 @@ final class RoutineProgramInstaller: RoutineProgramInstalling {
                     template: SeedRoutineExercise(
                         exerciseSeedKey: slot.exerciseSeedKey,
                         setCount: slot.setCount,
-                        reps: slot.repMin,
+                        reps: slot.startReps,
                         targetRepMin: slot.repMin,
                         targetRepMax: slot.repMax,
                         restTime: slot.restTime,

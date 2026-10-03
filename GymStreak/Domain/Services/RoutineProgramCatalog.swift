@@ -3,7 +3,8 @@
 //  GymStreak
 //
 //  The ready-made programs as data. Content source of truth:
-//  docs/research/routine-programs-hypertrophy.md §3 and §4 (signed off 2026-09-27).
+//  docs/research/routine-programs-hypertrophy.md §3 and §4 (signed off 2026-09-27);
+//  Fighter Strength lives in RoutineProgramCatalog+Fighter.swift.
 //  See docs/routine-programs.md.
 //
 
@@ -11,7 +12,7 @@ import Foundation
 
 enum RoutineProgramCatalog {
 
-    static let programs: [RoutineProgram] = [beginnerFullBody, pushPullLegs]
+    static let programs: [RoutineProgram] = [beginnerFullBody, pushPullLegs, fighterStrength]
 
     static func program(withId id: String) -> RoutineProgram? {
         programs.first { $0.id == id }

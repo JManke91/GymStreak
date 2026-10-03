@@ -14,16 +14,21 @@ struct RoutineProgramExercise: Sendable, Equatable {
     /// Full `SeedExerciseCatalog` key, e.g. "seed.exercise.barbell_back_squat".
     let exerciseSeedKey: String
     let setCount: Int
-    /// Rep-range goal. Every set starts at `repMin`, the bottom of the range.
-    let repMin: Int
-    let repMax: Int
+    /// Reps every set starts at: the bottom of the rep range, or the fixed count
+    /// of a slot without one.
+    let startReps: Int
+    /// Rep-range goal. Nil for power lifts, jumps and throws, which progress by
+    /// speed rather than reps, so the app never suggests a weight increase.
+    let repMin: Int?
+    let repMax: Int?
     let restTime: TimeInterval
     /// Slots sharing a non-nil group are performed as a superset, in order.
     let supersetGroup: String?
     /// Swap-in exercises, already set up with the primary's scheme.
     let alternativeSeedKeys: [String]
     /// Localization key of the one-line role shown on the detail screen
-    /// ("Vertical pull"). Alternatives and superset notes take precedence.
+    /// ("Vertical pull"), shown before the alternatives when there are any.
+    /// A superset partner note replaces it on a slot without alternatives.
     let noteKey: String?
 
     init(
@@ -37,8 +42,31 @@ struct RoutineProgramExercise: Sendable, Equatable {
     ) {
         self.exerciseSeedKey = exerciseSeedKey
         self.setCount = setCount
+        self.startReps = reps.lowerBound
         self.repMin = reps.lowerBound
         self.repMax = reps.upperBound
+        self.restTime = restTime
+        self.supersetGroup = supersetGroup
+        self.alternativeSeedKeys = alternativeSeedKeys
+        self.noteKey = noteKey
+    }
+
+    /// A slot with a fixed rep count and no rep-range goal (Fighter Strength's
+    /// power lifts, jumps and throws).
+    init(
+        _ exerciseSeedKey: String,
+        sets setCount: Int,
+        fixedReps: Int,
+        rest restTime: TimeInterval,
+        superset supersetGroup: String? = nil,
+        alternatives alternativeSeedKeys: [String] = [],
+        note noteKey: String? = nil
+    ) {
+        self.exerciseSeedKey = exerciseSeedKey
+        self.setCount = setCount
+        self.startReps = fixedReps
+        self.repMin = nil
+        self.repMax = nil
         self.restTime = restTime
         self.supersetGroup = supersetGroup
         self.alternativeSeedKeys = alternativeSeedKeys
@@ -80,4 +108,14 @@ struct RoutineProgram: Sendable, Equatable, Identifiable {
     /// The detail's third stat is the program's length ("~12 wk", `stat.length`)
     /// instead of the session length (`stat.duration`).
     var showsLengthStat = false
+    /// The guidance section's heading ("How to train it").
+    var guidanceTitleKey = "routine_programs.detail.how_to_train"
+    /// Guidance rules shown as a warning ("!" in the warning colour) instead of
+    /// a number (Fighter Strength's "Not before hard sparring").
+    var warningRuleKeys: Set<String> = []
+    /// Stems of the "Fight camp" phases, in order:
+    /// `routine_programs.<id>.phase.<stem>.weeks|title|detail`. Text only.
+    var phaseKeys: [String] = []
+    /// The detail links to the fight-conditioning program (lifting-only plans).
+    var pairsWithConditioning = false
 }
