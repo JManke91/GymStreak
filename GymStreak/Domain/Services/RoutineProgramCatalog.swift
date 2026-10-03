@@ -3,7 +3,7 @@
 //  GymStreak
 //
 //  The ready-made programs as data. Content source of truth:
-//  docs/research/routine-programs-hypertrophy.md §3 (signed off 2026-09-27).
+//  docs/research/routine-programs-hypertrophy.md §3 and §4 (signed off 2026-09-27).
 //  See docs/routine-programs.md.
 //
 
@@ -11,7 +11,7 @@ import Foundation
 
 enum RoutineProgramCatalog {
 
-    static let programs: [RoutineProgram] = [beginnerFullBody]
+    static let programs: [RoutineProgram] = [beginnerFullBody, pushPullLegs]
 
     static func program(withId id: String) -> RoutineProgram? {
         programs.first { $0.id == id }
@@ -96,6 +96,115 @@ enum RoutineProgramCatalog {
         ],
         alternativeHintKey: "routine_programs.detail.alternative_tip",
         guidanceRuleKeys: ["effort", "start_weight", "progression", "deload", "graduation"],
-        sourceKeys: ["basic_beginner", "acsm", "meta_analyses"]
+        sourceKeys: ["basic_beginner", "acsm", "meta_analyses"],
+        ruleLinks: ["graduation": "ppl"],
+        showsLengthStat: true
+    )
+
+    /// Metallicadpa's PPL exercises on double progression, run as the rotating
+    /// 5-day split: each routine every 5 days, offsets 0/1/3 →
+    /// Push · Pull · rest · Legs · rest (~4 sessions a week, rest days built in).
+    static let pushPullLegs = RoutineProgram(
+        id: "ppl",
+        cadenceDays: 5,
+        routines: [
+            RoutineProgramRoutine(
+                seedKey: "seed.program.ppl.push",
+                startOffsetDays: 0,
+                exercises: [
+                    RoutineProgramExercise(
+                        "seed.exercise.barbell_bench_press", sets: 4, reps: 6...10, rest: 180,
+                        note: "routine_programs.note.main_lift"
+                    ),
+                    RoutineProgramExercise(
+                        "seed.exercise.overhead_press", sets: 3, reps: 8...12, rest: 150,
+                        note: "routine_programs.note.shoulders"
+                    ),
+                    RoutineProgramExercise(
+                        "seed.exercise.incline_dumbbell_bench_press", sets: 3, reps: 8...12, rest: 120,
+                        note: "routine_programs.note.upper_chest"
+                    ),
+                    RoutineProgramExercise(
+                        "seed.exercise.tricep_pushdown", sets: 3, reps: 8...12, rest: 60, superset: "pushdown"
+                    ),
+                    RoutineProgramExercise(
+                        "seed.exercise.dumbbell_lateral_raise", sets: 3, reps: 15...20, rest: 60, superset: "pushdown"
+                    ),
+                    RoutineProgramExercise(
+                        "seed.exercise.overhead_tricep_extension", sets: 3, reps: 8...12, rest: 60, superset: "extension"
+                    ),
+                    RoutineProgramExercise(
+                        "seed.exercise.cable_lateral_raise", sets: 3, reps: 15...20, rest: 60, superset: "extension"
+                    ),
+                ]
+            ),
+            RoutineProgramRoutine(
+                seedKey: "seed.program.ppl.pull",
+                startOffsetDays: 1,
+                exercises: [
+                    RoutineProgramExercise(
+                        "seed.exercise.deadlift", sets: 2, reps: 4...6, rest: 180,
+                        note: "routine_programs.note.heavy_hinge"
+                    ),
+                    RoutineProgramExercise(
+                        "seed.exercise.barbell_row", sets: 3, reps: 6...10, rest: 150,
+                        note: "routine_programs.note.main_lift"
+                    ),
+                    RoutineProgramExercise(
+                        "seed.exercise.lat_pulldown", sets: 3, reps: 8...12, rest: 120,
+                        alternatives: ["seed.exercise.pull_up", "seed.exercise.assisted_pull_up"]
+                    ),
+                    RoutineProgramExercise(
+                        "seed.exercise.seated_cable_row", sets: 3, reps: 8...12, rest: 120,
+                        note: "routine_programs.note.horizontal_pull"
+                    ),
+                    RoutineProgramExercise(
+                        "seed.exercise.face_pull", sets: 5, reps: 15...20, rest: 60,
+                        note: "routine_programs.note.rear_delts"
+                    ),
+                    RoutineProgramExercise(
+                        "seed.exercise.hammer_curl", sets: 4, reps: 8...12, rest: 60,
+                        note: "routine_programs.note.biceps"
+                    ),
+                    RoutineProgramExercise(
+                        "seed.exercise.dumbbell_curl", sets: 4, reps: 8...12, rest: 60,
+                        note: "routine_programs.note.biceps"
+                    ),
+                ]
+            ),
+            RoutineProgramRoutine(
+                seedKey: "seed.program.ppl.legs",
+                startOffsetDays: 3,
+                exercises: [
+                    RoutineProgramExercise(
+                        "seed.exercise.barbell_back_squat", sets: 3, reps: 6...10, rest: 180,
+                        note: "routine_programs.note.main_lift"
+                    ),
+                    RoutineProgramExercise(
+                        "seed.exercise.romanian_deadlift", sets: 3, reps: 8...12, rest: 150,
+                        note: "routine_programs.note.hip_hinge"
+                    ),
+                    RoutineProgramExercise(
+                        "seed.exercise.leg_press", sets: 3, reps: 8...12, rest: 120,
+                        note: "routine_programs.note.quads"
+                    ),
+                    RoutineProgramExercise(
+                        "seed.exercise.lying_leg_curl", sets: 3, reps: 8...12, rest: 90,
+                        note: "routine_programs.note.hamstrings"
+                    ),
+                    RoutineProgramExercise(
+                        "seed.exercise.standing_calf_raise", sets: 5, reps: 8...12, rest: 60,
+                        note: "routine_programs.note.calves"
+                    ),
+                    RoutineProgramExercise(
+                        "seed.exercise.cable_crunch", sets: 3, reps: 10...15, rest: 60,
+                        note: "routine_programs.note.optional_abs"
+                    ),
+                ]
+            ),
+        ],
+        alternativeHintKey: nil,
+        guidanceRuleKeys: ["effort", "start_weight", "progression", "deload"],
+        sourceKeys: ["metallicadpa", "meta_analyses"]
     )
 }

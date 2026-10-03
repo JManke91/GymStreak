@@ -44,7 +44,16 @@ struct ProgramDetailView: View {
 
                     if !summary.guidanceRules.isEmpty {
                         ProgramSectionLabel(text: "routine_programs.detail.how_to_train".localized)
-                        ProgramGuidanceCard(rules: summary.guidanceRules)
+                        ProgramGuidanceCard(rules: summary.guidanceRules) { programId in
+                            if let target = viewModel.summary(withId: programId) {
+                                ProgramDetailView(
+                                    viewModel: viewModel,
+                                    summary: target,
+                                    backTitle: summary.name,
+                                    onInstalled: onInstalled
+                                )
+                            }
+                        }
                     }
 
                     if !summary.basedOn.isEmpty {

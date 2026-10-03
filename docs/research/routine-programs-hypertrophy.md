@@ -162,10 +162,23 @@ there [15].
 
 ## 4. Program B — Push/Pull/Legs
 
-**Schedule (recommended):** 6 days, Push/Pull/Legs/Push/Pull/Legs/Rest — the layout of
+**Schedule (shipped, amended 2026-10-03 by the product owner):** the rotating 5-day split,
+Push · Pull · Rest · Legs · Rest, repeated — each routine every 5 days (~4.2 sessions/week, each
+muscle ~1.4×/week, i.e. 3× per 2 weeks) [A1]. This replaces the signed-off 6-day layout below.
+Rationale: rest days are part of the plan instead of a text rule, and volume-equated frequency has no
+meaningful effect on hypertrophy [A2], so the frequency drop costs weekly volume, not the frequency
+itself. **Trade-off accepted:** with the tables unchanged, weekly sets per muscle are ~30 % lower than
+the 6-day figures below (5/7 × 2 sessions), and frequency sits under the ≥2×/week floor of [3][4].
+
+*Originally signed off:* 6 days, Push/Pull/Legs/Push/Pull/Legs/Rest — the layout of
 Metallicadpa's PPL ("PPLRPPL" or "PPLPPLR") [15]. Each muscle is trained 2×/week, which meets the
 evidence floor [3][4]; weekly volume per muscle lands at ~10–20 sets, the range where Pelland's
 dose-response still shows meaningful gains [2]. The same 3 routines run twice per week.
+
+[A1] Rotating PPL, "push/pull/off/legs/off", 3× every 2 weeks per muscle —
+https://www.aworkoutroutine.com/push-pull-legs-split/ ; [A2] Schoenfeld, Grgic, Krieger 2019,
+*J Sports Sci* 37:1286–1295 (25 volume-equated trials, no meaningful frequency effect) —
+https://www.semanticscholar.org/paper/5f3b9845fdfd15200bdac0f7b9b36da457c48025
 
 **Adaptation from the source:** Metallicadpa's main lifts are 5-rep linear progression with AMRAP
 last sets and weekly alternation of bench/OHP and deadlift/row. For a hypertrophy program on the
@@ -293,7 +306,7 @@ alternatives are missing:
 > **Resolved at content sign-off (2026-09-27, wayfinder ticket 06).** (1) No rotation concept;
 > every-N-days cadence per routine — Full Body A/B each every 4 days offset 2 (exact alternation,
 > one rest day between sessions), PPL each every 3 days offset 0/1/2 with a program-text rest-day
-> rule. (2) Deadlift **back in** as Pull #1, 2×4–6, row reduced to 3 sets (§4). (3) 6-day PPL only;
+> rule (**amended 2026-10-03:** PPL every 5 days, offsets 0/1/3, Push · Pull · Rest · Legs · Rest — §4). (2) Deadlift **back in** as Pull #1, 2×4–6, row reduced to 3 sets (§4). (3) 6-day PPL only;
 > 3-day users → Program A; an Upper/Lower program is planned follow-up work. (4) Barbell defaults with
 > machine alternatives attached. (5) Effort, reactive deload, increments, start weights and
 > graduation are program text only in v1; stall detection is a follow-up feature. (6) No abs in

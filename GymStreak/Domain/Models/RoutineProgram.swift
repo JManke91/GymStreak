@@ -74,4 +74,10 @@ struct RoutineProgram: Sendable, Equatable, Identifiable {
     /// Stems of the "Based on" sources, in order:
     /// `routine_programs.<id>.source.<stem>.name|role`.
     let sourceKeys: [String]
+    /// Rules that point to another program, by rule stem → program id
+    /// (Full Body's graduation rule → Push / Pull / Legs).
+    var ruleLinks: [String: String] = [:]
+    /// The detail's third stat is the program's length ("~12 wk", `stat.length`)
+    /// instead of the session length (`stat.duration`).
+    var showsLengthStat = false
 }

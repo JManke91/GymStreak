@@ -43,6 +43,14 @@ final class ProgramLibraryViewModel {
         let number: String
         let title: String
         let detail: String
+        /// The program this rule sends the user to, with its link title.
+        var link: RuleLink?
+    }
+
+    struct RuleLink: Equatable {
+        let programId: String
+        /// "See Push / Pull / Legs".
+        let title: String
     }
 
     /// One "Based on" line: the source and its role in the program.

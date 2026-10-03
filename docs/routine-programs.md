@@ -8,11 +8,11 @@ like any other routine. There is no program model in the store.
 add sheet → routines + optional cadence plan. Ticket 03 completed the detail screen (timeline,
 alternative hint, "How to train it", "Based on", repeated CTA with an add / restore / added state).
 Ticket 04 (done 2026-10-02) replaced the temporary entry row with the Programs shelf and rebuilt the zero-routine empty
-state around programs. Ticket 05 (done 2026-10-03) groups installed routines per program on the Routines tab. Still to come: Push/Pull/Legs (06), the ballistic seeds (07) and Fighter Strength (08). Tickets:
+state around programs. Ticket 05 (done 2026-10-03) groups installed routines per program on the Routines tab. Ticket 06 (done 2026-10-03) added **Push / Pull / Legs**, the first 3-routine program, and linked Full Body's graduation rule to it. Still to come: the ballistic seeds (07) and Fighter Strength (08). Tickets:
 `.scratch/routine-programs/issues/`.
 
-**Inputs:** content is in `docs/research/routine-programs-hypertrophy.md` §3 (the source of truth for
-the exact tables, signed off 2026-09-27). The delivery model is
+**Inputs:** content is in `docs/research/routine-programs-hypertrophy.md` §3 (Full Body) and §4 (PPL),
+the source of truth for the exact tables, signed off 2026-09-27. The delivery model is
 `docs/research/routine-programs-delivery-model.md`, the tier verdict
 `.scratch/routine-programs/wayfinder/04-grilling-monetization-verdict.md`, and the design the
 [Routine Programs Design](https://claude.ai/artifact/3ruyyATKwk7WX4EKmAi62D) canvas (artboards 1–6
@@ -48,6 +48,10 @@ are built; artboard 3's rule and source copy is the en source of truth).
    - **Alternative hint** (only for programs that set `alternativeHintKey`).
    - **"How to train it"**: numbered rules. Full Body: effort 1–3 RIR, start weight, top of range →
      smallest step (2.5 kg lower / 1.25–2.5 kg upper), stuck twice → −10 %, after ~12 weeks → PPL.
+     That last rule carries a **"See Push / Pull / Legs"** link that pushes the PPL detail (back
+     link "Beginner Full Body"; installing from there pops to the Routines list like any detail).
+     PPL: the same effort, start-weight and progression rules, and stuck **three** sessions → −10 %
+     (Metallicadpa's reset).
    - **"Based on"**: each source with its one-line role.
    - **The CTA again.** Both CTAs share one state: nothing installed → "Add program"; some routines
      deleted → "Restore N routine(s)" (opens the same sheet, which lists only the missing ones —
@@ -84,6 +88,45 @@ at the bottom of its rep range with 0 kg. Alternatives copy the primary's set sc
 Cadence: each routine every **4** days, B first due **2 days after** A. That gives a strict
 A-rest-B-rest alternation.
 
+## Push / Pull / Legs content
+
+Three routines, `seed.program.ppl.push` / `.pull` / `.legs` ("Push", "Pull", "Legs"; de "Push",
+"Pull", "Beine"; timeline letters Pu / Pl / Le, de Pu / Pl / Be, as in the design's shelf).
+Metallicadpa's exercises, main lifts converted to 6–10 double progression, bench always the first
+push lift, row the first pull lift (hypertrophy doc §4), run as the rotating 5-day split.
+
+| Push | Sets × reps | Rest | | Pull | Sets × reps | Rest | | Legs | Sets × reps | Rest |
+|---|---|---|---|---|---|---|---|---|---|---|
+| Barbell bench press | 4 × 6–10 | 180 | | **Deadlift** | 2 × 4–6 | 180 | | Barbell back squat | 3 × 6–10 | 180 |
+| Overhead press | 3 × 8–12 | 150 | | Barbell row | 3 × 6–10 | 150 | | Romanian deadlift | 3 × 8–12 | 150 |
+| Incline DB bench press | 3 × 8–12 | 120 | | Lat pulldown (alt: pull-up, assisted pull-up) | 3 × 8–12 | 120 | | Leg press | 3 × 8–12 | 120 |
+| Tricep pushdown ⟷ superset 1 | 3 × 8–12 | 60 | | Seated cable row | 3 × 8–12 | 120 | | Lying leg curl | 3 × 8–12 | 90 |
+| DB lateral raise ⟷ superset 1 | 3 × 15–20 | 60 | | Face pull | 5 × 15–20 | 60 | | Standing calf raise | 5 × 8–12 | 60 |
+| Overhead tricep extension ⟷ superset 2 | 3 × 8–12 | 60 | | Hammer curl | 4 × 8–12 | 60 | | Cable crunch (optional) | 3 × 10–15 | 60 |
+| Cable lateral raise ⟷ superset 2 | 3 × 15–20 | 60 | | Dumbbell curl | 4 × 8–12 | 60 | | | | |
+
+The lat pulldown alternatives are the doc's "Sub: pull_up, assisted_pull_up". The doc's "seated leg
+curl equally valid" is commentary, not an alternative. The cable crunch is a normal slot; its
+"optional" lives in the detail note ("Optional · abs").
+
+Cadence: each routine every **5** days, offsets **0 / 1 / 3** → Push · Pull · rest · Legs · rest,
+repeated (~4 sessions a week, "~4×"; each muscle 3× per 2 weeks). A late session moves the plan like
+any every-N-days schedule.
+
+**Why 5 days, not the 6-day source layout (decided 2026-10-03).** The ticket shipped first as each
+routine every 3 days, offsets 0/1/2 — Metallicadpa's 6-day PPL with the weekly rest day left to
+program text. On screen that meant a 14-day timeline without a single rest day, and the next routine
+went overdue after every rest. The product owner chose the rotating 5-day split instead: the rest days
+are in the plan, and with volume equated frequency barely matters for hypertrophy (Schoenfeld, Grgic &
+Krieger 2019). Accepted cost: the same tables give ~30 % fewer weekly sets per muscle than the 6-day
+version, and frequency is below the ≥2×/week floor. Considered and not taken: every 4 days
+(Push · Pull · Legs · rest, ~1.75×/week). Sources and the amended content are in the hypertrophy doc §4.
+The design canvas (artboards 1, 2 and 6) was updated to the 5-day copy on 2026-10-03. **Session length** (library and detail tile "~50 min") is the app's own
+estimate (`RoutineMetricsService.estimatedDurationMinutes`: 40 s per set, the rest between sets,
+60 s per exercise) applied to the tables: Push 48, Pull 49, Legs 43 min. The design's "~65 min" was
+a placeholder. (Full Body's "~50 min" is the design's figure and stays; the same formula gives it
+35 / 39 min.)
+
 ## Architecture
 
 ```
@@ -118,11 +161,16 @@ App           AppDependencies.routineProgramInstaller + lazy programLibrary (one
   start choice) and the detail's timeline (fetched on `onAppear`). The day and weekday formatters
   are `static let`.
 - **Program copy is catalog data.** `RoutineProgram` carries `alternativeHintKey`,
-  `guidanceRuleKeys` (stems of `routine_programs.<id>.rule.<stem>.title|detail`) and `sourceKeys`
-  (`routine_programs.<id>.source.<stem>.name|role`); a slot carries an optional `noteKey`
+  `guidanceRuleKeys` (stems of `routine_programs.<id>.rule.<stem>.title|detail`), `sourceKeys`
+  (`routine_programs.<id>.source.<stem>.name|role`), `ruleLinks` (rule stem → program id; the rule
+  gets a `routine_programs.detail.rule_link` "See %@" link, rendered by `ProgramGuidanceCard`, whose
+  destination closure `ProgramDetailView` fills with a nested detail) and `showsLengthStat` (the
+  detail's third tile is the program length `stat.length|length_label` instead of the session
+  length `stat.duration` — true for Full Body only); a slot carries an optional `noteKey`
   (`routine_programs.note.*`, shared across programs); the timeline explanation is
   `routine_programs.<id>.schedule_detail` and a routine's timeline letter is `<seedKey>.short`.
-  A new program (06, 08) therefore only adds catalog entries and strings — no view changes.
+  A new program therefore only adds catalog entries and strings — no view changes (PPL, ticket 06,
+  needed only the two catalog fields above).
 - **The timeline is derived, not drawn.** `RoutineProgramSchedule.timeline(for:from:dayCount:calendar:)`
   marks day *i* with the routine whose `(i − offset) % cadenceDays == 0`, offsets relative to the
   earliest routine (the same convention as `firstDueDates`). It shows the program as if started
@@ -246,6 +294,12 @@ Mechanism note: `docs/pro-subscription.md` §5c.
   - program routines stay outside the cap and survive the example seeder (`run()` and
     `cleanUpAfterImport()`);
   - every catalog key exists in `SeedExerciseCatalog`.
+- `GymStreakTests/PushPullLegsProgramTests.swift` covers the 3-routine program: every catalog
+  program references only seed exercises; the exact PPL content (deadlift-first Pull at 2 × 4–6 /
+  180 s, the row at 3 × 6–10, the optional crunch); Push's two supersets; the every-5-days plan at
+  offsets 0/1/3; a restore of Pull + Legs that starts Pull on the chosen day and Legs two days
+  later while leaving Push's plan alone; the 14-day Pu · Pl · – · Le · – timeline and shelf pattern; PPL's detail
+  showing the session length; and Full Body's single rule link pointing at `ppl`.
 - `GymStreakTests/RoutineProgramScheduleTests.swift` covers the start choice → first day
   (past-day clamp), offsets relative to the earliest routine being added, Full Body's 14-day
   A · – · B · – timeline, and a synthetic program proving the timeline follows cadence and offsets.

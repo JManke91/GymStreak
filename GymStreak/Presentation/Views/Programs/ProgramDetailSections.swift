@@ -85,32 +85,54 @@ struct ProgramScheduleCard: View {
     }
 }
 
-/// "How to train it": numbered rules.
-struct ProgramGuidanceCard: View {
+/// "How to train it": numbered rules. A rule that points to another program
+/// (Full Body's graduation → Push / Pull / Legs) links to its detail.
+struct ProgramGuidanceCard<Destination: View>: View {
     let rules: [ProgramLibraryViewModel.GuidanceRule]
+    @ViewBuilder let destination: (_ programId: String) -> Destination
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             ForEach(rules) { rule in
-                HStack(alignment: .top, spacing: 12) {
-                    Text(rule.number)
-                        .font(.system(size: 12, weight: .heavy))
-                        .foregroundStyle(DesignSystem.Colors.tint)
-                        .frame(width: 28, height: 28)
-                        .background(DesignSystem.Colors.tint.opacity(0.13), in: RoundedRectangle(cornerRadius: 9, style: .continuous))
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text(rule.title)
-                            .font(.system(size: 14, weight: .heavy))
-                            .foregroundStyle(.white)
-                        Text(rule.detail)
-                            .font(.system(size: 12.5))
-                            .foregroundStyle(Color.white.opacity(0.6))
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack(alignment: .top, spacing: 12) {
+                        Text(rule.number)
+                            .font(.system(size: 12, weight: .heavy))
+                            .foregroundStyle(DesignSystem.Colors.tint)
+                            .frame(width: 28, height: 28)
+                            .background(DesignSystem.Colors.tint.opacity(0.13), in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text(rule.title)
+                                .font(.system(size: 14, weight: .heavy))
+                                .foregroundStyle(.white)
+                            Text(rule.detail)
+                                .font(.system(size: 12.5))
+                                .foregroundStyle(Color.white.opacity(0.6))
+                        }
+                        .fixedSize(horizontal: false, vertical: true)
+                        Spacer(minLength: 0)
                     }
-                    .fixedSize(horizontal: false, vertical: true)
-                    Spacer(minLength: 0)
+                    .accessibilityElement(children: .combine)
+
+                    if let link = rule.link {
+                        NavigationLink {
+                            destination(link.programId)
+                        } label: {
+                            HStack(spacing: 4) {
+                                Text(link.title)
+                                Image(systemName: "chevron.right")
+                                    .font(.system(size: 11, weight: .bold))
+                            }
+                            .font(.system(size: 13, weight: .bold))
+                            .foregroundStyle(DesignSystem.Colors.tint)
+                            .frame(minHeight: 44)
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .padding(.leading, 40)
+                    }
                 }
                 .padding(.vertical, 13)
-                .accessibilityElement(children: .combine)
                 .overlay(alignment: .bottom) {
                     if rule.id != rules.last?.id {
                         Rectangle().fill(Color.white.opacity(0.07)).frame(height: 1)

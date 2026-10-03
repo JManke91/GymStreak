@@ -12,6 +12,11 @@ extension ProgramLibraryViewModel {
 
     static func summary(for program: RoutineProgram) -> ProgramSummary {
         let key = "routine_programs.\(program.id)"
+        let commonStats = [
+            Stat(value: "\(program.routines.count)", label: "routine_programs.stat.routines".localized),
+            Stat(value: "\(key).stat.frequency".localized, label: "routine_programs.stat.per_week".localized),
+        ]
+        let sessionStat = Stat(value: "\(key).stat.duration".localized, label: "routine_programs.stat.per_session".localized)
         return ProgramSummary(
             id: program.id,
             level: "\(key).level".localized,
@@ -19,15 +24,11 @@ extension ProgramLibraryViewModel {
             shortPitch: "\(key).pitch_short".localized,
             pitch: "\(key).pitch".localized,
             sources: "\(key).sources".localized,
-            libraryStats: [
-                Stat(value: "\(program.routines.count)", label: "routine_programs.stat.routines".localized),
-                Stat(value: "\(key).stat.frequency".localized, label: "routine_programs.stat.per_week".localized),
-                Stat(value: "\(key).stat.duration".localized, label: "routine_programs.stat.per_session".localized),
-            ],
-            detailStats: [
-                Stat(value: "\(program.routines.count)", label: "routine_programs.stat.routines".localized),
-                Stat(value: "\(key).stat.frequency".localized, label: "routine_programs.stat.per_week".localized),
-                Stat(value: "\(key).stat.length".localized, label: "\(key).stat.length_label".localized),
+            libraryStats: commonStats + [sessionStat],
+            detailStats: commonStats + [
+                program.showsLengthStat
+                    ? Stat(value: "\(key).stat.length".localized, label: "\(key).stat.length_label".localized)
+                    : sessionStat
             ],
             routines: program.routines.map { routineSummary(for: $0) },
             cadenceDays: program.cadenceDays,
@@ -45,7 +46,16 @@ extension ProgramLibraryViewModel {
                     id: stem,
                     number: "\(index + 1)",
                     title: "\(key).rule.\(stem).title".localized,
-                    detail: "\(key).rule.\(stem).detail".localized
+                    detail: "\(key).rule.\(stem).detail".localized,
+                    link: program.ruleLinks[stem].map { target in
+                        RuleLink(
+                            programId: target,
+                            title: String(
+                                format: "routine_programs.detail.rule_link".localized,
+                                "routine_programs.\(target).name".localized
+                            )
+                        )
+                    }
                 )
             },
             basedOn: program.sourceKeys.map { stem in
