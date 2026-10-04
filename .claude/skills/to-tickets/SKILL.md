@@ -45,6 +45,7 @@ Present the proposed breakdown as a numbered list. For each ticket, show:
 - **Title**: short descriptive name
 - **Blocked by**: which other tickets (if any) must complete first
 - **What it delivers**: the end-to-end behaviour this ticket makes work
+- **Touches**: the areas it edits — so overlapping tickets that could otherwise run in parallel are visible
 
 Ask the user:
 
@@ -71,7 +72,9 @@ Do NOT close or modify any parent issue.
 
 **What to build:** the end-to-end behaviour this ticket makes work, from the user's perspective — not a layer-by-layer implementation list.
 
-**Blocked by:** the numbers/titles of the tickets that gate this one, or "None — can start immediately".
+**Blocked by:** `None — can start immediately`, or the gating numbers first (`03, 04 — <why>`; a ticket in another set as `<feature-slug>#08`).
+
+**Touches:** the screens, services and shared files this ticket will edit — areas, not line-level paths (e.g. "History list, WorkoutSessionRepository, Localizable.strings"). Lets `/parallel-tickets` tell which unblocked tickets can run side by side.
 
 **Status:** ready-for-agent
 

@@ -5,6 +5,7 @@ Local implementation tickets use these standard `Status:` values:
 - `needs-triage`
 - `needs-info`
 - `ready-for-agent`
+- `in-progress`
 - `ready-for-human`
 - `done`
 - `wontfix`
@@ -19,8 +20,10 @@ Write it as a bold Markdown field so it can be found mechanically:
 **Status:** done — <one-line evidence: what was verified, when, on what>
 ```
 
-Use exactly one of the values above as the first word after `**Status:**`; free-text evidence follows after an em dash. Do not invent synonyms — `complete`, `completed`, and `implemented` are **not** status values (older tickets predate this rule and use them inconsistently).
+Use exactly one of the values above as the first word after `**Status:**`; free-text evidence follows after an em dash. Work done in a worktree names its branch in the evidence of every later status (`ready-for-human`, `done`) — it is how dependent tickets verify the code reached the worktree base. Do not invent synonyms — `complete`, `completed`, and `implemented` are **not** status values (older tickets predate this rule and use them inconsistently).
 
 **Tick the acceptance criteria as part of every status change — never only the status line.** Moving a ticket to `ready-for-human`, tick (`- [x]`) each criterion the agent has itself verified (build, tests, docs, review); moving it to `done`, tick the rest that the user's verification covered. A criterion that is not met stays `- [ ]` with a one-line note why, and a ticket with an unticked criterion cannot be `done`.
+
+`in-progress` is the claim an agent sets the moment it starts a ticket, so a parallel run of `/parallel-tickets` does not hand the same ticket to a second worktree. Its evidence names the branch: `**Status:** in-progress — branch <branch>, started <date>`. A ticket abandoned mid-way goes back to `ready-for-agent`.
 
 `ready-for-human` means the agent is finished and the change awaits the user's manual verification. `done` is the terminal state and means that verification passed; only the user's confirmation moves a ticket into it. Feature archival keys off every ticket in a set being `done` or `wontfix` — see `issue-tracker.md`.

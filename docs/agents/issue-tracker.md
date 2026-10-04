@@ -9,7 +9,7 @@ Implementation tickets are local Markdown files. A parent task is decomposed wit
 - One parent task or feature per directory: `.scratch/<feature-slug>/`
 - Implementation tickets are one file each at `.scratch/<feature-slug>/issues/<NN>-<slug>.md`, numbered from `01` in dependency order
 - Never use one combined tickets file
-- Each ticket names its blockers and records `**Status:** ready-for-agent` (see `triage-labels.md` for the vocabulary and the required format)
+- Each ticket names its blockers and records `**Status:** ready-for-agent`. The `**Blocked by:**` line starts with `None` or the blocking numbers (`03, 04`; another set as `<feature-slug>#08`), prose after an em dash. An optional `**Touches:**` line names the areas the ticket edits (screens, services, shared files), coarse enough not to go stale (see `triage-labels.md` for the vocabulary and the required format)
 - The parent Things task is the source of scope; its UUID and title should be noted in the ticket set when that context is useful
 - The top level of `.scratch/` holds **open work only**. Finished feature directories live under `.scratch/_done/<feature-slug>/`
 
@@ -35,7 +35,18 @@ When a skill says to publish implementation tickets, write the local files under
 
 When a skill says to fetch a parent task, use the Things MCP and the task identifier supplied by the user. When a skill says to fetch an implementation ticket, read the local Markdown file the user references.
 
-Work the frontier: choose only a ticket whose blockers are complete. For a linear sequence, that is the lowest-numbered incomplete ticket.
+Work the frontier: choose only a ticket whose blockers are complete. For a linear sequence, that is the lowest-numbered incomplete ticket. To work several frontier tickets at once, use `/parallel-tickets` (see below).
+
+## Parallel work in worktrees
+
+`/parallel-tickets` picks the frontier tickets that are unblocked **and** independent, and emits one kickoff prompt per ticket for its own Claude Code worktree (`claude --worktree <feature-slug>-<NN>` or a desktop worktree session). The rules that make this safe:
+
+- **One ticket store.** `.scratch/` is gitignored, so worktrees do not have it and must not get a copy (a copy diverges the moment a status changes). Every session reads and writes tickets in the main checkout: `"$(dirname "$(git rev-parse --path-format=absolute --git-common-dir)")/.scratch"`. Each ticket is its own file, so parallel status edits never collide.
+- **Claim before work.** A worker's first act is setting `**Status:** in-progress — branch <branch>, …` (see `triage-labels.md`); `/parallel-tickets` skips claimed tickets.
+- **A blocker is cleared only when its code is in the worktree base.** New worktrees start from `origin/HEAD` (Claude Code default `worktree.baseRef: "fresh"`), not from the main checkout's branch. So a `done` blocker built in a worktree also needs its branch merged and pushed before a dependent ticket starts; the branch named in its status evidence is what gets checked.
+- **Independence is about files, not just edges.** Two unblocked tickets that edit the same view, `AppDependencies`, the SwiftData schema, the watch sync payload or the project file must not run in parallel. A ticket's optional `**Touches:**` line declares its conflict surface; the skill falls back to reading the body. Appends to `Localizable.strings`, `WhatToTest.*.txt`, `CHANGELOG.md` and a shared feature doc are expected merge conflicts, not blockers.
+- **Merging is the user's.** Workers commit to their own branch and stop at `ready-for-human`; verifying, merging, and rerunning `/parallel-tickets` for the next wave stay with the user.
+- **Build isolation.** Each worktree has its own path and therefore its own default DerivedData, but parallel test runs still share simulators and the mouse (simulator driving takes over the pointer) — keep UI driving short and prefer headless test runs.
 
 ## Things safety boundary
 
