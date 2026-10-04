@@ -1,13 +1,14 @@
 # Full Release Pipeline
 
-Orchestrate a full release by merging the current feature branch all the way to `store-build` in three sequential steps, then cleaning up the source branch:
+Release whatever has landed on `main` (via merged PRs) all the way to `store-build` in three sequential steps:
 
-1. Current branch → `main`
+1. Sync `main` with `origin/main` — this is the release starting point
 2. `main` → `testflight-beta`
-3. `testflight-beta` → `store-build`
-4. Delete `<source-branch>` (local + remote)
+3. `testflight-beta` → `store-build`, then bump the version on `main`
 
 Each phase must complete successfully before the next begins. If any phase fails, stop immediately and report the failure — do not proceed to the next phase.
+
+This is the default release path for the worktree + PR workflow. To release a long-lived feature branch by merging it into `main` first, use `/release-from-branch` instead.
 
 ---
 
@@ -16,21 +17,20 @@ Each phase must complete successfully before the next begins. If any phase fails
 Before doing anything else:
 
 1. Run `git status` — if there are uncommitted changes, **stop and inform the user**. Do not stash or discard anything automatically.
-2. Run `git rev-parse --abbrev-ref HEAD` to capture `<source-branch>`. If it is `main`, **stop and inform the user** that they are already on `main`.
-3. Inform the user of the plan:
-   > "Starting release pipeline: `<source-branch>` → `main` → `testflight-beta` → `store-build`. `<source-branch>` will be deleted (locally and on origin) once the pipeline completes."
+2. Run `git rev-parse --abbrev-ref HEAD` to capture `<start-branch>` (the branch this checkout is on — `main`, or the worktree's own branch). The pipeline checks out `main`, `testflight-beta` and `store-build` in **this** checkout and returns to `<start-branch>` at the end.
+3. Run `git worktree list`. If `main`, `testflight-beta` or `store-build` is checked out in **another** worktree, git will refuse to check it out here — **stop and tell the user** which worktree holds it, so they can switch that checkout away or run `/release` from there.
+4. `git fetch origin`, then report what is being released: `git log --oneline origin/store-build..origin/main` (the commits/PRs on `main` not yet in the store build). If that list is empty, **stop and tell the user** there is nothing to release.
+5. Inform the user of the plan:
+   > "Starting release pipeline from `main` (`<short-sha>`): `main` → `testflight-beta` → `store-build`, then version bump on `main`."
 
 ---
 
-## Phase 1 — Merge `<source-branch>` into `main`
+## Phase 1 — Sync `main`
 
-1. `git fetch origin`
-2. `git checkout main && git pull origin main`
-3. `git merge <source-branch> -X theirs -m "Merge <source-branch> into main"`
-4. Verify `git status` shows no remaining conflicts. If conflicts remain (e.g., delete/modify conflicts that `-X theirs` doesn't auto-resolve), resolve each with `git checkout --theirs <file> && git add <file>`, then `git commit --no-edit`.
-5. `git push origin main`
+1. `git checkout main && git pull origin main`
+2. Verify `git rev-parse main` equals `git rev-parse origin/main`. If local `main` has commits that are not on `origin/main` (`git log --oneline origin/main..main` is non-empty), **stop and tell the user** — the release must start from exactly what is on origin, never from unpushed local commits.
 
-Announce: **"Phase 1 complete — `<source-branch>` merged into `main`."**
+Announce: **"Phase 1 complete — `main` is at `<short-sha>` and matches `origin/main`."**
 If this phase fails for any reason, stop and report the error.
 
 ---
@@ -79,16 +79,9 @@ Announce: **"Phase 3 complete — `testflight-beta` merged into `store-build`, v
 
 ---
 
-## Phase 4 — Delete the source branch
+## Phase 4 — Return to the starting branch
 
-Only runs after Phases 1–3 have **all** completed successfully (merged and pushed). If any earlier phase failed, skip this phase entirely — the branch must survive for retry.
-
-1. Safety check: `<source-branch>` must not be `main`, `testflight-beta`, or `store-build`. If it is one of these, skip deletion and note it in the final report.
-2. Verify the branch is fully merged: `git branch --merged main` (while on `main`) must list `<source-branch>`. If it does not, **do not delete** — report this instead.
-3. Delete the local branch: `git branch -d <source-branch>` (use `-d`, not `-D` — if git refuses, that's a signal something isn't merged; stop and report rather than forcing).
-4. Delete the remote branch, if it exists on origin: check with `git ls-remote --heads origin <source-branch>`. If it exists, run `git push origin --delete <source-branch>`. If it doesn't exist remotely (branch was never pushed), skip and note it.
-
-Announce: **"Phase 4 complete — `<source-branch>` deleted locally and on origin."** (adjust wording if the remote half was skipped).
+Only runs after Phases 1–3 have all completed. If `<start-branch>` is not `main`, run `git checkout <start-branch>` so `main` is not left checked out in this worktree (which would block other worktrees from checking it out). If `<start-branch>` is `main`, there is nothing to do.
 
 ---
 
@@ -250,7 +243,7 @@ that marketing copy was skipped because nothing shipped.
 ## Final report
 
 Summarize the entire pipeline:
-- Which branch was the starting point
+- The `main` commit the release started from, and the list of commits/PRs it shipped (from pre-flight step 4)
 - Commits merged in each phase
 - Any conflicts that were auto-resolved (list affected files per phase)
 - Old version → new version
@@ -258,7 +251,7 @@ Summarize the entire pipeline:
 - Confirmation that WhatToTest files were archived and cleared
 - Confirmation that `AppStore/ReleaseNotes.<old-version>.md` and `AppStore/Marketing.<old-version>.md` were written (or that they were skipped because WhatToTest was empty)
 - Any `docs/marketing/` files updated, and why
-- Confirmation that `<source-branch>` was deleted locally and on origin (or why deletion was skipped)
+- Confirmation that this checkout is back on `<start-branch>`
 - **Print the full generated App Store notes (English and German) inline in the chat**, clearly labeled per language, so they can be copy/pasted straight into App Store Connect.
 - **Print the generated Promotional Text (English and German) inline too**, each with its `N/170`
   character count, under a heading that says it can be pasted **without a new build**. Follow it
