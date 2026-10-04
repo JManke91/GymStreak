@@ -27,6 +27,7 @@ struct SettingsRootView: View {
     /// Shown when no app accepted the `mailto:` URL — the default state on a
     /// simulator, and real for users who removed every mail client.
     @State private var isShowingMailFallback = false
+    @State private var isShowingHistoryImport = false
 
     var body: some View {
         NavigationStack {
@@ -55,6 +56,21 @@ struct SettingsRootView: View {
                             footer: "settings.section.data.footer".localized
                         ) {
                             ICloudSyncRowView(provider: dependencies.cloudSyncStatus)
+                        }
+
+                        SettingsSectionView(
+                            header: "settings.section.import".localized,
+                            footer: "settings.section.import.footer".localized
+                        ) {
+                            SettingsActionRowView(
+                                icon: "square.and.arrow.down",
+                                title: "history_import.title".localized,
+                                subtitle: "settings.import.strong.row.subtitle".localized,
+                                isLast: true
+                            ) {
+                                isShowingHistoryImport = true
+                            }
+                            .accessibilityIdentifier("settings-row-import-strong")
                         }
 
                         UnitsSettingsSectionView(
@@ -186,6 +202,9 @@ struct SettingsRootView: View {
                 case .heartRateProfile:
                     HeartRateProfileView(viewModel: dependencies.makeHeartRateProfileEditor())
                 }
+            }
+            .sheet(isPresented: $isShowingHistoryImport) {
+                HistoryImportView(viewModel: dependencies.makeHistoryImportViewModel())
             }
             .alert(
                 "settings.support.contact.fallback.title".localized,

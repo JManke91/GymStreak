@@ -569,6 +569,52 @@ struct SwiftDataHistorySnapshotStoreTests {
         #expect(snapshot.data.dataPoints.count == 4)
     }
 
+    /// The history import joins the tripwire suite (docs/history-import.md §4): a
+    /// 2,000-workout Strong file — years of history — is read, parsed, previewed and
+    /// written through `any HistoryImporting` without stalling the main actor.
+    @Test
+    func largeHistoryImportKeepsMainActorResponsive() async throws {
+        let container = InMemoryModelContainer.make()
+        var lines = ["Date,Workout Name,Duration,Exercise Name,Set Order,Weight,Reps,Distance,Seconds,RPE"]
+        let start = Date(timeIntervalSince1970: 1_600_000_000)
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "yyyy-MM-dd HH:mm:ss"
+        for workout in 0..<2_000 {
+            let date = formatter.string(from: start.addingTimeInterval(Double(workout) * 86_400))
+            for exercise in 0..<5 {
+                for set in 1...4 {
+                    lines.append("\(date),Workout \(workout % 7),1h,Exercise \(exercise),\(set),\(40 + exercise),10,0,0,")
+                }
+            }
+        }
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("strong-large-\(UUID().uuidString).csv")
+        try lines.joined(separator: "\n").write(to: url, atomically: true, encoding: .utf8)
+
+        // Existential on purpose — see the note in the training-snapshot test above.
+        let importer: any HistoryImporting =
+            SwiftDataHistoryImportProvider(modelContainer: container, gate: .unshared())
+        let heartbeat = MainActorHeartbeat(interval: .milliseconds(10))
+        let heartbeatTask = Task { await heartbeat.run() }
+        await Task.yield()
+
+        let preview = try await importer.prepareStrongImport(from: url)
+        let result = try await importer.importHistory(preview.file, weightUnit: .kilograms) { _ in }
+
+        heartbeatTask.cancel()
+        await heartbeatTask.value
+
+        #expect(result.importedWorkoutCount == 2_000)
+        #expect(
+            heartbeat.sampleCount >= 1,
+            "the main actor should run while the import parses and writes"
+        )
+        #expect(
+            heartbeat.maximumDelay < .milliseconds(100),
+            "History import delayed MainActor by \(heartbeat.maximumDelay)"
+        )
+    }
+
     /// - Parameter routineSlotIDs: when non-empty, stamps each exercise index with the
     ///   corresponding routine-slot id. Only the previous-performance case needs it, so
     ///   it defaults to off and the other cases keep their exact seeded shape.

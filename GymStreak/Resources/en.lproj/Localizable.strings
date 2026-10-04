@@ -1893,3 +1893,37 @@
 "routine_programs.fighter.source.kostikiadis.role" = "heavy lifts paired with jumps and throws, sessions 48 hours apart.";
 "routine_programs.fighter.source.nsca.name" = "NSCA, Essentials of Strength Training and Conditioning";
 "routine_programs.fighter.source.nsca.role" = "sets, reps and rest for strength and power, and when to add weight.";
+
+/* History import (docs/history-import.md) */
+"settings.section.import" = "Import";
+"settings.section.import.footer" = "Imported workouts are added to your history. Nothing is written to Apple Health.";
+"settings.import.strong.row.subtitle" = "Bring your workout history with you";
+"history_import.title" = "Import from Strong";
+"history_import.intro.title" = "Bring your Strong history";
+"history_import.intro.body" = "In Strong, open Settings → Export Strong Data and save the CSV file. Then choose it here. Your workouts appear in History, and your progress charts and records carry on.";
+"history_import.intro.choose" = "Choose CSV File";
+"history_import.reading" = "Reading file…";
+"history_import.preview.workouts" = "Workouts";
+"history_import.preview.period" = "Period";
+"history_import.preview.already" = "Already imported (skipped)";
+"history_import.preview.matched" = "Exercises in your library";
+"history_import.preview.new" = "New custom exercises";
+"history_import.preview.cardio" = "Cardio sets (not imported)";
+"history_import.preview.unit.title" = "Weights in this file are in";
+"history_import.preview.unit.footer" = "Strong's export doesn't always say which unit you logged in. Pick the one you used in Strong.";
+"history_import.preview.import" = "Import";
+"history_import.preview.new_list" = "These exercises will be created:";
+"history_import.importing" = "Importing workouts…";
+"history_import.result.title" = "Import complete";
+"history_import.result.none" = "Nothing new to import. These workouts are already in your history.";
+"history_import.result.imported" = "Workouts imported";
+"history_import.result.duplicates" = "Already in history (skipped)";
+"history_import.result.exercises" = "Custom exercises created";
+"history_import.done" = "Done";
+"history_import.error.title" = "Couldn't import";
+"history_import.error.unreadable" = "The file couldn't be read. Choose the CSV file Strong exported.";
+"history_import.error.not_strong" = "This file isn't a Strong export. Nothing was imported.";
+"history_import.error.malformed" = "Line %d of the file couldn't be read. Nothing was imported.";
+"history_import.error.empty" = "The file contains no strength sets to import.";
+"history_import.error.write" = "The import stopped before it finished. Workouts imported so far are kept. Import the file again to add the rest.";
+"history_import.error.retry" = "Choose Another File";
