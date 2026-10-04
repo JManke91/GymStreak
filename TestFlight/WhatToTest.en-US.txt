@@ -1,0 +1,1 @@
+- Import your workout history from Strong: Settings → Import from Strong. Choose the CSV file Strong exported, check the preview, and your past workouts appear in History, progress charts and records. Importing the same file again adds nothing twice.

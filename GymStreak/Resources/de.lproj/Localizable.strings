@@ -1884,3 +1884,37 @@
 "routine_programs.fighter.source.kostikiadis.role" = "schwere Grundübungen kombiniert mit Sprüngen und Würfen, Einheiten 48 Stunden auseinander.";
 "routine_programs.fighter.source.nsca.name" = "NSCA, Essentials of Strength Training and Conditioning";
 "routine_programs.fighter.source.nsca.role" = "Sätze, Wiederholungen und Pausen für Kraft und Schnellkraft, und wann du mehr Gewicht nimmst.";
+
+/* History import (docs/history-import.md) */
+"settings.section.import" = "Import";
+"settings.section.import.footer" = "Importierte Workouts werden deinem Verlauf hinzugefügt. In Apple Health wird nichts geschrieben.";
+"settings.import.strong.row.subtitle" = "Nimm deinen Trainingsverlauf mit";
+"history_import.title" = "Aus Strong importieren";
+"history_import.intro.title" = "Deinen Strong-Verlauf mitnehmen";
+"history_import.intro.body" = "Öffne in Strong Einstellungen → Strong-Daten exportieren und speichere die CSV-Datei. Wähle sie dann hier aus. Deine Workouts erscheinen im Verlauf, und deine Fortschrittsdiagramme und Rekorde laufen weiter.";
+"history_import.intro.choose" = "CSV-Datei auswählen";
+"history_import.reading" = "Datei wird gelesen …";
+"history_import.preview.workouts" = "Workouts";
+"history_import.preview.period" = "Zeitraum";
+"history_import.preview.already" = "Bereits importiert (übersprungen)";
+"history_import.preview.matched" = "Übungen in deiner Bibliothek";
+"history_import.preview.new" = "Neue eigene Übungen";
+"history_import.preview.cardio" = "Cardio-Sätze (nicht importiert)";
+"history_import.preview.unit.title" = "Gewichte in dieser Datei sind in";
+"history_import.preview.unit.footer" = "Der Strong-Export gibt nicht immer an, in welcher Einheit du trainiert hast. Wähle die Einheit, die du in Strong genutzt hast.";
+"history_import.preview.import" = "Importieren";
+"history_import.preview.new_list" = "Diese Übungen werden angelegt:";
+"history_import.importing" = "Workouts werden importiert …";
+"history_import.result.title" = "Import abgeschlossen";
+"history_import.result.none" = "Nichts Neues zu importieren. Diese Workouts sind bereits in deinem Verlauf.";
+"history_import.result.imported" = "Importierte Workouts";
+"history_import.result.duplicates" = "Bereits im Verlauf (übersprungen)";
+"history_import.result.exercises" = "Angelegte eigene Übungen";
+"history_import.done" = "Fertig";
+"history_import.error.title" = "Import nicht möglich";
+"history_import.error.unreadable" = "Die Datei konnte nicht gelesen werden. Wähle die CSV-Datei, die Strong exportiert hat.";
+"history_import.error.not_strong" = "Diese Datei ist kein Strong-Export. Es wurde nichts importiert.";
+"history_import.error.malformed" = "Zeile %d der Datei konnte nicht gelesen werden. Es wurde nichts importiert.";
+"history_import.error.empty" = "Die Datei enthält keine Kraftsätze zum Importieren.";
+"history_import.error.write" = "Der Import wurde vor dem Ende unterbrochen. Bereits importierte Workouts bleiben erhalten. Importiere die Datei erneut, um den Rest hinzuzufügen.";
+"history_import.error.retry" = "Andere Datei auswählen";

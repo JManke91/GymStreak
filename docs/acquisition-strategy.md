@@ -255,7 +255,7 @@ is still zero.
 
 | Order | # | Lever | Tier | Effort | Moves | Status |
 |---|---|---|---|---|---|---|
-| 1 | 16 | **Strong + Hevy history import** | **P1** | ~1 week (2 tickets) | Switching from Strong/Hevy at all | 🎫 ticket cut — `.scratch/positioning-usp/issues/01–02`, see §4.16 |
+| 1 | 16 | **Strong + Hevy history import** | **P1** | ~1 week (2 tickets) | Switching from Strong/Hevy at all | 🟡 **Strong shipped 2026-10-03** (ticket 01, Settings → Import from Strong, rides 1.1.19); Hevy (`.scratch/positioning-usp/issues/02`) open — see §4.16 |
 | 2 | 17 | **Visible watch sync reliability** ("Saved on iPhone ✓") | **P1** | 1–2 days | The switching message, made experienceable | 🎫 ticket cut — `.scratch/positioning-usp/issues/03`, see §4.17 |
 | 3 | 18 | **Fighter positioning** (mat sessions, watch recording, lift-or-fight onboarding, round timer) | **P1** | ~3 weeks (4 tickets) | The one unowned market position | 🎫 ticket cut — `.scratch/positioning-usp/issues/04–07`, see §4.18 |
 | 4 | 5 | In-app sharing of a workout | **P1** | 2–3 days | Web-Referrer, virality | ⬜ not started — **un-gated from #4**, see §4.5 |
@@ -573,13 +573,17 @@ unrecommended, because every acquisition euro spent under this name partly funds
 
 ### 16. Strong + Hevy history import (P1)
 
-**🎫 Ticket cut 2026-10-02**: `.scratch/positioning-usp/issues/01` (Strong) and `02` (Hevy).
+**Strong shipped 2026-10-03** (ticket `01`, rides 1.1.19): Settings → Import from Strong reads
+Strong's CSV export, previews it, and writes every workout into History, the Fortschritt charts and
+PRs, matching exercise names to the library and creating the rest as custom exercises. Re-importing
+is idempotent. The flow is a self-contained sheet, so ticket 06's first-run link presents the same
+screen. **Hevy (`02`) is still open.** Ticket cut 2026-10-02.
 **Why:** the users most ready to leave Strong are the ones with years of history, and "I'm locked
 in because my history is here" is the recurring blocker in competitor reviews. Hevy, Liftin' and
 others already import Strong's CSV, so this is table stakes for any switching message and the
 prerequisite for both #17's and #18's audiences. Evidence:
-`research/positioning-usp-2026-10.md` §3.2. **Free** (monetization §3 Rule 4). Feature doc once
-built: `docs/history-import.md`.
+`research/positioning-usp-2026-10.md` §3.2. **Free** (monetization §3 Rule 4). Feature doc:
+`docs/history-import.md`.
 
 ### 17. Visible watch sync reliability (P1)
 

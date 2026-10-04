@@ -30,6 +30,10 @@ section/row blueprint documented here.
 - **Data** section: a single iCloud row that reports at a glance whether the user's data is
   safe — state-tinted icon tile, "Last: \<timestamp\>" subtitle and a status dot (or spinner)
   with a short label. Footnote: "Your training data syncs automatically via iCloud …".
+- **Import** section (below Data): one action row, "Import from Strong", presents the
+  `HistoryImportView` sheet that brings a Strong CSV export into workout history. The whole
+  feature (format, matching, dedupe, off-main import) is documented in `docs/history-import.md`;
+  this file does not repeat it.
 - **Calendar** section: one toggle, "Sync to Apple Calendar", that asks for full Calendar
   access and gives the app its own "Gym Streak" calendar; switching it off deletes that
   calendar again. A denied or "Add Only" grant leaves the toggle off and adds a tappable row

@@ -33,6 +33,9 @@ final class AppDependencies: ObservableObject {
     /// The one write path into workout history outside of recording a workout: linking
     /// pre-`exerciseId` rows to the library exercise the user says they meant.
     let legacyHistoryAttribution: LegacyHistoryAttributing
+    /// The other write path into history: importing another app's export
+    /// (docs/history-import.md). Append-only; never writes to Apple Health.
+    let historyImporter: HistoryImporting
     let workoutHistoryCorrelation: WorkoutHistoryCorrelationProviding
     let restTimerReminders: RestTimerReminderScheduling
     /// The rest timer's Lock Screen / Dynamic Island surface. One instance for
@@ -284,6 +287,10 @@ final class AppDependencies: ObservableObject {
         self.historySnapshotProvider = historySnapshotProvider
         self.exerciseDeepDiveFacts = historySnapshotProvider
         self.legacyHistoryAttribution = SwiftDataLegacyHistoryAttributionProvider(
+            modelContainer: modelContext.container,
+            gate: historyStoreGate
+        )
+        self.historyImporter = SwiftDataHistoryImportProvider(
             modelContainer: modelContext.container,
             gate: historyStoreGate
         )
@@ -572,6 +579,15 @@ final class AppDependencies: ObservableObject {
             healthSync: UserDefaultsHealthSyncPreference(),
             records: conditioningRecordRepository,
             heartRateProfile: heartRateProfileStore.heartRateProfile
+        )
+    }
+
+    /// One per presentation of the import sheet — Settings, or any later entry point.
+    func makeHistoryImportViewModel() -> HistoryImportViewModel {
+        HistoryImportViewModel(
+            importer: historyImporter,
+            catalogSync: exerciseCatalogSync,
+            weightUnitPreference: weightUnitPreference
         )
     }
 
