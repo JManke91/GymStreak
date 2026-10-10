@@ -50,11 +50,12 @@ struct SwiftDataHistoryImportProvider: HistoryImporting {
     @concurrent func importHistory(
         _ file: ParsedHistoryFile,
         weightUnit: WeightUnit,
+        createsMissingExercises: Bool,
         progress: @escaping @Sendable (Double) -> Void
     ) async throws -> HistoryImportResult {
         let store = await storeTask.value
         let (pending, exercises, created) = try await gate.withAccess {
-            try await store.prepareWrite(of: file)
+            try await store.prepareWrite(of: file, createsMissingExercises: createsMissingExercises)
         }
 
         let total = max(file.workouts.count, 1)
@@ -80,11 +81,14 @@ struct SwiftDataHistoryImportProvider: HistoryImporting {
     }
 }
 
-/// The library exercise imported history attaches to. Handed from `prepareWrite` to every
-/// `insert` call by value, so the actor holds **no state between calls** — two imports
-/// interleaving between gate holds cannot overwrite each other's mapping.
+/// What imported history attaches to. Handed from `prepareWrite` to every `insert` call by
+/// value, so the actor holds **no state between calls** — two imports interleaving between
+/// gate holds cannot overwrite each other's mapping.
 struct HistoryImportResolvedExercise: Sendable {
-    let id: UUID
+    /// The library exercise, or nil for a history-only name (`createsMissingExercises == false`):
+    /// the row then carries only its name and links up by name once a library exercise of
+    /// that name exists (docs/history-import.md §3).
+    let id: UUID?
     let name: String
     let muscleGroups: [String]
     let loadBehavior: ExerciseLoadBehavior
@@ -95,26 +99,29 @@ actor SwiftDataHistoryImportStore {
 
     func preview(of file: ParsedHistoryFile) throws -> HistoryImportPreview {
         let library = HistoryImportMatching.libraryIndex(try libraryEntries().map(\.entry))
-        let names = HistoryImportMatching.distinctExerciseNames(in: file)
-        let newNames = names.filter { library[HistoryImportMatching.normalizedName($0)] == nil }
-        let existing = try existingKeys(for: file)
+        let matched = Set(
+            HistoryImportMatching.distinctExerciseNames(in: file)
+                .map(HistoryImportMatching.normalizedName)
+                .filter { library[$0] != nil }
+        )
+        let fileKeys = Set(file.workouts.map(key(of:)))
         let dates = file.workouts.map(\.startTime)
         return HistoryImportPreview(
             file: file,
             earliest: dates.min() ?? Date(),
             latest: dates.max() ?? Date(),
-            alreadyImportedCount: file.workouts.filter { existing.contains(key(of: $0)) }.count,
-            matchedExerciseCount: names.count - newNames.count,
-            newExerciseNames: newNames.sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
+            alreadyImportedKeys: try existingKeys(for: file).intersection(fileKeys),
+            libraryMatchedNames: matched
         )
     }
 
-    /// Resolves every exercise name — creating the missing ones as custom exercises — and
-    /// returns the workouts not yet in history plus how many exercises were created.
+    /// Resolves every exercise name — creating the missing ones as custom exercises when
+    /// `createsMissingExercises`, else leaving them library-less — and returns the workouts
+    /// not yet in history plus how many exercises were created.
     ///
     /// Workouts are deduplicated before exercises are created, so a re-import of an
     /// already-imported file creates nothing at all.
-    func prepareWrite(of file: ParsedHistoryFile) throws -> (
+    func prepareWrite(of file: ParsedHistoryFile, createsMissingExercises: Bool) throws -> (
         pending: [ImportedWorkout],
         exercises: [String: HistoryImportResolvedExercise],
         createdExercises: Int
@@ -126,9 +133,10 @@ actor SwiftDataHistoryImportStore {
         let byId = Dictionary(rows.map { ($0.entry.id, $0.model) }, uniquingKeysWith: { first, _ in first })
         let library = HistoryImportMatching.libraryIndex(rows.map(\.entry))
         var resolved: [String: HistoryImportResolvedExercise] = [:]
+        var createdIdByName: [String: UUID] = [:]
         var created = 0
 
-        let pendingFile = ParsedHistoryFile(workouts: pending, skippedCardioSetCount: 0, detectedWeightUnit: nil)
+        let pendingFile = ParsedHistoryFile(workouts: pending, skippedCardioSetStartTimes: [], detectedWeightUnit: nil)
         for name in HistoryImportMatching.distinctExerciseNames(in: pendingFile) {
             let key = HistoryImportMatching.normalizedName(name)
             if let entry = library[key], let exercise = byId[entry.id] {
@@ -138,17 +146,43 @@ actor SwiftDataHistoryImportStore {
                 )
                 continue
             }
-            // The user-created path: no `seedKey`, the model's default muscle group.
             let (equipment, behavior) = HistoryImportMatching.customExerciseTraits(for: name)
+            guard createsMissingExercises else {
+                resolved[key] = HistoryImportResolvedExercise(
+                    id: nil, name: name, muscleGroups: ["General"], loadBehavior: behavior
+                )
+                continue
+            }
+            // The user-created path: no `seedKey`, the model's default muscle group.
             let exercise = Exercise(name: name, muscleGroups: ["General"], equipmentType: equipment, loadBehavior: behavior)
             modelContext.insert(exercise)
             resolved[key] = HistoryImportResolvedExercise(
                 id: exercise.id, name: name, muscleGroups: exercise.muscleGroups, loadBehavior: behavior
             )
+            createdIdByName[name.lowercased()] = exercise.id
             created += 1
         }
-        if created > 0 { try saveOrRollBack() }
+        if created > 0 {
+            try linkNameOnlyRows(to: createdIdByName)
+            try saveOrRollBack()
+        }
         return (pending, resolved, created)
+    }
+
+    /// Links name-only rows left by an earlier history-only import (or legacy data) to the
+    /// exercises this import just created, in the same save — the import's counterpart of
+    /// `ExercisesViewModel.linkNameOnlyHistory`. Without it, PRs and AI recaps (keyed by
+    /// `stableKey`) would split the old rows from this import's (docs/history-import.md §3a).
+    /// A created name is unique by construction: it matched nothing in the library.
+    private func linkNameOnlyRows(to createdIdByName: [String: UUID]) throws {
+        let rows = try modelContext.fetch(FetchDescriptor<WorkoutExercise>(
+            predicate: #Predicate { $0.exerciseId == nil }
+        ))
+        for row in rows where row.workoutSession?.endTime != nil {
+            if let id = createdIdByName[row.exerciseName.lowercased()] {
+                row.exerciseId = id
+            }
+        }
     }
 
     /// Writes one chunk of workouts as completed, routine-less sessions and saves once.

@@ -57,9 +57,11 @@ actor SwiftDataLegacyHistoryAttributionStore {
     ///
     /// The fetch is narrowed in the store to rows that carry no `exerciseId` — the only
     /// candidates — rather than walking the completed-session graph the History actor
-    /// fetches. Every write path in the app has set `exerciseId` since it existed, so this
-    /// predicate selects legacy data and nothing else, and it stays small even for a user
-    /// with years of history.
+    /// fetches. Every *recording* path has set `exerciseId` since it existed, so this
+    /// predicate selects legacy data plus rows from a **history-only import**, which carry
+    /// a name and deliberately no link (docs/history-import.md §3a). Two callers resolve
+    /// them: the ambiguous-name banner, and `ExercisesViewModel` whenever an exercise with a
+    /// unique name is created or renamed. It stays small even for a user with years of history.
     ///
     /// The name comparison and the completed-session check happen in Swift because
     /// SwiftData's `#Predicate` has neither case-insensitive equality nor a documented

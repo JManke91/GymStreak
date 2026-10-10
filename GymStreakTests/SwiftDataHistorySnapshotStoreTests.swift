@@ -599,7 +599,7 @@ struct SwiftDataHistorySnapshotStoreTests {
         await Task.yield()
 
         let preview = try await importer.prepareStrongImport(from: url)
-        let result = try await importer.importHistory(preview.file, weightUnit: .kilograms) { _ in }
+        let result = try await importer.importHistory(preview.file, weightUnit: .kilograms, createsMissingExercises: true) { _ in }
 
         heartbeatTask.cancel()
         await heartbeatTask.value

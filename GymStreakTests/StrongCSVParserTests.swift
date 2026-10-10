@@ -97,6 +97,36 @@ struct StrongCSVParserTests {
         #expect(file.workouts.first?.exercises.first?.sets.first?.weight == 135)
     }
 
+    /// Regression (2026-10-10): a real German-language export was rejected as "not a Strong
+    /// export". Strong localizes the header, writes `43min` durations and labels rest-timer
+    /// rows `Ruhezeit`. Rows copied verbatim from that file.
+    @Test("A localized (German) export parses by column order")
+    func localizedHeader() throws {
+        let csv = """
+        Datum,Workout-Name,Dauer,Name der Übung,Reihenfolge festlegen,Gewicht,Wiederh.,Entfernung,Sekunden,Notizen,Workout-Notizen,RPE
+        2024-04-14 17:06:06,"Legs",43min,"Deadlift (Barbell)",1,80.0,6.0,0,0.0,"6-8","",6
+        2024-04-14 17:06:06,"Legs",43min,"Deadlift (Barbell)",2,80.0,7.0,0,0.0,,,
+        2024-04-14 17:06:06,"Legs",43min,"Deadlift (Barbell)",Ruhezeit,0.0,0.0,0,120.0,,,
+        2024-04-16 18:00:00,"Push",1h 5min,"Bench Press (Barbell)",1,70.0,8.0,0,0.0,,"Good day",
+        """
+        let file = try StrongCSVParser.parse(csv, timeZone: utc)
+
+        #expect(file.workouts.count == 2)
+        #expect(file.workouts[0].duration == 2_580)
+        #expect(file.workouts[0].exercises.first?.sets == [ImportedSet(weight: 80, reps: 6), ImportedSet(weight: 80, reps: 7)])
+        #expect(file.skippedCardioSetCount == 0, "a rest-timer row is not a cardio set")
+        #expect(file.workouts[1].duration == 3_900)
+        #expect(file.workouts[1].notes == "Good day")
+    }
+
+    @Test("A localized header without a Strong timestamp in the first row is still rejected")
+    func localizedHeaderNeedsStrongRow() {
+        let csv = "a,b,c,d,e,f,g,h,i,j\nhello,1,2,3,4,5,6,7,8,9"
+        #expect(throws: HistoryImportError.notAStrongExport) {
+            try StrongCSVParser.parse(csv, timeZone: utc)
+        }
+    }
+
     @Test("A non-Strong CSV is rejected at the header")
     func rejectsForeignHeader() {
         let hevy = "title,start_time,end_time,description,exercise_title,set_index,weight_kg,reps\nPush,x,y,,Bench,0,60,10"
@@ -125,6 +155,8 @@ struct StrongCSVParserTests {
         #expect(StrongCSVParser.parseDuration("1h 5m") == 3_900)
         #expect(StrongCSVParser.parseDuration("45m") == 2_700)
         #expect(StrongCSVParser.parseDuration("50s") == 50)
+        #expect(StrongCSVParser.parseDuration("43min") == 2_580)
+        #expect(StrongCSVParser.parseDuration("1h 5min") == 3_900)
         #expect(StrongCSVParser.parseDuration("3600") == 3_600)
         #expect(StrongCSVParser.parseDuration("") == 0)
     }

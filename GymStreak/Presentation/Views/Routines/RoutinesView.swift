@@ -44,7 +44,8 @@ private struct RoutinesViewInternal: View {
             exerciseRepository: dependencies.exerciseRepository,
             routineRepository: dependencies.routineRepository,
             catalogSync: dependencies.exerciseCatalogSync,
-            historyStoreGate: dependencies.historyStoreGate
+            historyStoreGate: dependencies.historyStoreGate,
+            legacyHistoryAttribution: dependencies.legacyHistoryAttribution
         ))
         self._workoutViewModel = StateObject(wrappedValue: WorkoutViewModel(
             workoutSessionRepository: dependencies.workoutSessionRepository,

@@ -18,6 +18,11 @@ import Foundation
 /// them from today's library would change what an old session *means*. Attribution sets
 /// the missing `exerciseId` link and nothing else.
 ///
+/// Two callers: the ambiguous-name banner, where the **user** chooses the exercise, and
+/// `ExercisesViewModel.linkNameOnlyHistory`, which links automatically when an exercise is
+/// created or renamed **and its name is unique** — exactly the rows the charts were already
+/// resolving to it by name, so nothing is guessed (docs/history-import.md §3a).
+///
 /// ⚠️ Like `HistorySnapshotProviding`, this protocol does **not** provide the off-main
 /// guarantee: under SE-0461 a plain `nonisolated async` requirement runs on the caller's
 /// actor. The conforming type carries `@concurrent` on its own method. See
@@ -34,9 +39,9 @@ protocol LegacyHistoryAttributing: Sendable {
     ///   - exerciseName: matched case-insensitively against the row's denormalised name —
     ///     the same rule `ExerciseProgressAggregator.isUnattributedLegacyRow` applies when
     ///     it decides what to report as missing.
-    ///   - exerciseId: the live library exercise the user chose. Only the user knows
-    ///     whether a 2025 "Biceps Curls" was the barbell or the dumbbell, so nothing here
-    ///     may guess.
+    ///   - exerciseId: the live library exercise the rows belong to — chosen by the user when
+    ///     the name is ambiguous (only they know whether a 2025 "Biceps Curls" was the barbell
+    ///     or the dumbbell), or the only exercise of that name when it is unique.
     /// - Returns: how many rows were linked. Zero means there was nothing left to resolve.
     func attributeLegacyRows(
         named exerciseName: String,

@@ -2,75 +2,12 @@
 //  HistoryImportSummaryContent.swift
 //  GymStreak
 //
-//  The preview (before writing) and result (after writing) screens of the
-//  history import. Counts are label/value rows so no string needs plural rules.
+//  The result screen of the history import, and the label/value rows it shares with
+//  the preview (`HistoryImportPreviewContent`). Counts are label/value rows so no
+//  string needs plural rules.
 //
 
 import SwiftUI
-
-/// What will happen, with the unit choice and the confirm button.
-struct HistoryImportPreviewContent: View {
-    let preview: HistoryImportPreview
-    @Binding var weightUnit: WeightUnit
-    let onImport: () -> Void
-
-    var body: some View {
-        ScrollView {
-            // Lazy: the new-exercise list is as long as the user's Strong library.
-            LazyVStack(alignment: .leading, spacing: DesignSystem.Spacing.lg) {
-                OnyxCard {
-                    VStack(spacing: DesignSystem.Spacing.md) {
-                        HistoryImportCountRow(label: "history_import.preview.workouts".localized, value: preview.workoutCount)
-                        HistoryImportTextRow(
-                            label: "history_import.preview.period".localized,
-                            value: "\(preview.earliest.formatted(date: .abbreviated, time: .omitted)) – \(preview.latest.formatted(date: .abbreviated, time: .omitted))"
-                        )
-                        if preview.alreadyImportedCount > 0 {
-                            HistoryImportCountRow(label: "history_import.preview.already".localized, value: preview.alreadyImportedCount)
-                        }
-                        HistoryImportCountRow(label: "history_import.preview.matched".localized, value: preview.matchedExerciseCount)
-                        HistoryImportCountRow(label: "history_import.preview.new".localized, value: preview.newExerciseNames.count)
-                        if preview.file.skippedCardioSetCount > 0 {
-                            HistoryImportCountRow(label: "history_import.preview.cardio".localized, value: preview.file.skippedCardioSetCount)
-                        }
-                    }
-                }
-
-                VStack(alignment: .leading, spacing: DesignSystem.Spacing.sm) {
-                    Text("history_import.preview.unit.title".localized)
-                        .font(.onyxSubheadline)
-                        .foregroundStyle(DesignSystem.Colors.textPrimary)
-                    Picker("history_import.preview.unit.title".localized, selection: $weightUnit) {
-                        ForEach(WeightUnit.allCases, id: \.self) { unit in
-                            Text(WeightFormatting.unitName(unit)).tag(unit)
-                        }
-                    }
-                    .pickerStyle(.segmented)
-                    Text("history_import.preview.unit.footer".localized)
-                        .font(.onyxFootnote)
-                        .foregroundStyle(DesignSystem.Colors.textSecondary)
-                }
-
-                OnyxButton("history_import.preview.import".localized, icon: "square.and.arrow.down") {
-                    onImport()
-                }
-
-                if !preview.newExerciseNames.isEmpty {
-                    Text("history_import.preview.new_list".localized)
-                        .font(.onyxSubheadline)
-                        .foregroundStyle(DesignSystem.Colors.textSecondary)
-                        .padding(.top, DesignSystem.Spacing.sm)
-                    ForEach(preview.newExerciseNames, id: \.self) { name in
-                        Text(name)
-                            .font(.onyxBody)
-                            .foregroundStyle(DesignSystem.Colors.textPrimary)
-                    }
-                }
-            }
-            .padding(DesignSystem.Spacing.lg)
-        }
-    }
-}
 
 /// What happened.
 struct HistoryImportResultContent: View {
@@ -107,7 +44,7 @@ struct HistoryImportResultContent: View {
     }
 }
 
-private struct HistoryImportCountRow: View {
+struct HistoryImportCountRow: View {
     let label: String
     let value: Int
 
@@ -116,7 +53,7 @@ private struct HistoryImportCountRow: View {
     }
 }
 
-private struct HistoryImportTextRow: View {
+struct HistoryImportTextRow: View {
     let label: String
     let value: String
 

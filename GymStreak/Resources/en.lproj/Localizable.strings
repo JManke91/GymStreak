@@ -1927,3 +1927,17 @@
 "history_import.error.empty" = "The file contains no strength sets to import.";
 "history_import.error.write" = "The import stopped before it finished. Workouts imported so far are kept. Import the file again to add the rest.";
 "history_import.error.retry" = "Choose Another File";
+"history_import.preview.create_exercises" = "Add new exercises to your library";
+"history_import.preview.create_exercises.on" = "Each exercise below becomes a custom exercise with its own progress chart.";
+"history_import.preview.create_exercises.off" = "Your library stays as it is. These workouts still appear in History. An exercise's charts appear once you add an exercise with the same name.";
+"history_import.preview.new_list.history_only" = "These exercises are added to History only:";
+"history_import.period.everything" = "Everything";
+"history_import.period.last_month" = "Last month";
+"history_import.period.last_3_months" = "Last 3 months";
+"history_import.period.last_year" = "Last year";
+"history_import.period.custom" = "Custom";
+"history_import.period.from" = "From";
+"history_import.period.to" = "To";
+"history_import.period.footer" = "Only workouts in this period are imported. Periods count back from your most recent workout in the file.";
+"history_import.period.empty" = "No workouts in this period.";
+"history_import.period.all_imported" = "All workouts in this period are already in your history. There is nothing to import.";

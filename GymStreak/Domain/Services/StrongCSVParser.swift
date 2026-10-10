@@ -13,32 +13,35 @@ import Foundation
 /// Seconds, RPE` (newer exports add `Notes`, `Workout Notes`, `Workout #` and unit
 /// suffixes such as `Weight (kg)` / `Duration (sec)`).
 ///
-/// Columns are looked up **by header name**, never by position, so the column order
-/// and the optional extras of different Strong versions all parse. The header is the
-/// validation boundary: without the six required columns the file is not a Strong
-/// export and nothing is parsed.
+/// Columns are looked up **by header name** first, so the column order and the optional
+/// extras of different Strong versions all parse. **Strong localizes the header into the
+/// app language** (a German export starts `Datum,Workout-Name,Dauer,Name der Übung,…`) but
+/// keeps the classic column *order*, so a header with no English names falls back to that
+/// order — accepted only when the first data row has a Strong timestamp in the date slot
+/// and numbers in the weight and reps slots. The
+/// header is the validation boundary: a file passing neither check is not a Strong export
+/// and nothing is parsed.
 enum StrongCSVParser {
 
     static func parse(_ text: String, timeZone: TimeZone = .current) throws -> ParsedHistoryFile {
         let rows = CSVTableReader.rows(from: text)
         guard let header = rows.first else { throw HistoryImportError.notAStrongExport }
-        let columns = try Columns(header: header)
-
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = timeZone
+        let columns = try Columns(header: header, firstRow: rows.dropFirst().first, calendar: calendar)
 
         var workouts: [ImportedWorkout] = []
         var workoutIndexByKey: [String: Int] = [:]
-        var skippedCardio = 0
+        var skippedCardio: [Date] = []
 
         for (offset, row) in rows.dropFirst().enumerated() {
             let line = offset + 2
             guard row.count > columns.maxRequiredIndex else {
                 throw HistoryImportError.malformedRow(line: line)
             }
-            // Strong writes its rest-timer entries as rows; they are not sets.
-            let setOrder = row[columns.setOrder].lowercased()
-            if setOrder.contains("rest") { continue }
+            // Strong writes its rest-timer entries as rows (`Rest Timer`, `Ruhezeit`, … —
+            // localized); they are not sets.
+            if !isSetOrder(row[columns.setOrder]) { continue }
 
             guard let startTime = parseDate(row[columns.date], calendar: calendar),
                   let weight = parseNumber(row[columns.weight]),
@@ -52,7 +55,7 @@ enum StrongCSVParser {
             if weight == 0 && reps == 0 {
                 let distance = columns.distance.flatMap { parseNumber(row[safe: $0]) } ?? 0
                 let seconds = columns.seconds.flatMap { parseNumber(row[safe: $0]) } ?? 0
-                if distance > 0 || seconds > 0 { skippedCardio += 1 }
+                if distance > 0 || seconds > 0 { skippedCardio.append(startTime) }
                 continue
             }
 
@@ -89,7 +92,7 @@ enum StrongCSVParser {
         guard !workouts.isEmpty else { throw HistoryImportError.noWorkouts }
         return ParsedHistoryFile(
             workouts: workouts,
-            skippedCardioSetCount: skippedCardio,
+            skippedCardioSetStartTimes: skippedCardio,
             detectedWeightUnit: columns.detectedWeightUnit
         )
     }
@@ -111,8 +114,21 @@ enum StrongCSVParser {
 
         var maxRequiredIndex: Int { [date, workoutName, exerciseName, setOrder, weight, reps].max() ?? 0 }
 
-        init(header: [String]) throws {
+        init(header: [String], firstRow: [String]?, calendar: Calendar) throws {
             let names = header.map { $0.trimmingCharacters(in: .whitespaces).lowercased() }
+            if !names.contains("date"), let firstRow,
+               (10...12).contains(names.count),
+               firstRow.count > 6,
+               StrongCSVParser.parseDate(firstRow[0], calendar: calendar) != nil,
+               StrongCSVParser.parseNumber(firstRow[5]) != nil,
+               StrongCSVParser.parseNumber(firstRow[6]) != nil {
+                self.init(classicLayoutOf: names)
+            } else {
+                try self.init(namedColumns: names)
+            }
+        }
+
+        private init(namedColumns names: [String]) throws {
             func exact(_ name: String) -> Int? { names.firstIndex(of: name) }
             // `Weight (kg)`, `Duration (sec)`, `Distance (meters)` …
             func prefixed(_ name: String) -> Int? {
@@ -138,14 +154,30 @@ enum StrongCSVParser {
             self.seconds = exact("seconds")
             self.workoutNotes = exact("workout notes")
 
-            let weightHeader = names[weight]
-            if weightHeader.contains("lb") {
-                detectedWeightUnit = .pounds
-            } else if weightHeader.contains("kg") {
-                detectedWeightUnit = .kilograms
-            } else {
-                detectedWeightUnit = nil
-            }
+            detectedWeightUnit = Self.unit(inWeightHeader: names[weight])
+        }
+
+        /// The classic export order, whatever language the header is in:
+        /// `Date, Workout Name, Duration, Exercise Name, Set Order, Weight, Reps, Distance,
+        /// Seconds, [Notes, Workout Notes,] RPE`.
+        private init(classicLayoutOf names: [String]) {
+            date = 0
+            workoutName = 1
+            duration = 2
+            exerciseName = 3
+            setOrder = 4
+            weight = 5
+            reps = 6
+            distance = 7
+            seconds = 8
+            workoutNotes = names.count == 12 ? 10 : nil
+            detectedWeightUnit = Self.unit(inWeightHeader: names[5])
+        }
+
+        private static func unit(inWeightHeader header: String) -> WeightUnit? {
+            if header.contains("lb") { return .pounds }
+            if header.contains("kg") { return .kilograms }
+            return nil
         }
     }
 
@@ -173,21 +205,32 @@ enum StrongCSVParser {
         return Double(trimmed.replacingOccurrences(of: ",", with: "."))
     }
 
-    /// `1h 5m`, `45m`, `30s`, or plain seconds (`Duration (sec)` exports). Unknown → 0.
+    /// `1h 5min`, `43min`, `45m`, `30s`, or plain seconds (`Duration (sec)` exports).
+    /// Unknown → 0.
     static func parseDuration(_ raw: String) -> TimeInterval {
         let trimmed = raw.trimmingCharacters(in: .whitespaces)
         if let seconds = Double(trimmed) { return max(seconds, 0) }
         var total: TimeInterval = 0
         for token in trimmed.split(separator: " ") {
-            guard let unit = token.last, let value = Double(token.dropLast()) else { continue }
-            switch unit {
-            case "h": total += value * 3600
-            case "m": total += value * 60
-            case "s": total += value
-            default: continue
+            let number = token.prefix { $0.isNumber || $0 == "." || $0 == "," }
+            let unit = token.dropFirst(number.count).lowercased()
+            guard let value = Double(number.replacingOccurrences(of: ",", with: ".")) else { continue }
+            if unit.hasPrefix("h") {
+                total += value * 3600
+            } else if unit.hasPrefix("m") {
+                total += value * 60
+            } else if unit.hasPrefix("s") {
+                total += value
             }
         }
         return total
+    }
+
+    /// A set row's `Set Order` is a number, or a one-letter marker (`W`/`D`/`F`, warm-up,
+    /// drop, failure). Anything longer is a rest-timer row in some language.
+    static func isSetOrder(_ raw: String) -> Bool {
+        let trimmed = raw.trimmingCharacters(in: .whitespaces)
+        return trimmed.count <= 1 || Int(trimmed) != nil
     }
 }
 

@@ -81,18 +81,23 @@ class ExercisesViewModel: ObservableObject {
     /// reaches its routine graph too. Same uncatchable trap as a History deletion;
     /// see `HistoryStoreGate` and `docs/history-delete-race.md`.
     private let historyStoreGate: HistoryStoreGate
+    /// Links name-only history rows to a newly created or renamed exercise
+    /// (`linkNameOnlyHistory`). Nil in tests and previews that don't exercise it.
+    let legacyHistoryAttribution: (any LegacyHistoryAttributing)?
     private var cloudSyncObserver: NSObjectProtocol?
 
     init(
         exerciseRepository: ExerciseRepository,
         routineRepository: RoutineRepository,
         catalogSync: ExerciseCatalogSyncRequesting,
-        historyStoreGate: HistoryStoreGate = .unshared()
+        historyStoreGate: HistoryStoreGate = .unshared(),
+        legacyHistoryAttribution: (any LegacyHistoryAttributing)? = nil
     ) {
         self.exerciseRepository = exerciseRepository
         self.routineRepository = routineRepository
         self.catalogSync = catalogSync
         self.historyStoreGate = historyStoreGate
+        self.legacyHistoryAttribution = legacyHistoryAttribution
         fetchExercises()
         observeCloudKitChanges()
     }
@@ -128,7 +133,10 @@ class ExercisesViewModel: ObservableObject {
         exerciseRepository.insert(exercise)
         let saved = save()
         fetchExercises()
-        if saved { catalogSync.requestCatalogSync() }
+        if saved {
+            catalogSync.requestCatalogSync()
+            linkNameOnlyHistory(to: exercise)
+        }
         return exercise
     }
 
@@ -136,7 +144,10 @@ class ExercisesViewModel: ObservableObject {
         exercise.updatedAt = Date()
         let saved = save()
         fetchExercises()
-        if saved { catalogSync.requestCatalogSync() }
+        if saved {
+            catalogSync.requestCatalogSync()
+            linkNameOnlyHistory(to: exercise)
+        }
     }
 
     /// Finds all routines that use the given exercise

@@ -28,10 +28,14 @@ protocol HistoryImporting: Sendable {
     ///
     /// - Parameters:
     ///   - weightUnit: the unit the file's weights are in; stored values are kilograms.
+    ///   - createsMissingExercises: true creates every unmatched name as a custom exercise;
+    ///     false writes those rows with the name only (no library exercise, no chart until
+    ///     one of that name exists). Matched names link to the library either way.
     ///   - progress: fraction of workouts processed, 0…1, called off the main actor.
     func importHistory(
         _ file: ParsedHistoryFile,
         weightUnit: WeightUnit,
+        createsMissingExercises: Bool,
         progress: @escaping @Sendable (Double) -> Void
     ) async throws -> HistoryImportResult
 }

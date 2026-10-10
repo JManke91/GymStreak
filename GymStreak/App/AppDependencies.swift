@@ -708,7 +708,8 @@ final class AppDependencies: ObservableObject {
         exerciseRepository: exerciseRepository,
         routineRepository: routineRepository,
         catalogSync: exerciseCatalogSync,
-        historyStoreGate: historyStoreGate
+        historyStoreGate: historyStoreGate,
+        legacyHistoryAttribution: legacyHistoryAttribution
     )
 
     /// One routine-drafting session. A factory rather than a stored property because the

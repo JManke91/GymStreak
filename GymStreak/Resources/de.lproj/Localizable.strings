@@ -1918,3 +1918,17 @@
 "history_import.error.empty" = "Die Datei enthält keine Kraftsätze zum Importieren.";
 "history_import.error.write" = "Der Import wurde vor dem Ende unterbrochen. Bereits importierte Workouts bleiben erhalten. Importiere die Datei erneut, um den Rest hinzuzufügen.";
 "history_import.error.retry" = "Andere Datei auswählen";
+"history_import.preview.create_exercises" = "Neue Übungen zur Bibliothek hinzufügen";
+"history_import.preview.create_exercises.on" = "Jede Übung unten wird als eigene Übung mit eigenem Fortschrittsdiagramm angelegt.";
+"history_import.preview.create_exercises.off" = "Deine Bibliothek bleibt unverändert. Die Workouts erscheinen trotzdem im Verlauf. Diagramme für eine Übung erscheinen, sobald du eine Übung mit demselben Namen anlegst.";
+"history_import.preview.new_list.history_only" = "Diese Übungen werden nur in den Verlauf übernommen:";
+"history_import.period.everything" = "Alles";
+"history_import.period.last_month" = "Letzter Monat";
+"history_import.period.last_3_months" = "Letzte 3 Monate";
+"history_import.period.last_year" = "Letztes Jahr";
+"history_import.period.custom" = "Eigener Zeitraum";
+"history_import.period.from" = "Von";
+"history_import.period.to" = "Bis";
+"history_import.period.footer" = "Nur Workouts in diesem Zeitraum werden importiert. Die Zeiträume zählen ab deinem letzten Workout in der Datei zurück.";
+"history_import.period.empty" = "In diesem Zeitraum gibt es keine Workouts.";
+"history_import.period.all_imported" = "Alle Workouts in diesem Zeitraum sind bereits in deinem Verlauf. Es gibt nichts zu importieren.";

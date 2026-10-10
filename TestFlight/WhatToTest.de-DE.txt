@@ -1,1 +1,3 @@
 - Importiere deinen Trainingsverlauf aus Strong: Einstellungen → Aus Strong importieren. Wähle die von Strong exportierte CSV-Datei, prüfe die Vorschau, und deine bisherigen Workouts erscheinen im Verlauf, in den Fortschrittsdiagrammen und bei den Rekorden. Ein erneuter Import derselben Datei fügt nichts doppelt hinzu.
+- Beim Import entscheidest du, ob neue Übungen in deine Bibliothek übernommen werden. Lässt du sie weg, erscheinen die Workouts trotzdem im Verlauf und fließen in das Fortschrittsdiagramm einer Übung ein, sobald du eine Übung mit demselben Namen anlegst.
+- Beim Import kannst du einen Zeitraum wählen, z. B. nur den letzten Monat, oder ein eigenes Start- und Enddatum festlegen.

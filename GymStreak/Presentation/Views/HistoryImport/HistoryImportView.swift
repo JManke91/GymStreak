@@ -63,11 +63,8 @@ struct HistoryImportView: View {
         case .reading:
             ProgressView("history_import.reading".localized)
                 .tint(DesignSystem.Colors.tint)
-        case .preview(let preview):
-            HistoryImportPreviewContent(
-                preview: preview,
-                weightUnit: $viewModel.weightUnit
-            ) {
+        case .preview:
+            HistoryImportPreviewContent(viewModel: viewModel) {
                 Task { await viewModel.startImport() }
             }
         case .importing(let progress):

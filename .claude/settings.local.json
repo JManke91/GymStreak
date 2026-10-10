@@ -98,7 +98,8 @@
       "Bash(md5 GymStreak/Domain/Models/RestTimerAttributes.swift GymStreakWidgets/RestTimerAttributes.swift)",
       "mcp__things__search_todos",
       "Bash(echo \"exit=$?\")",
-      "Bash(awk -F: '$1>960 && $1<1020')"
+      "Bash(awk -F: '$1>960 && $1<1020')",
+      "Bash(cd /Users/jmanke/Documents/Code/iOS/AI/GymStreak/.claude/worktrees/parallel-ticket-identification-4a3286; ls .claude .claude/skills 2>/dev/null; ls docs/agents; ls -la .scratch 2>/dev/null | head; ls ../../../.scratch 2>/dev/null | head -30; cat .gitignore | grep -n scratch)"
     ],
     "defaultMode": "acceptEdits"
   },

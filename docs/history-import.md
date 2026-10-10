@@ -12,12 +12,16 @@
 A user who exported their data from Strong opens **Settings → Import → Import from Strong**,
 picks the CSV with the system document picker, and sees a preview:
 
-- the number of workouts and their period;
+- a **period** to import. Presets are Everything / Last month / Last 3 months / Last year, with
+  From and To date pickers for a custom range (§3b). Every count below is for the selected period;
+- the number of workouts;
 - how many were already imported earlier (these are skipped);
 - how many distinct exercise names match the library, how many will be created as custom
   exercises, and the list of those new names;
 - how many cardio sets are left out;
-- a **kg / lb** choice for the file's weights.
+- a **kg / lb** choice for the file's weights;
+- when there are unmatched names, a toggle **"Add new exercises to your library"** (on by
+  default). See §3a.
 
 **Import** writes the workouts and shows a progress bar, then a summary: workouts imported, already
 in history (skipped), custom exercises created, cardio sets skipped. **Cancel** at any point before
@@ -46,17 +50,35 @@ Date,Workout Name,Duration,Exercise Name,Set Order,Weight,Reps,Distance,Seconds,
 
 Newer exports add `Workout #`, `Notes` and `Workout Notes`, and suffix units onto columns
 (`Weight (kg)` / `Weight (lbs)`, `Duration (sec)`, `Distance (meters)`). The parser
-(`StrongCSVParser`) therefore looks columns up **by header name, never by position**:
+(`StrongCSVParser`) therefore looks columns up **by header name** first.
+
+**Strong localizes the header into the app language** but keeps the classic column order. A
+German export starts
+`Datum,Workout-Name,Dauer,Name der Übung,Reihenfolge festlegen,Gewicht,Wiederh.,Entfernung,Sekunden,Notizen,Workout-Notizen,RPE`.
+A header without the English `Date` column therefore falls back to the **classic order** (Date,
+Workout Name, Duration, Exercise Name, Set Order, Weight, Reps, Distance, Seconds, [Notes, Workout
+Notes,] RPE). The fallback is accepted only when the header has 10–12 columns **and** the first data row has a Strong timestamp
+in the date slot and numbers in the weight and reps slots. Any language therefore parses without an
+alias table, and a reordered English export is not silently read by position.
+
+> **Root cause, 2026-10-10:** the first real export tested (German, 135 workouts) was rejected as
+> "not a Strong export", because v1 matched English header names only. The same file exposed two more
+> v1 bugs that no synthetic fixture had: durations written `43min` / `1h 5min` parsed as 0 (only `m`
+> was understood), and rest-timer rows labelled `Ruhezeit` were counted as cardio, because only the
+> English `Rest Timer` was recognised. The regression test `localizedHeader` uses rows copied
+> verbatim from that file. **Lesson:** never assume an export format from documentation or memory.
+> Profile a real file first.
+
 
 | Column | Required | Handling |
 |---|---|---|
 | `Date` | ✓ | `yyyy-MM-dd HH:mm[:ss]`, wall-clock time in the device's time zone (Strong writes local time with no zone). |
 | `Workout Name` | ✓ | → `WorkoutSession.routineName`. |
 | `Exercise Name` | ✓ | Matched to the library (§3). |
-| `Set Order` | ✓ | Only used to skip Strong's `Rest Timer` rows. Set order in history is file order. Letter-marked sets (warm-up/drop/failure) import as ordinary sets. |
+| `Set Order` | ✓ | Only used to skip rest-timer rows: a value that is neither a number nor a single letter (`Rest Timer`, `Ruhezeit`, … in any language). Set order in history is file order. Letter-marked sets (`W`/`D`/`F`, warm-up/drop/failure) import as ordinary sets. |
 | `Weight…` | ✓ | Decimal comma accepted. The header's `(kg)`/`(lbs)` suffix, when present, **preselects** the unit picker. The user still decides. Negative values (assisted exercises in some exports) are stored as their absolute value. |
 | `Reps` | ✓ | Rounded to an integer. |
-| `Duration…` | – | `1h 5m`, `45m`, `30s`, or plain seconds → `endTime = startTime + duration`. Missing or unparseable → `endTime == startTime`. The session still counts as completed. |
+| `Duration…` | – | `1h 5min`, `43min`, `45m`, `30s` (unit read by its first letter h/m/s), or plain seconds → `endTime = startTime + duration`. Missing or unparseable → `endTime == startTime`. The session still counts as completed. |
 | `Distance…`, `Seconds` | – | Only used to recognise cardio rows. |
 | `Workout Notes` | – | First non-empty value → `WorkoutSession.notes`. |
 | `RPE`, `Notes` | – | Ignored. History has no field for them, and this feature adds no schema change. |
@@ -88,18 +110,116 @@ written. A file whose rows are all cardio or empty is "no strength sets to impor
   a library `Bench Press`. That is deliberate: guessing would silently merge charts. When CloudKit
   has left two library exercises with one name, the oldest `createdAt` wins, then the smallest id.
   This is the same pick `DefaultContentSeeder` makes.
-  - **Matched:** the history row takes the library exercise's id, name, muscle groups and load
+  - **Matched** (in both toggle positions): the history row takes the library exercise's id, name, muscle groups and load
     behaviour, so its charts and PRs continue.
-  - **Unmatched:** a custom exercise is created as a user-created one would be (`seedKey` empty,
+  - **Unmatched, toggle on (default):** a custom exercise is created as a user-created one would be (`seedKey` empty,
     muscle group `General`). Equipment and load behaviour come from Strong's suffix: `(Barbell)`,
     `(Dumbbell)` default, `(Machine)`/`(Smith Machine)`, `(Cable)`, `(Bodyweight)`/`(Weighted)`
     → bodyweight, and `(Assisted)` → bodyweight with counterweight assistance. The user can edit
-    any of them afterwards.
+    any of them afterwards. **Toggle off:** see §3a.
 - **Units:** the stored value is `WeightUnit.kilograms(fromDisplay:)` of the file value in the
   chosen unit. Kilograms stay canonical (`docs/weight-unit-preference.md` §2).
 - **Cardio rows** (weight 0 and reps 0, with distance or seconds > 0) are skipped and counted.
   Rows with nothing at all are dropped silently. A workout left with no strength set is not
   imported.
+
+### 3a. History-only import (the library toggle)
+
+Added 2026-10-10 at the user's request. The first real export had 21 of 23 names unmatched, all
+Strong spellings like `Bench Press (Barbell)`, and creating them all would crowd the library with
+near-duplicates. With the toggle **off**:
+
+- **Matched names still link to the library** exactly as before. The toggle governs only *new*
+  exercises.
+- **Unmatched names are written as name-only rows**: `exerciseId == nil`, the Strong spelling as
+  `exerciseName`, muscle group `General`, and the load behaviour from the suffix. No `Exercise` is
+  created, and the summary reports 0.
+
+**What a name-only row does in the app:**
+- **Shows fully in History:** list, detail, volume, streaks, muscle map (`General`). PR badges are
+  keyed by `stableKey`, which falls back to the lowercased name, so PRs work *among the imported
+  rows*. That is only true while no library exercise of that name exists; see the next point.
+- **Not in Fortschritt or the exercise charts yet.** `FortschrittAggregator` builds rows only for
+  *live* library exercises, and a row resolving to none is dropped by design (that is what keeps
+  deleted exercises out).
+- **Links up later, automatically, and permanently.** When the user **creates or renames** an
+  exercise and its name is unique in the library, `ExercisesViewModel.linkNameOnlyHistory` writes
+  that exercise's id onto every finished-workout row of the same name, through the existing
+  `LegacyHistoryAttributing` write path. The match is case-insensitive. It then posts
+  `.historySourceDataDidChange`. If two library exercises share the name, nothing is written, and
+  the existing attribution banner lets the user pick. Pinned by
+  `HistoryImportStoreTests.creatingExerciseLinksNameOnlyRows`.
+  - **Why the link must be written, not just read by name.** Charts (`FortschrittAggregator`,
+    `ExerciseProgressAggregator`) and previous performance already resolve a nil-id row by name.
+    But `PersonalRecordService`, `PostWorkoutRecapAggregator` and `WorkoutAnalysisAggregator` key
+    by `WorkoutExercise.stableKey` (`exerciseId ?? name`) and have no name fallback. Unlinked
+    imported rows would sit under the name key, and new workouts under the UUID key. The first
+    new workout would then be a "PR" against an imported history it cannot see, while the chart
+    shows that history as heavier. The architecture review found this on 2026-10-10. Writing the
+    link makes every consumer see one history.
+  - **Side effect, accepted:** genuine pre-`exerciseId` legacy rows of that name are linked too.
+    Charts were already showing them under that exercise by name, so this only makes permanent
+    what was displayed. It also keeps the rows attached if a second same-named exercise appears
+    later, where the name fallback would have withheld them.
+  - **A later import with the toggle on** links the same way. `prepareWrite` writes each created
+    exercise's id onto the existing name-only rows of that name, in the same save as the exercise.
+    A created name is unique by construction. Pinned by `laterCreatingImportLinksNameOnlyRows`.
+  - **Renames link too, and do not unlink.** `updateExercise` re-runs the link on every save.
+    Renaming an exercise to the name of orphaned rows attaches them permanently, and renaming it
+    back does not detach them, whereas a pure by-name lookup would follow the current name. This
+    is accepted: the user named the exercise after those workouts.
+  - **Matching difference:** the import matches whitespace-collapsed names, while linking compares
+    plain lowercased names. A Strong name with irregular inner spacing therefore imports matched
+    but is not auto-linked later.
+  - Seeded exercises added by a future catalog version do not run this hook. Their rows stay
+    chart-visible by name, but the PR split above applies until the user renames or recreates the
+    exercise.
+
+**Why nil and not a placeholder id:** an id that resolves to nothing would be dropped from
+Fortschritt forever. A nil id is the one state the app already knows how to link later.
+
+**Why the default is on:** charts are the payoff the import exists for (the aha path's "see the
+number go up"). Off is the explicit choice of a user who would rather keep the library clean.
+
+**Known edges:**
+- A re-import with the toggle on cannot "upgrade" an earlier history-only import, because those
+  workouts are skipped as duplicates. Adding the exercise by hand is the way, as above.
+- A name-only row keeps its suffix-derived load behaviour. `(Assisted)` means counterweight, and a
+  hand-made exercise of that name must match it, or Fortschritt drops the rows as a different
+  measure.
+
+### 3b. Period filter
+
+Added 2026-10-10 at the user's request ("users might want to only import last month").
+
+- **Selection is in whole days**, From's start through the end of To, in the device calendar. A
+  workout belongs to the period by its **start time**. Cardio skips carry their workout's start
+  time (`ParsedHistoryFile.skippedCardioSetStartTimes`), so they are counted per period too.
+- **Presets count back from the file's newest workout, not from today**
+  (`HistoryImportPeriod.dayRange`), clamped to the first workout. The first real export ended
+  eight months before it was imported, so "Last month" from today would have selected nothing.
+  For a user switching right now the two are the same. The menu shows "Custom" when the pickers
+  match no preset.
+- **The counts update live without another store round trip.** The off-main preview returns lookups
+  instead of numbers: `alreadyImportedKeys` (the file's dedupe keys already in history) and
+  `libraryMatchedNames`. `HistoryImportPreview.summary(in:)` then counts any period: workouts,
+  duplicates, matched names, new names and cardio skips. The view model recomputes it when the
+  pickers change (`refreshSelection`), never in a view body. It is an O(sets) pass over value
+  types, cheap even for thousands of workouts.
+- **Picker bounds come from the view model** (`fromBounds`/`toBounds`, clamped into the file's span
+  and against each other). A `ClosedRange` with inverted bounds traps, so the view never builds one
+  from the freely settable `rangeStart`/`rangeEnd` (architecture review, 2026-10-10). `apply(_:)`
+  writes both ends and then summarises once.
+- **Import takes `file.restricted(to:)`**, so only the selected workouts reach the store, and the
+  new-exercise list (and whether exercises are created) covers only those.
+- **Import is disabled when nothing would be written**: `importableWorkoutCount == 0`, meaning the
+  period is empty or every workout in it is already in history. A notice says which case it is.
+- **Exercise counts cover only the workouts that will be written.** The store resolves and creates
+  exercises for *pending* workouts only, so `summary(in:)` counts names over those. Found on device
+  on 2026-10-10: a period holding one already-imported workout still offered Import and listed seven
+  "new" exercises that an import would never have created.
+- **Importing more later is safe.** Importing an older period after a newer one, or the whole
+  file afterwards, adds only what is missing, by the usual dedupe rule.
 
 ### Dedupe: idempotent by construction
 
@@ -172,7 +292,7 @@ delete it.
 ## 5. UI
 
 `Presentation/Views/HistoryImport/`. Phases: **intro** (how to export from Strong, then "Choose CSV
-File") → **reading** → **preview** → **importing** (determinate progress, cancel and swipe-dismiss
+File") → **reading** → **preview** (period card, counts, unit, library toggle, Import) → **importing** (determinate progress, cancel and swipe-dismiss
 disabled) → **finished** (summary, Done) or **failed** (message, "Choose Another File"). Counts are
 label/value rows, so no string needs plural rules. The new-exercise list sits in a `LazyVStack`,
 because it is as long as the user's Strong library. `.fileImporter` sits on the sheet's stable root
@@ -227,7 +347,10 @@ format parameter) on `HistoryImporting`, and superset ids carried on `ImportedEx
 
 ## 9. Verification record
 
-- `StrongCSVParserTests` (13): grouping, quoted fields with commas/quotes/line breaks, semicolon +
+- **A real German-language Strong export** (2026-10-10, 2,270 rows) parsed through the shipping
+  parser: 135 workouts, 2,248 sets, 22 rest-timer rows ignored, 0 durations unread, 23 distinct
+  exercise names.
+- `StrongCSVParserTests` (15, including the localized-header regression and its negative case): grouping, quoted fields with commas/quotes/line breaks, semicolon +
   decimal-comma exports, empty RPE, cardio and rest-timer rows, the newer header variant, foreign
   header rejection, a malformed row's line number, durations, name normalization, oldest-duplicate
   library pick, dedupe key, unit conversion and equipment traits.
@@ -236,5 +359,19 @@ format parameter) on `HistoryImporting`, and superset ids carried on `ImportedEx
   HealthKit id), re-import creates zero workouts and zero exercises, pounds stored as kilograms, and
   a foreign file writes nothing.
 - `largeHistoryImportKeepsMainActorResponsive`: 2,000 workouts, main actor under 100 ms.
-- **Not yet done:** an import of a real Strong export on a device, with one exercise's chart
-  checked against the CSV. See the ticket's manual steps.
+- **On device, 2026-10-10** (iPhone, German UI, the user's real German-language Strong export, 135
+  workouts from 2024-04-14 to 2026-02-12), confirmed by the user:
+  - The file is accepted after the localized-header fix. Before that fix it was rejected as
+    "not a Strong export" (§2 root cause).
+  - Imported workouts appear in History with the right sets, duration and volume, and with PR
+    badges and "Erste Session" markers. One example is "Push", Thu 12 Feb: 22 sets, 55 min,
+    5.3 t, Bench Press (Barbell) 90 kg × 4.
+  - The library toggle works in both positions.
+  - Period presets work. "Letzte 3 Monate" selects 12.11.2025–12.02.2026, which is 5 workouts, 1 of
+    them already imported, and 6 new exercises. A custom single-day period updates the counts live.
+  - Re-importing a period whose only workout is already in history shows "all already imported",
+    counts 0 new exercises and disables Import (§3b).
+- **Not exercised on device:** a pound export imported as lb and then shown in kg. The user's file
+  is kilograms. The user accepted the unit test `poundsAreConverted` as sufficient (2026-10-10). A non-Strong CSV
+  on device is also unverified: the rejection is unit-tested, and the first, pre-fix attempt
+  showed the error screen.
