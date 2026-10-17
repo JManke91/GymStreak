@@ -81,3 +81,10 @@ enum CSVTableReader {
         return semicolons > commas ? semicolon : comma
     }
 }
+
+extension Array where Element == String {
+    /// A CSV row's field, or empty when an optional column is missing from a short row.
+    subscript(safe index: Int) -> String {
+        indices.contains(index) ? self[index] : ""
+    }
+}

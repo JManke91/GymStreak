@@ -1941,3 +1941,10 @@
 "history_import.period.footer" = "Only workouts in this period are imported. Periods count back from your most recent workout in the file.";
 "history_import.period.empty" = "No workouts in this period.";
 "history_import.period.all_imported" = "All workouts in this period are already in your history. There is nothing to import.";
+"settings.import.hevy.row.subtitle" = "Bring your Hevy workouts with you";
+"history_import.hevy.title" = "Import from Hevy";
+"history_import.hevy.intro.title" = "Bring your Hevy history";
+"history_import.hevy.intro.body" = "In Hevy, open Settings → Export & Import Data, export your workouts and save the CSV file. Then choose it here. Your workouts appear in History, and your progress charts and records carry on.";
+"history_import.hevy.error.unreadable" = "The file couldn't be read. Choose the CSV file Hevy exported.";
+"history_import.hevy.error.not_hevy" = "This file isn't a Hevy export. Nothing was imported.";
+"history_import.preview.warmup" = "Warm-up sets (not imported)";

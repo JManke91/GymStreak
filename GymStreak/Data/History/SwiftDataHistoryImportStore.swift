@@ -33,14 +33,17 @@ struct SwiftDataHistoryImportProvider: HistoryImporting {
     // read, the parse and the inserts on the calling `@MainActor` view model's actor.
     // See `docs/swift6-concurrency.md` §1; pinned by
     // `SwiftDataHistorySnapshotStoreTests.largeHistoryImportKeepsMainActorResponsive`.
-    @concurrent func prepareStrongImport(from url: URL) async throws -> HistoryImportPreview {
+    @concurrent func prepareImport(from url: URL, source: HistoryImportSource) async throws -> HistoryImportPreview {
         let isScoped = url.startAccessingSecurityScopedResource()
         defer { if isScoped { url.stopAccessingSecurityScopedResource() } }
         guard let data = try? Data(contentsOf: url),
               let text = String(data: data, encoding: .utf8)
         else { throw HistoryImportError.unreadableFile }
 
-        let file = try StrongCSVParser.parse(text)
+        let file = switch source {
+        case .strong: try StrongCSVParser.parse(text)
+        case .hevy: try HevyCSVParser.parse(text)
+        }
         let store = await storeTask.value
         return try await gate.withAccess {
             try await store.preview(of: file)
@@ -76,7 +79,8 @@ struct SwiftDataHistoryImportProvider: HistoryImporting {
             importedWorkoutCount: pending.count,
             skippedDuplicateCount: file.workouts.count - pending.count,
             createdExerciseCount: created,
-            skippedCardioSetCount: file.skippedCardioSetCount
+            skippedCardioSetCount: file.skippedCardioSetCount,
+            skippedWarmupSetCount: file.skippedWarmupSetCount
         )
     }
 }
@@ -199,6 +203,11 @@ actor SwiftDataHistoryImportStore {
             session.notes = workout.notes
             modelContext.insert(session)
 
+            // The file's superset markers are per workout; each group becomes one superset,
+            // its blocks numbered in file order (`supersetOrder`), as a recorded one would be.
+            var supersetIds: [String: UUID] = [:]
+            var supersetCounts: [String: Int] = [:]
+
             for (order, imported) in workout.exercises.enumerated() {
                 // `prepareWrite` resolves every name of every pending workout, so a miss is a
                 // programming error — fail loudly rather than write a session missing a block.
@@ -214,6 +223,13 @@ actor SwiftDataHistoryImportStore {
                     exerciseId: exercise.id,
                     loadBehavior: exercise.loadBehavior
                 )
+                if let group = imported.supersetGroup {
+                    let id = supersetIds[group] ?? UUID()
+                    supersetIds[group] = id
+                    row.supersetId = id
+                    row.supersetOrder = supersetCounts[group, default: 0]
+                    supersetCounts[group] = row.supersetOrder + 1
+                }
                 row.workoutSession = session
                 modelContext.insert(row)
                 session.workoutExercises?.append(row)

@@ -22,8 +22,11 @@ final class HistoryImportViewModel {
     }
 
     private(set) var phase: Phase = .intro
+    /// The app the file must come from — fixed by the entry point.
+    let source: HistoryImportSource
     /// The unit the file's weights are in. Strong does not always say, so the user picks;
-    /// it starts at their display preference, or at the unit the header names.
+    /// it starts at their display preference, or at the unit the header names. Hevy's
+    /// header always names it, and the picker is hidden (`isWeightUnitCertain`).
     var weightUnit: WeightUnit
     /// Whether unmatched exercise names join the library. Off keeps the library untouched:
     /// those workouts still show in History, and reach the charts once an exercise of the
@@ -45,10 +48,12 @@ final class HistoryImportViewModel {
     private let catalogSync: ExerciseCatalogSyncRequesting
 
     init(
+        source: HistoryImportSource,
         importer: any HistoryImporting,
         catalogSync: ExerciseCatalogSyncRequesting,
         weightUnitPreference: WeightUnitPreferenceProviding
     ) {
+        self.source = source
         self.importer = importer
         self.catalogSync = catalogSync
         self.weightUnit = weightUnitPreference.weightUnit
@@ -68,7 +73,7 @@ final class HistoryImportViewModel {
         }
         phase = .reading
         do {
-            let preview = try await importer.prepareStrongImport(from: url)
+            let preview = try await importer.prepareImport(from: url, source: source)
             if let detected = preview.file.detectedWeightUnit { weightUnit = detected }
             phase = .preview(preview)
             apply(.everything)
@@ -77,6 +82,12 @@ final class HistoryImportViewModel {
         } catch {
             phase = .failed(.unreadableFile)
         }
+    }
+
+    /// Hevy's header names the unit; only an uncertain file asks the user.
+    var isWeightUnitCertain: Bool {
+        guard case .preview(let preview) = phase else { return false }
+        return preview.file.isWeightUnitCertain
     }
 
     // MARK: - Period

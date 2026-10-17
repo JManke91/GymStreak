@@ -583,8 +583,9 @@ final class AppDependencies: ObservableObject {
     }
 
     /// One per presentation of the import sheet — Settings, or any later entry point.
-    func makeHistoryImportViewModel() -> HistoryImportViewModel {
+    func makeHistoryImportViewModel(source: HistoryImportSource) -> HistoryImportViewModel {
         HistoryImportViewModel(
+            source: source,
             importer: historyImporter,
             catalogSync: exerciseCatalogSync,
             weightUnitPreference: weightUnitPreference

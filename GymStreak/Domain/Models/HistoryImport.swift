@@ -20,6 +20,17 @@ struct ImportedSet: Sendable, Equatable {
 struct ImportedExercise: Sendable, Equatable {
     let name: String
     var sets: [ImportedSet]
+    /// The file's superset marker (Hevy's `superset_id`), scoped to its workout: blocks of
+    /// one workout sharing it are written as one superset. Nil for Strong, which has none.
+    var supersetGroup: String? = nil
+}
+
+/// The app an export comes from. Picked by the entry point, because each needs its own
+/// export instructions; the file must then match it.
+enum HistoryImportSource: String, Sendable, CaseIterable, Identifiable {
+    case strong, hevy
+
+    var id: String { rawValue }
 }
 
 /// One workout of the file. Becomes one routine-less `WorkoutSession`.
@@ -41,8 +52,15 @@ struct ParsedHistoryFile: Sendable, Equatable {
     /// The unit the header names, when it names one (newer Strong exports write
     /// `Weight (kg)` / `Weight (lbs)`). Only preselects the unit picker — the user decides.
     let detectedWeightUnit: WeightUnit?
+    /// True when the header *states* the unit (Hevy's `weight_kg` / `weight_lbs`), so the
+    /// user is not asked. Strong's suffix is only a hint and leaves this false.
+    var isWeightUnitCertain = false
+    /// Start time of the workout of each warm-up set (Hevy `set_type` `warmup`). Skipped:
+    /// warm-ups would distort volume and PRs; dated so a period filter counts only its own.
+    var skippedWarmupSetStartTimes: [Date] = []
 
     var skippedCardioSetCount: Int { skippedCardioSetStartTimes.count }
+    var skippedWarmupSetCount: Int { skippedWarmupSetStartTimes.count }
 
     /// The workouts (and cardio skips) starting inside `range`; nil keeps everything.
     func restricted(to range: ClosedRange<Date>?) -> ParsedHistoryFile {
@@ -50,7 +68,9 @@ struct ParsedHistoryFile: Sendable, Equatable {
         return ParsedHistoryFile(
             workouts: workouts.filter { range.contains($0.startTime) },
             skippedCardioSetStartTimes: skippedCardioSetStartTimes.filter { range.contains($0) },
-            detectedWeightUnit: detectedWeightUnit
+            detectedWeightUnit: detectedWeightUnit,
+            isWeightUnitCertain: isWeightUnitCertain,
+            skippedWarmupSetStartTimes: skippedWarmupSetStartTimes.filter { range.contains($0) }
         )
     }
 }
@@ -87,7 +107,8 @@ struct HistoryImportPreview: Sendable {
             alreadyImportedCount: selected.workouts.count - pending.count,
             matchedExerciseCount: names.count - newNames.count,
             newExerciseNames: newNames.sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending },
-            skippedCardioSetCount: selected.skippedCardioSetCount
+            skippedCardioSetCount: selected.skippedCardioSetCount,
+            skippedWarmupSetCount: selected.skippedWarmupSetCount
         )
     }
 }
@@ -102,6 +123,7 @@ struct HistoryImportSelectionSummary: Sendable, Equatable {
     /// Distinct exercise names of the workouts to import that are not in the library, sorted.
     let newExerciseNames: [String]
     let skippedCardioSetCount: Int
+    var skippedWarmupSetCount = 0
 
     /// Workouts an import of this selection would actually write. Zero disables Import.
     var importableWorkoutCount: Int { workoutCount - alreadyImportedCount }
@@ -133,13 +155,14 @@ struct HistoryImportResult: Sendable, Equatable {
     let skippedDuplicateCount: Int
     let createdExerciseCount: Int
     let skippedCardioSetCount: Int
+    var skippedWarmupSetCount = 0
 }
 
 enum HistoryImportError: Error, Equatable {
     /// The file could not be read or is not UTF-8 text.
     case unreadableFile
-    /// The header lacks the columns of a Strong workout export.
-    case notAStrongExport
+    /// The header lacks the columns of the chosen app's workout export.
+    case unrecognizedExport
     /// A data row could not be parsed (1-based line number in the file).
     case malformedRow(line: Int)
     /// The file parsed, but contains no strength set to import.

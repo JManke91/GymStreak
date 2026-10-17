@@ -100,6 +100,7 @@ struct HistoryImportSelectionTests {
     func importsOnlySelectedPeriod() async throws {
         let importer = RecordingImporter(preview: Self.preview)
         let viewModel = HistoryImportViewModel(
+            source: .strong,
             importer: importer,
             catalogSync: SelectionTestCatalogSync(),
             weightUnitPreference: SelectionTestUnitPreference()
@@ -136,7 +137,7 @@ private final class RecordingImporter: HistoryImporting {
 
     init(preview: HistoryImportPreview) { self.preview = preview }
 
-    func prepareStrongImport(from url: URL) async throws -> HistoryImportPreview { preview }
+    func prepareImport(from url: URL, source: HistoryImportSource) async throws -> HistoryImportPreview { preview }
 
     func importHistory(
         _ file: ParsedHistoryFile,

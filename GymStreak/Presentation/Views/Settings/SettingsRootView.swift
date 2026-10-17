@@ -27,7 +27,8 @@ struct SettingsRootView: View {
     /// Shown when no app accepted the `mailto:` URL — the default state on a
     /// simulator, and real for users who removed every mail client.
     @State private var isShowingMailFallback = false
-    @State private var isShowingHistoryImport = false
+    /// The app whose export the import sheet is open for; nil when it is closed.
+    @State private var historyImportSource: HistoryImportSource?
 
     var body: some View {
         NavigationStack {
@@ -65,12 +66,20 @@ struct SettingsRootView: View {
                             SettingsActionRowView(
                                 icon: "square.and.arrow.down",
                                 title: "history_import.title".localized,
-                                subtitle: "settings.import.strong.row.subtitle".localized,
-                                isLast: true
+                                subtitle: "settings.import.strong.row.subtitle".localized
                             ) {
-                                isShowingHistoryImport = true
+                                historyImportSource = .strong
                             }
                             .accessibilityIdentifier("settings-row-import-strong")
+                            SettingsActionRowView(
+                                icon: "square.and.arrow.down",
+                                title: "history_import.hevy.title".localized,
+                                subtitle: "settings.import.hevy.row.subtitle".localized,
+                                isLast: true
+                            ) {
+                                historyImportSource = .hevy
+                            }
+                            .accessibilityIdentifier("settings-row-import-hevy")
                         }
 
                         UnitsSettingsSectionView(
@@ -203,8 +212,8 @@ struct SettingsRootView: View {
                     HeartRateProfileView(viewModel: dependencies.makeHeartRateProfileEditor())
                 }
             }
-            .sheet(isPresented: $isShowingHistoryImport) {
-                HistoryImportView(viewModel: dependencies.makeHistoryImportViewModel())
+            .sheet(item: $historyImportSource) { source in
+                HistoryImportView(viewModel: dependencies.makeHistoryImportViewModel(source: source))
             }
             .alert(
                 "settings.support.contact.fallback.title".localized,

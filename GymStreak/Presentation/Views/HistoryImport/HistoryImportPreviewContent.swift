@@ -21,7 +21,9 @@ struct HistoryImportPreviewContent: View {
                 LazyVStack(alignment: .leading, spacing: DesignSystem.Spacing.lg) {
                     periodCard(fromBounds: fromBounds, toBounds: toBounds)
                     countsCard(summary)
-                    unitPicker
+                    if !viewModel.isWeightUnitCertain {
+                        unitPicker
+                    }
                     if !summary.newExerciseNames.isEmpty {
                         libraryToggle
                     }
@@ -106,6 +108,9 @@ struct HistoryImportPreviewContent: View {
                 HistoryImportCountRow(label: "history_import.preview.new".localized, value: summary.newExerciseNames.count)
                 if summary.skippedCardioSetCount > 0 {
                     HistoryImportCountRow(label: "history_import.preview.cardio".localized, value: summary.skippedCardioSetCount)
+                }
+                if summary.skippedWarmupSetCount > 0 {
+                    HistoryImportCountRow(label: "history_import.preview.warmup".localized, value: summary.skippedWarmupSetCount)
                 }
             }
         }

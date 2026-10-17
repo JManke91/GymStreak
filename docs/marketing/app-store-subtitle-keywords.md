@@ -111,6 +111,14 @@ Verified against the shipped code, not the roadmap (v1.1.12).
 1W-1M-3M-1Y-All), tappable muscle map, rest timer with Live Activity + Dynamic Island, HealthKit
 write-back, iCloud/CloudKit sync, and no account, ever.
 
+**History import from Strong and Hevy** (added 2026-10-17, `docs/history-import.md`): Settings →
+Import from Strong / Import from Hevy reads the app's own CSV export and writes past workouts into
+History, the progress charts and PRs. It is **free and uncapped** (monetization §3 Rule 4), so "bring
+your Strong or Hevy history" may be said without a Pro qualifier. It is the switching message of
+acquisition lever #16. **Hold-gate:** both formats ride the first App Store version after 1.1.18
+(they are in the current `WhatToTest`). Claim them only once that version is live, and `/release`
+step 1 releases this hold.
+
 **Truth constraints the copy respects** (each of these is a rejection or one-star risk):
 
 - **No widget claim.** `GymStreakWidgets.swift` is still unmodified Xcode boilerplate — only the
@@ -121,6 +129,9 @@ write-back, iCloud/CloudKit sync, and no account, ever.
   watch. The promo text therefore says "private on-device AI" as a property, never "every user gets
   an AI coach", and the AI claim is kept out of the subtitle — a 30-character field cannot carry the
   hardware qualifier, and an unqualified "AI" there sets an expectation older iPhones cannot meet.
+- **Import: name only Strong and Hevy, and say "history" or "workouts".** Not "import from any app",
+  and not "everything". Cardio sets, RPE and Hevy warm-up sets are left out, and the import is iOS
+  only (the watch is not involved).
 - **Free vs Pro:** unlimited workout tracking and history, 3 routines, max-weight chart, 1W/1M/3M
   ranges and the **entire watch app** are free. "Track unlimited, free" is accurate; "unlimited
   routines" would not be.

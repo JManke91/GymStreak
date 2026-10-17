@@ -16,11 +16,13 @@ import Foundation
 /// actor. The conforming type carries `@concurrent` on its own methods. See
 /// `docs/swift6-concurrency.md` §1.
 protocol HistoryImporting: Sendable {
-    /// Reads and parses a Strong CSV export and measures it against the current history
-    /// and library. Writes nothing.
+    /// Reads and parses a CSV export of `source` and measures it against the current
+    /// history and library. Writes nothing.
     ///
-    /// - Parameter url: a file-picker URL; security-scoped access is handled inside.
-    func prepareStrongImport(from url: URL) async throws -> HistoryImportPreview
+    /// - Parameters:
+    ///   - url: a file-picker URL; security-scoped access is handled inside.
+    ///   - source: the app the file must come from; any other file is `.unrecognizedExport`.
+    func prepareImport(from url: URL, source: HistoryImportSource) async throws -> HistoryImportPreview
 
     /// Writes the previewed file into history. Idempotent: a workout whose start time and
     /// name already exist is skipped, so re-importing the same or an overlapping export

@@ -25,7 +25,7 @@ enum StrongCSVParser {
 
     static func parse(_ text: String, timeZone: TimeZone = .current) throws -> ParsedHistoryFile {
         let rows = CSVTableReader.rows(from: text)
-        guard let header = rows.first else { throw HistoryImportError.notAStrongExport }
+        guard let header = rows.first else { throw HistoryImportError.unrecognizedExport }
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = timeZone
         let columns = try Columns(header: header, firstRow: rows.dropFirst().first, calendar: calendar)
@@ -141,7 +141,7 @@ enum StrongCSVParser {
                   let setOrder = exact("set order"),
                   let weight = prefixed("weight"),
                   let reps = exact("reps")
-            else { throw HistoryImportError.notAStrongExport }
+            else { throw HistoryImportError.unrecognizedExport }
 
             self.date = date
             self.workoutName = workoutName
@@ -231,12 +231,5 @@ enum StrongCSVParser {
     static func isSetOrder(_ raw: String) -> Bool {
         let trimmed = raw.trimmingCharacters(in: .whitespaces)
         return trimmed.count <= 1 || Int(trimmed) != nil
-    }
-}
-
-private extension Array where Element == String {
-    /// Optional columns may be missing from a short row; treat that as empty.
-    subscript(safe index: Int) -> String {
-        indices.contains(index) ? self[index] : ""
     }
 }

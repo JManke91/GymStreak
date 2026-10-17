@@ -36,6 +36,9 @@ struct HistoryImportResultContent: View {
                     if result.skippedCardioSetCount > 0 {
                         HistoryImportCountRow(label: "history_import.preview.cardio".localized, value: result.skippedCardioSetCount)
                     }
+                    if result.skippedWarmupSetCount > 0 {
+                        HistoryImportCountRow(label: "history_import.preview.warmup".localized, value: result.skippedWarmupSetCount)
+                    }
                 }
             }
             OnyxButton("history_import.done".localized, action: onDone)

@@ -122,7 +122,7 @@ struct StrongCSVParserTests {
     @Test("A localized header without a Strong timestamp in the first row is still rejected")
     func localizedHeaderNeedsStrongRow() {
         let csv = "a,b,c,d,e,f,g,h,i,j\nhello,1,2,3,4,5,6,7,8,9"
-        #expect(throws: HistoryImportError.notAStrongExport) {
+        #expect(throws: HistoryImportError.unrecognizedExport) {
             try StrongCSVParser.parse(csv, timeZone: utc)
         }
     }
@@ -130,10 +130,10 @@ struct StrongCSVParserTests {
     @Test("A non-Strong CSV is rejected at the header")
     func rejectsForeignHeader() {
         let hevy = "title,start_time,end_time,description,exercise_title,set_index,weight_kg,reps\nPush,x,y,,Bench,0,60,10"
-        #expect(throws: HistoryImportError.notAStrongExport) {
+        #expect(throws: HistoryImportError.unrecognizedExport) {
             try StrongCSVParser.parse(hevy, timeZone: utc)
         }
-        #expect(throws: HistoryImportError.notAStrongExport) {
+        #expect(throws: HistoryImportError.unrecognizedExport) {
             try StrongCSVParser.parse("", timeZone: utc)
         }
     }

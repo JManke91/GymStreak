@@ -30,7 +30,7 @@ struct HistoryImportStoreTests {
         let (container, provider, bench) = try makeStore()
         let url = try writeFile(Self.csv)
 
-        let preview = try await provider.prepareStrongImport(from: url)
+        let preview = try await provider.prepareImport(from: url, source: .strong)
         let summary = preview.summary(in: nil)
         #expect(summary.workoutCount == 2)
         #expect(summary.matchedExerciseCount == 1)
@@ -68,7 +68,7 @@ struct HistoryImportStoreTests {
     @Test("History-only import leaves the library untouched, and links up by name later")
     func historyOnlyImport() async throws {
         let (container, provider, bench) = try makeStore()
-        let preview = try await provider.prepareStrongImport(from: try writeFile(Self.csv))
+        let preview = try await provider.prepareImport(from: try writeFile(Self.csv), source: .strong)
         let result = try await provider.importHistory(
             preview.file, weightUnit: .kilograms, createsMissingExercises: false
         ) { _ in }
@@ -100,7 +100,7 @@ struct HistoryImportStoreTests {
     @Test("Creating an exercise links the history-only rows of its name")
     func creatingExerciseLinksNameOnlyRows() async throws {
         let (container, provider, _) = try makeStore()
-        let preview = try await provider.prepareStrongImport(from: try writeFile(Self.csv))
+        let preview = try await provider.prepareImport(from: try writeFile(Self.csv), source: .strong)
         _ = try await provider.importHistory(
             preview.file, weightUnit: .kilograms, createsMissingExercises: false
         ) { _ in }
@@ -128,15 +128,15 @@ struct HistoryImportStoreTests {
     @Test("A later import that creates an exercise links the earlier history-only rows")
     func laterCreatingImportLinksNameOnlyRows() async throws {
         let (container, provider, _) = try makeStore()
-        let historyOnly = try await provider.prepareStrongImport(from: try writeFile(Self.csv))
+        let historyOnly = try await provider.prepareImport(from: try writeFile(Self.csv), source: .strong)
         _ = try await provider.importHistory(
             historyOnly.file, weightUnit: .kilograms, createsMissingExercises: false
         ) { _ in }
 
-        let newer = try await provider.prepareStrongImport(from: try writeFile("""
+        let newer = try await provider.prepareImport(from: try writeFile("""
         Date,Workout Name,Duration,Exercise Name,Set Order,Weight,Reps,Distance,Seconds,RPE
         2024-04-01 18:00:00,Push Day,1h,Cable Fly (Cable),1,22.5,12,0,0,
-        """))
+        """), source: .strong)
         let result = try await provider.importHistory(
             newer.file, weightUnit: .kilograms, createsMissingExercises: true
         ) { _ in }
@@ -153,10 +153,10 @@ struct HistoryImportStoreTests {
     func reimportIsIdempotent() async throws {
         let (container, provider, _) = try makeStore()
         let url = try writeFile(Self.csv)
-        let first = try await provider.prepareStrongImport(from: url)
+        let first = try await provider.prepareImport(from: url, source: .strong)
         _ = try await provider.importHistory(first.file, weightUnit: .kilograms, createsMissingExercises: true) { _ in }
 
-        let second = try await provider.prepareStrongImport(from: url)
+        let second = try await provider.prepareImport(from: url, source: .strong)
         let secondSummary = second.summary(in: nil)
         #expect(secondSummary.alreadyImportedCount == 2)
         #expect(secondSummary.newExerciseNames.isEmpty)
@@ -173,7 +173,7 @@ struct HistoryImportStoreTests {
     @Test("Pound files are stored as canonical kilograms")
     func poundsAreConverted() async throws {
         let (container, provider, _) = try makeStore()
-        let preview = try await provider.prepareStrongImport(from: try writeFile(Self.csv))
+        let preview = try await provider.prepareImport(from: try writeFile(Self.csv), source: .strong)
         _ = try await provider.importHistory(preview.file, weightUnit: .pounds, createsMissingExercises: true) { _ in }
 
         let sets = try ModelContext(container).fetch(FetchDescriptor<WorkoutSet>())
@@ -186,8 +186,8 @@ struct HistoryImportStoreTests {
         let (container, provider, _) = try makeStore()
         let url = try writeFile("name,weight\nBench,60")
 
-        await #expect(throws: HistoryImportError.notAStrongExport) {
-            _ = try await provider.prepareStrongImport(from: url)
+        await #expect(throws: HistoryImportError.unrecognizedExport) {
+            _ = try await provider.prepareImport(from: url, source: .strong)
         }
         let context = ModelContext(container)
         #expect(try context.fetchCount(FetchDescriptor<WorkoutSession>()) == 0)

@@ -2,9 +2,9 @@
 //  HistoryImportView.swift
 //  GymStreak
 //
-//  The Strong import sheet (docs/history-import.md §5). Self-contained so any
+//  The Strong / Hevy import sheet (docs/history-import.md §5). Self-contained so any
 //  entry point — Settings today, the first-run fork later — presents it with
-//  `HistoryImportView(viewModel: dependencies.makeHistoryImportViewModel())`.
+//  `HistoryImportView(viewModel: dependencies.makeHistoryImportViewModel(source:))`.
 //
 
 import SwiftUI
@@ -22,7 +22,7 @@ struct HistoryImportView: View {
                 DesignSystem.Colors.background.ignoresSafeArea()
                 content
             }
-            .navigationTitle("history_import.title".localized)
+            .navigationTitle(text(strong: "history_import.title", hevy: "history_import.hevy.title"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -55,8 +55,8 @@ struct HistoryImportView: View {
         case .intro:
             message(
                 icon: "square.and.arrow.down",
-                title: "history_import.intro.title".localized,
-                body: "history_import.intro.body".localized
+                title: text(strong: "history_import.intro.title", hevy: "history_import.hevy.intro.title"),
+                body: text(strong: "history_import.intro.body", hevy: "history_import.hevy.intro.body")
             ) {
                 OnyxButton("history_import.intro.choose".localized, icon: "doc") { isPickingFile = true }
             }
@@ -82,7 +82,7 @@ struct HistoryImportView: View {
             message(
                 icon: "exclamationmark.triangle",
                 title: "history_import.error.title".localized,
-                body: Self.message(for: error)
+                body: message(for: error)
             ) {
                 OnyxButton("history_import.error.retry".localized, icon: "doc") {
                     viewModel.reset()
@@ -116,10 +116,18 @@ struct HistoryImportView: View {
         .padding(DesignSystem.Spacing.xl)
     }
 
-    private static func message(for error: HistoryImportError) -> String {
+    /// The one string of each pair that names the source app.
+    private func text(strong: String, hevy: String) -> String {
+        switch viewModel.source {
+        case .strong: strong.localized
+        case .hevy: hevy.localized
+        }
+    }
+
+    private func message(for error: HistoryImportError) -> String {
         switch error {
-        case .unreadableFile: "history_import.error.unreadable".localized
-        case .notAStrongExport: "history_import.error.not_strong".localized
+        case .unreadableFile: text(strong: "history_import.error.unreadable", hevy: "history_import.hevy.error.unreadable")
+        case .unrecognizedExport: text(strong: "history_import.error.not_strong", hevy: "history_import.hevy.error.not_hevy")
         case .malformedRow(let line): "history_import.error.malformed".localized(line)
         case .noWorkouts: "history_import.error.empty".localized
         case .writeFailed: "history_import.error.write".localized

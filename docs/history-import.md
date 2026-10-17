@@ -1,7 +1,8 @@
-# Workout history import (Strong CSV)
+# Workout history import (Strong and Hevy CSV)
 
-**Status:** Strong shipped 2026-10-03 (`.scratch/positioning-usp/issues/01`). Hevy is ticket
-`02`, still open; it extends this pipeline with a second format (§7).
+**Status:** Strong shipped 2026-10-03 (`.scratch/positioning-usp/issues/01`). Hevy built
+2026-10-10 (`.scratch/positioning-usp/issues/02`) as a second format on the same pipeline (§2b, §7),
+and device-verified with a real export on 2026-10-17.
 **Strategy:** `docs/acquisition-strategy.md` lever **#16**; research in
 `docs/research/positioning-usp-2026-10.md` §3.2.
 
@@ -9,8 +10,8 @@
 
 ## 1. What it does
 
-A user who exported their data from Strong opens **Settings → Import → Import from Strong**,
-picks the CSV with the system document picker, and sees a preview:
+A user who exported their data from Strong or Hevy opens **Settings → Import → Import from Strong**
+(or **Import from Hevy**), picks the CSV with the system document picker, and sees a preview:
 
 - a **period** to import. Presets are Everything / Last month / Last 3 months / Last year, with
   From and To date pickers for a custom range (§3b). Every count below is for the selected period;
@@ -18,8 +19,8 @@ picks the CSV with the system document picker, and sees a preview:
 - how many were already imported earlier (these are skipped);
 - how many distinct exercise names match the library, how many will be created as custom
   exercises, and the list of those new names;
-- how many cardio sets are left out;
-- a **kg / lb** choice for the file's weights;
+- how many cardio sets are left out, and (Hevy) how many warm-up sets;
+- a **kg / lb** choice for the file's weights (Strong only: Hevy's header names the unit);
 - when there are unmatched names, a toggle **"Add new exercises to your library"** (on by
   default). See §3a.
 
@@ -96,6 +97,49 @@ written. A file whose rows are all cardio or empty is "no strength sets to impor
 
 ---
 
+## 2b. Hevy's format
+
+`workout_data.csv`, from Hevy → Settings → Export & Import Data. One row per set:
+
+```
+"title","start_time","end_time","description","exercise_title","superset_id","exercise_notes","set_index","set_type","weight_kg","reps","distance_km","duration_seconds","rpe"
+"Morning workout","22 Dec 2025, 08:00","22 Dec 2025, 08:37","","Leg Press (Machine)",,"",1,"normal",90,12,,0,7.5
+```
+
+Accounts set to pounds export `weight_lbs` and `distance_miles` in the same positions. The parser
+(`HevyCSVParser`) looks columns up by header name. It needs `title`, `start_time`,
+`exercise_title`, `weight_kg`/`weight_lbs` and `reps`; anything else missing only disables what
+that column feeds. Without those columns the file is "not a Hevy export". A bad row fails the whole
+file with its line number, as for Strong. The source is chosen by the entry point and never
+auto-detected, because each needs its own export instructions. A Strong file in the Hevy flow (or
+the reverse) is therefore rejected.
+
+| Column | Handling |
+|---|---|
+| `title`, `start_time` | Workout identity and name. Rows group into workouts by `(start, title)`, as Strong does. |
+| `start_time`, `end_time` | `22 Dec 2025, 08:00`. The day is not always zero-padded, there are no seconds, and the time is wall-clock in the device's zone. Months are read by their first three letters, English or German (`Okt.`, `Mai`, `Dez`), because a localized export is unconfirmed. An ISO `yyyy-MM-dd HH:mm[:ss]` is also accepted. Duration is `end − start`, or 0 when the end is missing. |
+| `weight_kg` / `weight_lbs` | **The header states the unit.** `isWeightUnitCertain` is set, so the preview hides the unit picker and imports in that unit. Empty means bodyweight (0). |
+| `reps` | Rounded. Empty is 0. |
+| `superset_id` | Empty means no superset. Blocks of one workout sharing a value become one superset (§3). |
+| `set_type` | `warmup` (or numeric `2`) is **skipped and counted**. `normal`, `dropset` and `failure` import as ordinary completed sets. |
+| `description` | The workout notes. |
+| `exercise_notes` | Repeats on every set row. Appended **once per block** to the workout notes as `Exercise: note`, one per line, because history has no per-exercise notes and this feature adds no schema change. |
+| `distance_*`, `duration_seconds` | Only used to recognise cardio rows (weight and reps 0, distance or duration > 0): skipped and counted, as for Strong. A timed hold such as a plank therefore counts as cardio. |
+| `set_index`, `rpe` | Ignored. Set order in history is file order. |
+
+**Research (2026-10-10).** No real Hevy export was available, so the format was taken from
+published files and documentation and is pinned by `HevyCSVParserTests`:
+[a sample export (kg)](https://github.com/matanabudy/workout-data-sync/blob/main/examples/hevy_export_sample.csv),
+[a lbs row](https://blog.ayjc.net/posts/migrate-strong-hevy-app/),
+[Taper: Hevy export columns, set types, superset numbering](https://thetaperapp.com/articles/how-to-export-hevy-data/),
+[Gript: unit follows the account setting](https://griptapp.com/help/export-workouts-from-hevy).
+Taper's claim that weights are always in `weight_lbs` contradicts the kg sample, so the header
+decides. **Unconfirmed:** localized headers or month names, decimal commas, and the numbering of
+`superset_id` (it is keyed per workout, so its numbering does not matter). The Strong lesson in §2
+applies: profile the first real Hevy file before trusting this table.
+
+---
+
 ## 3. Mapping rules (`HistoryImportMatching`)
 
 - **Workouts** are grouped by `(start second, normalized workout name)`. Within a workout,
@@ -117,6 +161,16 @@ written. A file whose rows are all cardio or empty is "no strength sets to impor
     `(Dumbbell)` default, `(Machine)`/`(Smith Machine)`, `(Cable)`, `(Bodyweight)`/`(Weighted)`
     → bodyweight, and `(Assisted)` → bodyweight with counterweight assistance. The user can edit
     any of them afterwards. **Toggle off:** see §3a.
+- **Supersets (Hevy):** `ImportedExercise.supersetGroup` carries the file's `superset_id`. The
+  store gives each group of one workout a fresh `supersetId` and numbers its blocks
+  `supersetOrder` 0, 1, … in file order, the same fields a recorded superset writes, so
+  `WorkoutSession.exercisesGroupedBySupersets` groups them. Groups are scoped per workout: the same
+  id in two workouts makes two supersets. Consecutive rows form one block only while both the name
+  and the superset group stay the same.
+  **Display gap (open, ticket `08`):** the History detail (`WorkoutDetailView.exercisesSection`)
+  lists exercises flat by `order` and shows no superset grouping, for recorded workouts as well as
+  imported ones. The ticket assumed it did. The data is written correctly, so a grouped display
+  added there picks imported supersets up with no import change.
 - **Units:** the stored value is `WeightUnit.kilograms(fromDisplay:)` of the file value in the
   chosen unit. Kilograms stay canonical (`docs/weight-unit-preference.md` §2).
 - **Cardio rows** (weight 0 and reps 0, with distance or seconds > 0) are skipped and counted.
@@ -241,9 +295,9 @@ workout name is part of the ticket's dedupe rule.
 Presentation  HistoryImportView ── HistoryImportViewModel (@Observable @MainActor)
                     │                      │  any HistoryImporting
 Domain        HistoryImport (value types) · HistoryImporting (protocol)
-              CSVTableReader · StrongCSVParser · HistoryImportMatching   (pure, isolation-agnostic)
+              CSVTableReader · StrongCSVParser · HevyCSVParser · HistoryImportMatching   (pure, isolation-agnostic)
 Data          SwiftDataHistoryImportProvider (@concurrent) → SwiftDataHistoryImportStore (@ModelActor)
-App           AppDependencies.historyImporter, makeHistoryImportViewModel()
+App           AppDependencies.historyImporter, makeHistoryImportViewModel(source:)
 ```
 
 - **Off the main actor.** Both provider methods are `@concurrent`. Without it, SE-0461 runs the file
@@ -267,15 +321,21 @@ App           AppDependencies.historyImporter, makeHistoryImportViewModel()
   and exercise blocks would have been silently dropped. An unresolved name now throws `.writeFailed`.
   A failed `save()` rolls back the context, so a half-written chunk never stays pending for the next
   dedupe fetch.
-- **Security-scoped URL:** `prepareStrongImport(from:)` starts and stops access itself, around the
+- **One pipeline, two formats:** `prepareImport(from:source:)` picks the parser by
+  `HistoryImportSource`. Both produce `ParsedHistoryFile`, and everything after parsing (preview,
+  period filter, matching, dedupe, chunked writes) is shared. The view model carries the source,
+  fixed by the entry point (`makeHistoryImportViewModel(source:)`), and the view picks the few
+  strings that name the app (title, intro, two errors). Strong keeps its original `history_import.*`
+  keys, and Hevy's live under `history_import.hevy.*`.
+- **Security-scoped URL:** `prepareImport(from:source:)` starts and stops access itself, around the
   read, on the background executor. The URL is `Sendable`, and the scope belongs to the process, not
   a thread.
 - **Refresh:** after an import that wrote anything, the view model posts `.workoutHistoryDidChange`
   and `.historySourceDataDidChange`, which History, routines and Fortschritt already observe. If it
   created exercises, it also calls `requestCatalogSync()` so the watch learns them.
-- **Reusable entry point:** `HistoryImportView(viewModel: dependencies.makeHistoryImportViewModel())`
+- **Reusable entry point:** `HistoryImportView(viewModel: dependencies.makeHistoryImportViewModel(source:))`
   is a self-contained sheet with its own `NavigationStack` and file importer. Settings presents it
-  today, and ticket 06's first-run link presents the same thing.
+  today (one row per source, `.sheet(item:)` on the chosen `HistoryImportSource`), and ticket 06's first-run link presents the same thing.
 - **No schema change.** Only existing models and fields are written, so no CloudKit production
   deploy is needed.
 
@@ -291,7 +351,7 @@ delete it.
 
 ## 5. UI
 
-`Presentation/Views/HistoryImport/`. Phases: **intro** (how to export from Strong, then "Choose CSV
+`Presentation/Views/HistoryImport/`. Phases: **intro** (how to export from Strong or Hevy, then "Choose CSV
 File") → **reading** → **preview** (period card, counts, unit, library toggle, Import) → **importing** (determinate progress, cancel and swipe-dismiss
 disabled) → **finished** (summary, Done) or **failed** (message, "Choose Another File"). Counts are
 label/value rows, so no string needs plural rules. The new-exercise list sits in a `LazyVStack`,
@@ -310,7 +370,11 @@ in en and de.
 - **Cardio rows are not imported.** History has no distance or duration-per-set fields, and adding
   them would be a schema change with a CloudKit production deploy. They are counted in the preview
   and summary.
-- **RPE and per-set notes are dropped.** History has no field for them.
+- **RPE and Strong's per-set notes are dropped.** History has no field for them. Hevy's
+  per-exercise notes survive inside the workout notes (§2b).
+- **Warm-up sets (Hevy) are not imported.** They would inflate volume and set counts. They are
+  counted in the preview and summary. Strong's `W`-marked sets still import as ordinary sets,
+  unchanged from ticket 01.
 - **No fuzzy exercise matching.** See §3.
 - **No cancel during the write.** Once Import is tapped it runs to the end. Stopping between
   chunks would leave the same "partially imported, re-import to finish" state as a failure, with no
@@ -318,12 +382,12 @@ in en and de.
 
 ---
 
-## 7. Extending to Hevy (ticket 02)
+## 7. Adding another format
 
-The seam is ready: `CSVTableReader` is format-agnostic, and everything after parsing consumes
-`ParsedHistoryFile`. Hevy needs a `HevyCSVParser` that produces the same value type (unit from the
-`weight_kg`/`weight_lbs` header, warm-up sets skipped and counted), a `prepareHevyImport(from:)` (or a
-format parameter) on `HistoryImporting`, and superset ids carried on `ImportedExercise`.
+Hevy went in this way (ticket 02). Write a pure parser that produces `ParsedHistoryFile` and add a
+`HistoryImportSource` case. Then add a branch in `SwiftDataHistoryImportProvider.prepareImport`, the
+app-naming strings, and a Settings row. `CSVTableReader` and the shared `[safe:]` row subscript live
+in `CSVTableReader.swift`. Nothing after parsing changes.
 
 ---
 
@@ -359,6 +423,15 @@ format parameter) on `HistoryImporting`, and superset ids carried on `ImportedEx
   HealthKit id), re-import creates zero workouts and zero exercises, pounds stored as kilograms, and
   a foreign file writes nothing.
 - `largeHistoryImportKeepsMainActorResponsive`: 2,000 workouts, main actor under 100 ms.
+- **Hevy (2026-10-10):** `HevyCSVParserTests` (9): grouping and duration, header-unit detection
+  (kg and lbs), superset grouping, set types (warm-up skipped, drop and failure kept, cardio
+  skipped), warm-ups per period, notes mapping, date formats, rejection of a Strong file, and a
+  malformed row's line. `HevyHistoryImportStoreTests` (4): superset fields in history and
+  `exercisesGroupedBySupersets`, per-workout superset scoping, re-import idempotency with lbs → kg,
+  and a Strong file in the Hevy flow writing nothing. All Strong suites pass unchanged (regression).
+  **On device, 2026-10-17:** the user ran the hand-off checklist with a real Hevy export (accepted
+  with no unit picker, workouts in History, chart and records, re-import adds nothing) and reported
+  it working.
 - **On device, 2026-10-10** (iPhone, German UI, the user's real German-language Strong export, 135
   workouts from 2024-04-14 to 2026-02-12), confirmed by the user:
   - The file is accepted after the localized-header fix. Before that fix it was rejected as
