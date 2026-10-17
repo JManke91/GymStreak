@@ -1939,3 +1939,24 @@
 "history_import.hevy.error.unreadable" = "Die Datei konnte nicht gelesen werden. Wähle die CSV-Datei, die Hevy exportiert hat.";
 "history_import.hevy.error.not_hevy" = "Diese Datei ist kein Hevy-Export. Es wurde nichts importiert.";
 "history_import.preview.warmup" = "Aufwärmsätze (nicht importiert)";
+
+/* Mat-Einheiten (docs/fight-conditioning.md) */
+"mat.log.entry.title" = "Mat-Einheit eintragen";
+"mat.log.entry.subtitle" = "BJJ, Sparring, Pratzen — erfasst als Trainingslast. Zählt nicht für deine Programmwoche.";
+"mat.log.title" = "Mat-Einheit";
+"mat.log.sport" = "Sportart";
+"mat.log.intensity" = "Intensität";
+"mat.log.duration" = "Dauer";
+"mat.log.start" = "Beginn";
+"mat.log.note" = "Notiz";
+"mat.log.note.placeholder" = "Optional";
+"mat.sport.bjj" = "BJJ";
+"mat.sport.mma" = "MMA";
+"mat.sport.muayThai" = "Muay Thai";
+"mat.sport.boxing" = "Boxen";
+"mat.sport.wrestling" = "Ringen";
+"mat.sport.other" = "Andere";
+"mat.intensity.drilling" = "Drillen";
+"mat.intensity.moderate" = "Moderat";
+"mat.intensity.hardSparring" = "Hartes Sparring";
+"mat.history.month.summary" = "%d × Matte";

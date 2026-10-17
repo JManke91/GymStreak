@@ -1948,3 +1948,24 @@
 "history_import.hevy.error.unreadable" = "The file couldn't be read. Choose the CSV file Hevy exported.";
 "history_import.hevy.error.not_hevy" = "This file isn't a Hevy export. Nothing was imported.";
 "history_import.preview.warmup" = "Warm-up sets (not imported)";
+
+/* Mat sessions (docs/fight-conditioning.md) */
+"mat.log.entry.title" = "Log a mat session";
+"mat.log.entry.subtitle" = "BJJ, sparring, pads — recorded as training load. It doesn't count toward your program week.";
+"mat.log.title" = "Mat session";
+"mat.log.sport" = "Sport";
+"mat.log.intensity" = "Intensity";
+"mat.log.duration" = "Duration";
+"mat.log.start" = "Started";
+"mat.log.note" = "Note";
+"mat.log.note.placeholder" = "Optional";
+"mat.sport.bjj" = "BJJ";
+"mat.sport.mma" = "MMA";
+"mat.sport.muayThai" = "Muay Thai";
+"mat.sport.boxing" = "Boxing";
+"mat.sport.wrestling" = "Wrestling";
+"mat.sport.other" = "Other";
+"mat.intensity.drilling" = "Drilling";
+"mat.intensity.moderate" = "Moderate";
+"mat.intensity.hardSparring" = "Hard sparring";
+"mat.history.month.summary" = "%d × mat";

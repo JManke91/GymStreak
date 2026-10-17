@@ -43,6 +43,8 @@ struct HistorySnapshot: Sendable {
     var sessionCount: Int
     /// Conditioning sessions the snapshot was built from (docs/fight-conditioning.md).
     var conditioningCount: Int = 0
+    /// Logged mat sessions the snapshot was built from — counted apart for the same reason.
+    var matSessionCount: Int = 0
 
     static let empty = HistorySnapshot(
         rows: [],
@@ -81,12 +83,25 @@ enum HistoryListRow: Identifiable, Hashable, Sendable {
     case card(WorkoutCardModel)
     /// A finished conditioning session, interleaved with the workout cards by date.
     case conditioning(ConditioningCardModel)
+    /// A logged mat or sparring session, interleaved the same way.
+    case matSession(MatSessionCardModel)
 
     var id: String {
         switch self {
         case .monthHeader(let month): return "month-\(month.id)"
         case .card(let card):         return "card-\(card.id.uuidString)"
         case .conditioning(let card): return "conditioning-\(card.id.uuidString)"
+        case .matSession(let card):   return "mat-\(card.id.uuidString)"
+        }
+    }
+
+    /// The card's start; `nil` for a divider. What the builder merges the kinds on.
+    var startTime: Date? {
+        switch self {
+        case .monthHeader:            return nil
+        case .card(let card):         return card.startTime
+        case .conditioning(let card): return card.startTime
+        case .matSession(let card):   return card.startTime
         }
     }
 }
@@ -103,16 +118,19 @@ struct MonthSectionModel: Identifiable, Hashable, Sendable {
     /// which shows strength workouts only — keeps summarising exactly what it displays,
     /// while the list divider can name both.
     let conditioningCount: Int
+    /// Logged mat sessions in the month; list divider only, like `conditioningCount`.
+    let matSessionCount: Int
 
-    /// Written out rather than synthesized so `conditioningCount` can default: every
-    /// existing construction site means "no conditioning".
+    /// Written out rather than synthesized so the non-strength counts can default: every
+    /// existing construction site means "strength only".
     init(
         year: Int,
         month: Int,
         label: String,
         sessionCount: Int,
         totalVolume: Double,
-        conditioningCount: Int = 0
+        conditioningCount: Int = 0,
+        matSessionCount: Int = 0
     ) {
         self.year = year
         self.month = month
@@ -120,6 +138,7 @@ struct MonthSectionModel: Identifiable, Hashable, Sendable {
         self.sessionCount = sessionCount
         self.totalVolume = totalVolume
         self.conditioningCount = conditioningCount
+        self.matSessionCount = matSessionCount
     }
 
     var id: String { Self.id(year: year, month: month) }
@@ -173,4 +192,15 @@ struct ConditioningCardModel: Identifiable, Hashable, Sendable {
 
     /// Steady-state sessions have no rounds — the card shows duration alone.
     var isSteadyState: Bool { roundsPlanned == 0 }
+}
+
+/// Display-ready values for one mat-session card (docs/fight-conditioning.md).
+///
+/// Same contract as `ConditioningCardModel`: the row view takes this, never a `MatSession`.
+struct MatSessionCardModel: Identifiable, Hashable, Sendable {
+    let id: UUID
+    let startTime: Date
+    let sport: MatSport
+    let intensity: MatIntensity?
+    let duration: TimeInterval
 }

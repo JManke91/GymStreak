@@ -2,8 +2,9 @@
 //  ConditioningHistoryViewModel.swift
 //  GymStreak
 //
-//  History's conditioning side: resolving a record for the detail screen and
-//  deleting one (with its Apple Health counterpart when the user asks).
+//  History's conditioning side: resolving a record — or a logged mat session —
+//  for the detail screen and deleting one (with its Apple Health counterpart
+//  when the user asks).
 //  See docs/fight-conditioning.md and docs/delete-workout.md.
 //
 
@@ -26,15 +27,18 @@ final class ConditioningHistoryViewModel {
     var healthKitDeleteFailure: HealthKitDeleteFailure?
 
     @ObservationIgnored private let records: any ConditioningRecordRepository
+    @ObservationIgnored private let matSessions: any MatSessionRepository
     @ObservationIgnored private let healthKitManager: any HealthKitWorkoutServicing
     @ObservationIgnored private let historyStoreGate: HistoryStoreGate
 
     init(
         records: any ConditioningRecordRepository,
+        matSessions: any MatSessionRepository,
         healthKitManager: any HealthKitWorkoutServicing,
         historyStoreGate: HistoryStoreGate
     ) {
         self.records = records
+        self.matSessions = matSessions
         self.healthKitManager = healthKitManager
         self.historyStoreGate = historyStoreGate
     }
@@ -69,15 +73,45 @@ final class ConditioningHistoryViewModel {
         NotificationCenter.default.post(name: .historySourceDataDidChange, object: nil)
 
         guard alsoFromHealthKit, let healthKitWorkoutId else { return }
+        await deleteFromHealthKit(healthKitWorkoutId)
+    }
+
+    // MARK: - Mat sessions
+
+    func matSession(id: UUID) -> MatSession? {
+        matSessions.find(id: id)
+    }
+
+    /// Same contract as `delete(_:alsoFromHealthKit:)`; the History actor fetches
+    /// `MatSession` too, so the delete takes the gate for the same reason.
+    func delete(_ session: MatSession, alsoFromHealthKit: Bool) async {
+        let healthKitWorkoutId = session.healthKitWorkoutId
+        await historyStoreGate.withExclusiveAccess {
+            matSessions.delete(session)
+            do {
+                try matSessions.save()
+            } catch {
+                print("Error deleting mat session: \(error)")
+            }
+        }
+        NotificationCenter.default.post(name: .historySourceDataDidChange, object: nil)
+
+        guard alsoFromHealthKit, let healthKitWorkoutId else { return }
+        await deleteFromHealthKit(healthKitWorkoutId)
+    }
+
+    // MARK: - Apple Health
+
+    private func deleteFromHealthKit(_ healthKitWorkoutId: UUID) async {
         do {
             // A `false` result means the workout was already absent from HealthKit —
             // the desired end state, not a failure.
             _ = try await healthKitManager.deleteWorkout(externalUUID: healthKitWorkoutId)
         } catch HealthKitError.healthAccessDenied {
-            print("HealthKit conditioning delete refused: no Apple Health write access")
+            print("HealthKit delete refused: no Apple Health write access")
             healthKitDeleteFailure = .accessDenied
         } catch {
-            print("HealthKit conditioning delete failed: \(error)")
+            print("HealthKit delete failed: \(error)")
             healthKitDeleteFailure = .failed
         }
     }

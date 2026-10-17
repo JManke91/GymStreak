@@ -26,6 +26,8 @@ struct TrainingsTabView: View {
     /// Same, for a conditioning record. Separate because the two are different models
     /// with different delete paths (docs/fight-conditioning.md).
     let onDeleteConditioningRequested: (UUID) -> Void
+    /// Same, for a logged mat session.
+    let onDeleteMatSessionRequested: (UUID) -> Void
     /// Pushes a workout detail screen from calendar mode. List rows navigate
     /// through native `NavigationLink`s.
     let onSelectWorkout: (UUID) -> Void
@@ -184,6 +186,8 @@ struct TrainingsTabView: View {
                         cardRow(card)
                     case .conditioning(let card):
                         conditioningRow(card)
+                    case .matSession(let card):
+                        matSessionRow(card)
                     }
                 }
             }
@@ -222,6 +226,9 @@ struct TrainingsTabView: View {
         if month.conditioningCount > 0 {
             parts.append("conditioning.history.month.summary".localized(month.conditioningCount))
         }
+        if month.matSessionCount > 0 {
+            parts.append("mat.history.month.summary".localized(month.matSessionCount))
+        }
         return parts.joined(separator: " · ")
     }
 
@@ -240,6 +247,26 @@ struct TrainingsTabView: View {
         }
         .accessibilityAction(named: Text("action.delete".localized)) {
             onDeleteRequested(card.id)
+        }
+        .padding(.horizontal, 16)
+        .padding(.bottom, 8)
+    }
+
+    private func matSessionRow(_ card: MatSessionCardModel) -> some View {
+        NavigationLink(value: MatSessionDestination(id: card.id)) {
+            MatSessionCardView(card: card)
+        }
+        .buttonStyle(.plain)
+        .simultaneousGesture(TapGesture().onEnded { HapticManager.shared.light() })
+        .contextMenu {
+            Button(role: .destructive) {
+                onDeleteMatSessionRequested(card.id)
+            } label: {
+                Label("action.delete".localized, systemImage: "trash")
+            }
+        }
+        .accessibilityAction(named: Text("action.delete".localized)) {
+            onDeleteMatSessionRequested(card.id)
         }
         .padding(.horizontal, 16)
         .padding(.bottom, 8)

@@ -20,6 +20,9 @@ final class AppDependencies: ObservableObject {
     /// Recorded conditioning history (docs/fight-conditioning.md). Its own repository
     /// because `ConditioningRecord` is its own denormalized model, not a `WorkoutSession`.
     let conditioningRecordRepository: ConditioningRecordRepository
+    /// Logged mat sessions (docs/fight-conditioning.md) — their own model, so the
+    /// conditioning program never counts them.
+    let matSessionRepository: MatSessionRepository
     /// The one gate that makes History's model-actor reads and the main context's
     /// completed-session deletes mutually exclusive. Both sides must be handed *this*
     /// instance — a second gate excludes nothing. See `HistoryStoreGate`.
@@ -276,6 +279,7 @@ final class AppDependencies: ObservableObject {
         self.workoutSessionRepository = SwiftDataWorkoutSessionRepository(modelContext: modelContext)
         let conditioningRecordRepository = SwiftDataConditioningRecordRepository(modelContext: modelContext)
         self.conditioningRecordRepository = conditioningRecordRepository
+        self.matSessionRepository = SwiftDataMatSessionRepository(modelContext: modelContext)
         self.routineTemplateSync = RoutineTemplateSyncService(
             routineRepository: routineRepository,
             exerciseRepository: exerciseRepository
@@ -582,6 +586,15 @@ final class AppDependencies: ObservableObject {
         )
     }
 
+    /// One per presentation of the "Log a mat session" sheet.
+    func makeMatSessionLogViewModel() -> MatSessionLogViewModel {
+        MatSessionLogViewModel(
+            sessions: matSessionRepository,
+            workoutSaver: HealthKitWorkoutManager(),
+            healthSync: UserDefaultsHealthSyncPreference()
+        )
+    }
+
     /// One per presentation of the import sheet — Settings, or any later entry point.
     func makeHistoryImportViewModel(source: HistoryImportSource) -> HistoryImportViewModel {
         HistoryImportViewModel(
@@ -609,6 +622,7 @@ final class AppDependencies: ObservableObject {
     /// `makeHealthKitWorkoutService()` — `AppDependencies.init` cannot call its own methods.
     private(set) lazy var conditioningHistory: ConditioningHistoryViewModel = ConditioningHistoryViewModel(
         records: conditioningRecordRepository,
+        matSessions: matSessionRepository,
         healthKitManager: makeHealthKitWorkoutService(),
         historyStoreGate: historyStoreGate
     )

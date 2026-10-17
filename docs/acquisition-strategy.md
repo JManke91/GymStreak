@@ -257,7 +257,7 @@ is still zero.
 |---|---|---|---|---|---|---|
 | 1 | 16 | **Strong + Hevy history import** | **P1** | ~1 week (2 tickets) | Switching from Strong/Hevy at all | ✅ **Shipped** — Strong 2026-10-03 (ticket 01, rides 1.1.19), Hevy 2026-10-17 (ticket 02, device-verified). Settings → Import from Strong / Hevy — see §4.16 |
 | 2 | 17 | **Visible watch sync reliability** ("Saved on iPhone ✓") | **P1** | 1–2 days | The switching message, made experienceable | ✅ **Shipped** 2026-10-17 (ticket 03, device-verified). Watch summary "Saved on iPhone" status line, see §4.17 |
-| 3 | 18 | **Fighter positioning** (mat sessions, watch recording, lift-or-fight onboarding, round timer) | **P1** | ~3 weeks (4 tickets) | The one unowned market position | 🎫 ticket cut — `.scratch/positioning-usp/issues/04–07`, see §4.18 |
+| 3 | 18 | **Fighter positioning** (mat sessions, watch recording, lift-or-fight onboarding, round timer) | **P1** | ~3 weeks (4 tickets) | The one unowned market position | 🟡 **In progress** — ticket 04 (log a mat session on iPhone) ✅ done 2026-10-17 (device-verified, iCloud sync confirmed on TestFlight); 05–07 open — `.scratch/positioning-usp/issues/04–07`, see §4.18 |
 | 4 | 5 | In-app sharing of a workout | **P1** | 2–3 days | Web-Referrer, virality | 🎫 ticket cut 2026-10-17 — `.scratch/share-screen/issues/01–04` (01 = Claude Design hand-off, user-approved before code), see §4.5 |
 | 5 | 15 | **Decide the app name** (rename or commit) | **P1 / decision** | ~1 day to decide | Brand-query traffic, word-of-mouth | ⬜ **not decided — gates #4 and #6**; #18 adds an argument, §4.18 |
 | 6 | 4 | Landing page + custom domain | **P1** | 1–2 weeks | Unlocks every off-store channel | ⬜ not started — blocked on #15 |
@@ -613,6 +613,12 @@ the property into an experience. This is the **switching message**, not the iden
 
 **🎫 Ticket cut 2026-10-02**: `.scratch/positioning-usp/issues/04–07`, plus the already-cut
 Fighter Strength program (`.scratch/_done/routine-programs/issues/08`), which ticket 06 depends on.
+**Ticket 04 shipped** (2026-10-17, device-verified; CloudKit schema deployed and cross-device sync confirmed on TestFlight): Conditioning screen → "Log a mat
+session" records sport (BJJ, MMA, Muay Thai, boxing, wrestling, other), start, duration, intensity
+(drilling / moderate / hard sparring) and a note. The session gets its own History card and detail,
+can be deleted, and is written to Apple Health as martial arts, boxing, wrestling or other. It is its
+own model (`MatSession`), so it counts toward neither the conditioning program week nor any strength
+statistic (`docs/fight-conditioning.md`, "Mat sessions").
 **Why:** "lifting + fight conditioning in one log" is the only position on the market map with no
 owner, and the conditioning half has already shipped (`docs/fight-conditioning.md`). It can **not**
 be reached through App Store search ("mma strength", "bjj workout" and "fight conditioning" all

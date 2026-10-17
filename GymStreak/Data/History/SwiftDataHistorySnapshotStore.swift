@@ -238,6 +238,14 @@ actor SwiftDataHistorySnapshotStore {
                 )
             )
         }
+        // Logged mat sessions — flat rows too (docs/fight-conditioning.md).
+        let matSessions = try measured("HistoryFetchMatSessions") {
+            try modelContext.fetch(
+                FetchDescriptor<MatSession>(
+                    sortBy: [SortDescriptor(\.startTime, order: .reverse)]
+                )
+            )
+        }
 
         try Task.checkCancellation()
         let prs = measured("HistoryBuildPRs") {
@@ -251,6 +259,7 @@ actor SwiftDataHistorySnapshotStore {
                 routines: routines,
                 prCountBySession: prs.prCountBySession,
                 conditioningRecords: conditioning,
+                matSessions: matSessions,
                 referenceDate: referenceDate
             )
         }

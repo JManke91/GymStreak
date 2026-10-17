@@ -35,6 +35,7 @@ private struct ConditioningLibraryContent: View {
     @State private var viewModel: ConditioningLibraryViewModel
     @State private var path: [ConditioningRoute]
     @State private var showingSafetyInfo = false
+    @State private var matSessionLog: MatSessionLogViewModel?
     private let program: ConditioningProgramViewModel
     /// The third paywall host (ticket 08). This screen is a full-screen cover,
     /// so the app root's sheet cannot reach the screen while it is up — the
@@ -42,11 +43,13 @@ private struct ConditioningLibraryContent: View {
     /// §5e and §5l). The root suppresses `.conditioningProgram` accordingly.
     private let paywalls: any PaywallPresenting
     private let entitlements: any ProEntitlementProviding
+    private let makeMatSessionLog: () -> MatSessionLogViewModel
 
     init(dependencies: AppDependencies, opensShowcase: Bool) {
         program = dependencies.conditioningProgram
         paywalls = dependencies.paywalls
         entitlements = dependencies.proEntitlements
+        makeMatSessionLog = dependencies.makeMatSessionLogViewModel
         _path = State(initialValue: opensShowcase ? [.programShowcase] : [])
         _viewModel = State(initialValue: ConditioningLibraryViewModel(
             safety: dependencies.conditioningSafety,
@@ -71,6 +74,7 @@ private struct ConditioningLibraryContent: View {
                     )
 
                     singleSessionRow
+                    matSessionRow
                 }
                 .padding(.horizontal, DesignSystem.Spacing.lg)
                 .padding(.bottom, DesignSystem.Spacing.xxl)
@@ -117,6 +121,9 @@ private struct ConditioningLibraryContent: View {
             .sheet(isPresented: $showingSafetyInfo) {
                 ConditioningSafetyView(onAcknowledge: nil)
             }
+            .sheet(item: $matSessionLog) { log in
+                MatSessionLogView(viewModel: log)
+            }
             .fullScreenCover(item: $viewModel.activeRun) { run in
                 ConditioningRunnerView(
                     viewModel: run,
@@ -149,29 +156,53 @@ private struct ConditioningLibraryContent: View {
         )
     }
 
+    /// Mat time is logged after the fact, not run — it is training load the program
+    /// deliberately does not count (docs/fight-conditioning.md, "Mat sessions").
+    private var matSessionRow: some View {
+        Button {
+            HapticManager.shared.light()
+            matSessionLog = makeMatSessionLog()
+        } label: {
+            entryCard(
+                title: "mat.log.entry.title".localized,
+                subtitle: "mat.log.entry.subtitle".localized,
+                symbol: "plus"
+            )
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func entryCard(title: String, subtitle: String, symbol: String) -> some View {
+        OnyxCard {
+            HStack(spacing: DesignSystem.Spacing.md) {
+                VStack(alignment: .leading, spacing: DesignSystem.Spacing.xs) {
+                    Text(title)
+                        .font(.onyxSubheadline)
+                        .foregroundStyle(DesignSystem.Colors.textPrimary)
+                    Text(subtitle)
+                        .font(.onyxFootnote)
+                        .foregroundStyle(DesignSystem.Colors.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Spacer(minLength: 0)
+                Image(systemName: symbol)
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(DesignSystem.Colors.textTertiary)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .contentShape(Rectangle())
+    }
+
     /// The library, one tap away: the program owns this screen, but a user who
     /// wants a one-off session must not have to leave it.
     private var singleSessionRow: some View {
         NavigationLink(value: ConditioningRoute.sessionList) {
-            OnyxCard {
-                HStack(spacing: DesignSystem.Spacing.md) {
-                    VStack(alignment: .leading, spacing: DesignSystem.Spacing.xs) {
-                        Text("conditioning.library.single.title".localized)
-                            .font(.onyxSubheadline)
-                            .foregroundStyle(DesignSystem.Colors.textPrimary)
-                        Text("conditioning.library.single.subtitle".localized)
-                            .font(.onyxFootnote)
-                            .foregroundStyle(DesignSystem.Colors.textSecondary)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                    Spacer(minLength: 0)
-                    Image(systemName: "chevron.right")
-                        .font(.footnote.weight(.semibold))
-                        .foregroundStyle(DesignSystem.Colors.textTertiary)
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-            }
-            .contentShape(Rectangle())
+            entryCard(
+                title: "conditioning.library.single.title".localized,
+                subtitle: "conditioning.library.single.subtitle".localized,
+                symbol: "chevron.right"
+            )
         }
         .buttonStyle(.plain)
     }

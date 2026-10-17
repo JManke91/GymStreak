@@ -96,6 +96,7 @@ struct HistorySnapshotBuilderTests {
             case .monthHeader:  return "header"
             case .card:         return "card"
             case .conditioning: return "conditioning"
+            case .matSession:   return "mat"
             }
         }
         #expect(kinds == ["card", "card", "header", "card"])

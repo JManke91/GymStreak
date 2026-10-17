@@ -25,6 +25,7 @@ enum GymStreakSchema {
         WorkoutSession.self,
         WorkoutExercise.self,
         WorkoutSet.self,
-        ConditioningRecord.self
+        ConditioningRecord.self,
+        MatSession.self
     ]
 }

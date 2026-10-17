@@ -28,6 +28,8 @@ struct HistoryView: View {
     @State private var conditioning: ConditioningHistoryViewModel
     @State private var conditioningToDelete: ConditioningRecord?
     @State private var showingConditioningDeleteAlert = false
+    @State private var matSessionToDelete: MatSession?
+    @State private var showingMatSessionDeleteAlert = false
     @State private var isRecovering = false
     /// Type-erased because the stack pushes workout ids, exercise models and
     /// period destinations.
@@ -136,6 +138,7 @@ struct HistoryView: View {
                                     },
                                     onDeleteRequested: requestDelete,
                                     onDeleteConditioningRequested: requestConditioningDelete,
+                                    onDeleteMatSessionRequested: requestMatSessionDelete,
                                     onSelectWorkout: pushWorkout
                                 )
                             case .fortschritt:
@@ -178,6 +181,11 @@ struct HistoryView: View {
             .navigationDestination(for: ConditioningRecordDestination.self) { destination in
                 if let record = conditioning.record(id: destination.id) {
                     ConditioningRecordDetailView(record: record, viewModel: conditioning)
+                }
+            }
+            .navigationDestination(for: MatSessionDestination.self) { destination in
+                if let session = conditioning.matSession(id: destination.id) {
+                    MatSessionDetailView(session: session, viewModel: conditioning)
                 }
             }
             .navigationDestination(for: ExerciseWithHistory.self) { exercise in
@@ -257,6 +265,21 @@ struct HistoryView: View {
                 },
                 onCancel: { conditioningToDelete = nil }
             )
+            .deleteWorkoutConfirmation(
+                isPresented: $showingMatSessionDeleteAlert,
+                hasHealthKitWorkout: matSessionToDelete?.healthKitWorkoutId != nil,
+                onDelete: { alsoFromHealthKit in
+                    if let session = matSessionToDelete {
+                        // Cleared before the `await`, like the conditioning path.
+                        matSessionToDelete = nil
+                        HapticManager.shared.success()
+                        Task {
+                            await conditioning.delete(session, alsoFromHealthKit: alsoFromHealthKit)
+                        }
+                    }
+                },
+                onCancel: { matSessionToDelete = nil }
+            )
 #if DEBUG
             .overlay(alignment: .bottomLeading) {
                 MainThreadStallProbeOverlay(probe: stallProbe, identifier: "history-main-thread-max-delay-ms")
@@ -286,6 +309,12 @@ struct HistoryView: View {
         guard let record = conditioning.record(id: recordId) else { return }
         conditioningToDelete = record
         showingConditioningDeleteAlert = true
+    }
+
+    private func requestMatSessionDelete(_ sessionId: UUID) {
+        guard let session = conditioning.matSession(id: sessionId) else { return }
+        matSessionToDelete = session
+        showingMatSessionDeleteAlert = true
     }
 
     /// One banner for both delete paths — the notice says the same thing whichever kind of

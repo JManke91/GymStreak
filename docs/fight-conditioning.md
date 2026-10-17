@@ -7,7 +7,7 @@ device-verified the same day. Ticket 04 (the 12-week program — showcase, enrol
 today's suggestion) shipped and was device-verified 2026-09-20. Ticket 05 (the post-workout add-on on
 the iPhone workout summary) shipped and was device-verified 2026-09-21 — its `.later` branch is not
 reachable before program week 5 and remains unit-tested only (see that section). Ticket 06 (the watch runner with the live heart-rate zone) shipped and was device-verified 2026-09-22; its runner was then redesigned (heart-rate gauge, swipe-away controls — see "Watch runner redesign"). Ticket 07 (watch sessions sync to iPhone History and the program week) shipped and was device-verified 2026-09-23. Ticket 08 (the Pro depth gate on program Phases 2–3) shipped 2026-09-23 — the last ticket of the set.**
-The feature is complete. This file holds
+The feature is complete. **Extension (2026-10-17):** logging mat and sparring sessions as training load (see "Mat sessions"). This file holds
 the pre-implementation research (so it is not re-done) and the feature doc (iOS + watch
 architecture, components, edge cases). Parent Things task: "Add fighting conditioning into workout routine"
 (`TFUtiRbLsX4VScjcnbdZbv`, Gym Streak project).
@@ -1302,6 +1302,118 @@ created as a **Placement** in the RevenueCat dashboard and pointed at an offerin
 `currentOffering(forPlacement:)` falls back to the default offering — which still sells, but with
 generic copy instead of the fight-camp one. It cannot be created from here (see §9.4d for the
 per-store `default` offering trap this shares).
+
+## Mat sessions (positioning ticket 04 — log a mat or sparring session on iPhone)
+
+**Status (2026-10-17): implemented and device-verified (physical iPhone: logging, the History card in
+date order, the detail screen with note, and the Apple Health write). `CD_MatSession` was deployed to CloudKit
+Production the same day, and cross-device iCloud sync was confirmed on a TestFlight build. Done.** Ticket `.scratch/positioning-usp/issues/04-log-mat-session-iphone.md`, from
+`docs/research/positioning-usp-2026-10.md` §5 A → `docs/acquisition-strategy.md` lever #18. Ticket
+05 (recording on the watch) builds on this model.
+
+**This does not reverse the "skill training is out of scope" decision above.** A mat session is
+recorded as **training load only** — sport, when, how long, how hard, an optional note. It never
+models techniques, rounds, partners or results.
+
+**What the user gets.** Conditioning screen → "Log a mat session" card (below "Single session") →
+a sheet: sport chips (BJJ, MMA, Muay Thai, boxing, wrestling, other), intensity segmented control
+(drilling / moderate / hard sparring), duration stepper (5–300 min, 5-min steps, default 60), start
+date picker and a note. The start **follows the duration** (now − duration) until the user picks a
+start themselves; from then on it stays put (`MatSessionLogViewModel.editedStartDate`). Starts
+after the moment the form opened cannot be picked. In History the session is its own card (date
+tile | sport + duration + intensity | sport glyph), interleaved by date with workouts and
+conditioning sessions, with a detail screen and the same delete confirmation as every other
+session kind (`docs/delete-workout.md`). The month divider gains an "N × mat" clause.
+
+**Model decision: a new `@Model MatSession`, not an extension of `ConditioningRecord`.** Both
+were acceptable per the ticket. Extending `ConditioningRecord` would have reused the History card
+path, but every consumer of that type would then have had to filter mat sessions out: the program
+week (`ConditioningProgramViewModel.refresh` → `ConditioningProgramCoach.progress`), today's
+suggestion and its 48 h spacing rule, the watch offer, the post-workout add-on, and the watch
+ingestor. Each missed filter would silently count sparring as energy-system work. As a separate type,
+the exclusion holds by construction, and the History cost is small: one more `HistoryListRow` case,
+one more flat fetch on the History actor and one more merge. Its fields are also nothing like
+conditioning's (no rounds, intervals, modality or energy system). Every stored property is optional
+or defaulted (CloudKit), and the enums are stored as raw strings. An unknown sport raw value reads
+as `.other`.
+
+**History merge.** `HistorySnapshotBuilder.build(matSessions:)` buckets mat cards by month the way
+conditioning is bucketed. The in-month merge is now one generic linear merge over `HistoryListRow`
+(`HistoryListRow.startTime`), applied twice: workouts ⨝ conditioning, then ⨝ mat sessions. A
+same-second tie orders workout, then conditioning, then mat, which keeps `ForEach` identity
+deterministic. Row ids are prefixed `mat-`. `MonthSectionModel.matSessionCount` and
+`HistorySnapshot.matSessionCount` are counted apart (the latter also keeps the loading spinner from
+flashing over a mat-only list). Like conditioning, mat sessions feed **nothing else**: not
+`weekStats`, `weekDays`, `cardsByDay` (calendar mode shows no mat dot, the same deliberate omission
+as conditioning, restored the same way), `typesByMonth`, `lastMonth`, or `sessionCount` (which gates
+the AI Coach recap). Volume, PRs, Fortschritt and the muscle map read only `WorkoutSession`, so they
+cannot see a mat session at all.
+
+**Delete and lookup** live on `ConditioningHistoryViewModel` (`matSession(id:)`,
+`delete(_ session: MatSession, alsoFromHealthKit:)`). They share its Apple Health delete helper and
+its one failure banner instead of adding a third History view model. The delete takes
+`HistoryStoreGate.withExclusiveAccess` because the History actor now fetches `MatSession`. The
+navigation value is `MatSessionDestination(id:)`, not a bare `UUID`, which workout sessions claim.
+
+**Apple Health.** `HealthKitWorkoutManager+MatSession.swift` (`MatSessionWorkoutSaving`) writes a
+separate `HKWorkout` after the fact through `writeWorkout`, `locationType = .indoor`, no energy
+sample:
+
+| Sport | `HKWorkoutActivityType` |
+|---|---|
+| BJJ, MMA, Muay Thai | `.martialArts` |
+| Boxing | `.boxing` |
+| Wrestling | `.wrestling` |
+| Other | `.other` |
+
+Metadata: brand name = localized sport name (Fitness's title), `HKMetadataKeyExternalUUID` = the
+`MatSession.id`, `GymStreakSessionKind = "mat"`. The **recovery drain** now skips *any* workout that
+carries a `GymStreakSessionKind` (it used to compare against `"conditioning"` only). Strength
+workouts carry none, and a mat session has no strength counterpart to recover. Same rules as
+conditioning: honours the `healthKitSyncEnabled` switch, primes authorization before the write, and
+the record is saved **first** and never depends on Health (`healthKitWorkoutId` stays `nil` when the
+write is off or fails). `.kickboxing` would also fit Muay Thai. The ticket chose martial arts, and
+changing the mapping later only affects workouts written after the change.
+
+**Monetization.** Free — §3 Rule 4 (the user's own logged data). No cap, placement or badge.
+
+**CloudKit.** `MatSession` is registered in `GymStreakSchema.modelTypes` (`SchemaRegistrationTests`
+guards it). **Its record type (`CD_MatSession`) must be deployed to CloudKit Production before this
+ships**: run once with `-INITIALIZE_CLOUDKIT_SCHEMA` in Debug while signed into iCloud, diff and
+deploy in the Console, then verify with `xcrun cktool export-schema`. Without the deploy, every device
+on the release keeps mat sessions locally only. See `docs/cloudkit-schema-automation.md`.
+
+**CloudKit — deployed (2026-10-17).** The Console diff was purely additive: one new `CD_MatSession`
+record type with exactly the model's seven stored properties (plus `CD_entityName`, `CD_moveReceipt`,
+the `___` system fields and a `_ckAsset` overflow field per string), and no change to any existing
+type. Verified after the deploy by `cktool export-schema`: Production and Development are
+identical, and Production holds 12 `CD_` record types, one per `GymStreakSchema.modelTypes` entry.
+These field names are now frozen; adding fields later is another additive deploy.
+
+**Components.**
+
+| Layer | File | Role |
+|---|---|---|
+| Domain/Models | `MatSession/MatSession.swift` | `@Model MatSession`, `MatSport`, `MatIntensity` |
+| Domain/Repositories · Data | `MatSessionRepository.swift` · `SwiftDataMatSessionRepository.swift` | persistence |
+| Domain/Interfaces · Data | `MatSessionWorkoutSaving.swift` · `HealthKit/HealthKitWorkoutManager+MatSession.swift` | Apple Health write |
+| Domain/Models · Services | `MatSessionCardModel` in `HistorySnapshot.swift`, `HistorySnapshotBuilder` | History row + merge |
+| Data | `History/SwiftDataHistorySnapshotStore.swift` | flat `MatSession` fetch on the History actor |
+| Presentation | `ViewModels/Conditioning/MatSessionLogViewModel.swift`, `MatSessionCopy.swift`; `ConditioningHistoryViewModel` (lookup/delete) | state + copy |
+| Presentation | `Views/Conditioning/MatSessionLogView`, `MatSessionCardView`, `MatSessionDetailView` (+ `MatSessionDestination`); entry row in `ConditioningLibraryView` | screens |
+| App | `AppDependencies.matSessionRepository`, `makeMatSessionLogViewModel()` | wiring |
+
+Strings: `mat.*` in `Resources/{en,de}.lproj/Localizable.strings`.
+
+**Tests** (`GymStreakTests/MatSessionLogTests.swift`, `MatSessionHistoryTests.swift`; double in `Support/MatSessionTestDoubles.swift`): the start follows the duration until edited; a
+save writes the record and the Health workout with the same id and sport; Health sync off still
+saves; a failed Health write keeps the record; the activity type per sport; a full round trip
+through the app schema plus delete; interleaving among workouts and conditioning; a mat-only month
+gets its divider; strength statistics (week hero, calendar, session count, last month) are
+identical with and without mat sessions; mat sessions in the current week leave the program's
+weekly progress and today's suggestion unchanged.
+
+**Watch target.** Unchanged by this ticket. Recording on the watch is ticket 05.
 
 ## Research findings — Apple Health / HealthKit (verified 2026-09-18)
 
