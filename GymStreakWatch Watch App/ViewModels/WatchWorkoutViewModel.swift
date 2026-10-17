@@ -142,6 +142,10 @@ final class WatchWorkoutViewModel: ObservableObject {
     /// `refreshSummaryOverloadRows` so no summary row performs lookups in its
     /// body. Empty whenever no summary is showing.
     @Published var summaryOverloadRows: [UUID: WatchSummaryOverloadRow] = [:]
+    /// Whether the summarised workout has reached the iPhone, re-derived by
+    /// `refreshSummarySyncStatus` from the durable queue. Nil whenever no
+    /// summary is showing.
+    @Published private(set) var summarySyncStatus: WatchSummarySyncStatus?
 
     // Error handling
     @Published var errorMessage: String?
@@ -247,8 +251,38 @@ final class WatchWorkoutViewModel: ObservableObject {
             .sink { [weak self] _ in
                 guard let self, self.workoutSummary != nil else { return }
                 self.refreshSummaryOverloadRows()
+                // Every retirement republishes the routines, so this is also
+                // when the history entry's acknowledgment becomes readable.
+                self.refreshSummarySyncStatus()
             }
             .store(in: &cancellabes)
+
+        connectivityManager.$isReachable
+            .dropFirst()
+            .removeDuplicates()
+            .sink { [weak self] isReachable in
+                // `@Published` emits before the stored value changes.
+                self?.refreshSummarySyncStatus(isPhoneReachable: isReachable)
+            }
+            .store(in: &cancellabes)
+    }
+
+    /// Reads the summarised workout's HISTORY entry only — its id is the
+    /// workout id, while a split template intent is keyed by its own
+    /// transaction id, so a pending or quarantined template update can never
+    /// make a saved workout look unsaved.
+    private func refreshSummarySyncStatus(isPhoneReachable: Bool? = nil) {
+        // Equality-guarded: reachability flips during a live workout, and an
+        // equal `@Published` write still invalidates every observing view.
+        guard workoutSummary != nil, let id = pendingCompletedWorkoutId else {
+            if summarySyncStatus != nil { summarySyncStatus = nil }
+            return
+        }
+        let status = WatchSummarySyncStatus.resolve(
+            historyPhase: connectivityManager.syncState.entry(id: id)?.phase,
+            isPhoneReachable: isPhoneReachable ?? connectivityManager.isReachable
+        )
+        if status != summarySyncStatus { summarySyncStatus = status }
     }
 
     var isUITesting: Bool {
@@ -591,6 +625,7 @@ final class WatchWorkoutViewModel: ObservableObject {
                 // Resolve the recap's overload rows against the now-frozen
                 // terminal state, once, before the summary renders (ticket 05).
                 self.refreshSummaryOverloadRows()
+                self.refreshSummarySyncStatus()
                 WKInterfaceDevice.current().play(.success)
             },
             onTransportEligible: { [connectivityManager] in
@@ -1718,6 +1753,7 @@ final class WatchWorkoutViewModel: ObservableObject {
         pendingOverloadTransactionIDs = [:]
         appliedOverloadResults = [:]
         summaryOverloadRows = [:]
+        summarySyncStatus = nil
         // The live workout is over (discarded or summary dismissed); drop its
         // durable recovery checkpoint (ticket 08).
         checkpointStore.clear()

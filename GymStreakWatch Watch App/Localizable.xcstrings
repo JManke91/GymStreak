@@ -4,6 +4,50 @@
     "..." : {
 
     },
+    "Saving to iPhone…" : {
+      "comment" : "Watch summary: whether the finished workout reached the iPhone (docs/watch-sync.md)",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Wird auf dem iPhone gespeichert …"
+          }
+        }
+      }
+    },
+    "Saved on iPhone" : {
+      "comment" : "Watch summary: whether the finished workout reached the iPhone (docs/watch-sync.md)",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Auf dem iPhone gespeichert"
+          }
+        }
+      }
+    },
+    "Safe on this watch — syncs when your iPhone is nearby." : {
+      "comment" : "Watch summary: whether the finished workout reached the iPhone (docs/watch-sync.md)",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sicher auf dieser Watch – wird synchronisiert, sobald dein iPhone in der Nähe ist."
+          }
+        }
+      }
+    },
+    "Couldn't send to iPhone" : {
+      "comment" : "Watch summary: whether the finished workout reached the iPhone (docs/watch-sync.md)",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Konnte nicht ans iPhone gesendet werden"
+          }
+        }
+      }
+    },
     "·" : {
 
     },

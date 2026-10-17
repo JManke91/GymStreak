@@ -49,6 +49,10 @@ struct WatchWorkoutSummaryView: View {
             Text(summary.routineName)
                 .font(.watchCaption)
                 .foregroundStyle(OnyxWatch.Colors.textSecondary)
+
+            if let syncStatus = viewModel.summarySyncStatus {
+                WatchSummarySyncStatusRow(status: syncStatus)
+            }
         }
         .padding(.top, OnyxWatch.Spacing.md)
     }

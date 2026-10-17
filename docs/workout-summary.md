@@ -57,7 +57,7 @@ unprefetched fetch **per exercise**, so finishing a workout froze the app for th
 **File**: `GymStreakWatch Watch App/Views/WatchWorkoutSummaryView.swift`
 
 ### What it shows
-- **Header**: Checkmark icon, "Workout Complete" title, routine name
+- **Header**: Checkmark icon, "Workout Complete" title, routine name, and the iPhone sync status line ("Saving to iPhone…" → "Saved on iPhone ✓", or "Safe on this watch…" while the iPhone is out of reach). It is driven by the workout's history entry in the durable queue; see `docs/watch-sync.md`, "Showing the guarantee on the summary"
 - **Stats card**: Duration, sets (completed/total with percentage), calories (from HealthKit)
 - **Exercises card**: Per-exercise completion status with checkmark (complete) or minus badge (partial)
 - **Done button**: Dismisses the summary and returns to routine list
@@ -118,6 +118,8 @@ Used by iOS `SaveWorkoutView` for exercise progress display. Contains `volumeDel
 | `Domain/Models/PreviousPerformanceLookup.swift` | iOS | `Sendable` request carrying the workout across the actor boundary |
 | `Domain/Models/ExerciseProgressModels.swift` | iOS | Comparison result data structures |
 | `WatchWorkoutSummaryView.swift` | watchOS | Post-workout summary view |
+| `WatchSummarySyncStatusRow.swift` | watchOS | The summary's "Saved on iPhone" status line |
+| `WatchSummarySyncStatus.swift` | watchOS | Maps the history entry's queue phase + reachability to the displayed status |
 | `WatchModels.swift` | watchOS | WatchWorkoutSummary struct |
 | `WatchWorkoutViewModel.swift` | watchOS | Summary generation and state management |
 | `ActiveWorkoutView.swift` | watchOS | Flow control (workout tabs vs summary) |

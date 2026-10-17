@@ -2,3 +2,4 @@
 - Beim Import entscheidest du, ob neue Übungen in deine Bibliothek übernommen werden. Lässt du sie weg, erscheinen die Workouts trotzdem im Verlauf und fließen in das Fortschrittsdiagramm einer Übung ein, sobald du eine Übung mit demselben Namen anlegst.
 - Beim Import kannst du einen Zeitraum wählen, z. B. nur den letzten Monat, oder ein eigenes Start- und Enddatum festlegen.
 - Importiere deinen Trainingsverlauf aus Hevy: Einstellungen → Aus Hevy importieren. Wähle die von Hevy exportierte CSV-Datei. Die Gewichtseinheit wird aus der Datei gelesen, und Aufwärmsätze werden nicht übernommen.
+- Apple Watch: Nach dem Training zeigt die Zusammenfassung, ob das Workout auf deinem iPhone angekommen ist. Sie zeigt erst „Wird auf dem iPhone gespeichert …“ und dann „Auf dem iPhone gespeichert ✓“. Ist dein iPhone außer Reichweite, siehst du, dass das Workout sicher auf der Watch liegt und synchronisiert wird, sobald das iPhone in der Nähe ist.

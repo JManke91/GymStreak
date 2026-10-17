@@ -2,3 +2,4 @@
 - When importing, you choose whether new exercises are added to your library. If you leave them out, the workouts still appear in History, and they join an exercise's progress chart once you add an exercise with the same name.
 - When importing, you can pick a period, e.g. only the last month, or set your own start and end date.
 - Import your workout history from Hevy: Settings → Import from Hevy. Choose the CSV file Hevy exported. The weight unit is read from the file, and warm-up sets are left out.
+- Apple Watch: after finishing a workout, the summary shows whether it has reached your iPhone. It shows "Saving to iPhone…" and then "Saved on iPhone ✓". If your iPhone is out of reach, it says the workout is safe on the watch and will sync when the iPhone is nearby.

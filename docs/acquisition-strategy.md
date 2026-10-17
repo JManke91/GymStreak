@@ -256,18 +256,19 @@ is still zero.
 | Order | # | Lever | Tier | Effort | Moves | Status |
 |---|---|---|---|---|---|---|
 | 1 | 16 | **Strong + Hevy history import** | **P1** | ~1 week (2 tickets) | Switching from Strong/Hevy at all | ✅ **Shipped** — Strong 2026-10-03 (ticket 01, rides 1.1.19), Hevy 2026-10-17 (ticket 02, device-verified). Settings → Import from Strong / Hevy — see §4.16 |
-| 2 | 17 | **Visible watch sync reliability** ("Saved on iPhone ✓") | **P1** | 1–2 days | The switching message, made experienceable | 🎫 ticket cut — `.scratch/positioning-usp/issues/03`, see §4.17 |
+| 2 | 17 | **Visible watch sync reliability** ("Saved on iPhone ✓") | **P1** | 1–2 days | The switching message, made experienceable | ✅ **Shipped** 2026-10-17 (ticket 03, device-verified). Watch summary "Saved on iPhone" status line, see §4.17 |
 | 3 | 18 | **Fighter positioning** (mat sessions, watch recording, lift-or-fight onboarding, round timer) | **P1** | ~3 weeks (4 tickets) | The one unowned market position | 🎫 ticket cut — `.scratch/positioning-usp/issues/04–07`, see §4.18 |
-| 4 | 5 | In-app sharing of a workout | **P1** | 2–3 days | Web-Referrer, virality | ⬜ not started — **un-gated from #4**, see §4.5 |
+| 4 | 5 | In-app sharing of a workout | **P1** | 2–3 days | Web-Referrer, virality | 🎫 ticket cut 2026-10-17 — `.scratch/share-screen/issues/01–04` (01 = Claude Design hand-off, user-approved before code), see §4.5 |
 | 5 | 15 | **Decide the app name** (rename or commit) | **P1 / decision** | ~1 day to decide | Brand-query traffic, word-of-mouth | ⬜ **not decided — gates #4 and #6**; #18 adds an argument, §4.18 |
 | 6 | 4 | Landing page + custom domain | **P1** | 1–2 weeks | Unlocks every off-store channel | ⬜ not started — blocked on #15 |
 | 7 | 6 | Community presence (Reddit et al.) | **P1** | Ongoing | Downloads → velocity → ranking | ⬜ not started — blocked on #15 |
 | 8 | 14 | **Lifetime / one-time purchase option** | **P1 / decision** | ~1 day to build | Revenue per converting user | ⬜ **needs a Monetization Gate discussion first** |
 | 9 | 2 | Storefront metadata localization, steps 2–3 | **P2** | 1–2 days/locale | Keyword surface | ⬜ gated on the first search-term report |
-| 10 | 7 | In-App Events | **P2** | ~1 day/event | Browse + Search surfaces | ⬜ not started |
-| 11 | 8 | Custom Product Pages | **P2** | ~1 day | Conversion on off-store traffic | ⬜ not started — follows #4 and #6 |
-| 12 | 9 | Full app localization, 2–3 markets | **P3** | 1–2 weeks/language | Keyword surface + market fit | ⬜ blocked on `.scratch/i18n-foundation/` |
-| 13 | 10 | Apple Search Ads | **P3 / deferred** | Money | Impressions, and keyword data | ⬜ **deferred until #13 moves the return rate** — see §4.10 |
+| 10 | 7 | In-App Events | **P2** | ~1 day/event | Browse + Search surfaces | ⬜ not started — first candidate: the Strong/Hevy import, §4.7 |
+| 11 | 8 | Custom Product Pages | **P2** | ~1 day | Conversion on niche search terms and off-store traffic | ⬜ not started — **no longer blocked on #4/#6** (keyword-linked CPPs, §4.8) |
+| 12 | 19 | Creative assets — header + search-results image | **P3** | ~½ day, once | Search tap-through on iOS 27 only | ⬜ not started — §4.19 |
+| 13 | 9 | Full app localization, 2–3 markets | **P3** | 1–2 weeks/language | Keyword surface + market fit | ⬜ blocked on `.scratch/i18n-foundation/` |
+| 14 | 10 | Apple Search Ads | **P3 / deferred** | Money | Impressions, and keyword data | ⬜ **deferred until #13 moves the return rate** — see §4.10 |
 
 **Why #16–#18 went to the top on 2026-10-02.** `docs/research/positioning-usp-2026-10.md` asked
 what this document never had: *why would a lifter who finds the app choose it?* The answer was
@@ -561,11 +562,14 @@ Tracker` ranks **#14 (US), #29 (GB), #78 (AU)**, #2 (DE). Two further apps also 
 - **There is trademark exposure** in sharing a name with an established commercial developer in the
   same category. Not assessed here; it belongs in the decision.
 
-**What the decision needs** (this is the ticket): the cost of a rename priced honestly — App Store
-listing and all four metadata localizations, the `marketing/` keyword derivations (which are
-name-token-dependent, `app-store-subtitle-keywords.md` §2), app icon and screenshots, the 1,083
-localized strings that mention the name, the watch app, the domain, and the loss of the existing
-ratings history — set against the measured cost of keeping it. **Decide it either way and record the
+**Researched 2026-10-17: `docs/research/app-name-2026-10.md`.** The recommendation is to rename now,
+to **`Ironwrist`** (runner-up `Roundset`), with `Ironwrist: Workout Tracker` / `Ironwrist:
+Trainingstagebuch` as the name fields. The competitor has grown to **15,910 US ratings** against
+this app's 0 (DE: 3), and DE autocomplete for "gymstreak" no longer suggests this app at all. **The
+cost list that used to stand here was wrong in two places.** Ratings belong to the App ID and
+survive a rename. Only ~7 strings per language name the app; 1,083 is the size of the whole table.
+The real cost is about 2–3 days, mostly re-deriving metadata. The open checks (trademark, name
+reservation, the say-it-aloud test) are listed in that file's §6. **Decide it either way and record the
 decision here**; an undecided name is what blocks #4 and #6.
 
 **Not urgent this week** — #11–#13 come first and none of them touch the name. But it must not stay
@@ -591,7 +595,13 @@ prerequisite for both #17's and #18's audiences. Evidence:
 
 ### 17. Visible watch sync reliability (P1)
 
-**🎫 Ticket cut 2026-10-02**: `.scratch/positioning-usp/issues/03`. **Why:** since 2025, 45% of
+**Shipped** (2026-10-17, ticket `.scratch/positioning-usp/issues/03`, verified on paired hardware):
+the watch workout summary shows "Saving to iPhone…" with a slowly spinning icon, then "Saved on
+iPhone ✓", updating live when the iPhone's acknowledgment retires the workout's history entry. While
+the iPhone is out of reach it shows "Safe on this watch — syncs when your iPhone is nearby."
+Display only; sync behaviour and wire format are unchanged (`docs/watch-sync.md`, "Showing the
+guarantee on the summary", which also records a sync-robustness follow-up the status line exposed).
+**Why:** since 2025, 45% of
 Strong's negative reviews are about the Apple Watch losing or mangling workouts, and Hevy has the
 same failure on a smaller scale. GymStreak's sync already guarantees a finished workout is never lost
 (`docs/watch-sync.md`), but the guarantee is invisible, and nobody chooses an app for "reliable"
@@ -824,20 +834,106 @@ watch app to write about and cannot currently find one.
 ### 7. In-App Events (P2)
 
 **Why:** free, appear in **both** Search and Browse, each carries its own indexed metadata, and they
-can be featured editorially. Currently unused — greyed out in ASC.
+can be featured editorially. They are the only Apple-side tool on this page that can create an
+*impression* the keyword fields don't already create. Every other tool in §4.8 and §4.19 only
+converts impressions the app already gets. Currently unused.
 
-**How:** up to 5 published at once, 10 configured. They need a genuine hook, not a fake sale — a
-"New Year progressive-overload challenge", a notable feature launch. Each needs its own name, short
-description and event card art. Realistically a modest lever; cheap enough to be worth it.
+**How:** up to 5 published at once, 10 configured. They need a genuine hook, not a fake sale. Each
+needs its own name, short description and event card art (16:9 card + 9:16 details, now managed in
+the Asset Library). Realistically a modest lever; cheap enough to be worth it.
+
+**First candidate (2026-10-17): the Strong/Hevy import (#16), badge "Major Update".** It is the
+strongest switching hook the app has ever shipped, and an event is how an existing feature gets a
+second launch moment on the store. The second candidate is fighter positioning (#18) when it ships.
+Do not put competitor names in the event name without checking guideline 4.1/5.2 first. The import
+can be described as "bring your workout history from other apps" just as well.
 
 ### 8. Custom Product Pages (P2)
 
-**Why:** up to 35 pages, each with its own URL and its own screenshots. Lets a link from a watch-focused
-Reddit post land on a page whose *first screenshot is the watch app* rather than the generic one —
-which is exactly how off-store traffic converts. Currently unused.
+**Corrected 2026-10-17. This entry used to say "up to 35 pages" and "depends on off-store
+traffic", and both are out of date.** Third-party ASO sources (MobileAction, AppTweak, Adapty,
+stora.sh; Apple's own CPP doc not re-read) agree on two changes:
 
-**How:** one page per niche in §2 (Watch, privacy/no-account). Depends on having off-store traffic to
-point at them, so it follows #4 and #6.
+- **The limit is 70**, doubled from 35 in late October 2025. ASC shows "0 von 70" on this app.
+- **Since mid-2025, a CPP can be linked to keywords from the app's own keyword field and appear in
+  *organic* search** in place of the default page when Apple judges it more relevant. Each keyword
+  combination can belong to one CPP only. **Linking does not add keywords to the index.** It changes
+  which page converts a search the app already ranks for. It is not an impression lever.
+
+**So the dependency on #4/#6 is gone.** An organic-search CPP needs no off-store traffic, only
+keywords the app already ranks for:
+
+- **Watch CPP** (en-US): first screenshots are the watch app. Linked to the `apple` / `watch` tokens
+  (§2, `marketing/app-store-subtitle-keywords.md` §4.2a). This is the searcher whose intent the
+  default page serves least well, because its first screenshot is the iPhone.
+- **German log CPP** (de-DE), linked to `trainingstagebuch`. Only worth it if the de-DE default page
+  isn't already a log-first page.
+- **Switcher CPP**, which leads with the Strong/Hevy import. Its URL is also the one to use in any
+  "switch from Strong" community post (#6), so it serves both organic search and off-store traffic.
+
+**Caveat:** at ~13 impressions/day the effect cannot be measured per page (ASC → Analytics →
+Produktseiten does report per CPP, but the counts will be single digits). Build it because the intent
+match is obviously better, not because a test proved it.
+
+### 19. Creative assets — product page header + search-results image (P3)
+
+**Researched 2026-10-17.** Announced at WWDC26 (session 205, "Enhance your presence on the App
+Store"). The features went live in App Store Connect around 2026-10-05 as "Kopfzeile und
+Suchergebnisse", together with the **Asset Library** ("Inhalts-Mediathek"). Sources:
+[Apple — asset best practices](https://developer.apple.com/app-store/asset-best-practices/),
+[Adapty — Asset Library is live](https://adapty.io/blog/app-store-asset-library/),
+[WWDC26 205 summary](https://wwdc.ai/2026/205).
+
+- **Header:** the first visual on the product page, an image or video. Image sizes are 3840×1646
+  (21:9) or 5244×2950 (16:9 PNG). Video is 5–30 s.
+- **Search-results asset:** a custom image or video shown *instead of the default screenshots* in a
+  search result. Image sizes are 3:2 (1920×1280 to 3840×2560) or 16:9 5244×2950. Video is muted with
+  no unmute option. **One 16:9 asset can serve both slots** ("universal").
+- **Visible only on iOS 27 / iPadOS 27 and later.** Everyone else still sees screenshots.
+- **Reviewed standalone against the live version, no new build, and swappable on a live version.**
+  So these are **not release-pipeline material**: they are made once, outside the version cycle.
+- Per-localization. Must meet 4+. **No prices, URLs, accolades or other platforms' logos.**
+- PPO treatments can test header/search assets. At this app's traffic that is still useless (§4.3).
+- **They do not change keyword ranking.** The search asset can only move impression→page-view
+  tap-through (15.7%, §1). Page-view→download (20%) is already healthy, so the header has the least
+  room to help of anything on this page.
+- **iPhone Duo screenshots become mandatory for every submission from April 2027.** That is a
+  `fastlane snapshot` device addition, so cut a ticket before then. It is not optional.
+
+**Recommendation:** make **one** universal 16:9 image (iPhone + Apple Watch side by side, the
+subtitle's promise as a short headline) in en-US and de-DE, submitted via the Asset Library, and
+leave it there. No video, no tests, no per-release rework. It is free and it is the only lever on the
+search-results tap-through. It is ranked P3 because it only touches the iOS 27 slice of ~13
+impressions/day.
+
+### Tools evaluated — not adopted
+
+**vibe-aso** ([github.com/Kronop/vibe-aso](https://github.com/Kronop/vibe-aso), v0.1.0, evaluated
+2026-10-17). It is a Claude Code skill that covers keyword research, 50-locale metadata via `fastlane
+deliver`, a screenshot-heading renderer, GNI-band pricing, in-app localization and a submission
+checklist, with a small App Store Connect API client (`asc.rb`). **Not installed**, for three
+reasons:
+
+1. **It solves a launch problem, and this app's problem is authority.** Its own keyword reference
+   says so: *"An app with very few installs ranking ~1000 for a term in its own subtitle has an
+   authority problem, not a keyword problem — adding more keywords will not fix it; installs will."*
+   The keyword work it automates was already done here by hand, with the same autocomplete method
+   it falls back to without a paid data tool (Astro). See `marketing/app-store-subtitle-keywords.md`
+   §9.
+2. **Its central law contradicts the rating guardrail.** It requires fanning out to up to 49 locales
+   in one pass with no per-language review. Lever #2 deliberately gates new locales on evidence,
+   because a listing in a language the app doesn't speak is a 1-star risk (§4.2,
+   `monetization-strategy.md` §10).
+3. **The rest is already covered or doesn't apply.** Screenshots come from `fastlane snapshot`.
+   Submission isn't a first release. Pricing isn't the constraint (§1, zero revenue at any price).
+   Metadata here is pasted by hand on purpose, which is the release command's "proposal, not
+   publication" rule. vibe-aso writes `fastlane/metadata/` and pushes it, which conflicts with that
+   rule. It also needs fastlane ≥ 2.234 and the repo has 2.228.
+
+**Worth borrowing if ever needed:** the `asc.rb` read-back pattern (an ES256 JWT, no gems). With an
+App Store Connect API key (App Manager role, stored outside the repo), it would let Claude verify live
+keyword fields and pull Analytics Reports instead of reading screenshots. That is the gap §1.3 had to
+work around. Revisit only if pasting metadata ever becomes the bottleneck.
 
 ### 9. Full app localization (P3)
 
@@ -911,7 +1007,7 @@ soon as the page exists. The lifetime/one-time packaging discussion (#14) belong
 phase, when there is finally a population reaching a paywall for it to act on.
 
 **Phase D — compound it.** Additional metadata locales (#2 steps 2–3) informed by what Phase A
-moved, In-App Events (#7), Custom Product Pages (#8) once there is off-store traffic to route.
+moved, In-App Events (#7), Custom Product Pages (#8 — keyword-linked organic pages need no off-store traffic, §4.8), creative assets (#19).
 
 **Phase E — commit to markets.** Full app localization (#9) for whichever markets Phase D proved,
 after the i18n-foundation prerequisites. Reconsider Search Ads (#10) — and only once #13 has moved
