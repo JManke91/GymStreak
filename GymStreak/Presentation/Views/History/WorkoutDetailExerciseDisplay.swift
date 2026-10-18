@@ -59,3 +59,36 @@ struct WorkoutDetailExerciseDisplay: Identifiable, Equatable {
             }
     }
 }
+
+/// The exercise section as the screen draws it: a standalone exercise is a
+/// one-member group, a superset is one group carrying the letter the rest of
+/// the app knows it by.
+///
+/// Built once per load, next to the other display state — the walk below
+/// touches every exercise's `setsList`, which must never happen from `body`.
+struct WorkoutDetailExerciseGroup: Identifiable, Equatable {
+    /// The superset's id, or the lone member's exercise id.
+    let id: UUID
+    /// `nil` for a standalone exercise — and for a superset with a single
+    /// member, which is drawn as one; a frame around one block says nothing.
+    /// Letters follow first appearance in `order`, exactly as the active
+    /// workout labels them, so "Superset B" here is the same B the user
+    /// trained under.
+    let supersetLetter: String?
+    /// In `supersetOrder` for a superset.
+    let exercises: [WorkoutDetailExerciseDisplay]
+
+    static func make(from session: WorkoutSession) -> [WorkoutDetailExerciseGroup] {
+        let letters = SupersetLabelProvider.labels(for: session.workoutExercisesList)
+        return session.exercisesGroupedBySupersets.compactMap { members in
+            guard let first = members.first else { return nil }
+            let supersetId = first.supersetId
+            let letter = members.count > 1 ? supersetId.flatMap { letters[$0] } : nil
+            return WorkoutDetailExerciseGroup(
+                id: supersetId ?? first.id,
+                supersetLetter: letter,
+                exercises: members.map(WorkoutDetailExerciseDisplay.init)
+            )
+        }
+    }
+}

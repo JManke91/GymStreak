@@ -167,10 +167,12 @@ applies: profile the first real Hevy file before trusting this table.
   `WorkoutSession.exercisesGroupedBySupersets` groups them. Groups are scoped per workout: the same
   id in two workouts makes two supersets. Consecutive rows form one block only while both the name
   and the superset group stay the same.
-  **Display gap (open, ticket `08`):** the History detail (`WorkoutDetailView.exercisesSection`)
-  lists exercises flat by `order` and shows no superset grouping, for recorded workouts as well as
-  imported ones. The ticket assumed it did. The data is written correctly, so a grouped display
-  added there picks imported supersets up with no import change.
+  **Display (closed 2026-10-19, ticket `08`):** the History detail groups exercises sharing a
+  `supersetId` into one lettered frame (`WorkoutDetailExerciseGroup`, see
+  `docs/superset-feature.md` "History Detail - Superset Display"). Until then it listed exercises
+  flat by `order`, for recorded workouts as well as imported ones, and ticket `02` had assumed
+  otherwise. No import-side change was needed: `HevyHistoryImportStoreTests.importsWithSupersets`
+  asserts an imported superset reaches the detail rows grouped.
 - **Units:** the stored value is `WeightUnit.kilograms(fromDisplay:)` of the file value in the
   chosen unit. Kilograms stay canonical (`docs/weight-unit-preference.md` §2).
 - **Cardio rows** (weight 0 and reps 0, with distance or seconds > 0) are skipped and counted.

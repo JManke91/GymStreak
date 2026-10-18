@@ -31,6 +31,12 @@ struct WorkoutDetailView: View {
     /// Trained-muscle picture for the map card. Derived once per load — the aggregation walks
     /// the session's exercises and sets, so it must stay off the render path.
     @State private var muscleMap: MuscleMapCardModel = .empty
+    /// The exercise section's rows, supersets already grouped and lettered. Built once per
+    /// load and after an edit: the grouping and every block's set values come from one walk of
+    /// the session graph, so the exercise section never reads a `WorkoutExercise` or its
+    /// `setsList` from `body`. (The stat grid and the overload section still do — see
+    /// `docs/history-performance.md` §8.)
+    @State private var exerciseGroups: [WorkoutDetailExerciseGroup] = []
     @State private var showingEdit = false
     @State private var showingDeleteConfirmation = false
     /// Set the moment deletion is confirmed, so `body` stops walking
@@ -123,6 +129,7 @@ struct WorkoutDetailView: View {
             }
         }
         .task {
+            loadExerciseGroups()
             loadMuscleMap()
             await loadAppliedOverloads()
             await loadPRs()
@@ -160,10 +167,13 @@ struct WorkoutDetailView: View {
         }
     }
 
-    /// Re-derives PR badges, vs-previous comparisons and coach state after the user
-    /// edits the session. The set grid itself is @Model-observed and updates on its own.
+    /// Re-derives the exercise rows, PR badges, vs-previous comparisons and coach state
+    /// after the user edits the session. The rows are value structs built from the model,
+    /// not observed from it, so the edit sheet's changes reach the set grid only through
+    /// this reload.
     private func reloadAfterEdit() {
         Task {
+            loadExerciseGroups()
             loadMuscleMap()
             await loadPRs()
             await loadComparisons()
@@ -445,21 +455,41 @@ struct WorkoutDetailView: View {
                 .padding(.top, 6)
                 .padding(.bottom, 4)
 
-            let exercises = workout.workoutExercisesList.sorted(by: { $0.order < $1.order })
-            VStack(spacing: 8) {
-                ForEach(exercises, id: \.id) { exercise in
-                    WorkoutDetailExerciseBlock(
-                        display: WorkoutDetailExerciseDisplay(exercise),
-                        prDetail: prDetails[exercise.id],
-                        comparison: comparisons[exercise.id]
-                    )
+            // Lazy because the rows are value structs now: building one on scroll touches no
+            // `@Model`, so deferring offscreen rows is pure saving (rendering rule 1).
+            LazyVStack(spacing: 8) {
+                ForEach(exerciseGroups) { group in
+                    if let letter = group.supersetLetter {
+                        WorkoutDetailSupersetGroup(letter: letter, exerciseCount: group.exercises.count) {
+                            ForEach(group.exercises) { display in
+                                exerciseBlock(display)
+                            }
+                        }
+                    } else if let display = group.exercises.first {
+                        exerciseBlock(display)
+                    }
                 }
             }
             .padding(.horizontal, 16)
         }
     }
 
+    private func exerciseBlock(_ display: WorkoutDetailExerciseDisplay) -> some View {
+        WorkoutDetailExerciseBlock(
+            display: display,
+            prDetail: prDetails[display.id],
+            comparison: comparisons[display.id]
+        )
+    }
+
     // MARK: - Data loading
+
+    /// Builds the exercise section's rows — supersets grouped and lettered, each block's
+    /// set values resolved — in one walk of the session graph, off the render path.
+    @MainActor
+    private func loadExerciseGroups() {
+        exerciseGroups = WorkoutDetailExerciseGroup.make(from: workout)
+    }
 
     /// Derives which muscle regions this session trained. One traversal of the session graph,
     /// run when the screen loads and after an edit — never from a view body.

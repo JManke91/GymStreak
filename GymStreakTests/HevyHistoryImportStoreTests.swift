@@ -42,6 +42,11 @@ struct HevyHistoryImportStoreTests {
         #expect(superset.map(\.supersetOrder) == [0, 1])
         #expect(groups[0][0].supersetId == nil)
         #expect(groups[0][0].setsList.count == 2, "the warm-up set is not imported")
+        // The History detail draws its rows from this — an imported superset shows grouped
+        // there with no import-side change (docs/history-import.md §3).
+        let rows = WorkoutDetailExerciseGroup.make(from: push)
+        #expect(rows.map(\.supersetLetter) == [nil, "A"])
+        #expect(rows[1].exercises.map(\.name) == ["Cable Fly (Cable)", "Triceps Pushdown (Cable)"])
     }
 
     @Test("Superset ids are scoped per workout")

@@ -870,3 +870,24 @@ notifications (ticket 01 of the same set) and this fix are independent and multi
 - **`WorkoutCardView` still lacks `.equatable()`** at both call sites — see the bullet above for
   why its cost is smaller than the routine card's, and why the comment on its `==` is untrue as
   written. A one-line change at `TrainingsTabView.swift:216` and `HistoryCalendarView.swift:303`.
+
+## 8. Known-open on the workout detail (2026-10-19)
+
+Found by the architecture review of the History superset grouping (`docs/superset-feature.md`,
+"History Detail - Superset Display"), which moved the exercise section's rows off the render
+path (`@State [WorkoutDetailExerciseGroup]`, built once per load). Two body-path walks on
+`WorkoutDetailView` pre-date that change and were deliberately left alone as out of scope:
+
+- `statsGrid` reads `completedSetsCount`, `totalVolume` and `completionPercentage` separately —
+  three traversals of the session graph per evaluation, where `WorkoutSession.aggregates` does
+  it in one (`Models.swift`, the comment above `aggregates` says body-adjacent callers must use
+  it).
+- `qualifyingOverloadExercises` filters `workoutExercisesList` with
+  `hasRepRangeGoal && allCompletedSetsAtUpperLimit` on every evaluation (rendering rule 3).
+
+Both matter because the screen observes `WorkoutViewModel` as a whole (`@ObservedObject`), which
+owns the timer-driven `elapsedTime` / `restTimeRemaining` — so while a workout or rest timer is
+running, this body re-evaluates every tick (rule 6). The fix is the same shape as the exercise
+section: derive once in `.task` / `reloadAfterEdit` into `@State`, or narrow the observation.
+One session's graph is small, so this is a follow-up, not a regression — but it is the reason
+the `exerciseGroups` comment in the view is scoped to the exercise section only.

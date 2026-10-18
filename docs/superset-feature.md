@@ -436,6 +436,19 @@ For **deleting**:
 
 Workout labels are computed from `WorkoutSession.workoutExercisesList` using `SupersetLabelProvider.labels(for:)`.
 
+### History Detail - Superset Display (2026-10-19)
+
+**Files:** `GymStreak/Presentation/Views/History/WorkoutDetailExerciseDisplay.swift` (`WorkoutDetailExerciseGroup`), `GymStreak/Presentation/Views/History/Components/WorkoutDetailSupersetGroup.swift`, `GymStreak/Presentation/Views/History/WorkoutDetailView.swift` (`exercisesSection`).
+
+A recorded workout's detail screen groups the exercises that share a `supersetId` the way the active workout does: the member blocks sit inside a frame in the group's colour with the "Superset A (2 exercises)" capsule on top and a connecting line down the leading edge (`WorkoutDetailSupersetGroup`, a read-only sibling of `SupersetWorkoutGroupView` — no rest-time control, a recorded round has nothing to configure). Standalone exercises render exactly as before. This closes the display gap ticket `08` of the positioning work found: until then `WorkoutDetailView.exercisesSection` listed exercises flat by `order`, so supersets recorded in the app, and the ones the Hevy import writes (`docs/history-import.md` §3), read as separate exercises in History.
+
+- **Grouping is display state, not a body computation.** `WorkoutDetailExerciseGroup.make(from:)` runs once per load in `WorkoutDetailView.loadExerciseGroups()` (first thing in `.task`, again in `reloadAfterEdit`) and stores `[WorkoutDetailExerciseGroup]` in `@State`. It walks `WorkoutSession.exercisesGroupedBySupersets` once, assigns letters from `SupersetLabelProvider.labels(for:)` and maps every member to a `WorkoutDetailExerciseDisplay`. The exercise section's `ForEach` therefore reads value structs only, and now sits in a `LazyVStack` (rendering rule 1 — safe precisely because a row built on scroll touches no `@Model`); before this change it built each block's display struct — and so walked `setsList` — from `body` in a plain `VStack`, which rendering rule 4 forbids. The review also noted two pre-existing body-path walks elsewhere on the same screen (`statsGrid`, `qualifyingOverloadExercises`); they are out of this ticket's scope and recorded as follow-up in `docs/history-performance.md` §8.
+- **Letters match the live workout.** They follow first appearance in `order` over *all* exercises, so "Superset B" in History is the B the user trained under, even when A had dissolved to a single member.
+- **A single-member superset is drawn standalone** (`supersetLetter == nil`), as the active workout does for `group.count == 1` — a frame around one block says nothing. The letter it consumed is still skipped by the next group, keeping the labels stable.
+- **Edits reach the grid only through the reload.** The rows are built from the model, not observed from it, so `reloadAfterEdit` rebuilds them alongside PRs and comparisons; the old comment claiming the set grid was `@Model`-observed is gone with the code it described.
+- Group identity for `ForEach` is the `supersetId` (standalone: the exercise id). PR details and comparisons keep their `WorkoutExercise.id` keys and are looked up per block, so nothing about them changed.
+- Tests: `GymStreakTests/WorkoutDetailExerciseGroupTests.swift` (grouping, letter order, single-member superset, no-superset ordering) and an assertion in `HevyHistoryImportStoreTests.importsWithSupersets` that an imported superset reaches the detail rows grouped.
+
 ### Rest Timer Config
 
 - **Standalone**: Regular `RestTimerConfigView` per exercise
@@ -595,6 +608,8 @@ that activating it does anything.
 | `GymStreak/Presentation/Views/Routines/CreateRoutineFlow/CreateRoutineView.swift` + `CreateRoutineView+Exercises.swift` | Create-Routine screen: detail-style cards, `SupersetGroupContainer`, `SupersetLinkButton`, sorting mode |
 | `GymStreak/Presentation/Views/Routines/RoutineSortingRows.swift` | `RoutineSortingRow` (standalone) and `RoutineSortingGroupRow` (superset as one framed block) |
 | `GymStreak/Presentation/Views/Workout/ActiveWorkoutView.swift` | `SupersetWorkoutGroupView` with letter/color; `WorkoutExerciseCardView` / `WorkoutExerciseCollapsedRow` with position/total badges |
+| `GymStreak/Presentation/Views/History/WorkoutDetailExerciseDisplay.swift` | `WorkoutDetailExerciseGroup` — the History detail's rows with supersets grouped and lettered, built once per load |
+| `GymStreak/Presentation/Views/History/Components/WorkoutDetailSupersetGroup.swift` | Read-only superset frame (capsule + colour + connecting line) around the member blocks in the History detail |
 
 ### watchOS Views
 | File | Contains |
