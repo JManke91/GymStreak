@@ -27,7 +27,7 @@ struct WatchConditioningIngestorTests {
     private func makeIngestor() -> (WatchConditioningIngestor, SwiftDataConditioningRecordRepository, ModelContainer) {
         let container = InMemoryModelContainer.make()
         let records = SwiftDataConditioningRecordRepository(modelContext: container.mainContext)
-        let ingestor = WatchConditioningIngestor(records: records, defaults: UserDefaults(suiteName: UUID().uuidString)!)
+        let ingestor = WatchConditioningIngestor(records: records, matSessions: SwiftDataMatSessionRepository(modelContext: container.mainContext), defaults: UserDefaults(suiteName: UUID().uuidString)!)
         return (ingestor, records, container)
     }
 
@@ -126,7 +126,7 @@ struct WatchConditioningIngestorTests {
         let target = try #require(program.dashboard?.progress.first)
         #expect(target.completed == 0)
 
-        let ingestor = WatchConditioningIngestor(records: records, defaults: UserDefaults(suiteName: UUID().uuidString)!)
+        let ingestor = WatchConditioningIngestor(records: records, matSessions: SwiftDataMatSessionRepository(modelContext: container.mainContext), defaults: UserDefaults(suiteName: UUID().uuidString)!)
         _ = ingestor.ingest(session(type: target.id, start: now.addingTimeInterval(-3_600)))
         program.refresh()
 

@@ -245,8 +245,13 @@ window.
 
 ### Known OS caveats (verify on hardware)
 
-- **Simulator does not reliably trigger `handleActiveWorkoutRecovery()`** — test
-  recovery on a physical Apple Watch.
+- **The watchOS 26.5 simulator does trigger `handleActiveWorkoutRecovery()`**
+  (observed 2026-10-18, Xcode 26): a `kill -9` of the app mid-workout is followed
+  within seconds by a system relaunch (`watchkit:///recoverworkout`), and
+  `recoverActiveWorkoutSession` re-adopts the session. The agent-run E2E checks
+  rely on this (docs/agent-e2e-verification.md). An earlier note here said the
+  simulator was unreliable; a physical watch is still the final word for the
+  timing and for reboots.
 - **Recovery is crash-scoped, not reboot-scoped.** `recoverActiveWorkoutSession`
   reattaches a session the system `workoutd` daemon kept alive across an app
   crash/force-quit. A device **reboot** terminates `workoutd`, so no session

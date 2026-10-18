@@ -34,6 +34,9 @@ enum HeartRateZones {
     /// Aerobic zone: 60–75 % of HRmax, or 50–70 % of heart-rate reserve.
     static let aerobicPercentOfMax = 60...75
     static let aerobicPercentOfReserve = 50...70
+    /// Mat sessions: hard work from 85 % of HRmax, or 80 % of heart-rate reserve.
+    static let hardPercentOfMax = 85
+    static let hardPercentOfReserve = 80
 
     /// Tanaka: HRmax ≈ 208 − 0.7 × age.
     static func estimatedMaxHeartRate(age: Int) -> Int {
@@ -107,6 +110,20 @@ enum HeartRateZones {
             method: .percentOfMax,
             isMaxEstimated: isEstimated
         )
+    }
+
+    /// The bands the watch's mat-session intensity suggestion reads: "moderate" from
+    /// the top of the aerobic zone, "hard" from `hardPercentOf…`. `nil` exactly when
+    /// there is no aerobic target — no or invalid profile, or the medication switch.
+    static func matIntensityZones(for profile: HeartRateProfile?) -> MatIntensityZones? {
+        guard let aerobic = aerobicTarget(for: profile), let profile,
+              let max = maxHeartRate(for: profile) else { return nil }
+        let hard = if let resting = profile.restingHeartRate {
+            karvonen(hardPercentOfReserve, max: max, resting: resting)
+        } else {
+            Int((Double(max * hardPercentOfMax) / 100).rounded())
+        }
+        return MatIntensityZones(moderateFromBPM: aerobic.upperBPM, hardFromBPM: hard)
     }
 
     /// The heart-rate target for one effort. Only the conversational aerobic

@@ -1413,7 +1413,177 @@ gets its divider; strength statistics (week hero, calendar, session count, last 
 identical with and without mat sessions; mat sessions in the current week leave the program's
 weekly progress and today's suggestion unchanged.
 
-**Watch target.** Unchanged by this ticket. Recording on the watch is ticket 05.
+**Watch target.** Unchanged by ticket 04. Recording on the watch is ticket 05, below.
+
+## Mat sessions on the watch (positioning ticket 05 — record a mat session live)
+
+**Status (2026-10-17): implemented, both suites green, architecture review run; awaiting device
+verification** (ticket `.scratch/positioning-usp/issues/05-record-mat-session-watch.md`).
+
+**What the user gets.** A **Mat session** row at the bottom of the watch's routine list ("BJJ,
+sparring, pads"), and as an action in the empty state, because recording sparring needs no routine and
+no program. It opens the sport list (the same six as the iPhone); tapping a sport starts a live
+workout. The recorder is the conditioning runner's pager: Pause/End one swipe to the left, and on the
+main page the sport, the elapsed time, and live heart rate, with the runner's measuring and missing
+states. End (confirmed) opens a **review**: duration, "Avg 152 · max 181 bpm", and the three
+intensities, preset to the **suggested intensity** ("Suggested from your heart-rate zones") or, without
+a suggestion, "How hard was it?" with none selected. One tap changes it. **Save** writes Apple Health,
+queues the session for the iPhone, and shows "Session saved". A session ended under a minute is
+discarded (the dialog says so).
+
+**Reuse, not a second runner.** Every piece of live-workout plumbing is the conditioning runner's:
+
+| Concern | Reused | Mat-specific |
+|---|---|---|
+| HealthKit live session | `WatchConditioningWorkoutManager`: a second instance, through the new `MatSessionWorkoutRecording` protocol (`start(sport:)`, `finishMatSession`) | the sport's configuration and `GymStreakSessionKind = "mat"` |
+| Clock | `ConditioningClock` (wall clock minus pauses) | — |
+| Heart-rate display | `ConditioningHeartRateReading`, `ConditioningHeartRateValue`, `ConditioningControlsPage` | `MatSessionLivePage` |
+| Crash boundary | `WatchSessionCheckpointStore<Checkpoint>` (the conditioning store, made generic) | `WatchMatSessionCheckpoint`, file `Conditioning/mat-session-checkpoint.json` |
+| Watch → iPhone | `WatchSessionOutbox<Entry>` (the conditioning outbox, made generic), `transportConditioningSessions()`, the `conditioningAck` | `WatchMatSessionOutbox`, file `Conditioning/mat-outbox.json`, payload key `matSession` |
+| Recovery | `WatchWorkoutRecoveryCoordinator` | `resumeMatSession` |
+
+`WatchConditioningOutbox` and `WatchConditioningCheckpointStore` remain as typealiases, so no
+conditioning call site changed. The existing `outbox.json` decodes unchanged.
+
+**Apple Health.** The same mapping as the iPhone's logged session
+(`WatchConditioningWorkoutManager.configuration(forSport:)` mirrors
+`HealthKitWorkoutManager.configuration(for: MatSport)`): BJJ / MMA / Muay Thai → `.martialArts`,
+boxing → `.boxing`, wrestling → `.wrestling`, other → `.other`, all indoor. Metadata: external UUID =
+session id, brand name = localized sport, `GymStreakSessionKind = "mat"`, so the iPhone's recovery
+drain skips it (it skips any session kind since ticket 04). **End pauses the HealthKit session; Save
+finishes it at the moment End was tapped.** The intensity is part of the History record, not of the
+Health workout, so nothing is saved before the user confirms it. Meanwhile the paused session cannot
+add time, and the checkpoint carries `endedAt`, so a crash on the review screen comes back to the review.
+
+**The suggested intensity: a documented zone-time rule (`MatIntensitySuggestion`, watch, pure).**
+
+1. Bands come from the user's personal heart-rate profile (ticket 03), computed on the iPhone by
+   `HeartRateZones.matIntensityZones(for:)`. **Moderate** starts at the top of the aerobic zone (75 %
+   HRmax, or 70 % of heart-rate reserve with a resting HR: `aerobicTarget.upperBPM`). **Hard** starts at
+   85 % HRmax, or 80 % of reserve (`hardPercentOfMax` / `hardPercentOfReserve`). `nil` exactly when
+   there is no aerobic target: no or invalid profile, or the medication switch.
+2. `MatHeartRateTally` folds the live samples into session time. Each sample's value holds until the
+   next one, capped at **15 s** (`maximumGap`), so a dropout or a crash gap is not counted as minutes
+   at the last value. It keeps measured time, time in the moderate band, time in the hard band, a
+   time-weighted average and the maximum (the review's numbers).
+3. On shares of *measured* time: **≥ 20 % hard → hard sparring**; otherwise **≥ 40 % moderate or hard
+   → moderate**; otherwise **drilling**. **No suggestion** without bands or with **< 5 min** of heart
+   rate. The user then picks, and Save stays disabled until they do.
+
+The thresholds are a heuristic, not a validated model: sparring rounds are a fraction of a class,
+hence 20 % rather than a majority. They are constants in one place, and the rule is unit-tested. The
+bands are snapshotted at start, like the conditioning runner's range.
+
+**How the bands reach the watch.** They ride the **conditioning offer**, as an optional
+`matIntensityZones` on `WatchConditioningProgram` (`WatchMatIntensityZones`, two integers). No new
+context key, no new publish path: `watchOffer()` sets them on every offer, **including the empty
+"not enrolled" one**, so a fighter who never enrolled still gets a suggestion. They republish on every
+activation and every profile save, like the offer. The watch reads them from the stored program
+regardless of `validUntil` (they do not expire with the program week). An older iPhone sends no field,
+so the watch shows no suggestion.
+
+**iPhone History (sync).** `WatchCompletedMatSession` (id, start, end, sport, intensity,
+`isSavedToHealth`) goes through the ticket-07 path with its guarantees: durable in the watch outbox
+until the iPhone's ack, sent by `transferUserInfo` from every existing trigger (enqueue, activation,
+reachability, the iPhone's drain request), idempotent on the iPhone. The payload carries the
+conditioning id key (`conditioningSessionId`), so the outstanding-transfer check and the
+`conditioningAck` cover it unchanged. The ack is applied to both outboxes; an id lives in exactly one.
+On the iPhone, `WatchConnectivityManager.onMatSessionReceived` → `WatchConditioningIngestor.ingest(_:
+WatchCompletedMatSession)` → a **`MatSession`**, the record type ticket 04 created
+(`WatchConditioningMapper.matSession(from:)`). It shares the conditioning ingest's private idempotency
+helper and its receipt list (UUIDs, so one list serves both kinds). The iPhone never writes Health for
+it. It posts `.historySourceDataDidChange` and, unlike conditioning, **does not refresh the program**:
+a mat session never completes a program target, on either device, by construction.
+
+**Duration.** The record ends at *start + session time*, so pauses are excluded, as they are from the
+Health workout. A logged iPhone session has no pauses, so the two agree.
+
+**Crash recovery.** As for the conditioning runner: the checkpoint is written on start, pause, resume,
+**once a minute** (the tally is not wall-clock-derivable, unlike the clock) and on end. On relaunch,
+`resumeMatSession` runs **before** `resumeConditioning` and takes the recovered HealthKit session only
+when its activity type is the checkpoint sport's; `resumeConditioning` now likewise requires the
+checkpoint modality's activity type (it used to accept anything but strength), which closes the
+case of a live mat session whose own checkpoint write failed beside a stale conditioning checkpoint. A stale checkpoint of one kind therefore never
+adopts the other's session, and a mat checkpoint without a matching live session is discarded. A
+running session resumes where the clock says, a reviewing one comes back to the review.
+
+**Deliberate omissions.**
+- **No heart rate in the iPhone record.** `MatSession` has no average/max fields. Adding them is a new
+  CloudKit schema deploy for numbers Apple Health already holds (the watch workout carries the full
+  heart-rate series). The review shows them on the watch. To restore: add optional fields to
+  `MatSession` and `WatchCompletedMatSession`, then deploy the schema.
+- **No note on the watch.** Typing on the wrist is not worth it; it can be added on the iPhone later.
+  (Editing a mat session on the iPhone does not exist yet either.)
+- **No start right after a strength workout.** The conditioning runner's "queue until the strength
+  session has ended" path is not wired for mat sessions. Starting while a strength session is still
+  ending shows "Couldn't start the session".
+- **No live zone nudge.** Sparring is not steered by heart rate.
+- **The row is always on the list**, for lifters too: the watch has no signal for who fights until
+  the lift-or-fight onboarding (ticket 06) exists.
+
+**Monetization.**
+
+```
+Monetization verdict — record a mat session on the watch
+  Tier          Free
+  Derivation    §3 Rule 3 (watch app, in-session) and Rule 4 (the user's own logged data)
+  Mechanism     n/a — nothing is gated
+  Placement     none
+  Nudge         none
+  Free residue  the entire feature
+  Founder note  n/a — nothing gated
+```
+
+Re-checked at completion: no watch mat file reads an entitlement, shows an `OnyxProBadge` or a placement.
+
+**Components.**
+
+| Target | File | Role |
+|---|---|---|
+| Shared (identical) | `WatchConditioningModels.swift` — `WatchMatIntensityZones`, `matIntensityZones`, `WatchCompletedMatSession`, `completedMatSessionKey`, mat `userInfo` / decode | wire |
+| iOS Domain | `HeartRateProfile.swift` (`MatIntensityZones`), `HeartRateZones.matIntensityZones(for:)`, `ConditioningWatchOffer.matIntensityZones` | bands |
+| iOS Presentation | `ConditioningProgramViewModel+WatchOffer.swift` (bands on every offer) | publish |
+| iOS Data | `WatchConditioningMapper` (bands, `matSession(from:)`), `WatchConditioningIngestor` (mat ingest), `WatchConnectivityManager.onMatSessionReceived` | wire + ingest |
+| iOS App | `AppDependencies` (ingestor gets the mat repository, History notification) | wiring |
+| watch Models | `MatSession/MatHeartRateTally.swift` (sport/intensity enums, tally, rule), `WatchMatSessionCheckpoint.swift`, `WatchMatSessionCopy.swift` | pure logic, crash boundary, copy |
+| watch Managers | `WatchConditioningWorkoutManager` (`MatSessionWorkoutRecording`), `WatchConditioningOutbox.swift` (generic), `WatchConnectivityManager` (mat outbox, transport, ack), `WatchWorkoutRecoveryCoordinator.resumeMatSession` | HealthKit, sync, recovery |
+| watch ViewModels | `WatchMatSessionViewModel.swift` (+ `+State.swift`: states and review values) | the recorder |
+| watch Views | `MatSession/MatSessionSportPickerView` (+ `MatSessionEntryRow`), `MatSessionRunnerView` (+ live page), `MatSessionReviewView`; row and empty-state action in `RoutineListView`; cover in `RootView`; `AppState` wiring | screens |
+
+Strings: 26 new English-key entries with German in the watch `Localizable.xcstrings` (sports and
+intensities in the iPhone's wording, recorder, review and saved copy). No new iOS strings.
+
+**Tests.** Watch `WatchMatSessionTests`: time-weighted average and maximum; the 15 s gap cap; band
+attribution and an idempotent close; no suggestion without bands or under 5 min; the 20 % / 40 %
+rule at its boundaries; a session under a minute is discarded and queues nothing; end → review with the
+suggestion, the Health session paused rather than finished, nothing queued until Save, one tap
+changes it, and Save finishes at the end moment and queues one entry with the same id; without bands
+the user must pick; a failed Health save is still queued as not-in-Health; pauses are excluded from the
+duration; a relaunch resumes a running session without a new start and a reviewing one on the review,
+then saves the same session; the mat outbox survives relaunch in its own file and leaves only on its
+ack; the wire carries the shared id key; the sport → activity-type mapping. iOS
+`WatchMatSessionIngestTests`: bands from % max and from reserve, none without a profile or with
+medication; bands ride the empty offer and the wire; a watch mat session becomes one `MatSession` with
+the Health id only when saved, and never a `ConditioningRecord`; duplicates and a redelivery after
+delete; an already-present session is a duplicate. `sharedCopiesMatch` covers the wire file. Suites:
+iOS 1693/1693, watch 139/139 (2026-10-17).
+
+**Simulator end-to-end verification — PASSED (2026-10-18, 22/22).** `fastlane e2e_watch
+suite:mat_session` (docs/agent-e2e-verification.md) on a paired iPhone 17 Pro Max + Apple Watch
+Series 11 simulator: record → end → save; the Health workout read back as Martial Arts (28) / Boxing
+(8) / Wrestling (56) with session kind `mat`; heart rate recorded; one iPhone `MatSession` row and the
+watch outbox drained by the ack; with the iPhone simulator shut down at Save the session waits in
+the outbox and arrives once after reboot; a `kill -9` mid-session is relaunched by watchOS
+(`handleActiveWorkoutRecovery`) and resumes running with its elapsed time, and on the review screen it
+comes back on the review; both then save once. That run also led to conditioning and mat sessions
+taking the `sendMessage` fast path when reachable (docs/watch-sync.md) — watch→iPhone
+`transferUserInfo` never delivers between simulators.
+
+**Device verification (physical iPhone + Apple Watch, 2026-10-18).** Passed: the workout in the
+iPhone's Fitness app as Martial Arts, once; a session saved with the iPhone out of Bluetooth range
+arrived once in History when the iPhone came back (the queued `transferUserInfo` the simulator cannot
+deliver). The zone-based suggestion end to end is covered on the simulator with injected heart rate
+(`check_mat_suggestion_from_zones`); the real sensor reaching the zones is the only part not seen.
 
 ## Research findings — Apple Health / HealthKit (verified 2026-09-18)
 

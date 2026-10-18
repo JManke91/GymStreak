@@ -64,6 +64,14 @@ struct HeartRateTarget: Equatable, Sendable {
     let isMaxEstimated: Bool
 }
 
+/// Where a mat session's intensity bands begin, for the watch's suggestion
+/// (docs/fight-conditioning.md, "Mat sessions on the watch"): at or above
+/// `moderateFromBPM` is past the aerobic zone, at or above `hardFromBPM` is hard work.
+struct MatIntensityZones: Equatable, Sendable {
+    let moderateFromBPM: Int
+    let hardFromBPM: Int
+}
+
 /// Values read from Apple Health to pre-fill the profile. Any may be missing:
 /// nothing recorded, or read access denied — HealthKit does not say which.
 struct HeartRateHealthPrefill: Equatable, Sendable {

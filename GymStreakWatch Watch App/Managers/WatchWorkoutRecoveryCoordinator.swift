@@ -31,7 +31,10 @@ final class WatchWorkoutRecoveryCoordinator {
     private weak var healthKitManager: WatchHealthKitManager?
     private weak var conditioningRun: WatchConditioningRunViewModel?
     private weak var conditioningWorkout: WatchConditioningWorkoutManager?
+    private weak var matSession: WatchMatSessionViewModel?
+    private weak var matWorkout: WatchConditioningWorkoutManager?
     private let conditioningCheckpoints = WatchConditioningCheckpointStore()
+    private let matCheckpoints = WatchMatSessionCheckpointStore()
     private let checkpointStore = WatchActiveWorkoutCheckpointStore()
     private var syncState: WatchSyncStateStore { WatchConnectivityManager.shared.syncState }
 
@@ -47,12 +50,16 @@ final class WatchWorkoutRecoveryCoordinator {
         viewModel: WatchWorkoutViewModel,
         healthKitManager: WatchHealthKitManager,
         conditioningRun: WatchConditioningRunViewModel,
-        conditioningWorkout: WatchConditioningWorkoutManager
+        conditioningWorkout: WatchConditioningWorkoutManager,
+        matSession: WatchMatSessionViewModel,
+        matWorkout: WatchConditioningWorkoutManager
     ) {
         self.viewModel = viewModel
         self.healthKitManager = healthKitManager
         self.conditioningRun = conditioningRun
         self.conditioningWorkout = conditioningWorkout
+        self.matSession = matSession
+        self.matWorkout = matWorkout
         if pendingRequest { recoverIfNeeded() }
     }
 
@@ -79,14 +86,17 @@ final class WatchWorkoutRecoveryCoordinator {
     /// Resumes a conditioning session left running by a previous process, or
     /// discards its stale checkpoint cleanly. Returns whether `recovered` was taken.
     ///
-    /// Told apart from strength by the recovered session's activity type — the
-    /// strength session is always `.traditionalStrengthTraining` and HealthKit
-    /// restores the original configuration. No live session means the workout was
+    /// Told apart from strength and mat sessions by the recovered session's activity
+    /// type, which must be the checkpoint modality's — HealthKit restores the
+    /// original configuration. No live session means the workout was
     /// ended or never began; its checkpoint has nothing left to resume.
     private func resumeConditioning(_ recovered: HKWorkoutSession?) -> Bool {
         guard let checkpoint = conditioningCheckpoints.load() else { return false }
+        // The checkpoint modality's own activity type — never strength, and never a
+        // mat session whose own checkpoint write failed.
+        let activityType = WatchConditioningWorkoutManager.configuration(for: checkpoint.modality).activityType
         guard let recovered,
-              recovered.workoutConfiguration.activityType != .traditionalStrengthTraining,
+              recovered.workoutConfiguration.activityType == activityType,
               let conditioningRun, let conditioningWorkout else {
             conditioningCheckpoints.clear()
             print("WatchWorkoutRecovery: stale conditioning checkpoint discarded")
@@ -95,6 +105,26 @@ final class WatchWorkoutRecoveryCoordinator {
         conditioningWorkout.adopt(recovered)
         conditioningRun.resumeRecovered(from: checkpoint)
         print("WatchWorkoutRecovery: conditioning session resumed")
+        return true
+    }
+
+    /// The same for a mat session (positioning ticket 05), its own checkpoint file.
+    /// Runs before the conditioning check and claims only a session with the sport's
+    /// own activity type, so a stale checkpoint of one kind never adopts the other's.
+    private func resumeMatSession(_ recovered: HKWorkoutSession?) -> Bool {
+        guard let checkpoint = matCheckpoints.load() else { return false }
+        let activityType = WatchConditioningWorkoutManager
+            .configuration(forSport: checkpoint.sport.rawValue).activityType
+        guard let recovered,
+              recovered.workoutConfiguration.activityType == activityType,
+              let matSession, let matWorkout else {
+            matCheckpoints.clear()
+            print("WatchWorkoutRecovery: stale mat-session checkpoint discarded")
+            return false
+        }
+        matWorkout.adopt(recovered)
+        matSession.resumeRecovered(from: checkpoint)
+        print("WatchWorkoutRecovery: mat session resumed")
         return true
     }
 
@@ -111,10 +141,10 @@ final class WatchWorkoutRecoveryCoordinator {
 
         // Reconnect the live HealthKit session if one is still active.
         var recovered = await healthKit.recoverActiveSession()
-        // A conditioning session (ticket 06) is recovered first and entirely on its
+        // A mat or conditioning session (positioning 05, ticket 06) is recovered first and entirely on its
         // own path: it has no strength checkpoint and no queue entry, so the planner
         // below would otherwise finish it as an orphan.
-        if resumeConditioning(recovered) { recovered = nil }
+        if resumeMatSession(recovered) || resumeConditioning(recovered) { recovered = nil }
 
         var didRecoverLive = false
         if let session = recovered {

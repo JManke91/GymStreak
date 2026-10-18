@@ -536,12 +536,24 @@ final class AppDependencies: ObservableObject {
         // A conditioning session finished on the watch (ticket 07): History and the
         // program's progress follow it exactly like one run on the phone. The refresh
         // also republishes the offer, so the watch stops offering what was just done.
-        let conditioningIngestor = WatchConditioningIngestor(records: conditioningRecordRepository)
+        let conditioningIngestor = WatchConditioningIngestor(
+            records: conditioningRecordRepository,
+            matSessions: matSessionRepository
+        )
         watchConnectivity.onConditioningSessionReceived = { [weak self] completed in
             let outcome = conditioningIngestor.ingest(completed)
             if outcome == .inserted {
                 NotificationCenter.default.post(name: .historySourceDataDidChange, object: nil)
                 self?.conditioningProgram.refresh()
+            }
+            return outcome != .failed
+        }
+        // A mat session recorded on the watch (positioning ticket 05): History only —
+        // it never counts toward the program, so no refresh.
+        watchConnectivity.onMatSessionReceived = { completed in
+            let outcome = conditioningIngestor.ingest(completed)
+            if outcome == .inserted {
+                NotificationCenter.default.post(name: .historySourceDataDidChange, object: nil)
             }
             return outcome != .failed
         }

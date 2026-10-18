@@ -28,6 +28,9 @@ struct ConditioningWatchOffer: Equatable, Sendable {
     /// The end of the current program week: after it the offer is stale and the
     /// watch shows no conditioning entry until the iPhone publishes a new one.
     let validUntil: Date
+    /// For mat sessions recorded on the watch, whatever the program state — a
+    /// fighter need not be enrolled to record sparring. `nil` without a usable profile.
+    var matIntensityZones: MatIntensityZones?
 
     /// Not enrolled, paused, not started or completed: the watch shows nothing.
     static func none(on day: Date) -> ConditioningWatchOffer {

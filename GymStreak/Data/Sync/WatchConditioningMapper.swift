@@ -34,7 +34,24 @@ enum WatchConditioningMapper {
                         WatchHeartRateZone(lowerBPM: $0.lowerBPM, upperBPM: $0.upperBPM)
                     }
                 )
+            },
+            matIntensityZones: offer.matIntensityZones.map {
+                WatchMatIntensityZones(moderateFromBPM: $0.moderateFromBPM, hardFromBPM: $0.hardFromBPM)
             }
+        )
+    }
+
+    /// A mat session recorded on the watch → its History record (positioning ticket 05).
+    /// The same record type as one logged on the iPhone. The watch sends only values
+    /// this build knows (both ship together); anything else falls back to other/moderate.
+    static func matSession(from completed: WatchCompletedMatSession) -> MatSession {
+        MatSession(
+            id: completed.id,
+            startTime: completed.startTime,
+            endTime: completed.endTime,
+            sport: MatSport(rawValue: completed.sport) ?? .other,
+            intensity: MatIntensity(rawValue: completed.intensity) ?? .moderate,
+            healthKitWorkoutId: completed.isSavedToHealth ? completed.id : nil
         )
     }
 

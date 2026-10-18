@@ -27,6 +27,9 @@ final class WatchConnectivityManager: NSObject, ObservableObject, WatchSyncServi
     /// watch (docs/fight-conditioning.md, ticket 07). Returns whether it is now in
     /// History (inserted or already there) — only then is it acknowledged.
     var onConditioningSessionReceived: ((WatchCompletedConditioningSession) -> Bool)?
+    /// The same for a mat session recorded on the watch (positioning ticket 05); it
+    /// shares the conditioning ack.
+    var onMatSessionReceived: ((WatchCompletedMatSession) -> Bool)?
 
     /// State machine for the exercise-catalogue file sync. Lazy so `self` can
     /// be its transport; this manager is an app-lifetime singleton.
@@ -513,6 +516,16 @@ extension WatchConnectivityManager: WCSessionDelegate {
                 return
             }
             if onConditioningSessionReceived?(completed) == true {
+                acknowledgeConditioningSession(id: completed.id)
+            }
+            return
+        }
+        if payload[WatchConditioningWire.completedMatSessionKey] != nil {
+            guard let completed = WatchConditioningWire.completedMatSession(from: payload) else {
+                WatchSyncDiagnostics.error("phone: undecodable mat session via \(source) — ignored")
+                return
+            }
+            if onMatSessionReceived?(completed) == true {
                 acknowledgeConditioningSession(id: completed.id)
             }
             return

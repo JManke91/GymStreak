@@ -48,6 +48,8 @@ final class WatchConnectivityManager: NSObject, ObservableObject {
     /// Conditioning sessions finished here that the iPhone has not acknowledged yet
     /// (ticket 07). Sent from every trigger the workout queue is sent from.
     let conditioningOutbox = WatchConditioningOutbox()
+    /// Mat sessions recorded here (positioning ticket 05): the same transport and ack.
+    let matSessionOutbox = WatchMatSessionOutbox()
 
     private override init() {
         super.init()
@@ -63,6 +65,9 @@ final class WatchConnectivityManager: NSObject, ObservableObject {
             self?.publishChallengeContext()
         }
         conditioningOutbox.onEnqueued = { [weak self] in
+            self?.transportConditioningSessions()
+        }
+        matSessionOutbox.onEnqueued = { [weak self] in
             self?.transportConditioningSessions()
         }
         if WCSession.isSupported() {
@@ -157,20 +162,28 @@ final class WatchConnectivityManager: NSObject, ObservableObject {
         transportConditioningSessions()
     }
 
-    /// Sends every unacknowledged conditioning session (ticket 07) with
+    /// Sends every unacknowledged conditioning and mat session (tickets 07 and
+    /// positioning 05) with
     /// `transferUserInfo`, which WatchConnectivity queues while the iPhone is away.
     /// One already in the system queue is not queued again; one delivered but not
     /// yet acknowledged may be, and the iPhone answers that duplicate with an ack.
+    /// While the iPhone is reachable each also goes by `sendMessage`, the strength
+    /// workouts' fast path — the only one that delivers between simulators
+    /// (docs/agent-e2e-verification.md).
     func transportConditioningSessions() {
         guard let session, session.activationState == .activated,
-              !conditioningOutbox.pending.isEmpty else { return }
+              !conditioningOutbox.pending.isEmpty || !matSessionOutbox.pending.isEmpty else { return }
         let outstanding = Set(session.outstandingUserInfoTransfers.compactMap {
             $0.userInfo[WatchConditioningWire.completedSessionIdKey] as? String
         })
-        for completed in conditioningOutbox.pending where !outstanding.contains(completed.id.uuidString) {
-            guard let payload = WatchConditioningWire.userInfo(for: completed) else { continue }
+        let payloads = conditioningOutbox.pending.map { ($0.id, "conditioning", WatchConditioningWire.userInfo(for: $0)) }
+            + matSessionOutbox.pending.map { ($0.id, "mat", WatchConditioningWire.userInfo(for: $0)) }
+        for (id, kind, payload) in payloads {
+            guard let payload else { continue }
+            if session.isReachable { sendWorkoutMessage(payload) }
+            guard !outstanding.contains(id.uuidString) else { continue }
             session.transferUserInfo(payload)
-            WatchSyncDiagnostics.info("watch: sent conditioning session \(WatchSyncDiagnostics.shortID(completed.id)) to iPhone")
+            WatchSyncDiagnostics.info("watch: sent \(kind) session \(WatchSyncDiagnostics.shortID(id)) to iPhone")
         }
     }
 
@@ -365,8 +378,10 @@ extension WatchConnectivityManager: WCSessionDelegate {
             return
         }
         if let ackString = payload[WatchConditioningWire.ackKey] as? String, let id = UUID(uuidString: ackString) {
+            // One ack key for both kinds; the id is in exactly one outbox.
             conditioningOutbox.acknowledge(id: id)
-            WatchSyncDiagnostics.info("watch: conditioning session \(WatchSyncDiagnostics.shortID(id)) acknowledged by iPhone")
+            matSessionOutbox.acknowledge(id: id)
+            WatchSyncDiagnostics.info("watch: session \(WatchSyncDiagnostics.shortID(id)) acknowledged by iPhone")
             return
         }
         if let record = TemplateAckRecord.from(payload: payload) {

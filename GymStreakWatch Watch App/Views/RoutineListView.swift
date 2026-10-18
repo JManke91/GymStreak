@@ -33,6 +33,10 @@ struct RoutineListView: View {
             }
         }
         .navigationTitle("Routines")
+        // On the group, so the empty state's entry reaches it too.
+        .navigationDestination(for: MatSessionDestination.self) { _ in
+            MatSessionSportPickerView()
+        }
         // `onDismiss` is the documented, single-fire signal for an actual
         // cover dismissal (unlike `.onDisappear`, which can fire on wrist-down
         // and would wrongly kill a live workout). All visible-state teardown is
@@ -125,6 +129,10 @@ struct RoutineListView: View {
                     Text("All Routines")
                 }
             }
+
+            Section {
+                MatSessionEntryRow()
+            }
         }
         .listStyle(.carousel)
         .navigationDestination(for: ConditioningDestination.self) { _ in
@@ -184,6 +192,11 @@ struct RoutineListView: View {
             Label("No Routines", systemImage: "dumbbell")
         } description: {
             Text("Create routines in GymStreak on your iPhone")
+        } actions: {
+            // Recording sparring needs no routine.
+            NavigationLink(value: MatSessionDestination()) {
+                Label("Mat session", systemImage: "figure.martial.arts")
+            }
         }
     }
 }
@@ -243,6 +256,13 @@ struct RoutineRowView: View {
                 workout: WatchConditioningWorkoutManager(),
                 checkpoints: nil,
                 outbox: nil,
+                isOtherWorkoutActive: { false }
+            ))
+            .environment(WatchMatSessionViewModel(
+                workout: WatchConditioningWorkoutManager(),
+                checkpoints: nil,
+                outbox: nil,
+                zones: { nil },
                 isOtherWorkoutActive: { false }
             ))
     }

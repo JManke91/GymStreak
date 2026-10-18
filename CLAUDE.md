@@ -63,6 +63,7 @@ Principles for how to work in this repo. They apply to every model; they matter 
 - For every code change check if an existing feature is modified and if there already is a corresponsing .md file in the /docs folder make sure to update according to the criteria stated for building new .md files.
 - **Run the Monetization Gate** (see "Monetization Gate" below) before reporting a new or extended user-facing capability as done — re-check that what shipped matches the tier verdict made at planning
 - **Run the risk-based architecture review** (see "Architecture Review (risk-based)" below) before reporting work as done — mandatory when the change has architectural surface, skippable with a one-line justification for trivial edits.
+- **Verify it yourself before handing over manual tests.** Run everything automatable — unit tests and, for anything crossing the watch (HealthKit workouts, watch ↔ iPhone sync, crash recovery), `bundle exec fastlane e2e_watch`, extended with scenarios for the new feature (`docs/agent-e2e-verification.md`). The manual hand-off lists **only** what genuinely needs a human or a physical device (real heart-rate sensor, out-of-range delivery, the iPhone Fitness app, App Store builds…), each step saying why, plus what the automated run covered.
 
 This is an iOS app built with Xcode:
 

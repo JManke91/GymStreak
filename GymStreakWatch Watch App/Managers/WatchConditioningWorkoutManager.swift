@@ -8,6 +8,10 @@
 //  multi-activity sessions are restricted to swim-bike-run. The active session
 //  also grants the background runtime the runner's haptics need.
 //
+//  A mat session (positioning ticket 05) is recorded by a second instance of
+//  this same manager through `MatSessionWorkoutRecording`: only the activity
+//  type and the session-kind metadata differ.
+//
 //  Kept apart from `WatchHealthKitManager` on purpose: that manager's
 //  finalization is bound to the durable strength queue, which conditioning
 //  does not use.
@@ -33,13 +37,28 @@ protocol ConditioningWorkoutRecording: AnyObject {
     func discard()
 }
 
+/// What `WatchMatSessionViewModel` needs from HealthKit: the same live session, with
+/// the sport's configuration and the mat session kind.
 @MainActor
-final class WatchConditioningWorkoutManager: NSObject, ConditioningWorkoutRecording {
+protocol MatSessionWorkoutRecording: AnyObject {
+    var onHeartRate: ((Int) -> Void)? { get set }
+    var onSessionFailed: (() -> Void)? { get set }
+    func start(sport: String, at date: Date) async throws
+    func pause()
+    func resume()
+    func finishMatSession(at end: Date, externalUUID: UUID, title: String) async throws
+    func discard()
+}
+
+@MainActor
+final class WatchConditioningWorkoutManager: NSObject, ConditioningWorkoutRecording, MatSessionWorkoutRecording {
 
     /// Metadata the iPhone's recovery drain reads to leave conditioning out of the
     /// strength recovery banner (`HealthKitAnchoredWorkoutDrain`). Same key and value.
     static let sessionKindKey = "GymStreakSessionKind"
     static let sessionKindValue = "conditioning"
+    /// The iPhone's `HealthKitWorkoutManager.matSessionKind`.
+    static let matSessionKindValue = "mat"
 
     var onHeartRate: ((Int) -> Void)?
     var onSessionFailed: (() -> Void)?
@@ -70,13 +89,42 @@ final class WatchConditioningWorkoutManager: NSObject, ConditioningWorkoutRecord
         return configuration
     }
 
+    /// The iPhone's mat mapping (`HealthKitWorkoutManager.configuration(for: MatSport)`):
+    /// BJJ, MMA and Muay Thai → martial arts, boxing, wrestling, else other; indoor.
+    static func configuration(forSport sport: String) -> HKWorkoutConfiguration {
+        let configuration = HKWorkoutConfiguration()
+        configuration.activityType = switch sport {
+        case "bjj", "mma", "muayThai": .martialArts
+        case "boxing": .boxing
+        case "wrestling": .wrestling
+        default: .other
+        }
+        configuration.locationType = .indoor
+        return configuration
+    }
+
     func start(modality: String, at date: Date) async throws {
+        try await start(Self.configuration(for: modality), at: date)
+    }
+
+    func start(sport: String, at date: Date) async throws {
+        try await start(Self.configuration(forSport: sport), at: date)
+    }
+
+    func finish(at end: Date, externalUUID: UUID, title: String) async throws {
+        try await finish(at: end, externalUUID: externalUUID, title: title, kind: Self.sessionKindValue)
+    }
+
+    func finishMatSession(at end: Date, externalUUID: UUID, title: String) async throws {
+        try await finish(at: end, externalUUID: externalUUID, title: title, kind: Self.matSessionKindValue)
+    }
+
+    private func start(_ configuration: HKWorkoutConfiguration, at date: Date) async throws {
         // Prompts only for undecided types; the strength flow has usually asked already.
         try await healthStore.requestAuthorization(
             toShare: [HKQuantityType.workoutType()],
             read: [HKQuantityType(.heartRate), HKQuantityType(.activeEnergyBurned)]
         )
-        let configuration = Self.configuration(for: modality)
         let session = try HKWorkoutSession(healthStore: healthStore, configuration: configuration)
         let builder = session.associatedWorkoutBuilder()
         attach(session: session, builder: builder)
@@ -88,7 +136,7 @@ final class WatchConditioningWorkoutManager: NSObject, ConditioningWorkoutRecord
 
     func resume() { session?.resume() }
 
-    func finish(at end: Date, externalUUID: UUID, title: String) async throws {
+    private func finish(at end: Date, externalUUID: UUID, title: String, kind: String) async throws {
         // Nothing to save (the session was never adopted) must not read as "saved".
         guard let session, let builder else { throw CocoaError(.featureUnsupported) }
         defer { tearDown() }
@@ -98,7 +146,8 @@ final class WatchConditioningWorkoutManager: NSObject, ConditioningWorkoutRecord
             HKMetadataKeyExternalUUID: externalUUID.uuidString,
             // What Fitness shows as the title — the iPhone path does the same.
             HKMetadataKeyWorkoutBrandName: title,
-            Self.sessionKindKey: Self.sessionKindValue
+            // Read by the iPhone's recovery drain, which skips any session kind.
+            Self.sessionKindKey: kind
         ])
         _ = try await builder.finishWorkout()
     }

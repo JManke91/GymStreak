@@ -121,6 +121,14 @@ platform :ios do
     test_unit_watch
   end
 
+  # Watch ↔ iPhone end-to-end checks on a paired simulator (Health save,
+  # sync to History, crash recovery). Takes minutes, not seconds: scenarios
+  # run in real time. See docs/agent-e2e-verification.md.
+  desc "Run the watch ↔ iPhone end-to-end checks (optional: suite:mat_session)"
+  lane :e2e_watch do |options|
+    sh("../scripts/e2e/run.sh", *Array(options[:suite]))
+  end
+
   desc "Generate Apple Watch screenshots for App Store"
   lane :watch_screenshots do
     snapshot(

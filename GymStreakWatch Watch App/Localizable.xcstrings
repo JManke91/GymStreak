@@ -3179,6 +3179,292 @@
           }
         }
       }
+    },
+    "BJJ" : {
+      "comment" : "Mat session on the watch (docs/fight-conditioning.md, positioning ticket 05)",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "BJJ"
+          }
+        }
+      }
+    },
+    "MMA" : {
+      "comment" : "Mat session on the watch (docs/fight-conditioning.md, positioning ticket 05)",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "MMA"
+          }
+        }
+      }
+    },
+    "Muay Thai" : {
+      "comment" : "Mat session on the watch (docs/fight-conditioning.md, positioning ticket 05)",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Muay Thai"
+          }
+        }
+      }
+    },
+    "Boxing" : {
+      "comment" : "Mat session on the watch (docs/fight-conditioning.md, positioning ticket 05)",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Boxen"
+          }
+        }
+      }
+    },
+    "Wrestling" : {
+      "comment" : "Mat session on the watch (docs/fight-conditioning.md, positioning ticket 05)",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ringen"
+          }
+        }
+      }
+    },
+    "Other" : {
+      "comment" : "Mat session on the watch (docs/fight-conditioning.md, positioning ticket 05)",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Andere"
+          }
+        }
+      }
+    },
+    "Drilling" : {
+      "comment" : "Mat session on the watch (docs/fight-conditioning.md, positioning ticket 05)",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Drillen"
+          }
+        }
+      }
+    },
+    "Moderate" : {
+      "comment" : "Mat session on the watch (docs/fight-conditioning.md, positioning ticket 05)",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Moderat"
+          }
+        }
+      }
+    },
+    "Hard sparring" : {
+      "comment" : "Mat session on the watch (docs/fight-conditioning.md, positioning ticket 05)",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hartes Sparring"
+          }
+        }
+      }
+    },
+    "Mat session" : {
+      "comment" : "Mat session on the watch (docs/fight-conditioning.md, positioning ticket 05)",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mat-Einheit"
+          }
+        }
+      }
+    },
+    "BJJ, sparring, pads" : {
+      "comment" : "Mat session on the watch (docs/fight-conditioning.md, positioning ticket 05)",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "BJJ, Sparring, Pratzen"
+          }
+        }
+      }
+    },
+    "%@ elapsed" : {
+      "comment" : "Mat session on the watch (docs/fight-conditioning.md, positioning ticket 05)",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ vergangen"
+          }
+        }
+      }
+    },
+    "End mat session?" : {
+      "comment" : "Mat session on the watch (docs/fight-conditioning.md, positioning ticket 05)",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mat-Einheit beenden?"
+          }
+        }
+      }
+    },
+    "Under a minute, so nothing will be saved." : {
+      "comment" : "Mat session on the watch (docs/fight-conditioning.md, positioning ticket 05)",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Unter einer Minute – es wird nichts gespeichert."
+          }
+        }
+      }
+    },
+    "You'll rate how hard it was before it's saved." : {
+      "comment" : "Mat session on the watch (docs/fight-conditioning.md, positioning ticket 05)",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Vor dem Speichern gibst du an, wie hart es war."
+          }
+        }
+      }
+    },
+    "Session discarded" : {
+      "comment" : "Mat session on the watch (docs/fight-conditioning.md, positioning ticket 05)",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Einheit verworfen"
+          }
+        }
+      }
+    },
+    "Session saved" : {
+      "comment" : "Mat session on the watch (docs/fight-conditioning.md, positioning ticket 05)",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Einheit gespeichert"
+          }
+        }
+      }
+    },
+    "Saved to Apple Health · on its way to your iPhone" : {
+      "comment" : "Mat session on the watch (docs/fight-conditioning.md, positioning ticket 05)",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "In Apple Health gespeichert · unterwegs zum iPhone"
+          }
+        }
+      }
+    },
+    "Couldn't save to Apple Health · on its way to your iPhone" : {
+      "comment" : "Mat session on the watch (docs/fight-conditioning.md, positioning ticket 05)",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nicht in Apple Health gespeichert · unterwegs zum iPhone"
+          }
+        }
+      }
+    },
+    "Under a minute — nothing saved" : {
+      "comment" : "Mat session on the watch (docs/fight-conditioning.md, positioning ticket 05)",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Unter einer Minute – nichts gespeichert"
+          }
+        }
+      }
+    },
+    "bpm" : {
+      "comment" : "Mat session on the watch (docs/fight-conditioning.md, positioning ticket 05)",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "bpm"
+          }
+        }
+      }
+    },
+    "Paused" : {
+      "comment" : "Mat session on the watch (docs/fight-conditioning.md, positioning ticket 05)",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pausiert"
+          }
+        }
+      }
+    },
+    "Avg %lld · max %lld bpm" : {
+      "comment" : "Mat session on the watch (docs/fight-conditioning.md, positioning ticket 05)",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ø %1$lld · max. %2$lld bpm"
+          }
+        }
+      }
+    },
+    "How hard was it?" : {
+      "comment" : "Mat session on the watch (docs/fight-conditioning.md, positioning ticket 05)",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Wie hart war es?"
+          }
+        }
+      }
+    },
+    "Suggested from your heart-rate zones" : {
+      "comment" : "Mat session on the watch (docs/fight-conditioning.md, positioning ticket 05)",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Vorschlag aus deinen Pulszonen"
+          }
+        }
+      }
+    },
+    "Save" : {
+      "comment" : "Mat session on the watch (docs/fight-conditioning.md, positioning ticket 05)",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Speichern"
+          }
+        }
+      }
     }
   },
   "version" : "1.0"

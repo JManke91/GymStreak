@@ -18,6 +18,19 @@ extension ConditioningProgramViewModel {
         calendar: Calendar,
         now: Date
     ) -> ConditioningWatchOffer {
+        var offer = programOffer(dashboard: dashboard, today: today, profile: profile, calendar: calendar, now: now)
+        // Rides the same offer so it needs no context key of its own (positioning ticket 05).
+        offer.matIntensityZones = HeartRateZones.matIntensityZones(for: profile)
+        return offer
+    }
+
+    private static func programOffer(
+        dashboard: ConditioningProgramDashboard?,
+        today: ConditioningProgramDay,
+        profile: HeartRateProfile?,
+        calendar: Calendar,
+        now: Date
+    ) -> ConditioningWatchOffer {
         let startOfToday = calendar.startOfDay(for: now)
         guard let dashboard,
               case .active(_, _, let isPaused) = dashboard.status, !isPaused,

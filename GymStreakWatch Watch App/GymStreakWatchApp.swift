@@ -30,6 +30,7 @@ struct GymStreakWatchApp: App {
                 .environmentObject(appState.exerciseCatalogStore)
                 .environment(appState.conditioningStore)
                 .environment(appState.conditioningRun)
+                .environment(appState.matSession)
                 .task {
                     appState.connectServices()
                 }
@@ -58,6 +59,7 @@ struct GymStreakWatchApp: App {
 private struct RootView: View {
     @ObservedObject var weightUnitStore: WatchWeightUnitStore
     @Environment(WatchConditioningRunViewModel.self) private var conditioningRun
+    @Environment(WatchMatSessionViewModel.self) private var matSession
 
     var body: some View {
         NavigationStack {
@@ -71,6 +73,14 @@ private struct RootView: View {
             onDismiss: { conditioningRun.runnerDidDismiss() }
         ) {
             ConditioningRunnerView()
+                .interactiveDismissDisabled()
+        }
+        // The mat-session recorder (positioning ticket 05), on the same footing.
+        .fullScreenCover(
+            isPresented: Bindable(matSession).isRunnerPresented,
+            onDismiss: { matSession.runnerDidDismiss() }
+        ) {
+            MatSessionRunnerView()
                 .interactiveDismissDisabled()
         }
         // One injection point for the surfaces that render a weight. Modelled
@@ -100,6 +110,10 @@ final class AppState: ObservableObject {
     let conditioningStore: WatchConditioningStore
     let conditioningWorkout: WatchConditioningWorkoutManager
     let conditioningRun: WatchConditioningRunViewModel
+    /// Mat sessions recorded on the watch (positioning ticket 05): a second instance
+    /// of the conditioning HealthKit manager, the same outbox transport.
+    let matWorkout: WatchConditioningWorkoutManager
+    let matSession: WatchMatSessionViewModel
 
     init() {
         let connectivity = WatchConnectivityManager.shared
@@ -122,6 +136,17 @@ final class AppState: ObservableObject {
             // `isWorkoutActive` turns false once the strength session reaches `.ended`.
             isOtherWorkoutActive: { [weak healthKit] in healthKit?.isWorkoutActive ?? false }
         )
+        let matWorkout = WatchConditioningWorkoutManager()
+        self.matWorkout = matWorkout
+        self.matSession = WatchMatSessionViewModel(
+            workout: matWorkout,
+            checkpoints: WatchMatSessionCheckpointStore(),
+            outbox: connectivity.matSessionOutbox,
+            zones: { [conditioningStore = connectivity.conditioningStore] in
+                conditioningStore.program?.matIntensityZones
+            },
+            isOtherWorkoutActive: { [weak healthKit] in healthKit?.isWorkoutActive ?? false }
+        )
         self.workoutViewModel = WatchWorkoutViewModel(
             healthKitManager: healthKit,
             connectivityManager: connectivity,
@@ -142,9 +167,14 @@ final class AppState: ObservableObject {
             viewModel: workoutViewModel,
             healthKitManager: healthKitManager,
             conditioningRun: conditioningRun,
-            conditioningWorkout: conditioningWorkout
+            conditioningWorkout: conditioningWorkout,
+            matSession: matSession,
+            matWorkout: matWorkout
         )
         WatchWorkoutRecoveryCoordinator.shared.recoverIfNeeded()
+        #if DEBUG
+        WatchE2EScenarioRunner.runIfRequested(matSession: matSession, matWorkout: matWorkout)
+        #endif
         applicationDidBecomeActive()
     }
 
