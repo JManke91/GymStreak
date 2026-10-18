@@ -257,7 +257,7 @@ is still zero.
 |---|---|---|---|---|---|---|
 | 1 | 16 | **Strong + Hevy history import** | **P1** | ~1 week (2 tickets) | Switching from Strong/Hevy at all | ✅ **Shipped** — Strong 2026-10-03 (ticket 01, rides 1.1.19), Hevy 2026-10-17 (ticket 02, device-verified). Settings → Import from Strong / Hevy — see §4.16 |
 | 2 | 17 | **Visible watch sync reliability** ("Saved on iPhone ✓") | **P1** | 1–2 days | The switching message, made experienceable | ✅ **Shipped** 2026-10-17 (ticket 03, device-verified). Watch summary "Saved on iPhone" status line, see §4.17 |
-| 3 | 18 | **Fighter positioning** (mat sessions, watch recording, lift-or-fight onboarding, round timer) | **P1** | ~3 weeks (4 tickets) | The one unowned market position | 🟡 **In progress** — ticket 04 (log a mat session on iPhone) ✅ done 2026-10-17 (device-verified, iCloud sync confirmed on TestFlight); ticket 05 (record on the watch) ✅ done 2026-10-18 (simulator E2E 28/28 + paired-hardware sync checks); 06–07 open — `.scratch/positioning-usp/issues/04–07`, see §4.18 |
+| 3 | 18 | **Fighter positioning** (mat sessions, watch recording, lift-or-fight onboarding, round timer) | **P1** | ~3 weeks (4 tickets) | The one unowned market position | 🟡 **In progress** — ticket 04 (log a mat session on iPhone) ✅ done 2026-10-17 (device-verified, iCloud sync confirmed on TestFlight); ticket 05 (record on the watch) ✅ done 2026-10-18 (simulator E2E 28/28 + paired-hardware sync checks); ticket 06 (lift-or-fight onboarding fork + `trainingProfile` attribute) ✅ done 2026-10-18 (device-verified by the user); 07 open — `.scratch/positioning-usp/issues/04–07`, see §4.18 |
 | 4 | 5 | In-app sharing of a workout | **P1** | 2–3 days | Web-Referrer, virality | 🎫 ticket cut 2026-10-17 — `.scratch/share-screen/issues/01–04` (01 = Claude Design hand-off, user-approved before code), see §4.5 |
 | 5 | 15 | **Decide the app name** (rename or commit) | **P1 / decision** | ~1 day to decide | Brand-query traffic, word-of-mouth | ⬜ **not decided — gates #4 and #6**; #18 adds an argument, §4.18 |
 | 6 | 4 | Landing page + custom domain | **P1** | 1–2 weeks | Unlocks every off-store channel | ⬜ not started — blocked on #15 |
@@ -585,7 +585,10 @@ is idempotent. The flow is a self-contained sheet, so ticket 06's first-run link
 screen. **Hevy built 2026-10-10** (ticket `02`): Settings → Import from Hevy runs the same flow
 on Hevy's `workout_data.csv`. The unit comes from the header, superset grouping is stored in
 history, and warm-up sets are left out and counted. Unit-tested against row shapes from published Hevy exports. It was
-verified on device with a real export on 2026-10-17. Ticket cut 2026-10-02.
+verified on device with a real export on 2026-10-17. Ticket cut 2026-10-02. **Second entry point
+(2026-10-18, positioning ticket 06):** the first-run tour's last step links to the same sheet —
+"Coming from Strong or Hevy? Import your history" — so a switcher meets the import before deciding
+to start from zero (`docs/onboarding.md`, "Step 7").
 **Why:** the users most ready to leave Strong are the ones with years of history, and "I'm locked
 in because my history is here" is the recurring blocker in competitor reviews. Hevy, Liftin' and
 others already import Strong's CSV, so this is table stakes for any switching message and the
@@ -624,6 +627,15 @@ mat session live (sport, elapsed time, heart rate) as a martial-arts / boxing / 
 Apple Health. At the end it suggests an intensity from time in the user's heart-rate zones, which the
 user can change with one tap. The session reaches iPhone History as the same `MatSession` over the
 conditioning watch→iPhone path (`docs/fight-conditioning.md`, "Mat sessions on the watch").
+**Ticket 06 done** (2026-10-18; unit-tested, iOS suite green, architecture review, device-verified by
+the user): the first-run tour ends on a seventh step, **"How do you
+train?"**, with two cards — "I lift" (the default; the tour ends in the app exactly as before) and
+"I lift and fight" (the tour ends on the **Fighter Strength** program detail, which links on to Fight
+Conditioning; nothing is installed until the user taps "Add program") — and a link to the Strong /
+Hevy import. The answer is stored on the device and reported once as the fifth anonymous funnel
+attribute, **`trainingProfile`** (`lift` / `fight` / `unanswered`), through the existing report;
+nothing in the app reads it back (`docs/onboarding.md` "Step 7", `docs/funnel-instrumentation.md`
+§4.4 and §8). No paywall is in or adjacent to the tour — lever #12's removal stands.
 **Why:** "lifting + fight conditioning in one log" is the only position on the market map with no
 owner, and the conditioning half has already shipped (`docs/fight-conditioning.md`). It can **not**
 be reached through App Store search ("mma strength", "bjj workout" and "fight conditioning" all
@@ -632,7 +644,11 @@ on. **The one searchable entry point is the round timer (ticket 07):** "bjj time
 timer" and "kampfsport timer" are live queries, so the timer is how fighters find the app through
 search. **Built without the validation step the research recommended**, by product decision on
 2026-10-02. The first evidence is therefore the `trainingProfile` funnel attribute (ticket 06): the
-share of `fight` installs, and their `workoutsCompleted` against `lift` installs.
+**fighter share** (`fight` ÷ answered installs, `unanswered` excluded as the skip population) and
+**activation by profile** (`workoutsCompleted` segmented by `trainingProfile`, `fight` against
+`lift`), both filtered to `buildChannel = appstore` — the reading recipe is
+`docs/funnel-instrumentation.md` §8. It becomes measurable from the first App Store release carrying
+ticket 06; §6 has the row.
 It also adds an argument to #15: the current name says nothing about fighting. All three tickets
 are **Free** (Rules 1, 3, 4).
 
@@ -1042,6 +1058,7 @@ reach is the *second* broken multiplier, not the only one. Revenue remains last.
 | Customers seen in the last 7 days | **6** (one a dev device) | 25 | RC → Active Customers |
 | **Where they leave** | **measurable from 2026-09-09** — no reading yet | a first reading | RC → segment on `onboardingCompleted` / `routinesCreated` / `workoutsCompleted`, filtered to `buildChannel = appstore` (`docs/funnel-instrumentation.md`) |
 | Completed ≥1 workout | **measurable from 2026-09-09** — no reading yet | 40% of installs | RC → `workoutsCompleted` ≠ `"0"`, same filter |
+| **Fighter share, and fighters' activation** (lever #18) | **measurable from the first release carrying ticket 06** (done 2026-10-18) — no reading yet | any non-zero `fight` share; fighters' `workoutsCompleted` ≠ `"0"` at or above lifters' | RC → segment on `trainingProfile` (`fight` ÷ answered; then `workoutsCompleted` by profile), same filter — `docs/funnel-instrumentation.md` §8 |
 
 ### Reach
 

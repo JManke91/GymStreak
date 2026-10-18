@@ -1360,9 +1360,9 @@
 "onboarding.progress.accessibility" = "Schritt %1$d von %2$d";
 "onboarding.step_counter" = "SCHRITT %1$d VON %2$d";
 "onboarding.cta.continue" = "Weiter";
-/* The CTA of whichever step ends the tour. That is the coach slide when the Pro
-   offer step is not due (a Pro user, a Founder, gating off, or the placement
-   already fired) — the offer step itself draws no CTA. */
+/* The CTA of the last step, "How do you train?", when "I lift" is selected: it
+   opens the app. With "I lift and fight" selected the CTA names the program the
+   tour lands on instead (`onboarding.cta.fight`, under step 7). */
 "onboarding.cta.start" = "Training starten";
 
 /* Schritt 1 — Willkommen */
@@ -1433,6 +1433,21 @@
 "onboarding.coach.allowance" = "%1$d Coach-Nachrichten pro Monat gratis · unbegrenzt mit Pro";
 "onboarding.coach.sample.answer" = "Dein Volumen in %1$@ ist über vier Wochen um **+18 %%** gewachsen. %2$@ trägt den Großteil, %3$@ steht seit fünf Sessions bei %4$@.";
 "onboarding.coach.sample.question" = "Woran liegt die Stagnation bei %@?";
+
+/* Schritt 7 — Wie trainierst du? Die Gabelung Kraft / Kraft + Kampfsport, plus der
+   Strong- / Hevy-Import-Link. Die Antwort entscheidet nur, wo die Tour endet; es
+   wird nichts installiert. Die zwei Dialog-Buttons nutzen die Titel der Import-Sheets. */
+"onboarding.profile.eyebrow" = "DEIN TRAINING";
+"onboarding.profile.title" = "Wie trainierst\ndu?";
+"onboarding.profile.body" = "Wähl, was zu dir passt. Das entscheidet nur, wo du startest — die ganze App steht dir so oder so offen.";
+"onboarding.profile.lift.title" = "Krafttraining";
+"onboarding.profile.lift.detail" = "Routinen, Sätze und Fortschritt.";
+/* Explicit break: at card width the title wraps anyway, and iOS would hyphenate it as "Kampf-sport". */
+"onboarding.profile.fight.title" = "Krafttraining &\nKampfsport";
+"onboarding.profile.fight.detail" = "Kraft rund um dein Kampftraining, plus Fight Conditioning.";
+"onboarding.profile.import" = "Kommst du von Strong oder Hevy? Importiere deinen Verlauf";
+"onboarding.profile.import.dialog_title" = "Verlauf importieren";
+"onboarding.cta.fight" = "Fighter Strength öffnen";
 
 /* Routine detail — planned muscle map. Only the strings that name the card or a set count
    differ from the history reading; the legend, captions and reset control are shared. */

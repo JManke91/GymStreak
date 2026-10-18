@@ -10,9 +10,9 @@ import Foundation
 
 /// Re-reads where this install stands in the funnel and reports it onwards.
 ///
-/// **One method, not four.** The three events that move a user — finishing the
+/// **One method, not five.** The three events that move a user — finishing the
 /// tour, creating a routine, completing a workout — each change exactly one
-/// attribute, but re-reporting all four is idempotent, costs no network call
+/// attribute, but re-reporting all five is idempotent, costs no network call
 /// (`setAttributes` records locally and rides the SDK's next request) and
 /// removes the class of bug where a new attribute is added and one of its
 /// trigger sites is forgotten. It is the same reasoning that gives
@@ -30,7 +30,7 @@ import Foundation
 @MainActor
 protocol FunnelAttributeTracking: AnyObject {
 
-    /// Reads the four facts and reports them.
+    /// Reads the five facts and reports them.
     ///
     /// Never on a path a user waits on: it is called from a launch `.task` and
     /// from `Task { … }` at the three event sites, never inline in a view body,

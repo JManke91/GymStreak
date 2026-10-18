@@ -139,6 +139,15 @@ private struct RoutinesViewInternal: View {
         .routineSaveFailureAlert(viewModel)
         // Keeps the shelf's "Added" state in step with installs and deletions.
         .onReceive(viewModel.$routines) { _ in programLibrary.refresh() }
+        // The first-run tour's "I lift and fight" lands here: the request is
+        // raised while the cover is still up, so the detail is pushed underneath
+        // it and the tour ends *on* the program (docs/onboarding.md). `initial`
+        // covers a request that was raised before this tab was mounted.
+        .onChange(of: programLibrary.requestedDetailProgramId, initial: true) { _, programId in
+            guard let programId else { return }
+            shelfProgramId = programId
+            programLibrary.didOpenRequestedDetail()
+        }
         .onAppear {
             viewModel.fetchRoutines()
 #if DEBUG

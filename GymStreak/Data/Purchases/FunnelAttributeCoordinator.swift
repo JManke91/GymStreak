@@ -2,7 +2,7 @@
 //  FunnelAttributeCoordinator.swift
 //  GymStreak
 //
-//  Gathers the four anonymous funnel facts and hands them to the purchase
+//  Gathers the five anonymous funnel facts and hands them to the purchase
 //  backend's attribute surface. See docs/funnel-instrumentation.md.
 //
 
@@ -57,7 +57,7 @@ final class FunnelAttributeCoordinator: FunnelAttributeTracking {
         self.reporter = reporter
     }
 
-    /// Reads the four facts and reports them.
+    /// Reads the five facts and reports them.
     ///
     /// The count comes from `fetchCompletedWorkoutCount()` — the counting query,
     /// not `fetchLifetimeTotals()`, whose whole-history walk shares the History
@@ -83,6 +83,10 @@ final class FunnelAttributeCoordinator: FunnelAttributeTracking {
         reporter.report(
             FunnelAttributes.make(
                 hasCompletedOnboarding: onboarding.hasCompletedOnboarding,
+                // The same record the tour writes its one answer into; `nil`
+                // (skipped, or the last step never reached) buckets as
+                // "unanswered" rather than being mistaken for a lifter.
+                trainingProfile: onboarding.trainingProfile,
                 completedWorkoutCount: completedWorkoutCount,
                 // The one counting rule the cap already uses, and the reason
                 // this attribute is not a plain `fetchAll().count`: the app

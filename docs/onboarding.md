@@ -8,11 +8,13 @@ real pieces of the app rather than illustrations.
 > from tickets 01 and 03; steps 2–6 from tickets 04–07; the cover ordering, its
 > tests and the end-to-end walkthrough from ticket 09 (see "Verification" at the
 > end). A seventh step — a Pro offer — shipped with ticket 08 and was **retired
-> on 2026-09-09**; see "The retired offer step" below.
+> on 2026-09-09**; see "The retired offer step" below. A different seventh step
+> — the question "How do you train?" — was added on **2026-10-18** by positioning
+> ticket 06 (`docs/acquisition-strategy.md` §4.18); see "Step 7" below.
 
 ## The flow
 
-Six steps, declared once in `OnboardingStep` so the progress bar, the counter
+Seven steps, declared once in `OnboardingStep` so the progress bar, the counter
 and the navigation all derive their length from the same list:
 
 | # | Step | What it shows |
@@ -23,14 +25,20 @@ and the navigation all derive their length from the same list:
 | 4 | `.progressiveOverload` | A finished exercise and the weight prompt it raises. **Built.** |
 | 5 | `.history` | A recorded session: its header, the four stat tiles and one exercise block with its record and per-set deltas. **Built.** |
 | 6 | `.aiCoach` | The on-device coach, as a teaser: one answer, one question, and what the free tier gets. **Built.** |
+| 7 | `.trainingProfile` | One question — "How do you train?" — with two answers, "I lift" / "I lift and fight", and a link for Strong / Hevy switchers. **Built.** |
 
-No step is conditional and none of them asks for anything: every run is the same
-six slides, six progress segments and a counter that says so. The tour holds no
-paywall seam at all — `OnboardingFlowViewModel` takes no presenter, and the sixth
-slide's CTA ("Start training", `OnboardingStep.finishCTAKey`) opens the app.
+No step is conditional and none of them sells anything: every run is the same
+seven slides, seven progress segments and a counter that says so. The tour holds
+no paywall seam at all — `OnboardingFlowViewModel` takes no presenter. The
+seventh slide asks one question, and its CTA ends the tour where the answer
+points: in the app ("Start training", `OnboardingStep.finishCTAKey`) or on the
+Fighter Strength program detail ("Open Fighter Strength",
+`OnboardingStep.fightFinishCTAKey`). See "Step 7 — How do you train?".
 
-Every step is skippable. "Skip" and finishing the last step are the same exit:
-both end the flow and both record it.
+Every step is skippable. "Skip" and finishing the last step are the same exit as
+far as the tour is concerned: both end the flow and both record it. They differ
+in one thing — only the last step's CTA records an *answer*; a skip leaves the
+question unanswered (see "Step 7").
 
 ## Navigating between steps: buttons and swipe
 
@@ -39,10 +47,10 @@ on the slide area all write the view model's `currentStep`, so the progress bar,
 the counter, the CTA label and Back's dimmed state follow whichever was used.
 The buttons animate the same horizontal slide a swipe makes.
 
-- **The swipe never ends the tour.** A left swipe on the coach slide and a right
+- **The swipe never ends the tour.** A left swipe on the last slide and a right
   swipe on the welcome slide just rubber-band. Ending the tour spends the
   once-ever `onboarding.flowCompleted` record, so it stays an explicit tap on
-  "Start training" (or "Skip"). Decided with the user at planning, 2026-09-27.
+  the last step's CTA (or "Skip"). Decided with the user at planning, 2026-09-27.
 - **Two entry points on the view model, on purpose.** `advance()` is the CTA path
   and ends the flow on the last step. `go(to:)` is the swipe path. The pager's
   selection binding writes through it, and it only ever moves between steps.
@@ -89,10 +97,12 @@ Next stay reachable as ordinary buttons either way. The user confirmed both by h
 ## Architecture
 
 ```
-Domain/Interfaces/OnboardingCompletionTracking.swift   the durable "seen it" record
-Data/Preferences/OnboardingCompletionStore.swift       UserDefaults.standard behind it
-Presentation/ViewModels/Onboarding/OnboardingStep.swift          the step list + per-step CTA key
-Presentation/ViewModels/Onboarding/OnboardingFlowViewModel.swift presented? which step?
+Domain/Models/OnboardingTrainingProfile.swift          the step-7 answer: lift | fight
+Domain/Interfaces/OnboardingCompletionTracking.swift   the durable "seen it" record + the answer
+Domain/Interfaces/ProgramDetailRequesting.swift        "open this program next" — how step 7 lands a fighter
+Data/Preferences/OnboardingCompletionStore.swift       UserDefaults.standard behind both
+Presentation/ViewModels/Onboarding/OnboardingStep.swift          the step list + per-step CTA keys
+Presentation/ViewModels/Onboarding/OnboardingFlowViewModel.swift presented? which step? which answer?
 Presentation/ViewModels/Onboarding/FirstRunCoverOrder.swift      which first-run cover wins
 Presentation/Views/Onboarding/OnboardingCoverView.swift          the chrome + the paging slide area
 Presentation/Views/Onboarding/OnboardingCheckBullet.swift        the shared bullet
@@ -106,12 +116,15 @@ Presentation/Views/Onboarding/OnboardingSupersetsSlideView.swift step 3
 Presentation/Views/Onboarding/OnboardingProgressiveOverloadSlideView.swift step 4
 Presentation/Views/Onboarding/OnboardingHistorySlideView.swift   step 5
 Presentation/Views/Onboarding/OnboardingAICoachSlideView.swift   step 6
+Presentation/Views/Onboarding/OnboardingTrainingProfileSlideView.swift step 7
 Presentation/Views/Onboarding/OnboardingSampleRoutine.swift      steps 2 and 3's sample values
 Presentation/Views/Onboarding/OnboardingSampleWorkout.swift      step 4's sample values
 Presentation/Views/Onboarding/OnboardingSampleHistory.swift      step 5's sample values
 Presentation/Views/Onboarding/OnboardingSampleCoach.swift        step 6's sample values
+Presentation/ViewModels/ProgramLibraryViewModel.swift  answers step 7's program request
+Presentation/Views/Routines/RoutinesView.swift         pushes the requested program detail
 App/AppDependencies.swift                              constructs the view model
-App/ContentView.swift                                  hosts the three first-run covers
+App/ContentView.swift                                  hosts the four first-run covers
 ```
 
 The view model is app-lifetime and held concretely by the composition root,
@@ -119,7 +132,8 @@ mirroring `FounderCelebrationCoordinator`: the app root binds a
 `.fullScreenCover` straight to its `@Observable` `isPresenting`, and both the
 cover's content and that binding must be built from the *same* instance so a
 dismissal is recorded exactly once. Slides hold no dependencies — the cover
-navigates, the slides only render.
+navigates, the slides only render. Step 7 is the same in kind: it takes the
+selected answer and two closures from the cover and owns nothing.
 
 `isPresenting` is seeded at composition time rather than in a launch task, so the
 very first frame of the app root already knows the tour is due. There is nothing
@@ -146,6 +160,12 @@ matching `FounderCelebrationStore`:
 
 The flag is cached in memory and seeded at init, because `UserDefaults` is not
 observable and the view model is read while the app root is being composed.
+
+**A second key sits beside it since 2026-10-18:** `onboarding.trainingProfile`,
+the answer to step 7 as `OnboardingTrainingProfile`'s raw value (`lift` /
+`fight`), absent when the question was never answered. Same store, same
+reasoning — device-local, not KVS, not the App Group — and read by exactly one
+thing, the funnel report. See "Step 7".
 
 ## Cover ordering
 
@@ -263,7 +283,8 @@ the shipped bar is orange, names the target rep count rather than a next weight,
 Two deliberate departures from the design file:
 
 - Its welcome body says "Vier kurze Schritte" while its own flow has seven (the
-  shipped one has six). The shipped copy avoids the count.
+  shipped one has seven as well since 2026-10-18, but a different seventh — a
+  question, not the design's offer). The shipped copy avoids the count.
 - Its background carries a radial tint glow off the top-right corner. **Still not
   built.** Ticket 03 was the place to establish it and deliberately did not: on
   the shipped screen the plate's own 45 %-black drop shadow already separates the
@@ -765,6 +786,137 @@ further than in English. **Verified 2026-09-05** by rendering the whole slide wi
 `ImageRenderer` at 402 pt and 375 pt in both languages: nothing crops, and English
 leaves about 30 pt of panel below the strip.
 
+## Step 7 — How do you train?
+
+The last step asks one question and sells nothing. It exists because 89% of
+installs launch the app exactly once (`docs/acquisition-strategy.md` §1a): a
+fighter who arrived on a training partner's recommendation has to land on
+*their* product in that one session, and a Strong or Hevy switcher has to find
+the import before deciding to start from zero. Positioning ticket 06, cut from
+`docs/research/positioning-usp-2026-10.md` §6 (levers **#18** and **#16**).
+
+**What it shows.** The eyebrow / title / body stack of the welcome slide ("YOUR
+TRAINING" · "How do you train?"), then two selectable cards — **"I lift"**
+(dumbbell) and **"I lift and fight"** (`figure.boxing`) — and, below them, a
+text link: **"Coming from Strong or Hevy? Import your history"**. The cards are
+`TrainingProfileOptionCard`s: an icon wash like the welcome tile, a title, one
+line of detail, and the check chip of `OnboardingCheckBullet` — an empty ring
+unselected, filled with the tint (check in `textOnTint`) when selected. The
+selected card also tints its fill and border. "I lift" is selected by default.
+
+**German titles are noun phrases, not first person.** "Krafttraining" /
+"Krafttraining & Kampfsport" — the literal "Ich hebe" / "Ich hebe und kämpfe"
+shipped first and was rejected by the user on the device review (2026-10-18)
+as not idiomatic; the English stays first person because "I lift" is. The
+longer German title cannot fit one line at card width, so the string carries
+an explicit `\n` between the words — left to iOS it hyphenated as
+"Kampf-sport" (seen on the simulator) — the same per-language decision the
+step titles make.
+
+**Two exits, one CTA.** The footer CTA stays the tour's single primary button
+and renames itself after the selection, so it always says where it leads:
+
+| Selected | CTA | Where the tour ends |
+| -------- | --- | ------------------- |
+| "I lift" (default) | "Start training" (`OnboardingStep.finishCTAKey`) | In the app, exactly as before — tab bar, starter content. |
+| "I lift and fight" | "Open Fighter Strength" (`OnboardingStep.fightFinishCTAKey`) | On the **Fighter Strength** program detail (`ProgramDetailView`, back link "Routines"), which already carries the "Pairs with Fight conditioning" row. Nothing is installed: the user still taps "Add program". |
+
+Selecting a card writes nothing; the user can change their mind until the CTA.
+`OnboardingFlowViewModel.selectTrainingProfile(_:)` only changes
+`selectedTrainingProfile`, and `ctaKey` follows it on the last step alone.
+
+**How the fighter lands there.** The tour is a full-screen cover and knows
+nothing about the tab bar under it, so it cannot push a screen. Instead
+`finish()` — the private path `advance()` takes on the last step — calls
+`ProgramDetailRequesting.requestProgramDetail(RoutineProgramCatalog.fighterStrength.id)`
+on the app-lifetime `ProgramLibraryViewModel`, which stores it as
+`requestedDetailProgramId`. `RoutinesView` observes that property
+(`onChange(of:initial:)`), sets its own `shelfProgramId` and spends the request
+with `didOpenRequestedDetail()`. The request is raised **before** `endFlow()`
+lowers the cover, so the detail is pushed underneath it and the tour ends *on*
+the program rather than arriving at it a beat later
+(`OnboardingTrainingProfileTests.landingIsRequestedBeforeTheFlowEnds`). The
+catalog id is read from the catalog, never typed, so the slide cannot drift from
+the program it names.
+
+The first-run cover order is untouched: the reminder offer, which is raised at
+launch while the tour is up, still becomes topmost the moment the tour ends, so a
+fighter sees the Fighter Strength detail once that offer (and, where eligible,
+the coach opt-in) is dismissed. The screen underneath is the detail either way.
+
+**The import link.** Opens a `confirmationDialog` naming the two sources with
+the import sheets' own titles ("Import from Strong" / "Import from Hevy"), then
+`HistoryImportView` for the chosen `HistoryImportSource` — the same
+self-contained sheet Settings presents, built by the same
+`AppDependencies.makeHistoryImportViewModel(source:)` (`docs/history-import.md`).
+Both are hosted **by the cover**, not by the app root: a sheet raised while a
+full-screen cover is up never reaches the screen (the finding "The retired
+offer step" left behind). Finishing or cancelling the sheet lands back on step
+7 with the selection intact; the tour has not ended, so the user still chooses
+how to leave it. The cover takes `AppDependencies` from the environment for
+this one factory, as `SettingsRootView` does.
+
+**What is recorded, and by what.** Only the CTA records an answer:
+`finish()` calls `OnboardingCompletionTracking.recordTrainingProfile(_:)`
+*before* `endFlow()`, because `endFlow()` reports the funnel and the report
+reads the record back. "Skip" and a host-initiated dismissal end the tour as
+always but record **no** answer — `OnboardingTrainingProfileTests` pins all
+three exits and that selecting alone writes nothing. The answer lives in
+`OnboardingCompletionStore` under `onboarding.trainingProfile` and survives a
+relaunch (`recordSurvivesRelaunch`).
+
+**Nothing branches on it after the tour.** The answer is reported once as the
+anonymous `trainingProfile` funnel attribute — `"lift"`, `"fight"`, or
+`"unanswered"` when the tour was skipped or the step never reached — through the
+existing single reporting path, with the vocabulary spelled only in
+`FunnelAttributes` and no new trigger site (`docs/funnel-instrumentation.md`).
+It is the first evidence for the fighter-positioning bet: the share of `fight`
+installs and their `workoutsCompleted` against `lift` installs
+(`docs/acquisition-strategy.md` §4.18). Per that doc's rules it is never read
+back, no gate or UI branches on it, and it is not written during UI tests or
+screenshot runs (the launch report is `isUITesting`-guarded, and the tour is
+not part of any UI test). `OnboardingCompletionTracking` has one more reader
+than before — the funnel coordinator — and that is the whole list.
+
+**Why there is no preview plate.** The feature slides show a piece of the app;
+a question has no screen to picture, and a plate framing the Fighter Strength
+shelf card would have advertised the fork's one answer over the other. The
+step keeps everything else from the scaffold's design rules — the type scale,
+the eyebrow / title / body stack, the tinted check chip, the 24 pt margins, the
+single primary CTA — and is centred like the welcome poster
+(`OnboardingStep.isContentCentred`), because a short question top-aligned
+leaves the bottom half of the screen empty.
+
+**Accessibility.** Each card is one element (`children: .combine`) with the
+`.isButton` trait and `.isSelected` when chosen; the icon and the chip are
+hidden from VoiceOver because the title carries the meaning. The chip scales
+with the title (`@ScaledMetric(relativeTo: .subheadline)`), the cards wrap
+their text, and the link has the 44 pt target the tour's Back chip has.
+
+**Monetization.** Free, §3 Rule 1 — this is the aha path's front door. No
+paywall is in or adjacent to the step, in either exit; lever #12 removed one
+from exactly this moment, and the verdict block under "Monetization" below
+records that it stays removed.
+
+**Verification (2026-10-18, agent).** Unit: `OnboardingTrainingProfileTests`
+(11 tests — default, CTA renaming, all three exits, relaunch, request-before-
+dismissal, localization), the updated `OnboardingFlowTests`, and the funnel
+suites; full iOS suite 1,707 tests green. Simulator (iPhone 17 Pro, iOS 26.5,
+erased): a throwaway XCUITest walked a fresh install through all seven steps
+in English and German — the counter reads 7 of 7, "I lift" is preselected with
+"Start training", the import link opens the source dialog and the Strong sheet,
+Cancel returns to step 7, selecting "I lift and fight" renames the CTA to
+"Open Fighter Strength", and tapping it ends the tour on the Fighter Strength
+detail (back link "Routines", "Add program" still offered, nothing installed)
+with no paywall anywhere; "Skip" from step 7 reached the tab bar without the
+program. On that simulator Apple Intelligence resolves available, so the coach
+opt-in cover appeared between the tour and the detail — the documented first-run
+order, and the detail was already pushed underneath it. **User-verified on a
+device the same day** ("otherwise everything works"); the German titles were
+changed on that review, see above. Still unread: the `Funnel` Console line
+carrying `trainingProfile=fight` after a real tour, and the `buildChannel=other`
+TestFlight record (`docs/funnel-instrumentation.md` §9).
+
 ## The retired offer step
 
 The tour ended on a seventh step — the app's real RevenueCat paywall, on
@@ -882,9 +1034,26 @@ Monetization verdict — Onboarding step 6 (AI Coach teaser)
                 true for them; the slide neither promises nor withholds anything
 ```
 
-The six value slides contain no gate at all, and since 2026-09-09 neither does
-the tour as a whole. The offer step it briefly carried was retired under this
-verdict:
+Step 7 asks a question, not for money, and was built under this verdict
+(2026-10-18):
+
+```
+Monetization verdict — Onboarding step 7 ("How do you train?")
+  Tier          Free
+  Derivation    §3 Rule 1 — the fork is the aha path's front door; both exits
+                lead to free surfaces (the app, a free program detail)
+  Mechanism     none; nothing is capped, locked or previewed behind a blur
+  Placement     none — no paywall in or adjacent to onboarding, in either exit
+                (lever #12's removal stands)
+  Nudge         none
+  Free residue  the whole step, both landings, the import, and the full free app
+  Founder note  n/a — nobody is asked for anything; the step only records an
+                anonymous bucket that nothing reads back
+```
+
+The six value slides and the question contain no gate at all, and since
+2026-09-09 neither does the tour as a whole. The offer step it briefly carried
+was retired under this verdict:
 
 ```
 Monetization verdict — retire the onboarding paywall placement (2026-09-09)

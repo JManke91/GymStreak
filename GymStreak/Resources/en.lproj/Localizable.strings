@@ -1360,9 +1360,9 @@
 "onboarding.progress.accessibility" = "Step %1$d of %2$d";
 "onboarding.step_counter" = "STEP %1$d OF %2$d";
 "onboarding.cta.continue" = "Next";
-/* The CTA of whichever step ends the tour. That is the coach slide when the Pro
-   offer step is not due (a Pro user, a Founder, gating off, or the placement
-   already fired) — the offer step itself draws no CTA. */
+/* The CTA of the last step, "How do you train?", when "I lift" is selected: it
+   opens the app. With "I lift and fight" selected the CTA names the program the
+   tour lands on instead (`onboarding.cta.fight`, under step 7). */
 "onboarding.cta.start" = "Start training";
 
 /* Step 1 — welcome */
@@ -1442,6 +1442,20 @@
 "onboarding.coach.allowance" = "%1$d Coach messages a month free · unlimited with Pro";
 "onboarding.coach.sample.answer" = "Your volume in %1$@ has grown **+18%%** over four weeks. %2$@ carries most of it, while %3$@ has been sitting at %4$@ for five sessions.";
 "onboarding.coach.sample.question" = "Why has %@ stalled?";
+
+/* Step 7 — how do you train? The lift-or-fight fork, plus the Strong / Hevy import
+   link. The answer only decides where the tour ends; nothing is installed. The
+   dialog's two buttons reuse the import sheets' own titles. */
+"onboarding.profile.eyebrow" = "YOUR TRAINING";
+"onboarding.profile.title" = "How do you\ntrain?";
+"onboarding.profile.body" = "Pick what fits. It only decides where you start — the whole app stays open to you either way.";
+"onboarding.profile.lift.title" = "I lift";
+"onboarding.profile.lift.detail" = "Strength training: routines, sets and progress.";
+"onboarding.profile.fight.title" = "I lift and fight";
+"onboarding.profile.fight.detail" = "Strength built around your fight training, plus fight conditioning.";
+"onboarding.profile.import" = "Coming from Strong or Hevy? Import your history";
+"onboarding.profile.import.dialog_title" = "Import your history";
+"onboarding.cta.fight" = "Open Fighter Strength";
 
 /* Routine detail — planned muscle map. Only the strings that name the card or a set count
    differ from the history reading; the legend, captions and reset control are shared. */

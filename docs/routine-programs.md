@@ -180,7 +180,9 @@ Presentation  ProgramLibraryViewModel (@Observable @MainActor)
               Views/Programs/{ProgramLibraryView, ProgramDetailView, ProgramDetailSections, ProgramInstallSheet,
                               ProgramComponents, ProgramShelf, ProgramsEmptyStateView}
               RoutinesView: shelf + empty state; navigationDestination(isPresented:) → library,
-                            navigationDestination(item: shelfProgramId) → detail
+                            navigationDestination(item: shelfProgramId) → detail — also fed by
+                            ProgramLibraryViewModel.requestedDetailProgramId, the first-run tour's
+                            "I lift and fight" landing (ProgramDetailRequesting, docs/onboarding.md "Step 7")
       │  RoutineProgramInstalling (Domain protocol)
 Domain        Models/RoutineProgram.swift          value types (program → routines → exercise slots)
               Services/RoutineProgramCatalog.swift  the static content (+Fighter.swift: Fighter Strength)

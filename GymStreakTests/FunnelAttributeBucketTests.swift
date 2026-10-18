@@ -42,6 +42,15 @@ struct FunnelAttributeBucketTests {
         #expect(attributes(routines: -1).routinesCreated == "0")
     }
 
+    @Test("The training profile is spelled exactly as the dashboard filters it")
+    func trainingProfileSpelling() {
+        // `nil` is the tour skipped or its last step never reached — it must
+        // read as its own value, never fall into the default answer "lift".
+        #expect(attributes(profile: nil).trainingProfile == "unanswered")
+        #expect(attributes(profile: .lift).trainingProfile == "lift")
+        #expect(attributes(profile: .fight).trainingProfile == "fight")
+    }
+
     @Test("Onboarding and build channel are reported as the dashboard's literal strings")
     func flagSpelling() {
         #expect(attributes(onboarded: true).onboardingCompleted == "true")
@@ -52,12 +61,14 @@ struct FunnelAttributeBucketTests {
 
     private func attributes(
         onboarded: Bool = false,
+        profile: OnboardingTrainingProfile? = nil,
         workouts: Int = 0,
         routines: Int = 0,
         channel: AppBuildChannel = .other
     ) -> FunnelAttributes {
         FunnelAttributes.make(
             hasCompletedOnboarding: onboarded,
+            trainingProfile: profile,
             completedWorkoutCount: workouts,
             userCreatedRoutineCount: routines,
             buildChannel: channel

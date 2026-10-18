@@ -334,8 +334,11 @@ App           AppDependencies.historyImporter, makeHistoryImportViewModel(source
   and `.historySourceDataDidChange`, which History, routines and Fortschritt already observe. If it
   created exercises, it also calls `requestCatalogSync()` so the watch learns them.
 - **Reusable entry point:** `HistoryImportView(viewModel: dependencies.makeHistoryImportViewModel(source:))`
-  is a self-contained sheet with its own `NavigationStack` and file importer. Settings presents it
-  today (one row per source, `.sheet(item:)` on the chosen `HistoryImportSource`), and ticket 06's first-run link presents the same thing.
+  is a self-contained sheet with its own `NavigationStack` and file importer. Two entry points present
+  it, both with `.sheet(item:)` on the chosen `HistoryImportSource`: Settings (one row per source) and,
+  since 2026-10-18, the first-run tour's last step (one link, then a source dialog —
+  `docs/onboarding.md`, "Step 7"). The tour hosts the sheet on its own cover, because a sheet raised
+  under a full-screen cover never reaches the screen.
 - **No schema change.** Only existing models and fields are written, so no CloudKit production
   deploy is needed.
 

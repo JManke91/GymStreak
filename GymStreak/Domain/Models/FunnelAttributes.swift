@@ -2,7 +2,7 @@
 //  FunnelAttributes.swift
 //  GymStreak
 //
-//  The four anonymous, bucketed facts the purchase backend is tagged with, so
+//  The five anonymous, bucketed facts the purchase backend is tagged with, so
 //  its charts can be read as a funnel. See docs/funnel-instrumentation.md.
 //
 
@@ -54,6 +54,12 @@ struct FunnelAttributes: Equatable, Sendable {
     /// `"true"` / `"false"` — do they finish the tour, or bail inside it?
     let onboardingCompleted: String
 
+    /// `"lift"` / `"fight"` / `"unanswered"` — which product the first run
+    /// chose, or that the question was never answered (the tour was skipped or
+    /// its last step never reached). The first evidence for the fighter
+    /// positioning bet (docs/acquisition-strategy.md §4.18).
+    let trainingProfile: String
+
     /// `"0"` / `"1"` / `"2-4"` / `"5+"` — the activation question.
     let workoutsCompleted: String
 
@@ -64,6 +70,8 @@ struct FunnelAttributes: Equatable, Sendable {
     /// `"appstore"` / `"other"`.
     let buildChannel: String
 
+    /// - Parameter trainingProfile: the answer recorded by the tour's last
+    ///   step, or `nil` when there is none.
     /// - Parameter completedWorkoutCount: completed sessions, all time.
     /// - Parameter userCreatedRoutineCount: routines the **user** made. The
     ///   seeded starter routine must already be excluded — a fresh install that
@@ -72,16 +80,29 @@ struct FunnelAttributes: Equatable, Sendable {
     ///   (`RoutineCapPolicy.countableRoutineCount(in:)` is the one counting rule).
     static func make(
         hasCompletedOnboarding: Bool,
+        trainingProfile: OnboardingTrainingProfile?,
         completedWorkoutCount: Int,
         userCreatedRoutineCount: Int,
         buildChannel: AppBuildChannel
     ) -> FunnelAttributes {
         FunnelAttributes(
             onboardingCompleted: hasCompletedOnboarding ? "true" : "false",
+            trainingProfile: trainingProfileBucket(trainingProfile),
             workoutsCompleted: workoutsBucket(completedWorkoutCount),
             routinesCreated: routinesBucket(userCreatedRoutineCount),
             buildChannel: buildChannel.rawValue
         )
+    }
+
+    /// Spelled out case by case rather than through `rawValue`, so the stored
+    /// form (`OnboardingCompletionStore`) and the wire form can never be
+    /// renamed together by accident — a chart filter matches the literal text.
+    private static func trainingProfileBucket(_ profile: OnboardingTrainingProfile?) -> String {
+        switch profile {
+        case .lift: "lift"
+        case .fight: "fight"
+        case nil: "unanswered"
+        }
     }
 
     /// The activation ladder: nobody, once, warming up, habit. The boundaries

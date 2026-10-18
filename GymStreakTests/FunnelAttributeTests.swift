@@ -33,7 +33,7 @@ struct FunnelAttributeTests {
 
     // MARK: - What the coordinator reads
 
-    @Test("A fresh install reports all four attributes")
+    @Test("A fresh install reports all five attributes")
     func freshInstallReportsEverything() async {
         let fixture = makeFixture()
 
@@ -41,6 +41,7 @@ struct FunnelAttributeTests {
 
         #expect(fixture.reporter.reported.count == 1)
         #expect(fixture.reporter.reported.last?.onboardingCompleted == "false")
+        #expect(fixture.reporter.reported.last?.trainingProfile == "unanswered")
         #expect(fixture.reporter.reported.last?.workoutsCompleted == "0")
         #expect(fixture.reporter.reported.last?.routinesCreated == "0")
         #expect(fixture.reporter.reported.last?.buildChannel == "other")
@@ -75,6 +76,16 @@ struct FunnelAttributeTests {
         await fixture.coordinator.reportCurrentState()
 
         #expect(fixture.reporter.reported.last?.onboardingCompleted == "true")
+    }
+
+    @Test("The training profile is reported from the record, not from a flag of its own")
+    func trainingProfileIsReadFromTheRecord() async {
+        let fixture = makeFixture()
+        fixture.onboarding.recordTrainingProfile(.fight)
+
+        await fixture.coordinator.reportCurrentState()
+
+        #expect(fixture.reporter.reported.last?.trainingProfile == "fight")
     }
 
     @Test("The workout bucket moves as sessions are completed")
@@ -164,6 +175,27 @@ struct FunnelAttributeTests {
         await settle(until: { !fixture.reporter.reported.isEmpty })
 
         #expect(fixture.reporter.reported.last?.onboardingCompleted == "true")
+        // Skipped, so the question was never answered — and that is what the
+        // chart has to see, not the default card.
+        #expect(fixture.reporter.reported.last?.trainingProfile == "unanswered")
+    }
+
+    @Test("Answering the last step as a fighter reports it in the same session")
+    func fighterAnswerReportsImmediately() async {
+        let fixture = makeFixture()
+        let tour = OnboardingFlowViewModel(
+            completion: fixture.onboarding,
+            funnelAttributes: fixture.coordinator
+        )
+
+        tour.go(to: .trainingProfile)
+        tour.selectTrainingProfile(.fight)
+        tour.advance()
+
+        await settle(until: { !fixture.reporter.reported.isEmpty })
+
+        #expect(fixture.reporter.reported.last?.onboardingCompleted == "true")
+        #expect(fixture.reporter.reported.last?.trainingProfile == "fight")
     }
 
     // MARK: - What is never reported

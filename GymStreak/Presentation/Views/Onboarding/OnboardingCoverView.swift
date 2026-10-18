@@ -14,6 +14,8 @@ import SwiftUI
 /// Skip above, the call to action with the step counter below, and in between
 /// whichever slide the view model's current step names. Slides are separate
 /// views that know nothing about the flow — they render, the cover navigates.
+/// The one sheet the tour can raise — the Strong / Hevy import behind the last
+/// step's link — is hosted here too, for the reason given on it.
 ///
 /// The view model is passed in rather than created here, because it is
 /// app-lifetime state (the host binds its `.fullScreenCover` to the same
@@ -23,7 +25,16 @@ struct OnboardingCoverView: View {
 
     let viewModel: OnboardingFlowViewModel
 
+    /// Read only to build the import sheet's view model — the same factory
+    /// Settings uses, so the first-run link and the Settings row present one
+    /// and the same flow (docs/history-import.md).
+    @EnvironmentObject private var dependencies: AppDependencies
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    /// The last step's "Import your history" link, in two stages: which app the
+    /// export came from, then the import sheet for it.
+    @State private var isChoosingImportSource = false
+    @State private var importSource: HistoryImportSource?
 
     /// The animation Back and Next change the step with — the same horizontal
     /// slide a swipe makes. With Reduce Motion on, the page is swapped in place:
@@ -42,6 +53,24 @@ struct OnboardingCoverView: View {
         }
         .background(DesignSystem.Colors.background.ignoresSafeArea())
         .preferredColorScheme(.dark)
+        .confirmationDialog(
+            "onboarding.profile.import.dialog_title".localized,
+            isPresented: $isChoosingImportSource,
+            titleVisibility: .visible
+        ) {
+            // The two sources' own sheet titles, so the choice here and the
+            // screen it opens are named identically.
+            Button("history_import.title".localized) { importSource = .strong }
+            Button("history_import.hevy.title".localized) { importSource = .hevy }
+        }
+        // Hosted **by the cover**, not by the app root: a sheet raised while a
+        // full-screen cover is up never reaches the screen (the finding the
+        // retired offer step left behind, docs/onboarding.md). The sheet is
+        // self-contained — its own `NavigationStack`, file picker and Cancel —
+        // and dismissing it, finished or not, lands back on this last step.
+        .sheet(item: $importSource) { source in
+            HistoryImportView(viewModel: dependencies.makeHistoryImportViewModel(source: source))
+        }
     }
 
     // MARK: - Header
@@ -120,7 +149,9 @@ struct OnboardingCoverView: View {
                     OnboardingSlidePage(
                         step: step,
                         isSelected: step == viewModel.currentStep,
-                        minHeight: proxy.size.height
+                        minHeight: proxy.size.height,
+                        viewModel: viewModel,
+                        onImport: { isChoosingImportSource = true }
                     )
                     .tag(step)
                 }
@@ -172,6 +203,10 @@ private struct OnboardingSlidePage: View {
     let step: OnboardingStep
     let isSelected: Bool
     let minHeight: CGFloat
+    /// Only the last step reads it: its cards select an answer on the view
+    /// model, and its CTA label follows. The feature slides take nothing.
+    let viewModel: OnboardingFlowViewModel
+    let onImport: () -> Void
 
     @State private var position = ScrollPosition(edge: .top)
 
@@ -191,6 +226,12 @@ private struct OnboardingSlidePage: View {
                     OnboardingHistorySlideView()
                 case .aiCoach:
                     OnboardingAICoachSlideView()
+                case .trainingProfile:
+                    OnboardingTrainingProfileSlideView(
+                        selection: viewModel.selectedTrainingProfile,
+                        onSelect: { viewModel.selectTrainingProfile($0) },
+                        onImport: onImport
+                    )
                 }
             }
             .padding(.horizontal, DesignSystem.Spacing.xl)

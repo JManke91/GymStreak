@@ -15,7 +15,7 @@ import RevenueCat
 /// RevenueCat's attribution surface (docs/pro-subscription.md §3b).
 extension RevenueCatPurchaseGateway: FunnelAttributeReporting {
 
-    /// Writes the four anonymous funnel buckets as subscriber attributes, so
+    /// Writes the five anonymous funnel buckets as subscriber attributes, so
     /// every chart in `docs/acquisition-strategy.md` §3 can be segmented on
     /// where a user actually stopped — and filtered to real App Store installs,
     /// which §1.1 showed was the difference between a readable chart and an
@@ -27,12 +27,13 @@ extension RevenueCatPurchaseGateway: FunnelAttributeReporting {
     /// the SDK's own anonymous one and `collectDeviceIdentifiers()` is still
     /// never called), and **nothing anywhere reads them back**.
     ///
-    /// Sent as one dictionary rather than four calls so the four values are
+    /// Sent as one dictionary rather than five calls so the five values are
     /// always written together: a chart that cross-filters `buildChannel` with
     /// `workoutsCompleted` is reading one moment, not two.
     func report(_ attributes: FunnelAttributes) {
         Purchases.shared.attribution.setAttributes([
             Self.onboardingCompletedAttributeKey: attributes.onboardingCompleted,
+            Self.trainingProfileAttributeKey: attributes.trainingProfile,
             Self.workoutsCompletedAttributeKey: attributes.workoutsCompleted,
             Self.routinesCreatedAttributeKey: attributes.routinesCreated,
             Self.buildChannelAttributeKey: attributes.buildChannel
@@ -40,6 +41,7 @@ extension RevenueCatPurchaseGateway: FunnelAttributeReporting {
         Self.funnelLogger.info(
             """
             Reported funnel: onboardingCompleted=\(attributes.onboardingCompleted, privacy: .public) \
+            trainingProfile=\(attributes.trainingProfile, privacy: .public) \
             workoutsCompleted=\(attributes.workoutsCompleted, privacy: .public) \
             routinesCreated=\(attributes.routinesCreated, privacy: .public) \
             buildChannel=\(attributes.buildChannel, privacy: .public)
@@ -47,10 +49,11 @@ extension RevenueCatPurchaseGateway: FunnelAttributeReporting {
         )
     }
 
-    /// The four segmentation keys. Spelled here and nowhere else — a dashboard
+    /// The five segmentation keys. Spelled here and nowhere else — a dashboard
     /// filter is matched on the literal name, so a second spelling anywhere
     /// would silently create a second, half-populated attribute.
     private static let onboardingCompletedAttributeKey = "onboardingCompleted"
+    private static let trainingProfileAttributeKey = "trainingProfile"
     private static let workoutsCompletedAttributeKey = "workoutsCompleted"
     private static let routinesCreatedAttributeKey = "routinesCreated"
     private static let buildChannelAttributeKey = "buildChannel"

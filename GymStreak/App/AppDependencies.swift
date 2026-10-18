@@ -218,7 +218,24 @@ final class AppDependencies: ObservableObject {
     /// type, like `founderCelebration`: the app root binds a `.fullScreenCover`
     /// straight to its `@Observable` `isPresenting`, and it must be the *same*
     /// instance the cover is built from so a dismissal is recorded once.
-    let onboarding: OnboardingFlowViewModel
+    ///
+    /// `lazy` only because its last step hands a fighter to `programLibrary`,
+    /// which is itself lazy. The app root reads it while composing its first
+    /// frame, so `isPresenting` is still seeded before anything is drawn.
+    private(set) lazy var onboarding: OnboardingFlowViewModel = OnboardingFlowViewModel(
+        completion: onboardingCompletion,
+        // Reported the moment the tour ends, not on the next cold launch — a
+        // user who finishes the tour and never returns would otherwise be
+        // recorded as a bail-out.
+        funnelAttributes: funnelAttributes,
+        // "I lift and fight" ends the tour on the Fighter Strength detail; the
+        // Routines tab answers the request (docs/onboarding.md).
+        programDetails: programLibrary
+    )
+
+    /// The tour's record — seen, and how the user trains — shared by the view
+    /// model that writes it and the funnel coordinator that reports it.
+    private let onboardingCompletion: any OnboardingCompletionTracking
 
     /// Keeps the pending training reminders equal to what the user's plans imply
     /// (docs/workout-reminders.md). App-lifetime because four unrelated triggers
@@ -392,13 +409,7 @@ final class AppDependencies: ObservableObject {
             reporter: purchaseGateway
         )
         self.funnelAttributes = funnelAttributes
-        self.onboarding = OnboardingFlowViewModel(
-            completion: onboardingCompletion,
-            // Reported the moment the tour ends, not on the next cold launch — a
-            // user who finishes the tour and never returns would otherwise be
-            // recorded as a bail-out.
-            funnelAttributes: funnelAttributes
-        )
+        self.onboardingCompletion = onboardingCompletion
         // One store for both halves of the reminder feature — the offer's
         // record and the frequency-cap ledger — shared by the scheduler that
         // writes the ledger and the offer that writes the record.

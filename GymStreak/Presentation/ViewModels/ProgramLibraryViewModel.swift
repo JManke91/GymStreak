@@ -11,7 +11,7 @@ import OSLog
 
 @Observable
 @MainActor
-final class ProgramLibraryViewModel {
+final class ProgramLibraryViewModel: ProgramDetailRequesting {
 
     struct ExerciseRow: Identifiable, Equatable {
         let id: Int
@@ -148,6 +148,12 @@ final class ProgramLibraryViewModel {
     private(set) var routinesToAdd: [String: [RoutineProgramRoutine]] = [:]
     var didFailToInstall = false
 
+    /// A program the Routines tab should open next, by id — raised by the
+    /// first-run tour's "I lift and fight" answer (docs/onboarding.md) and
+    /// consumed once by the tab with `didOpenRequestedDetail()`. Observable so
+    /// the tab reacts whether it is already on screen or mounts later.
+    private(set) var requestedDetailProgramId: String?
+
     private let installer: any RoutineProgramInstalling
     private let proEntitlements: any ProEntitlementProviding
     private let isGatingEnabled: Bool
@@ -198,6 +204,17 @@ final class ProgramLibraryViewModel {
 
     func summary(withId programId: String) -> ProgramSummary? {
         summaries.first { $0.id == programId }
+    }
+
+    // MARK: - ProgramDetailRequesting
+
+    func requestProgramDetail(_ programId: String) {
+        requestedDetailProgramId = programId
+    }
+
+    /// The Routines tab has pushed the requested detail; the request is spent.
+    func didOpenRequestedDetail() {
+        requestedDetailProgramId = nil
     }
 
     func isFullyInstalled(_ programId: String) -> Bool {

@@ -15,7 +15,9 @@
 //
 //  The tour used to end on a Pro offer, which made its length conditional on the
 //  paywall seam. That step is retired (docs/acquisition-strategy.md §4.12), so
-//  the flow is six steps for everyone and takes no presenter at all.
+//  the flow is seven steps for everyone and takes no presenter at all. The
+//  seventh — "How do you train?" — has its own suite,
+//  `OnboardingTrainingProfileTests`.
 //
 
 import Foundation
@@ -128,15 +130,16 @@ struct OnboardingFlowTests {
         #expect(viewModel.stepCount == OnboardingStep.allCases.count)
     }
 
-    @Test("The tour ends on the coach slide and asks for nothing")
+    @Test("The tour ends on the training-profile question and sells nothing")
     func tourEndsWithoutAPaywall() {
         let viewModel = makeViewModel()
 
-        // Six slides, six progress segments, no conditional step: the flow has
-        // no paywall seam to ask, which is what makes a fresh install reach the
-        // tab bar without ever seeing one (docs/acquisition-strategy.md §4.12).
-        #expect(viewModel.stepCount == 6)
-        #expect(viewModel.steps.last == .aiCoach)
+        // Seven slides, seven progress segments, no conditional step: the flow
+        // has no paywall seam to ask, which is what makes a fresh install reach
+        // the tab bar without ever seeing one (docs/acquisition-strategy.md
+        // §4.12). The last step asks how the user trains, never for money.
+        #expect(viewModel.stepCount == 7)
+        #expect(viewModel.steps.last == .trainingProfile)
         // The retired `onboarding` placement is gone from the enum, not merely
         // unused — an orphan case would let a future gate re-raise it.
         #expect(!PaywallPlacement.allCases.contains { $0.identifier == "onboarding" })
@@ -145,7 +148,7 @@ struct OnboardingFlowTests {
             viewModel.advance()
         }
 
-        #expect(viewModel.currentStep == .aiCoach)
+        #expect(viewModel.currentStep == .trainingProfile)
         #expect(viewModel.ctaKey == OnboardingStep.finishCTAKey)
 
         viewModel.advance()
@@ -211,12 +214,12 @@ struct OnboardingFlowTests {
         #expect(viewModel.currentStep == .welcome)
         #expect(viewModel.isPresenting)
 
-        // Reaching the coach slide by swipe, then swiping left off it: the
+        // Reaching the last slide by swipe, then swiping left off it: the
         // paging view settles on the same page. Only the CTA finishes.
-        viewModel.go(to: .aiCoach)
-        viewModel.go(to: .aiCoach)
+        viewModel.go(to: .trainingProfile)
+        viewModel.go(to: .trainingProfile)
 
-        #expect(viewModel.currentStep == .aiCoach)
+        #expect(viewModel.currentStep == .trainingProfile)
         #expect(viewModel.ctaKey == OnboardingStep.finishCTAKey)
         #expect(viewModel.isPresenting)
         // Nothing was recorded: the next launch still shows the tour.
