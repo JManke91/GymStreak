@@ -47,6 +47,15 @@ final class MatSessionLogViewModel: Identifiable {
         editedStartDate ?? openedAt.addingTimeInterval(-duration)
     }
 
+    /// Pre-fills the form from a timed run (the round timer): its sport, its
+    /// start, and its elapsed time in whole minutes, clamped to the form's range.
+    func prefill(sport: MatSport, start: Date, duration: TimeInterval) {
+        self.sport = sport
+        editedStartDate = start
+        let minutes = Int((duration / 60).rounded())
+        durationMinutes = min(Self.durationRange.upperBound, max(Self.durationRange.lowerBound, minutes))
+    }
+
     private var duration: TimeInterval { TimeInterval(durationMinutes * 60) }
 
     /// Writes the session to History, then — when Health sync is on — to Apple Health.

@@ -24,7 +24,7 @@ saved). Exit code is non-zero when any check fails; each check prints ✓ / ✗.
 | `scripts/e2e/lib.sh` | repo | Pair lookup, build/install, log reading, watch outbox and iPhone SwiftData store inspection, crash, Health grant |
 | `scripts/e2e/<feature>.sh` | repo | One `suite_<name>` per feature, made of `check_…` functions |
 | `scripts/e2e/run.sh` | repo | Sources everything, runs the requested suites, prints the tally |
-| `e2e_watch` lane | `fastlane/Fastfile` | Wrapper |
+| `e2e_watch` lane | `fastlane/Fastfile` | Wrapper — if `bundle exec fastlane` fails to load on a Mac whose system-Ruby bundler lacks gems, run `scripts/e2e/run.sh <suite>` directly; the lane does nothing else |
 
 **Driving the watch.** A scenario is a launch argument
 (`-E2E_SCENARIO mat-record -E2E_SPORT bjj -E2E_SECONDS 65`) **or** a
@@ -128,3 +128,9 @@ to count as worn. Treat it as the next thing to probe, not a capability.
   → comes back on the review → saves; with a heart-rate profile on the iPhone and 165 bpm
   injected for 5+ minutes, hard sparring is suggested, preselected and synced
   (`check_mat_suggestion_from_zones`, ~6 min). Full suite 28 checks.
+- **`round_timer`** (positioning ticket 07, docs/fight-conditioning.md "Round timer"): a
+  custom 2 × 30 s / 15 s plan (`launch_watch_round`, sport `other`) logs each phase, ends
+  itself into the review with `rounds=2`, saves as a mat session → Health activity type
+  3000 (`other`) with kind `mat` and duration ≥ 70 s → one iPhone History row → outbox
+  drained; the same run with "Don't save" ends in `finished-discarded`, queues nothing
+  and leaves the iPhone count unchanged. 16 checks, ~4 min.

@@ -18,6 +18,8 @@ enum ConditioningRoute: Hashable {
     /// A session pre-set to a program target's volume.
     case programSession(ConditioningProgramTarget)
     case programShowcase
+    /// The round timer's setup (docs/fight-conditioning.md, "Round timer").
+    case roundTimer
 }
 
 struct ConditioningLibraryView: View {
@@ -44,12 +46,14 @@ private struct ConditioningLibraryContent: View {
     private let paywalls: any PaywallPresenting
     private let entitlements: any ProEntitlementProviding
     private let makeMatSessionLog: () -> MatSessionLogViewModel
+    private let makeRoundTimerSetup: () -> RoundTimerSetupViewModel
 
     init(dependencies: AppDependencies, opensShowcase: Bool) {
         program = dependencies.conditioningProgram
         paywalls = dependencies.paywalls
         entitlements = dependencies.proEntitlements
         makeMatSessionLog = dependencies.makeMatSessionLogViewModel
+        makeRoundTimerSetup = dependencies.makeRoundTimerSetupViewModel
         _path = State(initialValue: opensShowcase ? [.programShowcase] : [])
         _viewModel = State(initialValue: ConditioningLibraryViewModel(
             safety: dependencies.conditioningSafety,
@@ -74,6 +78,7 @@ private struct ConditioningLibraryContent: View {
                     )
 
                     singleSessionRow
+                    roundTimerRow
                     matSessionRow
                 }
                 .padding(.horizontal, DesignSystem.Spacing.lg)
@@ -95,6 +100,8 @@ private struct ConditioningLibraryContent: View {
                     )
                 case .programShowcase:
                     ConditioningProgramShowcaseView(viewModel: program) { path.removeAll() }
+                case .roundTimer:
+                    RoundTimerSetupView(viewModel: makeRoundTimerSetup())
                 }
             }
             // Bounded fetches (this week's conditioning, today's workouts) — see `refresh()`.
@@ -154,6 +161,19 @@ private struct ConditioningLibraryContent: View {
             get: { placement },
             set: { if $0 == nil { paywalls.dismiss() } }
         )
+    }
+
+    /// The round timer: the one fighter capability people search for (lever #18).
+    /// Free, and it leaves no trace unless the run is saved as a mat session.
+    private var roundTimerRow: some View {
+        NavigationLink(value: ConditioningRoute.roundTimer) {
+            entryCard(
+                title: "roundtimer.entry.title".localized,
+                subtitle: "roundtimer.entry.subtitle".localized,
+                symbol: "chevron.right"
+            )
+        }
+        .buttonStyle(.plain)
     }
 
     /// Mat time is logged after the fact, not run — it is training load the program

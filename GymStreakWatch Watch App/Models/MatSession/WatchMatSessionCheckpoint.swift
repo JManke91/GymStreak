@@ -20,6 +20,9 @@ struct WatchMatSessionCheckpoint: Codable, Equatable {
     var tally: MatHeartRateTally
     /// Set when the user ended the session; the review screen is still open.
     var endedAt: Date?
+    /// The round timer's plan (positioning ticket 07); `nil` for a plain mat
+    /// session. Optional, so a checkpoint written before it existed still decodes.
+    var rounds: RoundTimerConfiguration?
 }
 
 typealias WatchMatSessionCheckpointStore = WatchSessionCheckpointStore<WatchMatSessionCheckpoint>

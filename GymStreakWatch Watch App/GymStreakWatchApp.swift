@@ -114,6 +114,9 @@ final class AppState: ObservableObject {
     /// of the conditioning HealthKit manager, the same outbox transport.
     let matWorkout: WatchConditioningWorkoutManager
     let matSession: WatchMatSessionViewModel
+    /// The round timer's last-used settings (positioning ticket 07); the timer
+    /// itself runs on `matSession`.
+    let roundTimerSettings = WatchRoundTimerSettingsStore()
 
     init() {
         let connectivity = WatchConnectivityManager.shared
@@ -145,7 +148,8 @@ final class AppState: ObservableObject {
             zones: { [conditioningStore = connectivity.conditioningStore] in
                 conditioningStore.program?.matIntensityZones
             },
-            isOtherWorkoutActive: { [weak healthKit] in healthKit?.isWorkoutActive ?? false }
+            isOtherWorkoutActive: { [weak healthKit] in healthKit?.isWorkoutActive ?? false },
+            roundTimerSettings: roundTimerSettings
         )
         self.workoutViewModel = WatchWorkoutViewModel(
             healthKitManager: healthKit,

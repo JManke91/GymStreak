@@ -12,9 +12,13 @@ import SwiftUI
 struct MatSessionLogView: View {
     @State private var viewModel: MatSessionLogViewModel
     @Environment(\.dismiss) private var dismiss
+    /// Called when the user taps Save — the round timer uses it to offer the
+    /// save once. Cancelling calls nothing.
+    private let onSave: (() -> Void)?
 
-    init(viewModel: MatSessionLogViewModel) {
+    init(viewModel: MatSessionLogViewModel, onSave: (() -> Void)? = nil) {
         _viewModel = State(initialValue: viewModel)
+        self.onSave = onSave
     }
 
     var body: some View {
@@ -44,6 +48,7 @@ struct MatSessionLogView: View {
                         // Apple Health write finishes after the sheet is gone.
                         let viewModel = viewModel
                         Task { await viewModel.save() }
+                        onSave?()
                         dismiss()
                     }
                     .fontWeight(.semibold)

@@ -37,6 +37,9 @@ struct RoutineListView: View {
         .navigationDestination(for: MatSessionDestination.self) { _ in
             MatSessionSportPickerView()
         }
+        .navigationDestination(for: RoundTimerDestination.self) { _ in
+            RoundTimerSetupView()
+        }
         // `onDismiss` is the documented, single-fire signal for an actual
         // cover dismissal (unlike `.onDisappear`, which can fire on wrist-down
         // and would wrongly kill a live workout). All visible-state teardown is
@@ -132,6 +135,7 @@ struct RoutineListView: View {
 
             Section {
                 MatSessionEntryRow()
+                RoundTimerEntryRow()
             }
         }
         .listStyle(.carousel)
@@ -196,6 +200,9 @@ struct RoutineListView: View {
             // Recording sparring needs no routine.
             NavigationLink(value: MatSessionDestination()) {
                 Label("Mat session", systemImage: "figure.martial.arts")
+            }
+            NavigationLink(value: RoundTimerDestination()) {
+                Label("Round timer", systemImage: "timer")
             }
         }
     }

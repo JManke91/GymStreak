@@ -5,7 +5,8 @@
 //  After a mat session on the watch (positioning ticket 05,
 //  docs/fight-conditioning.md): duration, average and maximum heart rate, and
 //  the intensity — preset to the zone-time suggestion when there is one, one
-//  tap to change — confirmed before anything is saved.
+//  tap to change — confirmed before anything is saved. After the round timer
+//  (positioning ticket 07) the user can also not save it at all.
 //
 
 import SwiftUI
@@ -19,10 +20,20 @@ struct MatSessionReviewView: View {
         ScrollView {
             VStack(spacing: OnyxWatch.Spacing.md) {
                 VStack(spacing: 2) {
+                    if mat.isRoundTimer {
+                        Text("Round timer")
+                            .font(.watchCaption)
+                            .foregroundStyle(OnyxWatch.Colors.textSecondary)
+                    }
                     Text(WatchMatSessionCopy.sport(sport))
                         .font(.watchHeader)
-                    Text(WatchConditioningCopy.clock(review.duration))
-                        .font(.watchNumberLarge)
+                    if let rounds = review.rounds {
+                        Text("\(rounds) rounds · \(WatchConditioningCopy.clock(review.duration))")
+                            .font(.watchSubheadline)
+                    } else {
+                        Text(WatchConditioningCopy.clock(review.duration))
+                            .font(.watchNumberLarge)
+                    }
                     if let average = review.averageHeartRate, let maximum = review.maximumHeartRate {
                         Text("Avg \(average) · max \(maximum) bpm")
                             .font(.watchCaption)
@@ -40,8 +51,12 @@ struct MatSessionReviewView: View {
                     }
                 }
 
-                Button("Save") { Task { await mat.save() } }
+                Button(mat.isRoundTimer ? LocalizedStringKey("Save as mat session") : "Save") { Task { await mat.save() } }
                     .disabled(mat.selectedIntensity == nil)
+                if mat.isRoundTimer {
+                    Button("Don't save", role: .destructive) { mat.discard() }
+                        .buttonStyle(.bordered)
+                }
             }
             .padding(.horizontal, OnyxWatch.Spacing.md)
         }

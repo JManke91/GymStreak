@@ -6,6 +6,7 @@ final class RecordingConditioningCues: ConditioningCueDelivering {
     private(set) var played: [ConditioningLiveCue] = []
     private(set) var scheduledBatches: [[ConditioningScheduledCue]] = []
     private(set) var cancelCount = 0
+    private(set) var prepareCount = 0
     var isNotificationAllowed = true
 
     func play(_ cue: ConditioningLiveCue) { played.append(cue) }
@@ -16,6 +17,8 @@ final class RecordingConditioningCues: ConditioningCueDelivering {
     }
 
     func cancelBackgroundCues() { cancelCount += 1 }
+
+    func prepareRoundTimer() { prepareCount += 1 }
 }
 
 @MainActor

@@ -6,7 +6,9 @@
 //  and one local notification per upcoming transition for while it is not.
 //  The app installs no `UNUserNotificationCenterDelegate`, so a notification
 //  that fires while GymStreak is in the foreground is not presented — the
-//  in-app cue is the only one heard then. See docs/fight-conditioning.md.
+//  in-app cue is the only one heard then. The round timer's cues ring its
+//  bell (`RoundTimerBell`) instead of a system sound, and its notifications
+//  carry the same bell files. See docs/fight-conditioning.md.
 //
 
 import AudioToolbox
@@ -22,11 +24,13 @@ final class ConditioningCueDeliverer: ConditioningCueDelivering {
     private static let maxPendingCues = 48
 
     private let center: UNUserNotificationCenter
+    private let bell: RoundTimerBell
     private var scheduledIdentifiers: [String] = []
     private var generation = 0
 
-    init(center: UNUserNotificationCenter = .current()) {
+    init(center: UNUserNotificationCenter = .current(), bell: RoundTimerBell = RoundTimerBell()) {
         self.center = center
+        self.bell = bell
     }
 
     // MARK: - Foreground
@@ -45,7 +49,37 @@ final class ConditioningCueDeliverer: ConditioningCueDelivering {
         case .finished:
             AudioServicesPlaySystemSound(1025) // "fanfare"
             UINotificationFeedbackGenerator().notificationOccurred(.success)
+        case .roundStart:
+            bell.play(.start)
+            UINotificationFeedbackGenerator().notificationOccurred(.warning)
+        case .roundWarning:
+            bell.play(.warning)
+            UIImpactFeedbackGenerator(style: .heavy).impactOccurred()
+        case .roundEnd:
+            bell.play(.end)
+            UIImpactFeedbackGenerator(style: .heavy).impactOccurred()
+        case .roundTimerFinished:
+            bell.play(.finished)
+            UINotificationFeedbackGenerator().notificationOccurred(.success)
         }
+    }
+
+    func prepareRoundTimer() {
+        bell.prepare()
+    }
+
+    /// The round timer's notifications ring its bell; everything else keeps
+    /// the default sound.
+    private static func sound(for cue: ConditioningLiveCue?) -> UNNotificationSound {
+        let bell: RoundTimerBell.Sound? = switch cue {
+        case .roundStart: .start
+        case .roundWarning: .warning
+        case .roundEnd: .end
+        case .roundTimerFinished: .finished
+        default: nil
+        }
+        guard let bell else { return .default }
+        return UNNotificationSound(named: UNNotificationSoundName(bell.fileName))
     }
 
     // MARK: - Background
@@ -81,7 +115,7 @@ final class ConditioningCueDeliverer: ConditioningCueDelivering {
             let content = UNMutableNotificationContent()
             content.title = cue.title
             content.body = cue.body
-            content.sound = .default
+            content.sound = Self.sound(for: cue.cue)
 
             let identifier = Self.identifierPrefix + "\(scheduledGeneration).\(offset)"
             let request = UNNotificationRequest(

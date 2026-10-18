@@ -38,4 +38,25 @@ enum WatchMatSessionCopy {
         case .other: "figure.mixed.cardio"
         }
     }
+
+    // MARK: - Round timer (positioning ticket 07)
+
+    /// A preset is named after its sport; custom is "Custom".
+    static func preset(_ preset: RoundTimerPreset) -> String {
+        guard preset != .custom, let matSport = WatchMatSport(rawValue: preset.matSportRawValue) else {
+            return String(localized: "Custom")
+        }
+        return sport(matSport)
+    }
+
+    /// "5:00 / 1:00" — round and rest length.
+    static func roundAndRest(round: TimeInterval, rest: TimeInterval) -> String {
+        "\(WatchConditioningCopy.clock(round)) / \(WatchConditioningCopy.clock(rest))"
+    }
+
+    /// "Round 3/6", or "Round 3" when the timer is open-ended.
+    static func round(_ phase: ConditioningPhase) -> String? {
+        if let position = WatchConditioningCopy.position(phase) { return position }
+        return phase.round.map { String(localized: "Round \($0)") }
+    }
 }

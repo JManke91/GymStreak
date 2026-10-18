@@ -345,6 +345,7 @@ final class WatchConditioningRunViewModel {
         case .effortStart: .start
         case .recoveryStart: .stop
         case .leadIn: .click
+        case .warning: .notification
         case .finished: .success
         }
     }

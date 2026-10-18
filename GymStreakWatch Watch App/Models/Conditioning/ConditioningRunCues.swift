@@ -17,6 +17,8 @@ enum ConditioningRunCue: Equatable {
     case recoveryStart
     /// 3-2-1 before an effort phase that follows another phase.
     case leadIn(Int)
+    /// A round has `warning` seconds left (the round timer, positioning ticket 07).
+    case warning
     /// The last phase ended.
     case finished
 }
@@ -31,26 +33,34 @@ enum ConditioningCueEvaluator {
     static func cues(
         in timeline: ConditioningTimeline,
         from previous: TimeInterval,
-        to current: TimeInterval
+        to current: TimeInterval,
+        warning: TimeInterval = 0
     ) -> [ConditioningRunCue] {
         guard current > previous, current - previous <= maximumTickGap else { return [] }
         func crossed(_ offset: TimeInterval) -> Bool { offset > previous && offset <= current }
 
-        var cues: [ConditioningRunCue] = []
+        // Each cue at its session time, so warnings interleave with the phase cues.
+        var timed: [(offset: TimeInterval, cue: ConditioningRunCue)] = []
         for index in timeline.phases.indices.dropFirst() {
             let offset = timeline.startOffsets[index]
             let phase = timeline.phases[index]
             if phase.kind.isEffort {
                 for count in (1...3).reversed() where crossed(offset - TimeInterval(count)) {
-                    cues.append(.leadIn(count))
+                    timed.append((offset - TimeInterval(count), .leadIn(count)))
                 }
             }
             if crossed(offset) {
-                cues.append(phase.kind.isEffort ? .effortStart : .recoveryStart)
+                timed.append((offset, phase.kind.isEffort ? .effortStart : .recoveryStart))
             }
         }
-        if crossed(timeline.totalDuration) { cues.append(.finished) }
-        return cues
+        if crossed(timeline.totalDuration) { timed.append((timeline.totalDuration, .finished)) }
+        for offset in timeline.warningOffsets(before: warning) where crossed(offset) {
+            timed.append((offset, .warning))
+        }
+        // Stable on ties: the order appended above.
+        return timed.enumerated()
+            .sorted { ($0.element.offset, $0.offset) < ($1.element.offset, $1.offset) }
+            .map(\.element.cue)
     }
 }
 

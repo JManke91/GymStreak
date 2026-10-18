@@ -10,7 +10,11 @@ import Foundation
 
 extension WatchMatSessionViewModel {
 
-    enum HealthOutcome: Equatable { case saved, failed, notSaved }
+    enum HealthOutcome: Equatable {
+        case saved, failed, notSaved
+        /// The user chose not to save (the round timer's "Don't save").
+        case discarded
+    }
 
     struct Review: Equatable {
         let duration: TimeInterval
@@ -18,6 +22,8 @@ extension WatchMatSessionViewModel {
         let maximumHeartRate: Int?
         /// `nil` without heart-rate zones or with too little heart rate — the user picks.
         let suggested: WatchMatIntensity?
+        /// Rounds completed on the round timer; `nil` for a plain mat session.
+        let rounds: Int?
     }
 
     enum State: Equatable {
@@ -29,5 +35,10 @@ extension WatchMatSessionViewModel {
         case reviewing(Review)
         case saving
         case finished(HealthOutcome)
+    }
+
+    var heartRateReading: ConditioningHeartRateReading {
+        if let heartRate { return .bpm(heartRate) }
+        return elapsed - heartRateSearchStartedAt < ConditioningHeartRateReading.measuringWindow ? .measuring : .missing
     }
 }

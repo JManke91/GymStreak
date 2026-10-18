@@ -100,6 +100,13 @@ launch_watch() {
         -E2E_SCENARIO "$1" -E2E_SPORT "${2:-bjj}" -E2E_SECONDS "${3:-65}" "${extra[@]}" >/dev/null
 }
 
+launch_watch_round() {
+    # launch_watch_round <scenario> <rounds> <round seconds> <rest seconds>
+    xcrun simctl launch --terminate-running-process "$WATCH" "$WATCH_BUNDLE" \
+        -E2E_SCENARIO "$1" -E2E_ROUNDS "${2:-2}" -E2E_ROUND_SECONDS "${3:-30}" \
+        -E2E_REST_SECONDS "${4:-15}" >/dev/null
+}
+
 # The scenario the next launch runs — including watchOS's own relaunch after a crash.
 set_next_watch_scenario() {
     xcrun simctl spawn "$WATCH" defaults write "$WATCH_BUNDLE" E2E_SCENARIO "$1"

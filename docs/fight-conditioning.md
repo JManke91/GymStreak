@@ -7,7 +7,7 @@ device-verified the same day. Ticket 04 (the 12-week program — showcase, enrol
 today's suggestion) shipped and was device-verified 2026-09-20. Ticket 05 (the post-workout add-on on
 the iPhone workout summary) shipped and was device-verified 2026-09-21 — its `.later` branch is not
 reachable before program week 5 and remains unit-tested only (see that section). Ticket 06 (the watch runner with the live heart-rate zone) shipped and was device-verified 2026-09-22; its runner was then redesigned (heart-rate gauge, swipe-away controls — see "Watch runner redesign"). Ticket 07 (watch sessions sync to iPhone History and the program week) shipped and was device-verified 2026-09-23. Ticket 08 (the Pro depth gate on program Phases 2–3) shipped 2026-09-23 — the last ticket of the set.**
-The feature is complete. **Extension (2026-10-17):** logging mat and sparring sessions as training load (see "Mat sessions"). This file holds
+The feature is complete. **Extensions:** logging mat and sparring sessions as training load (2026-10-17, see "Mat sessions") and the **round timer** for sparring and class rounds (2026-10-18, see "Round timer"). This file holds
 the pre-implementation research (so it is not re-done) and the feature doc (iOS + watch
 architecture, components, edge cases). Parent Things task: "Add fighting conditioning into workout routine"
 (`TFUtiRbLsX4VScjcnbdZbv`, Gym Streak project).
@@ -65,8 +65,11 @@ an elapsed time to a `ConditioningPosition`. The view model re-derives everythin
 `clock.elapsed(at: now)` every 200 ms, so a locked or backgrounded phone resumes at the right
 place. On returning to the foreground (`scenePhase == .active`) it calls `resynchronize()`, which
 jumps to the current phase **without** replaying the cues that happened meanwhile (their
-notifications already fired). If the session ended while the app was suspended, the Health
-workout still ends at the timeline's end, not at wake-up.
+notifications already fired) and — since the round timer (2026-10-18) — reschedules the pending
+notifications from "now", so a long timeline keeps its window of upcoming cues; for a conditioning
+session that re-adds the same remaining cues, which is harmless. If the session ended while the app
+was suspended, the Health workout still ends at the timeline's end, not at wake-up. The timing
+itself has lived in `ConditioningIntervalEngine` since the round timer; see "Round timer".
 
 Expansion rules (unit-tested in `ConditioningTimelineTests`): warm-up → work/rest pairs with no
 trailing rest after the last work → cool-down; set-based sessions replace the last rest of each
@@ -1584,6 +1587,235 @@ iPhone's Fitness app as Martial Arts, once; a session saved with the iPhone out 
 arrived once in History when the iPhone came back (the queued `transferUserInfo` the simulator cannot
 deliver). The zone-based suggestion end to end is covered on the simulator with injected heart rate
 (`check_mat_suggestion_from_zones`); the real sensor reaching the zones is the only part not seen.
+
+## Round timer (positioning ticket 07 — rounds for sparring and classes, iPhone + watch)
+
+**Status (2026-10-18): done — built on both targets, iOS and watch suites green, simulator
+end-to-end `scripts/e2e/run.sh round_timer` (see "Verification" below), architecture review run, and
+device-verified by the user the same day (lock-screen bell and silent switch on the iPhone, haptics
+on the watch).** Ticket
+`.scratch/positioning-usp/issues/07-round-timer.md` → `docs/acquisition-strategy.md` lever #18.
+**Why it exists:** fighters do not search for strength apps, but they do search for round timers
+("bjj timer", "jiu-jitsu round timer", "kampfsport timer" are live autocomplete queries). The timer
+is the searchable entry point of the fighter positioning, and it gives a fighter a reason to open the
+app on mat days. The matching keyword-field rotation is a **proposal** in
+`docs/marketing/app-store-subtitle-keywords.md` §4.2c / §5.2b, entered with the version that ships
+this (not before — the tokens would point at a feature that does not exist).
+
+**What the user gets.** iPhone: Conditioning screen → **Round timer** (between "Single session" and
+"Log a mat session") → the setup: preset chips **BJJ** (5:00 / 1:00), **MMA** (5:00 / 1:00),
+**Boxing** (3:00 / 1:00), **Muay Thai** (3:00 / 2:00) and **Custom** (round 0:30–20:00 in 30 s steps,
+rest 0:00–10:00 in 15 s steps), the round count (1–30) or **Open-ended**, and the **warning before
+the end** (0–30 s in 5 s steps, default 10 s; "Off" at 0). The last-used settings are what the screen
+opens on next time. *Start* opens the runner full screen: ROUND on the tint capsule / REST on the
+elevated card, a large countdown that turns **amber inside the warning window**, "Round 3 of 6" (or
+"Round 3" when open-ended), "Next: REST · 1:00", a progress bar (hidden when open-ended), Pause /
+Resume / End. Watch: a **Round timer** row under "Mat session" on the routine list (and in the empty
+state) → preset picker, rounds stepper, Open-ended toggle, Custom's round and rest steppers, Start →
+the mat-session recorder's pager with a **round page** (phase pill, countdown, "Round 3/6", live
+heart rate). The watch does not edit the warning; it uses the configuration's default (10 s).
+
+**Signals.** iPhone, on screen: a synthesized **bell** at every round start (one strike — including
+the opening bell) and round end (two strikes), a wooden **clacker** at the warning, three bells when
+the last round is over, plus the conditioning runner's 3-2-1 lead-in tick before every round after
+the first. Each bell comes with a haptic. The bell plays through `AVAudioSession` category
+`.playback` with `[.mixWithOthers, .duckOthers]`, activated for the bell's duration and then
+deactivated with `.notifyOthersOnDeactivation` — so it **sounds with the ring/silent switch on
+silent** (a phone on a gym floor usually is) and ducks the music playing from this phone while it
+rings. Nothing else in the app configures an audio session. Screen locked / app in the background:
+the engine schedules one local notification per upcoming transition **and per warning**, in time
+order, carrying the same `.caf` as `UNNotificationSound(named:)` — the conditioning runner's
+mechanism, not the rest timer's Live Activity (which covers one deadline, not a multi-interval
+timeline). Notification sounds respect the silent switch and Focus; that limit is the OS's and is
+documented in the setup hint. The deliverer keeps the first 48 pending requests, so a timer of more
+than ~15 rounds (3 cues per round) or an open-ended one gets a *sliding window*: `resynchronize()`
+on every return to the foreground reschedules from "now". With the screen on, the runner keeps the
+idle timer disabled and the in-app bell is the only cue heard (no `UNUserNotificationCenterDelegate`,
+as before). Watch: haptics only — `.start` at round start, `.notification` at the warning, `.stop`
+when a rest starts and when the last round ends, `.click` ×3 lead-in before rounds 2+; an active
+`HKWorkoutSession` keeps them firing wrist-down. Round 1 gets no lead-in on the watch (the evaluator
+never cues the first phase).
+
+**The sounds** (`Resources/Sounds/round-timer-{start,warning,end,finished}.caf`, mono 44.1 kHz,
+IMA4, 0.6–2.5 s, 18–63 KB) were **synthesized**, not recorded: the bell is five inharmonic partials
+of a struck brass ring bell (ratios 1 / 2 / 2.76 / 3.5 / 5.4 of 880 Hz, exponential decays 1.1 s
+down to 0.25 s, 3 ms attack), struck once / twice (0.38 s apart) / three times; the clacker is two
+knocks 0.2 s apart, each a 12 ms noise burst plus a 1.9 kHz tone decaying over 35 ms; all normalized
+to −1 dBFS and converted with `afconvert -f caff -d ima4`. Regenerate with the same recipe rather than
+replacing one file: the four must sound like one instrument.
+
+**One engine, two vocabularies — the prefactor the ticket asked for.** The conditioning runner's
+timing, cue and notification logic moved out of `ConditioningRunViewModel` into
+`ConditioningIntervalEngine` (Presentation/ViewModels/Conditioning): `ConditioningClock` +
+`ConditioningTimeline`, the 200 ms tick, pause / resume / end / `resynchronize` (jump without
+replaying missed cues; now also reschedules the notification window), the phase-start cue, the
+3-2-1 lead-in, the new **warning** (once per work phase, `lead` seconds before its end, not for
+phases no longer than the lead), and `scheduleBackgroundCues()` (phase starts + warnings + "finished",
+sorted by fire date). What the engine does not know is supplied as a `ConditioningCueVocabulary`:
+which `ConditioningLiveCue` a phase start plays, an optional **start cue** (the round timer's opening
+bell; a conditioning session starts into its warm-up silently), the finished cue, the notification
+text, and the optional warning. `onFinished(didComplete:endDate:)` hands the end to the owner.
+`ConditioningRunViewModel` keeps its whole public surface (forwarding `state`, `position`,
+`elapsed`, …) and does only what is its own: the `ConditioningRecord` and the Apple Health write;
+`ConditioningRunViewModelTests` passed unchanged. `RoundTimerViewModel` owns an engine with
+`RoundTimerCopy.vocabulary(for:)` and adds `completedRounds`, `isInWarning`, `matSport`,
+`canSaveAsMatSession` and the pre-filled mat-session form. **Nothing else counts time.**
+
+**Architecture review (2026-10-18): PASS WITH WARNINGS**, no critical findings; the reviewer
+confirmed that the only iOS owner of a clock and tick loop is the engine and that the watch's are
+unchanged. Acted on: the bell's `AVAudioSession` category and players are now loaded by
+`prepareRoundTimer()` when the run is created (the Start tap), so the opening bell pays only
+`setActive` on the main thread; the watch setup view no longer writes the settings store itself —
+`startRoundTimer` remembers the configuration and the view reads `lastRoundTimerConfiguration`.
+Acknowledged: `resynchronize()` rescheduling the notification window is a deliberate behaviour change
+to the existing conditioning runner as well (documented in the ticket-01 section above); and
+`WatchMatSessionViewModel.swift` is 350 lines because its state is `private` by design — splitting
+it further would widen access, the same trade-off as `WatchConditioningRunViewModel` (352 lines).
+
+**The configuration (`RoundTimerConfiguration.swift`, identical copy in both targets —
+`WatchRoundTimerTests.sharedCopiesMatch`).** `RoundTimerPreset` (bjj, mma, boxing, muayThai, custom)
+fixes round/rest for the sport presets and names the `MatSport` raw value a run is saved as (custom →
+`other`). `RoundTimerConfiguration` holds the preset, the custom round/rest (kept while a sport preset
+is selected, so switching back restores them), `rounds: Int?` (`nil` = open-ended) and `warning`.
+`phases()` expands to `.work` (effort `.hardRepeatable`, `round`, `roundsPerSet` = the count or `nil`)
+/ `.rest` pairs with **no rest after the last round** and **no rest phases at all when rest is 0**
+(the next round starts on the bell). **Open-ended is 99 rounds** (`openEndedRoundCount`): the timeline
+stays finite, nobody reaches the end, and the notification window slides as described above.
+`ConditioningTimeline.warningOffsets(before:)` lives in the same file so the timeline file stays
+untouched. Each device expands its own rounds — the watch never needs the iPhone.
+
+**Save as a mat session — or nothing.** A timer run writes **no** `ConditioningRecord`, no
+conditioning Health workout and nothing to History. When it ends (the last bell, or End) the iPhone
+shows "Rounds complete" / "Timer stopped", "6 rounds · 35:12", and — if the run lasted at least
+**60 s** (`RoundTimerViewModel.minimumSavableDuration`, the watch's rule) — **Save as mat session**:
+the existing `MatSessionLogView`, pre-filled through `MatSessionLogViewModel.prefill(sport:start:
+duration:)` with the preset's sport, the run's start (`editedStartDate`, so it stays put) and the
+elapsed time rounded to whole minutes and clamped to the form's 5–300 min range. Saving goes through
+the form's unchanged path (record first, Health second, `GymStreakSessionKind = "mat"`), the view's
+new `onSave` marks the run saved, and the button is replaced by "Saved as a mat session" — a second
+record cannot be created. Declining (Done) creates nothing. On the watch the run *is* a mat session
+recording from the start (a live `HKWorkoutSession` with the sport's activity type, custom →
+`.other`), so the review that opens at the end is ticket 05's — duration, average / max heart rate,
+the heart-rate-suggested intensity — with "Round timer", "N rounds · m:ss" and **two buttons**: *Save
+as mat session* (the usual save: Health workout, outbox, iPhone History as one `MatSession`) and
+**Don't save** (`discard()`: `workout.discard()` so no Health workout, checkpoint cleared, nothing
+queued, state `.finished(.discarded)` → "Nothing saved · Just a timer — nothing in History or Apple
+Health."). Under a minute the existing `.notSaved` path applies. The intensity is part of the record,
+so nothing is saved before the user confirms it, as for every mat session.
+
+**Watch: the recorder plus a timeline, not a second runner.** `WatchMatSessionViewModel.begin(sport:
+rounds:)` is the one start path; `startRoundTimer(_:)` (`+Rounds.swift`) derives the sport from the
+preset and passes the plan. `tick()` → `advanceRounds`: `roundPosition = timeline.position(at:
+elapsed)`, cues from `ConditioningCueEvaluator.cues(in:from:to:warning:)` (the evaluator gained the
+`warning` parameter and now sorts all cues by session time; with the default 0 the conditioning
+runner's output is unchanged), haptics via `WatchConditioningRunViewModel.haptic(for:)` minus the
+finished cue, and when the position is `nil` while running the recorder **ends itself at the last
+bell** (`clock.date(forElapsed: totalDuration)`, not at the tick that noticed), so the review and the
+Health workout show exactly the planned length. A paused clock never advances, so a pause plays no cue
+and never auto-ends. `WatchMatSessionCheckpoint.rounds` (optional — older files decode) rebuilds the
+timeline on relaunch; `lastCueElapsed` is set to the recovered elapsed, so missed cues are not
+replayed, and a timeline that ended while the app was dead ends on the next tick. `Review.rounds`
+is computed once when the review opens — the view never iterates the timeline. Last-used settings:
+`WatchRoundTimerSettingsStore` (watch `UserDefaults`, JSON under `roundTimer.lastConfiguration`,
+owned by `AppState` and injected into the recorder, which saves on `startRoundTimer` and exposes
+`lastRoundTimerConfiguration` to the setup view); the iPhone's `RoundTimerSettingsStore` uses the
+same key in its own defaults.
+The two devices do not sync settings — each remembers what it last ran.
+
+**Monetization.**
+
+```
+Monetization verdict — round timer
+  Tier          Free
+  Derivation    §3 Rule 3 (in-session surface on iPhone and watch) and Rule 1 (it leads into a logged session)
+  Mechanism     n/a — nothing is gated
+  Placement     none
+  Nudge         none
+  Free residue  the entire feature, on both devices
+  Founder note  n/a — gating the acquisition hook would defeat it
+```
+
+Re-checked at completion: no round-timer file reads an entitlement, shows an `OnyxProBadge` or a
+placement, on either target.
+
+**Components.**
+
+| Target / layer | File | Role |
+|---|---|---|
+| Shared (identical) | `RoundTimerConfiguration.swift` (iOS `Domain/Models/Conditioning/`, watch `Models/Conditioning/`) | presets, settings, phase expansion, `warningOffsets` |
+| iOS Domain/Interfaces | `ConditioningCueDelivering.swift` (cues `roundStart`, `roundWarning`, `roundEnd`, `roundTimerFinished`; `ConditioningScheduledCue.cue`), `RoundTimerSettingsStoring.swift` | gateways |
+| iOS Data | `Notifications/RoundTimerBell.swift`, `Notifications/ConditioningCueDeliverer.swift` (bell + notification sounds), `Preferences/RoundTimerSettingsStore.swift`, `Resources/Sounds/*.caf` | sound, notifications, settings |
+| iOS Presentation | `ViewModels/Conditioning/ConditioningIntervalEngine.swift` (+ `ConditioningCueVocabulary`), `RoundTimerViewModel.swift`, `RoundTimerSetupViewModel.swift`, `RoundTimerCopy.swift`; `ConditioningRunViewModel.swift` (now engine-backed), `MatSessionLogViewModel.prefill` | state + copy |
+| iOS Presentation | `Views/Conditioning/RoundTimerSetupView.swift`, `RoundTimerRunnerView.swift` (+ finished view); `ConditioningLibraryView` (`ConditioningRoute.roundTimer`, entry row); `MatSessionLogView(onSave:)` | screens |
+| iOS App | `AppDependencies.roundTimerSettings`, `makeRoundTimerSetupViewModel()`, `makeRoundTimerViewModel(configuration:)` (shares `conditioningCues`) | wiring |
+| watch Models | `Conditioning/ConditioningRunCues.swift` (`.warning`, sorted cues), `MatSession/WatchMatSessionCheckpoint.swift` (`rounds`), `WatchMatSessionCopy.swift` | logic, crash boundary, copy |
+| watch Managers / ViewModels | `WatchRoundTimerSettingsStore.swift`; `WatchMatSessionViewModel.swift` (`begin`, `advanceRounds`, `discard`, `end(at:)`), `+Rounds.swift`, `+State.swift` (`Review.rounds`, `HealthOutcome.discarded`) | the recorder |
+| watch Views | `RoundTimer/RoundTimerSetupView.swift` (+ `RoundTimerEntryRow`, `RoundTimerDestination`), `RoundTimer/RoundTimerLivePage.swift`; `MatSession/MatSessionRunnerView` (page swap, discarded screen), `MatSessionReviewView` (rounds line, Don't save); `RoutineListView` row; `GymStreakWatchApp` (`AppState`) | screens |
+| E2E | `TestData/WatchE2EScenarioRunner.swift` (`round-record`, `round-discard`), `scripts/e2e/round-timer.sh`, `lib.sh` (`launch_watch_round`) | agent-run checks |
+
+Strings: `roundtimer.*` (35 keys) in `Resources/{en,de}.lproj/Localizable.strings`; 15 new English
+keys with German in the watch `Localizable.xcstrings` ("Round timer" → "Rundentimer", "Don't save" →
+"Nicht speichern", …). German says *Gong* for the bell and *Klapper* for the clacker.
+
+**Tests.** iOS `RoundTimerTests` (14): preset lengths and mat sports; phases alternate without a
+trailing rest, rest 0 drops the rest phases, open-ended expands to 99 rounds with no total; warning
+offsets; the live cue sequence (opening bell, warning once, round-end bell, 3-2-1, next bell, final
+bells); the notification batch (one per transition and warning, time-ordered, each with its bell);
+`resynchronize` reschedules and replays nothing, also inside a warning window; ending early keeps the
+rounds done and offers no save under 60 s; "save as mat session" pre-fills sport / start / minutes and
+writes exactly one `MatSession` + one Health workout and then offers no second save; a finished run
+left unsaved writes nothing; prefill clamps; the settings store round trip; the setup view model
+(last-used, open-ended toggle, remember on Start). `ConditioningRunViewModelTests` and
+`ConditioningTimelineTests` unchanged and green through the refactor (iOS suite 1,721/1,721 on 2026-10-18). Watch `WatchRoundTimerTests`
+(15): shared-copy identity, phases, warning offsets, the evaluator's `.warning` and catch-up rule, the
+recorder's haptic sequence, auto-end into the review at the planned length, discard, save as `other`,
+checkpoint round trip and recovery without replay, a plain mat session has no plan, starting remembers the configuration. Suites on
+2026-10-18: watch 155/155.
+
+**Verification (2026-10-18).** `scripts/e2e/run.sh round_timer` on the paired iPhone 17 Pro Max +
+Apple Watch Series 11 simulators (`fastlane e2e_watch suite:round_timer` wraps it; on this Mac the
+system-Ruby bundler lacked gems, so the script was run directly): *record* — a custom 2 × 30 s / 15 s
+plan logs round 1, rest, round 2, ends itself into the review with `rounds=2`, saves as `other`
+(Health activity type 3000, kind `mat`, duration ≥ 70 s), reaches the iPhone as one `MatSession` and
+the outbox drains; *discard* — the same run ends in `finished-discarded` with an empty outbox and an
+unchanged iPhone count. The iPhone screens were rendered (runner in the warning window, rest, the
+finished screen) and the setup screen walked through a throwaway XCUITest. **Hardware (user,
+2026-10-18): passed** — the lock-screen bell on a physical iPhone and the bell through the silent
+switch in the foreground (neither can be heard on a simulator), and the watch haptics on the wrist.
+
+**Deliberate omissions.**
+- **No Live Activity (yet).** The rest timer's Live Activity presents one deadline; a round timer is a
+  timeline of up to ~200 transitions, and ActivityKit cannot pre-schedule states — the running app or
+  a push must update it, so a locked phone cannot follow the rounds. The conditioning runner's
+  notification approach covers the boundaries, and the ticket asked for one engine. **Follow-up cut
+  2026-10-19 as ticket 09** (`.scratch/positioning-usp/issues/09-round-timer-live-activity.md`): one
+  activity with a whole-run countdown that never goes stale, plus phase detail while fresh with
+  `staleDate` fallback.
+- **No background audio mode and no time-sensitive interruption level.** `UIBackgroundModes: audio`
+  would let the bell ring while locked regardless of the silent switch, but it is a product and App
+  Review decision (and keeps the app alive for the whole run). `.timeSensitive` would break through
+  Focus modes but needs the Time Sensitive Notifications capability on the App ID — a provisioning
+  change this ticket did not want to risk (see `healthkit-background-delivery-entitlement` for the
+  failure mode). Both are listed here so they are decided deliberately, not forgotten.
+- **The warning is not editable on the watch**, and the two devices do not sync their settings.
+- **The iPhone's pre-filled duration is clamped to 5 min** by the mat-session form's range; a run of
+  60–299 s saves as 5 min. Lowering the form's floor is a one-line change if it ever matters.
+- **No sound on the watch**, haptics only. Research found speaker routing for a `.playback`
+  `AVAudioPlayer` on watchOS unconfirmed and headphone-dependent (see below).
+
+**Research findings (2026-10-18, via the ios-api-researcher agent, Apple docs through Context7).**
+`AVAudioSession` `.playback` is the only category that plays through the ring/silent switch;
+`AudioServicesPlaySystemSound` (what the conditioning cues use) and `UNNotificationSound` both respect
+it, and only `UNNotificationSound.criticalSoundNamed` ignores it — behind the Critical Alerts
+entitlement Apple grants for health/safety, not timers. `.duckOthers` implies mixing; deactivate with
+`.notifyOthersOnDeactivation` or the music stays ducked. Custom notification sounds: `.caf` / `.aiff`
+/ `.wav` with Linear PCM, IMA4, µ-law or a-law, **under 30 s**, in the main bundle (or
+`Library/Sounds`); longer or missing files fall back to the default sound. `.timeSensitive` requires
+the Time Sensitive Notifications capability and does not bypass the silent switch. Swift 6:
+`AVAudioPlayer` is not `Sendable`; keep the players in a `@MainActor` class and never pass them across
+actors; the deactivation `Task` inherits main-actor isolation. watchOS: `WKInterfaceDevice.play(_:)`
+types are mostly haptic-only; `.notification`, `.success`, `.failure`, `.retry` may chirp when the
+watch is not muted — test on the wrist.
 
 ## Research findings — Apple Health / HealthKit (verified 2026-09-18)
 

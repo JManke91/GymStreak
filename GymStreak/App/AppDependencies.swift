@@ -50,6 +50,8 @@ final class AppDependencies: ObservableObject {
     /// only one session runs at a time, and it owns the pending cue requests.
     let conditioningCues: ConditioningCueDelivering = ConditioningCueDeliverer()
     let conditioningSafety: ConditioningSafetyAcknowledging = ConditioningSafetyStore()
+    /// The round timer's last-used settings (docs/fight-conditioning.md, "Round timer").
+    let roundTimerSettings: RoundTimerSettingsStoring = RoundTimerSettingsStore()
     /// The conditioning heart-rate profile (docs/fight-conditioning.md). One instance, so the
     /// Settings editor and an open session preview observe the same value.
     let heartRateProfileStore: HeartRateProfileStoring = HeartRateProfileStore()
@@ -606,6 +608,21 @@ final class AppDependencies: ObservableObject {
             healthSync: UserDefaultsHealthSyncPreference(),
             records: conditioningRecordRepository,
             heartRateProfile: heartRateProfileStore.heartRateProfile
+        )
+    }
+
+    /// One per visit to the round timer's setup screen.
+    func makeRoundTimerSetupViewModel() -> RoundTimerSetupViewModel {
+        RoundTimerSetupViewModel(settings: roundTimerSettings, makeRun: makeRoundTimerViewModel(configuration:))
+    }
+
+    /// One per run of the round timer. Its cues are the conditioning runner's
+    /// deliverer — one timer engine, one set of notification identifiers.
+    func makeRoundTimerViewModel(configuration: RoundTimerConfiguration) -> RoundTimerViewModel {
+        RoundTimerViewModel(
+            configuration: configuration,
+            cues: conditioningCues,
+            makeMatSessionLog: makeMatSessionLogViewModel
         )
     }
 

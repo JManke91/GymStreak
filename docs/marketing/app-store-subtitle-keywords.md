@@ -297,6 +297,65 @@ is not, and was never in a shipped set.
 
 The strategy document has been corrected to say this rather than leaving the claim standing.
 
+### 4.2c Proposal — round-timer rotation (2026-10-18, not yet entered)
+
+**Status: proposal.** This is **not** in App Store Connect. §4.2 above is still the live field. The
+product owner enters this with the App Store version that carries the round timer
+(`.scratch/positioning-usp/issues/07-round-timer.md`, `acquisition-strategy.md` lever #18), and not
+before. Until that version is live the app has no round timer, and these tokens would send fighters
+to a feature that does not exist.
+
+```
+apple,watch,offline,superset,progressive,overload,lifting,weight,routine,calendar,timer,round,bjj,pr
+```
+
+**100/100 characters**, 14 tokens. The delta against §4.2:
+
+| | Tokens | Chars (incl. comma) |
+| --- | --- | --- |
+| **Out** | `private`, `1rm`, `ai` | 8 + 4 + 3 = 15, plus the 1 unused character |
+| **In** | `timer`, `round`, `bjj` | 6 + 6 + 4 = 16 |
+| **Kept** | `apple`, `watch`, `offline`, `superset`, `progressive`, `overload`, `lifting`, `weight`, `routine`, `calendar`, `pr` | — |
+
+**What goes in** (probes: US `143441`, §9 "The round-timer probes"):
+
+| Token | Buys | Evidence |
+| --- | --- | --- |
+| `timer` | ***workout timer*** (title owns `workout`), *gym timer*, and the second half of every fighter query below. Without it none of them match | "workout timer" 10 and "gym timer" 10 suggestions. On the bench since 2026-09-06 and in en-AU since 2026-09-07 |
+| `round` | ***round timer***, *workout round timer* (title-completed), *bjj round timer*, *jiu-jitsu round timer* (see below), *mma round timer*, *boxing round timer* (needs `boxing`, benched) | "round timer" 10, with Apple self-suggesting "round timer", "workout round timer", "bjj round timer" and "jiu-jitsu round timer". The bare `round` prefix is pizza and mortgages, but "round timer" is its 5th completion |
+| `bjj` | ***bjj timer***, *bjj round timer* | "bjj timer" 7 (self-suggested, plus small dedicated apps); "bjj round timer" 3. "bjj timer" is in the bare `bjj` top ten. 3 characters, and the BJJ preset is real |
+
+**What comes out, and why** (existing swap-bench reasoning, re-checked against today's probes):
+
+| Dropped | Reason |
+| --- | --- |
+| `private` (7) | On probation since §4.2 and re-probed today: "private workout" still returns exactly **one** suggestion ("private workout logger"). §4.2 already named it the first token to trade. The privacy message keeps converting in the description and promotional text. |
+| `1rm` (3) | §4.2 flagged it **"drop it first"**: it ranks a **Pro-gated** metric, and the US cluster is calculator intent ("1rm calculator", "1rm percentage calculator", "1rm max calculator"). en-GB already dropped it for the same reason (§6.2). |
+| `ai` (2) | Of the two 2-character tokens, `ai` is the weaker bet. "ai workout" completes to *ai workout coach / planner / plan*, intent the app does not serve: it does not write plans (§6.4 rejects that claim), and the coach needs Apple Intelligence hardware (§3). "ai gym coach" was never reachable in en-US (`coach` is not bought). `pr` stays because "pr tracker" returns 10 gym PR-tracker suggestions and PR tracking is free. **If the product owner would rather keep `ai`, drop `pr` instead.** Both are 3 characters with the comma. |
+
+**Not bought, and why** (each one has evidence and lost on characters, best first):
+
+| Candidate | Chars | Evidence | Why not |
+| --- | --- | --- | --- |
+| `boxing` | 6 | "boxing timer" 10, "boxing round timer" 10. The largest fighter cluster | Also the most crowded: the "boxing round timer" top ten is **ten dedicated apps with the phrase in their name** (Bout-IQ, BoxBell, Corner, Ding, Gong, Jabbell, OctaCoach …). With 13 impressions/day and the phrase only in the keyword field, it is the least winnable. **First back in** if the search-term report shows `round timer` impressions. |
+| `interval` | 8 | "interval timer" 10, including **"interval timer apple watch"**, which `apple` + `watch` already complete | Real, and it would be the cheapest way to that phrase, but its intent is HIIT/tabata, not rounds. It would cost `lifting` or `weight`, which are lifter tokens. |
+| `mma` | 3 | "mma timer" 2, "mma round timer" 2 | Thin, and the bare `mma` prefix is games and betting. Second back in after `boxing`. |
+| `fight` | 5 | "fight timer" 6 (mostly app names) | Covered by `round` + `bjj` for the same intent. |
+| `jiu`, `jitsu` | 8 | "jiu jitsu timer" 1 (+ hyphenated twin), "jiu-jitsu round timer" 1 | 10 characters with commas for two single-suggestion queries, and nothing documents whether Apple splits the hyphenated "jiu-jitsu" into two tokens. `bjj` is the cheap spelling of the same audience. |
+| `muay`, `thai`, `sparring`, `kickboxing`, `martial`, `arts` | — | "muay thai timer" 3, "sparring timer" 2, "kickboxing timer" 1, "martial arts timer" 1 | Each one is 1–3 suggestions for 8–10 characters. |
+| `hyrox`, `tabata` | — | "hyrox timer" 4, "tabata timer" 10 | Wrong product. The round timer has no HYROX splits or tabata mode, and claiming one is a one-star risk. |
+
+**Compliance check (§1–§3):** 100 characters, no spaces, commas only, 14 tokens, no duplicates, no
+plurals, no competitor brand, no `widget`; no title token (`workout`, `tracker`, `gym`, `streak`) and
+no subtitle token (`strength`, `training`, `plan`, `log`). Verified programmatically. `timer` and
+`round` are truthful once the round timer ships (BJJ, MMA, boxing and Muay Thai presets, iPhone and
+watch, free and ungated). **Not before.**
+
+**Knock-on for the other English fields, deliberately not done here.** en-GB and en-AU are untouched.
+en-AU already buys `timer`, so a later en-GB/en-AU pass only needs `round` (+ `bjj`) in **one** of
+the two pools (§6.1: the pools are disjoint by design). It was not probed in GB/AU and is not part of
+this hand-off.
+
 ### 4.3 Promotional Text — 165/170 characters
 
 ```
@@ -436,6 +495,64 @@ compounds*, not German versions of the English tokens.
 This refines `acquisition-strategy.md` §2: the two niches named there are real *in English*. In
 German the defensible niche is the native compound vocabulary, and the strategy document has been
 corrected to say so.
+
+### 5.2b Proposal — round-timer rotation (2026-10-18, not yet entered)
+
+**Status: proposal.** This is **not** in App Store Connect. §5.2 above is still the live field. It
+ships with the same version as §4.2c, entered by the product owner, and not before the round timer
+is live.
+
+```
+krafttraining,trainingstagebuch,muskelaufbau,superset,progressive,overload,kampfsport,timer,ki,app
+```
+
+**98/100 characters**, 10 tokens. The delta against §5.2:
+
+| | Tokens | Chars (incl. comma) |
+| --- | --- | --- |
+| **Out** | `offline`, `watch`, `1rm` | 8 + 6 + 4 = 18, plus the 1 unused character |
+| **In** | `kampfsport`, `timer` | 11 + 6 = 17 |
+| **Kept** | `krafttraining`, `trainingstagebuch`, `muskelaufbau`, `superset`, `progressive`, `overload`, `ki`, `app` | — |
+
+**The compound question, answered first.** §5.2 dropped `timer` because the rest-timer demand sits on
+the compound `pausentimer`, which a bare `timer` cannot match. **The round-timer demand in the German
+storefront is mostly two-token, so `timer` is worth buying again for it.** Probes (DE `143443`):
+"kampfsport timer" is a self-suggested query and **"kampfsporttimer" is empty**. "round timer" (10),
+"boxing timer" (10), "box timer" (10), "boxen timer" (3), "workout timer" (10) and "timer app" (10)
+are all live as separate words. The compound **`rundentimer` is live too** (9: the bare query plus
+apps such as "Jabbell: Box-Rundentimer", "RoundCue Box- & Rundentimer"), and it must be bought whole
+(§5.2). It is on the bench below. `pausentimer` stays out of reach of `timer`, as before.
+
+**What goes in:**
+
+| Token | Buys | Evidence |
+| --- | --- | --- |
+| `kampfsport` | ***kampfsport timer*** | Self-suggested in DE, and the second completion of the bare `kampfsport` prefix (the rest are clubs and dojos). **No app is named after it.** That is the §5.2a pattern: a native German query the international timer apps, all titled in English, do not buy. Named in lever #18. |
+| `timer` | *kampfsport timer*; ***workout timer*** (subtitle owns `workout`), 10; ***timer app*** (`app` already bought), 10, with "timer app sport" first | Without it `kampfsport` buys nothing useful. It also brings in two 10-suggestion clusters for free. |
+
+**What comes out, and why:**
+
+| Dropped | Reason |
+| --- | --- |
+| `offline` (7) | §5.2 already called it thin, and re-probed today **"offline training" returns nothing**. |
+| `watch` (5) | Bought as "a 6-character option, not a conviction" (§5.2a), and it still is not one: "watch trainingsplan" returns one suggestion ("watch trainingsplan ansehen"). The German watch query that does exist, "intervall-timer apple watch", needs `apple` and the hyphenated compound, so `watch` alone never reached it. |
+| `1rm` (3) | Calculator intent in DE as well ("1rm rechner", "1rm calculator", "1rm percentage calculator"), and it ranks a Pro-gated metric (§4.2). |
+
+**Not bought, and why** (best first):
+
+| Candidate | Chars | Evidence | Why not |
+| --- | --- | --- | --- |
+| `round` | 5 | "round timer" 10 in DE. German fighters use the English loanword, as with `superset` | **The alternate to `kampfsport`.** It has more volume but it is crowded: the top ten are English-titled dedicated apps ("Round Timer: Boxen, MMA, BJJ", "Boxing Round Timer", "Bout-IQ" …). Swapping `kampfsport` for `round,bjj` gives `…,overload,round,timer,bjj,ki,app` (97/100). Pick it if the en-US search-term report shows `round timer` converting. |
+| `rundentimer` | 11 | 9 suggestions, the bare compound among them | The only German-compound form of the head term. It costs as much as `kampfsport` but competes with the "Runden-Timer" apps. **First back in** if `kampfsport` shows nothing. |
+| `box` | 3 | "box timer" 10, and "boxtimer" autocompletes to the spaced "box timer" | Cheap but crowded ("Box Timer Pro", "BoxBell", "RoundBell"), and nothing documents whether `box` + `timer` matches the typed compound `boxtimer`. Next after `rundentimer`. |
+| `bjj` | 3 | "bjj timer" in DE returns **app names only** (5); unlike the US, the bare query is not self-suggested | Weaker in DE than in US. Rides with `round` in the alternate above. |
+| `boxen`, `mma`, `sparring` | — | "boxen timer" 3, "mma timer" 1, "sparring timer" 1 | Thin. "intervall-timer boxen" is live but needs the hyphenated `intervall-timer` compound. |
+| `rundenuhr`, `kickboxen` | — | "rundenuhr" and "kickboxen timer" **empty**; "boxuhr" 1 | Dead. |
+
+**Compliance check (§1–§3):** 98 characters, no spaces, commas only, 10 tokens, no duplicates, no
+competitor brand, no `widget`; no title token (`gym`, `streak`), no subtitle token (`workout`,
+`tracker`, `trainingsplan`), and every compound bought whole. `kampfsport` is a whole word, and the
+query it serves, "kampfsport timer", is spaced. Verified programmatically.
 
 ### 5.3 Promotional Text — 163/170 characters
 
@@ -797,6 +914,10 @@ en-US dropped for *characters* came back.
 - **Rotate the invisible field freely; leave the visible one alone.** The keyword field cannot affect
   conversion, so a bad set costs only the characters. The subtitle drove a measured **+110%**
   page-view→download conversion and is not a place to experiment (§4.1, §5.1).
+- **A round-timer rotation is proposed, not live** (§4.2c en-US, §5.2b de-DE, 2026-10-18). The
+  product owner enters it in App Store Connect with the version that carries the round timer, then
+  promotes the two proposals to the live §4.2 / §5.2 text and moves the dropped tokens onto the
+  benches there.
 - Keep the free-vs-Pro wording in §3 in sync with `Domain/Models/Pro/ProFeatureCaps.swift` and
   `docs/pro-subscription.md`. A cap change can silently make "Track unlimited, free" false.
 
@@ -866,6 +987,39 @@ against **both** so the two locales could be compared with each other, not just 
 | `gym coach` | 10 in both | Bought (`coach`) in en-AU — `gym` is free from the title |
 | `bench press`, `squat tracker`, `deadlift`, `exercise library` | 1–4 each | Exercise-name queries are not a buyable cluster |
 | `gym programme` (bare `programme` too) | GB self-suggests "gym programme" and carries it in the bare-prefix top ten; AU returns `program` forms only | The one GB↔AU difference acted on: `program` → en-AU (§6.4) |
+
+**The round-timer probes (2026-10-18, §4.2c and §5.2b).** Same method, storefronts US `143441` and DE
+`143443`. Counts are the number of suggestions returned, out of a maximum of 10.
+
+| Probe | Result | Consequence |
+| --- | --- | --- |
+| `round timer` (US) | 10: "boxing round timer", "round timer", **"workout round timer"**, **"bjj round timer"**, **"jiu-jitsu round timer"**, "mma round timer", "free round timer" … | `round` + `timer` bought. `workout` comes free from the title |
+| `round` / `rounds` (US) | bare `round` is pizza and mortgages, but "round timer" is 5th; `rounds` leads with "rounds timer" | The token is live in the timer shape only. That is enough |
+| `boxing timer`, `boxing round`, `boxing round timer` (US) | 10 each; the last is ten dedicated apps with the phrase in their name | The biggest and most crowded cluster. `boxing` benched |
+| `bjj timer` / `bjj round` / `bjj` (US) | 7 (bare query + small apps) / 3 / 10, with "bjj timer" in the bare top ten | `bjj` bought, 3 characters |
+| `jiu jitsu timer`, `jiu jitsu round timer` (US) | 2 (spaced + hyphenated) / 1 | Live but single-query. `jiu`,`jitsu` not bought, `bjj` covers the audience |
+| `mma timer`, `mma round timer`, `mma` (US) | 2 / 2 / games and betting | `mma` benched |
+| `fight timer` (US) | 6, mostly app names | Not bought |
+| `muay thai timer`, `sparring timer`, `kickboxing timer`, `martial arts timer` (US) | 3 / 2 / 1 / 1 | Thin. Not bought |
+| `interval timer` (US) | 10, including **"interval timer apple watch"** (also self-suggested from `timer apple watch`) | Real but HIIT intent. `interval` benched |
+| `workout timer`, `gym timer`, `timer workout` (US) | 10 each | What `timer` buys on its own, with title tokens |
+| `tabata`, `hyrox`, `hyrox timer` (US) | 10 / 10 / 4 | Wrong product. Not bought |
+| `ai workout` (US) | 10: coach / planner / plan intent | `ai` dropped in the proposal (§4.2c) |
+| `private workout` (US) | 1 ("private workout logger") | `private` dropped in the proposal |
+| `1rm` (US **and DE**) | 10, calculator intent ("1rm rechner" in DE) | `1rm` dropped in both proposals |
+| `pr tracker` (US) | 10 gym PR-tracker suggestions | `pr` kept |
+| `kampfsport timer` / `kampfsporttimer` (DE) | the bare query only / **empty** | Two-token demand. `kampfsport` + `timer` bought (§5.2b) |
+| `kampfsport` (DE) | "kampfsport timer" 2nd, the rest clubs and dojos | No app is named after the query, the §5.2a pattern |
+| `rundentimer` / `runden timer` (DE) | 9 (bare compound + "Runden-Timer" apps) / 5 | Live compound, must be bought whole. Benched (§5.2b) |
+| `round timer`, `boxing timer` (DE) | 10 each, English-titled dedicated apps | German fighters use the English loanword. `round` is the alternate |
+| `boxtimer` / `box timer` (DE) | 10 each; `boxtimer` autocompletes to the spaced "box timer" | `box` benched, crowded |
+| `boxen timer` / `intervall timer` (DE) | 3 / 10, including "intervall-timer boxen" and "intervall-timer apple watch" | Live but need the hyphenated `intervall-timer`. Not bought |
+| `bjj timer` / `bjj` (DE) | 5 app names, no bare query / 10 (brands, notes apps) | Weaker in DE than in US |
+| `workout timer`, `timer app`, `timer` (DE) | 10 / 10 / 10 ("timer app sport" first) | What `timer` buys with `workout` (subtitle) and `app` (field) |
+| `mma timer`, `sparring timer`, `boxuhr` (DE) | 1 each | Thin |
+| `rundenuhr`, `kickboxen timer`, `kampfsport training`, `rundentimer boxen` (DE) | **empty** | Dead |
+| `offline training` (DE) | **empty** | `offline` dropped in the proposal |
+| `watch trainingsplan` (DE) | 1 ("watch trainingsplan ansehen") | `watch` dropped in the proposal |
 
 **One method caveat learned here.** A single empty prefix is **not** evidence that a token is dead:
 `pr` looked dead on "gym pr" and is live on "pr tracker". Probe every prefix a token plausibly

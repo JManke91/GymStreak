@@ -5,8 +5,9 @@
 //  A mat session in progress on the watch (positioning ticket 05,
 //  docs/fight-conditioning.md): the conditioning runner's pager — Pause/End one
 //  swipe to the left — with elapsed time and live heart rate on the main page,
-//  then the review and the saved screen. Every value comes from
-//  `WatchMatSessionViewModel`; this view computes nothing.
+//  then the review and the saved screen. The round timer (positioning ticket 07)
+//  is the same recorder with a timeline: its live page shows the rounds. Every
+//  value comes from `WatchMatSessionViewModel`; this view computes nothing.
 //
 
 import SwiftUI
@@ -40,7 +41,7 @@ struct MatSessionRunnerView: View {
                 TabView(selection: $page) {
                     ConditioningControlsPage(
                         title: WatchMatSessionCopy.sport(mat.sport),
-                        subtitle: String(localized: "\(WatchConditioningCopy.clock(mat.elapsed)) elapsed"),
+                        subtitle: controlsSubtitle,
                         isPaused: mat.state == .paused,
                         onPauseResume: {
                             if mat.state == .paused { mat.resume() } else { mat.pause() }
@@ -49,12 +50,22 @@ struct MatSessionRunnerView: View {
                         onEnd: { isConfirmingEnd = true }
                     )
                     .tag(Page.controls)
-                    MatSessionLivePage(
-                        sport: mat.sport,
-                        elapsed: mat.elapsed,
-                        reading: mat.heartRateReading,
-                        isPaused: mat.state == .paused
-                    )
+                    Group {
+                        if let position = mat.roundPosition {
+                            RoundTimerLivePage(
+                                position: position,
+                                reading: mat.heartRateReading,
+                                isPaused: mat.state == .paused
+                            )
+                        } else {
+                            MatSessionLivePage(
+                                sport: mat.sport,
+                                elapsed: mat.elapsed,
+                                reading: mat.heartRateReading,
+                                isPaused: mat.state == .paused
+                            )
+                        }
+                    }
                     .tag(Page.live)
                 }
                 .tabViewStyle(.page)
@@ -62,9 +73,7 @@ struct MatSessionRunnerView: View {
                     Button("End session", role: .destructive) { isEndConfirmed = true }
                     Button("Keep going", role: .cancel) {}
                 } message: {
-                    Text(mat.elapsed < WatchMatSessionViewModel.minimumDuration
-                         ? "Under a minute, so nothing will be saved."
-                         : "You'll rate how hard it was before it's saved.")
+                    Text(endMessage)
                 }
                 .onChange(of: isConfirmingEnd) { _, isPresented in
                     guard !isPresented, isEndConfirmed else { return }
@@ -84,10 +93,10 @@ struct MatSessionRunnerView: View {
     private func finished(_ health: WatchMatSessionViewModel.HealthOutcome) -> some View {
         ScrollView {
             VStack(spacing: OnyxWatch.Spacing.md) {
-                Image(systemName: health == .notSaved ? "xmark.circle" : "checkmark.circle.fill")
+                Image(systemName: health == .notSaved || health == .discarded ? "xmark.circle" : "checkmark.circle.fill")
                     .font(.system(size: 32))
                     .foregroundStyle(OnyxWatch.Colors.tint)
-                Text(health == .notSaved ? "Session discarded" : "Session saved")
+                Text(finishedTitle(health))
                     .font(.watchHeader)
                 Text(healthLine(health))
                     .font(.watchCaption)
@@ -99,11 +108,32 @@ struct MatSessionRunnerView: View {
         }
     }
 
+    /// Round timer: "Round 3/6 · 12:34 elapsed"; a mat session: "12:34 elapsed".
+    private var controlsSubtitle: String {
+        let elapsed = String(localized: "\(WatchConditioningCopy.clock(mat.elapsed)) elapsed")
+        guard let round = mat.roundPosition.flatMap({ WatchMatSessionCopy.round($0.phase) }) else { return elapsed }
+        return "\(round) · \(elapsed)"
+    }
+
+    private var endMessage: LocalizedStringKey {
+        if mat.elapsed < WatchMatSessionViewModel.minimumDuration { return "Under a minute, so nothing will be saved." }
+        return mat.isRoundTimer ? "You can save it as a mat session or discard it." : "You'll rate how hard it was before it's saved."
+    }
+
+    private func finishedTitle(_ health: WatchMatSessionViewModel.HealthOutcome) -> LocalizedStringKey {
+        switch health {
+        case .saved, .failed: "Session saved"
+        case .notSaved: "Session discarded"
+        case .discarded: "Nothing saved"
+        }
+    }
+
     private func healthLine(_ health: WatchMatSessionViewModel.HealthOutcome) -> LocalizedStringKey {
         switch health {
         case .saved: "Saved to Apple Health · on its way to your iPhone"
         case .failed: "Couldn't save to Apple Health · on its way to your iPhone"
         case .notSaved: "Under a minute — nothing saved"
+        case .discarded: "Just a timer — nothing in History or Apple Health."
         }
     }
 }

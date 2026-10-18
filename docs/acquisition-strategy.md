@@ -257,7 +257,7 @@ is still zero.
 |---|---|---|---|---|---|---|
 | 1 | 16 | **Strong + Hevy history import** | **P1** | ~1 week (2 tickets) | Switching from Strong/Hevy at all | ✅ **Shipped** — Strong 2026-10-03 (ticket 01, rides 1.1.19), Hevy 2026-10-17 (ticket 02, device-verified). Settings → Import from Strong / Hevy — see §4.16 |
 | 2 | 17 | **Visible watch sync reliability** ("Saved on iPhone ✓") | **P1** | 1–2 days | The switching message, made experienceable | ✅ **Shipped** 2026-10-17 (ticket 03, device-verified). Watch summary "Saved on iPhone" status line, see §4.17 |
-| 3 | 18 | **Fighter positioning** (mat sessions, watch recording, lift-or-fight onboarding, round timer) | **P1** | ~3 weeks (4 tickets) | The one unowned market position | 🟡 **In progress** — ticket 04 (log a mat session on iPhone) ✅ done 2026-10-17 (device-verified, iCloud sync confirmed on TestFlight); ticket 05 (record on the watch) ✅ done 2026-10-18 (simulator E2E 28/28 + paired-hardware sync checks); ticket 06 (lift-or-fight onboarding fork + `trainingProfile` attribute) ✅ done 2026-10-18 (device-verified by the user); 07 open — `.scratch/positioning-usp/issues/04–07`, see §4.18 |
+| 3 | 18 | **Fighter positioning** (mat sessions, watch recording, lift-or-fight onboarding, round timer) | **P1** | ~3 weeks (4 tickets) | The one unowned market position | ✅ **Built** — all four tickets done: 04 (log a mat session on iPhone) 2026-10-17, 05 (record on the watch) 2026-10-18, 06 (lift-or-fight onboarding fork + `trainingProfile`) 2026-10-18, 07 (round timer, iPhone + watch) 2026-10-18 (unit + simulator E2E, device-verified by the user). **Open hand-off:** the round-timer keyword rotation is written as a proposal (`docs/marketing/app-store-subtitle-keywords.md` §4.2c / §5.2b) and is entered in App Store Connect with the version carrying ticket 07 — see §4.18 |
 | 4 | 5 | In-app sharing of a workout | **P1** | 2–3 days | Web-Referrer, virality | 🎫 ticket cut 2026-10-17 — `.scratch/share-screen/issues/01–04` (01 = Claude Design hand-off, user-approved before code), see §4.5 |
 | 5 | 15 | **Decide the app name** (rename or commit) | **P1 / decision** | ~1 day to decide | Brand-query traffic, word-of-mouth | ⬜ **not decided — gates #4 and #6**; #18 adds an argument, §4.18 |
 | 6 | 4 | Landing page + custom domain | **P1** | 1–2 weeks | Unlocks every off-store channel | ⬜ not started — blocked on #15 |
@@ -636,6 +636,27 @@ Hevy import. The answer is stored on the device and reported once as the fifth a
 attribute, **`trainingProfile`** (`lift` / `fight` / `unanswered`), through the existing report;
 nothing in the app reads it back (`docs/onboarding.md` "Step 7", `docs/funnel-instrumentation.md`
 §4.4 and §8). No paywall is in or adjacent to the tour — lever #12's removal stands.
+**Ticket 07 done** (2026-10-18; unit-tested on both targets, simulator end-to-end via
+`fastlane e2e_watch suite:round_timer`, architecture review, and device-verified by the user — the
+lock-screen bell, the silent switch and the watch haptics): a **round timer** — Conditioning → Round timer on the
+iPhone, a "Round timer" row on the watch's routine list. Presets BJJ (5 / 1), MMA (5 / 1), boxing
+(3 / 1), Muay Thai (3 / 2) and custom (round, rest, 1–30 rounds or open-ended, a warning before the
+round ends, default 10 s); the last-used settings are remembered per device. The iPhone rings a
+synthesized bell at round start and end and a clacker at the warning — through the playback audio
+session, so it sounds with the ring/silent switch on silent — and schedules the same sounds as
+lock-screen notifications for a locked phone; the watch plays haptics and shows live heart rate. It
+is the conditioning runner's interval engine with a different vocabulary, not a third timer
+(`docs/fight-conditioning.md`, "Round timer"). At the end the user can **save the rounds as a mat
+session** (ticket 04's record, pre-filled with the preset's sport and the elapsed time; on the watch
+with ticket 05's heart-rate-suggested intensity) or decline, in which case nothing is written
+anywhere. Free and ungated on both devices (Rules 1 and 3). **This is the searchable entry point:**
+the matching keyword-field rotation — `timer`, `round`, `bjj` for en-US; `kampfsport`, `timer` for
+de-DE — is derived with the §9 probe and written as a proposal in
+`docs/marketing/app-store-subtitle-keywords.md` §4.2c / §5.2b, for the product owner to enter with
+the version that carries the timer. Until that version is live the tokens would point at a feature
+that does not exist, so the proposal is not entered earlier. **Follow-up ticket 09 cut 2026-10-19:**
+a Lock Screen / Dynamic Island Live Activity for the round timer (whole-run countdown that stays
+correct while the phone is locked, phase detail while the app is on screen) — `.scratch/positioning-usp/issues/09`.
 **Why:** "lifting + fight conditioning in one log" is the only position on the market map with no
 owner, and the conditioning half has already shipped (`docs/fight-conditioning.md`). It can **not**
 be reached through App Store search ("mma strength", "bjj workout" and "fight conditioning" all
@@ -649,7 +670,7 @@ search. **Built without the validation step the research recommended**, by produ
 `lift`), both filtered to `buildChannel = appstore` — the reading recipe is
 `docs/funnel-instrumentation.md` §8. It becomes measurable from the first App Store release carrying
 ticket 06; §6 has the row.
-It also adds an argument to #15: the current name says nothing about fighting. All three tickets
+It also adds an argument to #15: the current name says nothing about fighting. All four tickets
 are **Free** (Rules 1, 3, 4).
 
 ### 1. Rating prompt (P0)

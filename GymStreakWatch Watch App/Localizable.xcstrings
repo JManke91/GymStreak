@@ -3465,6 +3465,201 @@
           }
         }
       }
+    },
+    "Round timer" : {
+      "comment" : "Round timer on the watch (docs/fight-conditioning.md, positioning ticket 07)",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Rundentimer"
+          }
+        }
+      }
+    },
+    "BJJ, boxing, Muay Thai rounds" : {
+      "comment" : "Round timer on the watch (docs/fight-conditioning.md, positioning ticket 07)",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "BJJ-, Box- und Muay-Thai-Runden"
+          }
+        }
+      }
+    },
+    "Preset" : {
+      "comment" : "Round timer on the watch (docs/fight-conditioning.md, positioning ticket 07)",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Vorlage"
+          }
+        }
+      }
+    },
+    "Custom" : {
+      "comment" : "Round timer on the watch (docs/fight-conditioning.md, positioning ticket 07)",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Eigene"
+          }
+        }
+      }
+    },
+    "Round" : {
+      "comment" : "Round timer on the watch (docs/fight-conditioning.md, positioning ticket 07)",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Runde"
+          }
+        }
+      }
+    },
+    "Rounds" : {
+      "comment" : "Round timer on the watch (docs/fight-conditioning.md, positioning ticket 07)",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Runden"
+          }
+        }
+      }
+    },
+    "Open-ended" : {
+      "comment" : "Round timer on the watch (docs/fight-conditioning.md, positioning ticket 07)",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ohne Ende"
+          }
+        }
+      }
+    },
+    "ROUND" : {
+      "comment" : "Round timer on the watch (docs/fight-conditioning.md, positioning ticket 07)",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "RUNDE"
+          }
+        }
+      }
+    },
+    "Round %lld" : {
+      "comment" : "Round timer on the watch (docs/fight-conditioning.md, positioning ticket 07)",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Runde %lld"
+          }
+        }
+      }
+    },
+    "Save as mat session" : {
+      "comment" : "Round timer on the watch (docs/fight-conditioning.md, positioning ticket 07)",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Als Mat-Einheit speichern"
+          }
+        }
+      }
+    },
+    "Don't save" : {
+      "comment" : "Round timer on the watch (docs/fight-conditioning.md, positioning ticket 07)",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nicht speichern"
+          }
+        }
+      }
+    },
+    "Nothing saved" : {
+      "comment" : "Round timer on the watch (docs/fight-conditioning.md, positioning ticket 07)",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nichts gespeichert"
+          }
+        }
+      }
+    },
+    "Just a timer — nothing in History or Apple Health." : {
+      "comment" : "Round timer on the watch (docs/fight-conditioning.md, positioning ticket 07)",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nur ein Timer – nichts im Verlauf oder in Apple Health."
+          }
+        }
+      }
+    },
+    "You can save it as a mat session or discard it." : {
+      "comment" : "Round timer on the watch (docs/fight-conditioning.md, positioning ticket 07)",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Du kannst sie als Mat-Einheit speichern oder verwerfen."
+          }
+        }
+      }
+    },
+    "%lld rounds · %@" : {
+      "comment" : "Round timer on the watch (docs/fight-conditioning.md, positioning ticket 07)",
+      "localizations" : {
+        "de" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld Runde · %@"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld Runden · %@"
+                }
+              }
+            }
+          }
+        },
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld round · %@"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld rounds · %@"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "version" : "1.0"

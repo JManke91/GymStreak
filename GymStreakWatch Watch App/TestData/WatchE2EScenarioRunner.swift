@@ -22,6 +22,13 @@
 //    mat-start   start and keep running (the harness then kills the app)
 //    mat-end     start → wait → end, left on the review (then killed)
 //    mat-finish  take whatever recovery restored: end it if running, save it
+//    round-record   round timer (custom preset → sport other) → it ends itself
+//                   into the review → save → read the Health workout back
+//    round-discard  round timer → the review → "Don't save"
+//
+//  The round scenarios take `-E2E_ROUNDS` (default 2), `-E2E_ROUND_SECONDS`
+//  (30) and `-E2E_REST_SECONDS` (15), and log a `round phase=… round=…` line
+//  on every phase change.
 //
 //  `-E2E_HEART_RATE <bpm>` feeds that heart rate once a second while a session
 //  runs, through the workout manager's `onHeartRate` — the callback the live
@@ -46,7 +53,47 @@ enum WatchE2EScenarioRunner {
         if let heartRate {
             Task { await feedHeartRate(heartRate, to: matWorkout, while: matSession) }
         }
+        if scenario.hasPrefix("round-") {
+            let configuration = RoundTimerConfiguration(
+                preset: .custom,
+                customRoundDuration: setting("E2E_ROUND_SECONDS").flatMap(Double.init) ?? 30,
+                customRestDuration: setting("E2E_REST_SECONDS").flatMap(Double.init) ?? 15,
+                rounds: setting("E2E_ROUNDS").flatMap(Int.init) ?? 2,
+                warning: 10
+            )
+            Task { await runRounds(configuration, save: scenario == "round-record", mat: matSession) }
+            return
+        }
         Task { await run(scenario, sport: sport, seconds: seconds, mat: matSession) }
+    }
+
+    /// The round timer ends itself into the review when its last round is over.
+    private static func runRounds(_ configuration: RoundTimerConfiguration, save: Bool, mat: WatchMatSessionViewModel) async {
+        log("rounds=\(configuration.plannedRounds) round=\(Int(configuration.roundDuration)) rest=\(Int(configuration.restDuration))")
+        await mat.startRoundTimer(configuration)
+        logState(mat)
+        let deadline = Date().addingTimeInterval((configuration.totalDuration ?? 0) + 30)
+        var loggedPhase: Int?
+        while mat.state == .running || mat.state == .paused, Date() < deadline {
+            if let position = mat.roundPosition, position.phaseIndex != loggedPhase {
+                loggedPhase = position.phaseIndex
+                log("round phase=\(position.phase.kind.rawValue) round=\(position.phase.round ?? 0) elapsed=\(Int(mat.elapsed))")
+            }
+            try? await Task.sleep(for: .milliseconds(500))
+        }
+        logState(mat)
+        guard case .reviewing(let review) = mat.state else { return }
+        log("review duration=\(Int(review.duration)) rounds=\(review.rounds.map(String.init) ?? "nil") suggested=\(review.suggested?.rawValue ?? "nil")")
+        guard save else {
+            mat.discard()
+            logState(mat)
+            return
+        }
+        if mat.selectedIntensity == nil { mat.selectedIntensity = .drilling }
+        log("intensity=\(mat.selectedIntensity?.rawValue ?? "nil")")
+        await mat.save()
+        logState(mat)
+        await logLatestHealthWorkout()
     }
 
     private static func feedHeartRate(_ bpm: Int, to workout: WatchConditioningWorkoutManager, while mat: WatchMatSessionViewModel) async {
