@@ -656,9 +656,13 @@ final class AppDependencies: ObservableObject {
         )
     }
 
-    /// One per workout completion screen (docs/workout-sharing.md).
-    func makeWorkoutShareViewModel() -> WorkoutShareViewModel {
-        WorkoutShareViewModel(personalBests: personalBests)
+    /// One per share entry point instance (docs/workout-sharing.md); `campaign` is the link's `ct`.
+    func makeWorkoutShareViewModel(campaign: String) -> WorkoutShareViewModel {
+        WorkoutShareViewModel(
+            personalBests: personalBests,
+            photoLibrary: PhotoLibraryImageSaver(),
+            campaign: campaign
+        )
     }
 
     func makeHeartRateProfileEditor() -> HeartRateProfileEditorViewModel {

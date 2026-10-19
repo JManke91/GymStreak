@@ -58,6 +58,15 @@ struct WorkoutDetailView: View {
     /// fact, and collapsing them would make the card state a weight that is
     /// wrong for every set but the first.
     @State private var appliedOverloadExerciseIDs: Set<UUID> = []
+    /// Whether the workout has a completed set, so the share card has something to show.
+    /// Derived with the exercise rows, never from `body`.
+    @State private var isShareable = false
+    /// The share card behind the inline share row (docs/workout-sharing.md). Built after the
+    /// PRs load, from them, and rebuilt after an edit.
+    @State private var shareCard: WorkoutShareViewModel?
+    /// The open preview sheet's model, and the sheet's item: with `.sheet(isPresented:)` plus a
+    /// separate optional, the first tap presented a blank sheet built from the still-nil value.
+    @State private var sharePreview: WorkoutShareViewModel?
 
     private var workoutType: WorkoutType {
         WorkoutType.classify(routineName: workout.routineName)
@@ -75,6 +84,7 @@ struct WorkoutDetailView: View {
                     discovery: dependencies.muscleMapDiscovery,
                     horizontalMargin: 16
                 )
+                shareRow
                 statsGrid
                 progressiveOverloadSection
                 if workout.healthKitWorkoutId != nil {
@@ -107,6 +117,15 @@ struct WorkoutDetailView: View {
         .toolbarBackground(.hidden, for: .navigationBar)
         .toolbarColorScheme(.dark, for: .navigationBar)
         .toolbar {
+            if isShareable {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button(action: presentShare) {
+                        Image(systemName: "square.and.arrow.up")
+                            .font(.system(size: 16, weight: .semibold))
+                    }
+                    .accessibilityLabel("share.preview.title".localized)
+                }
+            }
             ToolbarItem(placement: .topBarTrailing) {
                 Menu {
                     Button {
@@ -133,9 +152,13 @@ struct WorkoutDetailView: View {
             loadMuscleMap()
             await loadAppliedOverloads()
             await loadPRs()
+            await prepareShareCard()
             await loadHealthKitKcal()
             await loadComparisons()
             loadCoachState()
+        }
+        .sheet(item: $sharePreview) { share in
+            WorkoutSharePreviewSheet(viewModel: share)
         }
         .sheet(isPresented: $showingEdit, onDismiss: reloadAfterEdit) {
             EditWorkoutSessionView(workout: workout, viewModel: viewModel)
@@ -167,6 +190,40 @@ struct WorkoutDetailView: View {
         }
     }
 
+    /// Opens the preview with the prepared card. Before it exists (a toolbar tap while the PRs
+    /// still load) a fresh model fetches its own PRs; `prepare` reads the session only before
+    /// its `await`, so a delete in the meantime is harmless.
+    private func presentShare() {
+        guard !isBeingDeleted else { return }
+        HapticManager.shared.light()
+        if let shareCard {
+            sharePreview = shareCard
+            return
+        }
+        let share = dependencies.makeWorkoutShareViewModel(
+            campaign: SupportLinks.Campaign.shareHistory
+        )
+        sharePreview = share
+        Task { await share.prepare(session: workout, weightUnit: weightUnit) }
+    }
+
+    /// Builds the share row's card from the PRs just loaded: one bounded read of this session
+    /// (the same the muscle map makes) and no second history walk.
+    @MainActor
+    private func prepareShareCard() async {
+        guard !isBeingDeleted else { return }
+        // An edit can remove the last completed set; the old card must not stay up.
+        guard isShareable else {
+            shareCard = nil
+            return
+        }
+        let share = dependencies.makeWorkoutShareViewModel(
+            campaign: SupportLinks.Campaign.shareHistory
+        )
+        await share.prepare(session: workout, weightUnit: weightUnit, knownRecords: prDetails)
+        shareCard = share
+    }
+
     /// Re-derives the exercise rows, PR badges, vs-previous comparisons and coach state
     /// after the user edits the session. The rows are value structs built from the model,
     /// not observed from it, so the edit sheet's changes reach the set grid only through
@@ -176,6 +233,7 @@ struct WorkoutDetailView: View {
             loadExerciseGroups()
             loadMuscleMap()
             await loadPRs()
+            await prepareShareCard()
             await loadComparisons()
             loadCoachState()
         }
@@ -204,6 +262,16 @@ struct WorkoutDetailView: View {
 
     private var dateString: String {
         Self.dateFormatter.string(from: workout.startTime)
+    }
+
+    // MARK: - Share
+
+    @ViewBuilder
+    private var shareRow: some View {
+        if let shareCard, let card = shareCard.card {
+            WorkoutShareEntryRow(card: card, subtitle: shareCard.entrySubtitle, onShare: presentShare)
+                .padding(.horizontal, 16)
+        }
     }
 
     // MARK: - Stats grid
@@ -489,6 +557,9 @@ struct WorkoutDetailView: View {
     @MainActor
     private func loadExerciseGroups() {
         exerciseGroups = WorkoutDetailExerciseGroup.make(from: workout)
+        isShareable = exerciseGroups.contains { group in
+            group.exercises.contains { $0.sets.contains(where: \.isCompleted) }
+        }
     }
 
     /// Derives which muscle regions this session trained. One traversal of the session graph,

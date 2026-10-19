@@ -2046,4 +2046,12 @@
 "share.layer.stats" = "Werte";
 "share.layer.exercises" = "Übungen";
 "share.layer.weights" = "Gewichte";
+"share.save" = "Sichern";
+"share.saved" = "Gesichert";
+"share.save.open_settings" = "Einstellungen öffnen";
+"share.save.denied_title" = "Zugriff auf Fotos erlauben";
+"share.save.denied_message" = "Erlaube GymStreak in den Einstellungen, Fotos hinzuzufügen, um das Bild zu sichern.";
+"share.save.failed_title" = "Bild konnte nicht gesichert werden";
+"share.save.restricted_message" = "Auf diesem Gerät ist das Sichern in Fotos nicht erlaubt.";
+"share.save.failed_message" = "Versuche es erneut oder tippe auf „Teilen“ und wähle „Bild sichern“.";
 "share.message" = "Getrackt mit %1$@: %2$@";

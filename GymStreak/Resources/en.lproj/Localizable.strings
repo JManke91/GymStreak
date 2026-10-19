@@ -2058,5 +2058,13 @@
 "share.layer.stats" = "Stats";
 "share.layer.exercises" = "Exercises";
 "share.layer.weights" = "Weights";
+"share.save" = "Save";
+"share.saved" = "Saved";
+"share.save.open_settings" = "Open Settings";
+"share.save.denied_title" = "Allow access to Photos";
+"share.save.denied_message" = "To save the image, allow GymStreak to add photos in Settings.";
+"share.save.failed_title" = "Couldn't save the image";
+"share.save.restricted_message" = "Saving to Photos isn't allowed on this device.";
+"share.save.failed_message" = "Try again, or tap Share and choose Save Image.";
 // The text that travels with the image: wordmark, then the App Store link.
 "share.message" = "Tracked with %1$@: %2$@";

@@ -71,7 +71,9 @@ struct SaveWorkoutView: View {
             // delays, the comparison and recap below. It only reads the session.
             .task {
                 guard let session = viewModel.currentSession else { return }
-                let share = dependencies.makeWorkoutShareViewModel()
+                let share = dependencies.makeWorkoutShareViewModel(
+                    campaign: SupportLinks.Campaign.shareSummary
+                )
                 shareViewModel = share
                 await share.prepare(session: session, weightUnit: weightUnit)
             }

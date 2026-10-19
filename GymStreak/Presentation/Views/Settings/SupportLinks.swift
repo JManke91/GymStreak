@@ -49,6 +49,7 @@ enum SupportLinks {
     /// Campaign names, one per place a link is shared from.
     enum Campaign {
         static let shareSummary = "share-summary"
+        static let shareHistory = "share-history"
     }
 
     /// Where "Contact support" addresses its mail. Also the address shown in the

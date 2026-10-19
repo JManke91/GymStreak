@@ -258,7 +258,7 @@ is still zero.
 | 1 | 16 | **Strong + Hevy history import** | **P1** | ~1 week (2 tickets) | Switching from Strong/Hevy at all | ✅ **Shipped** — Strong 2026-10-03 (ticket 01, rides 1.1.19), Hevy 2026-10-17 (ticket 02, device-verified). Settings → Import from Strong / Hevy — see §4.16 |
 | 2 | 17 | **Visible watch sync reliability** ("Saved on iPhone ✓") | **P1** | 1–2 days | The switching message, made experienceable | ✅ **Shipped** 2026-10-17 (ticket 03, device-verified). Watch summary "Saved on iPhone" status line, see §4.17 |
 | 3 | 18 | **Fighter positioning** (mat sessions, watch recording, lift-or-fight onboarding, round timer) | **P1** | ~3 weeks (4 tickets) | The one unowned market position | ✅ **Built** — all four tickets done: 04 (log a mat session on iPhone) 2026-10-17, 05 (record on the watch) 2026-10-18, 06 (lift-or-fight onboarding fork + `trainingProfile`) 2026-10-18, 07 (round timer, iPhone + watch) 2026-10-18 (unit + simulator E2E, device-verified by the user); follow-up 09 (the round timer's Lock Screen / Dynamic Island Live Activity) 2026-10-19. **Open hand-off:** the round-timer keyword rotation is written as a proposal (`docs/marketing/app-store-subtitle-keywords.md` §4.2c / §5.2b) and is entered in App Store Connect with the version carrying ticket 07 — see §4.18 |
-| 4 | 5 | In-app sharing of a workout | **P1** | 2–3 days | Web-Referrer, virality | 🟡 **in progress** — design approved 2026-10-19 (01); sharing from the workout completion screen built 2026-10-19 (02); History (03) and conditioning (04) open. Link carries no campaign token yet (provider token missing), see §4.5 |
+| 4 | 5 | In-app sharing of a workout | **P1** | 2–3 days | Web-Referrer, virality | 🟡 **in progress** — design approved 2026-10-19 (01); sharing from the workout completion screen built 2026-10-19 (02); from a History workout built 2026-10-19 (03); conditioning (04) open. Link carries no campaign token yet (provider token missing), see §4.5 |
 | 5 | 15 | **Decide the app name** (rename or commit) | **P1 / decision** | ~1 day to decide | Brand-query traffic, word-of-mouth | ⬜ **not decided — gates #4 and #6**; #18 adds an argument, §4.18 |
 | 6 | 4 | Landing page + custom domain | **P1** | 1–2 weeks | Unlocks every off-store channel | ⬜ not started — blocked on #15 |
 | 7 | 6 | Community presence (Reddit et al.) | **P1** | Ongoing | Downloads → velocity → ranking | ⬜ not started — blocked on #15 |
@@ -845,13 +845,15 @@ whole first milestone.
 
 ### 5. In-app sharing (P1)
 
-**Partly shipped** (2026-10-19, `.scratch/share-screen/` ticket 02): the workout completion screen
-offers a 1080 × 1920 story card (muscle map with callouts, PRs, stats) through a preview sheet with
-layer toggles and then the system share sheet. Sharing from a History entry (03) and from a
-conditioning session (04) are still open. **The link is not attributed yet:** App Store Connect's
+**Partly shipped** (2026-10-19, `.scratch/share-screen/` tickets 02 and 03): the workout completion
+screen offers a 1080 × 1920 story card (muscle map with callouts, PRs, stats) through a preview sheet
+with layer toggles and then the system share sheet, and every History workout detail (logged or
+imported) offers the same card from an inline share row under the muscle map plus a toolbar icon.
+The preview also saves the image straight to Photos for story posting. Sharing a conditioning session (04) is
+still open. **The link is not attributed yet:** App Store Connect's
 provider token (`pt`) has not been entered, so `SupportLinks.appStoreCampaignLink(campaign:)` sends a
-plain App Store link until `SupportLinks.appStoreProviderToken` is set; `ct=share-summary` is wired
-and starts counting the moment it is. Details: [workout-sharing.md](./workout-sharing.md).
+plain App Store link until `SupportLinks.appStoreProviderToken` is set; `ct=share-summary` and
+`ct=share-history` are wired and start counting the moment it is. Details: [workout-sharing.md](./workout-sharing.md).
 
 **Why:** before this lever there was no sharing anywhere in the app, so users had no way to show
 anyone what they did and could not generate a single referral. This is the only lever that makes

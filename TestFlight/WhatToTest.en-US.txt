@@ -1,1 +1,3 @@
 - Share a finished workout: on the save screen, tap Share to post your muscle map, PRs and stats as a story-ready image. Choose what to show (muscles, PRs, stats, exercises, weights) before sharing.
+- Share any past workout: open it in History and tap Share under the muscle map (or the share icon at the top right). Imported workouts work too, and the card shows the PRs that workout set at the time.
+- New "Save" button in the share preview puts the image straight into Photos, ready to post as a story.

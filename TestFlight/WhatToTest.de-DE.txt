@@ -1,1 +1,3 @@
 - Workout teilen: Tippe auf dem Speichern-Bildschirm auf „Teilen“, um deine Muskelkarte, PRs und Werte als Story-Bild zu posten. Vorher wählst du aus, was zu sehen ist (Muskeln, PRs, Werte, Übungen, Gewichte).
+- Jedes vergangene Workout teilen: Öffne es im Verlauf und tippe unter der Muskelkarte auf „Teilen“ (oder oben rechts auf das Teilen-Symbol). Das klappt auch bei importierten Workouts, und die Karte zeigt die PRs, die du damals aufgestellt hast.
+- Neuer „Sichern“-Button in der Teilen-Vorschau legt das Bild direkt in Fotos ab, bereit für deine Story.

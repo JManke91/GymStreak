@@ -13,6 +13,7 @@ struct WorkoutSharePreviewSheet: View {
 
     @Bindable var viewModel: WorkoutShareViewModel
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.openURL) private var openURL
     @State private var sharePayload: SharePayload?
 
     var body: some View {
@@ -41,7 +42,11 @@ struct WorkoutSharePreviewSheet: View {
             }
             .padding(.top, 2)
             Spacer(minLength: 0)
-            shareButton
+            HStack(spacing: 10) {
+                saveButton
+                shareButton
+            }
+            .padding(.top, 4)
         }
         .padding(.horizontal, 20)
         .padding(.top, 20)
@@ -49,6 +54,26 @@ struct WorkoutSharePreviewSheet: View {
         .background(DesignSystem.Colors.card)
         .presentationDragIndicator(.visible)
         .presentationBackground(DesignSystem.Colors.card)
+        .alert(
+            saveErrorTitle,
+            isPresented: Binding(
+                get: { viewModel.saveError != nil },
+                set: { if !$0 { viewModel.saveError = nil } }
+            ),
+            presenting: viewModel.saveError
+        ) { error in
+            if error == .denied {
+                Button("share.save.open_settings".localized) {
+                    guard let url = URL(string: UIApplication.openSettingsURLString) else { return }
+                    openURL(url)
+                }
+                Button("action.cancel".localized, role: .cancel) {}
+            } else {
+                Button("common.ok".localized, role: .cancel) {}
+            }
+        } message: { error in
+            Text(Self.saveErrorMessage(error))
+        }
         .sheet(item: $sharePayload) { payload in
             ActivityShareSheet(items: [payload.image, payload.message])
                 .presentationDetents([.medium, .large])
@@ -122,7 +147,45 @@ struct WorkoutSharePreviewSheet: View {
                 .background(DesignSystem.Colors.tint, in: Capsule())
         }
         .buttonStyle(.plain)
-        .padding(.top, 4)
+    }
+
+    /// Straight to Photos, for posting a story from another app without the share sheet.
+    private var saveButton: some View {
+        let isSaved = viewModel.saveState == .saved
+        return Button {
+            HapticManager.shared.light()
+            Task {
+                await viewModel.saveImage()
+                if viewModel.saveState == .saved { HapticManager.shared.success() }
+            }
+        } label: {
+            Label(
+                (isSaved ? "share.saved" : "share.save").localized,
+                systemImage: isSaved ? "checkmark" : "arrow.down.to.line"
+            )
+            .font(.headline)
+            .foregroundStyle(isSaved ? DesignSystem.Colors.tint : .white)
+            .padding(.horizontal, 20)
+            .frame(height: 52)
+            .background(DesignSystem.Colors.cardElevated, in: Capsule())
+            .overlay { Capsule().stroke(Color.white.opacity(0.08), lineWidth: 1) }
+            .contentTransition(.symbolEffect(.replace))
+        }
+        .buttonStyle(.plain)
+        .disabled(viewModel.saveState != .idle)
+        .animation(.easeInOut(duration: 0.2), value: viewModel.saveState)
+    }
+
+    private var saveErrorTitle: String {
+        (viewModel.saveError == .denied ? "share.save.denied_title" : "share.save.failed_title").localized
+    }
+
+    private static func saveErrorMessage(_ error: PhotoSaveError) -> String {
+        switch error {
+        case .denied: "share.save.denied_message".localized
+        case .restricted: "share.save.restricted_message".localized
+        case .failed: "share.save.failed_message".localized
+        }
     }
 }
 

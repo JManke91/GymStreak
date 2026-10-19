@@ -5,9 +5,9 @@ new personal records and the headline stats, plus a line of text that carries th
 It is acquisition lever #5 (`docs/acquisition-strategy.md` §4.5): every posted card is an ad seen
 by the user's friends.
 
-**Status:** sharing from the **workout completion screen** shipped (2026-10-19,
-`.scratch/share-screen/` ticket 02). Sharing from a History entry (ticket 03) and the conditioning
-card (ticket 04) are not built yet.
+**Status:** sharing from the **workout completion screen** (2026-10-19, `.scratch/share-screen/`
+ticket 02) and from a **History workout detail** (2026-10-19, ticket 03) shipped. The conditioning
+card (ticket 04) is not built yet.
 
 **Targets:** iOS only. The watch target is untouched and no watch counterpart is planned.
 
@@ -31,7 +31,16 @@ No `OnyxProBadge` on the card or the sheet, and nothing on the card is a Pro-gat
    - **Weights**: off, PRs show reps only ("5 reps"), the volume stat becomes the exercise count,
      and a one-exercise line reads "Back Squat · 5 sets". This is for people who don't want to
      post their numbers.
-3. **System share sheet** (`UIActivityViewController`) with the rendered PNG and the text
+
+   Below the chips are two buttons: **Save** (secondary, dark capsule) next to the green
+   **Share**. Save writes the card straight to Photos and turns into a green "Saved" ✓. It
+   resets when a chip changes, because the card on screen no longer matches the saved image.
+3. **History workout detail** (`WorkoutDetailView`). The same share row as the completion screen,
+   directly under the muscle map, plus a share icon (`square.and.arrow.up`) in the top-right
+   toolbar group, left of the `…` menu. Both appear on every recorded workout, logged or imported
+   from Strong or Hevy, and are hidden when the workout has no completed set. Both open the same
+   preview sheet.
+4. **System share sheet** (`UIActivityViewController`) with the rendered PNG and the text
    "Tracked with GymStreak: <App Store link>". Instagram, WhatsApp, Messages and Save Image all
    work from it.
 
@@ -88,6 +97,56 @@ changes the image.
   its setting for when they come back. Both flags (`isRecordsChipShown`, `isWeightsChipEnabled`)
   are computed in `WorkoutShareCardModel.make`, never in `body`.
 
+## Sharing a past workout (History)
+
+- **Two entry points, one card.** An inline share row (the completion screen's
+  `WorkoutShareEntryRow`, reused unchanged) directly under the muscle map, plus the toolbar icon.
+  Both open the same prepared model. The row exists because sharing is a free acquisition channel
+  and a small toolbar icon is easy to miss (user decision, 2026-10-19).
+- **Not sticky, on purpose.** A pinned bottom bar was considered and rejected. This is a long
+  reading screen, the bar would cover sets and comparisons on every visit, and the tab bar's
+  bottom accessory is already used for the active-workout bar. An inline row high on the page
+  gets the visibility without that cost.
+- **When the card is built:** in `.task`, right after `loadPRs()` (and again after an edit), by
+  `prepareShareCard()`, which calls `prepare(session:weightUnit:knownRecords: prDetails)`. Those
+  are History's own PR details for this workout, same rule and same shape (keyed by
+  `WorkoutExercise.id`), so **no second history walk** happens. The only extra main-actor work is
+  one bounded read of this session, the same `loadMuscleMap()` makes, plus building the card
+  model. This screen shipped a 630 ms hang once (`docs/history-performance.md`), so a
+  history-wide walk here would not be acceptable.
+- **Toolbar tap before the card exists** (while the PRs still load): `presentShare()` falls back to
+  a fresh model that fetches its own PRs through `PersonalBestsProviding`, off main.
+- **Edits:** `reloadAfterEdit()` rebuilds the card after `loadPRs()`, so a share after
+  "Edit workout" shows the edited workout. The chips reset to their defaults. An edit that removes
+  every completed set clears the card, so the row disappears instead of showing the old workout.
+- **Presentation:** `.sheet(item:)` on the view model itself (`sharePreview`). The first version
+  used `.sheet(isPresented:)` plus a separate optional view model set in the same tap, and the
+  first tap showed an **empty sheet**, because the sheet content was built from the still-nil
+  value. The second tap worked because the first tap's model was still there (found on device,
+  2026-10-19).
+- **Visibility:** `isShareable` (any completed set) is computed in `loadExerciseGroups()` from the
+  already-built exercise rows, so `body` reads no extra model property. It gates both the row and
+  the icon.
+- **Deletion:** `prepareShareCard()` and the button are no-ops once `isBeingDeleted` is set.
+  `prepare` reads the session only before any `await`, so a delete during the PR walk can't fault
+  it.
+- **Link:** `ct=share-history` (`SupportLinks.Campaign.shareHistory`). The campaign is an init
+  parameter of the view model, passed by each entry point through
+  `AppDependencies.makeWorkoutShareViewModel(campaign:)`.
+
+### PRs for a past workout
+
+The card shows the PRs **as of that workout**, not today's records. No new computation was
+needed: `prepare` already asks `PersonalBestsProviding.fetchPersonalBests(before: startTime,
+excludingSessionID:)` for the best estimated 1RM per exercise over sessions that *started
+earlier*, and `PersonalRecordService.records(from:priorBests:)` keeps the exercises that beat it.
+That is the same rule `PersonalRecordService.computePRs` applies when it walks history
+chronologically, so the card's records match the PR badges the History detail already shows for
+that workout. A later workout that beat the record doesn't remove it from the earlier card.
+
+Known edge: two sessions with the same `startTime` don't count each other as "earlier". Both can
+show the same record. This is the same strict-`<` boundary the completion screen uses.
+
 ## Architecture
 
 ```
@@ -112,11 +171,14 @@ SaveWorkoutView ── .task ──▶ AppDependencies.makeWorkoutShareViewModel
 | `Presentation/Views/Share/WorkoutShareCardView.swift` | Presentation | The 1080 × 1920 card; reads only `WorkoutShareCardModel` |
 | `Presentation/Views/Share/WorkoutSharePreviewSheet.swift` | Presentation | Preview sheet, `WorkoutShareCardThumbnail` (the card scaled to a width), and the `UIActivityViewController` bridge |
 | `Presentation/Views/Share/WorkoutShareEntryRow.swift` | Presentation | The completion screen's row |
+| `Presentation/Views/History/WorkoutDetailView.swift` | Presentation | History entry points: inline share row, toolbar icon, `prepareShareCard()`, `presentShare()`, `isShareable` |
+| `Domain/Interfaces/PhotoLibrarySaving.swift` | Domain | Save-to-Photos boundary and `PhotoSaveError` |
+| `Data/System/PhotoLibraryImageSaver.swift` | Data | PhotoKit add-only implementation |
 | `Domain/Interfaces/PersonalBestsProviding.swift` | Domain | Read boundary: best estimated 1RM per exercise before a date |
 | `Domain/Services/PersonalRecordService.swift` | Domain | Gained `sessionBests(of:)`, `records(from:priorBests:)`, `records(in:priorBests:)` and `personalBests(sessions:)`; `computePRs` is now built on them, with unchanged behaviour |
 | `Data/History/SwiftDataHistorySnapshotStore.swift` | Data | `SwiftDataHistorySnapshotProvider` conforms to `PersonalBestsProviding` (`@concurrent`), same instance and model actor as History |
 | `Presentation/Views/Settings/SupportLinks.swift` | Presentation | `appStoreCampaignLink(campaign:)`, `appStoreProviderToken`, `Campaign.shareSummary`, and `AppBrand.wordmark` |
-| `App/AppDependencies.swift` | App | `personalBests` and `makeWorkoutShareViewModel()` |
+| `App/AppDependencies.swift` | App | `personalBests` and `makeWorkoutShareViewModel(campaign:)` |
 
 **Rendering rules** (CLAUDE.md): the card view never touches a `@Model`. Every string, number,
 date and position is computed in `WorkoutShareCardModel.make`, which runs on prepare, on PR arrival
@@ -149,7 +211,8 @@ doubles of the History protocol untouched.
 
 - **Link:** built only by `SupportLinks.appStoreCampaignLink(campaign:)`, next to `appStoreAppID`.
   With a provider token it is
-  `https://apps.apple.com/app/apple-store/id6756426105?pt=<token>&ct=share-summary&mt=8`.
+  `https://apps.apple.com/app/apple-store/id6756426105?pt=<token>&ct=<campaign>&mt=8`, where the
+  campaign is `share-summary` (completion screen) or `share-history` (History detail).
   **The token isn't known yet** (`// TODO(share-screen)` on `appStoreProviderToken`). Without it,
   App Store Connect can't attribute a `ct`, so the builder returns the plain
   `https://apps.apple.com/app/id6756426105` instead of inventing one. To turn attribution on,
@@ -158,11 +221,53 @@ doubles of the History protocol untouched.
 - **Wordmark:** `AppBrand.wordmark` ("GymStreak") is the single swappable element on the card and
   in the share text, so the rename decision (lever #15) changes one line.
 
-## Photos permission
+## Photos permission and the Save button
 
 "Save Image" in the share sheet writes to the photo library and **crashes without
 `NSPhotoLibraryAddUsageDescription`**. The app target sets it as an `INFOPLIST_KEY_` build setting
 (both configurations) and translates it in `en`/`de` `InfoPlist.strings`.
+
+**Why a Save button in the preview** (added 2026-10-19 after user feedback): posting a story from
+Instagram usually means saving to Photos first, and inside the share sheet "Bild sichern" sits one
+screen deeper, after Share. The direct button saves a tap and makes the option visible. A saved
+image carries the wordmark but **not the link**, which only travels as share-sheet text. That was
+accepted, because an Instagram story drops the text either way.
+
+**Mechanism** (researched 2026-10-19 against the iOS SDK headers `PHPhotoLibrary.h`,
+`PHAssetCreationRequest.h`; Context7 has no Photos docs):
+- `Domain/Interfaces/PhotoLibrarySaving.swift`: `savePNG(_ data: Data) async throws` and
+  `PhotoSaveError` (`denied`, `restricted`, `failed`). It takes PNG bytes, so no UIKit or Photos
+  type enters Domain.
+- `Data/System/PhotoLibraryImageSaver.swift`:
+  - Calls `PHPhotoLibrary.authorizationStatus(for: .addOnly)`, then
+    `await PHPhotoLibrary.requestAuthorization(for: .addOnly)` while still `.notDetermined`.
+    This is add-only; read access is never asked for.
+  - Saves with `try await PHPhotoLibrary.shared().performChanges { @Sendable in
+    PHAssetCreationRequest.forAsset().addResource(with: .photo, data:options:) }`. That keeps the
+    PNG bytes as they are (no re-encode, unlike `creationRequestForAsset(from: UIImage)`).
+  - `.limited` is treated as authorized (it describes read access and isn't expected for
+    add-only).
+- **Threading (load-bearing):** Photos runs the change block on an arbitrary serial queue, and the
+  block is not `NS_SWIFT_SENDABLE`. Without `@Sendable` it would be inferred main-actor-isolated,
+  and the app would trap the first time Photos ran it (`docs/swift6-concurrency.md` §4a). The
+  block lives in a `nonisolated static func` and captures only `Data`.
+  - Verified at runtime: a throwaway Swift Testing probe called the saver from a `@MainActor` test
+    on an iOS 26 simulator, with access granted through `xcrun simctl privacy <udid> grant
+    photos-add com.shotat24fps.GymStreak`. It passed with no executor trap.
+  - The `ios-api-researcher` reviewed the final code: correct.
+  - `ImageRenderer` + `pngData()` stay on main. The renderer must run there, and one tap-triggered
+    1080 × 1920 encode costs tens of milliseconds.
+- `WorkoutShareViewModel.saveImage()`:
+  - `saveState` is `idle` → `saving` → `saved`.
+  - A chip change resets `saved` to `idle`, but never `saving`; resetting `saving` would re-enable
+    the button mid-save, a bug found in review.
+  - A save that finishes after a chip change ends `idle`, not `saved`, because the card is compared
+    with the one that was rendered.
+- **Errors:**
+  - Denied: an alert with **Open Settings** (`UIApplication.openSettingsURLString`). The app never
+    re-requests, because the system silently returns `.denied`.
+  - Restricted: an informational alert.
+  - Failed: "try again, or use Share → Save Image".
 
 ## Design provenance
 
@@ -175,13 +280,21 @@ as is), `SharePreview.dc.html` and `EntrySave.dc.html`. The callout anchors and 
 algorithm in `WorkoutShareCalloutLayout` are a direct port of `Main.dc.html`'s `ANCHOR` table and
 `renderVals()`.
 
-The conditioning card (`ConditioningCard.dc.html`) and the History and conditioning entry points
-belong to tickets 03 and 04. Ticket 04 must know that `ConditioningRecord` stores **no heart-rate
+**Deliberate deviations from the approved design** (user decision, 2026-10-19, after the device
+check): the History detail also gets the completion screen's share row, not only the toolbar
+icon of `EntryHistory.dc.html`. The preview sheet gains a secondary **Save** button beside Share,
+which `SharePreview.dc.html` doesn't have. Both reuse the existing visual system, so no new design
+round was run.
+
+The conditioning card (`ConditioningCard.dc.html`) and the conditioning entry point belong to
+ticket 04. Ticket 04 must know that `ConditioningRecord` stores **no heart-rate
 data**: read it from the linked HealthKit workout, or use the design's no-HR state.
 
 ## Verification
 
-- Unit tests: `WorkoutShareCardModelTests` covers records, the empty-PR state, the two-row cap,
+- Unit tests: `WorkoutShareViewModelTests` covers History's `knownRecords` path (PRs used, no
+  history fetch) and the Save state across chip changes, including mid-save.
+  `WorkoutShareCardModelTests` covers records, the empty-PR state, the two-row cap,
   pounds conversion, the Weights/Muscles/Stats/Exercises layers, the one-exercise line, and that
   callouts split into the right columns without overlapping.
   `PersonalRecordServiceTests.unsavedSessionIsCheckedAgainstPriorBests` covers the pre-save PR path.
@@ -191,3 +304,6 @@ data**: read it from the linked HealthKit workout, or use the design's no-HR sta
 - Device check by the user on 2026-10-19 (German locale): an Instagram story fits, with the date,
   title and footer clear of Instagram's controls. WhatsApp received the image plus the text line
   with the unattributed link, and Save Image saved it to Photos.
+- Device check by the user on 2026-10-19 (ticket 03): sharing from History, the inline share row,
+  the preview's Save button (permission prompt, "Saved" ✓, reset on chip change) and the denied
+  alert all work.
