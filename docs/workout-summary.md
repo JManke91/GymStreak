@@ -12,6 +12,9 @@ Workout summary screens provide users with a quick review of their completed wor
 - **Duration**: Formatted workout time
 - **Sets**: Combined format showing `completed/total (percentage%)` — green text at 100%
 - **Est. Calories**: Based on duration (4.5 kcal/minute for strength training)
+- **Share row** (under Summary): a live thumbnail of the story share card and a Share button that
+  opens the preview sheet and then the system share sheet. Built from the in-memory session; it
+  never saves or alters the workout. See [workout-sharing.md](./workout-sharing.md).
 - **Exercise Progress**: Per-slot volume change compared to the previous workout of the same routine exercise; repeated heavy/high-rep uses remain separate
   - Volume increase: green arrow with percentage
   - Volume decrease: orange arrow with percentage
@@ -109,6 +112,7 @@ Used by iOS `SaveWorkoutView` for exercise progress display. Contains `volumeDel
 | File | Target | Role |
 |------|--------|------|
 | `Presentation/Views/Workout/SaveWorkoutView.swift` | iOS | Post-workout save form with summary |
+| `Presentation/Views/Share/WorkoutShareEntryRow.swift` | iOS | The share row (see workout-sharing.md) |
 | `Presentation/Views/Conditioning/ConditioningAddOnCard.swift` | iOS | The conditioning add-on card (value input only) |
 | `Presentation/ViewModels/Conditioning/ConditioningAddOnViewModel.swift` | iOS | The add-on's offer, reminder and started session |
 | `Views/Components/DeltaBadge.swift` | iOS | Reusable delta indicator component |

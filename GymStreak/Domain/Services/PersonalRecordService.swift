@@ -52,51 +52,11 @@ struct PersonalRecordService {
         var prDetailsBySession: [UUID: [UUID: PRDetail]] = [:]
 
         for session in sorted {
-            // 1. Determine the best set (by estimated 1RM) for each exercise within this session.
-            var sessionBests: [String: (
-                workoutExerciseId: UUID,
-                setId: UUID,
-                weight: Double,
-                reps: Int,
-                estimated: Double
-            )] = [:]
-            for exercise in session.workoutExercisesList.sorted(by: { $0.order < $1.order }) {
-                let nameKey = exercise.stableKey
-                let usePlanned = exercise.progressiveOverloadApplied
-                for set in exercise.setsList where set.isCompleted {
-                    let enteredWeight = usePlanned ? set.plannedWeight : set.actualWeight
-                    let reps   = usePlanned ? set.plannedReps   : set.actualReps
-                    guard reps > 0,
-                          enteredWeight > 0 || exercise.loadBehavior.isCounterweightAssistance,
-                          let weight = ExerciseLoadMetrics.effectiveWeight(
-                            enteredWeight: enteredWeight,
-                            behavior: exercise.loadBehavior,
-                            bodyWeightKg: session.bodyWeightKg
-                          ) else { continue }
-                    let estimated = ExerciseLoadMetrics.estimatedOneRepMax(weight: weight, reps: reps)
-                    if estimated > (sessionBests[nameKey]?.estimated ?? 0) {
-                        sessionBests[nameKey] = (exercise.id, set.id, weight, reps, estimated)
-                    }
-                }
+            let details = records(in: session, priorBests: bestByExercise)
+            // Only a record can raise a best, so the winners are the whole update.
+            for detail in details.values {
+                bestByExercise[detail.exerciseKey] = detail.estimatedOneRepMax
             }
-
-            // 2. Compare against historical bests (strictly before this session).
-            var details: [UUID: PRDetail] = [:]
-            for (nameKey, best) in sessionBests {
-                let prior = bestByExercise[nameKey]
-                guard best.estimated > (prior ?? 0) else { continue }
-                details[best.workoutExerciseId] = PRDetail(
-                    exerciseKey: nameKey,
-                    workoutExerciseId: best.workoutExerciseId,
-                    setId: best.setId,
-                    weight: best.weight,
-                    reps: best.reps,
-                    estimatedOneRepMax: best.estimated,
-                    previousBest: prior
-                )
-                bestByExercise[nameKey] = best.estimated
-            }
-
             if !details.isEmpty {
                 prCountBySession[session.id] = details.count
                 prDetailsBySession[session.id] = details
@@ -107,5 +67,79 @@ struct PersonalRecordService {
             prCountBySession: prCountBySession,
             prDetailsBySession: prDetailsBySession
         )
+    }
+
+    /// Best estimated 1RM per `WorkoutExercise.stableKey` across `sessions` — the bar a
+    /// session the history does not contain yet has to clear. Expects completed sessions; it
+    /// does not filter by `endTime` itself.
+    static func personalBests(sessions: [WorkoutSession]) -> [String: Double] {
+        var bests: [String: Double] = [:]
+        for session in sessions {
+            for (key, best) in sessionBests(of: session) where best.estimatedOneRepMax > (bests[key] ?? 0) {
+                bests[key] = best.estimatedOneRepMax
+            }
+        }
+        return bests
+    }
+
+    /// The records `session` sets against `priorBests`, keyed by the winning
+    /// `WorkoutExercise.id`.
+    static func records(in session: WorkoutSession, priorBests: [String: Double]) -> [UUID: PRDetail] {
+        records(from: sessionBests(of: session), priorBests: priorBests)
+    }
+
+    /// The records a session's bests (`sessionBests(of:)`) set against `priorBests`. Takes
+    /// values, so a caller can read the session before an `await` and decide after it — the
+    /// completion screen's share card checks a workout that is not saved yet.
+    static func records(from sessionBests: [String: PRDetail], priorBests: [String: Double]) -> [UUID: PRDetail] {
+        var details: [UUID: PRDetail] = [:]
+        for (key, best) in sessionBests {
+            let prior = priorBests[key]
+            guard best.estimatedOneRepMax > (prior ?? 0) else { continue }
+            details[best.workoutExerciseId] = PRDetail(
+                exerciseKey: key,
+                workoutExerciseId: best.workoutExerciseId,
+                setId: best.setId,
+                weight: best.weight,
+                reps: best.reps,
+                estimatedOneRepMax: best.estimatedOneRepMax,
+                previousBest: prior
+            )
+        }
+        return details
+    }
+
+    /// The best completed set (by estimated 1RM) of each exercise in one session, keyed by
+    /// `stableKey`. `previousBest` is always nil here — this knows nothing of history.
+    static func sessionBests(of session: WorkoutSession) -> [String: PRDetail] {
+        var bests: [String: PRDetail] = [:]
+        for exercise in session.workoutExercisesList.sorted(by: { $0.order < $1.order }) {
+            let nameKey = exercise.stableKey
+            let usePlanned = exercise.progressiveOverloadApplied
+            for set in exercise.setsList where set.isCompleted {
+                let enteredWeight = usePlanned ? set.plannedWeight : set.actualWeight
+                let reps   = usePlanned ? set.plannedReps   : set.actualReps
+                guard reps > 0,
+                      enteredWeight > 0 || exercise.loadBehavior.isCounterweightAssistance,
+                      let weight = ExerciseLoadMetrics.effectiveWeight(
+                        enteredWeight: enteredWeight,
+                        behavior: exercise.loadBehavior,
+                        bodyWeightKg: session.bodyWeightKg
+                      ) else { continue }
+                let estimated = ExerciseLoadMetrics.estimatedOneRepMax(weight: weight, reps: reps)
+                if estimated > (bests[nameKey]?.estimatedOneRepMax ?? 0) {
+                    bests[nameKey] = PRDetail(
+                        exerciseKey: nameKey,
+                        workoutExerciseId: exercise.id,
+                        setId: set.id,
+                        weight: weight,
+                        reps: reps,
+                        estimatedOneRepMax: estimated,
+                        previousBest: nil
+                    )
+                }
+            }
+        }
+        return bests
     }
 }

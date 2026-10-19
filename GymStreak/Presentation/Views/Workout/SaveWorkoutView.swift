@@ -20,6 +20,10 @@ struct SaveWorkoutView: View {
     /// that wait (see the Save button), so without this a second tap would complete the
     /// workout twice — and the template reconciliation it runs is not idempotent.
     @State private var isSaving = false
+    /// The share card of this workout (docs/workout-sharing.md). Made in `.task` because the
+    /// factory lives on the environment's `AppDependencies`.
+    @State private var shareViewModel: WorkoutShareViewModel?
+    @State private var isSharePreviewPresented = false
 
     let onSave: () -> Void
 
@@ -27,6 +31,7 @@ struct SaveWorkoutView: View {
         NavigationView {
             Form {
                 summarySection
+                shareSection
                 readyForMoreSection
                 aiRecapSection
                 exerciseProgressSection
@@ -61,6 +66,19 @@ struct SaveWorkoutView: View {
             .interactiveDismissDisabled(isSaving)
             .onAppear {
                 syncToHealthKit = viewModel.healthKitSyncEnabled
+            }
+            // A task of its own so the share card's history walk never queues behind, or
+            // delays, the comparison and recap below. It only reads the session.
+            .task {
+                guard let session = viewModel.currentSession else { return }
+                let share = dependencies.makeWorkoutShareViewModel()
+                shareViewModel = share
+                await share.prepare(session: session, weightUnit: weightUnit)
+            }
+            .sheet(isPresented: $isSharePreviewPresented) {
+                if let shareViewModel {
+                    WorkoutSharePreviewSheet(viewModel: shareViewModel)
+                }
             }
             .task {
                 // §8 placement B's second trigger, on the completion screen's
@@ -130,6 +148,24 @@ struct SaveWorkoutView: View {
             }
         } header: {
             Text("save_workout.summary".localized)
+        }
+    }
+
+    // MARK: - Share Section
+
+    /// Reachable before Save: the card renders from the in-memory session, and sharing never
+    /// commits it.
+    @ViewBuilder
+    private var shareSection: some View {
+        if let shareViewModel, let card = shareViewModel.card {
+            Section {
+                WorkoutShareEntryRow(card: card, subtitle: shareViewModel.entrySubtitle) {
+                    isSharePreviewPresented = true
+                }
+                .listRowBackground(Color.clear)
+                .listRowInsets(EdgeInsets(top: 6, leading: 0, bottom: 6, trailing: 0))
+                .listRowSeparator(.hidden)
+            }
         }
     }
 

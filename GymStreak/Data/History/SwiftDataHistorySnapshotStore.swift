@@ -17,6 +17,7 @@ import SwiftData
 /// methods and their explicit cancellation checks.
 struct SwiftDataHistorySnapshotProvider: HistorySnapshotProviding,
                                         LifetimeTrainingTotalsProviding,
+                                        PersonalBestsProviding,
                                         ExerciseDeepDiveFactProviding {
     private let storeTask: Task<SwiftDataHistorySnapshotStore, Never>
 
@@ -133,6 +134,18 @@ struct SwiftDataHistorySnapshotProvider: HistorySnapshotProviding,
         let store = await storeTask.value
         return try await gate.withAccess {
             try await store.fetchLifetimeTotals()
+        }
+    }
+
+    /// `PersonalBestsProviding`. Walks every completed session's set graph, so it is
+    /// `@concurrent` for the same load-bearing reason as the methods above.
+    @concurrent func fetchPersonalBests(
+        before date: Date,
+        excludingSessionID: UUID
+    ) async throws -> [String: Double] {
+        let store = await storeTask.value
+        return try await gate.withAccess {
+            try await store.fetchPersonalBests(before: date, excludingSessionID: excludingSessionID)
         }
     }
 
@@ -390,6 +403,24 @@ actor SwiftDataHistorySnapshotStore {
         return try measured("HistoryCountCompletedSessions") {
             try CompletedSessionFetch.completedCount(in: modelContext)
         }
+    }
+
+    /// Best estimated 1RM per exercise over completed sessions started before `date` (share card PRs).
+    func fetchPersonalBests(
+        before date: Date,
+        excludingSessionID: UUID
+    ) async throws -> [String: Double] {
+        try Task.checkCancellation()
+        let sessions = try measured("HistoryFetchSessions") {
+            try fetchCompletedSessions()
+        }
+        try Task.checkCancellation()
+        let prior = sessions.filter { $0.startTime < date && $0.id != excludingSessionID }
+        let bests = measured("HistoryBuildPersonalBests") {
+            PersonalRecordService.personalBests(sessions: prior)
+        }
+        try Task.checkCancellation()
+        return bests
     }
 
     /// All-time totals for §8 placement B's endowed figures.

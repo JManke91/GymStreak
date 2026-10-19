@@ -2015,3 +2015,35 @@
 "roundtimer.finished.ended_title" = "Timer gestoppt";
 "roundtimer.finished.save" = "Als Mat-Einheit speichern";
 "roundtimer.finished.saved" = "Als Mat-Einheit gespeichert";
+
+// MARK: - Workout Sharing (docs/workout-sharing.md)
+"share_card.callout_sets" = "%d Sätze";
+"share_card.pr_tag" = "PR";
+"share_card.records_one" = "Neuer persönlicher Rekord";
+"share_card.records_many" = "%d neue persönliche Rekorde";
+"share_card.stat.duration" = "Dauer";
+"share_card.stat.sets" = "Sätze";
+"share_card.stat.volume" = "Volumen";
+"share_card.stat.exercise" = "Übung";
+"share_card.stat.exercises" = "Übungen";
+"share_card.unit.minutes" = "min";
+"share_card.weight_reps" = "%1$@ × %2$d";
+"share_card.single_top_set" = "%1$@ · Top-Satz %2$@";
+"share_card.single_sets" = "%1$@ · %2$d Sätze";
+"share_card.tagline" = "Getrackt auf iPhone & Apple Watch";
+"share_card.untitled" = "Workout";
+"share_card.region.back" = "Latissimus";
+"share_card.region.quadriceps" = "Quadrizeps";
+"share_card.region.trapezius" = "Trapez";
+"share.entry.title" = "Dieses Workout teilen";
+"share.entry.subtitle" = "Deine Muskelkarte und Werte als Bild für deine Story.";
+"share.entry.subtitle_pr_one" = "Deine Muskelkarte, Werte und 1 neuer PR als Bild für deine Story.";
+"share.entry.subtitle_prs" = "Deine Muskelkarte, Werte und %d neue PRs als Bild für deine Story.";
+"share.action" = "Teilen";
+"share.preview.title" = "Workout teilen";
+"share.layer.muscles" = "Muskeln";
+"share.layer.prs" = "PRs";
+"share.layer.stats" = "Werte";
+"share.layer.exercises" = "Übungen";
+"share.layer.weights" = "Gewichte";
+"share.message" = "Getrackt mit %1$@: %2$@";

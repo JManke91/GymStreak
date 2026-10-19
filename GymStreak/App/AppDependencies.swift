@@ -33,6 +33,9 @@ final class AppDependencies: ObservableObject {
     /// the chart above it is drawn from, so a second `@ModelActor` would fault
     /// the same graph twice for one screen.
     let exerciseDeepDiveFacts: ExerciseDeepDiveFactProviding
+    /// The share card's PR bar (docs/workout-sharing.md). The **same instance** as
+    /// `historySnapshotProvider`, for the reason `exerciseDeepDiveFacts` gives.
+    let personalBests: PersonalBestsProviding
     /// The one write path into workout history outside of recording a workout: linking
     /// pre-`exerciseId` rows to the library exercise the user says they meant.
     let legacyHistoryAttribution: LegacyHistoryAttributing
@@ -313,6 +316,7 @@ final class AppDependencies: ObservableObject {
         )
         self.historySnapshotProvider = historySnapshotProvider
         self.exerciseDeepDiveFacts = historySnapshotProvider
+        self.personalBests = historySnapshotProvider
         self.legacyHistoryAttribution = SwiftDataLegacyHistoryAttributionProvider(
             modelContainer: modelContext.container,
             gate: historyStoreGate
@@ -650,6 +654,11 @@ final class AppDependencies: ObservableObject {
             catalogSync: exerciseCatalogSync,
             weightUnitPreference: weightUnitPreference
         )
+    }
+
+    /// One per workout completion screen (docs/workout-sharing.md).
+    func makeWorkoutShareViewModel() -> WorkoutShareViewModel {
+        WorkoutShareViewModel(personalBests: personalBests)
     }
 
     func makeHeartRateProfileEditor() -> HeartRateProfileEditorViewModel {

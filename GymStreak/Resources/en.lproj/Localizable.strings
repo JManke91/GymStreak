@@ -2023,3 +2023,40 @@
 "roundtimer.finished.ended_title" = "Timer stopped";
 "roundtimer.finished.save" = "Save as mat session";
 "roundtimer.finished.saved" = "Saved as a mat session";
+
+// MARK: - Workout Sharing (docs/workout-sharing.md)
+// The card is an image for Instagram stories and chats; its labels are uppercased by the view.
+"share_card.callout_sets" = "%d sets";
+"share_card.pr_tag" = "PR";
+"share_card.records_one" = "New personal record";
+"share_card.records_many" = "%d new personal records";
+"share_card.stat.duration" = "Duration";
+"share_card.stat.sets" = "Sets";
+"share_card.stat.volume" = "Volume";
+"share_card.stat.exercise" = "Exercise";
+"share_card.stat.exercises" = "Exercises";
+"share_card.unit.minutes" = "min";
+// A record or top set: "100 kg × 5".
+"share_card.weight_reps" = "%1$@ × %2$d";
+// One-exercise workout: "Back Squat · top set 140 kg × 3".
+"share_card.single_top_set" = "%1$@ · top set %2$@";
+"share_card.single_sets" = "%1$@ · %2$d sets";
+"share_card.tagline" = "Tracked on iPhone & Apple Watch";
+"share_card.untitled" = "Workout";
+// The card's short gym names where they differ from the muscle map's region names.
+"share_card.region.back" = "Lats";
+"share_card.region.quadriceps" = "Quads";
+"share_card.region.trapezius" = "Traps";
+"share.entry.title" = "Share this workout";
+"share.entry.subtitle" = "Your muscle map and stats as a story-ready image.";
+"share.entry.subtitle_pr_one" = "Your muscle map, stats and 1 new PR as a story-ready image.";
+"share.entry.subtitle_prs" = "Your muscle map, stats and %d new PRs as a story-ready image.";
+"share.action" = "Share";
+"share.preview.title" = "Share workout";
+"share.layer.muscles" = "Muscles";
+"share.layer.prs" = "PRs";
+"share.layer.stats" = "Stats";
+"share.layer.exercises" = "Exercises";
+"share.layer.weights" = "Weights";
+// The text that travels with the image: wordmark, then the App Store link.
+"share.message" = "Tracked with %1$@: %2$@";
