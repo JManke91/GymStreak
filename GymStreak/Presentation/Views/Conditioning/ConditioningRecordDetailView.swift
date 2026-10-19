@@ -16,8 +16,11 @@ struct ConditioningRecordDetailView: View {
     let record: ConditioningRecord
     let viewModel: ConditioningHistoryViewModel
 
+    @EnvironmentObject private var dependencies: AppDependencies
     @Environment(\.dismiss) private var dismiss
     @State private var showingDeleteConfirmation = false
+    /// Set once the card is prepared, so the sheet never opens on an empty card.
+    @State private var sharePreview: ConditioningShareViewModel?
     /// The screen blanks itself before the delete awaits, so nothing reads the tombstone.
     @State private var isBeingDeleted = false
 
@@ -32,6 +35,12 @@ struct ConditioningRecordDetailView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
+                Button(action: presentShare) {
+                    Image(systemName: "square.and.arrow.up")
+                }
+                .accessibilityLabel("share.preview.title_conditioning".localized)
+            }
+            ToolbarItem(placement: .topBarTrailing) {
                 Button(role: .destructive) {
                     HapticManager.shared.light()
                     showingDeleteConfirmation = true
@@ -40,6 +49,9 @@ struct ConditioningRecordDetailView: View {
                 }
                 .accessibilityLabel("action.delete".localized)
             }
+        }
+        .sheet(item: $sharePreview) { share in
+            ConditioningSharePreviewSheet(viewModel: share)
         }
         .deleteWorkoutConfirmation(
             isPresented: $showingDeleteConfirmation,
@@ -52,6 +64,20 @@ struct ConditioningRecordDetailView: View {
 
     private var title: String {
         ConditioningCopy.recordedTitle(sessionType: record.sessionType, snapshot: record.titleSnapshot)
+    }
+
+    /// Built on tap, never on load: the heart rate is read from Apple Health only when the
+    /// user actually shares.
+    private func presentShare() {
+        guard !isBeingDeleted else { return }
+        HapticManager.shared.light()
+        let share = dependencies.makeConditioningShareViewModel()
+        let recordID = record.id
+        Task {
+            if await share.prepare(recordID: recordID), !isBeingDeleted {
+                sharePreview = share
+            }
+        }
     }
 
     private func delete(alsoFromHealthKit: Bool) {

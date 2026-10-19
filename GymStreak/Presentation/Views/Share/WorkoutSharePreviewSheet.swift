@@ -3,7 +3,9 @@
 //  GymStreak
 //
 //  What the user sees between tapping Share and the system share sheet: the live card, the
-//  layer chips and one Share button. Design: `SharePreview.dc.html` (docs/workout-sharing.md).
+//  layer chips and the Save and Share buttons. Design: `SharePreview.dc.html`
+//  (docs/workout-sharing.md). `SharePreviewSheet` is the shell both cards share; the
+//  strength and conditioning sheets only supply the card and its chips.
 //
 
 import SwiftUI
@@ -12,6 +14,35 @@ import UIKit
 struct WorkoutSharePreviewSheet: View {
 
     @Bindable var viewModel: WorkoutShareViewModel
+
+    var body: some View {
+        SharePreviewSheet(viewModel: viewModel) {
+            if let card = viewModel.card {
+                WorkoutShareCardThumbnail(model: card, width: 270)
+            }
+        } chips: {
+            ShareLayerChip("share.layer.muscles", isOn: $viewModel.layers.muscles)
+            if viewModel.card?.isRecordsChipShown == true {
+                ShareLayerChip("share.layer.prs", isOn: $viewModel.layers.records)
+            }
+            ShareLayerChip("share.layer.stats", isOn: $viewModel.layers.stats)
+            ShareLayerChip("share.layer.exercises", isOn: $viewModel.layers.exercises)
+            ShareLayerChip(
+                "share.layer.weights",
+                isOn: $viewModel.layers.weights,
+                isEnabled: viewModel.card?.isWeightsChipEnabled ?? true
+            )
+        }
+    }
+}
+
+struct SharePreviewSheet<Model: ShareCardPreviewing, Card: View, Chips: View>: View {
+
+    let viewModel: Model
+    var title = "share.preview.title"
+    @ViewBuilder let card: Card
+    @ViewBuilder let chips: Chips
+
     @Environment(\.dismiss) private var dismiss
     @Environment(\.openURL) private var openURL
     @State private var sharePayload: SharePayload?
@@ -19,26 +50,14 @@ struct WorkoutSharePreviewSheet: View {
     var body: some View {
         VStack(spacing: 12) {
             header
-            if let card = viewModel.card {
-                WorkoutShareCardThumbnail(model: card, width: 270)
-                    .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
-                    .overlay {
-                        RoundedRectangle(cornerRadius: 20, style: .continuous)
-                            .stroke(Color.white.opacity(0.1), lineWidth: 1)
-                    }
-            }
-            FlowLayout(spacing: 8) {
-                chip("share.layer.muscles", isOn: $viewModel.layers.muscles)
-                if viewModel.card?.isRecordsChipShown == true {
-                    chip("share.layer.prs", isOn: $viewModel.layers.records)
+            card
+                .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 20, style: .continuous)
+                        .stroke(Color.white.opacity(0.1), lineWidth: 1)
                 }
-                chip("share.layer.stats", isOn: $viewModel.layers.stats)
-                chip("share.layer.exercises", isOn: $viewModel.layers.exercises)
-                chip(
-                    "share.layer.weights",
-                    isOn: $viewModel.layers.weights,
-                    isEnabled: viewModel.card?.isWeightsChipEnabled ?? true
-                )
+            FlowLayout(spacing: 8) {
+                chips
             }
             .padding(.top, 2)
             Spacer(minLength: 0)
@@ -83,7 +102,7 @@ struct WorkoutSharePreviewSheet: View {
 
     private var header: some View {
         ZStack {
-            Text("share.preview.title".localized)
+            Text(title.localized)
                 .font(.headline)
             HStack {
                 Button {
@@ -100,37 +119,6 @@ struct WorkoutSharePreviewSheet: View {
                 Spacer()
             }
         }
-    }
-
-    private func chip(_ key: String, isOn: Binding<Bool>, isEnabled: Bool = true) -> some View {
-        Button {
-            isOn.wrappedValue.toggle()
-            HapticManager.shared.light()
-        } label: {
-            HStack(spacing: 6) {
-                // Always laid out, only faded: a chip that changed width on toggle made the
-                // flow layout move its neighbours between rows.
-                Image(systemName: "checkmark")
-                    .font(.system(size: 11, weight: .heavy))
-                    .opacity(isOn.wrappedValue ? 1 : 0)
-                Text(key.localized)
-                    .font(.subheadline.weight(.semibold))
-            }
-            .foregroundStyle(isOn.wrappedValue ? DesignSystem.Colors.textOnTint : DesignSystem.Colors.textSecondary)
-            .padding(.horizontal, 14)
-            .frame(height: 36)
-            .background(
-                isOn.wrappedValue ? DesignSystem.Colors.tint : DesignSystem.Colors.cardElevated,
-                in: Capsule()
-            )
-            .overlay {
-                Capsule().stroke(isOn.wrappedValue ? DesignSystem.Colors.tint : Color.white.opacity(0.08), lineWidth: 1)
-            }
-        }
-        .buttonStyle(.plain)
-        .disabled(!isEnabled)
-        .opacity(isEnabled ? 1 : 0.35)
-        .accessibilityAddTraits(isOn.wrappedValue ? .isSelected : [])
     }
 
     private var shareButton: some View {
@@ -189,6 +177,47 @@ struct WorkoutSharePreviewSheet: View {
     }
 }
 
+/// One layer toggle of the preview sheet.
+struct ShareLayerChip: View {
+    let key: String
+    @Binding var isOn: Bool
+    var isEnabled = true
+
+    init(_ key: String, isOn: Binding<Bool>, isEnabled: Bool = true) {
+        self.key = key
+        self._isOn = isOn
+        self.isEnabled = isEnabled
+    }
+
+    var body: some View {
+        Button {
+            isOn.toggle()
+            HapticManager.shared.light()
+        } label: {
+            HStack(spacing: 6) {
+                // Always laid out, only faded: a chip that changed width on toggle made the
+                // flow layout move its neighbours between rows.
+                Image(systemName: "checkmark")
+                    .font(.system(size: 11, weight: .heavy))
+                    .opacity(isOn ? 1 : 0)
+                Text(key.localized)
+                    .font(.subheadline.weight(.semibold))
+            }
+            .foregroundStyle(isOn ? DesignSystem.Colors.textOnTint : DesignSystem.Colors.textSecondary)
+            .padding(.horizontal, 14)
+            .frame(height: 36)
+            .background(isOn ? DesignSystem.Colors.tint : DesignSystem.Colors.cardElevated, in: Capsule())
+            .overlay {
+                Capsule().stroke(isOn ? DesignSystem.Colors.tint : Color.white.opacity(0.08), lineWidth: 1)
+            }
+        }
+        .buttonStyle(.plain)
+        .disabled(!isEnabled)
+        .opacity(isEnabled ? 1 : 0.35)
+        .accessibilityAddTraits(isOn ? .isSelected : [])
+    }
+}
+
 /// The rendered image and its message, handed to the system share sheet.
 private struct SharePayload: Identifiable {
     let id = UUID()
@@ -202,8 +231,18 @@ struct WorkoutShareCardThumbnail: View {
     let width: CGFloat
 
     var body: some View {
+        ShareCardScaled(width: width) { WorkoutShareCardView(model: model) }
+    }
+}
+
+/// Any 1080 × 1920 share card scaled down to `width`, in dark mode.
+struct ShareCardScaled<Content: View>: View {
+    let width: CGFloat
+    @ViewBuilder let content: Content
+
+    var body: some View {
         let scale = width / WorkoutShareCardView.size.width
-        WorkoutShareCardView(model: model)
+        content
             .scaleEffect(scale, anchor: .topLeading)
             .frame(width: width, height: WorkoutShareCardView.size.height * scale, alignment: .topLeading)
             .environment(\.colorScheme, .dark)

@@ -26,10 +26,9 @@ enum SupportLinks {
     )
 
     /// App Store Connect provider token, the `pt` of a campaign link (App Store Connect →
-    /// Analytics → Campaigns). Without it a `ct` is not attributed, so neither is sent.
-    // TODO(share-screen): paste the provider token here once known. The link then becomes
-    // https://apps.apple.com/app/apple-store/id6756426105?pt=<token>&ct=<campaign>&mt=8
-    static let appStoreProviderToken: String? = nil
+    /// Analyse → Akquisition → Kampagnen). It belongs to the developer account, not the app.
+    /// Without it a `ct` is not attributed, so neither would be sent.
+    static let appStoreProviderToken: String? = "122361031"
 
     /// The App Store page with campaign attribution, for links that leave the app inside
     /// shared content (docs/workout-sharing.md). The only place such a link is built.
@@ -50,6 +49,7 @@ enum SupportLinks {
     enum Campaign {
         static let shareSummary = "share-summary"
         static let shareHistory = "share-history"
+        static let shareConditioning = "share-conditioning"
     }
 
     /// Where "Contact support" addresses its mail. Also the address shown in the

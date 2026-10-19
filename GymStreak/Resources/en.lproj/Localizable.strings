@@ -1554,6 +1554,7 @@
 "conditioning.finished.title" = "Session complete";
 "conditioning.finished.ended_title" = "Session ended";
 "conditioning.finished.done" = "Done";
+"conditioning.finished.share" = "Share session";
 "conditioning.finished.health_saving" = "Saving to Apple Health…";
 "conditioning.finished.health_saved" = "Saved to Apple Health";
 "conditioning.finished.health_failed" = "Could not save to Apple Health";
@@ -2068,3 +2069,26 @@
 "share.save.failed_message" = "Try again, or tap Share and choose Save Image.";
 // The text that travels with the image: wordmark, then the App Store link.
 "share.message" = "Tracked with %1$@: %2$@";
+"share.preview.title_conditioning" = "Share session";
+"share.layer.rounds" = "Rounds";
+"share.layer.heart_rate" = "Heart rate";
+"share_card.conditioning.kind" = "Conditioning";
+"share_card.conditioning.rounds" = "Rounds";
+"share_card.conditioning.steady" = "Steady state";
+"share_card.conditioning.structure" = "%1$d × %2$@ work, %3$@ rest";
+"share_card.conditioning.work_legend" = "Work %@";
+"share_card.conditioning.rest_legend" = "Rest %@";
+"share_card.conditioning.round_label" = "R%d";
+"share_card.conditioning.zones_title" = "Time in heart-rate zone";
+"share_card.conditioning.zone" = "Z%d";
+"share_card.conditioning.effort.easy" = "Easy";
+"share_card.conditioning.effort.conversational" = "RPE 3–4";
+"share_card.conditioning.effort.strongBurst" = "RPE 8";
+"share_card.conditioning.effort.hardRepeatable" = "RPE 9";
+"share_card.conditioning.effort.maximal" = "Max effort";
+"share_card.conditioning.effort.subMaximal" = "85–90 %";
+"share_card.stat.avg_hr" = "Avg HR";
+"share_card.stat.max_hr" = "Max HR";
+"share_card.stat.work" = "Work";
+"share_card.stat.rest" = "Rest";
+"share_card.unit.bpm" = "bpm";

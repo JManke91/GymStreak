@@ -6,8 +6,9 @@ It is acquisition lever #5 (`docs/acquisition-strategy.md` §4.5): every posted 
 by the user's friends.
 
 **Status:** sharing from the **workout completion screen** (2026-10-19, `.scratch/share-screen/`
-ticket 02) and from a **History workout detail** (2026-10-19, ticket 03) shipped. The conditioning
-card (ticket 04) is not built yet.
+ticket 02) and from a **History workout detail** (2026-10-19, ticket 03) shipped. Sharing a
+**fight-conditioning session** (ticket 04, "Sharing a conditioning session" below) was built
+2026-10-19; the user confirmed the feature finished and tested the same day.
 
 **Targets:** iOS only. The watch target is untouched and no watch counterpart is planned.
 
@@ -97,6 +98,96 @@ changes the image.
   its setting for when they come back. Both flags (`isRecordsChipShown`, `isWeightsChipEnabled`)
   are computed in `WorkoutShareCardModel.make`, never in `body`.
 
+## Sharing a conditioning session
+
+The conditioning variant of the card (`ConditioningCard.dc.html`), built 2026-10-19 (ticket 04).
+It is the card that carries the fighter positioning (`docs/research/positioning-usp-2026-10.md` §6
+step 5). Only interval and steady-state conditioning sessions (`ConditioningRecord`) share; **mat and
+sparring sessions do not** (user decision, 2026-10-19: they have no rounds to draw and would need
+their own variant; follow-up, not planned).
+
+**Entry points.** Both build a fresh `ConditioningShareViewModel` on tap, await
+`prepare(recordID:)` and only then present the sheet (`.sheet(item:)`), so the sheet never opens on
+an empty card and chips never appear mid-animation. Link campaign `ct=share-conditioning` for both.
+- **History detail** (`ConditioningRecordDetailView`): a share icon in the top-right toolbar, left of
+  the trash icon, as `EntryConditioning.dc.html` places it.
+- **Runner finish screen** (`ConditioningFinishedView` in `ConditioningRunnerView`): a secondary
+  "Share session" button above Done, shown once the run recorded a session (ending in the warm-up
+  records nothing, so there is nothing to share). This placement is not in the design; it reuses the
+  screen's existing button style. It also covers the post-workout add-on, which runs the same runner.
+
+**The card,** top to bottom (56 pt between sections, same tokens as the strength card):
+- **Header:** eyebrow "MONDAY · 20 OCT · CONDITIONING", the session title (re-localized like
+  History), and a subtitle: modality · "8 × 2:00 work, 1:00 rest" (steady state: "45 min"), plus a
+  short effort ("RPE 9", `share_card.conditioning.effort.*`) when no heart rate is shown. The
+  design's "Week 4" is left out: `ConditioningRecord` does not store the program week.
+- **Round strip:** one block per planned work interval with the rests between them, widths
+  proportional to time, "4 / 6" on the right and a work/rest legend. Rounds not reached (ended early)
+  are faded green, as the design's `done < rounds` case draws them.
+- **Time in heart-rate zone:** Z5 → Z1 bars, each relative to the longest zone, the time as m:ss.
+- **Stats:** with heart rate: duration, average, maximum (bpm). Without: duration, work, rest.
+- **Footer:** as the strength card.
+
+**No-heart-rate state** (the design's `noHr`): no zone card, the strip grows from 96 to 200 pt and
+names each round (R1…Rn), the stats become duration / work / rest, and the **Heart rate** chip is
+hidden. Chips: **Rounds**, **Heart rate**, **Stats** (`ConditioningShareLayers`). Heart rate off
+behaves like the no-heart-rate state but keeps the chip.
+
+### Decisions the design didn't specify
+
+- **Five zones, % of HRmax** (user decision, 2026-10-19): Z1 from 50 %, Z2 60, Z3 70, Z4 80, Z5 90
+  of the heart-rate profile's maximum (estimated or measured), **also when a resting heart rate is
+  set** — not Karvonen. Time below 50 % counts as Z1, so the zones add up to the measured time.
+  `HeartRateZones.sessionZoneFloors(for:)`; `nil` exactly when there is no aerobic target (no or
+  invalid profile, medication switch).
+- **Heart rate without a profile:** the average and maximum are still shown; only the zone card
+  disappears (and the strip grows, as without heart rate).
+- **Steady state:** one full-width block headed "Steady state" with no value and no legend (the
+  duration stat already says it), and without heart rate only the duration stat.
+- **Short sprints:** every block is at least 16 pt wide (an 8 s sprint beside 90 s of rest would
+  otherwise be a hairline); a block narrower than 52 pt loses its R-label. From 20 rounds the strip
+  would no longer fit at that minimum and the 8 pt gap (the round timer allows up to 30), so the gap
+  tightens to 4 pt and the minimum shrinks to an even share of the width (found in review). Set breaks are drawn as
+  ordinary rests, because the record stores no set-break length.
+- **Rest stat** without heart rate is `rest × (completed rounds − 1)`: the rests actually taken.
+- **The missed rounds' R-labels** are grey instead of black, which would be invisible on faded green.
+
+### Where the heart rate comes from
+
+`ConditioningRecord` stores **no heart rate** (no CloudKit schema change was made for this). The
+share view model reads it from Apple Health **only when the record has a `healthKitWorkoutId`** — a
+user with Health sync off opted out of Health, and the card uses its no-heart-rate state.
+- `ConditioningHeartRateReading` (Domain) → `HealthKitConditioningHeartRateReader` (Data): an
+  `HKSampleQueryDescriptor` for `HKQuantityType(.heartRate)` with
+  `predicateForSamples(withStart: record.startTime, end: record.endTime)` and **no options**, so a
+  sample overlapping either edge matches; sorted by start date. **All sources**, not only samples
+  associated with the workout: an iPhone-run session with a watch on the wrist has its readings
+  outside any workout. It never asks for access: heart-rate read access is part of the workout
+  authorization (`HealthKitWorkoutManager`). Denied and empty look the same, both mean no heart rate.
+- `ConditioningHeartRateSummarizer` (Domain, pure) folds the readings: each holds its value until
+  the next reading but at most **15 s** (the watch mat-session tally's cap), clamped to the window;
+  the average is time-weighted; the maximum is the highest reading. **Under 50 % of the session
+  measured → no summary**, because a watch outside a workout samples every few minutes and those
+  numbers would describe a few stray readings, not the session.
+- In practice, heart rate appears for **watch-run sessions** (the watch workout samples about every
+  5 s). An iPhone-run session usually has too little coverage, and right after the iPhone runner
+  finishes the Health write may still be in flight (no `healthKitWorkoutId` yet), so the finish
+  screen's card is usually the no-heart-rate one. Sharing the same session later from History picks
+  up whatever Health has by then.
+- **Series samples:** a sample with `count > 1` carries one summary value for its span; it is
+  treated as holding that value over the span. Apple Watch writes heart rate as individual samples,
+  so this matters only for third-party sources. Reading per-reading values would need
+  `HKQuantitySeriesSampleQueryDescriptor` (iOS 15.4+), deliberately not used.
+- Research (2026-10-19, ios-api-researcher against Apple's docs): HealthKit's async query
+  descriptors take no completion closure, so no `@Sendable` handler is involved.
+  [HKQuantitySeriesSampleQueryDescriptor](https://developer.apple.com/documentation/healthkit/hkquantityseriessamplequerydescriptor),
+  [Running queries with Swift concurrency](https://developer.apple.com/documentation/healthkit/running-queries-with-swift-concurrency).
+  The watch's ~5 s workout sampling interval and the claim that the watch writes individual samples
+  are the researcher's background knowledge, not confirmed in Apple's docs.
+
+**Tier:** Free — §3 Rule 4 (the user's own logged session). No Pro badge, even though the
+conditioning program has its own gate (`ConditioningProgramGatingPolicy`).
+
 ## Sharing a past workout (History)
 
 - **Two entry points, one card.** An inline share row (the completion screen's
@@ -165,11 +256,20 @@ SaveWorkoutView ── .task ──▶ AppDependencies.makeWorkoutShareViewModel
 
 | File | Layer | Role |
 |---|---|---|
+| `Presentation/ViewModels/Share/ShareCardPreviewing.swift` | Presentation | What the preview sheet needs from either card's view model, `ShareSaveState`, and the shared Save-to-Photos flow (`saveImage()`, `cardDidChange()`) and share line |
 | `Presentation/ViewModels/Share/WorkoutShareViewModel.swift` | Presentation | Reads the session, fetches the PR bar, owns the layers, renders the image, holds the share text |
+| `Presentation/ViewModels/Share/ConditioningShareViewModel.swift` | Presentation | Reads the conditioning record, reads its heart rate from Health, owns the layers, renders the image |
+| `Presentation/Views/Share/ConditioningShareCardModel.swift` | Presentation | `ConditioningShareSource`, `ConditioningShareLayers`, and `ConditioningShareCardModel.make` (strings, block widths, zone rows, stats) |
+| `Presentation/Views/Share/ConditioningShareCardView.swift` | Presentation | The conditioning card; reads only `ConditioningShareCardModel` |
+| `Presentation/Views/Share/ConditioningSharePreviewSheet.swift` | Presentation | The shared sheet with the conditioning card and its chips |
+| `Domain/Models/Conditioning/ConditioningHeartRate.swift` | Domain | `HeartRateReading`, `ConditioningHeartRateSummary` |
+| `Domain/Services/ConditioningHeartRateSummarizer.swift` | Domain | Average, maximum and time per zone of a session window; gap cap and coverage threshold |
+| `Domain/Services/HeartRateZones.swift` | Domain | Gained `sessionZoneFloors(for:)` |
+| `Domain/Interfaces/ConditioningHeartRateReading.swift` · `Data/HealthKit/HealthKitConditioningHeartRateReader.swift` | Domain · Data | Heart-rate readings of a time window |
 | `Presentation/Views/Share/WorkoutShareCardModel.swift` | Presentation | `WorkoutShareSource` (values from the session), `WorkoutShareLayers`, and `WorkoutShareCardModel.make`, which localizes, formats and lays out everything the card shows |
 | `Presentation/Views/Share/WorkoutShareCalloutLayout.swift` | Presentation | Port of the design's callout layout: stage geometry, anchors per region, column assignment, collision push and mean-displacement shift |
 | `Presentation/Views/Share/WorkoutShareCardView.swift` | Presentation | The 1080 × 1920 card; reads only `WorkoutShareCardModel` |
-| `Presentation/Views/Share/WorkoutSharePreviewSheet.swift` | Presentation | Preview sheet, `WorkoutShareCardThumbnail` (the card scaled to a width), and the `UIActivityViewController` bridge |
+| `Presentation/Views/Share/WorkoutSharePreviewSheet.swift` | Presentation | `SharePreviewSheet` (the shell both cards use: header, card, chips, Save and Share, the error alert), `ShareLayerChip`, `WorkoutSharePreviewSheet` (strength card + chips), `ShareCardScaled` / `WorkoutShareCardThumbnail`, and the `UIActivityViewController` bridge |
 | `Presentation/Views/Share/WorkoutShareEntryRow.swift` | Presentation | The completion screen's row |
 | `Presentation/Views/History/WorkoutDetailView.swift` | Presentation | History entry points: inline share row, toolbar icon, `prepareShareCard()`, `presentShare()`, `isShareable` |
 | `Domain/Interfaces/PhotoLibrarySaving.swift` | Domain | Save-to-Photos boundary and `PhotoSaveError` |
@@ -178,7 +278,8 @@ SaveWorkoutView ── .task ──▶ AppDependencies.makeWorkoutShareViewModel
 | `Domain/Services/PersonalRecordService.swift` | Domain | Gained `sessionBests(of:)`, `records(from:priorBests:)`, `records(in:priorBests:)` and `personalBests(sessions:)`; `computePRs` is now built on them, with unchanged behaviour |
 | `Data/History/SwiftDataHistorySnapshotStore.swift` | Data | `SwiftDataHistorySnapshotProvider` conforms to `PersonalBestsProviding` (`@concurrent`), same instance and model actor as History |
 | `Presentation/Views/Settings/SupportLinks.swift` | Presentation | `appStoreCampaignLink(campaign:)`, `appStoreProviderToken`, `Campaign.shareSummary`, and `AppBrand.wordmark` |
-| `App/AppDependencies.swift` | App | `personalBests` and `makeWorkoutShareViewModel(campaign:)` |
+| `App/AppDependencies.swift` | App | `personalBests`, `makeWorkoutShareViewModel(campaign:)` and `makeConditioningShareViewModel()` |
+| `Presentation/Views/Conditioning/ConditioningRecordDetailView.swift`, `ConditioningRunnerView.swift` | Presentation | Conditioning entry points: toolbar icon, finish-screen button |
 
 **Rendering rules** (CLAUDE.md): the card view never touches a `@Model`. Every string, number,
 date and position is computed in `WorkoutShareCardModel.make`, which runs on prepare, on PR arrival
@@ -209,15 +310,18 @@ doubles of the History protocol untouched.
 
 ## Link and wordmark
 
-- **Link:** built only by `SupportLinks.appStoreCampaignLink(campaign:)`, next to `appStoreAppID`.
-  With a provider token it is
-  `https://apps.apple.com/app/apple-store/id6756426105?pt=<token>&ct=<campaign>&mt=8`, where the
-  campaign is `share-summary` (completion screen) or `share-history` (History detail).
-  **The token isn't known yet** (`// TODO(share-screen)` on `appStoreProviderToken`). Without it,
-  App Store Connect can't attribute a `ct`, so the builder returns the plain
-  `https://apps.apple.com/app/id6756426105` instead of inventing one. To turn attribution on,
-  get the token from App Store Connect → Analytics → Campaigns (Kampagnen) → campaign link
-  generator and set the constant. No other change is needed.
+- **Link:** built only by `SupportLinks.appStoreCampaignLink(campaign:)`, next to `appStoreAppID`:
+  `https://apps.apple.com/app/apple-store/id6756426105?pt=122361031&ct=<campaign>&mt=8`, where the
+  campaign is `share-summary` (completion screen), `share-history` (History detail) or
+  `share-conditioning` (both conditioning entry points). `SupportLinksCampaignTests` pins the format.
+- **Provider token** `122361031` (`SupportLinks.appStoreProviderToken`, set 2026-10-19). It belongs
+  to the developer account, not the app, and comes from App Store Connect → Analyse → Akquisition →
+  Kampagnen → "Kampagnen-Link erstellen" (the `pt` of any generated link). Campaign names need no
+  registration: whatever `ct` arrives is listed. Without a token the builder would return the plain
+  `https://apps.apple.com/app/id6756426105`, since a `ct` is not attributed without `pt`.
+- **When numbers appear:** only installs through links shared from a build with the token count,
+  and App Store Connect shows a campaign only once at least **5 distinct Apple Accounts** installed
+  through it.
 - **Wordmark:** `AppBrand.wordmark` ("GymStreak") is the single swappable element on the card and
   in the share text, so the rename decision (lever #15) changes one line.
 
@@ -286,11 +390,19 @@ icon of `EntryHistory.dc.html`. The preview sheet gains a secondary **Save** but
 which `SharePreview.dc.html` doesn't have. Both reuse the existing visual system, so no new design
 round was run.
 
-The conditioning card (`ConditioningCard.dc.html`) and the conditioning entry point belong to
-ticket 04. Ticket 04 must know that `ConditioningRecord` stores **no heart-rate
-data**: read it from the linked HealthKit workout, or use the design's no-HR state.
+The conditioning card is built from `ConditioningCard.dc.html` (states `hr` / `noHr`, layers
+`showRounds` / `showHeartRate` / `showStats`) and its entry point from `EntryConditioning.dc.html`;
+the finish-screen button is an addition (see "Sharing a conditioning session").
 
 ## Verification
+
+- Conditioning (ticket 04): `ConditioningHeartRateSummarizerTests` (time-weighted average, zones,
+  below-Z1, the gap cap, sparse readings, window clamping, zone floors incl. resting HR and
+  medication), `ConditioningShareCardModelTests` (hr / noHr states, Heart rate chip, average and
+  maximum without zones, ended early, minimum block width, 30 rounds, steady state, layers) and
+  `ConditioningShareViewModelTests` (Health read only with a `healthKitWorkoutId`, unknown record).
+  The four states (hr, noHr ended early, 15 short sprints, steady) were rendered with
+  `ImageRenderer` from a throwaway test and compared with `ConditioningCard.dc.html`.
 
 - Unit tests: `WorkoutShareViewModelTests` covers History's `knownRecords` path (PRs used, no
   history fetch) and the Save state across chip changes, including mid-save.

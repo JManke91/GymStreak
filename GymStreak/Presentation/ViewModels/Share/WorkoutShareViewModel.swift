@@ -11,7 +11,7 @@ import SwiftUI
 
 @Observable
 @MainActor
-final class WorkoutShareViewModel: Identifiable {
+final class WorkoutShareViewModel: ShareCardPreviewing, Identifiable {
 
     /// The card as it renders now. Nil until a workout with completed work is prepared, and
     /// nil is what hides the entry row.
@@ -25,27 +25,19 @@ final class WorkoutShareViewModel: Identifiable {
     var layers = WorkoutShareLayers() {
         didSet {
             rebuildCard()
-            // Not while saving: that would re-enable the button mid-save. `saveImage` settles
-            // that case itself.
-            if saveState == .saved { saveState = .idle }
+            cardDidChange()
         }
     }
 
-    enum SaveState: Equatable {
-        case idle, saving, saved
-    }
-
     /// The preview's "Save image" button.
-    private(set) var saveState = SaveState.idle
+    var saveState = ShareSaveState.idle
 
-    /// Set when a save was refused; the sheet shows it as an alert.
     var saveError: PhotoSaveError?
 
-    /// The line that travels with the image: the wordmark and the attributable App Store link.
     let shareMessage: String
 
     @ObservationIgnored private let personalBests: PersonalBestsProviding
-    @ObservationIgnored private let photoLibrary: PhotoLibrarySaving
+    @ObservationIgnored let photoLibrary: PhotoLibrarySaving
     @ObservationIgnored private var source: WorkoutShareSource?
     @ObservationIgnored private var weightUnit: WeightUnit = .kilograms
 
@@ -53,10 +45,7 @@ final class WorkoutShareViewModel: Identifiable {
     init(personalBests: PersonalBestsProviding, photoLibrary: PhotoLibrarySaving, campaign: String) {
         self.personalBests = personalBests
         self.photoLibrary = photoLibrary
-        self.shareMessage = "share.message".localized(
-            AppBrand.wordmark,
-            SupportLinks.appStoreCampaignLink(campaign: campaign).absoluteString
-        )
+        self.shareMessage = Self.shareMessage(campaign: campaign)
     }
 
     /// Reads the session once, then checks it against history for new PRs.
@@ -129,22 +118,6 @@ final class WorkoutShareViewModel: Identifiable {
         renderer.scale = 1
         renderer.isOpaque = true
         return renderer.uiImage
-    }
-
-    /// Renders the card and saves it straight to Photos, for posting a story from another app
-    /// without going through the share sheet. The image carries the wordmark but not the link.
-    func saveImage() async {
-        guard saveState != .saving, let data = renderImage()?.pngData() else { return }
-        let savedCard = card
-        saveState = .saving
-        do {
-            try await photoLibrary.savePNG(data)
-            // A chip changed mid-save: the image in Photos is not the card on screen.
-            saveState = card == savedCard ? .saved : .idle
-        } catch {
-            saveState = .idle
-            saveError = error as? PhotoSaveError ?? .failed
-        }
     }
 
     // MARK: - Private

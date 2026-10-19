@@ -665,6 +665,17 @@ final class AppDependencies: ObservableObject {
         )
     }
 
+    /// One per conditioning share tap (docs/workout-sharing.md).
+    func makeConditioningShareViewModel() -> ConditioningShareViewModel {
+        ConditioningShareViewModel(
+            records: conditioningRecordRepository,
+            heartRates: HealthKitConditioningHeartRateReader(),
+            heartRateProfiles: heartRateProfileStore,
+            photoLibrary: PhotoLibraryImageSaver(),
+            campaign: SupportLinks.Campaign.shareConditioning
+        )
+    }
+
     func makeHeartRateProfileEditor() -> HeartRateProfileEditorViewModel {
         HeartRateProfileEditorViewModel(
             store: heartRateProfileStore,

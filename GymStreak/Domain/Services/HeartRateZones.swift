@@ -126,6 +126,19 @@ enum HeartRateZones {
         return MatIntensityZones(moderateFromBPM: aerobic.upperBPM, hardFromBPM: hard)
     }
 
+    /// Where zones Z1–Z5 of a finished session begin, in % of HRmax — the common
+    /// five-zone split, used for the share card's time in zone.
+    static let sessionZonePercentsOfMax = [50, 60, 70, 80, 90]
+
+    /// The lowest bpm of each session zone, Z1 first. Always % of HRmax, also with a
+    /// resting heart rate (user decision, docs/workout-sharing.md). `nil` exactly when
+    /// there is no aerobic target: no or invalid profile, or the medication switch.
+    static func sessionZoneFloors(for profile: HeartRateProfile?) -> [Int]? {
+        guard aerobicTarget(for: profile) != nil, let profile,
+              let max = maxHeartRate(for: profile) else { return nil }
+        return sessionZonePercentsOfMax.map { Int((Double(max * $0) / 100).rounded()) }
+    }
+
     /// The heart-rate target for one effort. Only the conversational aerobic
     /// effort has one: interval heart rate lags the effort too much to steer by,
     /// and alactic work is cued by maximal intent, never by heart rate.

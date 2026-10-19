@@ -214,6 +214,10 @@ private struct ConditioningFinishedView: View {
     let viewModel: ConditioningRunViewModel
     let onDone: () -> Void
 
+    @EnvironmentObject private var dependencies: AppDependencies
+    /// Set once the card is prepared, so the sheet never opens on an empty card.
+    @State private var sharePreview: ConditioningShareViewModel?
+
     var body: some View {
         VStack(spacing: DesignSystem.Spacing.lg) {
             Spacer()
@@ -235,6 +239,16 @@ private struct ConditioningFinishedView: View {
                     .foregroundStyle(DesignSystem.Colors.textSecondary)
             }
             Spacer()
+            // Only a recorded session can be shared; ending in the warm-up records nothing.
+            if let recordID = viewModel.recordedSessionId {
+                Button {
+                    presentShare(recordID: recordID)
+                } label: {
+                    Label("conditioning.finished.share".localized, systemImage: "square.and.arrow.up")
+                        .frame(maxWidth: .infinity, minHeight: DesignSystem.Dimensions.buttonHeight - 24)
+                }
+                .buttonStyle(.onyxProminent(backgroundColor: DesignSystem.Colors.cardElevated))
+            }
             Button(action: onDone) {
                 Text("conditioning.finished.done".localized)
                     .frame(maxWidth: .infinity, minHeight: DesignSystem.Dimensions.buttonHeight - 24)
@@ -242,6 +256,19 @@ private struct ConditioningFinishedView: View {
             .buttonStyle(.onyxProminent)
         }
         .padding(DesignSystem.Spacing.lg)
+        .sheet(item: $sharePreview) { share in
+            ConditioningSharePreviewSheet(viewModel: share)
+        }
+    }
+
+    private func presentShare(recordID: UUID) {
+        HapticManager.shared.light()
+        let share = dependencies.makeConditioningShareViewModel()
+        Task {
+            if await share.prepare(recordID: recordID) {
+                sharePreview = share
+            }
+        }
     }
 
     private var healthText: String? {

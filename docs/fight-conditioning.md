@@ -7,7 +7,7 @@ device-verified the same day. Ticket 04 (the 12-week program — showcase, enrol
 today's suggestion) shipped and was device-verified 2026-09-20. Ticket 05 (the post-workout add-on on
 the iPhone workout summary) shipped and was device-verified 2026-09-21 — its `.later` branch is not
 reachable before program week 5 and remains unit-tested only (see that section). Ticket 06 (the watch runner with the live heart-rate zone) shipped and was device-verified 2026-09-22; its runner was then redesigned (heart-rate gauge, swipe-away controls — see "Watch runner redesign"). Ticket 07 (watch sessions sync to iPhone History and the program week) shipped and was device-verified 2026-09-23. Ticket 08 (the Pro depth gate on program Phases 2–3) shipped 2026-09-23 — the last ticket of the set.**
-The feature is complete. **Extensions:** logging mat and sparring sessions as training load (2026-10-17, see "Mat sessions") and the **round timer** for sparring and class rounds (2026-10-18, see "Round timer"). This file holds
+The feature is complete. **Extensions:** logging mat and sparring sessions as training load (2026-10-17, see "Mat sessions") and the **round timer** for sparring and class rounds (2026-10-18, see "Round timer"). **Sharing** a finished session as a story card (2026-10-19, `.scratch/share-screen/` ticket 04) is documented in `docs/workout-sharing.md`, "Sharing a conditioning session". This file holds
 the pre-implementation research (so it is not re-done) and the feature doc (iOS + watch
 architecture, components, edge cases). Parent Things task: "Add fighting conditioning into workout routine"
 (`TFUtiRbLsX4VScjcnbdZbv`, Gym Streak project).
@@ -222,6 +222,14 @@ the Trainings `.task(id:)` is keyed on — no new refresh mechanism. Apple Healt
 `HealthKitWorkoutServicing.deleteWorkout(externalUUID:)` unchanged (the predicate is type-agnostic
 across `HKObjectType.workoutType()`), and a failure raises the same non-blocking
 `HealthKitDeleteFailure` banner; `HistoryView` shows one banner for whichever path set it.
+
+**Sharing (2026-10-19).** The detail screen has a share icon left of the trash icon, and the
+runner's finish screen a "Share session" button above Done; both open the conditioning share card
+(`docs/workout-sharing.md`, "Sharing a conditioning session"). The card's heart rate is read from
+Apple Health over the record's time window and only for a record with a `healthKitWorkoutId`; the
+record itself still stores none. The card's five zones are `HeartRateZones.sessionZoneFloors`
+(50/60/70/80/90 % of HRmax), separate from the aerobic target and the mat-session bands. Mat
+sessions do not share.
 
 **Navigation.** `HistoryView`'s stack already claims `UUID.self` for workout sessions, so a
 conditioning row pushes `ConditioningRecordDestination(id:)` — a conditioning id sent as a bare
