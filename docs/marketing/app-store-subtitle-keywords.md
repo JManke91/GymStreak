@@ -115,9 +115,9 @@ write-back, iCloud/CloudKit sync, and no account, ever.
 Import from Strong / Import from Hevy reads the app's own CSV export and writes past workouts into
 History, the progress charts and PRs. It is **free and uncapped** (monetization §3 Rule 4), so "bring
 your Strong or Hevy history" may be said without a Pro qualifier. It is the switching message of
-acquisition lever #16. **Hold-gate:** both formats ride the first App Store version after 1.1.18
-(they are in the current `WhatToTest`). Claim them only once that version is live, and `/release`
-step 1 releases this hold.
+acquisition lever #16. **Live as of v1.1.19.** Both formats shipped in 1.1.19. The hold-gate ("claim
+them only once that version is live") was released in the v1.1.19 release pass
+(`AppStore/Marketing.1.1.19.md`).
 
 **Truth constraints the copy respects** (each of these is a rejection or one-star risk):
 
@@ -299,11 +299,11 @@ The strategy document has been corrected to say this rather than leaving the cla
 
 ### 4.2c Proposal — round-timer rotation (2026-10-18, not yet entered)
 
-**Status: proposal.** This is **not** in App Store Connect. §4.2 above is still the live field. The
+**Status: proposal, now due.** This is **not** in App Store Connect. §4.2 above is still the live field. The
 product owner enters this with the App Store version that carries the round timer
-(`.scratch/positioning-usp/issues/07-round-timer.md`, `acquisition-strategy.md` lever #18), and not
-before. Until that version is live the app has no round timer, and these tokens would send fighters
-to a feature that does not exist.
+(`.scratch/positioning-usp/issues/07-round-timer.md`, `acquisition-strategy.md` lever #18). **That
+version is v1.1.19 (the round timer is live as of v1.1.19)**, so the gate is satisfied. Enter the
+rotation in a deliberate separate pass (`AppStore/Marketing.1.1.19.md`).
 
 ```
 apple,watch,offline,superset,progressive,overload,lifting,weight,routine,calendar,timer,round,bjj,pr
@@ -498,9 +498,9 @@ corrected to say so.
 
 ### 5.2b Proposal — round-timer rotation (2026-10-18, not yet entered)
 
-**Status: proposal.** This is **not** in App Store Connect. §5.2 above is still the live field. It
-ships with the same version as §4.2c, entered by the product owner, and not before the round timer
-is live.
+**Status: proposal, now due.** This is **not** in App Store Connect. §5.2 above is still the live field. It
+ships together with §4.2c, entered by the product owner. The round timer is live as of v1.1.19, so the
+gate is satisfied.
 
 ```
 krafttraining,trainingstagebuch,muskelaufbau,superset,progressive,overload,kampfsport,timer,ki,app
@@ -914,8 +914,9 @@ en-US dropped for *characters* came back.
 - **Rotate the invisible field freely; leave the visible one alone.** The keyword field cannot affect
   conversion, so a bad set costs only the characters. The subtitle drove a measured **+110%**
   page-view→download conversion and is not a place to experiment (§4.1, §5.1).
-- **A round-timer rotation is proposed, not live** (§4.2c en-US, §5.2b de-DE, 2026-10-18). The
-  product owner enters it in App Store Connect with the version that carries the round timer, then
+- **A round-timer rotation is proposed, not live** (§4.2c en-US, §5.2b de-DE, 2026-10-18), and **due**:
+  the round timer is live as of v1.1.19. The
+  product owner enters it in App Store Connect in a deliberate pass, then
   promotes the two proposals to the live §4.2 / §5.2 text and moves the dropped tokens onto the
   benches there.
 - Keep the free-vs-Pro wording in §3 in sync with `Domain/Models/Pro/ProFeatureCaps.swift` and
