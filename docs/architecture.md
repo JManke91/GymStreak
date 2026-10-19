@@ -29,7 +29,7 @@ GymStreak is a multi-platform fitness tracking app for iOS and Apple Watch: work
 |---|---|---|
 | GymStreak | iOS 26+ | Main app — Clean Architecture layout below |
 | GymStreakWatch Watch App | watchOS | Own lightweight architecture (no SwiftData) |
-| GymStreakWidgets | iOS widget ext. | Rest-timer Live Activity UI |
+| GymStreakWidgets | iOS widget ext. | Rest-timer and round-timer Live Activity UI |
 | GymStreakUITests / GymStreakWatchUITests | UI tests | Screenshot generation |
 
 File sharing between targets is by directory (`PBXFileSystemSynchronizedRootGroup`) — every file inside a target's folder is compiled into that target automatically. There is no per-file target membership (only Info.plist exceptions). Types needed by two targets exist as copies in each target's folder (e.g. `WatchModels`, `RestTimerAttributes`).
@@ -59,12 +59,12 @@ GymStreak/
 | App | `App/` | `GymStreakApp` (@main, ModelContainer), `AppDependencies` (composition root), `ContentView` (tab root), `TestDataSeeder` |
 | Domain | `Domain/Models/` | SwiftData `@Model` classes (`Models.swift`), `MuscleGroups`, `EquipmentType`, `WorkoutType`, chart models, AI-coach input/output models, `IncomingWatchWorkout` (Domain input for watch-workout ingestion) |
 | Domain | `Domain/Repositories/` | `RoutineRepository`, `ExerciseRepository`, `WorkoutSessionRepository` — `@MainActor` protocols |
-| Domain | `Domain/Interfaces/` | System-gateway and async read protocols: `WatchSyncServicing`, `HealthKitWorkoutServicing`, `RestTimerReminderScheduling`, `RestTimerLiveActivityPresenting`, `HistorySnapshotProviding`, `AICoach/` (`AICoachServicing`, `AICoachCaching`, `AICoachPreferencesProviding`, `AICoachAvailabilityProviding`, `ProactivePromptCoordinating`) — and cross-screen request seams between Presentation components that must not know each other's concrete type, e.g. `PaywallPresenting`, `ProgramDetailRequesting` (the first-run tour asking the Routines tab to open a program; implemented by `ProgramLibraryViewModel`, `docs/onboarding.md` "Step 7") |
+| Domain | `Domain/Interfaces/` | System-gateway and async read protocols: `WatchSyncServicing`, `HealthKitWorkoutServicing`, `RestTimerReminderScheduling`, `RestTimerLiveActivityPresenting`, `RoundTimerLiveActivityPresenting`, `HistorySnapshotProviding`, `AICoach/` (`AICoachServicing`, `AICoachCaching`, `AICoachPreferencesProviding`, `AICoachAvailabilityProviding`, `ProactivePromptCoordinating`) — and cross-screen request seams between Presentation components that must not know each other's concrete type, e.g. `PaywallPresenting`, `ProgramDetailRequesting` (the first-run tour asking the Routines tab to open a program; implemented by `ProgramLibraryViewModel`, `docs/onboarding.md` "Step 7") |
 | Domain | `Domain/Services/` | Pure business logic on model arrays: `HistoryStatsService`, `PersonalRecordService`, `FortschrittAggregator`, `SupersetLabelProvider`, `SupersetEditor` (superset-editor set-algebra), `WatchWorkoutIngestionService` (`@MainActor`, materializes an `IncomingWatchWorkout` into a `WorkoutSession`), `RoutineTemplateSyncService` (`@MainActor`, writes a session's performed values back onto its routine template; mutates and never saves), `ExerciseProgressAggregator` + `ExerciseComparisonBuilder` + `PreviousPerformanceResolver` (isolation-agnostic on purpose — the History `@ModelActor` calls them from its own executor) |
 | Data | `Data/Repositories/` | `SwiftData*Repository` — `@MainActor final class`, `init(modelContext:)` |
 | Data | `Data/HealthKit/` | `HealthKitWorkoutManager`, `HealthKitWorkoutReconciler` |
 | Data | `Data/Notifications/` | `UserNotificationRestTimerScheduler` |
-| Data | `Data/LiveActivity/` | `ActivityKitRestTimerPresenter` (+ its `RestTimerLiveActivityStore` seam) and `RestTimerAttributes` — the only app-target files importing ActivityKit |
+| Data | `Data/LiveActivity/` | `ActivityKitRestTimerPresenter` and `ActivityKitRoundTimerPresenter` (each with its injectable `…LiveActivityStore` seam) and the two `…Attributes` wire types — the only app-target files importing ActivityKit |
 | Data | `Data/Sync/` | `WatchConnectivityManager`, `CloudSyncObserver`, `WatchModels` (sync DTOs + mappers) |
 | Data | `Data/Progress/` | `ExerciseProgressService` — the vs-previous seam for the save/detail screens. Owns no `ModelContext`: `@MainActor` glue running `ExerciseComparisonBuilder` either side of one `@concurrent` `HistorySnapshotProviding` call (audit P1.6) |
 | Data | `Data/History/` | `SwiftDataHistorySnapshotProvider` (detached off-main construction) + `SwiftDataHistorySnapshotStore` (`@ModelActor`; actor-owned History **and exercise-chart** fetch and aggregation) |

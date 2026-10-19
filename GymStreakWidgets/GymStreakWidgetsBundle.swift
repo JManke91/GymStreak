@@ -14,5 +14,6 @@ struct GymStreakWidgetsBundle: WidgetBundle {
         GymStreakWidgets()
         GymStreakWidgetsControl()
         GymStreakWidgetsLiveActivity()
+        RoundTimerLiveActivity()
     }
 }

@@ -46,6 +46,10 @@ final class AppDependencies: ObservableObject {
     /// rest-timer Live Activity, and identity-keyed calls keep the two
     /// `WorkoutViewModel`s from ending each other's countdown.
     let restTimerLiveActivity: RestTimerLiveActivityPresenting
+    /// The round timer's Lock Screen / Dynamic Island surface (docs/fight-conditioning.md,
+    /// "Round timer"). One instance, identity-keyed by run; coexists with the rest timer's —
+    /// a different attributes type, so neither presenter can see the other's activity.
+    let roundTimerLiveActivity: RoundTimerLiveActivityPresenting
     /// Fight-conditioning runner cues (docs/fight-conditioning.md). One instance:
     /// only one session runs at a time, and it owns the pending cue requests.
     let conditioningCues: ConditioningCueDelivering = ConditioningCueDeliverer()
@@ -322,6 +326,7 @@ final class AppDependencies: ObservableObject {
         )
         self.restTimerReminders = UserNotificationRestTimerScheduler()
         self.restTimerLiveActivity = ActivityKitRestTimerPresenter()
+        self.roundTimerLiveActivity = ActivityKitRoundTimerPresenter()
         self.cloudSyncStatus = CloudKitSyncStatusMonitor(
             isCloudKitStoreEnabled: isCloudKitStoreEnabled,
             storeFailureDescription: cloudKitStoreFailure,
@@ -617,11 +622,13 @@ final class AppDependencies: ObservableObject {
     }
 
     /// One per run of the round timer. Its cues are the conditioning runner's
-    /// deliverer — one timer engine, one set of notification identifiers.
+    /// deliverer — one timer engine, one set of notification identifiers — and
+    /// its Lock Screen activity the shared round-timer presenter.
     func makeRoundTimerViewModel(configuration: RoundTimerConfiguration) -> RoundTimerViewModel {
         RoundTimerViewModel(
             configuration: configuration,
             cues: conditioningCues,
+            liveActivity: roundTimerLiveActivity,
             makeMatSessionLog: makeMatSessionLogViewModel
         )
     }

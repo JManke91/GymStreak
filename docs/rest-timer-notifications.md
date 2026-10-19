@@ -67,7 +67,10 @@ notification scheduler:
   `RestTimerLiveActivityContent` value the ViewModel builds. `Domain/` and
   `Presentation/` no longer reference ActivityKit at all.
 - `Data/LiveActivity/ActivityKitRestTimerPresenter.swift` — the only app-target
-  file importing ActivityKit. `RestTimerAttributes.swift` moved here from
+  file importing ActivityKit until 2026-10-19, when the round timer's
+  `ActivityKitRoundTimerPresenter.swift` joined it in the same folder, built on the
+  same seam one-for-one (`docs/fight-conditioning.md`, "Round timer" → "Live
+  Activity"); nothing of the rest timer's moved. `RestTimerAttributes.swift` moved here from
   `Domain/Models/` in the same change, since it imports ActivityKit and is the
   wire format of one system integration, not a domain model.
 - `AppDependencies` owns one presenter, injected into both `WorkoutViewModel`s.

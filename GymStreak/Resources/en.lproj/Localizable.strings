@@ -259,6 +259,9 @@
 // the already-localized string and needs no keys of its own.
 "live_activity.rest_timer.complete" = "Rest Complete! 💪";
 "live_activity.rest_timer.workout_fallback" = "Workout";
+/* Round timer Live Activity (docs/fight-conditioning.md, "Round timer") — localized in the app, rendered by the widget */
+"live_activity.round_timer.time_left" = "Time left";
+"live_activity.round_timer.stale_note" = "Open Gym Streak for the rounds";
 
 // MARK: - Rest Timer Config
 "rest_timer.config.title" = "Rest Timer";

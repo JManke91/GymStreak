@@ -31,6 +31,7 @@ struct RoundTimerTests {
         let viewModel: RoundTimerViewModel
         let clock: TestClock
         let cues: RecordingConditioningCues
+        let liveActivity: RecordingRoundTimerLiveActivity
         let repository: SwiftDataMatSessionRepository
         let saver: RecordingMatSessionWorkoutSaver
         let container: ModelContainer
@@ -39,12 +40,14 @@ struct RoundTimerTests {
     private func makeHarness(_ configuration: RoundTimerConfiguration = quick) -> Harness {
         let clock = TestClock()
         let cues = RecordingConditioningCues()
+        let liveActivity = RecordingRoundTimerLiveActivity()
         let container = InMemoryModelContainer.make()
         let repository = SwiftDataMatSessionRepository(modelContext: container.mainContext)
         let saver = RecordingMatSessionWorkoutSaver()
         let viewModel = RoundTimerViewModel(
             configuration: configuration,
             cues: cues,
+            liveActivity: liveActivity,
             makeMatSessionLog: {
                 MatSessionLogViewModel(
                     sessions: repository,
@@ -56,7 +59,10 @@ struct RoundTimerTests {
             now: { clock.now },
             isTickingAutomatically: false
         )
-        return Harness(viewModel: viewModel, clock: clock, cues: cues, repository: repository, saver: saver, container: container)
+        return Harness(
+            viewModel: viewModel, clock: clock, cues: cues, liveActivity: liveActivity,
+            repository: repository, saver: saver, container: container
+        )
     }
 
     private func settle() async {
@@ -186,6 +192,103 @@ struct RoundTimerTests {
         #expect(h.cues.played.filter { $0 == .roundWarning }.isEmpty)
     }
 
+    // MARK: - The Lock Screen activity
+
+    @Test("Start presents the run's wall-clock bounds and round 1; every boundary updates the phase with its own bounds")
+    func liveActivityFollowsTheBoundaries() throws {
+        let h = makeHarness()
+        let t0 = h.clock.now
+        h.viewModel.start()
+        #expect(h.liveActivity.presented.count == 1)
+        #expect(h.liveActivity.presented.first?.id == h.viewModel.id)
+        var content = try #require(h.liveActivity.lastContent)
+        #expect(content.run.subtitle == "\(RoundTimerCopy.preset(.custom)) · 0:30 / 0:15")
+        #expect(content.run.isOpenEnded == false)
+        #expect(content.runRange == t0...t0.addingTimeInterval(75))
+        #expect(content.pauseDate == nil)
+        #expect(content.phase?.label == RoundTimerCopy.phase(.work))
+        #expect(content.phase?.isRound == true)
+        #expect(content.phase?.position == RoundTimerCopy.position(h.viewModel.timeline.phases[0]))
+        #expect(content.phase?.range == t0...t0.addingTimeInterval(30))
+
+        h.clock.advance(10); h.viewModel.refresh()                 // inside round 1: no update
+        #expect(h.liveActivity.presented.count == 1)
+
+        h.clock.advance(20); h.viewModel.refresh()                 // 30 s: rest
+        #expect(h.liveActivity.presented.count == 2)
+        content = try #require(h.liveActivity.lastContent)
+        #expect(content.phase?.isRound == false)
+        #expect(content.phase?.range == t0.addingTimeInterval(30)...t0.addingTimeInterval(45))
+        #expect(content.runRange == t0...t0.addingTimeInterval(75))
+
+        h.clock.advance(15); h.viewModel.refresh()                 // 45 s: round 2
+        #expect(h.liveActivity.presented.count == 3)
+        content = try #require(h.liveActivity.lastContent)
+        #expect(content.phase?.position == RoundTimerCopy.position(h.viewModel.timeline.phases[2]))
+        #expect(content.phase?.range == t0.addingTimeInterval(45)...t0.addingTimeInterval(75))
+        #expect(h.liveActivity.ended.isEmpty)
+    }
+
+    @Test("Pause freezes the activity at the pause instant; resume shifts every bound by the pause; a foreground return re-presents")
+    func liveActivityPauseResumeAndResynchronize() throws {
+        let h = makeHarness()
+        let t0 = h.clock.now
+        h.viewModel.start()
+        h.clock.advance(10)
+        h.viewModel.pause()
+        var content = try #require(h.liveActivity.lastContent)
+        #expect(h.liveActivity.presented.count == 2)
+        #expect(content.pauseDate == t0.addingTimeInterval(10))
+        #expect(content.runRange == t0...t0.addingTimeInterval(75))
+        #expect(content.phase?.range == t0...t0.addingTimeInterval(30))
+
+        h.clock.advance(20)                                        // paused for 20 s
+        h.viewModel.resume()
+        content = try #require(h.liveActivity.lastContent)
+        #expect(h.liveActivity.presented.count == 3)
+        #expect(content.pauseDate == nil)
+        #expect(content.runRange == t0.addingTimeInterval(20)...t0.addingTimeInterval(95))
+        #expect(content.phase?.range == t0.addingTimeInterval(20)...t0.addingTimeInterval(50))
+
+        h.clock.advance(37)                                        // slept into round 2: elapsed 10 → 47
+        h.viewModel.resynchronize()
+        content = try #require(h.liveActivity.lastContent)
+        #expect(h.liveActivity.presented.count == 4)
+        #expect(content.phase?.position == RoundTimerCopy.position(h.viewModel.timeline.phases[2]))
+        #expect(content.phase?.range == t0.addingTimeInterval(65)...t0.addingTimeInterval(95))
+    }
+
+    @Test("Completion ends the activity with the rounds and the time; End ends it with the stopped title; open-ended runs say so")
+    func liveActivityEnds() throws {
+        let h = makeHarness()
+        h.viewModel.start()
+        h.clock.advance(75); h.viewModel.refresh()
+        #expect(h.viewModel.state == .finished)
+        #expect(h.liveActivity.ended.count == 1)
+        #expect(h.liveActivity.ended.first?.id == h.viewModel.id)
+        #expect(h.liveActivity.ended.first?.completionMessage
+                == RoundTimerCopy.liveActivityCompletion(didComplete: true, rounds: 2, elapsed: 75))
+        #expect(h.liveActivity.ended.first?.completionMessage.hasSuffix("1:15") == true)
+        #expect(h.viewModel.liveActivityContent() == nil)
+
+        let early = makeHarness()
+        early.viewModel.start()
+        early.clock.advance(40); early.viewModel.refresh()
+        early.viewModel.end()
+        #expect(early.liveActivity.ended.first?.completionMessage
+                == RoundTimerCopy.liveActivityCompletion(didComplete: false, rounds: 1, elapsed: 40))
+        #expect(early.liveActivity.ended.first?.completionMessage.hasPrefix("roundtimer.finished.ended_title".localized) == true)
+
+        let open = makeHarness(RoundTimerConfiguration(
+            preset: .bjj, customRoundDuration: 60, customRestDuration: 0, rounds: nil, warning: 10
+        ))
+        open.viewModel.start()
+        let content = try #require(open.liveActivity.lastContent)
+        #expect(content.run.isOpenEnded)
+        #expect(content.run.timeLabel == "conditioning.runner.elapsed".localized)
+        #expect(content.phase?.position == RoundTimerCopy.position(open.viewModel.timeline.phases[0]))
+    }
+
     // MARK: - The end of a run
 
     @Test("Ending early keeps the rounds done; under a minute there is nothing to save")
@@ -284,6 +387,7 @@ struct RoundTimerTests {
                 return RoundTimerViewModel(
                     configuration: configuration,
                     cues: cues,
+                    liveActivity: RecordingRoundTimerLiveActivity(),
                     makeMatSessionLog: { fatalError("not used") },
                     isTickingAutomatically: false
                 )

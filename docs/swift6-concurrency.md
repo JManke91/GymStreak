@@ -761,8 +761,9 @@ assert afterwards on the test's own actor — see
 ## 8. `@preconcurrency import` for under-annotated Apple modules
 
 `Data/LiveActivity/ActivityKitRestTimerPresenter.swift` uses
-`@preconcurrency import ActivityKit`, and is the only file in the app target that
-imports ActivityKit at all.
+`@preconcurrency import ActivityKit`, as does its sibling
+`ActivityKitRoundTimerPresenter.swift` (2026-10-19, same crossing at `update` and
+`end`) — the only two files in the app target that import ActivityKit at all.
 
 **Correction (2026-08-13, audit P1.5):** this section previously said the import
 lived in `WorkoutViewModel` and that `Activity.end(_:dismissalPolicy:)` "is a

@@ -270,6 +270,14 @@ struct GymStreakApp: App {
                     // anything in the app changed.
                     await dependencies.workoutReminders.refreshReminders()
                 }
+                .task {
+                    // A round-timer Live Activity an earlier process left on the
+                    // Lock Screen: no run survives a relaunch (nothing persists
+                    // it), so every one listed is a leftover. The rest timer's
+                    // sweep lives in `WorkoutViewModel.init` because its timer
+                    // *is* restored; this one has no view model alive at launch.
+                    dependencies.roundTimerLiveActivity.dismissLeftoverActivities()
+                }
                 .onChange(of: scenePhase) { _, newPhase in
                     if newPhase == .active {
                         watchConnectivity.requestWorkoutQueueDrain()

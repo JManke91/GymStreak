@@ -257,7 +257,7 @@ is still zero.
 |---|---|---|---|---|---|---|
 | 1 | 16 | **Strong + Hevy history import** | **P1** | ~1 week (2 tickets) | Switching from Strong/Hevy at all | ✅ **Shipped** — Strong 2026-10-03 (ticket 01, rides 1.1.19), Hevy 2026-10-17 (ticket 02, device-verified). Settings → Import from Strong / Hevy — see §4.16 |
 | 2 | 17 | **Visible watch sync reliability** ("Saved on iPhone ✓") | **P1** | 1–2 days | The switching message, made experienceable | ✅ **Shipped** 2026-10-17 (ticket 03, device-verified). Watch summary "Saved on iPhone" status line, see §4.17 |
-| 3 | 18 | **Fighter positioning** (mat sessions, watch recording, lift-or-fight onboarding, round timer) | **P1** | ~3 weeks (4 tickets) | The one unowned market position | ✅ **Built** — all four tickets done: 04 (log a mat session on iPhone) 2026-10-17, 05 (record on the watch) 2026-10-18, 06 (lift-or-fight onboarding fork + `trainingProfile`) 2026-10-18, 07 (round timer, iPhone + watch) 2026-10-18 (unit + simulator E2E, device-verified by the user). **Open hand-off:** the round-timer keyword rotation is written as a proposal (`docs/marketing/app-store-subtitle-keywords.md` §4.2c / §5.2b) and is entered in App Store Connect with the version carrying ticket 07 — see §4.18 |
+| 3 | 18 | **Fighter positioning** (mat sessions, watch recording, lift-or-fight onboarding, round timer) | **P1** | ~3 weeks (4 tickets) | The one unowned market position | ✅ **Built** — all four tickets done: 04 (log a mat session on iPhone) 2026-10-17, 05 (record on the watch) 2026-10-18, 06 (lift-or-fight onboarding fork + `trainingProfile`) 2026-10-18, 07 (round timer, iPhone + watch) 2026-10-18 (unit + simulator E2E, device-verified by the user); follow-up 09 (the round timer's Lock Screen / Dynamic Island Live Activity) 2026-10-19. **Open hand-off:** the round-timer keyword rotation is written as a proposal (`docs/marketing/app-store-subtitle-keywords.md` §4.2c / §5.2b) and is entered in App Store Connect with the version carrying ticket 07 — see §4.18 |
 | 4 | 5 | In-app sharing of a workout | **P1** | 2–3 days | Web-Referrer, virality | 🎫 ticket cut 2026-10-17 — `.scratch/share-screen/issues/01–04` (01 = Claude Design hand-off, user-approved before code), see §4.5 |
 | 5 | 15 | **Decide the app name** (rename or commit) | **P1 / decision** | ~1 day to decide | Brand-query traffic, word-of-mouth | ⬜ **not decided — gates #4 and #6**; #18 adds an argument, §4.18 |
 | 6 | 4 | Landing page + custom domain | **P1** | 1–2 weeks | Unlocks every off-store channel | ⬜ not started — blocked on #15 |
@@ -654,9 +654,11 @@ the matching keyword-field rotation — `timer`, `round`, `bjj` for en-US; `kamp
 de-DE — is derived with the §9 probe and written as a proposal in
 `docs/marketing/app-store-subtitle-keywords.md` §4.2c / §5.2b, for the product owner to enter with
 the version that carries the timer. Until that version is live the tokens would point at a feature
-that does not exist, so the proposal is not entered earlier. **Follow-up ticket 09 cut 2026-10-19:**
-a Lock Screen / Dynamic Island Live Activity for the round timer (whole-run countdown that stays
-correct while the phone is locked, phase detail while the app is on screen) — `.scratch/positioning-usp/issues/09`.
+that does not exist, so the proposal is not entered earlier. **Follow-up ticket 09 done 2026-10-19:**
+a Lock Screen / Dynamic Island Live Activity for the round timer — the time left for the whole run
+and its progress, which stay correct with the phone locked, plus the current round and its countdown
+while the app is on screen (`docs/fight-conditioning.md`, "Round timer" → "Live Activity"). Free by
+Rule 3; the watch gets the Smart Stack mirror iOS provides on its own.
 **Why:** "lifting + fight conditioning in one log" is the only position on the market map with no
 owner, and the conditioning half has already shipped (`docs/fight-conditioning.md`). It can **not**
 be reached through App Store search ("mma strength", "bjj workout" and "fight conditioning" all

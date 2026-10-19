@@ -63,6 +63,29 @@ enum RoundTimerCopy {
         seconds > 0 ? ConditioningCopy.duration(seconds) : "roundtimer.setup.warning.off".localized
     }
 
+    // MARK: - Live Activity
+
+    /// The fixed text of a run's Lock Screen activity, localized here in the
+    /// app process — the widget extension renders it as it arrives.
+    static func liveActivityRun(for configuration: RoundTimerConfiguration) -> RoundTimerLiveActivityContent.Run {
+        RoundTimerLiveActivityContent.Run(
+            title: "roundtimer.title".localized,
+            subtitle: "\(preset(configuration.preset)) · \(lengths(configuration))",
+            isOpenEnded: configuration.isOpenEnded,
+            timeLabel: configuration.isOpenEnded
+                ? "conditioning.runner.elapsed".localized
+                : "live_activity.round_timer.time_left".localized,
+            pausedLabel: "conditioning.runner.paused".localized,
+            staleNote: "live_activity.round_timer.stale_note".localized
+        )
+    }
+
+    /// "Rounds complete · 6 rounds · 35:00", or "Timer stopped · …" after End.
+    static func liveActivityCompletion(didComplete: Bool, rounds: Int, elapsed: TimeInterval) -> String {
+        let title = didComplete ? "roundtimer.finished.title".localized : "roundtimer.finished.ended_title".localized
+        return "\(title) · \(completed(rounds: rounds, elapsed: elapsed))"
+    }
+
     // MARK: - Cues
 
     /// Bells for round start and end, the clacker for the warning, and

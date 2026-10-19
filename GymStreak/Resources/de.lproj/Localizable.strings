@@ -259,6 +259,9 @@
 // rendert den bereits lokalisierten Text und braucht keine eigenen Keys.
 "live_activity.rest_timer.complete" = "Pause beendet! 💪";
 "live_activity.rest_timer.workout_fallback" = "Training";
+/* Round timer Live Activity (docs/fight-conditioning.md, "Round timer") — localized in the app, rendered by the widget */
+"live_activity.round_timer.time_left" = "Verbleibend";
+"live_activity.round_timer.stale_note" = "Öffne Gym Streak für die Runden";
 
 // MARK: - Rest Timer Config
 "rest_timer.config.title" = "Pausentimer";

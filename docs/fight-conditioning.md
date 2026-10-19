@@ -1593,7 +1593,8 @@ deliver). The zone-based suggestion end to end is covered on the simulator with 
 **Status (2026-10-18): done — built on both targets, iOS and watch suites green, simulator
 end-to-end `scripts/e2e/run.sh round_timer` (see "Verification" below), architecture review run, and
 device-verified by the user the same day (lock-screen bell and silent switch on the iPhone, haptics
-on the watch).** Ticket
+on the watch). Follow-up ticket 09, the Lock Screen / Dynamic Island Live Activity, built 2026-10-19
+(see "Live Activity" below).** Ticket
 `.scratch/positioning-usp/issues/07-round-timer.md` → `docs/acquisition-strategy.md` lever #18.
 **Why it exists:** fighters do not search for strength apps, but they do search for round timers
 ("bjj timer", "jiu-jitsu round timer", "kampfsport timer" are live autocomplete queries). The timer
@@ -1625,8 +1626,8 @@ silent** (a phone on a gym floor usually is) and ducks the music playing from th
 rings. Nothing else in the app configures an audio session. Screen locked / app in the background:
 the engine schedules one local notification per upcoming transition **and per warning**, in time
 order, carrying the same `.caf` as `UNNotificationSound(named:)` — the conditioning runner's
-mechanism, not the rest timer's Live Activity (which covers one deadline, not a multi-interval
-timeline). Notification sounds respect the silent switch and Focus; that limit is the OS's and is
+mechanism. The round timer's own Live Activity (below, ticket 09) is informational: it never makes
+a sound, and the notifications stay the boundary cue. Notification sounds respect the silent switch and Focus; that limit is the OS's and is
 documented in the setup hint. The deliverer keeps the first 48 pending requests, so a timer of more
 than ~15 rounds (3 cues per round) or an open-ended one gets a *sliding window*: `resynchronize()`
 on every return to the foreground reschedules from "now". With the screen on, the runner keeps the
@@ -1783,14 +1784,168 @@ finished screen) and the setup screen walked through a throwaway XCUITest. **Har
 2026-10-18): passed** — the lock-screen bell on a physical iPhone and the bell through the silent
 switch in the foreground (neither can be heard on a simulator), and the watch haptics on the wrist.
 
+### Live Activity (positioning ticket 09 — the rounds on the Lock Screen and in the Dynamic Island, 2026-10-19)
+
+**Status (2026-10-19): done — built on iOS, unit-tested through the store seam, architecture review
+run, simulator-verified, and confirmed by the user on hardware the same day (the four checks listed
+under "Hardware checks").** Ticket
+`.scratch/positioning-usp/issues/09-round-timer-live-activity.md`, a follow-up to 07 from the product
+owner's question the same day ("include the timer on the lock screen as well, similar to the break
+timer"). Free — §3 Rule 3, an in-session surface; the widget extension renders no Pro surface.
+
+**Why the design has two levels.** ActivityKit research (ios-api-researcher, Apple docs, 2026-10-19,
+findings below) settled it: a Live Activity's content changes only through `Activity.update` from
+the running app or an APNs push — there is no local pre-scheduling of future states. The only
+self-advancing primitives are the timer-interval `Text` and `ProgressView`, and the only
+time-dependent switch is `staleDate` → `isStale`. A per-phase countdown that follows the rounds
+while the phone is locked is therefore impossible without a server or background audio, and
+neither is wanted (see the omissions). So the activity carries:
+
+1. **Always correct without the app** — "Round timer · BJJ · 5:00 / 1:00", the time left for the
+   **whole run** as a countdown to the last bell (`Text(timerInterval:pauseTime:countsDown:)` over
+   the run's wall-clock range) and a progress bar over the whole timeline
+   (`ProgressView(timerInterval:countsDown: false)`). An open-ended run shows elapsed time counting
+   up and no bar. The system advances both; the app is not involved.
+2. **Phase detail while it is fresh** — the ROUND / REST pill, "Round 3 of 6" (or "Round 3") and the
+   phase countdown. The app updates it at every boundary while on screen, on pause, on resume and on
+   every return to the foreground; the update's `staleDate` is **that phase's end**. When the app
+   could not update (phone locked, app suspended) the system flips `isStale` at that instant and the
+   views drop to level 1 with a quiet "Open Gym Streak for the rounds" note — never a wrong phase.
+
+Dynamic Island: compact leading = the phase pill (or the bell when stale), compact trailing = the
+phase countdown (or the whole-run time when stale), minimal = the bell, expanded = both levels.
+**Apple Watch:** nothing to build — watchOS 11+ mirrors an iPhone Live Activity into the Smart Stack
+on its own, re-compositing the Dynamic Island's *compact* views, which is why those carry the phase
+and its countdown rather than an icon. It coexists with the watch's own runner by construction: a
+run is timed on one device or the other, never both, so the mirror only ever appears when the
+iPhone is the timer. Whether the mirror shows while the watch runs its own workout session is not
+documented (listed as a hardware check).
+
+**Lifecycle.** Started on the engine's `start()`; updated on every phase boundary, pause (the
+content carries `pauseDate`; the widget then renders **plain strings** of the value at the pause
+and a fixed `ProgressView(value:)` — see "Verification" for why not `pauseTime`), resume (every
+bound shifts by the pause) and `resynchronize()`; ended by `onFinished` with a 4-second completion state — "Rounds
+complete · 6 rounds · 35:00", or "Timer stopped · 1 round · 0:40" after End — and dismissed after
+it. A **paused run carries no stale date**: nothing moves, so the frozen phase stays right for as
+long as the pause lasts. **Leftovers:** no run survives a process death (nothing persists it), so at
+launch `GymStreakApp` ends *every* round-timer activity the system still lists
+(`dismissLeftoverActivities()`), and the first present of a process sweeps once more — unlike the
+rest timer's expired-only sweep, whose timer *is* restored. Between two runs in one process the
+previous activity is deliberately left showing its completion state.
+
+**Architecture — the rest timer's seams one-for-one** (`docs/rest-timer-notifications.md`, "The Live
+Activity surface"):
+- `Domain/Interfaces/RoundTimerLiveActivityPresenting.swift` — the ActivityKit-free
+  `RoundTimerLiveActivityContent` (`Run`: title, subtitle, open-ended flag and the three captions,
+  all localized in the app; `runRange`; `pauseDate`; `Phase`: label, `isRound`, position, range) and
+  the identity-keyed protocol `presentActivity(id:content:)` (request, or update when `id` is
+  already up) / `endActivity(id:completionMessage:)` / `dismissLeftoverActivities()`.
+- `Data/LiveActivity/ActivityKitRoundTimerPresenter.swift` — the `RoundTimerLiveActivityStore` +
+  `…Handle` seam, the ActivityKit conformance (`@preconcurrency import`, same non-`Sendable`
+  crossing at `await update` / `await end` as the rest timer's; `docs/swift6-concurrency.md` §8), the
+  Domain-content → `ContentState` mapping and the presenter policy, including `staleDate(for:)`.
+- `Data/LiveActivity/RoundTimerAttributes.swift` ⇄ `GymStreakWidgets/RoundTimerAttributes.swift` —
+  **identical copies**, like `RestTimerAttributes`; a field on one side only breaks the activity at
+  runtime with no compile error.
+- `GymStreakWidgets/RoundTimerLiveActivity.swift` (+ `RoundTimerLockScreenView.swift`) — the widget,
+  registered in `GymStreakWidgetsBundle` next to the rest timer's; `RoundTimerDisplay` resolves
+  `isStale` once so every region reads the same decision. Timer text is horizontally flexible in a
+  widget and **drops digits when squeezed** (the small whole-run clock rendered "1:--" next to
+  "Verbleibend" until it got `.subheadline` and `.frame(minWidth: 56)`), so every timer text sits in
+  a bounded frame — the compact trailing one at 44 pt. The pill's accent is
+  `DesignSystem.Colors.tint` **by value** (the widget target has no DesignSystem copy) with black
+  text, so the Lock Screen matches the runner and keeps the tint contrast rule.
+- `ConditioningIntervalEngine.onTransition` — one hook, fired at start, each boundary (inside
+  `refresh()`), pause, resume and resynchronize; `onFinished` covers the end. Plus `pausedAt` and
+  `date(forElapsed:)` (frozen at the pause while paused) so the view model can hand the system
+  wall-clock bounds. The conditioning runner leaves the hook nil. **No second clock**: every date is
+  the engine's `ConditioningClock` + the timeline.
+- `RoundTimerViewModel.liveActivityContent()` builds the two levels; `RoundTimerCopy.liveActivityRun`
+  / `liveActivityCompletion` the text; `AppDependencies.roundTimerLiveActivity` the one presenter,
+  injected into every run. Both presenters coexist: different attributes types, so neither can see
+  the other's activity.
+
+Strings: `live_activity.round_timer.time_left` ("Time left" / "Verbleibend") and
+`live_activity.round_timer.stale_note` ("Open Gym Streak for the rounds" / "Öffne Gym Streak für die
+Runden"); the title, pill, position, "Paused" and "Elapsed" reuse `roundtimer.*` /
+`conditioning.runner.*` keys. All cross into the attributes already localized (the rest timer's rule).
+
+**Tests.** iOS `ActivityKitRoundTimerPresenterTests` (12, against a fake store): request with the
+phase end as `staleDate`; same id → update, never a second request; a paused run carries no stale
+date on request or update; the authorization gate and retry; a different id replaces (immediate end,
+no completion); end shows the completion state for `completionDisplayDuration`; unknown id ignored,
+end idempotent and the id re-requestable afterwards; the launch sweep ends every leftover and does
+nothing once this process has presented; a leftover is ended before the first present; a completed
+activity is not swept when the next run starts; a failed request leaves the run retryable.
+`RoundTimerTests` +3: start presents the run's wall-clock bounds and round 1 and every boundary
+re-presents with the new phase's bounds (no update inside a phase); pause freezes at the pause
+instant, resume shifts every bound by the pause, resynchronize re-presents the current phase;
+completion / End end with the right message and an open-ended run says "Elapsed".
+`ActivityKitRestTimerPresenterTests` unchanged and green. iOS suite 2026-10-19: 1,740 tests in 182
+suites passed. No watch code changed and no shared copy moved (`ConditioningTimeline`,
+`ConditioningPhase`, `RoundTimerConfiguration` untouched; the engine is iOS-only), so the watch suite
+was not re-run for this ticket.
+
+**Research findings (2026-10-19, ios-api-researcher, Apple docs via Context7 + WWDC24 10098/10068).**
+`Text(timerInterval:pauseTime:countsDown:showsHours:)` (iOS 16+): `countsDown` **defaults to true**
+(pass `false` explicitly for a count-up); `pauseTime` is "the date at which to pause the timer" —
+freezing at a `pauseTime` already in the past is implied, not documented, and the simulator rendered
+it inconsistently (see "Verification"), which is why the paused clocks are static strings. In a widget
+the text is horizontally flexible and should be framed. `ProgressView(timerInterval:countsDown:…)`
+(iOS 16+) has **no pause parameter** and no custom styles; a static `ProgressView(value:)` is the
+frozen bar. `ActivityContent(state:staleDate:relevanceScore:)` and `ActivityViewContext.isStale`
+(iOS 16.2+): "At the specified date, the activityState changes to stale and isStale changes to true"
+with no app involvement; Apple adds that stale activities "display text to indicate that the
+displayed information is outdated" — what that looks like on a custom view is undocumented, so the
+views must look right on their own when stale. `Activity.update` works "while your app is in the
+foreground or while it's in the background"; a *suspended* app cannot update (hence level 1);
+`Activity.request` is foreground-only (`ActivityAuthorizationError.visibility`). Payload limit 4 KB
+combined; **no documented budget for local `update` calls** (the budget is for pushes). Several
+activities per app with different attributes types are allowed; Apple publishes **no numeric limit**
+(`targetMaximumExceeded` / `globalMaximumExceeded` are handled at request). Lifetime: 8 h in the
+Dynamic Island, 12 h on the Lock Screen. `ActivityUIDismissalPolicy.after(_:)` (iOS 16.1+) removes
+"after the specified date or after four hours … whichever comes first", no second-level precision
+promised. watchOS 11: "Live Activities automatically appear in the Smart Stack and as alerts using
+the compact presentation"; `supplementalActivityFamilies([.small])` would render the Lock Screen view
+there instead — not adopted, the compact views are enough. Sources: developer.apple.com →
+`swiftui/text/init(timerinterval:pausetime:countsdown:showshours:)`,
+`swiftui/progressview/init(timerinterval:countsdown:label:currentvaluelabel:)`,
+`activitykit/displaying-live-data-with-live-activities`, `activitykit/activity/update(_:)`,
+`activitykit/activity/request(attributes:content:pushtype:)`,
+`activitykit/activityuidismissalpolicy/after(_:)`,
+`activitykit/creating-custom-views-for-live-activities`, WWDC24 sessions 10098 and 10068.
+
+**Verification (2026-10-19, simulator, throwaway XCUITest — recipe in the agent memory
+`live-activity-simulator-verification`).** iPhone 17 simulator, iOS 26, German, custom 1:00 / 0:15 ×
+2: the Lock Screen banner renders title · preset, the RUNDE pill, the phase countdown, "Runde 1 von
+2 · Verbleibend · <run time>" and the bar; Pause shows "Pausiert" with a frozen bar; the Dynamic
+Island compact shows pill + phase countdown, expanded both levels; a relaunch sweeps the leftover
+(island empty). Three simulator observations shaped the code: (a) `Text(timerInterval:pauseTime:)`
+with a pause date already in the past **froze in one presentation and kept counting in another**
+(the research had flagged it as undocumented), so while paused the clocks are static strings
+computed from the dates — exact, and verified identical across screenshots 8 s apart; (b) the
+small-font whole-run clock rendered **"1:--"** above a minute until it got a bounded frame, see the
+architecture note; (c) after the app process was killed, the activity **did not re-render at the
+stale date** within ~55 s — the phase countdown sat at 0:00 with the pill still up while the
+whole-run level stayed correct; `isStale` is Apple's documented mechanism and was kept, but whether
+the system re-renders at `staleDate` is the first hardware check, and if a device behaves the same
+the fallback is the frozen 0:00 (never a running wrong phase). Also seen: an *ended* activity leaves
+the Dynamic Island at once and shows its completion state on the Lock Screen only (documented
+behaviour, not a bug), and after the system's one-time "Live-Aktivitäten erlauben?" prompt went
+unanswered the simulator stopped showing the Lock Screen banner altogether (only the island) — not
+reproducible on a device where the prompt is answered.
+
+**Hardware checks (not possible on a simulator; passed by the user 2026-10-19).** (1) Lock the phone across at least one round
+boundary: the phase detail disappears at that round's end (`isStale` re-render, see (c) above) and
+the whole-run time and bar stay right. (2) Pause, lock, unlock: both clocks show the pause value
+(static strings now, so this is a formality). (3) The paired watch shows the mirror in the Smart
+Stack with the pill and countdown, and whether it does so while the watch runs its own workout.
+(4) The 4-second completion state on the Lock Screen, and the rest timer's activity side by side
+with this one in the Dynamic Island.
+
 **Deliberate omissions.**
-- **No Live Activity (yet).** The rest timer's Live Activity presents one deadline; a round timer is a
-  timeline of up to ~200 transitions, and ActivityKit cannot pre-schedule states — the running app or
-  a push must update it, so a locked phone cannot follow the rounds. The conditioning runner's
-  notification approach covers the boundaries, and the ticket asked for one engine. **Follow-up cut
-  2026-10-19 as ticket 09** (`.scratch/positioning-usp/issues/09-round-timer-live-activity.md`): one
-  activity with a whole-run countdown that never goes stale, plus phase detail while fresh with
-  `staleDate` fallback.
+- **No per-phase countdown while locked.** Impossible without a server push or background audio (the
+  research above); the two-level design is the deliberate answer, not a gap.
 - **No background audio mode and no time-sensitive interruption level.** `UIBackgroundModes: audio`
   would let the bell ring while locked regardless of the silent switch, but it is a product and App
   Review decision (and keeps the app alive for the whole run). `.timeSensitive` would break through

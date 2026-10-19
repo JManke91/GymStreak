@@ -63,6 +63,11 @@ final class ConditioningIntervalEngine {
     /// and the wall-clock end — the timeline's end when it completed while the
     /// app was suspended, not the moment the app woke up.
     @ObservationIgnored var onFinished: ((_ didComplete: Bool, _ endDate: Date) -> Void)?
+    /// Called after every change a Lock Screen mirror has to follow — the
+    /// start, each phase boundary, pause, resume and a foreground
+    /// resynchronisation. The end has `onFinished`. The round timer's Live
+    /// Activity hangs here; the conditioning runner leaves it nil.
+    @ObservationIgnored var onTransition: (() -> Void)?
 
     @ObservationIgnored private var clock = ConditioningClock()
     @ObservationIgnored private var lastPhaseIndex: Int?
@@ -97,6 +102,14 @@ final class ConditioningIntervalEngine {
     // MARK: - Derived display state
 
     var startDate: Date? { clock.startDate }
+    var pausedAt: Date? { clock.pausedAt }
+
+    /// The wall-clock date at which the run reaches session-relative `offset`,
+    /// as the clock stands — frozen at the pause while paused. What a Live
+    /// Activity's self-advancing timers are given.
+    func date(forElapsed offset: TimeInterval) -> Date {
+        clock.date(forElapsed: offset, now: clock.pausedAt ?? now())
+    }
 
     var nextPhase: ConditioningPhase? {
         guard let index = position?.phaseIndex, index + 1 < timeline.phases.count else { return nil }
@@ -119,6 +132,7 @@ final class ConditioningIntervalEngine {
         if let startCue = vocabulary.startCue { cues.play(startCue) }
         startTicking()
         scheduleBackgroundCues()
+        onTransition?()
     }
 
     func pause() {
@@ -128,6 +142,7 @@ final class ConditioningIntervalEngine {
         stopTicking()
         cues.cancelBackgroundCues()
         refresh()
+        onTransition?()
     }
 
     func resume() {
@@ -137,6 +152,7 @@ final class ConditioningIntervalEngine {
         refresh()
         startTicking()
         scheduleBackgroundCues()
+        onTransition?()
     }
 
     /// Ends before the timeline did.
@@ -163,8 +179,9 @@ final class ConditioningIntervalEngine {
         }
         if position == nil {
             finish()
-        } else if state == .running {
-            scheduleBackgroundCues()
+        } else {
+            if state == .running { scheduleBackgroundCues() }
+            onTransition?()
         }
     }
 
@@ -179,11 +196,13 @@ final class ConditioningIntervalEngine {
         position = current
 
         if current.phaseIndex != lastPhaseIndex {
-            if lastPhaseIndex != nil {
+            let isBoundary = lastPhaseIndex != nil
+            if isBoundary {
                 cues.play(vocabulary.phaseStart(current.phase))
             }
             lastPhaseIndex = current.phaseIndex
             lastLeadInSecond = nil
+            if isBoundary { onTransition?() }
         }
 
         guard state == .running else { return }
