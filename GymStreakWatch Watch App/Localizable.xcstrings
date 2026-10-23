@@ -48,6 +48,28 @@
         }
       }
     },
+    "Swipe up or down to adjust" : {
+      "comment" : "VoiceOver hint on the set editor's weight/reps card",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Zum Anpassen nach oben oder unten streichen"
+          }
+        }
+      }
+    },
+    "Tap first" : {
+      "comment" : "Set editor hint on the selected value card when the Digital Crown is turned while locked: tap the card first to unlock the Crown",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Antippen"
+          }
+        }
+      }
+    },
     "·" : {
 
     },

@@ -1078,7 +1078,19 @@ stored, so no code path can leave two owners set — and each candidate declares
 | Large timer up | `.largeTimer` | it covers the whole display, so it takes the Crown |
 | Pill, stepper closed | `.none` | the exercise list underneath keeps Crown scrolling |
 | Pill, stepper open | `.pillStepper` | the pill takes it for the stepper's 3 s |
-| Morph in flight, or no rest | `.none` | Crown input is inert |
+| Morph in flight, or no rest | `.none` | inert for the overlay; the set editor (if pushed) holds it **locked** — no value changes, at most its "Tap first" hint |
+| Any `.none` row (workout mutable) | set editor | holds the Crown; an *unlocked* (tapped) weight/reps card steps its value, a locked one only shows "Tap first" — see `docs/watch-crown-value-adjustment.md` |
+
+The set editor is the third candidate, outside the overlay. It declares
+`.focusable(canUnlockCrown)`, where `canUnlockCrown` = `!isCoveredByRestTimer`
+**and** `!isRestPillStepperOpen` **and** `canMutateWorkout` — the two environment
+keys are exactly the `.largeTimer` and `.pillStepper` rows above, so it can never
+be focusable while either holds the Crown. Holding is not editing: detents change
+a value only while a card is unlocked by a tap. It re-locks on rest start and on
+any loss of ownership, so after a hand-back the Crown is held again but only a
+fresh tap lets it edit. Holding it while locked relies on `isContinuous: true`
+and installation-time `isHapticFeedbackEnabled: false` to stay silent — see the
+feature doc ("Holding the Crown while locked").
 
 One gap, accepted: opening the stepper within one `WatchRestTimerMorph.response`
 (0.42 s) of a minimize leaves it open with the owner still `.none`, so the Crown

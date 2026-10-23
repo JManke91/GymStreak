@@ -763,7 +763,9 @@ edit, and it cannot touch a weight that was already logged.
 consecutive ±1 lb steps landing back exactly where they started.
 
 **Two steppers, two grid rules, on purpose.** `WatchWeightConfigurationEditor`'s crown snaps
-to whole display units; `FullScreenSetEditorView.adjustWeight` does not. The crown dials a
+to whole display units; the set editor's stepping rule (`WatchSetValueStepping.weight`,
+shared by its ± buttons and — since the Crown value adjustment, `docs/watch-crown-value-adjustment.md`
+— its Digital Crown) does not. The crown dials a
 *new* value up from zero, so whole units are all it can ever hold. The set editor edits a
 weight that already exists — usually straight off the routine — and snapping would discard
 whatever part of it does not sit on the current unit's grid the first time the user taps +.

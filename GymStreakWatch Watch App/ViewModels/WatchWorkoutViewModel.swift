@@ -880,15 +880,34 @@ final class WatchWorkoutViewModel: ObservableObject {
     }
 
     func updateSet(_ updatedSet: ActiveWorkoutSet, in exerciseId: UUID) {
+        guard replaceSet(updatedSet, in: exerciseId) else { return }
+        WKInterfaceDevice.current().play(.success)
+        persistActiveCheckpoint()
+    }
+
+    /// The Digital Crown's write path for a set value. Deliberately silent and
+    /// not checkpointed, like `updateRestTime`: the Crown plays its own
+    /// per-detent click and fires many times a second. The caller checkpoints
+    /// once via `commitSetValueAdjustment()` when the rotation settles.
+    func adjustSetValue(_ updatedSet: ActiveWorkoutSet, in exerciseId: UUID) {
+        replaceSet(updatedSet, in: exerciseId)
+    }
+
+    func commitSetValueAdjustment() {
         guard canMutateWorkout else { return }
+        persistActiveCheckpoint()
+    }
+
+    @discardableResult
+    private func replaceSet(_ updatedSet: ActiveWorkoutSet, in exerciseId: UUID) -> Bool {
+        guard canMutateWorkout else { return false }
         guard let exerciseIndex = exercises.firstIndex(where: { $0.id == exerciseId }),
               let setIndex = exercises[exerciseIndex].sets.firstIndex(where: { $0.id == updatedSet.id }) else {
-            return
+            return false
         }
 
         exercises[exerciseIndex].sets[setIndex] = updatedSet
-        WKInterfaceDevice.current().play(.success)
-        persistActiveCheckpoint()
+        return true
     }
 
     /// The single write path for a rest-duration change made during a workout:

@@ -19,11 +19,28 @@ struct FullScreenSetEditorView: View {
 
     @State private var focusedField: FocusedField = .weight
     @State private var showDoneFlash = false
+    /// The Crown steps the focused card only while this is true. Armed by a tap
+    /// on a card, so a brushed Crown can never change a value on its own.
+    @State private var isCrownUnlocked = false
+    /// Bumped by every unlocking tap so switching cards restarts the relock delay.
+    @State private var crownArmingID = 0
+    /// When the unlocked Crown locks again — drives the card's draining border.
+    @State private var crownRelockDeadline: Date?
+    /// "Tap first" on the focused card, answering a Crown turned while locked.
+    @State private var showsCrownHint = false
+    @State private var crownHintTask: Task<Void, Never>?
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.weightUnit) private var weightUnit
+    @Environment(\.isRestPillStepperOpen) private var isRestPillStepperOpen
+    @Environment(\.isCoveredByRestTimer) private var isCoveredByRestTimer
 
     private let metrics = WorkoutScreenMetrics.current
+    /// Detents a locked rotation must reach before "Tap first" shows — a single
+    /// brushed detent is not an attempt to use the Crown.
+    private static let crownHintMinimumDetents = 2
+    /// How long "Tap first" stays after the last locked detent.
+    private static let crownHintLife: Duration = .milliseconds(1500)
 
     enum FocusedField {
         case weight, reps
@@ -34,6 +51,26 @@ struct FullScreenSetEditorView: View {
     /// focus swap as a slide instead of a crossfade.
     private enum ClusterSlot: Hashable {
         case steppers, metrics
+    }
+
+    /// A tap could hand the Crown to a card right now: neither rest-timer
+    /// candidate holds it and the workout can change.
+    private var canUnlockCrown: Bool {
+        !isCoveredByRestTimer
+            && !isRestPillStepperOpen
+            && viewModel.canMutateWorkout
+    }
+
+    /// The editor's half of the single-owner Crown model
+    /// (`docs/watch-rest-timer-ui.md` "Crown ownership"): it may take the Crown
+    /// only while unlocked AND neither rest-timer candidate holds it.
+    private var ownsCrown: Bool {
+        isCrownUnlocked && canUnlockCrown
+    }
+
+    private func crownState(for field: FocusedField) -> CompactValueEditor.CrownState {
+        guard focusedField == field, canUnlockCrown else { return .unavailable }
+        return ownsCrown ? .unlocked : .locked
     }
 
     private var hasMetrics: Bool {
@@ -159,10 +196,11 @@ struct FullScreenSetEditorView: View {
                             spokenUnit: WatchWeightFormatting.spokenUnitWord(weightUnit),
                             icon: "scalemass.fill",
                             isFocused: focusedField == .weight,
-                            onTap: {
-                                focusedField = .weight
-                                WKInterfaceDevice.current().play(.click)
-                            }
+                            crownState: crownState(for: .weight),
+                            crownRelockDeadline: crownRelockDeadline,
+                            showsCrownHint: showsCrownHint && canUnlockCrown && focusedField == .weight,
+                            onTap: { selectCard(.weight) },
+                            onAdjust: { adjust(.weight, by: $0) }
                         )
 
                         CompactValueEditor(
@@ -172,10 +210,11 @@ struct FullScreenSetEditorView: View {
                             spokenUnit: String(localized: "reps"),
                             icon: "repeat",
                             isFocused: focusedField == .reps,
-                            onTap: {
-                                focusedField = .reps
-                                WKInterfaceDevice.current().play(.click)
-                            }
+                            crownState: crownState(for: .reps),
+                            crownRelockDeadline: crownRelockDeadline,
+                            showsCrownHint: showsCrownHint && canUnlockCrown && focusedField == .reps,
+                            onTap: { selectCard(.reps) },
+                            onAdjust: { adjust(.reps, by: $0) }
                         )
                     }
 
@@ -206,11 +245,36 @@ struct FullScreenSetEditorView: View {
                 // internals, which log "tried to update multiple times per
                 // frame" warnings.
                 .animation(.easeInOut(duration: 0.2), value: focusedField)
+                .animation(.easeInOut(duration: 0.2), value: ownsCrown)
+                .animation(.easeInOut(duration: 0.15), value: showsCrownHint)
                 .animation(.easeInOut(duration: 0.2), value: showDoneFlash)
                 .animation(.easeInOut(duration: 0.25), value: viewModel.currentSetIndex)
                 .animation(.easeInOut(duration: 0.25), value: viewModel.currentExerciseIndex)
                 .animation(.spring(response: 0.35, dampingFraction: 0.8), value: viewModel.progress)
+                .setValueCrownInput(
+                    isListening: canUnlockCrown,
+                    isActive: ownsCrown,
+                    isUnlocked: $isCrownUnlocked,
+                    armingID: crownArmingID,
+                    onDetents: applyCrownDetents,
+                    onCommit: viewModel.commitSetValueAdjustment,
+                    onLockedTurn: showCrownHintIfNeeded,
+                    onRelockScheduled: { crownRelockDeadline = $0 }
+                )
             }
+        }
+        // Every hand-off away from this set re-locks; the editor gets the Crown
+        // back only through a fresh tap.
+        .onChange(of: viewModel.currentSetIndex) { _, _ in lockCrown() }
+        .onChange(of: viewModel.currentExerciseIndex) { _, _ in lockCrown() }
+        .onChange(of: viewModel.isResting) { _, _ in lockCrown() }
+        // Losing ownership for ANY reason (pill stepper opening, a minimized
+        // rest expanding to the large timer, mutation suspended) re-locks too,
+        // so ownership coming back never hands the Crown back on its own.
+        .onChange(of: ownsCrown) { _, owns in if !owns { lockCrown() } }
+        .onDisappear {
+            lockCrown()
+            crownHintTask?.cancel()
         }
     }
 
@@ -290,43 +354,78 @@ struct FullScreenSetEditorView: View {
 
     // MARK: - Actions
 
-    private func adjustFocusedValue(by amount: Double) {
-        switch focusedField {
-        case .weight:
-            adjustWeight(by: amount)
-        case .reps:
-            adjustReps(by: Int(amount))
+    /// Focuses the card and unlocks the Crown for it — unless the Crown cannot
+    /// be unlocked right now (rest timer holds it, mutation suspended). A tap on the card that
+    /// is already unlocked locks it again: the lock glyph toggles both ways.
+    private func selectCard(_ field: FocusedField) {
+        if field == focusedField && ownsCrown {
+            lockCrown()
+        } else {
+            focusedField = field
+            // `canUnlockCrown`, not just `canMutateWorkout`: unlocking while a
+            // rest-timer candidate holds the Crown would hand it back unlocked,
+            // without a fresh tap, the moment that candidate lets go.
+            if canUnlockCrown {
+                isCrownUnlocked = true
+                crownArmingID += 1
+                hideCrownHint()
+            }
+        }
+        WKInterfaceDevice.current().play(.click)
+    }
+
+    private func lockCrown() {
+        isCrownUnlocked = false
+        crownRelockDeadline = nil
+    }
+
+    /// Answers a Crown turned while locked: never a value change, only "Tap
+    /// first" on the focused card, kept up for as long as the turning goes on.
+    private func showCrownHintIfNeeded(lockedDetents: Int) {
+        guard abs(lockedDetents) >= Self.crownHintMinimumDetents else { return }
+        showsCrownHint = true
+        crownHintTask?.cancel()
+        crownHintTask = Task { @MainActor in
+            try? await Task.sleep(for: Self.crownHintLife)
+            guard !Task.isCancelled else { return }
+            showsCrownHint = false
         }
     }
 
-    /// Steps the weight by one unit **of what the user is reading**, never by
-    /// one kilogram of what is stored.
-    ///
-    /// The stored value stays an unrounded `Double`. Rounding the kilograms to
-    /// a whole number — which this used to do implicitly by stepping them —
-    /// destroys any pounds figure the user entered: 135 lb is 61.235 kg, rounds
-    /// to 61, and comes back as 134.5 lb, drifting again on the next edit. So
-    /// the ±1 happens after converting to display space, and the result is
-    /// converted back and clamped against the canonical ceiling.
-    ///
-    /// It deliberately does NOT snap to the display grid, unlike
-    /// `WatchWeightConfigurationEditor`'s crown. That editor dials a *new*
-    /// value up from zero, so whole display units are all it can ever hold. This
-    /// one edits a weight that already exists — usually straight off the
-    /// routine — and snapping would discard the part of it that does not sit on
-    /// the current unit's grid the first time the user taps +. A 60 kg planned
-    /// set read in pounds steps 132,3 → 133,3 and back to 132,3, which is the
-    /// property `displaySpaceSteppingPreservesAPoundsValue` pins.
-    private func adjustWeight(by amount: Double) {
-        let display = weightUnit.converting(fromKilograms: currentSet.actualWeight.wrappedValue)
-        currentSet.actualWeight.wrappedValue =
-            weightUnit.clampedKilograms(fromDisplay: display + amount)
+    private func hideCrownHint() {
+        crownHintTask?.cancel()
+        showsCrownHint = false
     }
 
-    private func adjustReps(by amount: Int) {
-        let current = currentSet.actualReps.wrappedValue
-        let new = max(0, min(100, current + amount))
-        currentSet.actualReps.wrappedValue = new
+    private func adjustFocusedValue(by amount: Int) {
+        adjust(focusedField, by: amount)
+    }
+
+    /// The ± path (and VoiceOver's swipe): confirmed with a haptic, checkpointed.
+    private func adjust(_ field: FocusedField, by amount: Int) {
+        currentSet.wrappedValue = stepped(currentSet.wrappedValue, field: field, by: amount)
+    }
+
+    /// The Crown writes through the silent, non-checkpointing path; the
+    /// checkpoint is taken once per rotation via `onCommit`.
+    private func applyCrownDetents(_ detents: Int) {
+        viewModel.adjustSetValue(
+            stepped(currentSet.wrappedValue, field: focusedField, by: detents),
+            in: displayedExercise.id
+        )
+    }
+
+    /// One stepping rule for ± and the Crown — `WatchSetValueStepping` keeps
+    /// the weight unsnapped in display space (see its doc comment).
+    private func stepped(_ set: ActiveWorkoutSet, field: FocusedField, by steps: Int) -> ActiveWorkoutSet {
+        var set = set
+        switch field {
+        case .weight:
+            set.actualWeight = WatchSetValueStepping.weight(set.actualWeight, steppedBy: steps, in: weightUnit)
+        case .reps:
+            set.actualReps = WatchSetValueStepping.reps(set.actualReps, steppedBy: steps)
+        }
+        return set
     }
 
     private func toggleSetCompletion() {
@@ -338,6 +437,7 @@ struct FullScreenSetEditorView: View {
         let completesExercise = !sets[displayedSetIndex].isCompleted
             && sets.enumerated().allSatisfy { $0.element.isCompleted || $0.offset == displayedSetIndex }
 
+        lockCrown()
         viewModel.toggleSetCompletion(sets[displayedSetIndex].id, in: displayedExercise.id)
 
         if completesExercise {
